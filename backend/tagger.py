@@ -97,6 +97,7 @@ class WD14Tagger:
         self.session: Optional["ort.InferenceSession"] = None
         self.tags: List[str] = []
         self.general_tags: List[Tuple[int, str]] = []
+        self.copyright_tags: List[Tuple[int, str]] = []
         self.character_tags: List[Tuple[int, str]] = []
         self.rating_tags: List[Tuple[int, str]] = []
         self.rating_indices: Dict[str, int] = {}  # Map rating name to index
@@ -376,6 +377,7 @@ class WD14Tagger:
         """Load tag metadata for classic WD CSV files, PixAI CSV exports, or Camie JSON metadata."""
         self.tags = []
         self.general_tags = []
+        self.copyright_tags = []
         self.character_tags = []
         self.rating_tags = []
         self.rating_indices = {}
@@ -401,7 +403,9 @@ class WD14Tagger:
                     continue
                 category = str(tag_to_category.get(tag_name, 'general')).strip().lower()
                 self.tags.append(tag_name)
-                if category in {"general", "meta", "year", "artist", "copyright"}:
+                if category == "copyright":
+                    self.copyright_tags.append((tag_idx, tag_name))
+                elif category in {"general", "meta", "year", "artist"}:
                     self.general_tags.append((tag_idx, tag_name))
                 elif category == "character":
                     self.character_tags.append((tag_idx, tag_name))
@@ -435,6 +439,8 @@ class WD14Tagger:
             self.tags.append(tag_name)
             if category == 0:
                 self.general_tags.append((row_idx, tag_name))
+            elif category == 3:
+                self.copyright_tags.append((row_idx, tag_name))
             elif category == 4:
                 self.character_tags.append((row_idx, tag_name))
             elif category == 9:
@@ -512,6 +518,7 @@ class WD14Tagger:
     def _build_empty_result(self, error: Optional[str] = None) -> Dict[str, Any]:
         result: Dict[str, Any] = {
             "general_tags": [],
+            "copyright_tags": [],
             "character_tags": [],
             "rating": "unknown",
             "rating_confidences": {},
@@ -559,10 +566,12 @@ class WD14Tagger:
         probs: np.ndarray,
         threshold: Optional[float] = None,
         character_threshold: Optional[float] = None,
+        copyright_threshold: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Convert raw model scores into the public result payload."""
         general_thresh = threshold if threshold is not None else self.threshold
         char_thresh = character_threshold if character_threshold is not None else self.character_threshold
+        copyright_thresh = copyright_threshold if copyright_threshold is not None else general_thresh
         probs = self._normalize_output_probs(probs)
         result = self._build_empty_result()
 
@@ -571,6 +580,13 @@ class WD14Tagger:
                 conf = float(probs[tag_id])
                 if conf >= general_thresh:
                     result["general_tags"].append({"tag": tag_name, "confidence": conf})
+                    result["all_tags"].append({"tag": tag_name, "confidence": conf})
+
+        for tag_id, tag_name in self.copyright_tags:
+            if tag_id < len(probs):
+                conf = float(probs[tag_id])
+                if conf >= copyright_thresh:
+                    result["copyright_tags"].append({"tag": tag_name, "confidence": conf})
                     result["all_tags"].append({"tag": tag_name, "confidence": conf})
 
         for tag_id, tag_name in self.character_tags:
@@ -598,6 +614,7 @@ class WD14Tagger:
                 result["all_tags"].append({"tag": result["rating"], "confidence": 1.0})
 
         result["general_tags"].sort(key=lambda x: x["confidence"], reverse=True)
+        result["copyright_tags"].sort(key=lambda x: x["confidence"], reverse=True)
         result["character_tags"].sort(key=lambda x: x["confidence"], reverse=True)
         result["all_tags"].sort(key=lambda x: x["confidence"], reverse=True)
         return result
@@ -750,6 +767,7 @@ class WD14Tagger:
         retry_cooldown_seconds: float = 0.15,
         threshold: Optional[float] = None,
         character_threshold: Optional[float] = None,
+        copyright_threshold: Optional[float] = None,
     ) -> Tuple[List[Optional[Dict[str, Any]]], Dict[str, Any]]:
         """Run batched inference with adaptive backoff before giving up on GPU."""
         results: List[Optional[Dict[str, Any]]] = [None] * len(image_paths)
@@ -790,6 +808,7 @@ class WD14Tagger:
                         output[output_index],
                         threshold=threshold,
                         character_threshold=character_threshold,
+                        copyright_threshold=copyright_threshold,
                     )
                 self._finalize_processed_images(len(current_indices))
                 if self._session_uses_gpu():
@@ -1021,6 +1040,7 @@ class WD14Tagger:
         *,
         threshold: Optional[float] = None,
         character_threshold: Optional[float] = None,
+        copyright_threshold: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Tag a single image.
@@ -1048,6 +1068,7 @@ class WD14Tagger:
                 probs,
                 threshold=threshold,
                 character_threshold=character_threshold,
+                copyright_threshold=copyright_threshold,
             )
 
             del input_data
@@ -1103,6 +1124,7 @@ class WD14Tagger:
         min_batch_size: int = ...,
         threshold: Optional[float] = ...,
         character_threshold: Optional[float] = ...,
+        copyright_threshold: Optional[float] = ...,
         return_runtime_info: Literal[False] = ...,
     ) -> List[Dict[str, Any]]: ...
 
@@ -1115,6 +1137,7 @@ class WD14Tagger:
         min_batch_size: int = ...,
         threshold: Optional[float] = ...,
         character_threshold: Optional[float] = ...,
+        copyright_threshold: Optional[float] = ...,
         return_runtime_info: Literal[True],
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]: ...
 
@@ -1126,6 +1149,7 @@ class WD14Tagger:
         min_batch_size: int = 1,
         threshold: Optional[float] = None,
         character_threshold: Optional[float] = None,
+        copyright_threshold: Optional[float] = None,
         return_runtime_info: bool = False,
     ) -> Any:
         """Tag multiple images using adaptive true multi-image inference when supported."""
@@ -1170,6 +1194,7 @@ class WD14Tagger:
                             min_chunk_size=min_batch_size,
                             threshold=threshold,
                             character_threshold=character_threshold,
+                            copyright_threshold=copyright_threshold,
                         )
                         self._merge_runtime_info(runtime_info, chunk_info)
                         for index, result in enumerate(adaptive_results):
@@ -1195,6 +1220,7 @@ class WD14Tagger:
                                     output[0],
                                     threshold=threshold,
                                     character_threshold=character_threshold,
+                                    copyright_threshold=copyright_threshold,
                                 )
                                 self._finalize_processed_images(1)
                                 del single_input
@@ -1229,24 +1255,35 @@ class _ConfiguredTaggerProxy:
         *,
         threshold: float,
         character_threshold: float,
+        copyright_threshold: Optional[float] = None,
     ):
         self._tagger = tagger
         self._threshold = threshold
         self._character_threshold = character_threshold
+        self._copyright_threshold = copyright_threshold if copyright_threshold is not None else threshold
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._tagger, name)
 
-    def tag(self, image_path: str) -> Dict[str, Any]:
+    def tag(
+        self,
+        image_path: str,
+        *,
+        threshold: Optional[float] = None,
+        character_threshold: Optional[float] = None,
+        copyright_threshold: Optional[float] = None,
+    ) -> Dict[str, Any]:
         return self._tagger.tag(
             image_path,
-            threshold=self._threshold,
-            character_threshold=self._character_threshold,
+            threshold=self._threshold if threshold is None else threshold,
+            character_threshold=self._character_threshold if character_threshold is None else character_threshold,
+            copyright_threshold=self._copyright_threshold if copyright_threshold is None else copyright_threshold,
         )
 
     def tag_batch(self, image_paths: List[str], **kwargs: Any) -> Any:
         kwargs.setdefault("threshold", self._threshold)
         kwargs.setdefault("character_threshold", self._character_threshold)
+        kwargs.setdefault("copyright_threshold", self._copyright_threshold)
         return self._tagger.tag_batch(image_paths, **kwargs)
 
 def get_tagger(
@@ -1255,15 +1292,17 @@ def get_tagger(
     tags_path: Optional[str] = None,
     threshold: float = 0.35,
     character_threshold: float = 0.85,
+    copyright_threshold: Optional[float] = None,
     use_gpu: bool = True,
     force_reload: bool = False
 ) -> WD14Tagger:
     """Get or create the tagger instance."""
     global _tagger, _current_settings
+    resolved_model_name = model_name or DEFAULT_MODEL
 
     with _tagger_lock:
         new_settings = {
-            "model_name": WD14Tagger._resolve_model_profile(model_name, model_path),
+            "model_name": WD14Tagger._resolve_model_profile(resolved_model_name, model_path),
             "model_path": model_path,
             "tags_path": tags_path,
             "use_gpu": use_gpu
@@ -1272,7 +1311,7 @@ def get_tagger(
         # Reload if settings changed or forced
         if force_reload or _tagger is None or new_settings != _current_settings:
             _tagger = WD14Tagger(
-                model_name=model_name,
+                model_name=resolved_model_name,
                 model_path=model_path,
                 tags_path=tags_path,
                 threshold=threshold,
@@ -1284,6 +1323,7 @@ def get_tagger(
             _tagger,
             threshold=threshold,
             character_threshold=character_threshold,
+            copyright_threshold=copyright_threshold,
         )
 
 

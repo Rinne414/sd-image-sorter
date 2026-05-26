@@ -225,6 +225,10 @@
                             <span>📚</span>
                             <span data-i18n="action.library">Library</span>
                         </button>
+                        <button class="btn btn-ghost full-width" id="mobile-btn-mass-tag-editor" type="button" aria-label="Open mass tag editor" data-i18n-aria="massTag.openTooltip">
+                            <span aria-hidden="true">🧹</span>
+                            <span data-i18n="massTag.mobileOpen">Mass Tag</span>
+                        </button>
                         <button class="btn btn-ghost full-width" id="mobile-btn-language" aria-label="Switch language" data-i18n-aria="lang.switchLabel">
                             <span aria-hidden="true">🌐</span>
                             <span data-i18n="lang.toggle">中文</span>
@@ -2558,16 +2562,24 @@
                                 <span class="dataset-folder-bar-icon" aria-hidden="true">📁</span>
                                 <input type="text" id="dataset-folder-import-path" class="form-input"
                                        placeholder="Drag folder here or type path..."
+                                       data-folder-browser-container="dataset-folder-import-browser"
                                        data-i18n-placeholder="dataset.folderBarPlaceholder">
                                 <label class="dataset-folder-bar-subfolder">
                                     <input type="checkbox" id="dataset-folder-import-recursive" checked>
                                     <span data-i18n="dataset.includeSubfolders">Subfolders</span>
                                 </label>
-                                <button class="btn btn-ghost btn-small" id="btn-dataset-folder-import-browse"
+                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-folder-import-browse"
                                         data-i18n="common.browse">Browse</button>
-                                <button class="btn btn-primary btn-small" id="btn-dataset-folder-import-go"
+                                <button type="button" class="btn btn-primary btn-small" id="btn-dataset-folder-import-go"
                                         data-i18n="dataset.folderImportGo">Scan</button>
+                                <div class="dataset-folder-browser-host" id="dataset-folder-import-browser"></div>
                             </div>
+                        </div>
+                        <div class="dataset-large-import-reminder" role="note">
+                            <span aria-hidden="true">⚠️</span>
+                            <span data-i18n="dataset.largeImportReminder">
+                                For 100k+ images, use the folder path bar. Browser drag/drop and ZIP import must enumerate files in the browser first and can be slow or memory-heavy.
+                            </span>
                         </div>
 
                         <!-- Drag-drop zone (accepts images, zip, folders) -->
@@ -2587,8 +2599,17 @@
                         <div class="dataset-import-gallery" id="dataset-import-gallery" hidden>
                             <div class="dataset-import-gallery-header">
                                 <strong id="dataset-import-gallery-count">0 images imported</strong>
-                                <button class="btn btn-ghost btn-small" id="btn-dataset-import-audit"
-                                        data-i18n="dataset.runAudit">Run Audit</button>
+                                <div class="dataset-import-gallery-actions">
+                                    <span class="dataset-selection-summary" id="dataset-import-selection-summary">0 selected</span>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-import-select-all"
+                                            data-i18n="dataset.selectAll">Select all</button>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-import-clear-selection"
+                                            data-i18n="dataset.clearSelection">Clear selection</button>
+                                    <button type="button" class="btn btn-secondary btn-small" id="btn-dataset-import-remove-selected"
+                                            data-i18n="dataset.removeSelected">Remove selected</button>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-import-audit"
+                                            data-i18n="dataset.runAudit">Run Audit</button>
+                                </div>
                             </div>
                             <div class="dataset-import-gallery-grid" id="dataset-import-gallery-grid"></div>
                         </div>
@@ -2600,23 +2621,71 @@
                                 <span data-i18n="dataset.auditTitle">Quality Audit (optional)</span>
                             </summary>
                             <div class="dataset-audit-body">
-                                <div class="dataset-audit-thresholds">
-                                    <label class="dataset-audit-threshold">
-                                        <span data-i18n="dataset.auditDimLabel">Min image side (px)</span>
-                                        <input type="number" id="dataset-audit-dim-min" step="1" placeholder="e.g. 512" style="width:80px">
-                                    </label>
-                                    <label class="dataset-audit-threshold">
-                                        <span data-i18n="dataset.auditPhashLabel">Max phash distance</span>
-                                        <input type="number" id="dataset-audit-phash-max" step="1" placeholder="e.g. 5" style="width:80px">
-                                    </label>
-                                    <label class="dataset-audit-threshold">
-                                        <span data-i18n="dataset.auditAestheticLabel">Min aesthetic</span>
-                                        <input type="number" id="dataset-audit-aesthetic-max" step="0.1" placeholder="4.5" style="width:80px">
-                                    </label>
+                                <p class="dataset-audit-help" data-i18n="dataset.auditHelp">
+                                    Run the checks you actually care about before caption editing/export. Nothing is deleted automatically.
+                                </p>
+                                <div class="dataset-audit-options">
+                                    <section class="dataset-audit-option">
+                                        <label class="dataset-audit-option-main" for="dataset-audit-check-captions">
+                                            <input type="checkbox" id="dataset-audit-check-captions" checked>
+                                            <span>
+                                                <strong data-i18n="dataset.auditCheckCaptions">Empty captions</strong>
+                                                <small data-i18n="dataset.auditCheckCaptionsHint">Find images that will export blank .txt files.</small>
+                                            </span>
+                                        </label>
+                                    </section>
+                                    <section class="dataset-audit-option">
+                                        <label class="dataset-audit-option-main" for="dataset-audit-check-dim">
+                                            <input type="checkbox" id="dataset-audit-check-dim" checked>
+                                            <span>
+                                                <strong data-i18n="dataset.auditCheckDim">Small images</strong>
+                                                <small data-i18n="dataset.auditCheckDimHint">Flag images below the selected minimum side.</small>
+                                            </span>
+                                        </label>
+                                        <div class="dataset-audit-option-control">
+                                            <label for="dataset-audit-dim-min" data-i18n="dataset.auditDimLabel">Min image side (px)</label>
+                                            <input type="number" id="dataset-audit-dim-min" step="1" value="512" placeholder="512">
+                                            <div class="dataset-audit-preset-row" role="group" aria-label="Minimum side presets">
+                                                <button type="button" class="btn btn-ghost btn-small" data-audit-dim-preset="512">512</button>
+                                                <button type="button" class="btn btn-ghost btn-small" data-audit-dim-preset="768">768</button>
+                                                <button type="button" class="btn btn-ghost btn-small" data-audit-dim-preset="1024">1024</button>
+                                            </div>
+                                        </div>
+                                    </section>
+                                    <section class="dataset-audit-option">
+                                        <label class="dataset-audit-option-main" for="dataset-audit-check-phash">
+                                            <input type="checkbox" id="dataset-audit-check-phash">
+                                            <span>
+                                                <strong data-i18n="dataset.auditCheckPhash">Near duplicates</strong>
+                                                <small data-i18n="dataset.auditCheckPhashHint">Slower on very large sets; exact duplicates stay safe.</small>
+                                            </span>
+                                        </label>
+                                        <div class="dataset-audit-option-control">
+                                            <label for="dataset-audit-phash-max" data-i18n="dataset.auditPhashLabel">Max phash distance</label>
+                                            <input type="number" id="dataset-audit-phash-max" step="1" value="5" placeholder="5">
+                                            <small data-i18n="dataset.auditPhashHint">Lower is stricter. Only runs when duplicate check is enabled.</small>
+                                        </div>
+                                    </section>
+                                    <section class="dataset-audit-option">
+                                        <label class="dataset-audit-option-main" for="dataset-audit-check-aesthetic">
+                                            <input type="checkbox" id="dataset-audit-check-aesthetic">
+                                            <span>
+                                                <strong data-i18n="dataset.auditCheckAesthetic">Low aesthetic score</strong>
+                                                <small data-i18n="dataset.auditCheckAestheticHint">Uses the local aesthetic model when available.</small>
+                                            </span>
+                                        </label>
+                                        <div class="dataset-audit-option-control">
+                                            <label for="dataset-audit-aesthetic-max" data-i18n="dataset.auditAestheticLabel">Min aesthetic</label>
+                                            <input type="number" id="dataset-audit-aesthetic-max" step="0.1" value="4.5" placeholder="4.5">
+                                            <small data-i18n="dataset.auditAestheticHint">Only runs when aesthetic check is enabled.</small>
+                                        </div>
+                                    </section>
                                 </div>
                                 <div class="dataset-audit-actions">
                                     <button type="button" class="btn btn-primary btn-small" id="btn-dataset-audit-run"
                                             data-i18n="dataset.auditRun">Run audit</button>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-audit-download"
+                                            data-i18n="dataset.auditDownload" hidden>Download report (.json)</button>
                                     <span class="dataset-audit-status" id="dataset-audit-status" aria-live="polite"></span>
                                 </div>
                                 <div class="dataset-audit-results" id="dataset-audit-results" hidden>
@@ -2645,6 +2714,15 @@
                                     <button type="button" class="dataset-queue-mode-btn" id="btn-dataset-queue-list"
                                             data-dataset-queue-mode="list" title="List with names" aria-pressed="false">☰</button>
                                 </div>
+                            </div>
+                            <div class="dataset-queue-toolbar">
+                                <span class="dataset-selection-summary" id="dataset-queue-selection-summary">0 selected</span>
+                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-queue-select-all"
+                                        data-i18n="dataset.selectAll">Select all</button>
+                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-queue-clear-selection"
+                                        data-i18n="dataset.clearSelection">Clear selection</button>
+                                <button type="button" class="btn btn-secondary btn-small" id="btn-dataset-queue-remove-selected"
+                                        data-i18n="dataset.removeSelected">Remove selected</button>
                             </div>
                             <div class="dataset-queue-list" id="dataset-queue-list"></div>
                         </aside>
@@ -2757,7 +2835,7 @@
                                 </summary>
                                 <div class="dataset-vocab-body">
                                     <p class="dataset-vocab-help" data-i18n="dataset.vocabHelp">
-                                        Click a tag to add it to Common tags. Click again to move it to Blacklist. Third click clears.
+                                        This list is built from the current dataset captions. Use + for Common tags and - for Blacklist; click again to clear.
                                     </p>
                                     <div class="dataset-vocab-controls">
                                         <input type="text" class="form-input dataset-vocab-search" id="dataset-vocab-search"
@@ -2791,10 +2869,10 @@
                                 </label>
                                 <button class="btn btn-primary full-width" id="btn-dataset-smart-tag" style="margin-top: 8px;">
                                     <span aria-hidden="true">✨</span>
-                                    <span data-i18n="dataset.smartTag">Smart Tag (WD14 + VLM)</span>
+                                    <span data-i18n="dataset.smartTag">Smart Tag (booru + NL)</span>
                                 </button>
                                 <p class="dataset-card-help" data-i18n="dataset.smartTagHelp" style="margin-top: 6px; font-size: 12px; opacity: 0.75;">
-                                    LoraHub-style: WD14 tags + a VLM-written natural-language sentence, with auto-cleanup of "masterpiece / score_9 / anime" noise tags and trigger-word injection. Pick a training purpose and run.
+                                    Run one or two local taggers, optionally add a VLM sentence, clean noise tags, and write captions back to every image in this dataset.
                                 </p>
                             </section>
 
@@ -2807,11 +2885,11 @@
                                 <p class="dataset-card-help" data-i18n="dataset.cardCaptionHelp">
                                     Bulk-edit every caption: add common tags, remove tags you don't want, control underscore behavior.
                                 </p>
-                                <!-- v3.2.2 task #11: Anime LoRA defaults reset. -->
+                                <!-- Optional caption/export starter defaults. -->
                                 <div class="dataset-anime-defaults-row">
                                     <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-anime-defaults"
-                                            title="Reset common tags, underscore handling, and naming preset to anime-LoRA recommended values"
-                                            data-i18n="dataset.animeDefaultsButton">🎌 Apply Anime LoRA defaults</button>
+                                            title="Fill a simple starter setup: common quality tags, underscore handling, and sequential filenames"
+                                            data-i18n="dataset.animeDefaultsButton">Apply starter defaults</button>
                                 </div>
                                 <label class="form-label">
                                     <span data-i18n="dataset.commonTagsLabel">Common tags (added to every caption)</span>
@@ -2824,7 +2902,7 @@
                                     <button type="button" class="btn btn-ghost btn-small"
                                             id="btn-dataset-quickfill-quality"
                                             data-i18n="dataset.quickfillQuality">
-                                        ✨ Add recommended quality tags
+                                        Add quality tags to all captions
                                     </button>
                                     <button type="button" class="btn btn-ghost btn-small"
                                             id="btn-dataset-quickfill-trigger"
@@ -2842,13 +2920,8 @@
                                               data-i18n-placeholder="dataset.blacklistPlaceholder"></textarea>
                                 </label>
 
-                                <!-- Pro LoRA-trainer convenience: 5 category-cleanup
-                                     buttons that batch-append common tag classes to
-                                     the blacklist. Each button is non-destructive
-                                     (it just appends to the textarea, the user can
-                                     still trim afterwards). Curated lists; intent
-                                     is "the 30-50 most common danbooru tags in
-                                     each category" not "every possible tag". -->
+                                <!-- Category cleanup uses the live dataset vocabulary and only appends tags
+                                     that currently exist in this Dataset Maker session. -->
                                 <div class="dataset-cleanup-row">
                                     <small class="dataset-cleanup-label" data-i18n="dataset.cleanupLabel">Quick remove a category:</small>
                                     <div class="dataset-cleanup-buttons">
@@ -2912,7 +2985,7 @@
                                            placeholder="replacement text"
                                            data-i18n-placeholder="dataset.replacePlaceholder">
                                 </label>
-                                <button class="btn btn-secondary full-width" id="btn-dataset-find-replace"
+                                <button type="button" class="btn btn-secondary full-width" id="btn-dataset-find-replace"
                                         data-i18n="dataset.replaceAllBtn">Replace in all captions</button>
                             </section>
 
@@ -2980,10 +3053,12 @@
                                     <div class="folder-input-row">
                                         <input type="text" id="dataset-output-folder" class="form-input"
                                                placeholder="C:/training-data/my-lora"
+                                               data-folder-browser-container="dataset-output-folder-browser"
                                                data-i18n-placeholder="dataset.outputPlaceholder">
-                                        <button class="btn btn-ghost btn-small" id="btn-dataset-browse-output"
+                                        <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-browse-output"
                                                 data-i18n="common.browse">Browse</button>
                                     </div>
+                                    <div class="dataset-folder-browser-host" id="dataset-output-folder-browser"></div>
                                     <small class="dataset-help" data-i18n="dataset.outputFolderHint">
                                         Will be created if it doesn't exist.
                                     </small>
@@ -3038,7 +3113,7 @@
                                 </details>
 
                                 <!-- Big primary CTA -->
-                                <button class="btn btn-primary btn-large full-width dataset-export-cta"
+                                <button type="button" class="btn btn-primary btn-large full-width dataset-export-cta"
                                         id="btn-dataset-export" disabled
                                         data-i18n-aria="dataset.exportCta">
                                     <span aria-hidden="true">📤</span>
@@ -4894,100 +4969,140 @@
         </div>
     </div>
 
-    <!-- Smart Tag Modal (LoraHub-style WD14 + VLM combined wizard) -->
+    <!-- Smart Tag Modal (booru taggers + natural-language captioners) -->
     <div class="modal" id="smart-tag-modal" role="dialog" aria-modal="true" aria-labelledby="smart-tag-modal-title">
         <div class="modal-backdrop"></div>
-        <div class="modal-content">
+        <div class="modal-content modal-large smart-tag-modal-content">
             <button class="modal-close" id="btn-smart-tag-close" aria-label="Close">✕</button>
             <h3 id="smart-tag-modal-title">
                 <span aria-hidden="true">✨</span>
                 <span data-i18n="smartTag.title">Smart Tag (WD14 + VLM)</span>
             </h3>
             <p class="modal-description" data-i18n="smartTag.description">
-                Runs a local tagger (WD14 / OppaiOracle) and a VLM in one pass, then writes a clean LoRA-ready caption per image. Mirrors LoraHub's smart-caption recipe.
+                Runs local taggers and an optional VLM sentence in one pass, then writes a clean LoRA-ready caption per image.
             </p>
 
-            <!-- Form -->
-            <div class="smart-tag-form" style="display: flex; flex-direction: column; gap: 16px; margin-top: 16px;">
-                <!-- Training purpose -->
-                <label class="form-label">
-                    <span data-i18n="smartTag.trainingPurpose">Training purpose</span>
-                    <select id="smart-tag-purpose" class="form-input">
-                        <option value="style" data-i18n="smartTag.purposeStyle">Style LoRA — describe medium / lighting / composition (no clothing detail)</option>
-                        <option value="character" data-i18n="smartTag.purposeCharacter">Character LoRA — describe pose / framing only (no hair, eye, outfit)</option>
-                        <option value="general" selected data-i18n="smartTag.purposeGeneral">General — full description: subject / pose / clothing / scene</option>
-                        <option value="concept" data-i18n="smartTag.purposeConcept">Concept LoRA — focus on the concept being trained</option>
-                    </select>
-                </label>
-
-                <!-- Trigger word -->
-                <label class="form-label">
-                    <span data-i18n="smartTag.triggerWord">Trigger word (optional)</span>
-                    <input type="text" id="smart-tag-trigger" class="form-input"
-                           placeholder="e.g. myloratrigger"
-                           data-i18n-placeholder="smartTag.triggerPlaceholder"
-                           autocomplete="off">
-                    <span class="form-help" data-i18n="smartTag.triggerHelp" style="font-size: 12px; opacity: 0.75; margin-top: 4px;">
-                        Inserted at the front of every caption (skipped if already in WD14 tags).
-                    </span>
-                </label>
-
-                <!-- Merge strategy -->
-                <label class="form-label">
-                    <span data-i18n="smartTag.mergeStrategy">Existing captions</span>
-                    <select id="smart-tag-merge" class="form-input">
-                        <option value="replace" selected data-i18n="smartTag.mergeReplace">Replace (recommended) — discard previous caption</option>
-                        <option value="append" data-i18n="smartTag.mergeAppend">Append — glue new caption onto previous</option>
-                    </select>
-                </label>
-
-                <!-- Toggles -->
-                <div class="smart-tag-toggles" style="display: flex; flex-direction: column; gap: 10px; padding: 10px; border: 1px solid var(--border-color, #333); border-radius: 8px;">
-                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                        <input type="checkbox" id="smart-tag-strip-noise" checked>
-                        <span data-i18n="smartTag.stripNoise">Auto-strip noise tags (masterpiece / score_9 / anime / monochrome / ...)</span>
-                    </label>
-                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                        <input type="checkbox" id="smart-tag-enable-wd14" checked>
-                        <span data-i18n="smartTag.enableWd14">Run local tagger (WD14 / OppaiOracle) for booru-style tags</span>
-                    </label>
-                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                        <input type="checkbox" id="smart-tag-enable-vlm" checked>
-                        <span data-i18n="smartTag.enableVlm">Run VLM for natural-language sentence (uses the provider in Settings)</span>
-                    </label>
-                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                        <input type="checkbox" id="smart-tag-use-gpu" checked>
-                        <span data-i18n="smartTag.useGpu">Use GPU for the local tagger if available</span>
-                    </label>
-                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                        <span data-i18n="smartTag.tagMergeMode">Tag merge mode (general tags)</span>
-                        <select id="smart-tag-consensus-mode" style="margin-left: auto; width: auto; padding: 2px 8px; font-size: 13px;">
-                            <option value="or" data-i18n="smartTag.tagMergeOr">OR (keep all)</option>
-                            <option value="and" data-i18n="smartTag.tagMergeAnd">AND (consensus only)</option>
+            <div class="smart-tag-form">
+                <div class="smart-tag-basic-grid">
+                    <label class="form-label">
+                        <span data-i18n="smartTag.trainingPurpose">Training purpose</span>
+                        <select id="smart-tag-purpose" class="form-input">
+                            <option value="style" data-i18n="smartTag.purposeStyle">Style LoRA — describe medium / lighting / composition (no clothing detail)</option>
+                            <option value="character" data-i18n="smartTag.purposeCharacter">Character LoRA — describe pose / framing only (no hair, eye, outfit)</option>
+                            <option value="general" selected data-i18n="smartTag.purposeGeneral">General — full description: subject / pose / clothing / scene</option>
+                            <option value="concept" data-i18n="smartTag.purposeConcept">Concept LoRA — focus on the concept being trained</option>
                         </select>
                     </label>
-                    <details class="smart-tag-vote-details">
-                        <summary data-i18n="smartTag.taggerVotesTitle">Tagger votes</summary>
-                        <div class="smart-tag-vote-grid">
-                            <label class="form-label">
-                                <span data-i18n="smartTag.taggerOne">Tagger 1</span>
-                                <select id="smart-tag-tagger-1" class="form-input"></select>
-                            </label>
-                            <label class="form-label">
-                                <span data-i18n="smartTag.taggerTwo">Tagger 2</span>
-                                <select id="smart-tag-tagger-2" class="form-input">
-                                    <option value="" data-i18n="smartTag.taggerDisabled">Off</option>
-                                </select>
-                            </label>
-                        </div>
-                        <p class="form-help" data-i18n="smartTag.taggerVotesHelp">
-                            OR keeps tags from either tagger. AND keeps only general tags both taggers agree on; character/copyright tags still use OR.
-                        </p>
-                    </details>
+
+                    <label class="form-label">
+                        <span data-i18n="smartTag.triggerWord">Trigger word (optional)</span>
+                        <input type="text" id="smart-tag-trigger" class="form-input"
+                               placeholder="e.g. myloratrigger"
+                               data-i18n-placeholder="smartTag.triggerPlaceholder"
+                               autocomplete="off">
+                        <span class="form-help" data-i18n="smartTag.triggerHelp">
+                            Inserted at the front of every caption.
+                        </span>
+                    </label>
+
+                    <label class="form-label">
+                        <span data-i18n="smartTag.mergeStrategy">Existing captions</span>
+                        <select id="smart-tag-merge" class="form-input">
+                            <option value="replace" selected data-i18n="smartTag.mergeReplace">Replace (recommended) — discard previous caption</option>
+                            <option value="append" data-i18n="smartTag.mergeAppend">Append — glue new caption onto previous</option>
+                        </select>
+                    </label>
+                </div>
+
+                <label class="checkbox-label smart-tag-inline-toggle">
+                    <input type="checkbox" id="smart-tag-strip-noise" checked>
+                    <span data-i18n="smartTag.stripNoise">Auto-strip noise tags (masterpiece / score_9 / anime / monochrome / ...)</span>
+                </label>
+
+                <section class="smart-tag-section" id="smart-tag-booru-section">
+                    <div class="smart-tag-section-head">
+                        <label class="checkbox-label smart-tag-section-toggle">
+                            <input type="checkbox" id="smart-tag-enable-wd14" checked>
+                            <span data-i18n="smartTag.booruSectionTitle">Booru taggers</span>
+                        </label>
+                        <span class="smart-tag-section-note" data-i18n="smartTag.booruAutoDownload">Missing models download automatically on first run.</span>
+                    </div>
+
+                    <div class="smart-tag-vote-grid">
+                        <label class="form-label">
+                            <span data-i18n="smartTag.taggerOne">Tagger 1</span>
+                            <select id="smart-tag-tagger-1" class="form-input"></select>
+                        </label>
+                        <label class="form-label">
+                            <span data-i18n="smartTag.taggerTwo">Tagger 2</span>
+                            <select id="smart-tag-tagger-2" class="form-input">
+                                <option value="" data-i18n="smartTag.taggerDisabled">Off</option>
+                            </select>
+                        </label>
+                        <label class="form-label">
+                            <span data-i18n="smartTag.generalThreshold">General threshold</span>
+                            <input type="number" id="smart-tag-general-threshold" class="form-input" min="0" max="1" step="0.01" value="0.35">
+                        </label>
+                        <label class="form-label">
+                            <span data-i18n="smartTag.characterThreshold">Character threshold</span>
+                            <input type="number" id="smart-tag-character-threshold" class="form-input" min="0" max="1" step="0.01" value="0.85">
+                        </label>
+                        <label class="form-label">
+                            <span data-i18n="smartTag.copyrightThreshold">Copyright threshold</span>
+                            <input type="number" id="smart-tag-copyright-threshold" class="form-input" min="0" max="1" step="0.01" value="0.35">
+                        </label>
+                        <label class="form-label">
+                            <span data-i18n="smartTag.maxTags">Max tags</span>
+                            <input type="number" id="smart-tag-max-tags" class="form-input" min="0" max="2000" step="1" value="50">
+                        </label>
+                        <label class="form-label">
+                            <span data-i18n="smartTag.tagMergeMode">Tag merge mode</span>
+                            <select id="smart-tag-consensus-mode" class="form-input">
+                                <option value="or" data-i18n="smartTag.tagMergeOr">OR (keep all)</option>
+                                <option value="and" data-i18n="smartTag.tagMergeAnd">AND (consensus only)</option>
+                            </select>
+                        </label>
+                    </div>
+                    <p class="form-help" id="smart-tag-booru-help" data-i18n="smartTag.taggerVotesHelp">
+                        OR keeps tags from either tagger. AND keeps only general tags both taggers agree on; character/copyright tags still use OR.
+                    </p>
+                </section>
+
+                <section class="smart-tag-section" id="smart-tag-natural-section">
+                    <div class="smart-tag-section-head">
+                        <label class="checkbox-label smart-tag-section-toggle">
+                            <input type="checkbox" id="smart-tag-enable-vlm" checked>
+                            <span data-i18n="smartTag.nlSectionTitle">Natural-language captioner</span>
+                        </label>
+                        <button type="button" class="btn btn-ghost btn-small" id="btn-smart-tag-vlm-settings">
+                            <span aria-hidden="true">⚙️</span>
+                            <span data-i18n="smartTag.vlmSettings">VLM Settings</span>
+                        </button>
+                    </div>
+                    <div class="smart-tag-natural-grid">
+                        <label class="form-label">
+                            <span data-i18n="smartTag.nlSource">Caption source</span>
+                            <select id="smart-tag-nl-mode" class="form-input">
+                                <option value="vlm" selected data-i18n="smartTag.nlSourceVlm">API / Local LLM from VLM Settings</option>
+                                <option value="toriigate" data-i18n="smartTag.nlSourceTorii">ToriiGate local model</option>
+                            </select>
+                        </label>
+                        <label class="checkbox-label smart-tag-inline-toggle">
+                            <input type="checkbox" id="smart-tag-use-gpu" checked>
+                            <span data-i18n="smartTag.useGpu">Use GPU for local models if available</span>
+                        </label>
+                    </div>
+                    <p class="form-help" data-i18n="smartTag.nlHelp">
+                        Natural-language captioning is combined after booru tags. It is not part of OR/AND voting.
+                    </p>
+                </section>
+
+                <div class="smart-tag-safety-note" data-i18n="smartTag.executionNote">
+                    Smart Tag runs selected booru taggers one by one, then the natural-language captioner. It does not run multiple heavy models concurrently.
                 </div>
 
                 <!-- Image count summary -->
-                <div class="smart-tag-summary" id="smart-tag-summary" style="padding: 10px; background: var(--surface-2, #1a1a1a); border-radius: 8px; font-size: 14px;">
+                <div class="smart-tag-summary" id="smart-tag-summary">
                     <span data-i18n="smartTag.imageCountLabel">Will run on:</span>
                     <strong id="smart-tag-image-count">0</strong>
                     <span data-i18n="smartTag.imageCountSuffix">images currently in Dataset Maker.</span>
@@ -4995,16 +5110,16 @@
 
                 <!-- Progress (hidden until job starts) -->
                 <div class="smart-tag-progress" id="smart-tag-progress" hidden>
-                    <div class="progress-bar" style="height: 8px; border-radius: 4px; background: var(--surface-2, #1a1a1a); overflow: hidden;">
-                        <div class="progress-bar-fill" id="smart-tag-progress-fill" style="height: 100%; width: 0%; background: var(--accent-color, #ff8a00); transition: width 0.3s;"></div>
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill" id="smart-tag-progress-fill"></div>
                     </div>
-                    <p class="smart-tag-progress-text" id="smart-tag-progress-text" style="margin-top: 8px; font-size: 13px;">Initialising...</p>
-                    <p class="smart-tag-progress-preview" id="smart-tag-progress-preview" style="margin-top: 4px; font-size: 12px; opacity: 0.7; font-style: italic;"></p>
+                    <p class="smart-tag-progress-text" id="smart-tag-progress-text">Initialising...</p>
+                    <p class="smart-tag-progress-preview" id="smart-tag-progress-preview"></p>
                 </div>
             </div>
 
             <!-- Actions -->
-            <div class="modal-actions" style="margin-top: 20px; display: flex; gap: 8px; justify-content: flex-end;">
+            <div class="modal-actions smart-tag-actions">
                 <button class="btn btn-ghost" id="btn-smart-tag-cancel-modal" data-i18n="smartTag.cancel">Cancel</button>
                 <button class="btn btn-danger" id="btn-smart-tag-cancel-job" hidden data-i18n="smartTag.cancelJob">Stop</button>
                 <button class="btn btn-primary" id="btn-smart-tag-run">

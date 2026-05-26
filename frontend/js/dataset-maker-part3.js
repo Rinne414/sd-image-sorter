@@ -60,7 +60,7 @@
         // Re-render captions for the whole queue to reflect updated
         // common-tags / blacklist / underscore settings.
         if (this.imageIds.length === 0) return;
-        await this._fetchCaptionsFor(this.imageIds.slice());
+        await this._fetchCaptionsFor(this.imageIds.filter((id) => !(this.isLocalId?.(id))));
         // If the user is editing one, refresh its textarea (unless they
         // already typed an override -- their edits are sticky)
         if (this.activeId != null && !this.captionEdits.has(this.activeId)) {
@@ -178,7 +178,11 @@
         }
         const trigger = document.getElementById('dataset-trigger')?.value?.trim() || 'subject';
         const sampleStem = trigger;
-        previewEl.textContent = `${sampleStem}_001.png  +  ${sampleStem}_001.txt`;
+        const firstId = (this.imageIds || [])[0];
+        const filename = this.meta?.get?.(firstId)?.filename || '';
+        const match = String(filename).match(/\.([^.]+)$/);
+        const ext = match ? match[1].toLowerCase() : 'png';
+        previewEl.textContent = `${sampleStem}_001.${ext}  +  ${sampleStem}_001.txt`;
     };
 
     // ---------- Export readiness ----------
@@ -203,6 +207,7 @@
         const ready = this._isReadyToExport();
         if (btn) btn.disabled = !ready;
         if (hint) hint.hidden = ready;
+        this._refreshExportPreview?.();
     };
 
     // ---------- Confirm modal ----------
@@ -248,6 +253,9 @@
             '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
         }[c]));
 
+        const logicalCount = this._getLogicalDatasetCount?.() || this.imageIds.length;
+        const loadedCount = this.imageIds.length;
+        const loadedOnlyChecks = logicalCount !== loadedCount;
         const editedCount = this.captionEdits.size;
 
         // v3.2.2 (issue #5 follow-up): warn the user if they're about to
@@ -263,7 +271,7 @@
         const items = [
             this._t('dataset.confirmSummaryImages',
                 '<strong>{count}</strong> images will be {action}',
-                { count: this.imageIds.length, action: escapeHtml(actionLabel) }),
+                { count: logicalCount, action: escapeHtml(actionLabel) }),
             this._t('dataset.confirmSummaryFolder',
                 'Output folder: <code>{folder}</code>',
                 { folder: escapeHtml(folder) }),
@@ -272,8 +280,13 @@
                 { naming: escapeHtml(namingLabel) }),
             this._t('dataset.confirmSummaryCaptions',
                 '<strong>{count}</strong> .txt caption files will be written',
-                { count: this.imageIds.length }),
+                { count: logicalCount }),
         ];
+        if (loadedOnlyChecks) {
+            items.push(`<span class="dataset-confirm-warn">${this._t('dataset.confirmSummaryManifestPreview',
+                'Only {loaded} previews are loaded in the browser; export will still include all {total} manifest images. Caption/size warnings below only cover loaded previews.',
+                { loaded: loadedCount, total: logicalCount })}</span>`);
+        }
         if (editedCount > 0) {
             items.push(this._t('dataset.confirmSummaryEdited',
                 '<strong>{count}</strong> have your manually-edited captions',
@@ -289,10 +302,10 @@
         // size most trainers consider workable (~15-50 images for a
         // character LoRA). Empty / tiny datasets are the most common
         // reason a noob's first LoRA comes out broken.
-        if (this.imageIds.length > 0 && this.imageIds.length < 10) {
+        if (logicalCount > 0 && logicalCount < 10) {
             items.push(`<span class="dataset-confirm-warn">${this._t('dataset.confirmSummaryFewImages',
                 '⚠️ Only <strong>{count}</strong> images. Most LoRA trainers want 15-50 images for a stable character/style; below 10 the model may not generalize.',
-                { count: this.imageIds.length })}</span>`);
+                { count: logicalCount })}</span>`);
         }
 
         // Dimension warning - count images with a side under 512 px,
@@ -432,7 +445,7 @@
         this._renderExportProgress({
             status: 'starting',
             current: 0,
-            total: (payload.image_ids?.length || 0) + (payload.image_paths?.length || 0),
+            total: this._getLogicalDatasetCount?.() || (payload.image_ids?.length || 0) + (payload.image_paths?.length || 0),
             exported: 0,
             skipped: 0,
             errors: 0,
@@ -629,15 +642,29 @@
         async function getVocab() {
             if (cachedVocab) return cachedVocab;
             try {
-                const ids = (DM.imageIds || []).filter(id => id > 0).slice(0, 500);
+                const ids = [];
+                const localCaptions = {};
+                for (const id of (DM.imageIds || [])) {
+                    if (DM.isLocalId?.(id)) {
+                        const p = DM.localItemPaths?.get?.(id);
+                        const cap = DM.captionEdits?.get?.(id);
+                        if (p && cap) localCaptions[p] = cap;
+                    } else if (Number(id) > 0) {
+                        ids.push(Number(id));
+                    }
+                }
                 const r = await fetch('/api/dataset/vocab', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image_ids: ids, top_n: 500 }),
+                    body: JSON.stringify({
+                        image_ids: ids,
+                        path_caption_overrides: localCaptions,
+                        top_n: 2000,
+                    }),
                 });
                 if (r.ok) {
                     const data = await r.json();
-                    cachedVocab = (data.tags || []).map(t => t.tag || t);
+                    cachedVocab = (data.vocab || []).map(t => t.tag || t).filter(Boolean);
                 }
             } catch { /* ignore */ }
             if (!cachedVocab || cachedVocab.length === 0) {

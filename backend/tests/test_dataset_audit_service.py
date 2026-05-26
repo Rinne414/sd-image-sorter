@@ -165,6 +165,16 @@ def test_audit_no_thresholds_means_no_flags_other_than_untagged(audit_sandbox):
             assert flag != "small", f"small flagged without dim_min: {item}"
 
 
+def test_audit_can_disable_untagged_check(audit_sandbox):
+    report = audit_dataset(
+        image_paths=[str(p) for p in audit_sandbox],
+        enable_untagged=False,
+    )
+
+    assert report["summary"]["untagged_count"] == 0
+    assert all("untagged" not in item["flags"] for item in report["items"])
+
+
 def test_audit_disable_aesthetic_skips_inference(audit_sandbox, monkeypatch):
     """``enable_aesthetic=False`` must not call into the aesthetic
     backend. We monkey-patch ``_safe_aesthetic_score`` to a tripwire."""
@@ -212,6 +222,27 @@ def test_audit_recognises_missing_gallery_ids(test_db, audit_sandbox):
     assert len(missing) == 1
     assert missing[0]["image_id"] == 9_999_999
     assert report["summary"]["missing_count"] == 1
+
+
+def test_audit_recognises_unreadable_path_items(tmp_path):
+    broken = tmp_path / "broken.png"
+    broken.write_bytes(b"not an image")
+
+    report = audit_dataset(image_paths=[str(broken)])
+
+    assert report["summary"]["missing_count"] == 1
+    assert "missing" in report["items"][0]["flags"]
+
+
+def test_audit_reports_when_items_are_truncated(audit_sandbox):
+    report = audit_dataset(
+        image_paths=[str(path) for path in audit_sandbox],
+        item_limit=1,
+    )
+
+    assert report["summary"]["total"] == len(audit_sandbox)
+    assert report["items_returned"] == 1
+    assert report["items_truncated"] is True
 
 
 # ============== route layer ==============

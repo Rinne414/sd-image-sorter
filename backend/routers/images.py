@@ -94,6 +94,7 @@ class ExportSelectionRequest(BaseModel):
 class SelectionIdsRequest(BaseModel):
     generators: List[str] = Field(default_factory=list)
     tags: List[str] = Field(default_factory=list)
+    tagMode: str = Field(default="and", pattern="^(and|or)$")
     ratings: List[str] = Field(default_factory=list)
     checkpoints: List[str] = Field(default_factory=list)
     loras: List[str] = Field(default_factory=list)
@@ -129,6 +130,7 @@ class SelectionIdsRequest(BaseModel):
         if normalized not in VALID_PROMPT_MATCH_MODES:
             raise ValueError("promptMatchMode must be exact or contains")
         self.promptMatchMode = normalized
+        self.tagMode = "or" if str(self.tagMode or "and").strip().lower() == "or" else "and"
         return self
 
 
@@ -567,6 +569,7 @@ async def create_selection_token(
     return service.create_selection_token(
         generators=request.generators,
         tags=request.tags,
+        tag_mode=request.tagMode,
         ratings=request.ratings,
         checkpoints=request.checkpoints,
         loras=request.loras,
@@ -734,6 +737,7 @@ async def get_selection_ids(
     return service.get_filtered_selection_ids(
         generators=request.generators,
         tags=request.tags,
+        tag_mode=request.tagMode,
         ratings=request.ratings,
         checkpoints=request.checkpoints,
         loras=request.loras,
@@ -753,6 +757,11 @@ async def get_selection_ids(
         brightness_max=request.brightnessMax,
         color_temperature=request.colorTemperature,
         brightness_distribution=request.brightnessDistribution,
+        exclude_tags=request.excludeTags,
+        exclude_generators=request.excludeGenerators,
+        exclude_ratings=request.excludeRatings,
+        exclude_checkpoints=request.excludeCheckpoints,
+        exclude_loras=request.excludeLoras,
     )
 
 

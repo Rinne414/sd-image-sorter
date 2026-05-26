@@ -5,13 +5,12 @@
  * /api/tags/bulk/* with a UI that requires dry-run preview and inserts a
  * 2-second confirm dialog for any operation touching > MAX_NOCONFIRM images.
  *
- * Scope is always the user-chosen image_ids[]:
- *   - "selection" — pulled from window.AppFilterAccess.getSelectedImageIds()
- *   - "filter"    — fetched once on Apply by querying /api/images with the
- *                   current gallery filter, capped at BACKEND_MAX_IDS.
+ * Scope is sent as the smallest backend contract available:
+ *   - "selection" — explicit small image_ids[] or an active selection_token
+ *   - "filter"    — current gallery filter converted to a selection_token
  *
  * Backend hard caps:
- *   - image_ids: max_length=500000 (see routers/tags_bulk.py)
+ *   - image_ids: max_length=1000000 (see routers/tags_bulk.py)
  *   - tags:      max_length=200 per request
  */
 (function () {
@@ -38,12 +37,11 @@
     };
 
     const MAX_NOCONFIRM = 1000;          // scope above this requires confirm dialog
-    const BACKEND_MAX_IDS = 500000;      // matches Pydantic Field max_length
+    const BACKEND_MAX_IDS = 1000000;     // matches Pydantic Field max_length
     const CONFIRM_DELAY_MS = 2000;       // 2-second countdown on Apply button
 
     const MassTagEditor = {
         activeTab: "find_replace",
-        scopeIds: [],
         scopeLabel: "",
         confirmTimer: null,
         lastDryRunResult: null,
@@ -61,6 +59,10 @@
 
         bindEvents() {
             document.getElementById("btn-mass-tag-editor")?.addEventListener("click", () => this.openModal());
+            document.getElementById("mobile-btn-mass-tag-editor")?.addEventListener("click", () => {
+                if (typeof window.closeMobileMenu === "function") window.closeMobileMenu();
+                this.openModal();
+            });
             document.getElementById("btn-mass-tag-close")?.addEventListener("click", () => this.closeModal());
             document.querySelector("#mass-tag-modal .modal-backdrop")?.addEventListener("click", () => this.closeModal());
             document.querySelectorAll(".mass-tag-tab").forEach(tab => {
@@ -152,23 +154,50 @@
             return checked?.value || "selection";
         },
 
-        /** Resolve the current scope choice to an int[] of image IDs. */
-        async resolveScopeIds() {
+        /** Resolve the current scope choice to backend scope fields. */
+        async resolveScopePayload() {
             const scope = this.getScopeValue();
             if (scope === "selection") {
-                const ids = window.AppFilterAccess?.resolveSelectedImageIds
-                    ? await window.AppFilterAccess.resolveSelectedImageIds(BACKEND_MAX_IDS)
-                    : (window.AppFilterAccess?.getSelectedImageIds?.() || []);
+                const selectionToken = window.AppFilterAccess?.getActiveSelectionToken?.();
+                if (selectionToken) {
+                    const total = Number(window.AppFilterAccess?.getSelectionTotal?.() || 0);
+                    this.scopeLabel = this.t(
+                        `${total.toLocaleString()} selected images`,
+                        `已选 ${total.toLocaleString()} 张`,
+                    );
+                    return {
+                        scopeFields: { selection_token: selectionToken },
+                        scopeSize: total,
+                        source: "selection_token",
+                    };
+                }
+
+                const rawIds = window.AppFilterAccess?.getSelectedImageIds?.() || [];
+                const ids = rawIds
+                    .map(id => Number(id))
+                    .filter(id => Number.isFinite(id) && id > 0)
+                    .slice(0, BACKEND_MAX_IDS);
                 this.scopeLabel = this.t(
                     `${ids.length.toLocaleString()} selected images`,
                     `已选 ${ids.length.toLocaleString()} 张`,
                 );
-                return ids;
+                if (rawIds.length > ids.length) {
+                    this._setStatus(
+                        this.t(
+                            `Selection was capped at ${BACKEND_MAX_IDS.toLocaleString()} explicit IDs. Use filtered selection for larger scopes.`,
+                            `显式选择已截断到 ${BACKEND_MAX_IDS.toLocaleString()} 个 ID。更大范围请使用筛选选择。`,
+                        ),
+                        "warning",
+                    );
+                }
+                return {
+                    scopeFields: { image_ids: ids },
+                    scopeSize: ids.length,
+                    source: "image_ids",
+                };
             }
-            // Filter scope: use the existing selection-token + selection-chunk API.
-            // That flow accepts the full filter shape and returns ids in chunks
-            // up to chunk_size each — far cheaper than /api/images which would
-            // pay the per-row column cost for tens of thousands of rows.
+            // Filter scope: create a stateless token and let the bulk-tag
+            // backend consume it in DB chunks. Do not expand it in the browser.
             try {
                 const tokenBody = this._buildSelectionTokenBody();
                 const tokenResp = await fetch("/api/images/selection-token", {
@@ -182,78 +211,66 @@
                 const tokenData = await tokenResp.json();
                 const selectionToken = tokenData.selection_token;
                 const total = tokenData.total_estimate ?? 0;
-                const chunkSize = Math.min(tokenData.chunk_size || 2000, 10000);
-
-                // Hard-cap at the backend bulk-op limit so we don't try to
-                // assemble a list pydantic would reject anyway.
-                const targetCount = Math.min(total, BACKEND_MAX_IDS);
-                const ids = [];
-                let offset = 0;
-                while (offset < targetCount) {
-                    const params = new URLSearchParams({
-                        selection_token: selectionToken,
-                        offset: String(offset),
-                        limit: String(chunkSize),
-                    });
-                    const chunkResp = await fetch(`/api/images/selection-chunk?${params.toString()}`);
-                    if (!chunkResp.ok) {
-                        throw new Error(`/api/images/selection-chunk returned ${chunkResp.status}`);
-                    }
-                    const chunk = await chunkResp.json();
-                    const chunkIds = Array.isArray(chunk.image_ids) ? chunk.image_ids : [];
-                    if (chunkIds.length === 0) break;
-                    ids.push(...chunkIds);
-                    if (!chunk.has_more) break;
-                    offset = chunk.next_offset ?? (offset + chunkIds.length);
-                }
-
-                this.scopeLabel = this.t(
-                    `current filter — ${ids.length.toLocaleString()} of ${total.toLocaleString()} images`,
-                    `当前筛选 — ${ids.length.toLocaleString()} / ${total.toLocaleString()} 张`,
-                );
-                if (total > ids.length) {
-                    this._setStatus(
-                        this.t(
-                            `Filter scope was capped at ${BACKEND_MAX_IDS.toLocaleString()} images. Narrow the filter or use selection for an exact set.`,
-                            `筛选范围太大，已截断到 ${BACKEND_MAX_IDS.toLocaleString()} 张。请缩小筛选或改用 "已选" 模式。`,
-                        ),
-                        "warning",
+                const countText = tokenData.exact_total === false
+                    ? this.t(
+                        `${Number(total).toLocaleString()} estimated images`,
+                        `约 ${Number(total).toLocaleString()} 张`,
+                    )
+                    : this.t(
+                        `${Number(total).toLocaleString()} images`,
+                        `${Number(total).toLocaleString()} 张`,
                     );
-                }
-                return ids;
+                this.scopeLabel = this.t(
+                    `current filter — ${countText}`,
+                    `当前筛选 — ${countText}`,
+                );
+                return {
+                    scopeFields: { selection_token: selectionToken },
+                    scopeSize: Number(total) || 0,
+                    source: "selection_token",
+                };
             } catch (e) {
                 this._setStatus(String(e.message || e), "error");
-                return [];
+                return null;
             }
         },
 
         /** Build the request body for /api/images/selection-token from current filter state. */
         _buildSelectionTokenBody() {
             const filters = window.AppFilterStore?.getState?.() || {};
-            // Map UI-side camelCase → API-side camelCase (selection-token request
-            // already uses camelCase fields). Empty arrays / nulls are fine.
+            const request = window.App?.buildSelectionFilterRequest
+                ? window.App.buildSelectionFilterRequest(filters)
+                : {
+                    generators: Array.isArray(filters.generators) ? filters.generators : [],
+                    tags: Array.isArray(filters.tags) ? filters.tags : [],
+                    tagMode: filters.tagMode === "or" ? "or" : "and",
+                    ratings: Array.isArray(filters.ratings) ? filters.ratings : [],
+                    checkpoints: Array.isArray(filters.checkpoints) ? filters.checkpoints : [],
+                    loras: Array.isArray(filters.loras) ? filters.loras : [],
+                    prompts: Array.isArray(filters.prompts) ? filters.prompts : [],
+                    promptMatchMode: filters.promptMatchMode || "exact",
+                    artist: filters.artist || null,
+                    search: filters.search || "",
+                    sortBy: filters.sortBy || "newest",
+                    minWidth: filters.minWidth ?? null,
+                    maxWidth: filters.maxWidth ?? null,
+                    minHeight: filters.minHeight ?? null,
+                    maxHeight: filters.maxHeight ?? null,
+                    aspectRatio: filters.aspectRatio || null,
+                    minAesthetic: filters.minAesthetic ?? null,
+                    maxAesthetic: filters.maxAesthetic ?? null,
+                    brightnessMin: filters.brightnessMin ?? null,
+                    brightnessMax: filters.brightnessMax ?? null,
+                    colorTemperature: filters.colorTemperature || null,
+                    brightnessDistribution: filters.brightnessDistribution || null,
+                    excludeTags: Array.isArray(filters.excludeTags) ? filters.excludeTags : [],
+                    excludeGenerators: Array.isArray(filters.excludeGenerators) ? filters.excludeGenerators : [],
+                    excludeRatings: Array.isArray(filters.excludeRatings) ? filters.excludeRatings : [],
+                    excludeCheckpoints: Array.isArray(filters.excludeCheckpoints) ? filters.excludeCheckpoints : [],
+                    excludeLoras: Array.isArray(filters.excludeLoras) ? filters.excludeLoras : [],
+                };
             return {
-                generators: Array.isArray(filters.generators) ? filters.generators : [],
-                tags: Array.isArray(filters.tags) ? filters.tags : [],
-                ratings: Array.isArray(filters.ratings) ? filters.ratings : [],
-                checkpoints: Array.isArray(filters.checkpoints) ? filters.checkpoints : [],
-                loras: Array.isArray(filters.loras) ? filters.loras : [],
-                prompts: Array.isArray(filters.prompts) ? filters.prompts : [],
-                promptMatchMode: filters.promptMatchMode || "exact",
-                artist: filters.artist || null,
-                search: filters.search || "",
-                sortBy: filters.sortBy || "newest",
-                minWidth: filters.minWidth || null,
-                maxWidth: filters.maxWidth || null,
-                minHeight: filters.minHeight || null,
-                maxHeight: filters.maxHeight || null,
-                aspectRatio: filters.aspectRatio || null,
-                minAesthetic: filters.minAesthetic || null,
-                maxAesthetic: filters.maxAesthetic || null,
-                brightnessMin: filters.brightnessMin || null,
-                brightnessMax: filters.brightnessMax || null,
-                colorTemperature: filters.colorTemperature || null,
-                brightnessDistribution: filters.brightnessDistribution || null,
+                ...request,
                 excludedImageIds: [],
                 chunkSize: 5000,
             };
@@ -261,9 +278,9 @@
 
         // ---- Build request body ------------------------------------------
 
-        _collectFindReplace(imageIds, dryRun) {
+        _collectFindReplace(scopeFields, dryRun) {
             return {
-                image_ids: imageIds,
+                ...scopeFields,
                 find: document.getElementById("mass-tag-find")?.value || "",
                 replace: document.getElementById("mass-tag-replace")?.value || "",
                 case_sensitive: !!document.getElementById("mass-tag-find-replace-case")?.checked,
@@ -271,43 +288,43 @@
             };
         },
 
-        _collectAdd(imageIds, dryRun) {
+        _collectAdd(scopeFields, dryRun) {
             const raw = document.getElementById("mass-tag-add-tags")?.value || "";
             const tags = raw.split(",").map(t => t.trim()).filter(Boolean);
             return {
-                image_ids: imageIds,
+                ...scopeFields,
                 tags,
                 confidence: parseFloat(document.getElementById("mass-tag-add-confidence")?.value) || 0.85,
                 dry_run: !!dryRun,
             };
         },
 
-        _collectRemove(imageIds, dryRun) {
+        _collectRemove(scopeFields, dryRun) {
             const raw = document.getElementById("mass-tag-remove-tags")?.value || "";
             const tags = raw.split(",").map(t => t.trim()).filter(Boolean);
             return {
-                image_ids: imageIds,
+                ...scopeFields,
                 tags,
                 case_sensitive: !!document.getElementById("mass-tag-remove-case")?.checked,
                 dry_run: !!dryRun,
             };
         },
 
-        _collectCleanup(imageIds, dryRun) {
+        _collectCleanup(scopeFields, dryRun) {
             return {
-                image_ids: imageIds,
+                ...scopeFields,
                 min_confidence: parseFloat(document.getElementById("mass-tag-cleanup-confidence")?.value) || 0.20,
                 dedupe: !!document.getElementById("mass-tag-cleanup-dedupe")?.checked,
                 dry_run: !!dryRun,
             };
         },
 
-        _collectBody(imageIds, dryRun) {
+        _collectBody(scopeFields, dryRun) {
             switch (this.activeTab) {
-                case "find_replace": return this._collectFindReplace(imageIds, dryRun);
-                case "add":          return this._collectAdd(imageIds, dryRun);
-                case "remove":       return this._collectRemove(imageIds, dryRun);
-                case "cleanup":      return this._collectCleanup(imageIds, dryRun);
+                case "find_replace": return this._collectFindReplace(scopeFields, dryRun);
+                case "add":          return this._collectAdd(scopeFields, dryRun);
+                case "remove":       return this._collectRemove(scopeFields, dryRun);
+                case "cleanup":      return this._collectCleanup(scopeFields, dryRun);
                 default: return null;
             }
         },
@@ -316,7 +333,10 @@
 
         /** Returns string error or null if valid. */
         _validate(body) {
-            if (!body.image_ids || body.image_ids.length === 0) {
+            const hasImageIds = Array.isArray(body.image_ids) && body.image_ids.length > 0;
+            const hasSelectionToken = typeof body.selection_token === "string" && body.selection_token.trim().length > 0;
+            const hasFilters = body.filters && typeof body.filters === "object";
+            if (!hasImageIds && !hasSelectionToken && !hasFilters) {
                 return this.t(
                     "Scope is empty — select some images or pick a filter that matches at least one image.",
                     "范围为空 — 请先选中图片或选一个能匹配的筛选条件。",
@@ -344,10 +364,19 @@
 
         async runDryRun() {
             this._setStatus(this.t("Resolving scope…", "正在计算范围..."), "info");
-            const imageIds = await this.resolveScopeIds();
-            if (imageIds.length === 0) return;
+            const scope = await this.resolveScopePayload();
+            if (!scope || scope.scopeSize === 0) {
+                this._setStatus(
+                    this.t(
+                        "Scope is empty — select some images or pick a filter that matches at least one image.",
+                        "范围为空 — 请先选中图片或选一个能匹配的筛选条件。",
+                    ),
+                    "error",
+                );
+                return;
+            }
 
-            const body = this._collectBody(imageIds, /*dryRun=*/ true);
+            const body = this._collectBody(scope.scopeFields, /*dryRun=*/ true);
             const validation = this._validate(body);
             if (validation) {
                 this._setStatus(validation, "error");
@@ -366,7 +395,7 @@
                     this._setStatus(data.detail || resp.statusText, "error");
                     return;
                 }
-                this.lastDryRunResult = { ...data, _scopeIds: imageIds };
+                this.lastDryRunResult = { ...data, _scope: scope };
                 this._renderResult(data);
                 this._setStatus(this.t("Dry-run complete — review the summary, then click Apply.", "试算完成 — 请检查摘要后再点 Apply。"), "success");
             } catch (e) {
@@ -380,17 +409,26 @@
             // Always force a fresh resolve so we capture the *current* selection,
             // not whatever the user previewed five minutes ago.
             this._setStatus(this.t("Resolving scope…", "正在计算范围..."), "info");
-            const imageIds = await this.resolveScopeIds();
-            if (imageIds.length === 0) return;
+            const scope = await this.resolveScopePayload();
+            if (!scope || scope.scopeSize === 0) {
+                this._setStatus(
+                    this.t(
+                        "Scope is empty — select some images or pick a filter that matches at least one image.",
+                        "范围为空 — 请先选中图片或选一个能匹配的筛选条件。",
+                    ),
+                    "error",
+                );
+                return;
+            }
 
-            const body = this._collectBody(imageIds, /*dryRun=*/ false);
+            const body = this._collectBody(scope.scopeFields, /*dryRun=*/ false);
             const validation = this._validate(body);
             if (validation) {
                 this._setStatus(validation, "error");
                 return;
             }
 
-            const scopeSize = imageIds.length;
+            const scopeSize = scope.scopeSize;
             if (scopeSize > MAX_NOCONFIRM) {
                 this._openConfirm(body, scopeSize);
                 return;

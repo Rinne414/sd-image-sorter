@@ -191,12 +191,12 @@ Re-parse metadata for one image.
 #### POST /api/images/selection-ids
 Resolve the full ordered ID set for the current filtered result set.
 
-This is the compatibility endpoint for callers that need one complete response. For large filtered selections, prefer the token/chunk pair below unless `sortBy` is `random`.
+This is the compatibility endpoint for callers that need one complete response. It uses the same filter payload as the gallery, including `tagMode` (`and`/`or`) and `excludeTags` / `excludeGenerators` / `excludeRatings` / `excludeCheckpoints` / `excludeLoras`. Responses are capped at 100,000 IDs; larger selections return `413` and must use the token/chunk pair below unless `sortBy` is `random`.
 
 #### POST /api/images/selection-token
 Create a stateless token for chunked filtered-selection ID retrieval.
 
-Request body is the same filter payload as `selection-ids`, including color fields (`brightnessMin`, `brightnessMax`, `colorTemperature`, `brightnessDistribution`), plus optional `chunkSize` (`1..10000`, default `2000`) and `excludedImageIds` (`0..10000`) for inverted filtered-selection scopes.
+Request body is the same filter payload as `selection-ids`, including `tagMode`, exclude filters, and color fields (`brightnessMin`, `brightnessMax`, `colorTemperature`, `brightnessDistribution`), plus optional `chunkSize` (`1..10000`, default `2000`) and `excludedImageIds` (`0..10000`) for inverted filtered-selection scopes.
 
 Response:
 
@@ -1130,7 +1130,7 @@ Returns `{summary, items[], duplicate_groups[]}`. `summary` aggregates `{total, 
 
 #### POST /api/dataset/vocab
 
-Returns the union of tags across the supplied Dataset Maker session, sorted by descending frequency. Combines DB-source tags (read from `image_ids`) and local-source caption text (`path_caption_overrides`, split by comma). Backs the LoraHub-style "Tag Vocabulary" side panel that lets the user click a tag to add it to common tags or blacklist.
+Returns the union of tags across the supplied Dataset Maker session, sorted by descending frequency. Combines DB-source tags (read from `image_ids`) and local-source caption text (`path_caption_overrides`, split by comma). Backs the Dataset Maker "Tag Vocabulary" side panel for adding current tags to common tags or blacklist.
 
 Body:
 ```json
@@ -1157,12 +1157,13 @@ Returns `{items[], skipped_unreadable}`. Each item carries `{ds_id, abs_path, fi
 
 #### POST /api/smart-tag/start
 
-LoraHub-style "Smart Tag" wizard: runs a local tagger (WD14 / OppaiOracle / Camie / PixAI) and a VLM in one pipeline, strips noise tags (`masterpiece` / `score_9` / `anime` / ...), and writes a clean LoRA-ready caption per image. Returns immediately with the job snapshot; progress is polled via `/api/smart-tag/progress`.
+"Smart Tag" wizard: runs a local tagger (WD14 / OppaiOracle / Camie / PixAI) and a VLM in one pipeline, strips noise tags (`masterpiece` / `score_9` / `anime` / ...), and writes a clean LoRA-ready caption per image. Returns immediately with the job snapshot; progress is polled via `/api/smart-tag/progress`.
 
 Body:
 ```json
 {
   "image_ids": [1, 2, 3],
+  "image_paths": ["C:/dataset/local_001.png"],
   "training_purpose": "style",
   "trigger_word": "myloratrigger",
   "merge_strategy": "replace",
@@ -1184,6 +1185,10 @@ Returns 409 if another Smart Tag job is already running on the same backend.
 #### GET /api/smart-tag/progress
 
 Poll the active or named Smart Tag job. With no `job_id` query param, returns the active job (or `{"status": "idle", "active": false}` if none is running). Snapshot contains `total`, `processed`, `succeeded`, `failed`, `message`, `last_caption_preview`, and a tail-capped `errors[]` list.
+
+#### GET /api/smart-tag/results
+
+Returns paginated path-source caption results for a completed Smart Tag job, used by Dataset Maker local-folder imports. Query params: `job_id`, `offset`, `limit`. Gallery-source captions are written directly to the DB and do not need this endpoint.
 
 #### POST /api/smart-tag/cancel
 

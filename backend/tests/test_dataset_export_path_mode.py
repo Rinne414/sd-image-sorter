@@ -143,6 +143,45 @@ def test_path_mode_caption_falls_back_to_template_when_no_override(
     assert "masterpiece" in cap
 
 
+def test_path_mode_export_accepts_dataset_scan_token_without_path_payload(
+    test_client, test_db, folder_with_locals, tmp_path
+):
+    folder, paths = folder_with_locals
+    out = tmp_path / "token-out"
+    out.mkdir()
+
+    scan = test_client.post("/api/dataset/folder-scan", json={
+        "folder_path": str(folder),
+        "recursive": False,
+        "limit": 1,
+    })
+    assert scan.status_code == 200, scan.text
+    token = scan.json()["scan_token"]
+
+    response = test_client.post("/api/dataset/export", json={
+        "image_ids": [],
+        "image_paths": [],
+        "dataset_scan_tokens": [{
+            "scan_token": token,
+            "exclude_paths": [str(paths[1].resolve())],
+        }],
+        "output_folder": str(out),
+        "naming_pattern": "{filename}",
+        "trigger": "token_trigger",
+        "image_op": "copy",
+        "overwrite_policy": "unique",
+        "common_tags": ["clean_caption"],
+        "normalize_tag_underscores": False,
+    })
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "ok", body
+    assert body["exported"] == 2
+    assert (out / "local_a.png").exists()
+    assert not (out / "local_b.png").exists()
+    assert (out / "local_c.png").exists()
+
+
 def test_export_400_when_neither_ids_nor_paths_supplied(test_client, test_db, tmp_path):
     """Empty request payload should be a 400, not a server error."""
     out = tmp_path / "out"

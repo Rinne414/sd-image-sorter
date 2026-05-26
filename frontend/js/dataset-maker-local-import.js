@@ -17,7 +17,8 @@
  * The places that previously called ``/api/image-thumbnail/{id}`` or
  * ``/api/tags/export-preview`` with image IDs are wrapped here to
  * branch on ``id < 0``:
- *   - thumbnail render uses ``data:image/jpeg;base64,<thumb_b64>``
+ *   - thumbnail render uses inline ``thumb_b64`` when present, otherwise
+ *     lazily fetches ``/api/dataset/local-thumbnail`` for visible items
  *   - meta + caption fetch is skipped (local items are fully populated
  *     by the scan response; captions live in localStorage)
  *   - export request splits positive IDs (image_ids) from negative IDs
@@ -41,14 +42,19 @@
     /** Local-only state (in addition to the shared ``imageIds`` / ``meta``). */
     DM.localItemPaths = DM.localItemPaths || new Map();   // negative id -> abs_path
     DM.localItemDsIds = DM.localItemDsIds || new Map();   // negative id -> ds_id (for completeness)
+    DM.localManifestTokens = DM.localManifestTokens || new Map(); // scan_token -> {total, excludedPaths}
     DM._folderScanToken = null;
     DM._folderScanNextOffset = 0;
     DM._folderScanHasMore = false;
     DM._folderScanTotal = 0;
     DM._folderScanPreviewed = 0;
 
+    // Keep preview hydration small. Folder scan returns a backend manifest
+    // token, so export/audit can include unloaded images without sending a
+    // million absolute paths to the browser.
     const FOLDER_SCAN_PAGE_SIZE = 5000;
-    const MAX_BROWSER_DROP_FILES = 5000;
+    const UPLOAD_BATCH_SIZE = 250;
+    const LARGE_BROWSER_DROP_WARNING_FILES = 5000;
 
     /** Negative-id helper: true iff the supplied id refers to a local-source item. */
     DM.isLocalId = function (id) {
@@ -72,6 +78,27 @@
             n = Math.abs(h) || 1;
         }
         return -Math.min(n || 1, Number.MAX_SAFE_INTEGER);
+    };
+
+    function localThumbnailUrl(absPath, size = 256) {
+        const path = String(absPath || '').trim();
+        if (!path) return '';
+        const px = Math.max(1, Math.min(4096, Math.round(Number(size) || 256)));
+        return `/api/dataset/local-thumbnail?path=${encodeURIComponent(path)}&size=${px}`;
+    }
+
+    const original_thumbSrc = DM._thumbSrc;
+    DM._thumbSrc = function (id, size = 128) {
+        const numericId = Number(id);
+        if (!this.isLocalId(numericId)) {
+            return typeof original_thumbSrc === 'function'
+                ? original_thumbSrc.call(this, numericId, size)
+                : `/api/image-thumbnail/${numericId}?size=${size}`;
+        }
+        const meta = this.meta?.get?.(numericId) || {};
+        if (meta.thumb_b64) return `data:image/jpeg;base64,${meta.thumb_b64}`;
+        const absPath = meta.abs_path || this.localItemPaths?.get?.(numericId) || '';
+        return localThumbnailUrl(absPath, size);
     };
 
     // -------- localStorage caption persistence (path-keyed) --------
@@ -101,6 +128,84 @@
         DM._saveLocalCaption(absPath, '');
     };
 
+    DM._registerFolderManifest = function (data) {
+        const token = String(data?.scan_token || '').trim();
+        if (!token) return null;
+        const existing = this.localManifestTokens.get(token) || {};
+        this.localManifestTokens.set(token, {
+            scan_token: token,
+            folder_path: data.folder_path || existing.folder_path || '',
+            total: Number(data.total_files_seen || existing.total || 0) || 0,
+            excludedPaths: existing.excludedPaths instanceof Set ? existing.excludedPaths : new Set(),
+        });
+        return token;
+    };
+
+    DM._markLocalManifestExcluded = function (id) {
+        const numericId = Number(id);
+        const meta = this.meta?.get?.(numericId) || {};
+        const token = String(meta.folder_scan_token || '').trim();
+        const absPath = this.localItemPaths?.get?.(numericId) || meta.abs_path || '';
+        if (!token || !absPath) return;
+        const source = this.localManifestTokens.get(token);
+        if (!source) return;
+        source.excludedPaths = source.excludedPaths instanceof Set ? source.excludedPaths : new Set();
+        source.excludedPaths.add(absPath);
+    };
+
+    DM._excludeLocalPathFromManifests = function (absPath) {
+        const path = String(absPath || '').trim();
+        if (!path || !this.localManifestTokens) return false;
+        let touched = false;
+        const sources = Array.from(this.localManifestTokens.values());
+        for (const source of sources) {
+            const root = String(source.folder_path || '').replace(/[\\/]+$/, '');
+            const inSource = root
+                ? (path === root || path.startsWith(root + '/') || path.startsWith(root + '\\'))
+                : sources.length === 1;
+            if (!inSource) continue;
+            source.excludedPaths = source.excludedPaths instanceof Set ? source.excludedPaths : new Set();
+            if (!source.excludedPaths.has(path)) {
+                source.excludedPaths.add(path);
+                touched = true;
+            }
+        }
+        return touched;
+    };
+
+    DM._localIdUsesManifest = function (id) {
+        const meta = this.meta?.get?.(Number(id)) || {};
+        const token = String(meta.folder_scan_token || '').trim();
+        return !!(token && this.localManifestTokens?.has?.(token));
+    };
+
+    DM._getDatasetScanTokenSources = function () {
+        const out = [];
+        for (const [token, source] of this.localManifestTokens.entries()) {
+            if (!token) continue;
+            out.push({
+                scan_token: token,
+                exclude_paths: Array.from(source.excludedPaths || []),
+            });
+        }
+        return out;
+    };
+
+    DM._getLogicalDatasetCount = function () {
+        let count = 0;
+        for (const id of this.imageIds || []) {
+            const numericId = Number(id);
+            if (this.isLocalId(numericId) && this._localIdUsesManifest(numericId)) continue;
+            count += 1;
+        }
+        for (const source of this.localManifestTokens.values()) {
+            const total = Number(source.total || 0) || 0;
+            const excluded = source.excludedPaths instanceof Set ? source.excludedPaths.size : 0;
+            count += Math.max(0, total - excluded);
+        }
+        return count;
+    };
+
     // -------- Add local items from folder-scan response --------
 
     /**
@@ -113,6 +218,7 @@
     DM.addLocalItems = function (items, options = {}) {
         const switchView = options.switchView !== false;
         const showToast = options.showToast !== false;
+        const focusImportTab = options.focusImportTab === true;
 
         const before = this.imageIds.length;
         const seen = new Set(this.imageIds.map(Number));
@@ -152,6 +258,7 @@
                 mtime: Number(item.mtime || existing.mtime || 0),
                 size: Number(item.size || existing.size || 0),
                 scan_index: Number.isFinite(scanIndex) ? scanIndex : existing.scan_index,
+                folder_scan_token: item.folder_scan_token || existing.folder_scan_token || '',
             });
             if (Number(this.activeId) === Number(numericId)) touchedActive = true;
             // Restore any saved caption for this path so re-imports
@@ -169,7 +276,7 @@
         if (typeof this._renderImportGallery === 'function') {
             this._renderImportGallery();
         }
-        if (added > 0 && typeof this._setPipelineTab === 'function') {
+        if (added > 0 && focusImportTab && typeof this._setPipelineTab === 'function') {
             this._setPipelineTab('import');
         }
         if (this.activeId == null && this.imageIds.length) {
@@ -195,18 +302,28 @@
         return added;
     };
 
-    // -------- Queue + editor patches: render local thumbs from base64 --------
+    // -------- Queue + editor patches: render local thumbs lazily --------
 
     const original_buildQueueItem = DM._buildQueueItem;
-    DM._buildQueueItem = function (id) {
-        const node = original_buildQueueItem.call(this, id);
+    DM._buildQueueItem = function (id, orderIndex = null) {
+        const node = original_buildQueueItem.call(this, id, orderIndex);
         if (!this.isLocalId(id)) return node;
         // Replace the ``/api/image-thumbnail/{id}`` request (which would 404
-        // for negative ids) with the inline base64 thumb from scan.
+        // for negative ids) with either the inline scan thumb or the lazy
+        // path-thumbnail endpoint.
         const meta = this.meta.get(id) || {};
         const img = node.querySelector('img.dataset-queue-thumb');
-        if (img && meta.thumb_b64) {
-            img.src = `data:image/jpeg;base64,${meta.thumb_b64}`;
+        if (img) {
+            const src = this._thumbSrc(id, 160);
+            if (src) {
+                img.src = src;
+                img.classList.remove('is-preview-pending');
+                node.classList.remove('preview-pending');
+            } else {
+                img.removeAttribute('src');
+                img.classList.add('is-preview-pending');
+                node.classList.add('preview-pending');
+            }
         }
         // Tag the item visually so the user can tell local vs gallery
         // apart at a glance.
@@ -222,7 +339,8 @@
         if (!this.isLocalId(id)) {
             return original_setActive.call(this, id);
         }
-        // Local-source path: render inline base64 thumb in the editor.
+        // Local-source path: render the same lazy thumbnail path used by
+        // queue/import/export previews. No DB row is required.
         if (!this.imageIds.includes(id)) return;
         this.activeId = id;
         const meta = this.meta.get(id) || {};
@@ -236,20 +354,26 @@
         const zoomBar = document.getElementById('dataset-zoom-toolbar');
 
         if (img) {
-            // Use the scan/upload preview so local files work without
-            // registering them in the main gallery first.
-            img.src = meta.thumb_b64
-                ? `data:image/jpeg;base64,${meta.thumb_b64}`
-                : '';
+            const src = this._thumbSrc(id, 768);
+            if (src) img.src = src;
+            else img.removeAttribute('src');
             img.alt = filename;
-            img.hidden = false;
+            img.hidden = !src;
             img.onerror = () => {
                 img.removeAttribute('src');
                 img.hidden = true;
                 if (empty) empty.hidden = false;
             };
         }
-        if (empty) empty.hidden = true;
+        if (empty) {
+            const hasPreview = !!this._thumbSrc(id, 256);
+            empty.hidden = hasPreview;
+            const text = empty.querySelector('.dataset-editor-empty-text');
+            if (text && !hasPreview) {
+                text.textContent = this._t('dataset.previewPending',
+                    'Preview not loaded yet. Use "Load more previews" in Step 1 to hydrate this folder batch.');
+            }
+        }
         if (filenameEl) filenameEl.textContent = `📁 ${filename}`;
         if (zoomBar) zoomBar.hidden = false;
         this._zoomLevel = 1;
@@ -265,6 +389,7 @@
         if (actions) actions.hidden = false;
 
         this._highlightActiveQueueItem();
+        this._scrollActiveQueueItemIntoView?.();
         this._renderTagPills?.();
     };
 
@@ -333,18 +458,31 @@
         }
         return original_captionEdits_delete(id);
     };
+    DM._deleteCaptionEditForDatasetRemoval = function (id) {
+        return original_captionEdits_delete(id);
+    };
 
     // -------- Removing items: clean up local maps --------
+
+    const original_removeImageById = DM._removeImageById;
+    DM._removeImageById = function (imageId, options = {}) {
+        const id = Number(imageId);
+        if (this.isLocalId(id)) this._markLocalManifestExcluded(id);
+        return original_removeImageById.call(this, imageId, options);
+    };
 
     const original_removeActive = DM._removeActive;
     DM._removeActive = function () {
         const id = Number(this.activeId);
         const wasLocal = this.isLocalId(id);
+        if (wasLocal) this._markLocalManifestExcluded(id);
         original_removeActive.call(this);
         if (wasLocal) {
             this.localItemPaths.delete(id);
             this.localItemDsIds.delete(id);
-            // captionEdits.delete (above) already cleared localStorage.
+            // Removing from the current dataset must not erase saved
+            // path-keyed captions; re-importing the same folder should
+            // restore the user's edits.
         }
     };
 
@@ -353,12 +491,14 @@
         const localPathsBefore = Array.from(this.localItemPaths.values());
         original_clearAll.call(this);
         // If the user actually confirmed, the imageIds is now [] — drop
-        // local maps + localStorage. If they cancelled, imageIds still
+        // local maps. Keep localStorage captions so re-importing the same
+        // folder restores edits instead of silently losing work.
+        // If they cancelled, imageIds still
         // has entries; bail out without touching anything.
         if (this.imageIds.length === 0 && localPathsBefore.length) {
             this.localItemPaths.clear();
             this.localItemDsIds.clear();
-            try { localStorage.removeItem(LOCAL_CAPTIONS_KEY); } catch { /* */ }
+            this.localManifestTokens.clear();
         }
     };
 
@@ -380,6 +520,7 @@
         const localPaths = [];
         for (const id of this.imageIds) {
             if (this.isLocalId(id)) {
+                if (this._localIdUsesManifest(id)) continue;
                 const p = this.localItemPaths.get(Number(id));
                 if (p) localPaths.push(p);
             } else {
@@ -402,6 +543,7 @@
         return {
             image_ids: galleryIds,
             image_paths: localPaths,
+            dataset_scan_tokens: this._getDatasetScanTokenSources(),
             output_folder: folder,
             naming_pattern: pattern,
             trigger,
@@ -412,6 +554,27 @@
             common_tags: commonTags,
             image_overrides,
         };
+    };
+
+    const original_updateCount = DM._updateCount;
+    DM._updateCount = function () {
+        original_updateCount.call(this);
+        const logical = this._getLogicalDatasetCount ? this._getLogicalDatasetCount() : this.imageIds.length;
+        const num = document.getElementById('dataset-count-num');
+        if (num) num.textContent = String(logical);
+        const importCount = document.getElementById('dataset-import-gallery-count');
+        if (importCount && logical !== this.imageIds.length) {
+            importCount.textContent = this._t('dataset.importGalleryManifestCount',
+                '{loaded} previews loaded / {count} images in dataset',
+                { loaded: this.imageIds.length, count: logical });
+        }
+    };
+
+    const original_isReadyToExport = DM._isReadyToExport;
+    DM._isReadyToExport = function () {
+        const logical = this._getLogicalDatasetCount ? this._getLogicalDatasetCount() : this.imageIds.length;
+        if (logical <= 0) return false;
+        return original_isReadyToExport.call({ ...this, imageIds: logical > 0 ? [1] : [] });
     };
 
     // -------- Folder-import modal wiring --------
@@ -431,6 +594,19 @@
         if (!moreBtn) return;
         moreBtn.hidden = !visible;
         if (label) moreBtn.textContent = label;
+    };
+
+    DM._setFolderImportBusy = function (busy) {
+        const isBusy = !!busy;
+        const row = document.querySelector('.dataset-folder-import-status-row');
+        const grid = $('dataset-import-gallery-grid');
+        const gallery = $('dataset-import-gallery');
+        if (row) {
+            row.classList.toggle('is-loading', isBusy);
+            row.setAttribute('aria-busy', isBusy ? 'true' : 'false');
+        }
+        if (grid) grid.classList.toggle('is-loading', isBusy);
+        if (gallery) gallery.classList.toggle('is-loading', isBusy);
     };
 
     DM._runFolderImport = async function (options = {}) {
@@ -460,17 +636,20 @@
         if (status) status.textContent = append
             ? this._t('dataset.folderImportLoadingMore', 'Loading next batch...')
             : this._t('dataset.folderImportScanning', 'Scanning folder...');
+        this._setFolderImportBusy(true);
         try {
             const body = append
                 ? {
                     scan_token: this._folderScanToken,
                     offset: this._folderScanNextOffset || 0,
                     limit: FOLDER_SCAN_PAGE_SIZE,
+                    include_thumbnails: false,
                 }
                 : {
                     folder_path: path,
                     recursive,
                     limit: FOLDER_SCAN_PAGE_SIZE,
+                    include_thumbnails: false,
                 };
             const r = await fetch('/api/dataset/folder-scan', {
                 method: 'POST',
@@ -485,9 +664,9 @@
                 return;
             }
             const data = await r.json();
-            const items = data.items || [];
-            const manifestItems = Array.isArray(data.manifest_items) ? data.manifest_items : [];
-            this._folderScanToken = data.scan_token || this._folderScanToken || null;
+            const token = this._registerFolderManifest(data) || this._folderScanToken || null;
+            const items = (data.items || []).map((item) => ({ ...item, folder_scan_token: token || '' }));
+            this._folderScanToken = token;
             this._folderScanNextOffset = Number(data.next_offset || 0) || 0;
             this._folderScanHasMore = Boolean(data.has_more);
             this._folderScanTotal = Number(data.total_files_seen || this._folderScanTotal || 0);
@@ -496,14 +675,11 @@
                 Number(data.next_offset || this._folderScanTotal || items.length || 0) || 0
             );
 
-            if (manifestItems.length > 0) {
-                this.addLocalItems(manifestItems, { switchView: false, showToast: false });
-            }
             if (items.length > 0) {
-                this.addLocalItems(items, { switchView: false, showToast: false });
+                this.addLocalItems(items, { switchView: false, showToast: false, focusImportTab: !append });
             }
 
-            if (items.length === 0 && manifestItems.length === 0 && !this._folderScanHasMore) {
+            if (items.length === 0 && !this._folderScanHasMore) {
                 if (status) status.textContent = this._t('dataset.folderImportEmpty',
                     'No new images found in that folder.');
                 this._setFolderLoadMoreState(false);
@@ -511,16 +687,16 @@
             }
             const total = Number(data.total_files_seen || 0);
             const previewed = Math.min(this._folderScanPreviewed || 0, total || this._folderScanPreviewed || 0);
-            const addedToDataset = manifestItems.length || items.length;
+            const addedToDataset = total || items.length;
             if (status) {
-                if (!append && manifestItems.length > 0) {
+                if (!append && total > 0) {
                     status.textContent = this._folderScanHasMore
                         ? this._t('dataset.folderImportAddedManifest',
                             'Added {count} images to the dataset. Previewed {loaded}/{total}; load more previews to continue.',
-                            { count: manifestItems.length, loaded: previewed, total })
+                            { count: total, loaded: previewed, total })
                         : this._t('dataset.folderImportAdded',
                             'Added {count} local images (not added to main gallery)',
-                            { count: manifestItems.length });
+                            { count: total });
                 } else {
                     status.textContent = this._folderScanHasMore
                         ? this._t('dataset.folderImportPreviewPage',
@@ -537,7 +713,7 @@
             );
             if (data.truncated || data.has_more) {
                 this._toast(this._t('dataset.folderImportMoreAvailable',
-                    'Large folder detected. All paths were added; previews load in batches so the UI stays responsive.'),
+                    'Large folder detected. Export and audit will use the backend manifest; previews load in batches so the UI stays responsive.'),
                     'info', 6000);
             } else if (!append && addedToDataset > 0) {
                 this._toast(this._t('dataset.folderImportAdded',
@@ -552,6 +728,7 @@
         } catch (e) {
             if (status) status.textContent = e.message || String(e);
         } finally {
+            this._setFolderImportBusy(false);
             if (goBtn) goBtn.disabled = false;
             if (moreBtn) moreBtn.disabled = false;
         }
@@ -645,7 +822,6 @@
         const out = [];
         async function walk(entry, depth = 0) {
             if (!entry) return;
-            if (out.length >= MAX_BROWSER_DROP_FILES) return;
             if (entry.isFile) {
                 try { out.push(await entryFile(entry)); } catch { /* skip unreadable */ }
                 return;
@@ -656,7 +832,6 @@
             let batch = await readDirectoryEntries(reader);
             while (batch.length > 0) {
                 for (const child of batch) {
-                    if (out.length >= MAX_BROWSER_DROP_FILES) return;
                     if (child.isFile || recursive || depth === 0) {
                         await walk(child, depth + 1);
                     }
@@ -678,44 +853,86 @@
             if (IMAGE_EXTS.has(ext)) imageFiles.push(f);
             else if (ARCHIVE_EXTS.has(ext)) archiveFiles.push(f);
         }
-        let uploadFiles = [...imageFiles, ...archiveFiles];
+        const uploadFiles = [...imageFiles, ...archiveFiles];
         if (uploadFiles.length === 0) {
             DM._toast(DM._t('dataset.dropNoImages',
                 'No supported image or ZIP files found in the drop.'), 'warning', 3000);
             return;
         }
-        if (uploadFiles.length > MAX_BROWSER_DROP_FILES) {
-            uploadFiles = uploadFiles.slice(0, MAX_BROWSER_DROP_FILES);
+        if (uploadFiles.length > LARGE_BROWSER_DROP_WARNING_FILES) {
             DM._toast(DM._t('dataset.dropCapped',
-                'Large browser drop detected. Imported the first {count} files; use the folder path bar for larger folders.',
-                { count: MAX_BROWSER_DROP_FILES }), 'warning', 7000);
+                'Large browser drop detected. The app will import all dropped files; the folder path bar is faster for very large folders.',
+                { count: uploadFiles.length }), 'warning', 7000);
         }
-        // Upload files to the backend for local-source import
-        const formData = new FormData();
-        for (const f of uploadFiles) formData.append('files', f);
-        formData.append('recursive', $('dataset-folder-import-recursive')?.checked ? 'true' : 'false');
+        // Upload files to the backend for local-source import. Keep this
+        // chunked so a large drop does not create one huge FormData request.
+        const recursive = $('dataset-folder-import-recursive')?.checked ? 'true' : 'false';
+        const batches = [];
+        for (let i = 0; i < uploadFiles.length; i += UPLOAD_BATCH_SIZE) {
+            batches.push(uploadFiles.slice(i, i + UPLOAD_BATCH_SIZE));
+        }
+        let totalAdded = 0;
+        let skippedUnreadable = 0;
+        let sawTruncated = false;
+        const status = $('dataset-folder-import-status');
+        if (status) {
+            status.textContent = DM._t('dataset.uploadImporting',
+                'Importing dropped files... 0/{total} batches',
+                { total: batches.length });
+        }
+        DM._setFolderImportBusy?.(true);
         try {
-            const r = await fetch('/api/dataset/upload-files', {
-                method: 'POST',
-                body: formData,
-            });
-            if (!r.ok) {
-                const body = await r.json().catch(() => ({}));
-                DM._toast(body.detail || `Upload failed: ${r.status}`, 'error', 5000);
-                return;
+            for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+                if (status) {
+                    status.textContent = DM._t('dataset.uploadImporting',
+                        'Importing dropped files... {current}/{total} batches',
+                        { current: batchIndex + 1, total: batches.length });
+                }
+                const formData = new FormData();
+                for (const f of batches[batchIndex]) formData.append('files', f);
+                formData.append('recursive', recursive);
+                const r = await fetch('/api/dataset/upload-files', {
+                    method: 'POST',
+                    body: formData,
+                });
+                if (!r.ok) {
+                    const body = await r.json().catch(() => ({}));
+                    DM._toast(body.detail || `Upload failed: ${r.status}`, 'error', 5000);
+                    return;
+                }
+                const data = await r.json();
+                const items = data.items || [];
+                if (items.length > 0) {
+                    totalAdded += DM.addLocalItems(items, { switchView: false, showToast: false });
+                }
+                skippedUnreadable += Number(data.skipped_unreadable || 0) || 0;
+                sawTruncated = sawTruncated || Boolean(data.truncated);
             }
-            const data = await r.json();
-            const items = data.items || [];
-            if (items.length > 0) {
-                DM.addLocalItems(items, { switchView: false, showToast: true });
+            if (totalAdded > 0) {
+                if (status) {
+                    status.textContent = DM._t('dataset.folderImportAdded',
+                        'Added {count} local images (not added to main gallery)',
+                        { count: totalAdded });
+                }
+                DM._toast(DM._t('dataset.folderImportAdded',
+                    'Added {count} local images (not added to main gallery)',
+                    { count: totalAdded }), 'success');
             }
-            if (data.truncated) {
+            if (sawTruncated) {
                 DM._toast(DM._t('dataset.uploadTruncated',
-                    'Upload contained more than {count} supported images. Imported the first batch; use the folder path bar for very large folders.',
-                    { count: FOLDER_SCAN_PAGE_SIZE }), 'warning', 7000);
+                    'Upload import was split into batches. Imported every returned image; use the folder path bar for very large folders.'),
+                    'warning', 7000);
+            }
+            if (skippedUnreadable > 0) {
+                DM._toast(DM._t('dataset.folderImportSkipped',
+                    'Skipped {count} unreadable files in that folder.',
+                    { count: skippedUnreadable }), 'warning', 5000);
             }
         } catch (e) {
+            if (status) status.textContent = e.message || 'Upload failed';
             DM._toast(e.message || 'Upload failed', 'error', 5000);
+        } finally {
+            DM._setFolderImportBusy?.(false);
         }
     }
 
@@ -726,7 +943,12 @@
         const browseBtn = $('btn-dataset-folder-import-browse');
         const pathInput = $('dataset-folder-import-path');
         if (browseBtn && pathInput && typeof window.showFolderBrowser === 'function') {
-            browseBtn.addEventListener('mousedown', () => window.showFolderBrowser(pathInput));
+            const openBrowser = (event) => {
+                event.preventDefault();
+                window.showFolderBrowser(pathInput);
+            };
+            browseBtn.addEventListener('click', openBrowser);
+            browseBtn.addEventListener('mousedown', (event) => event.preventDefault());
         }
 
         bindDropzone();

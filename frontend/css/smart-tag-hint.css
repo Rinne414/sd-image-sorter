@@ -66,25 +66,161 @@
     flex-shrink: 0;
 }
 
-.smart-tag-vote-details {
+#smart-tag-modal .smart-tag-modal-content {
+    max-width: min(1080px, calc(100vw - 32px));
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+}
+
+#smart-tag-modal .smart-tag-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 16px;
+}
+
+#smart-tag-modal .smart-tag-basic-grid,
+#smart-tag-modal .smart-tag-vote-grid,
+#smart-tag-modal .smart-tag-natural-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+#smart-tag-modal .smart-tag-basic-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#smart-tag-modal .smart-tag-basic-grid .form-label:first-child {
+    grid-column: 1 / -1;
+}
+
+#smart-tag-modal .form-label {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--text-primary, #f3f4f6);
+    font-weight: 650;
+}
+
+#smart-tag-modal .form-help {
+    margin: 0;
+    color: var(--text-secondary, #cbd5e1);
+    font-size: 12px;
+    line-height: 1.45;
+    font-weight: 500;
+}
+
+#smart-tag-modal select,
+#smart-tag-modal input[type="text"],
+#smart-tag-modal input[type="number"],
+#smart-tag-modal .form-input {
+    min-height: 32px;
+    width: 100%;
+}
+
+#smart-tag-modal .smart-tag-section {
     border: 1px solid var(--border-color, rgba(255, 255, 255, 0.14));
     border-radius: var(--radius-md, 8px);
     background: var(--surface-2, rgba(255, 255, 255, 0.05));
     color: var(--text-primary, #f3f4f6);
-    padding: 8px 10px;
+    padding: 12px;
+}
+
+#smart-tag-modal .smart-tag-section.is-disabled {
+    opacity: 0.58;
+}
+
+#smart-tag-modal .smart-tag-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+#smart-tag-modal .smart-tag-section-toggle,
+#smart-tag-modal .smart-tag-inline-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    color: var(--text-primary, #f3f4f6);
+    cursor: pointer;
+    font-weight: 650;
+}
+
+#smart-tag-modal .smart-tag-section-note {
+    color: var(--text-secondary, #cbd5e1);
+    font-size: 12px;
+    text-align: right;
+}
+
+#smart-tag-modal .smart-tag-safety-note {
+    padding: 10px 12px;
+    border: 1px solid rgba(var(--accent-secondary-rgb, 45, 212, 191), 0.26);
+    border-radius: var(--radius-md, 8px);
+    background: rgba(var(--accent-secondary-rgb, 45, 212, 191), 0.08);
+    color: var(--text-secondary, #cbd5e1);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+#smart-tag-modal .smart-tag-summary {
+    padding: 10px 12px;
+    background: var(--surface-2, #1a1a1a);
+    border-radius: var(--radius-md, 8px);
+    font-size: 14px;
+}
+
+#smart-tag-modal .smart-tag-progress .progress-bar {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--surface-2, #1a1a1a);
+    overflow: hidden;
+}
+
+#smart-tag-modal .smart-tag-progress .progress-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--accent-color, #ff8a00);
+    transition: width 0.3s;
+}
+
+#smart-tag-modal .smart-tag-progress-text {
+    margin: 8px 0 0;
+    font-size: 13px;
+}
+
+#smart-tag-modal .smart-tag-progress-preview {
+    margin: 4px 0 0;
+    color: var(--text-secondary, #cbd5e1);
+    font-size: 12px;
+    font-style: italic;
+}
+
+#smart-tag-modal .smart-tag-actions {
+    margin-top: 20px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    position: sticky;
+    bottom: -1px;
+    padding-top: 10px;
+    padding-bottom: 2px;
+    background: linear-gradient(
+        180deg,
+        rgba(15, 23, 42, 0),
+        var(--surface-0, #0f172a) 28%
+    );
+    z-index: 2;
 }
 
 .smart-tag-vote-details summary {
     color: var(--text-primary, #f3f4f6);
     cursor: pointer;
     font-weight: 600;
-}
-
-.smart-tag-vote-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: 10px;
 }
 
 .smart-tag-vote-details .form-help {
@@ -158,7 +294,18 @@
         justify-content: flex-end;
     }
 
-    .smart-tag-vote-grid {
+    #smart-tag-modal .smart-tag-basic-grid,
+    #smart-tag-modal .smart-tag-vote-grid,
+    #smart-tag-modal .smart-tag-natural-grid {
         grid-template-columns: 1fr;
+    }
+
+    #smart-tag-modal .smart-tag-section-head {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    #smart-tag-modal .smart-tag-section-note {
+        text-align: left;
     }
 }

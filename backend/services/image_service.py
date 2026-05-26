@@ -66,6 +66,7 @@ OFFSET_MAX = 10000000
 SEARCH_MAX_LENGTH = 1000
 DEFAULT_PAGE_SIZE = 100
 SELECTION_IDS_FETCH_CHUNK = 2000
+SELECTION_IDS_MAX_RESPONSE = 100000
 SELECTION_TOKEN_DEFAULT_CHUNK = 2000
 SELECTION_TOKEN_MAX_CHUNK = 10000
 SELECTION_TOKEN_MAX_EXCLUDED_IDS = 10000
@@ -122,6 +123,14 @@ def _coerce_prompt_match_mode(value: Any) -> str:
     mode = _coerce_optional_string_filter(value, "promptMatchMode") or PROMPT_MATCH_MODE_EXACT
     mode = mode.lower()
     if mode not in VALID_PROMPT_MATCH_MODES:
+        raise _invalid_selection_token()
+    return mode
+
+
+def _coerce_tag_mode(value: Any) -> str:
+    mode = _coerce_optional_string_filter(value, "tagMode") or "and"
+    mode = mode.lower()
+    if mode not in {"and", "or"}:
         raise _invalid_selection_token()
     return mode
 
@@ -1188,6 +1197,7 @@ class ImageService:
                     chunk_size=chunk_size,
                     generators=contract["generators"],
                     tags=contract["tags"],
+                    tag_mode=contract.get("tagMode", "and"),
                     ratings=contract["ratings"],
                     checkpoints=contract["checkpoints"],
                     loras=contract["loras"],
@@ -1207,6 +1217,11 @@ class ImageService:
                     brightness_max=contract["brightnessMax"],
                     color_temperature=contract["colorTemperature"],
                     brightness_distribution=contract["brightnessDistribution"],
+                    exclude_tags=contract.get("excludeTags"),
+                    exclude_generators=contract.get("excludeGenerators"),
+                    exclude_ratings=contract.get("excludeRatings"),
+                    exclude_checkpoints=contract.get("excludeCheckpoints"),
+                    exclude_loras=contract.get("excludeLoras"),
                 ):
                     for image_id in batch_ids:
                         handle.write(f"{int(image_id)}\n")
@@ -1504,6 +1519,7 @@ class ImageService:
         checkpoints: Optional[List[str]] = None,
         loras: Optional[List[str]] = None,
         prompts: Optional[List[str]] = None,
+        tag_mode: str = "and",
         prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
         artist: Optional[str] = None,
         search: Optional[str] = None,
@@ -1545,6 +1561,7 @@ class ImageService:
         color_temperature = color_temperature.lower() if color_temperature else None
         brightness_distribution = _coerce_optional_string_filter(brightness_distribution, "brightnessDistribution")
         brightness_distribution = brightness_distribution.lower() if brightness_distribution else None
+        tag_mode = _coerce_tag_mode(tag_mode)
         prompt_match_mode = _coerce_prompt_match_mode(prompt_match_mode)
         excluded_image_ids = _coerce_selection_id_list(
             excluded_image_ids,
@@ -1567,6 +1584,7 @@ class ImageService:
         return {
             "generators": _sanitize_filter_values(generators) or [],
             "tags": _sanitize_filter_values(tags) or [],
+            "tagMode": tag_mode,
             "ratings": _sanitize_filter_values(ratings) or [],
             "checkpoints": _sanitize_filter_values(checkpoints) or [],
             "loras": _sanitize_filter_values(loras) or [],
@@ -1604,6 +1622,7 @@ class ImageService:
         return db.get_filtered_image_ids(
             generators=contract["generators"],
             tags=contract["tags"],
+            tag_mode=contract.get("tagMode", "and"),
             ratings=contract["ratings"],
             checkpoints=contract["checkpoints"],
             loras=contract["loras"],
@@ -1638,6 +1657,7 @@ class ImageService:
         return db.get_filtered_image_count(
             generators=contract["generators"],
             tags=contract["tags"],
+            tag_mode=contract.get("tagMode", "and"),
             ratings=contract["ratings"],
             checkpoints=contract["checkpoints"],
             loras=contract["loras"],
@@ -1694,6 +1714,7 @@ class ImageService:
             return self._build_selection_filter_contract(
                 generators=filters.get("generators"),
                 tags=filters.get("tags"),
+                tag_mode=filters.get("tagMode") or filters.get("tag_mode") or "and",
                 ratings=filters.get("ratings"),
                 checkpoints=filters.get("checkpoints"),
                 loras=filters.get("loras"),
@@ -1771,6 +1792,7 @@ class ImageService:
         *,
         generators: Optional[List[str]] = None,
         tags: Optional[List[str]] = None,
+        tag_mode: str = "and",
         ratings: Optional[List[str]] = None,
         checkpoints: Optional[List[str]] = None,
         loras: Optional[List[str]] = None,
@@ -1790,11 +1812,17 @@ class ImageService:
         brightness_max: Optional[float] = None,
         color_temperature: Optional[str] = None,
         brightness_distribution: Optional[str] = None,
+        exclude_tags: Optional[List[str]] = None,
+        exclude_generators: Optional[List[str]] = None,
+        exclude_ratings: Optional[List[str]] = None,
+        exclude_checkpoints: Optional[List[str]] = None,
+        exclude_loras: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Resolve the full filtered-result ID set in current gallery sort order."""
         contract = self._build_selection_filter_contract(
             generators=generators,
             tags=tags,
+            tag_mode=tag_mode,
             ratings=ratings,
             checkpoints=checkpoints,
             loras=loras,
@@ -1814,8 +1842,24 @@ class ImageService:
             brightness_max=brightness_max,
             color_temperature=color_temperature,
             brightness_distribution=brightness_distribution,
+            exclude_tags=exclude_tags,
+            exclude_generators=exclude_generators,
+            exclude_ratings=exclude_ratings,
+            exclude_checkpoints=exclude_checkpoints,
+            exclude_loras=exclude_loras,
         )
-        image_ids = self._selection_ids_from_contract(contract)
+        image_ids = self._selection_ids_from_contract(
+            contract,
+            limit=SELECTION_IDS_MAX_RESPONSE + 1,
+        )
+        if len(image_ids) > SELECTION_IDS_MAX_RESPONSE:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"selection-ids is limited to {SELECTION_IDS_MAX_RESPONSE} IDs. "
+                    "Use selection-token and selection-chunk for larger filtered selections."
+                ),
+            )
         return {
             "image_ids": image_ids,
             "total": len(image_ids),

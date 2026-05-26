@@ -7,6 +7,9 @@ import json
 import os
 import base64
 import binascii
+import time
+import uuid
+from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional
 
 from fastapi import HTTPException
@@ -57,6 +60,7 @@ EXPORT_DB_CHUNK_SIZE = 500
 SELECTION_TOKEN_VERSION = 2
 PROMPT_MATCH_MODE_EXACT = "exact"
 PROMPT_MATCH_MODE_CONTAINS = "contains"
+COMBINED_EXPORT_RECENT_ERROR_LIMIT = 20
 
 
 def _normalize_export_image_ids(image_ids: Iterable[Any]) -> List[int]:
@@ -117,6 +121,7 @@ def iter_selection_token_id_chunks(selection_token: str, chunk_size: int = EXPOR
         chunk_size=chunk_size,
         generators=filters.get("generators") or None,
         tags=filters.get("tags") or None,
+        tag_mode=filters.get("tagMode") or filters.get("tag_mode") or "and",
         ratings=filters.get("ratings") or None,
         checkpoints=filters.get("checkpoints") or None,
         loras=filters.get("loras") or None,
@@ -133,6 +138,15 @@ def iter_selection_token_id_chunks(selection_token: str, chunk_size: int = EXPOR
         min_aesthetic=filters.get("minAesthetic"),
         max_aesthetic=filters.get("maxAesthetic"),
         excluded_image_ids=filters.get("excludedImageIds") or None,
+        brightness_min=filters.get("brightnessMin"),
+        brightness_max=filters.get("brightnessMax"),
+        color_temperature=filters.get("colorTemperature"),
+        brightness_distribution=filters.get("brightnessDistribution"),
+        exclude_tags=filters.get("excludeTags") or None,
+        exclude_generators=filters.get("excludeGenerators") or None,
+        exclude_ratings=filters.get("excludeRatings") or None,
+        exclude_checkpoints=filters.get("excludeCheckpoints") or None,
+        exclude_loras=filters.get("excludeLoras") or None,
     )
 
 
@@ -141,6 +155,7 @@ def count_selection_token_ids(selection_token: str) -> int:
     return db.get_filtered_image_count(
         generators=filters.get("generators") or None,
         tags=filters.get("tags") or None,
+        tag_mode=filters.get("tagMode") or filters.get("tag_mode") or "and",
         ratings=filters.get("ratings") or None,
         checkpoints=filters.get("checkpoints") or None,
         loras=filters.get("loras") or None,
@@ -156,6 +171,15 @@ def count_selection_token_ids(selection_token: str) -> int:
         min_aesthetic=filters.get("minAesthetic"),
         max_aesthetic=filters.get("maxAesthetic"),
         excluded_image_ids=filters.get("excludedImageIds") or None,
+        brightness_min=filters.get("brightnessMin"),
+        brightness_max=filters.get("brightnessMax"),
+        color_temperature=filters.get("colorTemperature"),
+        brightness_distribution=filters.get("brightnessDistribution"),
+        exclude_tags=filters.get("excludeTags") or None,
+        exclude_generators=filters.get("excludeGenerators") or None,
+        exclude_ratings=filters.get("excludeRatings") or None,
+        exclude_checkpoints=filters.get("excludeCheckpoints") or None,
+        exclude_loras=filters.get("excludeLoras") or None,
     )
 
 
@@ -307,6 +331,100 @@ def _join_caption_parts(parts: List[str]) -> str:
         seen.add(key)
         output.append(normalized)
     return ", ".join(output)
+
+
+def _split_caption_transform_tokens(value: str) -> List[str]:
+    return [
+        " ".join(part.split()).strip(" ,")
+        for part in str(value or "").replace("\n", ",").split(",")
+        if " ".join(part.split()).strip(" ,")
+    ]
+
+
+def _normalize_caption_transform_token(value: str) -> str:
+    return " ".join(str(value or "").replace("_", " ").split()).strip().lower()
+
+
+def _coerce_transform_token_list(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, (str, bytes)):
+        values = [value]
+    else:
+        try:
+            values = list(value)
+        except TypeError:
+            values = [value]
+    out: List[str] = []
+    seen: set[str] = set()
+    for raw in values:
+        token = " ".join(str(raw or "").split()).strip(" ,")
+        if not token:
+            continue
+        key = _normalize_caption_transform_token(token)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(token)
+    return out
+
+
+def apply_caption_transforms(content: str, transforms: Optional[Dict[str, Any]]) -> str:
+    """Apply token-level caption transforms without loading captions in the UI.
+
+    The v321 caption editor can now say "add/remove from all selected images"
+    as a compact rule. Export code applies that rule per image while streaming
+    chunks from either explicit IDs or a selection token.
+    """
+    if not isinstance(transforms, dict) or not transforms:
+        return str(content or "")
+
+    prepend = _coerce_transform_token_list(transforms.get("prepend") or transforms.get("add_prepend"))
+    append = _coerce_transform_token_list(transforms.get("append") or transforms.get("add_append"))
+    remove = _coerce_transform_token_list(transforms.get("remove") or transforms.get("remove_tokens"))
+    remove_categories = {
+        str(category or "").strip().lower()
+        for category in _coerce_transform_token_list(
+            transforms.get("remove_categories") or transforms.get("removeCategories")
+        )
+        if str(category or "").strip()
+    }
+    dedupe = bool(transforms.get("dedupe") or prepend or append or remove or remove_categories)
+
+    if not prepend and not append and not remove and not remove_categories and not dedupe:
+        return str(content or "")
+
+    tokens = _split_caption_transform_tokens(str(content or ""))
+    remove_keys = {_normalize_caption_transform_token(token) for token in remove}
+    if remove_keys:
+        tokens = [token for token in tokens if _normalize_caption_transform_token(token) not in remove_keys]
+    if remove_categories:
+        try:
+            from tag_rules import categorize_tag
+            tokens = [
+                token
+                for token in tokens
+                if str(categorize_tag(token) or "").strip().lower() not in remove_categories
+            ]
+        except Exception:
+            # Category cleanup is a convenience layer. Exact add/remove
+            # transforms must continue to work even if the categorizer is
+            # unavailable in a packaged build.
+            pass
+
+    merged = [*prepend, *tokens, *append]
+    if dedupe:
+        output: List[str] = []
+        seen: set[str] = set()
+        for token in merged:
+            key = _normalize_caption_transform_token(token)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            output.append(token)
+        merged = output
+
+    return ", ".join(merged)
 
 
 def _filter_text_caption_tokens(value: str, blacklist: set[str]) -> List[str]:
@@ -603,6 +721,7 @@ def export_tags_batch_request(
     # per-content-mode default. Explicit True / False is the user's
     # checkbox override from the export modal.
     normalize_tag_underscores_request = getattr(request, "normalize_tag_underscores", None)
+    caption_transforms = getattr(request, "caption_transforms", None) or {}
 
     exported = 0
     skipped = 0
@@ -644,6 +763,7 @@ def export_tags_batch_request(
                         template_options=template_options,
                         normalize_tag_underscores=normalize_tag_underscores_request,
                     )
+                file_content = apply_caption_transforms(file_content, caption_transforms)
                 # In ``beside_image`` mode each image lands in its own
                 # source directory. We do NOT auto-create directories on
                 # this path: if the source folder no longer exists (file
@@ -714,6 +834,131 @@ def export_tags_batch_request(
     }
 
 
+def _get_combined_export_dir() -> Path:
+    target = Path(__file__).resolve().parent.parent / "data" / "combined-exports"
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def combined_export_path(token: str) -> Path:
+    raw = str(token or "")
+    if len(raw) != 32 or any(ch not in "0123456789abcdef" for ch in raw):
+        raise HTTPException(status_code=404, detail="Combined export not found")
+    path = _get_combined_export_dir() / f"{raw}.txt"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Combined export not found")
+    return path
+
+
+def export_tags_combined_request(
+    request: Any,
+    *,
+    id_chunks: Optional[Iterable[List[int]]] = None,
+    total: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Render selected captions to one server-side file.
+
+    This avoids the old v321 path where the browser expanded a selection token
+    into a giant ID list, rendered every caption via preview calls, then built a
+    huge JS string/Blob. The browser now receives a download URL.
+    """
+    blacklist = {str(tag or "").strip().lower() for tag in (getattr(request, "blacklist", None) or []) if str(tag or "").strip()}
+    prefix = str(getattr(request, "prefix", "") or "")
+    content_mode = str(getattr(request, "content_mode", "tags") or "tags").strip().lower()
+    if content_mode not in VALID_CONTENT_MODES:
+        raise HTTPException(status_code=400, detail=f"Invalid content_mode: {content_mode}")
+
+    template_options = getattr(request, "template_options", None)
+    if template_options is not None and not isinstance(template_options, dict):
+        if hasattr(template_options, "model_dump"):
+            template_options = template_options.model_dump()
+        else:
+            template_options = None
+
+    image_overrides_raw = getattr(request, "image_overrides", None) or {}
+    image_overrides: Dict[int, str] = {}
+    if isinstance(image_overrides_raw, dict):
+        for key, value in image_overrides_raw.items():
+            try:
+                image_overrides[int(key)] = str(value or "")
+            except (TypeError, ValueError):
+                continue
+
+    normalize_tag_underscores_request = getattr(request, "normalize_tag_underscores", None)
+    caption_transforms = getattr(request, "caption_transforms", None) or {}
+
+    if id_chunks is None:
+        id_chunks = _iter_id_list_chunks(getattr(request, "image_ids", []) or [], EXPORT_DB_CHUNK_SIZE)
+    total_count = int(total if total is not None else len(_normalize_export_image_ids(getattr(request, "image_ids", []) or [])))
+
+    token = uuid.uuid4().hex
+    export_dir = _get_combined_export_dir()
+    path = export_dir / f"{token}.txt"
+    tmp_path = export_dir / f"{token}.tmp"
+    filename = f"sd-image-sorter-combined-{time.strftime('%Y%m%d-%H%M%S')}.{_sidecar_extension(content_mode).lstrip('.')}"
+
+    exported = 0
+    error_count = 0
+    error_messages: List[str] = []
+    first_line = True
+
+    try:
+        with tmp_path.open("w", encoding="utf-8", newline="\n") as handle:
+            for image_id_list in id_chunks:
+                images_map = db.get_images_by_ids(image_id_list)
+                tags_map = db.get_image_tags_map(image_id_list)
+                for image_id in image_id_list:
+                    try:
+                        image = images_map.get(image_id)
+                        if not image:
+                            error_count += 1
+                            if len(error_messages) < COMBINED_EXPORT_RECENT_ERROR_LIMIT:
+                                error_messages.append(f"Image {image_id} not found")
+                            continue
+                        if image_id in image_overrides:
+                            rendered = image_overrides[image_id]
+                        else:
+                            rendered = build_sidecar_content(
+                                image,
+                                tags_map.get(image_id, []) or [],
+                                content_mode=content_mode,
+                                blacklist=blacklist,
+                                prefix=prefix,
+                                template_options=template_options,
+                                normalize_tag_underscores=normalize_tag_underscores_request,
+                            )
+                        rendered = apply_caption_transforms(rendered, caption_transforms)
+                        if not rendered:
+                            continue
+                        if not first_line:
+                            handle.write("\n")
+                        handle.write(rendered)
+                        first_line = False
+                        exported += 1
+                    except HTTPException:
+                        raise
+                    except Exception as exc:
+                        error_count += 1
+                        if len(error_messages) < COMBINED_EXPORT_RECENT_ERROR_LIMIT:
+                            error_messages.append(f"Image {image_id}: {exc}")
+        tmp_path.replace(path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+    return {
+        "status": "ok" if error_count == 0 else ("partial" if exported else "error"),
+        "token": token,
+        "download_url": f"/api/tags/export-combined/download/{token}",
+        "filename": filename,
+        "exported": exported,
+        "total": total_count,
+        "error_count": error_count,
+        "error_messages": error_messages,
+        "content_mode": content_mode,
+    }
+
+
 def render_export_preview(request: Any) -> Dict[str, Any]:
     """Render template-engine previews for a small image set without writing sidecars."""
     image_ids = _normalize_export_image_ids(getattr(request, "image_ids", []) or [])
@@ -725,6 +970,7 @@ def render_export_preview(request: Any) -> Dict[str, Any]:
     # Modes that cannot be represented as templates — use build_sidecar_content directly
     content_mode = getattr(request, "content_mode", None)
     use_native_mode = content_mode in ("json", "a1111", "prompt_negative")
+    caption_transforms = getattr(request, "caption_transforms", None) or {}
 
     images_map = db.get_images_by_ids(image_ids)
     tags_map = db.get_image_tags_map(image_ids)
@@ -764,6 +1010,8 @@ def render_export_preview(request: Any) -> Dict[str, Any]:
         except Exception as exc:
             results.append({"image_id": image_id, "error": str(exc), "rendered": ""})
             continue
+
+        rendered = apply_caption_transforms(rendered, caption_transforms)
 
         results.append({
             "image_id": image_id,

@@ -3,11 +3,10 @@ tagging checks as a single LoRA-trainer-readiness report.
 
 Rationale
 ---------
-LoraHub's Image Studio audit step is one of the strongest "noob save"
-features it ships: it tells the user before they hit Train whether
-their dataset has obvious problems (low-quality images, duplicates,
-images with no captions, dimensions below the trainer's floor). This
-project already has all the underlying detectors:
+The audit step tells the user before they hit Train whether their dataset
+has obvious problems (low-quality images, duplicates, images with no
+captions, dimensions below the trainer's floor). This project already has
+all the underlying detectors:
 
   * ``backend/aesthetic.py``  — CLIP ViT-L + LAION head, ~1-10 score
   * ``backend/similarity.py`` — perceptual hash for near-duplicate
@@ -78,6 +77,7 @@ from PIL import Image, UnidentifiedImageError
 logger = logging.getLogger(__name__)
 
 PHASH_NEAR_DUPLICATE_LIMIT = 5_000
+AUDIT_RESPONSE_ITEM_LIMIT = 5_000
 
 
 def _safe_aesthetic_score(image_path: str) -> Optional[float]:
@@ -199,11 +199,12 @@ def _row_for_path(abs_path: str) -> Dict[str, Any]:
     p = Path(abs_path)
     width: Optional[int] = None
     height: Optional[int] = None
+    flags: List[str] = []
     try:
         with Image.open(p) as img:
             width, height = img.size
     except Exception:  # noqa: BLE001
-        pass
+        flags.append("missing")
     return {
         "image_id": 0,
         "abs_path": str(p),
@@ -217,7 +218,7 @@ def _row_for_path(abs_path: str) -> Dict[str, Any]:
         "tag_count": 0,
         "aesthetic_score": None,
         "phash_hex": None,
-        "flags": [],
+        "flags": flags,
     }
 
 
@@ -231,6 +232,8 @@ def audit_dataset(
     extra_tag_counts: Optional[Dict[str, int]] = None,
     enable_aesthetic: bool = True,
     enable_phash: bool = True,
+    enable_untagged: bool = True,
+    item_limit: int = AUDIT_RESPONSE_ITEM_LIMIT,
 ) -> Dict[str, Any]:
     """Run the audit pipeline over a Dataset Maker session.
 
@@ -247,30 +250,146 @@ def audit_dataset(
                              by the frontend so local items can also
                              be flagged ``untagged`` based on their
                              localStorage caption length
-    * ``enable_aesthetic`` / ``enable_phash`` - hard-off switches the
-                             frontend can flip when a user just wants a
-                             quick "what's missing tags?" pass without
-                             paying the AI inference cost.
+    * ``enable_aesthetic`` / ``enable_phash`` / ``enable_untagged`` -
+                             hard-off switches the frontend can flip when
+                             a user wants a focused pass without paying the
+                             AI inference cost or seeing checks they
+                             intentionally disabled.
 
     Returns the report dict shape documented in the module docstring.
     """
-    rows: List[Dict[str, Any]] = []
+    response_limit = max(0, int(item_limit or 0))
+    returned_items: List[Dict[str, Any]] = []
+    total_rows = 0
+    low_quality_count = 0
+    untagged_count = 0
+    small_count = 0
+    missing_count = 0
+    aesthetic_scores: List[float] = []
 
-    # Gallery-source rows: pull from DB.
-    image_ids_clean = list({int(i) for i in (image_ids or []) if int(i) > 0})
+    duplicate_rows: List[Dict[str, Any]] = []
+    duplicate_exact_mode = False
+    seen_hash_first: Dict[str, Dict[str, Any]] = {}
+    duplicate_buckets: Dict[str, List[Dict[str, Any]]] = {}
+
+    def _track_exact_duplicate(row: Dict[str, Any]) -> None:
+        hash_value = str(row.get("phash_hex") or "")
+        if not hash_value:
+            return
+        if hash_value in duplicate_buckets:
+            duplicate_buckets[hash_value].append(row)
+            return
+        first = seen_hash_first.pop(hash_value, None)
+        if first is not None:
+            duplicate_buckets[hash_value] = [first, row]
+            return
+        seen_hash_first[hash_value] = row
+
+    def _track_duplicate(row: Dict[str, Any]) -> None:
+        nonlocal duplicate_exact_mode
+        if not (enable_phash and phash_max is not None) or not row.get("phash_hex"):
+            return
+        if duplicate_exact_mode:
+            _track_exact_duplicate(row)
+            return
+        duplicate_rows.append(row)
+        if len(duplicate_rows) <= PHASH_NEAR_DUPLICATE_LIMIT:
+            return
+        duplicate_exact_mode = True
+        for prior in duplicate_rows:
+            _track_exact_duplicate(prior)
+        duplicate_rows.clear()
+
+    def _process_row(row: Dict[str, Any]) -> None:
+        nonlocal total_rows, low_quality_count, untagged_count, small_count, missing_count
+        total_rows += 1
+        path = row.get("abs_path") or ""
+        flags = set(row.get("flags") or [])
+        if path and not Path(str(path)).is_file():
+            flags.add("missing")
+        if path and "missing" not in flags:
+            # Backfill width/height for gallery items that the DB row
+            # didn't populate (they should but defensive).
+            if row.get("width") is None or row.get("height") is None:
+                try:
+                    with Image.open(path) as img:
+                        row["width"], row["height"] = img.size
+                except Exception:  # noqa: BLE001
+                    flags.add("missing")
+
+            if "missing" not in flags and enable_aesthetic and aesthetic_max is not None:
+                row["aesthetic_score"] = _safe_aesthetic_score(path)
+            if "missing" not in flags and enable_phash and phash_max is not None:
+                row["phash_hex"] = _safe_phash_hex(path)
+
+        if "missing" in flags:
+            missing_count += 1
+            row["flags"] = sorted(flags)
+        else:
+            # Low-quality: aesthetic_max set + score available + score < max
+            if aesthetic_max is not None and row.get("aesthetic_score") is not None:
+                score = float(row["aesthetic_score"])
+                aesthetic_scores.append(score)
+                if score < float(aesthetic_max):
+                    flags.add("low_quality")
+                    low_quality_count += 1
+
+            # Untagged: tag_count == 0 (cheap and useful, but user-toggleable)
+            if enable_untagged and int(row.get("tag_count") or 0) == 0:
+                flags.add("untagged")
+                untagged_count += 1
+
+            # Small dimension
+            if dim_min is not None and row.get("width") and row.get("height"):
+                if min(int(row["width"]), int(row["height"])) < int(dim_min):
+                    flags.add("small")
+                    small_count += 1
+
+            row["flags"] = sorted(flags)
+            _track_duplicate(row)
+
+        if response_limit and len(returned_items) < response_limit:
+            returned_items.append(row)
+
+    # Gallery-source rows: pull from DB in chunks.
+    image_ids_clean: List[int] = []
+    seen_ids: set[int] = set()
+    for raw_id in image_ids or []:
+        try:
+            image_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if image_id > 0 and image_id not in seen_ids:
+            seen_ids.add(image_id)
+            image_ids_clean.append(image_id)
+
     if image_ids_clean:
         try:
             import database as db
-            images_map = db.get_images_by_ids(image_ids_clean) or {}
-            tags_map = db.get_image_tags_map(image_ids_clean) or {}
+            for start in range(0, len(image_ids_clean), 500):
+                chunk = image_ids_clean[start:start + 500]
+                images_map = db.get_images_by_ids(chunk) or {}
+                tags_map = db.get_image_tags_map(chunk) or {}
+                for image_id in chunk:
+                    record = images_map.get(image_id)
+                    if not record:
+                        _process_row({
+                            "image_id": image_id,
+                            "abs_path": "",
+                            "filename": f"image_{image_id}",
+                            "width": None,
+                            "height": None,
+                            "tag_count": 0,
+                            "aesthetic_score": None,
+                            "phash_hex": None,
+                            "flags": ["missing"],
+                        })
+                        continue
+                    _process_row(_row_for_image_id(image_id, record, tags_map))
         except Exception as exc:
             logger.error("audit: DB lookup failed: %s", exc)
-            images_map = {}
-            tags_map = {}
-        for image_id in image_ids_clean:
-            record = images_map.get(image_id)
-            if not record:
-                rows.append({
+            for image_id in image_ids_clean:
+                _process_row({
                     "image_id": image_id,
                     "abs_path": "",
                     "filename": f"image_{image_id}",
@@ -281,89 +400,42 @@ def audit_dataset(
                     "phash_hex": None,
                     "flags": ["missing"],
                 })
-                continue
-            rows.append(_row_for_image_id(image_id, record, tags_map))
 
-    # Path-source rows: build virtual records.
+    # Path-source rows: build virtual records one-by-one.
     path_extra: Dict[str, int] = {
         str(k): int(v or 0) for k, v in (extra_tag_counts or {}).items()
     }
     for p in (image_paths or []):
         if not p:
             continue
-        row = _row_for_path(str(p))
+        path_key = str(p)
+        row = _row_for_path(path_key)
         # Inject any localStorage-derived tag count the frontend supplied
         # (a non-empty caption is treated as "tag_count >= 1" for the
         # untagged check).
-        if path_extra.get(str(p)):
-            row["tag_count"] = int(path_extra[str(p)])
-        rows.append(row)
+        if path_extra.get(path_key):
+            row["tag_count"] = int(path_extra[path_key])
+        _process_row(row)
 
-    # Per-image enrichments
-    for row in rows:
-        path = row.get("abs_path") or ""
-        if not path or "missing" in row["flags"]:
-            continue
-
-        # Backfill width/height for gallery items that the DB row
-        # didn't populate (they should but defensive).
-        if row.get("width") is None or row.get("height") is None:
-            try:
-                with Image.open(path) as img:
-                    row["width"], row["height"] = img.size
-            except Exception:  # noqa: BLE001
-                pass
-
-        if enable_aesthetic and aesthetic_max is not None:
-            row["aesthetic_score"] = _safe_aesthetic_score(path)
-        if enable_phash and phash_max is not None:
-            row["phash_hex"] = _safe_phash_hex(path)
-
-    # Apply flags using the requested thresholds.
-    low_quality_count = 0
-    untagged_count = 0
-    small_count = 0
-    missing_count = 0
-    aesthetic_scores: List[float] = []
-
-    for row in rows:
-        flags = set(row.get("flags") or [])
-        if "missing" in flags:
-            missing_count += 1
-            row["flags"] = sorted(flags)
-            continue
-
-        # Low-quality: aesthetic_max set + score available + score < max
-        if aesthetic_max is not None and row.get("aesthetic_score") is not None:
-            score = float(row["aesthetic_score"])
-            aesthetic_scores.append(score)
-            if score < float(aesthetic_max):
-                flags.add("low_quality")
-                low_quality_count += 1
-
-        # Untagged: tag_count == 0 (always evaluated; cheap and useful)
-        if int(row.get("tag_count") or 0) == 0:
-            flags.add("untagged")
-            untagged_count += 1
-
-        # Small dimension
-        if dim_min is not None and row.get("width") and row.get("height"):
-            if min(int(row["width"]), int(row["height"])) < int(dim_min):
-                flags.add("small")
-                small_count += 1
-
-        row["flags"] = sorted(flags)
-
-    # Duplicate groups (only if phash was enabled)
     duplicate_groups: List[Dict[str, Any]] = []
     if enable_phash and phash_max is not None:
-        duplicate_groups = _build_duplicate_groups(rows, int(phash_max))
+        if duplicate_exact_mode:
+            duplicate_groups = [
+                {
+                    "phash_hex": hash_value,
+                    "image_ids": [int(row.get("image_id") or 0) for row in bucket],
+                    "abs_paths": [str(row.get("abs_path") or "") for row in bucket],
+                }
+                for hash_value, bucket in duplicate_buckets.items()
+                if len(bucket) > 1
+            ]
+        else:
+            duplicate_groups = _build_duplicate_groups(duplicate_rows, int(phash_max))
 
     avg_aesthetic = (sum(aesthetic_scores) / len(aesthetic_scores)) if aesthetic_scores else None
-
     return {
         "summary": {
-            "total": len(rows),
+            "total": total_rows,
             "low_quality_count": low_quality_count,
             "duplicate_pairs": len(duplicate_groups),
             "untagged_count": untagged_count,
@@ -371,9 +443,11 @@ def audit_dataset(
             "missing_count": missing_count,
             "avg_aesthetic": (round(avg_aesthetic, 3) if avg_aesthetic is not None else None),
             "near_duplicate_check_limited": bool(
-                enable_phash and phash_max is not None and len(rows) > PHASH_NEAR_DUPLICATE_LIMIT
+                enable_phash and phash_max is not None and total_rows > PHASH_NEAR_DUPLICATE_LIMIT
             ),
         },
-        "items": rows,
+        "items": returned_items,
+        "items_truncated": len(returned_items) < total_rows,
+        "items_returned": len(returned_items),
         "duplicate_groups": duplicate_groups,
     }

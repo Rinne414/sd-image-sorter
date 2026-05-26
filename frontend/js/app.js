@@ -43,7 +43,13 @@ function throttle(func, limit) {
 // i18n helper for app-level dynamic strings.
 function appT(key, fallback, params) {
     const val = window.I18n?.t?.(key, params);
-    return (val && val !== key) ? val : (fallback || key);
+    let text = (val && val !== key) ? val : (fallback || key);
+    if (params && typeof params === 'object') {
+        for (const [paramKey, paramValue] of Object.entries(params)) {
+            text = String(text).split(`{${paramKey}}`).join(String(paramValue));
+        }
+    }
+    return text;
 }
 
 function normalizeAspectRatioFilter(value) {
@@ -474,7 +480,7 @@ window.AppFilterAccess = {
         const state = AppSelectionStore?.getState?.();
         return Number(state?.selectionTotal || 0);
     },
-    /** Returns the current selection as an int[] (empty array if nothing selected). */
+    /** Returns only explicitly selected IDs already held by the UI. */
     getSelectedImageIds() {
         const state = AppSelectionStore?.getState?.();
         if (!state) return [];
@@ -482,9 +488,9 @@ window.AppFilterAccess = {
         if (Array.isArray(state.selectedIds)) return [...state.selectedIds];
         return [];
     },
-    async resolveSelectedImageIds(limit = 500000) {
+    async resolveSelectedImageIds(limit = 5000) {
         const token = this.getActiveSelectionToken();
-        const normalizedLimit = Math.max(1, Math.min(Number(limit) || 500000, 500000));
+        const normalizedLimit = Math.max(1, Math.min(Number(limit) || 5000, 10000));
         if (token && window.App?.API?.getSelectionChunk) {
             const ids = [];
             let offset = 0;
@@ -1511,6 +1517,12 @@ const API = {
         }
         if (options.imageOverrides && typeof options.imageOverrides === 'object') {
             payload.image_overrides = options.imageOverrides;
+        }
+        if (options.captionTransforms && typeof options.captionTransforms === 'object') {
+            payload.caption_transforms = options.captionTransforms;
+        }
+        if (typeof options.normalizeTagUnderscores === 'boolean') {
+            payload.normalize_tag_underscores = options.normalizeTagUnderscores;
         }
         if (options.selectionToken) {
             payload.selection_token = options.selectionToken;
@@ -3648,6 +3660,17 @@ function switchView(viewName) {
         }
         detachGalleryPaginationListener();
         cancelGalleryImageLoad();
+        // Stop hidden-gallery thumbnail downloads from occupying the browser's
+        // per-host connection pool. This keeps Dataset Maker's folder browser
+        // responsive even when the gallery was still loading many thumbnails.
+        const galleryGrid = $('#gallery-grid');
+        if (galleryGrid) {
+            galleryGrid.querySelectorAll('img').forEach((img) => {
+                img.removeAttribute('srcset');
+                img.removeAttribute('src');
+            });
+        }
+        AppState.galleryNeedsRefresh = true;
     }
 
     // Cleanup censor view listeners when leaving
@@ -4826,23 +4849,12 @@ function initEventListeners() {
         if (getSelectedGalleryCount() > 0) {
             const token = getActiveSelectionTokenForActions();
             if (token) {
-                // Resolve filtered selection into actual IDs
-                try {
-                    const ids = [];
-                    let offset = 0;
-                    const pageSize = 5000;
-                    let done = false;
-                    while (!done) {
-                        const chunk = await API.getSelectionChunk(token, { offset, limit: pageSize });
-                        const batch = Array.isArray(chunk?.image_ids) ? chunk.image_ids : [];
-                        ids.push(...batch);
-                        if (batch.length < pageSize) done = true;
-                        else offset += pageSize;
-                    }
-                    if (ids.length) addToCensorQueue(ids);
-                } catch (_) {
-                    addToCensorQueue(getSelectedGalleryIds());
-                }
+                addToCensorQueue({
+                    selectionToken: token,
+                    total: getSelectedGalleryCount(),
+                    filterKey: AppState.selectionFilterKey || null,
+                    visibleImageIds: normalizeSelectionImageIds((AppState.images || []).map((image) => image?.id)),
+                });
                 return;
             }
             addToCensorQueue(getSelectedGalleryIds());
@@ -8632,7 +8644,20 @@ async function executeBatchExport() {
         const imageOverrides = window.V321Integration?.collectEditedCaptionOverrides
             ? window.V321Integration.collectEditedCaptionOverrides()
             : null;
-        const result = await API.exportTagsBatch(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy, { selectionToken, outputMode, templateOptions, imageOverrides });
+        const captionTransforms = window.V321Integration?.collectCaptionTransforms
+            ? window.V321Integration.collectCaptionTransforms()
+            : null;
+        const normalizeTagUnderscores = $('#batch-export-normalize-underscores')
+            ? !!$('#batch-export-normalize-underscores').checked
+            : undefined;
+        const result = await API.exportTagsBatch(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy, {
+            selectionToken,
+            outputMode,
+            templateOptions,
+            imageOverrides,
+            captionTransforms,
+            normalizeTagUnderscores,
+        });
 
         $('#batch-export-progress-fill').style.width = '100%';
 
@@ -11067,8 +11092,26 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-function addToCensorQueue(imageIds = []) {
-    const normalizedIds = Array.from(
+function normalizeCensorQueueSource(source) {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) {
+        return null;
+    }
+
+    const selectionToken = String(source.selectionToken || source.selection_token || '').trim();
+    if (!selectionToken) return null;
+
+    return {
+        selectionToken,
+        total: Math.max(0, Number(source.total ?? source.selectionTotal ?? source.selection_total ?? 0) || 0),
+        exactTotal: source.exactTotal !== false && source.exact_total !== false,
+        filterKey: typeof source.filterKey === 'string' ? source.filterKey : null,
+        visibleImageIds: normalizeSelectionImageIds(source.visibleImageIds || source.visible_image_ids || []),
+    };
+}
+
+function addToCensorQueue(imageIds = [], options = {}) {
+    const tokenSource = normalizeCensorQueueSource(imageIds);
+    const queuePayload = tokenSource || Array.from(
         new Set(
             (Array.isArray(imageIds) ? imageIds : [imageIds])
                 .map((value) => Number(value))
@@ -11082,7 +11125,7 @@ function addToCensorQueue(imageIds = []) {
 
     const runtimeHandler = window.CensorEdit?.addToQueue;
     if (typeof runtimeHandler === 'function') {
-        return runtimeHandler(normalizedIds);
+        return runtimeHandler(queuePayload, options);
     }
 
     switchView('censor');

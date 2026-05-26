@@ -28,14 +28,79 @@
 
     const DATASET_VIRTUAL_THRESHOLD = 800;
     const DATASET_VIRTUAL_BUFFER_ROWS = 3;
-    const DATASET_QUEUE_GRID_MIN = 112;
-    const DATASET_QUEUE_LIST_HEIGHT = 92;
-    const DATASET_IMPORT_GRID_MIN = 124;
+    const DATASET_QUEUE_GRID_MIN = 144;
+    const DATASET_QUEUE_LIST_HEIGHT = 108;
+    const DATASET_IMPORT_GRID_MIN = 150;
+    const DATASET_QUEUE_GRID_GAP = 8;
+    const DATASET_IMPORT_GRID_GAP = 10;
+    const DATASET_MAX_SCROLL_SPACER_PX = 24_000_000;
 
     function cleanupVirtualRenderer(owner, key) {
         const cleanup = owner[key];
         if (typeof cleanup === 'function') cleanup();
         owner[key] = null;
+    }
+
+    function getVirtualMetrics(scroller, rowCount, itemHeight) {
+        const viewport = Math.max(1, scroller.clientHeight || 1);
+        const totalHeight = Math.max(0, rowCount * itemHeight);
+        const spacerHeight = Math.min(totalHeight, DATASET_MAX_SCROLL_SPACER_PX);
+        const compressed = totalHeight > spacerHeight;
+        if (!compressed) {
+            return {
+                viewport,
+                totalHeight,
+                spacerHeight,
+                compressed: false,
+                virtualTop: Math.max(0, scroller.scrollTop || 0),
+                domTopForRow: (row) => row * itemHeight,
+            };
+        }
+        const domScrollable = Math.max(1, spacerHeight - viewport);
+        const virtualScrollable = Math.max(1, totalHeight - viewport);
+        const ratio = Math.max(0, Math.min(1, (scroller.scrollTop || 0) / domScrollable));
+        const virtualTop = ratio * virtualScrollable;
+        return {
+            viewport,
+            totalHeight,
+            spacerHeight,
+            compressed: true,
+            virtualTop,
+            domTopForRow: (row) => (scroller.scrollTop || 0) + ((row * itemHeight) - virtualTop),
+        };
+    }
+
+    function scrollVirtualIndexIntoView(scroller, index, columns, itemHeight) {
+        if (!scroller || index < 0 || columns <= 0 || itemHeight <= 0) return;
+        const row = Math.floor(index / columns);
+        const rowCount = Math.ceil(Math.max(0, index + 1) / columns);
+        const knownRows = Number(scroller.dataset.virtualRows || rowCount);
+        const totalRows = Math.max(rowCount, knownRows);
+        const totalHeight = totalRows * itemHeight;
+        const viewport = Math.max(1, scroller.clientHeight || 1);
+        const spacerHeight = Math.min(totalHeight, DATASET_MAX_SCROLL_SPACER_PX);
+        const targetVirtualTop = row * itemHeight;
+        if (totalHeight <= spacerHeight) {
+            scroller.scrollTop = targetVirtualTop;
+            return;
+        }
+        const ratio = targetVirtualTop / Math.max(1, totalHeight - viewport);
+        scroller.scrollTop = ratio * Math.max(1, spacerHeight - viewport);
+    }
+
+    function getMeasuredWidth(el, fallback = 1) {
+        const rectWidth = Math.floor(el?.getBoundingClientRect?.().width || 0);
+        const clientWidth = Math.floor(el?.clientWidth || 0);
+        const parentWidth = Math.floor(el?.parentElement?.getBoundingClientRect?.().width || 0);
+        return Math.max(1, rectWidth || clientWidth || parentWidth || fallback || 1);
+    }
+
+    function getGridLayout(el, minCellWidth, gapPx) {
+        const width = getMeasuredWidth(el, minCellWidth);
+        const gap = Math.max(0, Number(gapPx) || 0);
+        const columns = Math.max(1, Math.floor((width + gap) / (Math.max(1, minCellWidth) + gap)));
+        const cellWidth = Math.max(1, Math.floor((width - (gap * (columns - 1))) / columns));
+        return { width, columns, cellWidth, rowStride: cellWidth + gap, gap };
     }
 
     DM._setActive = function (imageId) {
@@ -80,6 +145,7 @@
         if (actions) actions.hidden = false;
 
         this._highlightActiveQueueItem();
+        this._scrollActiveQueueItemIntoView?.();
         this._renderTagPills();
     };
 
@@ -94,6 +160,7 @@
     DM._removeActive = function () {
         if (this.activeId == null) return;
         this._removeImageById(Number(this.activeId), { confirm: true });
+        this._saveSession();
     };
 
     DM._removeImageById = function (imageId, options = {}) {
@@ -106,7 +173,11 @@
         const idx = this.imageIds.indexOf(id);
         this.imageIds.splice(idx, 1);
         this.captions.delete(id);
-        this.captionEdits.delete(id);
+        if (typeof this._deleteCaptionEditForDatasetRemoval === 'function') {
+            this._deleteCaptionEditForDatasetRemoval(id);
+        } else {
+            this.captionEdits.delete(id);
+        }
         this._undoStacks?.delete?.(id);
         this._queueSelection.delete(id);
         if (this.localItemPaths && this.isLocalId && this.isLocalId(id)) {
@@ -136,7 +207,11 @@
         if (idx < 0) return;
         this.imageIds.splice(idx, 1);
         this.captions.delete(id);
-        this.captionEdits.delete(id);
+        if (typeof this._deleteCaptionEditForDatasetRemoval === 'function') {
+            this._deleteCaptionEditForDatasetRemoval(id);
+        } else {
+            this.captionEdits.delete(id);
+        }
         this.activeId = null;
         this._renderQueue();
         this._updateCount();
@@ -165,6 +240,11 @@
         const filenameEl = document.getElementById('dataset-editor-filename');
         if (img) img.hidden = true;
         if (empty) empty.hidden = false;
+        const emptyText = empty?.querySelector?.('.dataset-editor-empty-text');
+        if (emptyText) {
+            emptyText.textContent = this._t('dataset.editorEmpty',
+                'Pick an image from the queue on the left to edit its caption.');
+        }
         if (ta) ta.hidden = true;
         if (actions) actions.hidden = true;
         if (filenameEl) filenameEl.textContent = '';
@@ -174,6 +254,7 @@
     DM._renderQueue = function () {
         const list = document.getElementById('dataset-queue-list');
         if (!list) return;
+        this._updateCount?.();
         const mode = this._queueViewMode === 'list' ? 'list' : 'grid';
         list.classList.toggle('dataset-queue-grid-mode', mode === 'grid');
         list.classList.toggle('dataset-queue-list-mode', mode === 'list');
@@ -184,6 +265,7 @@
         cleanupVirtualRenderer(this, '_queueVirtualCleanup');
         list.classList.remove('is-virtualized');
         list.style.display = '';
+        delete list.dataset.virtualRows;
         if (this.imageIds.length === 0) {
             list.innerHTML = `
                 <div class="dataset-empty-state">
@@ -196,13 +278,31 @@
                     </p>
                 </div>
             `;
+            this._updateMultiSelectUI();
             return;
         }
         list.innerHTML = '';
-        for (const id of this.imageIds) {
-            list.appendChild(this._buildQueueItem(id));
+        for (const [index, id] of this.imageIds.entries()) {
+            list.appendChild(this._buildQueueItem(id, index));
         }
         this._highlightActiveQueueItem();
+        this._applyAuditFilterToQueue?.();
+        this._updateMultiSelectUI();
+    };
+
+    DM._scrollActiveQueueItemIntoView = function () {
+        const list = document.getElementById('dataset-queue-list');
+        if (!list || !list.classList.contains('is-virtualized') || this.activeId == null) return;
+        const index = this.imageIds.indexOf(Number(this.activeId));
+        if (index < 0) return;
+        const mode = this._queueViewMode === 'list' ? 'list' : 'grid';
+        const gridLayout = getGridLayout(list, DATASET_QUEUE_GRID_MIN, DATASET_QUEUE_GRID_GAP);
+        const width = gridLayout.width;
+        const columns = mode === 'list' ? 1 : gridLayout.columns;
+        const cellWidth = mode === 'list' ? width : gridLayout.cellWidth;
+        const itemHeight = mode === 'list' ? DATASET_QUEUE_LIST_HEIGHT : gridLayout.rowStride;
+        list.dataset.virtualRows = String(Math.ceil(this.imageIds.length / columns));
+        scrollVirtualIndexIntoView(list, index, columns, itemHeight);
     };
 
     DM._renderVirtualQueue = function (list, mode) {
@@ -220,34 +320,41 @@
             if (frame) cancelAnimationFrame(frame);
             frame = requestAnimationFrame(() => {
                 frame = 0;
-                const width = Math.max(1, list.clientWidth - 8);
                 const isList = mode === 'list';
-                const columns = isList ? 1 : Math.max(1, Math.floor(width / DATASET_QUEUE_GRID_MIN));
-                const cellWidth = isList ? width : Math.floor(width / columns);
-                const itemHeight = isList ? DATASET_QUEUE_LIST_HEIGHT : cellWidth;
+                const gridLayout = getGridLayout(list, DATASET_QUEUE_GRID_MIN, DATASET_QUEUE_GRID_GAP);
+                const width = gridLayout.width;
+                const columns = isList ? 1 : gridLayout.columns;
+                const cellWidth = isList ? width : gridLayout.cellWidth;
+                const itemHeight = isList ? DATASET_QUEUE_LIST_HEIGHT : gridLayout.rowStride;
                 const rowCount = Math.ceil(this.imageIds.length / columns);
-                spacer.style.height = `${rowCount * itemHeight}px`;
+                const metrics = getVirtualMetrics(list, rowCount, itemHeight);
+                list.dataset.virtualRows = String(rowCount);
+                spacer.style.height = `${metrics.spacerHeight}px`;
                 spacer.style.position = 'relative';
                 spacer.innerHTML = '';
 
-                const startRow = Math.max(0, Math.floor(list.scrollTop / itemHeight) - DATASET_VIRTUAL_BUFFER_ROWS);
-                const visibleRows = Math.ceil((list.clientHeight || 420) / itemHeight) + (DATASET_VIRTUAL_BUFFER_ROWS * 2);
+                const startRow = Math.max(0, Math.floor(metrics.virtualTop / itemHeight) - DATASET_VIRTUAL_BUFFER_ROWS);
+                const visibleRows = Math.ceil(metrics.viewport / itemHeight) + (DATASET_VIRTUAL_BUFFER_ROWS * 2);
                 const endRow = Math.min(rowCount, startRow + visibleRows);
 
                 for (let row = startRow; row < endRow; row += 1) {
                     for (let col = 0; col < columns; col += 1) {
                         const index = row * columns + col;
                         if (index >= this.imageIds.length) break;
-                        const node = this._buildQueueItem(this.imageIds[index]);
+                        const node = this._buildQueueItem(this.imageIds[index], index);
                         node.style.position = 'absolute';
-                        node.style.top = `${row * itemHeight}px`;
-                        node.style.left = isList ? '0' : `${col * cellWidth}px`;
-                        node.style.width = isList ? 'calc(100% - 6px)' : `${Math.max(1, cellWidth - 8)}px`;
-                        node.style.height = isList ? `${DATASET_QUEUE_LIST_HEIGHT - 4}px` : `${Math.max(1, cellWidth - 8)}px`;
+                        node.style.top = `${metrics.domTopForRow(row)}px`;
+                        node.style.left = isList ? '0' : `${col * (cellWidth + DATASET_QUEUE_GRID_GAP)}px`;
+                        node.style.width = isList ? 'calc(100% - 6px)' : `${Math.max(1, cellWidth)}px`;
+                        node.style.height = isList ? `${DATASET_QUEUE_LIST_HEIGHT - 4}px` : `${Math.max(1, cellWidth)}px`;
+                        node.style.aspectRatio = 'auto';
+                        node.style.boxSizing = 'border-box';
                         spacer.appendChild(node);
                     }
                 }
                 this._highlightActiveQueueItem();
+                this._applyAuditFilterToQueue?.();
+                this._updateMultiSelectUI();
             });
         };
 
@@ -264,12 +371,27 @@
         renderVisible();
     };
 
-    DM._buildQueueItem = function (id) {
+    DM._buildQueueItem = function (id, orderIndex = null) {
         const meta = this.meta.get(id) || {};
-        const item = document.createElement('button');
-        item.type = 'button';
+        const resolvedOrderIndex = Number.isFinite(orderIndex) ? Number(orderIndex) : this.imageIds.indexOf(id);
+        const item = document.createElement('div');
+        item.setAttribute('role', 'button');
+        item.tabIndex = 0;
         item.className = 'dataset-queue-item';
         item.dataset.imageId = String(id);
+        if (resolvedOrderIndex >= 0) item.dataset.queueOrder = String(resolvedOrderIndex + 1);
+
+        const selectToggle = document.createElement('button');
+        selectToggle.type = 'button';
+        selectToggle.className = 'dataset-queue-select-toggle';
+        selectToggle.setAttribute('role', 'checkbox');
+        selectToggle.setAttribute('aria-checked', this._queueSelection.has(id) ? 'true' : 'false');
+        selectToggle.title = this._t('dataset.toggleSelect', 'Select image');
+        selectToggle.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this._toggleQueueSelection(id);
+        });
 
         // v3.2.2 (issue #5 follow-up): caption status badge so the user
         // can see at a glance which images need work.
@@ -287,14 +409,25 @@
 
         const img = document.createElement('img');
         img.className = 'dataset-queue-thumb';
-        img.src = this._thumbSrc(id, 160);
         img.loading = 'lazy';
         img.decoding = 'async';
         img.alt = '';
+        item.classList.add('is-loading');
+        img.onload = () => {
+            item.classList.remove('is-loading');
+        };
         img.onerror = () => {
+            item.classList.remove('is-loading');
             img.classList.add('is-missing');
             img.removeAttribute('src');
         };
+        img.src = this._thumbSrc(id, 160);
+        if (img.complete) item.classList.remove('is-loading');
+
+        const orderBadge = document.createElement('span');
+        orderBadge.className = 'dataset-queue-order';
+        orderBadge.textContent = resolvedOrderIndex >= 0 ? String(resolvedOrderIndex + 1) : '?';
+        orderBadge.title = this._t('dataset.queueOrder', 'Queue order');
 
         const metaWrap = document.createElement('div');
         metaWrap.className = 'dataset-queue-meta';
@@ -316,7 +449,7 @@
         const b = badgeMap[status];
         badge.innerHTML = `<span aria-hidden="true">${b.icon}</span><span>${this._t(b.key, b.fallback)}</span>`;
 
-        item.append(img, metaWrap, badge);
+        item.append(selectToggle, orderBadge, img, metaWrap, badge);
         item.addEventListener('click', (e) => {
             if (e.shiftKey || e.ctrlKey || e.metaKey) {
                 this._handleMultiSelectClick(id, e);
@@ -325,6 +458,12 @@
                 this._updateMultiSelectUI();
                 this._setActive(id);
             }
+        });
+        item.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            if (e.shiftKey || e.ctrlKey || e.metaKey) this._handleMultiSelectClick(id, e);
+            else this._setActive(id);
         });
         return item;
     };
@@ -336,6 +475,7 @@
         if (!existing) return;
         existing.replaceWith(this._buildQueueItem(id));
         this._highlightActiveQueueItem();
+        this._applyAuditFilterToQueue?.();
     };
 
     DM._highlightActiveQueueItem = function () {
@@ -365,6 +505,107 @@
     };
 
     // ---------- Queue multi-select ----------
+    DM._selectionSummaryText = function (count = this._queueSelection.size) {
+        const formatted = Number(count || 0).toLocaleString();
+        return this._t('dataset.selectionCount', '{count} selected', { count: formatted })
+            .replace(/\{count\}/g, formatted);
+    };
+
+    DM._setSelectionSummary = function () {
+        const count = this._queueSelection.size;
+        const text = this._selectionSummaryText(count);
+        for (const id of ['dataset-queue-selection-summary', 'dataset-import-selection-summary']) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.removeAttribute('data-i18n');
+                el.textContent = text;
+            }
+        }
+        for (const id of [
+            'btn-dataset-queue-clear-selection',
+            'btn-dataset-import-clear-selection',
+            'btn-dataset-queue-remove-selected',
+            'btn-dataset-import-remove-selected',
+        ]) {
+            const btn = document.getElementById(id);
+            if (btn) btn.disabled = count === 0;
+        }
+        for (const id of ['btn-dataset-queue-select-all', 'btn-dataset-import-select-all']) {
+            const btn = document.getElementById(id);
+            if (btn) btn.disabled = this.imageIds.length === 0 || count >= this.imageIds.length;
+        }
+    };
+
+    DM._toggleQueueSelection = function (id) {
+        const n = Number(id);
+        if (!this.imageIds.includes(n)) return;
+        if (this._queueSelection.has(n)) this._queueSelection.delete(n);
+        else this._queueSelection.add(n);
+        this._lastClickedId = n;
+        this._updateMultiSelectUI();
+    };
+
+    DM._selectAllQueue = function () {
+        this._queueSelection = new Set(this.imageIds.map(Number));
+        this._lastClickedId = this.imageIds.length ? Number(this.imageIds[this.imageIds.length - 1]) : null;
+        this._updateMultiSelectUI();
+    };
+
+    DM._clearQueueSelection = function () {
+        this._queueSelection.clear();
+        this._updateMultiSelectUI();
+    };
+
+    DM._removeSelectedImages = function () {
+        const selected = Array.from(this._queueSelection).map(Number);
+        if (selected.length === 0) return;
+        const msg = this._t('dataset.confirmRemoveSelected',
+            'Remove {count} selected images from the dataset? Original files are not affected.',
+            { count: selected.length });
+        if (!window.confirm(msg)) return;
+
+        const removeSet = new Set(selected);
+        this.imageIds = this.imageIds.filter((id) => !removeSet.has(Number(id)));
+        for (const id of selected) {
+            if (this.isLocalId?.(id)) this._markLocalManifestExcluded?.(id);
+            this.captions.delete(id);
+            if (typeof this._deleteCaptionEditForDatasetRemoval === 'function') {
+                this._deleteCaptionEditForDatasetRemoval(id);
+            } else {
+                this.captionEdits.delete(id);
+            }
+            this._undoStacks?.delete?.(id);
+            if (this.localItemPaths && this.isLocalId && this.isLocalId(id)) {
+                this.localItemPaths.delete(id);
+                this.localItemDsIds?.delete?.(id);
+            }
+        }
+        this._queueSelection.clear();
+        if (this.activeId != null && !this.imageIds.includes(Number(this.activeId))) {
+            this.activeId = this.imageIds.length ? Number(this.imageIds[0]) : null;
+        }
+        this._renderQueue();
+        this._renderImportGallery?.();
+        this._updateCount();
+        this._updateExportEnabled();
+        this._updateMultiSelectUI();
+        if (this.activeId != null) this._setActive(this.activeId);
+        else this._renderEmptyEditor();
+    };
+
+    DM._initQueueSelectionControls = function () {
+        for (const id of ['btn-dataset-queue-select-all', 'btn-dataset-import-select-all']) {
+            document.getElementById(id)?.addEventListener('click', () => this._selectAllQueue());
+        }
+        for (const id of ['btn-dataset-queue-clear-selection', 'btn-dataset-import-clear-selection']) {
+            document.getElementById(id)?.addEventListener('click', () => this._clearQueueSelection());
+        }
+        for (const id of ['btn-dataset-queue-remove-selected', 'btn-dataset-import-remove-selected']) {
+            document.getElementById(id)?.addEventListener('click', () => this._removeSelectedImages());
+        }
+        this._setSelectionSummary();
+    };
+
     DM._handleMultiSelectClick = function (id, e) {
         if (e.shiftKey && this._lastClickedId != null) {
             const startIdx = this.imageIds.indexOf(Number(this._lastClickedId));
@@ -392,10 +633,20 @@
         const list = document.getElementById('dataset-queue-list');
         if (list) {
             for (const el of list.querySelectorAll('.dataset-queue-item')) {
+                const selected = this._queueSelection.has(Number(el.dataset.imageId));
+                el.classList.toggle('multi-selected', selected);
+                const toggle = el.querySelector('.dataset-queue-select-toggle');
+                if (toggle) toggle.setAttribute('aria-checked', selected ? 'true' : 'false');
+            }
+        }
+        const importGrid = document.getElementById('dataset-import-gallery-grid');
+        if (importGrid) {
+            for (const el of importGrid.querySelectorAll('.import-thumb')) {
                 el.classList.toggle('multi-selected',
                     this._queueSelection.has(Number(el.dataset.imageId)));
             }
         }
+        this._setSelectionSummary();
         let bar = document.getElementById('dataset-multiselect-bar');
         if (this._queueSelection.size === 0) {
             if (bar) bar.hidden = true;
@@ -419,29 +670,7 @@
             </button>
         `;
         bar.querySelector('#btn-multisel-remove').addEventListener('click', () => {
-            for (const sid of this._queueSelection) {
-                const idx = this.imageIds.indexOf(Number(sid));
-                if (idx >= 0) {
-                    this.imageIds.splice(idx, 1);
-                    this.captions.delete(sid);
-                    this.captionEdits.delete(sid);
-                    if (this.localItemPaths && this.isLocalId && this.isLocalId(sid)) {
-                        this.localItemPaths.delete(Number(sid));
-                        this.localItemDsIds?.delete?.(Number(sid));
-                    }
-                }
-            }
-            this._queueSelection.clear();
-            this._renderQueue();
-            this._renderImportGallery?.();
-            this._updateCount();
-            this._updateExportEnabled();
-            this._updateMultiSelectUI();
-            if (this.activeId != null && !this.imageIds.includes(Number(this.activeId))) {
-                this.activeId = null;
-                if (this.imageIds.length) this._setActive(this.imageIds[0]);
-                else this._renderEmptyEditor();
-            }
+            this._removeSelectedImages();
         });
         bar.querySelector('#btn-multisel-addtag').addEventListener('click', () => {
             const tag = prompt(this._t('dataset.multiAddTagPrompt', 'Tag to add:'));
@@ -534,9 +763,11 @@
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => DM._initSplitView(), { once: true });
         document.addEventListener('DOMContentLoaded', () => DM._initQueueModeControls(), { once: true });
+        document.addEventListener('DOMContentLoaded', () => DM._initQueueSelectionControls(), { once: true });
     } else {
         DM._initSplitView();
         DM._initQueueModeControls();
+        DM._initQueueSelectionControls();
     }
 
     DM._updateCount = function () {
@@ -557,7 +788,9 @@
             container.hidden = true;
             grid.innerHTML = '';
             grid.classList.remove('is-virtualized');
+            delete grid.dataset.virtualRows;
             cleanupVirtualRenderer(this, '_importVirtualCleanup');
+            this._updateMultiSelectUI();
             return;
         }
 
@@ -574,35 +807,57 @@
 
         cleanupVirtualRenderer(this, '_importVirtualCleanup');
         grid.classList.remove('is-virtualized');
+        delete grid.dataset.virtualRows;
         grid.innerHTML = '';
-        for (const id of this.imageIds) {
-            grid.appendChild(this._buildImportThumb(id));
+        for (const [index, id] of this.imageIds.entries()) {
+            grid.appendChild(this._buildImportThumb(id, index));
         }
+        this._updateMultiSelectUI();
     };
 
-    DM._buildImportThumb = function (id) {
+    DM._buildImportThumb = function (id, orderIndex = null) {
+        const resolvedOrderIndex = Number.isFinite(orderIndex) ? Number(orderIndex) : this.imageIds.indexOf(id);
         const thumb = document.createElement('div');
         thumb.className = 'import-thumb';
         thumb.dataset.imageId = String(id);
+        if (resolvedOrderIndex >= 0) thumb.dataset.queueOrder = String(resolvedOrderIndex + 1);
         const img = document.createElement('img');
         img.loading = 'lazy';
         img.decoding = 'async';
         img.alt = '';
-
-        img.src = this._thumbSrc(id, 160);
+        thumb.classList.add('is-loading');
+        img.onload = () => {
+            thumb.classList.remove('is-loading');
+        };
         img.onerror = () => {
+            thumb.classList.remove('is-loading');
             img.removeAttribute('src');
             thumb.classList.add('thumb-missing');
         };
+
+        const src = this._thumbSrc(id, 160);
+        if (src) img.src = src;
+        else thumb.classList.add('preview-pending');
+        if (!src || img.complete) thumb.classList.remove('is-loading');
 
         img.style.width = '100%';
         img.style.height = '100%';
         img.style.objectFit = 'cover';
         thumb.appendChild(img);
+        const order = document.createElement('span');
+        order.className = 'import-thumb-order';
+        order.textContent = resolvedOrderIndex >= 0 ? String(resolvedOrderIndex + 1) : '?';
+        order.title = this._t('dataset.queueOrder', 'Queue order');
+        thumb.appendChild(order);
         const keep = document.createElement('span');
         keep.className = 'import-thumb-keep';
         keep.textContent = this._t('dataset.keepBadge', 'Keep');
         thumb.appendChild(keep);
+        const selected = document.createElement('span');
+        selected.className = 'import-thumb-selected';
+        selected.textContent = '✓';
+        selected.setAttribute('aria-hidden', 'true');
+        thumb.appendChild(selected);
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'import-thumb-remove';
@@ -613,7 +868,14 @@
             this._removeImageById(id);
         });
         thumb.appendChild(remove);
-        thumb.addEventListener('click', () => this._setActive(id));
+        thumb.addEventListener('click', (event) => {
+            if (event.shiftKey || event.ctrlKey || event.metaKey) this._handleMultiSelectClick(id, event);
+            else this._toggleQueueSelection(id);
+        });
+        thumb.addEventListener('dblclick', () => {
+            this._setActive(id);
+            this._setPipelineTab?.('workbench');
+        });
         return thumb;
     };
 
@@ -631,32 +893,37 @@
             if (frame) cancelAnimationFrame(frame);
             frame = requestAnimationFrame(() => {
                 frame = 0;
-                const width = Math.max(1, grid.clientWidth - 8);
-                const columns = Math.max(1, Math.floor(width / DATASET_IMPORT_GRID_MIN));
-                const cellWidth = Math.floor(width / columns);
-                const itemHeight = cellWidth;
+                const gridLayout = getGridLayout(grid, DATASET_IMPORT_GRID_MIN, DATASET_IMPORT_GRID_GAP);
+                const columns = gridLayout.columns;
+                const cellWidth = gridLayout.cellWidth;
+                const itemHeight = gridLayout.rowStride;
                 const rowCount = Math.ceil(this.imageIds.length / columns);
-                spacer.style.height = `${rowCount * itemHeight}px`;
+                const metrics = getVirtualMetrics(grid, rowCount, itemHeight);
+                grid.dataset.virtualRows = String(rowCount);
+                spacer.style.height = `${metrics.spacerHeight}px`;
                 spacer.style.position = 'relative';
                 spacer.innerHTML = '';
 
-                const startRow = Math.max(0, Math.floor(grid.scrollTop / itemHeight) - DATASET_VIRTUAL_BUFFER_ROWS);
-                const visibleRows = Math.ceil((grid.clientHeight || 520) / itemHeight) + (DATASET_VIRTUAL_BUFFER_ROWS * 2);
+                const startRow = Math.max(0, Math.floor(metrics.virtualTop / itemHeight) - DATASET_VIRTUAL_BUFFER_ROWS);
+                const visibleRows = Math.ceil(metrics.viewport / itemHeight) + (DATASET_VIRTUAL_BUFFER_ROWS * 2);
                 const endRow = Math.min(rowCount, startRow + visibleRows);
 
                 for (let row = startRow; row < endRow; row += 1) {
                     for (let col = 0; col < columns; col += 1) {
                         const index = row * columns + col;
                         if (index >= this.imageIds.length) break;
-                        const thumb = this._buildImportThumb(this.imageIds[index]);
+                        const thumb = this._buildImportThumb(this.imageIds[index], index);
                         thumb.style.position = 'absolute';
-                        thumb.style.top = `${row * itemHeight}px`;
-                        thumb.style.left = `${col * cellWidth}px`;
-                        thumb.style.width = `${Math.max(1, cellWidth - 8)}px`;
-                        thumb.style.height = `${Math.max(1, cellWidth - 8)}px`;
+                        thumb.style.top = `${metrics.domTopForRow(row)}px`;
+                        thumb.style.left = `${col * (cellWidth + DATASET_IMPORT_GRID_GAP)}px`;
+                        thumb.style.width = `${Math.max(1, cellWidth)}px`;
+                        thumb.style.height = `${Math.max(1, cellWidth)}px`;
+                        thumb.style.aspectRatio = 'auto';
+                        thumb.style.boxSizing = 'border-box';
                         spacer.appendChild(thumb);
                     }
                 }
+                this._updateMultiSelectUI();
             });
         };
 
@@ -762,29 +1029,48 @@
     })();
 
     // ---------- Batch Find/Replace ----------
-    DM._batchFindReplace = function () {
+    DM._batchFindReplace = async function () {
         const findEl = document.getElementById('dataset-find-input');
         const replaceEl = document.getElementById('dataset-replace-input');
         if (!findEl || !replaceEl) return;
         const find = findEl.value;
         if (!find) return;
+        const btn = document.getElementById('btn-dataset-find-replace');
+        const previousText = btn?.textContent;
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = this._t('dataset.replaceLoading', 'Loading captions...');
+        }
         const replace = replaceEl.value;
         let count = 0;
-        for (const id of this.imageIds) {
-            const caption = this.captionEdits.has(id)
-                ? this.captionEdits.get(id)
-                : (this.captions.get(id) || '');
-            if (!caption.includes(find)) continue;
-            const updated = caption.split(find).join(replace);
-            this.captionEdits.set(id, updated);
-            count++;
+        try {
+            const missing = this.imageIds
+                .filter(id => !(this.isLocalId?.(id)))
+                .filter(id => !this.captions.has(id) && !this.captionEdits.has(id));
+            if (missing.length) {
+                await this._fetchCaptionsFor(missing);
+            }
+            for (const id of this.imageIds) {
+                const caption = this.captionEdits.has(id)
+                    ? this.captionEdits.get(id)
+                    : (this.captions.get(id) || '');
+                if (!caption.includes(find)) continue;
+                const updated = caption.split(find).join(replace);
+                this.captionEdits.set(id, updated);
+                count++;
+            }
+            if (count > 0 && this.activeId != null) {
+                this._setActive(this.activeId);
+            }
+            const msg = this._t('dataset.replaceResult', '{count} captions updated')
+                .replace('{count}', count);
+            if (window.showToast) window.showToast(msg, count > 0 ? 'success' : 'info');
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                if (previousText) btn.textContent = previousText;
+            }
         }
-        if (count > 0 && this.activeId != null) {
-            this._setActive(this.activeId);
-        }
-        const msg = this._t('dataset.replaceResult', '{count} captions updated')
-            .replace('{count}', count);
-        if (window.showToast) window.showToast(msg, count > 0 ? 'success' : 'info');
     };
 
     document.getElementById('btn-dataset-find-replace')

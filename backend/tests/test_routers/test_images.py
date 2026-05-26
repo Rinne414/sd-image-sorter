@@ -562,6 +562,45 @@ class TestSelectionIds:
             "total": len(expected_ids),
         }
 
+    def test_selection_ids_preserves_tag_mode_or_and_excludes(self, test_client, test_db_with_images):
+        """Legacy filtered selection must match the gallery's OR and exclude semantics."""
+        landscape_id = test_db_with_images["image_ids"][0]
+        portrait_id = test_db_with_images["image_ids"][2]
+
+        response = test_client.post("/api/images/selection-ids", json={
+            "tags": ["landscape", "portrait"],
+            "tagMode": "or",
+            "sortBy": "oldest",
+        })
+
+        assert response.status_code == 200
+        assert response.json()["image_ids"] == [landscape_id, portrait_id]
+
+        excluded = test_client.post("/api/images/selection-ids", json={
+            "tags": ["landscape", "portrait"],
+            "tagMode": "or",
+            "excludeTags": ["portrait"],
+            "sortBy": "oldest",
+        })
+
+        assert excluded.status_code == 200
+        assert excluded.json() == {"image_ids": [landscape_id], "total": 1}
+
+    def test_selection_ids_rejects_oversized_legacy_response(self, test_client, monkeypatch):
+        """The compatibility endpoint must not return unbounded giant ID arrays."""
+        import services.image_service as image_service_module
+
+        monkeypatch.setattr(
+            image_service_module.db,
+            "get_filtered_image_ids",
+            lambda **_kwargs: list(range(1, image_service_module.SELECTION_IDS_MAX_RESPONSE + 2)),
+        )
+
+        response = test_client.post("/api/images/selection-ids", json={"sortBy": "oldest"})
+
+        assert response.status_code == 413
+        assert "selection-ids is limited" in response.text
+
     def test_selection_query_token_returns_stateless_chunk_contract(self, test_client, test_db_with_images):
         """Selection token should let clients page IDs without one giant response."""
         response = test_client.post("/api/images/selection-token", json={
@@ -640,6 +679,48 @@ class TestSelectionIds:
         assert chunk_response.status_code == 200
         assert chunk_response.json()["image_ids"] == [bright_id]
         assert dim_id not in chunk_response.json()["image_ids"]
+
+    def test_selection_token_preserves_tag_mode_or_and_excludes(self, test_client, test_db_with_images):
+        """Chunked selection tokens must carry tag OR mode and exclude filters."""
+        landscape_id = test_db_with_images["image_ids"][0]
+        portrait_id = test_db_with_images["image_ids"][2]
+
+        token_response = test_client.post("/api/images/selection-token", json={
+            "tags": ["landscape", "portrait"],
+            "tagMode": "or",
+            "excludeTags": ["portrait"],
+            "sortBy": "oldest",
+            "chunkSize": 10,
+        })
+        assert token_response.status_code == 200
+        assert token_response.json()["total_estimate"] == 1
+
+        chunk_response = test_client.get(
+            "/api/images/selection-chunk",
+            params={"selection_token": token_response.json()["selection_token"], "offset": 0, "limit": 10},
+        )
+
+        assert chunk_response.status_code == 200
+        assert chunk_response.json()["image_ids"] == [landscape_id]
+        assert portrait_id not in chunk_response.json()["image_ids"]
+
+    def test_tag_sidecar_selection_token_preserves_tag_mode_or_and_excludes(self, test_client, test_db_with_images):
+        """Sidecar export helpers must decode the full selection-token contract."""
+        from services.tag_export_service import count_selection_token_ids, iter_selection_token_id_chunks
+
+        landscape_id = test_db_with_images["image_ids"][0]
+        token_response = test_client.post("/api/images/selection-token", json={
+            "tags": ["landscape", "portrait"],
+            "tagMode": "or",
+            "excludeTags": ["portrait"],
+            "sortBy": "oldest",
+            "chunkSize": 10,
+        })
+        assert token_response.status_code == 200
+        token = token_response.json()["selection_token"]
+
+        assert count_selection_token_ids(token) == 1
+        assert list(iter_selection_token_id_chunks(token, chunk_size=10)) == [[landscape_id]]
 
     def test_selection_token_can_exclude_small_explicit_selection(self, test_client, test_db_with_images):
         """Token mode should preserve filtered-invert semantics without materializing every ID."""
@@ -1023,6 +1104,30 @@ class TestExportSelectionData:
         assert [item["id"] for item in data["images"]] == list(reversed(exact_ids))[2:4]
         assert data["source"] == "selection_token"
         assert data["exact_total"] is False
+
+    def test_export_selection_data_token_preserves_tag_mode_or_and_excludes(self, test_client, test_db_with_images):
+        """Export previews must use the same token contract as gallery selection."""
+        landscape_id = test_db_with_images["image_ids"][0]
+
+        token_response = test_client.post("/api/images/selection-token", json={
+            "tags": ["landscape", "portrait"],
+            "tagMode": "or",
+            "excludeTags": ["portrait"],
+            "sortBy": "oldest",
+            "chunkSize": 10,
+        })
+        assert token_response.status_code == 200
+
+        response = test_client.post("/api/images/export-data", json={
+            "selection_token": token_response.json()["selection_token"],
+            "offset": 0,
+            "limit": 10,
+        })
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [item["id"] for item in data["images"]] == [landscape_id]
+        assert data["total"] == 1
 
     def test_export_selection_data_rejects_tampered_selection_token(self, test_client):
         """Export-data token mode should fail closed like selection chunks."""

@@ -13,13 +13,20 @@ const V321Integration = {
     editedCaptions: new Map(),  // image_id -> user-edited caption
     previewResults: [],    // legacy array OR sparse metadata cache (kept for compat)
     previewMetadata: new Map(), // image_id -> {filename, thumbnail_path}
-    queueImageIds: [],     // full ordered list of all selected image IDs
+    queueImageIds: [],     // explicit IDs or the currently cached token window
+    queueSelectionToken: null,
+    queueIdByIndex: new Map(),
+    queueIndexById: new Map(),
     queueTotalCount: 0,    // total count for display
+    queueSourceMode: 'ids',
     activePreviewImageId: null,
+    activePreviewIndex: 0,
+    captionTransforms: { prepend: [], append: [], remove: [], remove_categories: [], dedupe: false },
     previewLimit: null, // No artificial cap — virtual scroll handles any count
     vlmActive: false,
     _queueScrollContainer: null,
     _queueRenderVisible: null,
+    _queueMetadataInFlight: new Set(),
     _captionEditorKeyHandler: null,
 
     init() {
@@ -1130,14 +1137,19 @@ const V321Integration = {
     },
 
     /** Navigate to adjacent queue item by delta (-1 = prev, +1 = next) */
-    _navigateQueue(delta) {
-        const ids = this.queueImageIds;
-        if (!ids.length) return;
-        const curIdx = ids.indexOf(Number(this.activePreviewImageId));
-        const nextIdx = Math.max(0, Math.min(ids.length - 1, curIdx + delta));
-        const newId = ids[nextIdx];
+    async _navigateQueue(delta) {
+        const total = this.queueTotalCount || this.queueImageIds.length;
+        if (!total) return;
+        const currentId = Number(this.activePreviewImageId);
+        const curIdx = this.queueIndexById.has(currentId)
+            ? this.queueIndexById.get(currentId)
+            : Math.max(0, this.queueImageIds.indexOf(currentId));
+        const nextIdx = Math.max(0, Math.min(total - 1, Number(curIdx || 0) + delta));
+        const ids = await this._fetchQueueIdsWindow(nextIdx, 1);
+        const newId = ids[0];
         if (newId == null || newId === Number(this.activePreviewImageId)) return;
         this.activePreviewImageId = newId;
+        this.activePreviewIndex = nextIdx;
         this._onQueueItemClick(newId);
     },
 
@@ -1190,43 +1202,91 @@ const V321Integration = {
             .slice(0, cap);
     },
 
-    async _resolveSelectionImageIds({ cap = 500000, allowLoadedFallback = true } = {}) {
-        const normalizedCap = Math.max(1, Math.min(Number(cap) || 500000, 500000));
+    _selectionTotalFromState() {
+        const state = this._getSelectionState();
+        const total = Number(state?.selectionTotal ?? window.App?.AppState?.selectionTotal ?? 0);
+        return Number.isFinite(total) && total > 0 ? total : 0;
+    },
+
+    _rememberQueueIds(ids, startIndex = 0) {
+        ids.forEach((rawId, offset) => {
+            const id = Number(rawId);
+            if (!Number.isFinite(id) || id <= 0) return;
+            const index = startIndex + offset;
+            this.queueIdByIndex.set(index, id);
+            this.queueIndexById.set(id, index);
+        });
+    },
+
+    async _fetchQueueIdsWindow(startIndex = 0, limit = 80) {
+        const start = Math.max(0, Number(startIndex) || 0);
+        const size = Math.max(1, Math.min(Number(limit) || 80, 500));
+        if (!this.queueSelectionToken || !window.App?.API?.getSelectionChunk) {
+            return this.queueImageIds.slice(start, start + size);
+        }
+        const missing = [];
+        const knownTotal = this.queueTotalCount || (start + size);
+        for (let i = start; i < start + size && i < knownTotal; i += 1) {
+            if (!this.queueIdByIndex.has(i)) missing.push(i);
+        }
+        if (missing.length) {
+            const fetchStart = Math.max(0, missing[0]);
+            const fetchLimit = Math.min(500, Math.max(size, missing[missing.length - 1] - fetchStart + 1));
+            const chunk = await window.App.API.getSelectionChunk(this.queueSelectionToken, {
+                offset: fetchStart,
+                limit: fetchLimit,
+            });
+            const ids = Array.isArray(chunk?.image_ids) ? chunk.image_ids : [];
+            this._rememberQueueIds(ids, fetchStart);
+            const total = Number(chunk?.total ?? chunk?.count ?? 0);
+            if (Number.isFinite(total) && total > 0) this.queueTotalCount = total;
+        }
+        const out = [];
+        const readTotal = this.queueTotalCount || (start + size);
+        for (let i = start; i < start + size && i < readTotal; i += 1) {
+            const id = this.queueIdByIndex.get(i);
+            if (id) out.push(id);
+        }
+        return out;
+    },
+
+    async _loadQueueSource() {
+        this.queueSelectionToken = null;
+        this.queueIdByIndex = new Map();
+        this.queueIndexById = new Map();
+        this.queueSourceMode = 'ids';
+
         const selectionToken = this._getActiveSelectionTokenForExport();
         if (selectionToken && window.App?.API?.getSelectionChunk) {
-            try {
-                const allIds = [];
-                let offset = 0;
-                let hasMore = true;
-                while (hasMore && allIds.length < normalizedCap) {
-                    const chunk = await window.App.API.getSelectionChunk(selectionToken, {
-                        offset,
-                        limit: Math.min(5000, normalizedCap - allIds.length),
-                    });
-                    const ids = Array.isArray(chunk?.image_ids) ? chunk.image_ids : [];
-                    for (const id of ids) {
-                        const n = Number(id);
-                        if (Number.isFinite(n) && n > 0) allIds.push(n);
-                    }
-                    hasMore = Boolean(chunk?.has_more);
-                    offset = Number(chunk?.next_offset || 0);
-                    if (!offset && hasMore) break;
-                }
-                if (allIds.length) return allIds;
-            } catch (error) {
-                console.warn('Could not resolve filtered selection ids', error);
-            }
+            this.queueSelectionToken = selectionToken;
+            this.queueSourceMode = 'token';
+            this.queueTotalCount = this._selectionTotalFromState();
+            const firstIds = await this._fetchQueueIdsWindow(0, 80);
+            this.queueImageIds = firstIds;
+            if (!this.queueTotalCount) this.queueTotalCount = firstIds.length;
+            return {
+                mode: 'token',
+                token: selectionToken,
+                firstIds,
+                total: this.queueTotalCount,
+            };
+        }
+
+        const ids = this._getExplicitSelectedImageIds(Infinity);
+        this.queueImageIds = ids;
+        this._rememberQueueIds(ids, 0);
+        this.queueTotalCount = ids.length;
+        return { mode: 'ids', ids, firstIds: ids.slice(0, 80), total: ids.length };
+    },
+
+    async _resolveSelectionImageIds({ cap = 500, allowLoadedFallback = false } = {}) {
+        const normalizedCap = Math.max(1, Math.min(Number(cap) || 500, 5000));
+        if (this.queueSelectionToken) {
+            return this._fetchQueueIdsWindow(0, normalizedCap);
         }
         const selectedIds = this._getExplicitSelectedImageIds(normalizedCap);
         if (selectedIds.length) return selectedIds;
         return allowLoadedFallback ? this._getLoadedGalleryImageIds(normalizedCap) : [];
-    },
-
-    /** Load ALL selected image_ids for the queue (no cap). */
-    async _loadQueueImageIds() {
-        const ids = await this._resolveSelectionImageIds({ cap: 500000, allowLoadedFallback: true });
-        this.queueImageIds = ids;
-        return ids;
     },
 
     async refreshPreview() {
@@ -1237,8 +1297,8 @@ const V321Integration = {
         if (!list) return;
 
         const contentMode = document.getElementById('batch-export-content-mode')?.value;
-        const ids = await this._loadQueueImageIds();
-        this.queueTotalCount = ids.length;
+        const source = await this._loadQueueSource();
+        const ids = source.firstIds || source.ids || [];
         if (!ids.length) {
             list.style.display = 'block';
             list.innerHTML = '<p style="padding:12px;text-align:center;color:var(--text-muted)">No images selected. Select images in Gallery first.</p>';
@@ -1251,8 +1311,9 @@ const V321Integration = {
         list.innerHTML = '<p style="padding:8px;color:var(--text-muted)">Rendering preview…</p>';
 
         // Set active image if not already in queue
-        if (!this.activePreviewImageId || !ids.includes(Number(this.activePreviewImageId))) {
+        if (!this.activePreviewImageId || !this.queueIndexById.has(Number(this.activePreviewImageId))) {
             this.activePreviewImageId = ids[0] || null;
+            this.activePreviewIndex = 0;
         }
 
         // Fetch captions for a small initial batch via export-preview (also gives us metadata)
@@ -1321,6 +1382,8 @@ const V321Integration = {
 
         if (contentMode === 'template') {
             const opts = this.collectTemplateOptions();
+            const transforms = this.collectCaptionTransforms();
+            if (transforms) opts.caption_transforms = transforms;
             // For template mode the preset itself decides; only override
             // when the user explicitly toggles the checkbox to FALSE
             // (forces raw underscores for Pony / NoobAI workflows).
@@ -1352,6 +1415,8 @@ const V321Integration = {
             opts.underscore_to_space_override = false;
             opts.preserve_underscore_prefixes_override = ['score_'];
         }
+        const transforms = this.collectCaptionTransforms();
+        if (transforms) opts.caption_transforms = transforms;
         return opts;
     },
 
@@ -1456,6 +1521,9 @@ const V321Integration = {
         // Try metadata Map first (virtual scroll path)
         const meta = this.previewMetadata.get(id);
         if (meta) return { image_id: id, filename: meta.filename || '', thumbnail_path: meta.thumbnail_path || '', rendered: this.previewCache.get(id) || '' };
+        if (Number.isFinite(id) && id > 0 && (this.queueIndexById.has(id) || this.queueImageIds.includes(id))) {
+            return { image_id: id, filename: `Image ${id}`, thumbnail_path: '', rendered: this.previewCache.get(id) || '' };
+        }
         // Legacy array fallback
         const found = this.previewResults.find((item) => Number(item.image_id) === id);
         if (found) return found;
@@ -1470,8 +1538,10 @@ const V321Integration = {
 
     _getRenderedCaption(imageId) {
         const id = Number(imageId);
-        if (this.editedCaptions.has(id)) return this.editedCaptions.get(id) || '';
-        return this.previewCache.get(id) || this._getPreviewItem(id)?.rendered || '';
+        const raw = this.editedCaptions.has(id)
+            ? (this.editedCaptions.get(id) || '')
+            : (this.previewCache.get(id) || this._getPreviewItem(id)?.rendered || '');
+        return this._applyCaptionTransformsToText(raw);
     },
 
     _setPreviewCaption(imageId, value) {
@@ -1483,6 +1553,85 @@ const V321Integration = {
         } else {
             this.editedCaptions.delete(id);
         }
+    },
+
+    _normalizeTransformToken(token) {
+        return String(token || '').replace(/_/g, ' ').split(/\s+/).join(' ').trim().toLowerCase();
+    },
+
+    _addCaptionTransform(kind, token) {
+        const clean = String(token || '').trim();
+        if (!clean) return;
+        if (!this.captionTransforms || typeof this.captionTransforms !== 'object') {
+            this.captionTransforms = { prepend: [], append: [], remove: [], remove_categories: [], dedupe: false };
+        }
+        const key = kind === 'append' ? 'append' : kind === 'remove' ? 'remove' : 'prepend';
+        const arr = Array.isArray(this.captionTransforms[key]) ? this.captionTransforms[key] : [];
+        const normalized = this._normalizeTransformToken(clean);
+        if (!arr.some((item) => this._normalizeTransformToken(item) === normalized)) {
+            arr.push(clean);
+        }
+        this.captionTransforms[key] = arr;
+        if (key === 'remove') {
+            this.captionTransforms.prepend = (this.captionTransforms.prepend || [])
+                .filter((item) => this._normalizeTransformToken(item) !== normalized);
+            this.captionTransforms.append = (this.captionTransforms.append || [])
+                .filter((item) => this._normalizeTransformToken(item) !== normalized);
+        }
+    },
+
+    _addCaptionCategoryTransform(category) {
+        const clean = String(category || '').trim().toLowerCase();
+        if (!clean) return;
+        if (!this.captionTransforms || typeof this.captionTransforms !== 'object') {
+            this.captionTransforms = { prepend: [], append: [], remove: [], remove_categories: [], dedupe: false };
+        }
+        const arr = Array.isArray(this.captionTransforms.remove_categories)
+            ? this.captionTransforms.remove_categories
+            : [];
+        if (!arr.includes(clean)) arr.push(clean);
+        this.captionTransforms.remove_categories = arr;
+    },
+
+    _applyCaptionTransformsToText(text) {
+        const transforms = this.captionTransforms || {};
+        const prepend = Array.isArray(transforms.prepend) ? transforms.prepend : [];
+        const append = Array.isArray(transforms.append) ? transforms.append : [];
+        const remove = Array.isArray(transforms.remove) ? transforms.remove : [];
+        const removeCategories = Array.isArray(transforms.remove_categories) ? transforms.remove_categories : [];
+        const dedupe = !!transforms.dedupe || prepend.length || append.length || remove.length || removeCategories.length;
+        if (!prepend.length && !append.length && !remove.length && !removeCategories.length && !dedupe) return String(text || '');
+        const removeSet = new Set(remove.map((token) => this._normalizeTransformToken(token)));
+        const tokens = this._splitCaptionTokens(text)
+            .filter((token) => !removeSet.has(this._normalizeTransformToken(token)));
+        const merged = [...prepend, ...tokens, ...append];
+        if (!dedupe) return merged.join(', ');
+        const seen = new Set();
+        const out = [];
+        for (const token of merged) {
+            const key = this._normalizeTransformToken(token);
+            if (!key || seen.has(key)) continue;
+            seen.add(key);
+            out.push(token);
+        }
+        return out.join(', ');
+    },
+
+    collectCaptionTransforms() {
+        const transforms = this.captionTransforms || {};
+        const payload = {};
+        for (const key of ['prepend', 'append', 'remove', 'remove_categories']) {
+            const values = Array.isArray(transforms[key])
+                ? transforms[key].map((item) => String(item || '').trim()).filter(Boolean)
+                : [];
+            if (values.length) payload[key] = values;
+        }
+        if (transforms.dedupe) payload.dedupe = true;
+        return Object.keys(payload).length ? payload : null;
+    },
+
+    _queueActionCount() {
+        return this.queueTotalCount || this.queueImageIds?.length || this.previewResults?.length || 0;
     },
 
     _splitCaptionTokens(value) {
@@ -1570,14 +1719,15 @@ const V321Integration = {
     },
 
     async _applyTokenToAll(token, mode, position = 'prepend') {
-        const ids = this.queueImageIds.length ? this.queueImageIds : this.previewResults.map(item => Number(item.image_id));
-
-        // Ensure all captions are loaded before bulk-editing.
-        // Without this, unloaded images get overwritten with just the token.
-        await this._ensurePreviewCaptionsLoaded(ids);
-
-        for (const id of ids) {
-            this._applyTokenToCaption(id, token, mode, position);
+        const transformKey = mode === 'remove' ? 'remove' : (position === 'append' ? 'append' : 'prepend');
+        this._addCaptionTransform(transformKey, token);
+        const loadedIds = new Set([
+            ...Array.from(this.previewCache.keys()).map(Number),
+            ...Array.from(this.editedCaptions.keys()).map(Number),
+            ...this.previewResults.map(item => Number(item.image_id)),
+        ]);
+        for (const id of loadedIds) {
+            if (Number.isFinite(id) && id > 0) this._applyTokenToCaption(id, token, mode, position);
         }
         this._renderPreviewWorkbench();
     },
@@ -1601,8 +1751,18 @@ const V321Integration = {
     },
 
     async _cleanupAllPreviewCaptions(options = {}) {
-        const ids = this.queueImageIds.length ? this.queueImageIds : this.previewResults.map(item => Number(item.image_id));
-        await this._ensurePreviewCaptionsLoaded(ids);
+        if (options.dedupe) this.captionTransforms.dedupe = true;
+        if (options.blacklist) {
+            for (const token of this._getBlacklistTokens()) this._addCaptionTransform('remove', token);
+        }
+        if (options.boilerplate) {
+            for (const token of this._getLoraBoilerplateTokens()) this._addCaptionTransform('remove', token);
+        }
+        const ids = Array.from(new Set([
+            ...Array.from(this.previewCache.keys()).map(Number),
+            ...Array.from(this.editedCaptions.keys()).map(Number),
+            ...this.previewResults.map(item => Number(item.image_id)),
+        ])).filter((id) => Number.isFinite(id) && id > 0);
         for (const id of ids) {
             this._cleanupPreviewCaption(id, options);
         }
@@ -1610,35 +1770,43 @@ const V321Integration = {
     },
 
     async _removeTagsByCategory(category) {
+        const clean = String(category || '').trim().toLowerCase();
+        if (!clean) return;
+        const count = this._queueActionCount();
+        if (!confirm(this._i18n('batchExport.confirmCategoryRemoveAll', `Remove ${clean} tags from all ${count} images during export?`, { count, category: clean }))) return;
+        this._addCaptionCategoryTransform(clean);
+
+        // Update the loaded preview sample best-effort so the user sees the
+        // rule took effect. The actual full selection is handled by the backend
+        // transform at export time, including images that are not loaded in the
+        // virtual queue.
         const ids = this.queueImageIds.length ? this.queueImageIds : this.previewResults.map(item => Number(item.image_id));
-        await this._ensurePreviewCaptionsLoaded(ids);
-        const allTokens = new Set();
-        for (const id of ids) {
-            for (const token of this._splitCaptionTokens(this._getRenderedCaption(id))) {
-                allTokens.add(token);
-            }
-        }
-        if (!allTokens.size) return;
         try {
-            const resp = await fetch('/api/prompts/categorize', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify([...allTokens]),
-            });
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const data = await resp.json();
-            const toRemove = data.results
-                .filter(item => item.category === category)
-                .map(item => item.tag);
-            if (!toRemove.length) {
-                window.showToast?.(`No ${category} tags found.`, 'info');
-                return;
+            await this._ensurePreviewCaptionsLoaded(ids);
+            const allTokens = new Set();
+            for (const id of ids) {
+                for (const token of this._splitCaptionTokens(this._getRenderedCaption(id))) {
+                    allTokens.add(token);
+                }
             }
-            if (!confirm(this._i18n('batchExport.confirmCategoryRemoveAll', `Remove ${toRemove.length} ${category} tags from all images?`, { count: toRemove.length, category }))) return;
-            for (const tag of toRemove) await this._applyTokenToAll(tag, 'remove');
-        } catch (err) {
-            window.showToast?.(`Category removal failed: ${err.message}`, 'error');
-        }
+            if (allTokens.size) {
+                const resp = await fetch('/api/prompts/categorize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify([...allTokens]),
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    const toRemove = (data.results || [])
+                        .filter(item => String(item.category || '').toLowerCase() === clean)
+                        .map(item => item.tag);
+                    for (const tag of toRemove) {
+                        this._addCaptionTransform('remove', tag);
+                    }
+                }
+            }
+        } catch (_) { /* backend export still applies remove_categories */ }
+        this._renderPreviewWorkbench();
     },
 
     async _copyCurrentPreviewCaption() {
@@ -1669,6 +1837,7 @@ const V321Integration = {
         for (const id of ids) {
             this.editedCaptions.delete(Number(id));
         }
+        this.captionTransforms = { prepend: [], append: [], remove: [], remove_categories: [], dedupe: false };
         this._renderPreviewWorkbench();
     },
 
@@ -1697,34 +1866,85 @@ const V321Integration = {
         body.className = 'export-preview-queue-list';
 
         const ids = this.queueImageIds.length ? this.queueImageIds : this.previewResults.map(r => Number(r.image_id));
+        const totalCount = this.queueTotalCount || ids.length;
         const ITEM_HEIGHT = 60;
+        const MAX_SCROLL_SPACER_PX = 4_000_000;
+        const MAX_RENDER_VIEWPORT_PX = 1200;
+
+        const getMetrics = () => {
+            const viewport = Math.max(1, Math.min(body.clientHeight || 400, MAX_RENDER_VIEWPORT_PX));
+            const totalHeight = Math.max(0, totalCount * ITEM_HEIGHT);
+            const spacerHeight = Math.min(totalHeight, MAX_SCROLL_SPACER_PX);
+            if (totalHeight <= spacerHeight) {
+                const virtualTop = Math.max(0, body.scrollTop || 0);
+                return {
+                    viewport,
+                    spacerHeight,
+                    virtualTop,
+                    domTopForIndex: (index) => index * ITEM_HEIGHT,
+                };
+            }
+            const domScrollable = Math.max(1, spacerHeight - viewport);
+            const virtualScrollable = Math.max(1, totalHeight - viewport);
+            const ratio = Math.max(0, Math.min(1, (body.scrollTop || 0) / domScrollable));
+            const virtualTop = ratio * virtualScrollable;
+            return {
+                viewport,
+                spacerHeight,
+                virtualTop,
+                domTopForIndex: (index) => (body.scrollTop || 0) + ((index * ITEM_HEIGHT) - virtualTop),
+            };
+        };
 
         // Virtual scroll: only render visible items
         const spacer = document.createElement('div');
-        spacer.style.height = `${ids.length * ITEM_HEIGHT}px`;
+        spacer.style.height = `${Math.min(Math.max(0, totalCount * ITEM_HEIGHT), MAX_SCROLL_SPACER_PX)}px`;
         spacer.style.position = 'relative';
 
         const renderVisible = () => {
-            const scrollTop = body.scrollTop;
-            const viewHeight = body.clientHeight || 400;
-            const startIdx = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT));
-            const endIdx = Math.min(startIdx + Math.ceil(viewHeight / ITEM_HEIGHT) + 2, ids.length);
+            const metrics = getMetrics();
+            spacer.style.height = `${metrics.spacerHeight}px`;
+            const startIdx = Math.max(0, Math.floor(metrics.virtualTop / ITEM_HEIGHT));
+            const endIdx = Math.min(startIdx + Math.ceil(metrics.viewport / ITEM_HEIGHT) + 2, totalCount);
 
             spacer.innerHTML = '';
+            const visibleIds = [];
             for (let i = startIdx; i < endIdx; i++) {
-                const imageId = ids[i];
-                const btn = this._buildQueueItem(imageId, i);
+                const imageId = this.queueSelectionToken ? this.queueIdByIndex.get(i) : ids[i];
+                const btn = imageId
+                    ? this._buildQueueItem(imageId, i)
+                    : this._buildQueuePlaceholder(i);
                 btn.style.position = 'absolute';
-                btn.style.top = `${i * ITEM_HEIGHT}px`;
+                btn.style.top = `${metrics.domTopForIndex(i)}px`;
                 btn.style.left = '0';
                 btn.style.right = '0';
                 btn.style.height = `${ITEM_HEIGHT}px`;
                 spacer.appendChild(btn);
+                if (imageId) visibleIds.push(imageId);
             }
 
-            // Prefetch metadata for visible items that are missing
-            const visibleIds = ids.slice(startIdx, endIdx).filter(id => !this.previewMetadata.has(id));
-            if (visibleIds.length) this._fetchQueueMetadata(visibleIds).then(() => renderVisible());
+            // Prefetch metadata for visible items that are missing. Do not
+            // re-render after a no-op fetch; otherwise large virtual queues can
+            // spin in a microtask render loop.
+            const missingVisibleIds = visibleIds.filter(id => !this.previewMetadata.has(Number(id)));
+            if (missingVisibleIds.length) {
+                this._fetchQueueMetadata(missingVisibleIds).then((changed) => {
+                    if (changed) renderVisible();
+                });
+            }
+            if (this.queueSelectionToken) {
+                let needsIds = false;
+                for (let i = startIdx; i < endIdx; i += 1) {
+                    if (!this.queueIdByIndex.has(i)) {
+                        needsIds = true;
+                        break;
+                    }
+                }
+                if (!needsIds) return;
+                this._fetchQueueIdsWindow(startIdx, endIdx - startIdx).then((loaded) => {
+                    if (loaded.length) renderVisible();
+                });
+            }
         };
 
         body.addEventListener('scroll', renderVisible);
@@ -1735,6 +1955,13 @@ const V321Integration = {
         this._queueScrollContainer = body;
         this._queueRenderVisible = renderVisible;
         return queue;
+    },
+
+    _buildQueuePlaceholder(index) {
+        const item = document.createElement('div');
+        item.className = 'export-preview-queue-item is-loading';
+        item.innerHTML = `<span class="export-preview-queue-copy"><span>#${index + 1}</span><strong>Loading...</strong><small></small></span>`;
+        return item;
     },
 
     _buildQueueItem(imageId, index) {
@@ -1767,6 +1994,7 @@ const V321Integration = {
 
         btn.addEventListener('click', () => {
             this.activePreviewImageId = id;
+            this.activePreviewIndex = Number(index || 0);
             this._onQueueItemClick(id);
         });
         return btn;
@@ -1774,6 +2002,9 @@ const V321Integration = {
 
     async _onQueueItemClick(imageId) {
         const id = Number(imageId);
+        if (this.queueIndexById.has(id)) {
+            this.activePreviewIndex = this.queueIndexById.get(id);
+        }
         // Ensure metadata is available
         if (!this.previewMetadata.has(id)) {
             await this._fetchQueueMetadata([id]);
@@ -1814,10 +2045,15 @@ const V321Integration = {
     },
 
     async _fetchQueueMetadata(imageIds) {
-        if (!imageIds.length) return;
+        if (!imageIds.length) return false;
         // Filter out already-cached IDs
-        const needed = imageIds.filter(id => !this.previewMetadata.has(id));
-        if (!needed.length) return;
+        const needed = imageIds
+            .map(id => Number(id))
+            .filter(id => Number.isFinite(id) && id > 0)
+            .filter(id => !this.previewMetadata.has(id) && !this._queueMetadataInFlight.has(id));
+        if (!needed.length) return false;
+        needed.forEach(id => this._queueMetadataInFlight.add(id));
+        let changed = false;
         // Use export-preview to get metadata (filename) — it's the only endpoint
         // guaranteed to return filename without triggering individual detail requests
         const contentMode = document.getElementById('batch-export-content-mode')?.value;
@@ -1832,21 +2068,28 @@ const V321Integration = {
             if (r.ok) {
                 const data = await r.json();
                 for (const item of (data.results || [])) {
-                    this.previewMetadata.set(item.image_id, { filename: item.filename || '', thumbnail_path: item.thumbnail_path || '' });
-                    if (item.rendered && !this.previewCache.has(item.image_id)) {
-                        this.previewCache.set(item.image_id, item.rendered);
+                    const itemId = Number(item.image_id);
+                    if (!Number.isFinite(itemId) || itemId <= 0) continue;
+                    if (!this.previewMetadata.has(itemId)) changed = true;
+                    this.previewMetadata.set(itemId, { filename: item.filename || '', thumbnail_path: item.thumbnail_path || '' });
+                    if (item.rendered && !this.previewCache.has(itemId)) {
+                        this.previewCache.set(itemId, item.rendered);
                     }
                 }
             }
         } catch (e) {
             // Graceful fallback
+        } finally {
+            needed.forEach(id => this._queueMetadataInFlight.delete(id));
         }
         // Set placeholder for any still-missing
         for (const id of needed) {
             if (!this.previewMetadata.has(id)) {
                 this.previewMetadata.set(id, { filename: `Image ${id}`, thumbnail_path: '' });
+                changed = true;
             }
         }
+        return changed;
     },
 
     _buildPreviewEditor() {
@@ -2030,7 +2273,7 @@ const V321Integration = {
         const addAll = this._toolButton('batchExport.addToAllPreview', '+All images', async () => {
             const tags = input.value.split(',').map(t => t.trim()).filter(Boolean);
             if (!tags.length) return;
-            const count = this.queueImageIds?.length || this.previewResults?.length || 0;
+            const count = this._queueActionCount();
             if (!confirm(this._i18n('batchExport.confirmAddAll', `Add "${tags.join(', ')}" to all ${count} images?`, { tags: tags.join(', '), count }))) return;
             for (const tag of tags) await this._applyTokenToAll(tag, 'add', getPosition());
             input.value = '';
@@ -2038,7 +2281,7 @@ const V321Integration = {
         const removeAll = this._toolButton('batchExport.removeFromAllPreview', '-All images', async () => {
             const tags = input.value.split(',').map(t => t.trim()).filter(Boolean);
             if (!tags.length) return;
-            const count = this.queueImageIds?.length || this.previewResults?.length || 0;
+            const count = this._queueActionCount();
             if (!confirm(this._i18n('batchExport.confirmRemoveAll', `Remove "${tags.join(', ')}" from all ${count} images?`, { tags: tags.join(', '), count }))) return;
             for (const tag of tags) await this._applyTokenToAll(tag, 'remove');
             input.value = '';
@@ -2120,7 +2363,7 @@ const V321Integration = {
             this._cleanupPreviewCaption(id, { dedupe: true });
             this._renderPreviewWorkbench();
         }, 'batchExport.cleanupAllImages', 'All images', 'dedupe-all', async () => {
-            const count = this.queueImageIds?.length || this.previewResults?.length || 0;
+            const count = this._queueActionCount();
             if (!confirm(this._i18n('batchExport.confirmCleanupAll', `Remove duplicate tags from all ${count} images?`, { count }))) return;
             await this._cleanupAllPreviewCaptions({ dedupe: true });
         });
@@ -2130,7 +2373,7 @@ const V321Integration = {
             this._cleanupPreviewCaption(id, { blacklist: true, dedupe: true });
             this._renderPreviewWorkbench();
         }, 'batchExport.cleanupAllImages', 'All images', 'blacklist-all', async () => {
-            const count = this.queueImageIds?.length || this.previewResults?.length || 0;
+            const count = this._queueActionCount();
             const blacklist = this._getBlacklistTokens();
             const preview = blacklist.length ? blacklist.slice(0, 10).join(', ') + (blacklist.length > 10 ? '...' : '') : '(empty)';
             if (!confirm(this._i18n('batchExport.confirmBlacklistAll', `Remove blacklisted tags [${preview}] from all ${count} images?`, { preview, count }))) return;
@@ -2170,7 +2413,7 @@ const V321Integration = {
             this._cleanupPreviewCaption(id, { boilerplate: true, dedupe: true });
             this._renderPreviewWorkbench();
         }, 'batchExport.cleanupAllImages', 'All images', 'boilerplate-all', async () => {
-            const count = this.queueImageIds?.length || this.previewResults?.length || 0;
+            const count = this._queueActionCount();
             const boilerplate = this._getLoraBoilerplateTokens().slice(0, 8).join(', ') + '...';
             if (!confirm(this._i18n('batchExport.confirmBoilerplateAll', `Remove quality/rating tags [${boilerplate}] from all ${count} images?`, { boilerplate, count }))) return;
             await this._cleanupAllPreviewCaptions({ boilerplate: true, dedupe: true });
@@ -2292,6 +2535,10 @@ const V321Integration = {
                     if (overrides) {
                         body.image_overrides = overrides;
                     }
+                    const transforms = self.collectCaptionTransforms();
+                    if (transforms) {
+                        body.caption_transforms = transforms;
+                    }
 
                     // v3.2.1 follow-up: forward the LoRA underscore checkbox.
                     // Default behavior (when the field is omitted) is the
@@ -2355,15 +2602,16 @@ const V321Integration = {
      */
     async _runCombinedExport(destination) {
         const i18n = (key, params, fallback) => { const v = window.I18n?.t?.(key, params); return (v && v !== key) ? v : fallback; };
-        const ids = await this._getAllSelectedImageIdsForExport();
-        if (!ids.length) {
+        const payload = await this._buildCombinedExportPayload();
+        const requestedTotal = payload.selection_token
+            ? (this.queueTotalCount || this._selectionTotalFromState())
+            : (payload.image_ids || []).length;
+        if (!requestedTotal) {
             if (typeof window.showToast === 'function') {
                 window.showToast(i18n('selection.noImagesSelected', null, 'No images selected.'), 'warning');
             }
             return;
         }
-        const contentMode = document.getElementById('batch-export-content-mode')?.value || 'caption_merged';
-        const opts = this._previewOptionsForContentMode(contentMode);
         const startBtn = document.getElementById('btn-start-batch-export');
         const previousLabel = startBtn?.innerHTML;
         if (startBtn) {
@@ -2371,54 +2619,41 @@ const V321Integration = {
             startBtn.innerHTML = '<span>' + i18n('export.inProgress', null, 'Working...') + '</span>';
         }
         try {
-            // Render in chunks to avoid asking the backend for ten thousand
-            // captions at once. /api/tags/export-preview already trims, but
-            // we batch defensively.
-            const chunkSize = 20;
-            const renderedById = new Map();
-            for (let i = 0; i < ids.length; i += chunkSize) {
-                const slice = ids.slice(i, i + chunkSize);
-                const r = await fetch('/api/tags/export-preview', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image_ids: slice, content_mode: contentMode, ...opts }),
-                });
-                if (!r.ok) throw new Error('preview HTTP ' + r.status);
-                const data = await r.json();
-                for (const item of (data.results || [])) {
-                    renderedById.set(item.image_id, item.rendered);
-                }
-            }
-            const ordered = ids.map((id) => {
-                if (this.editedCaptions.has(id)) return this.editedCaptions.get(id);
-                return renderedById.get(id) || '';
+            const r = await fetch('/api/tags/export-combined', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
             });
-            const combined = ordered.filter(Boolean).join('\n');
+            if (!r.ok) throw new Error('combined HTTP ' + r.status);
+            const result = await r.json();
+            if (!result.download_url) throw new Error('combined export did not return a download URL');
 
             if (destination === 'clipboard') {
-                await navigator.clipboard.writeText(combined);
-                if (typeof window.showToast === 'function') {
-                    window.showToast(
-                        i18n('batchExport.combinedCopied', null, 'Combined export copied to clipboard.'),
-                        'success'
-                    );
+                if (requestedTotal <= 5000) {
+                    const textResponse = await fetch(result.download_url);
+                    if (!textResponse.ok) throw new Error('download HTTP ' + textResponse.status);
+                    await navigator.clipboard.writeText(await textResponse.text());
+                    if (typeof window.showToast === 'function') {
+                        window.showToast(
+                            i18n('batchExport.combinedCopied', null, 'Combined export copied to clipboard.'),
+                            'success'
+                        );
+                    }
+                } else {
+                    window.location.href = result.download_url;
+                    if (typeof window.showToast === 'function') {
+                        window.showToast(
+                            i18n('batchExport.combinedLargeDownloaded', null, 'Large combined export was generated as a download so the browser does not freeze.'),
+                            'info',
+                            7000
+                        );
+                    }
                 }
             } else {
-                const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                const ext = (contentMode === 'json' || contentMode === 'jsonl') ? 'json' : 'txt';
-                const filename = 'sd-image-sorter-export-' + stamp + '.' + ext;
-                const blob = new Blob([combined], { type: 'text/plain;charset=utf-8' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+                window.location.href = result.download_url;
                 if (typeof window.showToast === 'function') {
                     window.showToast(
-                        i18n('batchExport.combinedDownloaded', { filename }, 'Combined export saved as ' + filename),
+                        i18n('batchExport.combinedDownloaded', { filename: result.filename || '' }, 'Combined export saved.'),
                         'success'
                     );
                 }
@@ -2434,12 +2669,38 @@ const V321Integration = {
         }
     },
 
-    /** Fetch the full list of selected image ids for a combined export. */
-    async _getAllSelectedImageIdsForExport() {
-        const resolved = await this._resolveSelectionImageIds({ cap: 500000, allowLoadedFallback: false });
-        if (resolved.length) return resolved;
-        if (this.queueImageIds.length) return this.queueImageIds;
-        return this._getLoadedGalleryImageIds(500000);
+    async _buildCombinedExportPayload() {
+        const contentMode = document.getElementById('batch-export-content-mode')?.value || 'caption_merged';
+        const blacklistText = document.getElementById('batch-export-blacklist')?.value || '';
+        const blacklist = blacklistText.split(',').map((item) => item.trim()).filter(Boolean);
+        const prefix = document.getElementById('batch-export-prefix')?.value || '';
+        const overwritePolicy = document.getElementById('batch-export-overwrite')?.value || 'unique';
+        const normalizeCheckbox = document.getElementById('batch-export-normalize-underscores');
+        const selectionToken = this.queueSelectionToken || this._getActiveSelectionTokenForExport();
+        const payload = {
+            output_folder: '',
+            output_mode: 'folder',
+            blacklist,
+            prefix,
+            content_mode: contentMode,
+            overwrite_policy: overwritePolicy,
+        };
+        if (selectionToken) {
+            payload.selection_token = selectionToken;
+        } else {
+            payload.image_ids = this.queueImageIds.length
+                ? this.queueImageIds
+                : this._getExplicitSelectedImageIds(Infinity);
+        }
+        if (contentMode === 'template' && this.collectTemplateOptions) {
+            payload.template_options = this.collectTemplateOptions();
+        }
+        const overrides = this.collectEditedCaptionOverrides();
+        if (overrides) payload.image_overrides = overrides;
+        const transforms = this.collectCaptionTransforms();
+        if (transforms) payload.caption_transforms = transforms;
+        if (normalizeCheckbox) payload.normalize_tag_underscores = !!normalizeCheckbox.checked;
+        return payload;
     },
 };
 

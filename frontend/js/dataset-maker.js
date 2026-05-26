@@ -43,13 +43,41 @@
             }
         },
 
+        // ---- Session persistence ----
+        _saveSession() {
+            try {
+                sessionStorage.setItem('sd-image-sorter-dataset-session', JSON.stringify({
+                    imageIds: this.imageIds,
+                    captionEdits: Object.fromEntries(this.captionEdits),
+                    activeId: this.activeId,
+                }));
+            } catch {}
+        },
+
         // ---- Lifecycle ----
         init() {
             if (this.boundOnce) return;
             this.boundOnce = true;
+
+            if (this.imageIds.length === 0) {
+                try {
+                    const saved = sessionStorage.getItem('sd-image-sorter-dataset-session');
+                    if (saved) {
+                        const s = JSON.parse(saved);
+                        if (s.imageIds && s.imageIds.length) {
+                            this.imageIds = s.imageIds;
+                            if (s.captionEdits) {
+                                for (const [k, v] of Object.entries(s.captionEdits)) this.captionEdits.set(Number(k), v);
+                            }
+                        }
+                    }
+                } catch {}
+            }
+
             this._bindEvents();
             this._renderQueue();
             this._renderEmptyEditor();
+            this._onPresetChange?.();
             this._updateNamingPreview();
             this._updateExportEnabled();
             this._resumeExportProgress?.();
@@ -222,6 +250,13 @@
                 this._validateOutputFolder();
                 this._updateExportEnabled();
             });
+            document.getElementById('btn-dataset-browse-output')?.addEventListener('click', (event) => {
+                event.preventDefault();
+                const input = document.getElementById('dataset-output-folder');
+                if (input && typeof window.showFolderBrowser === 'function') {
+                    window.showFolderBrowser(input);
+                }
+            });
 
             // Export flow
             document.getElementById('btn-dataset-export')?.addEventListener('click', () => this._showConfirmModal());
@@ -339,6 +374,7 @@
                 }
             }
             this._checkDuplicateFilenames();
+            this._saveSession();
             return added;
         },
 
@@ -384,25 +420,20 @@
                 return [];
             }
 
-            const maxImport = 100000;
             const out = [];
             let offset = 0;
             let hasMore = true;
-            while (hasMore && out.length < maxImport) {
+            const chunkSize = 10000;
+            while (hasMore) {
                 const chunk = await api.getSelectionChunk(token, {
                     offset,
-                    limit: Math.min(500, maxImport - out.length),
+                    limit: chunkSize,
                 });
                 const ids = Array.isArray(chunk?.image_ids) ? chunk.image_ids : [];
                 out.push(...ids.map(Number).filter((id) => Number.isFinite(id) && id > 0));
                 hasMore = Boolean(chunk?.has_more);
                 offset = Number(chunk?.next_offset || 0);
                 if (!offset && hasMore) break;
-            }
-            if (hasMore) {
-                this._toast(this._t('dataset.gallerySelectionCapped',
-                    'Imported the first {count} filtered images. Narrow the Gallery filters before importing more.',
-                    { count: maxImport }), 'warning', 7000);
             }
             return out;
         },
@@ -419,6 +450,8 @@
             this._undoStacks.clear();
             this._queueSelection.clear();
             this.activeId = null;
+            sessionStorage.removeItem('sd-image-sorter-dataset-session');
+            this._saveSession();
             this._renderQueue();
             this._renderImportGallery?.();
             this._renderEmptyEditor();

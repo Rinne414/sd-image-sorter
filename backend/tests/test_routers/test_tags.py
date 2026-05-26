@@ -102,8 +102,10 @@ class TestTaggerModels:
         assert models["camie-tagger-v2"]["custom_tags_file_hint"] == ".json metadata"
 
         assert "pixai-tagger-v0.9" in models
-        assert models["pixai-tagger-v0.9"]["default_threshold"] == 0.3
+        assert models["pixai-tagger-v0.9"]["default_threshold"] == 0.45
         assert models["pixai-tagger-v0.9"]["default_character_threshold"] == 0.85
+        assert models["pixai-tagger-v0.9"]["default_copyright_threshold"] == 0.45
+        assert models["pixai-tagger-v0.9"]["default_max_tags_per_image"] == 65
         assert models["pixai-tagger-v0.9"]["disabled"] is False
         assert models["pixai-tagger-v0.9"]["custom_profile_supported"] is True
         assert models["pixai-tagger-v0.9"]["custom_tags_file_hint"] == "selected_tags.csv"
@@ -592,6 +594,10 @@ class TestTaggingPipeline:
         models_by_name = {model["name"]: model for model in data["models"]}
         assert models_by_name["wd-swinv2-tagger-v3"]["recommended"] is True
         assert models_by_name["wd-swinv2-tagger-v3"]["gpu_default"] is True
+        assert models_by_name["wd-swinv2-tagger-v3"]["default_threshold"] == 0.35
+        assert models_by_name["wd-swinv2-tagger-v3"]["default_character_threshold"] == 0.85
+        assert models_by_name["wd-swinv2-tagger-v3"]["default_copyright_threshold"] == 0.35
+        assert models_by_name["wd-swinv2-tagger-v3"]["default_max_tags_per_image"] == 50
         assert models_by_name["wd-eva02-large-tagger-v3"]["gpu_locked"] is False
         assert models_by_name["wd-eva02-large-tagger-v3"]["gpu_confirmation_required"] is False
         assert models_by_name["wd-eva02-large-tagger-v3"]["memory"] == "High"
@@ -1677,6 +1683,46 @@ class TestExportTagsBatch:
         assert content == "manual_preview_caption, qa_global_tag"
         assert "old_tag" not in content
         assert "original prompt" not in content
+
+    def test_export_combined_uses_selection_token_and_caption_transforms(
+        self, test_client, test_db, tmp_path: Path
+    ):
+        import database as db
+        from PIL import Image
+
+        for name, tag in (("combined_a.png", "old_tag"), ("combined_b.png", "keep_tag")):
+            img_path = tmp_path / name
+            Image.new("RGB", (64, 64), color="white").save(img_path)
+            image_id = db.add_image(path=str(img_path), filename=name, metadata_json="{}")
+            db.add_tags(image_id, [
+                {"tag": tag, "confidence": 0.9},
+                {"tag": "standing", "confidence": 0.8},
+            ])
+
+        token_response = test_client.post("/api/images/selection-token", json={})
+        assert token_response.status_code == 200, token_response.text
+
+        response = test_client.post("/api/tags/export-combined", json={
+            "selection_token": token_response.json()["selection_token"],
+            "content_mode": "tags",
+            "caption_transforms": {
+                "prepend": ["global_trigger"],
+                "remove": ["old_tag"],
+                "remove_categories": ["pose"],
+            },
+        })
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["download_url"].startswith("/api/tags/export-combined/download/")
+        assert body["exported"] == 2
+
+        download = test_client.get(body["download_url"])
+        assert download.status_code == 200, download.text
+        text = download.text
+        assert "global_trigger" in text
+        assert "keep tag" in text
+        assert "old_tag" not in text
+        assert "standing" not in text
 
 
 class TestEdgeCases:
