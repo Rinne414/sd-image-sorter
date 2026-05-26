@@ -431,7 +431,10 @@ def test_dataset_folder_and_output_browse_buttons_are_real_click_buttons():
     assert 'type="button" class="btn btn-ghost btn-small" id="btn-dataset-folder-import-browse"' in html
     assert 'type="button" class="btn btn-ghost btn-small" id="btn-dataset-browse-output"' in html
     assert "btn-dataset-folder-import-browse" in local_import
-    assert "addEventListener('click', openBrowser)" in local_import
+    # PR #18 (issue 4): browse button is a toggle — mousedown opens or closes
+    # the folder browser depending on whether it's already showing.
+    assert "addEventListener('mousedown'" in local_import
+    assert "window.showFolderBrowser(pathInput)" in local_import
     assert "btn-dataset-browse-output" in dataset_js
     assert "showFolderBrowser(input)" in dataset_js
 
