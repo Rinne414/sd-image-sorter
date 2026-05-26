@@ -2865,6 +2865,8 @@ window.I18nLang_zhCN = {
     'smartTag.taggerLoadFailedToast': 'Smart Tag 的 tagger 列表加载失败，将使用后端默认模型。',
     'smartTag.taggerRecommended': '推荐',
     'smartTag.taggerUnavailable': '不可用',
+    'smartTag.stageTagging': '打标中',
+    'smartTag.stageVlm': 'VLM 描述中',
     'smartTag.imageCountLabel': '会跑：',
     'smartTag.imageCountSuffix': '张图（当前 Dataset Maker 里）',
     'smartTag.cancel': '取消',

@@ -550,9 +550,20 @@
         const processed = snap.processed || 0;
         const percent = total > 0 ? (processed / total) * 100 : 0;
         const status = snap.status || 'idle';
+        const stage = snap.stage || '';
         let text = snap.message || status;
         if (total > 0) {
-            text = `${snap.message || status} — ${processed}/${total} (${snap.succeeded || 0} ok, ${snap.failed || 0} failed)`;
+            let stagePrefix = '';
+            if (stage === 'tagging') {
+                stagePrefix = t('smartTag.stageTagging', 'Tagging');
+            } else if (stage === 'vlm') {
+                stagePrefix = t('smartTag.stageVlm', 'VLM captioning');
+            }
+            if (stagePrefix) {
+                text = `${stagePrefix} ${processed}/${total} — ${snap.succeeded || 0} ok, ${snap.failed || 0} failed`;
+            } else {
+                text = `${snap.message || status} — ${processed}/${total} (${snap.succeeded || 0} ok, ${snap.failed || 0} failed)`;
+            }
         }
         setProgressUI({
             percent,

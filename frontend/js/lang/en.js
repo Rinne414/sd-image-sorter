@@ -2865,6 +2865,8 @@ window.I18nLang_en = {
     'smartTag.taggerLoadFailedToast': 'Failed to load Smart Tag tagger list. The backend default will be used.',
     'smartTag.taggerRecommended': 'Recommended',
     'smartTag.taggerUnavailable': 'Unavailable',
+    'smartTag.stageTagging': 'Tagging',
+    'smartTag.stageVlm': 'VLM captioning',
     'smartTag.imageCountLabel': 'Will run on:',
     'smartTag.imageCountSuffix': 'images currently in Dataset Maker.',
     'smartTag.cancel': 'Cancel',
