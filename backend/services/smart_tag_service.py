@@ -1417,11 +1417,6 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
             else:
                 job.message = "Loading VLM provider..."
                 try:
-                    # The vlm router owns the "load saved settings -> VLMConfig"
-                    # plumbing; the vlm_providers registry owns "VLMConfig ->
-                    # concrete provider instance". Compose them here so the
-                    # smart-tag pipeline picks up whatever provider/model the
-                    # user already configured in Settings.
                     from routers.vlm import _build_config as _build_vlm_config
                     from vlm_providers import get_provider as _get_vlm_provider
 
@@ -1441,52 +1436,180 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                         raise
                     logger.warning("VLM provider not available, continuing without it: %s", exc)
                     vlm_provider = None
-        # Per-image loop. Parallel pools can be added after the basic path is
-        # verified end-to-end and cancellation/progress remain predictable.
-        job.message = f"Smart-tagging {job.total} image(s)..."
-        for source_chunk in _iter_request_source_chunks(req):
-            for source_key, image_id, path in source_chunk:
-                if job.cancel_requested:
-                    job.status = "cancelled"
-                    job.message = "Cancelled by user."
-                    break
-                try:
-                    if not path:
-                        raise ValueError("Image path not found")
-                    result = _process_one_image(
-                        image_path=path,
-                        image_id=image_id,
-                        req=req,
-                        tagger=tagger,
-                        vlm_provider=vlm_provider,
-                        nl_tagger=nl_tagger,
-                    )
-                    if image_id > 0:
-                        _persist_result(image_id, result, req.merge_strategy)
-                    else:
-                        _append_caption_result(
-                            job,
-                            path,
-                            (result.get("caption") or "").strip(),
-                        )
-                    job.succeeded += 1
-                    preview = (result.get("caption") or "").strip()
-                    if preview:
-                        # Cap preview to keep snapshot payload small.
-                        job.last_caption_preview = preview[:200]
-                except Exception as exc:  # noqa: BLE001
-                    job.failed += 1
-                    _record_job_error(job, str(source_key), str(exc))
-                    logger.warning("smart-tag failed on image %s: %s", source_key, exc)
-                finally:
-                    job.processed += 1
-                    job.message = f"Processed {job.processed}/{job.total}"
-            if job.cancel_requested:
-                break
 
-        if job.status == "running":
-            job.status = "completed"
-            job.message = f"Done. {job.succeeded} ok, {job.failed} failed."
+        # ---- Multi-tagger mode: process ALL images per-tagger to avoid
+        # model reload thrashing. Each tagger is loaded once, tags every
+        # image, then the next tagger is loaded. Results are fused after
+        # all taggers finish.
+        if req.enable_wd14 and req.taggers:
+            job.stage = "tagging"
+            # Collect all source items first so we can iterate them per-tagger.
+            all_sources: List[Tuple[str, int, str]] = []
+            for source_chunk in _iter_request_source_chunks(req):
+                all_sources.extend(source_chunk)
+            job.total = len(all_sources)
+
+            # per_image_outputs[i] = list of per-tagger output dicts for image i
+            per_image_outputs: List[List[Dict[str, Any]]] = [[] for _ in all_sources]
+            tagger_count = len(req.taggers)
+
+            for tagger_idx, entry in enumerate(req.taggers):
+                if job.cancel_requested:
+                    break
+                model_name = str(entry.get("model") or "").strip()
+                if not model_name:
+                    continue
+                weight = float(entry.get("weight") or 1.0)
+                gen_th = float(entry.get("general_threshold") or req.general_threshold)
+                char_th = float(entry.get("character_threshold") or req.character_threshold)
+                copy_th = float(entry.get("copyright_threshold") or req.copyright_threshold or gen_th)
+
+                job.message = f"Loading tagger {tagger_idx + 1}/{tagger_count}: {model_name}..."
+                try:
+                    one_tagger = _resolve_tagger_by_model(
+                        model_name,
+                        general_threshold=gen_th,
+                        character_threshold=char_th,
+                        copyright_threshold=copy_th,
+                        use_gpu=req.use_gpu,
+                    )
+                    if hasattr(one_tagger, "load"):
+                        one_tagger.load()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("smart-tag: failed to load tagger %s: %s", model_name, exc)
+                    continue
+
+                for img_idx, (source_key, image_id, path) in enumerate(all_sources):
+                    if job.cancel_requested:
+                        break
+                    if not path:
+                        continue
+                    try:
+                        out = _tag_image_with_thresholds(
+                            one_tagger,
+                            path,
+                            general_threshold=gen_th,
+                            character_threshold=char_th,
+                            copyright_threshold=copy_th,
+                        )
+                        per_image_outputs[img_idx].append({
+                            "model": model_name,
+                            "weight": weight,
+                            "general_tags": out.get("general_tags") or [],
+                            "copyright_tags": out.get("copyright_tags") or [],
+                            "character_tags": out.get("character_tags") or [],
+                            "rating": out.get("rating"),
+                        })
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "smart-tag consensus: tagger %s failed on %s: %s",
+                            model_name, path, exc,
+                        )
+                    job.processed = img_idx + 1 + (tagger_idx * len(all_sources))
+                    job.total = len(all_sources) * tagger_count
+                    job.message = f"Tagging ({model_name}) {img_idx + 1}/{len(all_sources)}"
+
+            if job.cancel_requested:
+                job.status = "cancelled"
+                job.message = "Cancelled by user."
+            else:
+                # Now run consensus + VLM for each image.
+                vlm_enabled = req.enable_vlm and (vlm_provider is not None or nl_tagger is not None)
+                job.stage = "vlm" if vlm_enabled else "tagging"
+                job.total = len(all_sources)
+                job.processed = 0
+                job.message = "Running consensus + VLM..." if vlm_enabled else "Running consensus..."
+
+                for img_idx, (source_key, image_id, path) in enumerate(all_sources):
+                    if job.cancel_requested:
+                        job.status = "cancelled"
+                        job.message = "Cancelled by user."
+                        break
+                    try:
+                        if not path:
+                            raise ValueError("Image path not found")
+                        result = _process_one_image(
+                            image_path=path,
+                            image_id=image_id,
+                            req=req,
+                            tagger=None,
+                            vlm_provider=vlm_provider,
+                            nl_tagger=nl_tagger,
+                            precomputed_tagger_outputs=per_image_outputs[img_idx] or None,
+                        )
+                        # Tags are persisted per-image so cancel preserves
+                        # already-completed results.
+                        if image_id > 0:
+                            _persist_result(image_id, result, req.merge_strategy)
+                        else:
+                            _append_caption_result(
+                                job, path, (result.get("caption") or "").strip(),
+                            )
+                        job.succeeded += 1
+                        preview = (result.get("caption") or "").strip()
+                        if preview:
+                            job.last_caption_preview = preview[:200]
+                    except Exception as exc:  # noqa: BLE001
+                        job.failed += 1
+                        _record_job_error(job, str(source_key), str(exc))
+                        logger.warning("smart-tag failed on image %s: %s", source_key, exc)
+                    finally:
+                        job.processed = img_idx + 1
+                        stage_label = "VLM captioning" if vlm_enabled else "Processing"
+                        job.message = f"{stage_label} {job.processed}/{job.total}"
+
+                if job.status == "running":
+                    job.status = "completed"
+                    job.message = f"Done. {job.succeeded} ok, {job.failed} failed."
+        else:
+            # Single-tagger or no-tagger path: per-image loop as before.
+            vlm_enabled = req.enable_vlm and (vlm_provider is not None or nl_tagger is not None)
+            job.stage = "tagging" if req.enable_wd14 else ("vlm" if vlm_enabled else "")
+            job.message = f"Smart-tagging {job.total} image(s)..."
+            for source_chunk in _iter_request_source_chunks(req):
+                for source_key, image_id, path in source_chunk:
+                    if job.cancel_requested:
+                        job.status = "cancelled"
+                        job.message = "Cancelled by user."
+                        break
+                    try:
+                        if not path:
+                            raise ValueError("Image path not found")
+                        result = _process_one_image(
+                            image_path=path,
+                            image_id=image_id,
+                            req=req,
+                            tagger=tagger,
+                            vlm_provider=vlm_provider,
+                            nl_tagger=nl_tagger,
+                        )
+                        # Tags are persisted per-image so cancel preserves
+                        # already-completed results.
+                        if image_id > 0:
+                            _persist_result(image_id, result, req.merge_strategy)
+                        else:
+                            _append_caption_result(
+                                job,
+                                path,
+                                (result.get("caption") or "").strip(),
+                            )
+                        job.succeeded += 1
+                        preview = (result.get("caption") or "").strip()
+                        if preview:
+                            job.last_caption_preview = preview[:200]
+                    except Exception as exc:  # noqa: BLE001
+                        job.failed += 1
+                        _record_job_error(job, str(source_key), str(exc))
+                        logger.warning("smart-tag failed on image %s: %s", source_key, exc)
+                    finally:
+                        job.processed += 1
+                        job.message = f"Processed {job.processed}/{job.total}"
+                if job.cancel_requested:
+                    break
+
+            if job.status == "running":
+                job.status = "completed"
+                job.message = f"Done. {job.succeeded} ok, {job.failed} failed."
     except Exception as exc:  # noqa: BLE001
         job.status = "failed"
         job.message = f"Smart Tag failed: {exc}"
