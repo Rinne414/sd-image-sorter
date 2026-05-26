@@ -41,6 +41,15 @@
             this._updateNamingPreview();
             this._updateExportEnabled();
             this._initCaptionHelpAutoOpen();
+            this._bindBeforeUnload();
+        },
+
+        _bindBeforeUnload() {
+            window.addEventListener('beforeunload', (e) => {
+                if (this.imageIds && this.imageIds.length > 0) {
+                    e.preventDefault();
+                }
+            });
         },
 
         _initCaptionHelpAutoOpen() {

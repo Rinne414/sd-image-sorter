@@ -25,7 +25,11 @@
         const filenameEl = document.getElementById('dataset-editor-filename');
 
         if (img) {
-            img.src = `/api/image-thumbnail/${id}?size=512`;
+            if (this._fullResMode) {
+                img.src = `/api/image-file/${id}`;
+            } else {
+                img.src = `/api/image-thumbnail/${id}?size=512`;
+            }
             img.alt = filename;
             img.hidden = false;
         }
@@ -42,6 +46,57 @@
         if (actions) actions.hidden = false;
 
         this._highlightActiveQueueItem();
+        this._ensureFullResButtons();
+    };
+
+    DM._fullResMode = false;
+
+    DM._ensureFullResButtons = function () {
+        const wrap = document.getElementById('dataset-editor-image-wrap');
+        if (!wrap || wrap.querySelector('.dataset-fullres-bar')) return;
+        const bar = document.createElement('div');
+        bar.className = 'dataset-fullres-bar';
+        const btnOne = document.createElement('button');
+        btnOne.type = 'button';
+        btnOne.className = 'btn btn-ghost btn-small dataset-fullres-btn';
+        btnOne.textContent = '\uD83D\uDD0D';
+        btnOne.title = this._t('dataset.fullResCurrent', 'Load full resolution (current)');
+        btnOne.addEventListener('click', () => this._loadFullResCurrent());
+        const btnAll = document.createElement('button');
+        btnAll.type = 'button';
+        btnAll.className = 'btn btn-ghost btn-small dataset-fullres-btn';
+        btnAll.textContent = '\uD83D\uDD0D\u2726';
+        btnAll.title = this._t('dataset.fullResAll', 'Full resolution mode (all)');
+        btnAll.addEventListener('click', () => this._toggleFullResAll());
+        bar.appendChild(btnOne);
+        bar.appendChild(btnAll);
+        wrap.appendChild(bar);
+    };
+
+    DM._loadFullResCurrent = function () {
+        const img = document.getElementById('dataset-editor-image');
+        if (!img || this.activeId == null) return;
+        img.src = `/api/image-file/${this.activeId}`;
+    };
+
+    DM._toggleFullResAll = function () {
+        this._fullResMode = !this._fullResMode;
+        const btn = document.querySelector('.dataset-fullres-bar .dataset-fullres-btn:last-child');
+        if (btn) btn.classList.toggle('active', this._fullResMode);
+        if (this.activeId != null) {
+            const img = document.getElementById('dataset-editor-image');
+            if (img) {
+                img.src = this._fullResMode
+                    ? `/api/image-file/${this.activeId}`
+                    : `/api/image-thumbnail/${this.activeId}?size=512`;
+            }
+        }
+        this._toast(
+            this._fullResMode
+                ? this._t('dataset.fullResOnToast', 'Full resolution mode ON')
+                : this._t('dataset.fullResOffToast', 'Full resolution mode OFF (thumbnails)'),
+            'info', 2000
+        );
     };
 
     DM._stepActive = function (delta) {

@@ -473,6 +473,7 @@ class SmartTagJobState:
     """
     job_id: str
     status: str = "queued"  # queued | running | completed | failed | cancelled
+    stage: str = ""  # "" | "tagging" | "vlm"
     total: int = 0
     processed: int = 0
     succeeded: int = 0
@@ -489,6 +490,7 @@ class SmartTagJobState:
         return {
             "job_id": self.job_id,
             "status": self.status,
+            "stage": self.stage,
             "total": self.total,
             "processed": self.processed,
             "succeeded": self.succeeded,
@@ -967,6 +969,13 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
     # Per-image loop (sequential for the MVP - LoraHub does this
     # in parallel pools, we will follow up with that once the basic
     # path is verified end-to-end).
+    vlm_enabled = req.enable_vlm and vlm_provider is not None
+    if req.enable_wd14 and vlm_enabled:
+        job.stage = "vlm"
+    elif req.enable_wd14:
+        job.stage = "tagging"
+    elif vlm_enabled:
+        job.stage = "vlm"
     job.message = f"Smart-tagging {job.total} image(s)..."
     for image_id, path in paths.items():
         if job.cancel_requested:

@@ -43,6 +43,7 @@
     const AUDIT_STATE = {
         lastReport: null,
         activeFilter: null,    // one of "low_quality", "untagged", "small", "duplicate"
+        inverted: false,       // when true, highlight items NOT matching the filter
     };
 
     function $(id) { return document.getElementById(id); }
@@ -74,6 +75,8 @@
         for (const b of document.querySelectorAll('.dataset-audit-badge')) {
             b.classList.toggle('active', b.dataset.flag === AUDIT_STATE.activeFilter);
         }
+        const removeBtn = $('btn-dataset-audit-remove-flagged');
+        if (removeBtn) removeBtn.hidden = !AUDIT_STATE.activeFilter;
     }
 
     function applyFilterToQueue() {
@@ -109,7 +112,7 @@
             const absPath = meta.abs_path || '';
             const match = (id > 0 && flaggedIds.has(id))
                 || (absPath && flaggedPaths.has(absPath));
-            it.classList.toggle('audit-flagged', !!match);
+            it.classList.toggle('audit-flagged', AUDIT_STATE.inverted ? !match : !!match);
         }
     }
 
@@ -141,11 +144,68 @@
             ok.className = 'dataset-audit-status';
             ok.textContent = t('dataset.auditAllClean', 'No issues found in the active checks.');
             badges.appendChild(ok);
+        } else {
+            // Invert toggle: flips all filters to show the opposite set
+            const invertBtn = document.createElement('button');
+            invertBtn.type = 'button';
+            invertBtn.className = 'btn btn-ghost btn-small dataset-audit-invert-btn';
+            invertBtn.textContent = '\u21C4';
+            invertBtn.title = t('dataset.auditInvertHint', 'Invert filter (show items NOT matching)');
+            invertBtn.classList.toggle('active', AUDIT_STATE.inverted);
+            invertBtn.addEventListener('click', () => {
+                AUDIT_STATE.inverted = !AUDIT_STATE.inverted;
+                invertBtn.classList.toggle('active', AUDIT_STATE.inverted);
+                applyFilterToQueue();
+            });
+            badges.appendChild(invertBtn);
         }
 
         wrap.hidden = false;
         const dlBtn = $('btn-dataset-audit-download');
         if (dlBtn) dlBtn.hidden = false;
+
+        // "Remove all flagged" button
+        let removeBtn = $('btn-dataset-audit-remove-flagged');
+        if (!removeBtn) {
+            removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.id = 'btn-dataset-audit-remove-flagged';
+            removeBtn.className = 'btn btn-ghost btn-small dataset-audit-remove-btn';
+            removeBtn.addEventListener('click', () => removeFlaggedFromQueue());
+            wrap.appendChild(removeBtn);
+        }
+        removeBtn.textContent = t('dataset.auditRemoveFlagged', 'Remove all flagged');
+        removeBtn.hidden = !AUDIT_STATE.activeFilter;
+    }
+
+    function removeFlaggedFromQueue() {
+        const flag = AUDIT_STATE.activeFilter;
+        if (!flag || !AUDIT_STATE.lastReport) return;
+        const items = document.querySelectorAll('#dataset-queue-list .dataset-queue-item.audit-flagged');
+        const ids = [];
+        for (const it of items) {
+            const id = Number(it.dataset.imageId || 0);
+            if (id) ids.push(id);
+        }
+        if (ids.length === 0) return;
+        const msg = DM._t?.('dataset.auditRemoveConfirm', 'Remove {count} flagged images from the dataset?', { count: ids.length })
+            || `Remove ${ids.length} flagged images from the dataset?`;
+        if (!window.confirm(msg)) return;
+        for (const id of ids) {
+            const idx = DM.imageIds.indexOf(id);
+            if (idx >= 0) DM.imageIds.splice(idx, 1);
+            DM.captions?.delete?.(id);
+            DM.captionEdits?.delete?.(id);
+        }
+        DM._renderQueue?.();
+        DM._updateExportEnabled?.();
+        DM._saveSession?.();
+        AUDIT_STATE.activeFilter = null;
+        AUDIT_STATE.inverted = false;
+        applyFilterToQueue();
+        if (typeof window.showToast === 'function') {
+            window.showToast(DM._t?.('dataset.auditRemovedToast', '{count} images removed', { count: ids.length }) || `${ids.length} images removed`, 'success');
+        }
     }
 
     async function runAudit() {
@@ -519,6 +579,35 @@
             r.addEventListener('change', refreshPairChip);
         });
         refreshPairChip();
+
+        // Issue 5: click .txt chip to preview caption content
+        const txtChip = document.getElementById('dataset-pair-chip-txt');
+        if (txtChip) {
+            txtChip.style.cursor = 'pointer';
+            txtChip.title = DM._t?.('dataset.txtPreviewHint', 'Click to preview .txt content') || 'Click to preview .txt content';
+            txtChip.addEventListener('click', () => {
+                const id = DM.activeId;
+                if (id == null) {
+                    if (typeof window.showToast === 'function') window.showToast(DM._t?.('dataset.txtPreviewNoImage', 'Select an image first') || 'Select an image first', 'info');
+                    return;
+                }
+                const caption = DM.captionEdits?.has?.(id) ? DM.captionEdits.get(id) : (DM.captions?.get?.(id) || '');
+                const text = String(caption || '').trim() || DM._t?.('dataset.txtPreviewEmpty', '(empty - no caption yet)') || '(empty)';
+                showTxtPreviewPopover(txtChip, text);
+            });
+        }
+    }
+
+    function showTxtPreviewPopover(anchor, text) {
+        let pop = document.getElementById('dataset-txt-preview-pop');
+        if (pop) { pop.remove(); return; }
+        pop = document.createElement('div');
+        pop.id = 'dataset-txt-preview-pop';
+        pop.className = 'dataset-txt-preview-pop';
+        pop.textContent = text;
+        anchor.parentElement.appendChild(pop);
+        const dismiss = (e) => { if (!pop.contains(e.target) && e.target !== anchor) { pop.remove(); document.removeEventListener('mousedown', dismiss); } };
+        setTimeout(() => document.addEventListener('mousedown', dismiss), 0);
     }
 
     DM._refreshPairChip = refreshPairChip;
