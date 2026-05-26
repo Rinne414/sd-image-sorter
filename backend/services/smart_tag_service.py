@@ -505,6 +505,7 @@ class SmartTagJobState:
     """
     job_id: str
     status: str = "queued"  # queued | running | completed | failed | cancelled
+    stage: str = ""  # tagging | vlm | "" (for single-pass legacy)
     total: int = 0
     processed: int = 0
     succeeded: int = 0
@@ -525,6 +526,7 @@ class SmartTagJobState:
         return {
             "job_id": self.job_id,
             "status": self.status,
+            "stage": self.stage,
             "total": self.total,
             "processed": self.processed,
             "succeeded": self.succeeded,

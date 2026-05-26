@@ -2621,65 +2621,27 @@
                                 <span data-i18n="dataset.auditTitle">Quality Audit (optional)</span>
                             </summary>
                             <div class="dataset-audit-body">
-                                <p class="dataset-audit-help" data-i18n="dataset.auditHelp">
-                                    Run the checks you actually care about before caption editing/export. Nothing is deleted automatically.
-                                </p>
-                                <div class="dataset-audit-options">
-                                    <section class="dataset-audit-option">
-                                        <label class="dataset-audit-option-main" for="dataset-audit-check-captions">
-                                            <input type="checkbox" id="dataset-audit-check-captions" checked>
-                                            <span>
-                                                <strong data-i18n="dataset.auditCheckCaptions">Empty captions</strong>
-                                                <small data-i18n="dataset.auditCheckCaptionsHint">Find images that will export blank .txt files.</small>
-                                            </span>
-                                        </label>
-                                    </section>
-                                    <section class="dataset-audit-option">
-                                        <label class="dataset-audit-option-main" for="dataset-audit-check-dim">
-                                            <input type="checkbox" id="dataset-audit-check-dim" checked>
-                                            <span>
-                                                <strong data-i18n="dataset.auditCheckDim">Small images</strong>
-                                                <small data-i18n="dataset.auditCheckDimHint">Flag images below the selected minimum side.</small>
-                                            </span>
-                                        </label>
-                                        <div class="dataset-audit-option-control">
-                                            <label for="dataset-audit-dim-min" data-i18n="dataset.auditDimLabel">Min image side (px)</label>
-                                            <input type="number" id="dataset-audit-dim-min" step="1" value="512" placeholder="512">
-                                            <div class="dataset-audit-preset-row" role="group" aria-label="Minimum side presets">
-                                                <button type="button" class="btn btn-ghost btn-small" data-audit-dim-preset="512">512</button>
-                                                <button type="button" class="btn btn-ghost btn-small" data-audit-dim-preset="768">768</button>
-                                                <button type="button" class="btn btn-ghost btn-small" data-audit-dim-preset="1024">1024</button>
-                                            </div>
-                                        </div>
-                                    </section>
-                                    <section class="dataset-audit-option">
-                                        <label class="dataset-audit-option-main" for="dataset-audit-check-phash">
-                                            <input type="checkbox" id="dataset-audit-check-phash">
-                                            <span>
-                                                <strong data-i18n="dataset.auditCheckPhash">Near duplicates</strong>
-                                                <small data-i18n="dataset.auditCheckPhashHint">Slower on very large sets; exact duplicates stay safe.</small>
-                                            </span>
-                                        </label>
-                                        <div class="dataset-audit-option-control">
-                                            <label for="dataset-audit-phash-max" data-i18n="dataset.auditPhashLabel">Max phash distance</label>
-                                            <input type="number" id="dataset-audit-phash-max" step="1" value="5" placeholder="5">
-                                            <small data-i18n="dataset.auditPhashHint">Lower is stricter. Only runs when duplicate check is enabled.</small>
-                                        </div>
-                                    </section>
-                                    <section class="dataset-audit-option">
-                                        <label class="dataset-audit-option-main" for="dataset-audit-check-aesthetic">
-                                            <input type="checkbox" id="dataset-audit-check-aesthetic">
-                                            <span>
-                                                <strong data-i18n="dataset.auditCheckAesthetic">Low aesthetic score</strong>
-                                                <small data-i18n="dataset.auditCheckAestheticHint">Uses the local aesthetic model when available.</small>
-                                            </span>
-                                        </label>
-                                        <div class="dataset-audit-option-control">
-                                            <label for="dataset-audit-aesthetic-max" data-i18n="dataset.auditAestheticLabel">Min aesthetic</label>
-                                            <input type="number" id="dataset-audit-aesthetic-max" step="0.1" value="4.5" placeholder="4.5">
-                                            <small data-i18n="dataset.auditAestheticHint">Only runs when aesthetic check is enabled.</small>
-                                        </div>
-                                    </section>
+                                <div class="dataset-audit-thresholds">
+                                    <label class="dataset-audit-threshold">
+                                        <input type="checkbox" id="dataset-audit-check-captions" checked>
+                                        <span data-i18n="dataset.auditCheckCaptions">Empty captions</span>
+                                    </label>
+                                    <label class="dataset-audit-threshold">
+                                        <input type="checkbox" id="dataset-audit-check-dim" checked>
+                                        <span data-i18n="dataset.auditCheckDim">Small images</span>
+                                        <input type="number" id="dataset-audit-dim-min" step="1" value="512" placeholder="512">
+                                        <small>px</small>
+                                    </label>
+                                    <label class="dataset-audit-threshold">
+                                        <input type="checkbox" id="dataset-audit-check-phash">
+                                        <span data-i18n="dataset.auditCheckPhash">Near duplicates</span>
+                                        <input type="number" id="dataset-audit-phash-max" step="1" value="5" placeholder="5">
+                                    </label>
+                                    <label class="dataset-audit-threshold">
+                                        <input type="checkbox" id="dataset-audit-check-aesthetic">
+                                        <span data-i18n="dataset.auditCheckAesthetic">Low aesthetic</span>
+                                        <input type="number" id="dataset-audit-aesthetic-max" step="0.1" value="4.5" placeholder="4.5">
+                                    </label>
                                 </div>
                                 <div class="dataset-audit-actions">
                                     <button type="button" class="btn btn-primary btn-small" id="btn-dataset-audit-run"
