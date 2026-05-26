@@ -393,6 +393,12 @@ def copy_project(destination_root: Path) -> None:
         shutil.copy2(item, destination)
 
 
+def _remove_windows_only_files(stage_dir: Path) -> None:
+    """Remove .bat files and other Windows-only artifacts from a Linux stage."""
+    for bat in stage_dir.glob("*.bat"):
+        bat.unlink()
+
+
 def write_release_notes(stage_dir: Path, version: str) -> Path:
     """Copy the version-specific release notes into the package root."""
     source = ROOT / "docs" / f"RELEASE_NOTES_v{version}.md"
@@ -1167,6 +1173,7 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
     # === Linux: app only, no models, no Python (uses system Python) ===
     def populate_linux(stage_dir: Path) -> None:
         copy_project(stage_dir)
+        _remove_windows_only_files(stage_dir)
         write_release_notes(stage_dir, version)
         write_package_manifest(stage_dir, version)
 
@@ -1208,6 +1215,7 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
     # updater can pick the right tarball for the running machine.
     def populate_linux_portable_for_arch(stage_dir: Path, arch: str) -> None:
         copy_project(stage_dir)
+        _remove_windows_only_files(stage_dir)
         write_release_notes(stage_dir, version)
         prepare_bundled_linux_python(stage_dir, arch=arch)
         write_linux_portable_launcher(stage_dir)

@@ -566,7 +566,15 @@
         const browseBtn = $('btn-dataset-folder-import-browse');
         const pathInput = $('dataset-folder-import-path');
         if (browseBtn && pathInput && typeof window.showFolderBrowser === 'function') {
-            browseBtn.addEventListener('mousedown', () => window.showFolderBrowser(pathInput));
+            browseBtn.addEventListener('mousedown', () => {
+                const container = document.getElementById('dataset-folder-import-browser');
+                if (container && container.children.length > 0) {
+                    if (typeof window.hideFolderBrowser === 'function') window.hideFolderBrowser();
+                    else container.innerHTML = '';
+                    return;
+                }
+                window.showFolderBrowser(pathInput);
+            });
         }
     }
 

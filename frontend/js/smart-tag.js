@@ -225,8 +225,8 @@
 
         // Tell Dataset Maker to refresh its captions so the new ones show up
         // in the editor without requiring a tab switch.
-        if (window.DatasetMaker && typeof window.DatasetMaker.refresh === 'function') {
-            try { window.DatasetMaker.refresh(); } catch (_e) { /* ignore */ }
+        if (window.DatasetMaker && typeof window.DatasetMaker._refreshAllCaptions === 'function') {
+            try { window.DatasetMaker._refreshAllCaptions(); } catch (_e) { /* ignore */ }
         }
         activeJobId = null;
     }

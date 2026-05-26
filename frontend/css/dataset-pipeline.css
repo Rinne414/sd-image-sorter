@@ -169,46 +169,45 @@
 }
 
 .dataset-audit-body {
-    padding: 0 14px 14px;
+    padding: 0 12px 10px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
 }
 
 .dataset-audit-help {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    line-height: 1.5;
-    margin: 0;
+    display: none;
 }
 
 .dataset-audit-thresholds {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-end;
 }
 
 .dataset-audit-threshold {
     display: flex;
-    flex-direction: column;
+    align-items: center;
     gap: 4px;
 }
 .dataset-audit-threshold > span {
-    font-size: 0.84rem;
+    font-size: 0.78rem;
     color: var(--text-primary);
     font-weight: 500;
+    white-space: nowrap;
 }
 .dataset-audit-threshold > input {
     background: var(--surface-2, rgba(255, 255, 255, 0.06));
     border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.10));
     color: var(--text-primary);
     border-radius: var(--radius-sm, 6px);
-    padding: 6px 10px;
-    font-size: 0.92rem;
+    padding: 4px 6px;
+    font-size: 0.82rem;
+    width: 64px;
 }
 .dataset-audit-threshold > small {
-    color: var(--text-muted, #9ca3af);
-    font-size: 0.76rem;
+    display: none;
 }
 
 .dataset-audit-actions {
@@ -266,7 +265,7 @@
 }
 
 @media (max-width: 1100px) {
-    .dataset-audit-thresholds { grid-template-columns: 1fr; }
+    .dataset-audit-thresholds { flex-direction: column; }
 }
 
 
@@ -534,4 +533,71 @@
 .dataset-confidence-pill-x:hover {
     background: rgba(239, 68, 68, 0.30);
     color: #fff;
+}
+
+/* ============== Full-resolution buttons (Issue 4) ============== */
+.dataset-fullres-bar {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: flex;
+    gap: 4px;
+    z-index: 2;
+}
+.dataset-fullres-btn {
+    font-size: 14px;
+    padding: 2px 6px;
+    min-width: unset;
+    opacity: 0.7;
+    backdrop-filter: blur(4px);
+    background: rgba(0,0,0,0.4);
+    border-radius: 4px;
+}
+.dataset-fullres-btn:hover { opacity: 1; }
+.dataset-fullres-btn.active {
+    opacity: 1;
+    outline: 1.5px solid var(--accent-secondary, #14b8a6);
+}
+.dataset-editor-image-wrap { position: relative; }
+
+
+/* ============== .txt preview popover (Issue 5) ============== */
+.dataset-txt-preview-pop {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    max-height: 120px;
+    overflow-y: auto;
+    padding: 8px 10px;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--bg-surface, #1e293b);
+    border: 1px solid var(--border-color, #334155);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 10;
+}
+.dataset-pair-chip { position: relative; }
+
+/* ============== Audit invert + remove buttons (Issue 8, 9) ============== */
+.dataset-audit-invert-btn {
+    font-size: 14px;
+    min-width: unset;
+    padding: 4px 8px;
+    border-radius: 999px;
+}
+.dataset-audit-invert-btn.active {
+    background: rgba(var(--accent-secondary-rgb), 0.25);
+    border-color: rgba(var(--accent-secondary-rgb), 0.5);
+}
+.dataset-audit-remove-btn {
+    margin-top: 4px;
+    color: var(--error, #ef4444);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+.dataset-audit-remove-btn:hover {
+    background: rgba(239, 68, 68, 0.12);
 }
