@@ -3156,5 +3156,8 @@ window.I18nLang_en = {
     'dataset.splitNoNext': 'No next image to compare with.',
     'dataset.exportPreviewClickTxt': 'Click to preview caption',
     'dataset.exportPreviewNoCaption': '(empty)',
+    'dataset.filterAll': 'All',
+    'dataset.filterUntagged': 'No caption',
+    'dataset.filterTagged': 'Has caption',
 
 };

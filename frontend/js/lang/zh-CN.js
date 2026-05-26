@@ -3156,5 +3156,8 @@ window.I18nLang_zhCN = {
     'dataset.splitNoNext': '没有下一张图片可供对比。',
     'dataset.exportPreviewClickTxt': '点击预览 caption 内容',
     'dataset.exportPreviewNoCaption': '（空）',
+    'dataset.filterAll': '全部',
+    'dataset.filterUntagged': '空 caption',
+    'dataset.filterTagged': '有 caption',
 
 };

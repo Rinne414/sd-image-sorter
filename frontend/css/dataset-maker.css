@@ -396,6 +396,16 @@
     background: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.22);
     color: var(--accent-primary, #ff8a3d);
 }
+#view-dataset .dataset-queue-filter-select {
+    height: 26px;
+    font-size: 11px;
+    padding: 0 4px;
+    border: 0;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.06);
+    color: var(--text-secondary, #94a3b8);
+    cursor: pointer;
+}
 
 /* ---- Big empty-state (queue) ---- */
 #view-dataset .dataset-empty-state {

@@ -2671,6 +2671,11 @@
                             <div class="dataset-pane-head">
                                 <strong data-i18n="dataset.queueTitle">Images</strong>
                                 <div class="dataset-queue-head-actions" role="group" aria-label="Dataset queue display mode">
+                                    <select id="dataset-queue-caption-filter" class="dataset-queue-filter-select" data-i18n-title="dataset.filterAll">
+                                        <option value="all" data-i18n="dataset.filterAll">All</option>
+                                        <option value="untagged" data-i18n="dataset.filterUntagged">No caption</option>
+                                        <option value="tagged" data-i18n="dataset.filterTagged">Has caption</option>
+                                    </select>
                                     <button type="button" class="dataset-queue-mode-btn active" id="btn-dataset-queue-grid"
                                             data-dataset-queue-mode="grid" title="Grid thumbnails" aria-pressed="true">▦</button>
                                     <button type="button" class="dataset-queue-mode-btn" id="btn-dataset-queue-list"

@@ -287,6 +287,7 @@
         }
         this._highlightActiveQueueItem();
         this._applyAuditFilterToQueue?.();
+        this._applyCaptionFilter?.();
         this._updateMultiSelectUI();
     };
 
@@ -502,6 +503,34 @@
             btn.addEventListener('click', () => this._setQueueViewMode(btn.getAttribute('data-dataset-queue-mode')));
         });
         this._setQueueViewMode(this._queueViewMode || 'grid');
+    };
+
+    // ---------- Queue caption filter ----------
+    DM._queueCaptionFilter = 'all';
+
+    DM._initQueueCaptionFilter = function () {
+        const sel = document.getElementById('dataset-queue-caption-filter');
+        if (!sel) return;
+        sel.addEventListener('change', () => {
+            this._queueCaptionFilter = sel.value || 'all';
+            this._applyCaptionFilter();
+        });
+    };
+
+    DM._applyCaptionFilter = function () {
+        const filter = this._queueCaptionFilter || 'all';
+        const items = document.querySelectorAll('#dataset-queue-list .dataset-queue-item');
+        for (const it of items) {
+            if (filter === 'all') {
+                it.style.display = '';
+                continue;
+            }
+            const id = Number(it.dataset.imageId || 0);
+            const caption = (this.captionEdits?.get?.(id) || this.captions?.get?.(id) || '').trim();
+            const hasCaption = caption.length > 0;
+            if (filter === 'tagged') it.style.display = hasCaption ? '' : 'none';
+            else it.style.display = hasCaption ? 'none' : '';
+        }
     };
 
     // ---------- Queue multi-select ----------
@@ -763,10 +792,12 @@
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => DM._initSplitView(), { once: true });
         document.addEventListener('DOMContentLoaded', () => DM._initQueueModeControls(), { once: true });
+        document.addEventListener('DOMContentLoaded', () => DM._initQueueCaptionFilter(), { once: true });
         document.addEventListener('DOMContentLoaded', () => DM._initQueueSelectionControls(), { once: true });
     } else {
         DM._initSplitView();
         DM._initQueueModeControls();
+        DM._initQueueCaptionFilter();
         DM._initQueueSelectionControls();
     }
 
