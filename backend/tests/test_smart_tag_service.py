@@ -451,12 +451,45 @@ def test_multi_tagger_pipeline_uses_copyright_threshold_and_caption(monkeypatch)
         copyright_threshold=0.42,
     )
 
+    # Mirror the orchestrator: pre-compute per-tagger outputs, then call
+    # _process_one_image with precomputed_tagger_outputs. The tagger-loading
+    # loop now lives in _run_smart_tag_pipeline so models aren't reloaded per
+    # image (v3.2.2 multi-tagger refactor).
+    precomputed = []
+    for entry in req.taggers:
+        model_name = entry["model"]
+        gen_th = float(entry["general_threshold"])
+        char_th = float(entry["character_threshold"])
+        copy_th = float(entry["copyright_threshold"])
+        one_tagger = smart_tag_service._resolve_tagger_by_model(
+            model_name,
+            general_threshold=gen_th,
+            character_threshold=char_th,
+            copyright_threshold=copy_th,
+        )
+        one_tagger.load()
+        out = one_tagger.tag(
+            "/tmp/fake.png",
+            threshold=gen_th,
+            character_threshold=char_th,
+            copyright_threshold=copy_th,
+        )
+        precomputed.append({
+            "model": model_name,
+            "weight": float(entry.get("weight") or 1.0),
+            "general_tags": out.get("general_tags") or [],
+            "copyright_tags": out.get("copyright_tags") or [],
+            "character_tags": out.get("character_tags") or [],
+            "rating": out.get("rating"),
+        })
+
     result = smart_tag_service._process_one_image(
         image_path="/tmp/fake.png",
         image_id=0,
         req=req,
         tagger=None,
         vlm_provider=None,
+        precomputed_tagger_outputs=precomputed,
     )
 
     assert result["general_tags"] == ["1girl"]
@@ -533,12 +566,43 @@ def test_multi_tagger_pipeline_runs_taggers_then_vlm_with_fused_tag_context(monk
         consensus_skip_categories=["character", "copyright"],
     )
 
+    # Mirror the orchestrator: pre-compute per-tagger outputs, then call
+    # _process_one_image with precomputed_tagger_outputs (post-refactor flow).
+    precomputed = []
+    for entry in req.taggers:
+        model_name = entry["model"]
+        gen_th = float(entry["general_threshold"])
+        char_th = float(entry["character_threshold"])
+        copy_th = float(entry.get("copyright_threshold") or req.copyright_threshold or gen_th)
+        one_tagger = smart_tag_service._resolve_tagger_by_model(
+            model_name,
+            general_threshold=gen_th,
+            character_threshold=char_th,
+            copyright_threshold=copy_th,
+        )
+        one_tagger.load()
+        out = one_tagger.tag(
+            "/tmp/fake.png",
+            threshold=gen_th,
+            character_threshold=char_th,
+            copyright_threshold=copy_th,
+        )
+        precomputed.append({
+            "model": model_name,
+            "weight": float(entry.get("weight") or 1.0),
+            "general_tags": out.get("general_tags") or [],
+            "copyright_tags": out.get("copyright_tags") or [],
+            "character_tags": out.get("character_tags") or [],
+            "rating": out.get("rating"),
+        })
+
     result = smart_tag_service._process_one_image(
         image_path="/tmp/fake.png",
         image_id=0,
         req=req,
         tagger=None,
         vlm_provider=vlm,
+        precomputed_tagger_outputs=precomputed,
     )
 
     assert events == [

@@ -959,6 +959,12 @@ List built-in tag/caption export presets used by the LoRA training template engi
 #### POST /api/tags/export-preview
 Render up to 20 sample caption files for a given preset without writing to disk. Body: `{image_ids, preset_id|template, options}`. Returns rendered captions keyed by image id plus the resolved template variables.
 
+#### POST /api/tags/export-combined
+Build a single combined export bundle for the current selection across multiple presets. Body: `{image_ids|selection_token, presets: [{preset_id|template, options}], filename_template}`. Returns `{token, total_files}` — pass the token to the download endpoint below.
+
+#### GET /api/tags/export-combined/download/{token}
+Stream the combined export as a `.zip`. The token is single-use and expires after a short window. Used by the v3.2.1+ multi-preset export flow.
+
 ### Color Analysis
 
 Added in v3.2.1. The color analyzer extracts dominant colors, brightness, saturation, temperature, and distribution shape; persisted in 7 indexed DB columns added by migration 010.
@@ -1103,6 +1109,14 @@ Body:
 ```
 
 Returns `{folder_path, items[], total_files_seen, skipped_unreadable, truncated}`. Each item carries `{ds_id, abs_path, filename, width, height, mtime, size, thumb_b64}` where `thumb_b64` is a JPEG-encoded base64 string for direct rendering and `ds_id` is a stable session id derived from `sha1(abs_path)`.
+
+---
+
+#### GET /api/dataset/local-thumbnail
+
+Return a JPEG thumbnail for a local-source Dataset Maker item that is NOT in the main library DB. Used by the small-gallery flow when the inline base64 thumb from `/api/dataset/folder-scan` is not enough (full-resolution preview, large folder lazy-load).
+
+Query params: `path` (URL-encoded absolute path), `size` (int, default 256). The path must resolve to a previously scanned folder so an unauthenticated visitor cannot pull arbitrary files. Returns `image/jpeg` bytes; `404` if the file is gone, `400` for malformed paths.
 
 ---
 

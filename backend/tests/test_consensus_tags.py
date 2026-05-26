@@ -108,7 +108,12 @@ def test_rating_picks_highest_score():
 
 def test_zero_taggers_returns_empty():
     out = compute_consensus_tags([])
-    assert out == {"general_tags": [], "character_tags": [], "rating": ""}
+    assert out == {
+        "general_tags": [],
+        "character_tags": [],
+        "copyright_tags": [],
+        "rating": "",
+    }
 
 
 def test_consensus_min_one_keeps_everything():
