@@ -1031,8 +1031,14 @@ def _process_one_image(
     tagger,
     vlm_provider,
     nl_tagger=None,
+    precomputed_tagger_outputs: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    """Run the full per-image pipeline. Returns a dict with caption + tags."""
+    """Run the full per-image pipeline. Returns a dict with caption + tags.
+
+    When ``precomputed_tagger_outputs`` is provided (multi-tagger mode),
+    the tagging phase is skipped and the pre-collected outputs are fused
+    directly. This avoids reloading models per-image.
+    """
     # ------- Stage 1: WD14 / OppaiOracle local tagging --------------------
     general_names: List[str] = []
     copyright_names: List[str] = []
@@ -1042,79 +1048,35 @@ def _process_one_image(
     character_rows: List[Dict[str, Any]] = []
     rating: Optional[str] = None
 
-    if req.enable_wd14 and (tagger is not None or req.taggers):
-        # T-power-PR3 (D wire-up): when SmartTagRequest.taggers is
-        # populated, run each tagger sequentially on this image and
-        # fuse via compute_consensus_tags. The single-tagger object
-        # passed in (from _resolve_tagger) is ignored here.
-        if req.taggers:
-            per_tagger_outputs: List[Dict[str, Any]] = []
-            for entry in req.taggers:
-                model_name = str(entry.get("model") or "").strip()
-                if not model_name:
-                    continue
-                weight = float(entry.get("weight") or 1.0)
-                gen_th = float(entry.get("general_threshold") or req.general_threshold)
-                char_th = float(entry.get("character_threshold") or req.character_threshold)
-                copy_th = float(entry.get("copyright_threshold") or req.copyright_threshold or gen_th)
-                try:
-                    one_tagger = _resolve_tagger_by_model(
-                        model_name,
-                        general_threshold=gen_th,
-                        character_threshold=char_th,
-                        copyright_threshold=copy_th,
-                        use_gpu=req.use_gpu,
-                    )
-                    if hasattr(one_tagger, "load"):
-                        one_tagger.load()
-                    out = _tag_image_with_thresholds(
-                        one_tagger,
-                        image_path,
-                        general_threshold=gen_th,
-                        character_threshold=char_th,
-                        copyright_threshold=copy_th,
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "smart-tag consensus: tagger %s failed on %s: %s",
-                        model_name, image_path, exc,
-                    )
-                    continue
-                per_tagger_outputs.append({
-                    "model": model_name,
-                    "weight": weight,
-                    "general_tags": out.get("general_tags") or [],
-                    "copyright_tags": out.get("copyright_tags") or [],
-                    "character_tags": out.get("character_tags") or [],
-                    "rating": out.get("rating"),
-                })
-            fused = compute_consensus_tags(
-                per_tagger_outputs,
-                consensus_min=req.consensus_min,
-                skip_categories=req.consensus_skip_categories,
-            )
-            general_rows = _normalize_tag_rows(fused.get("general_tags") or [], "general")
-            copyright_rows = _normalize_tag_rows(fused.get("copyright_tags") or [], "copyright")
-            character_rows = _normalize_tag_rows(fused.get("character_tags") or [], "character")
-            general_names = _flatten_tag_names(general_rows)
-            copyright_names = _flatten_tag_names(copyright_rows)
-            character_names = _flatten_tag_names(character_rows)
-            rating = fused.get("rating") or None
-        else:
-            result = _tag_image_with_thresholds(
-                tagger,
-                image_path,
-                general_threshold=req.general_threshold,
-                character_threshold=req.character_threshold,
-                copyright_threshold=req.copyright_threshold,
-            )
-            general_rows = _normalize_tag_rows(result.get("general_tags") or [], "general")
-            copyright_rows = _normalize_tag_rows(result.get("copyright_tags") or [], "copyright")
-            character_rows = _normalize_tag_rows(result.get("character_tags") or [], "character")
-            general_names = _flatten_tag_names(general_rows)
-            copyright_names = _flatten_tag_names(copyright_rows)
-            character_names = _flatten_tag_names(character_rows)
-            rating = result.get("rating") or None
+    if precomputed_tagger_outputs is not None:
+        # Multi-tagger consensus from pre-collected per-tagger results.
+        fused = compute_consensus_tags(
+            precomputed_tagger_outputs,
+            consensus_min=req.consensus_min,
+            skip_categories=req.consensus_skip_categories,
+        )
+        general_rows = _normalize_tag_rows(fused.get("general_tags") or [], "general")
+        copyright_rows = _normalize_tag_rows(fused.get("copyright_tags") or [], "copyright")
+        character_rows = _normalize_tag_rows(fused.get("character_tags") or [], "character")
+        general_names = _flatten_tag_names(general_rows)
+        copyright_names = _flatten_tag_names(copyright_rows)
+        character_names = _flatten_tag_names(character_rows)
+        rating = fused.get("rating") or None
+    elif req.enable_wd14 and tagger is not None:
+        result = _tag_image_with_thresholds(
+            tagger,
+            image_path,
+            general_threshold=req.general_threshold,
+            character_threshold=req.character_threshold,
+            copyright_threshold=req.copyright_threshold,
+        )
+        general_rows = _normalize_tag_rows(result.get("general_tags") or [], "general")
+        copyright_rows = _normalize_tag_rows(result.get("copyright_tags") or [], "copyright")
+        character_rows = _normalize_tag_rows(result.get("character_tags") or [], "character")
+        general_names = _flatten_tag_names(general_rows)
+        copyright_names = _flatten_tag_names(copyright_rows)
+        character_names = _flatten_tag_names(character_rows)
+        rating = result.get("rating") or None
 
     general_rows, copyright_rows, character_rows = _prepare_smart_tag_rows(
         general_rows,
@@ -1148,17 +1110,10 @@ def _process_one_image(
             vlm_context_tags,
             include_tags=include_tags_as_context,
         )
-        # Most providers' VLMConfig owns the user_prompt; we override it
-        # for this call only via build_user_message's tag injection so we
-        # don't mutate the shared config.
         try:
             import asyncio
 
             async def _call() -> str:
-                # Stash the original user_prompt and swap in our preset
-                # for this call only. caption_image() reads
-                # config.user_prompt at call time, so this is safe even
-                # for concurrent calls if the caller runs them serially.
                 config = vlm_provider.config
                 original_user_prompt = getattr(config, "user_prompt", "")
                 original_with_tags = getattr(config, "user_prompt_with_tags", "")

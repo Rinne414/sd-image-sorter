@@ -942,13 +942,15 @@
 
         const browseBtn = $('btn-dataset-folder-import-browse');
         const pathInput = $('dataset-folder-import-path');
-        if (browseBtn && pathInput && typeof window.showFolderBrowser === 'function') {
-            const openBrowser = (event) => {
-                event.preventDefault();
-                window.showFolderBrowser(pathInput);
-            };
-            browseBtn.addEventListener('click', openBrowser);
-            browseBtn.addEventListener('mousedown', (event) => event.preventDefault());
+        if (browseBtn && pathInput) {
+            browseBtn.addEventListener('click', () => {
+                const container = document.getElementById('dataset-folder-import-browser-container');
+                if (container && container.children.length > 0) {
+                    container.innerHTML = '';
+                    return;
+                }
+                if (typeof window.showFolderBrowser === 'function') window.showFolderBrowser(pathInput);
+            });
         }
 
         bindDropzone();
