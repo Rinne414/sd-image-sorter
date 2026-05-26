@@ -3154,5 +3154,7 @@ window.I18nLang_en = {
     'dataset.multiAddTagDone': 'Added tag to {count} images',
     'dataset.splitBtn': 'Split',
     'dataset.splitNoNext': 'No next image to compare with.',
+    'dataset.exportPreviewClickTxt': 'Click to preview caption',
+    'dataset.exportPreviewNoCaption': '(empty)',
 
 };

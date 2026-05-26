@@ -1103,6 +1103,20 @@
             const txtName = document.createElement('span');
             txtName.className = 'file-txt';
             txtName.textContent = `${stem}.txt`;
+            txtName.style.cursor = 'pointer';
+            txtName.title = DM._t?.('dataset.exportPreviewClickTxt', 'Click to preview caption') || 'Click to preview caption';
+            txtName.addEventListener('click', () => {
+                let preview = copy.querySelector('.export-caption-preview');
+                if (preview) {
+                    preview.remove();
+                    return;
+                }
+                preview = document.createElement('div');
+                preview.className = 'export-caption-preview';
+                const text = DM.captionEdits?.get?.(id) || DM.captions?.get?.(id) || '';
+                preview.textContent = text || DM._t?.('dataset.exportPreviewNoCaption', '(empty)') || '(empty)';
+                copy.appendChild(preview);
+            });
             const status = document.createElement('span');
             status.className = 'file-caption-status';
             status.textContent = captionState;

@@ -3154,5 +3154,7 @@ window.I18nLang_zhCN = {
     'dataset.multiAddTagDone': '已为 {count} 张图片添加标签',
     'dataset.splitBtn': '分屏',
     'dataset.splitNoNext': '没有下一张图片可供对比。',
+    'dataset.exportPreviewClickTxt': '点击预览 caption 内容',
+    'dataset.exportPreviewNoCaption': '（空）',
 
 };
