@@ -151,7 +151,353 @@ def test_v321_modules_read_runtime_selection_store_from_window_app():
     assert "window.SelectionStore?.getSelectedIds" not in combined_source
     assert "window.SelectionStore.getSelectedIds" not in combined_source
     assert "window.App?.SelectionStore?.getState?.()" in combined_source
-    assert "const chunkSize = 20;" in v321_source
+    assert "/api/tags/export-combined" in v321_source
+    assert "_buildCombinedExportPayload" in v321_source
+
+
+def test_dataset_maker_large_queues_use_virtualized_rendering():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "dataset-maker-part2.js").read_text(encoding="utf-8")
+
+    assert "DATASET_VIRTUAL_THRESHOLD" in source
+    assert "_renderVirtualQueue" in source
+    assert "_renderVirtualImportGallery" in source
+    assert "dataset-virtual-spacer" in source
+
+
+def test_dataset_folder_import_has_paged_large_folder_controls():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    source = (repo_root / "frontend" / "js" / "dataset-maker-local-import.js").read_text(encoding="utf-8")
+    part2_source = (repo_root / "frontend" / "js" / "dataset-maker-part2.js").read_text(encoding="utf-8")
+    pipeline_source = (repo_root / "frontend" / "js" / "dataset-maker-pipeline.js").read_text(encoding="utf-8")
+    app_source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    zh_source = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
+
+    assert 'id="btn-dataset-folder-import-more"' in html
+    assert "_folderScanToken" in source
+    assert "const FOLDER_SCAN_PAGE_SIZE = 5000;" in source
+    assert "include_thumbnails: false" in source
+    assert "/api/dataset/local-thumbnail" in source
+    assert "encodeURIComponent(path)" in source
+    assert "LARGE_BROWSER_DROP_WARNING_FILES" in source
+    assert ".slice(0, LARGE_BROWSER_DROP_WARNING_FILES)" not in source
+    assert "scan_token" in source
+    assert "dataset_scan_tokens" in source
+    assert "manifest_items" not in source
+    assert "folderImportAddedManifest" in source
+    assert "_markLocalManifestExcluded?.(id)" in part2_source
+    assert "exportPreviewManifestNote" in pipeline_source
+    assert "confirmSummaryManifestPreview" in zh_source
+    assert "dataset.importGalleryManifestCount" in zh_source
+    assert "Object.entries(params)" in app_source
+
+
+def test_dataset_folder_import_append_keeps_current_tab_and_shows_busy_state():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "dataset-maker-local-import.js").read_text(encoding="utf-8")
+    css = (repo_root / "frontend" / "css" / "dataset-pipeline.css").read_text(encoding="utf-8")
+
+    assert "const focusImportTab = options.focusImportTab === true;" in source
+    assert "focusImportTab: !append" in source
+    assert "this._setFolderImportBusy(true);" in source
+    assert "this._setFolderImportBusy(false);" in source
+    assert ".dataset-folder-import-status-row.is-loading::before" in css
+    assert "@keyframes dataset-spin" in css
+
+
+def test_dataset_audit_results_have_next_step_actions():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "dataset-maker-pipeline.js").read_text(encoding="utf-8")
+    css = (repo_root / "frontend" / "css" / "dataset-pipeline.css").read_text(encoding="utf-8")
+    zh_source = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
+
+    assert "dataset-audit-next-steps" in source
+    assert "selectAuditMatches" in source
+    assert "removeAuditMatches" in source
+    assert "dataset.auditBadgeMissing" in source
+    assert "dataset.auditNextTruncated" in source
+    assert "item_limit: 50000" in source
+    assert "dataset.auditActionWorkbench" in zh_source
+    assert ".dataset-audit-next-steps" in css
+    assert ".dataset-audit-next-warning" in css
+
+
+def test_dataset_browser_uploads_reuse_folder_import_busy_spinner():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "dataset-maker-local-import.js").read_text(encoding="utf-8")
+    en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
+
+    assert "dataset.uploadImporting" in source
+    assert "DM._setFolderImportBusy?.(true);" in source
+    assert "DM._setFolderImportBusy?.(false);" in source
+    assert "'dataset.uploadImporting'" in en_source
+
+
+def test_gallery_order_badge_moves_away_from_selection_circle():
+    repo_root = Path(__file__).resolve().parents[2]
+    css = (repo_root / "frontend" / "css" / "ui-refresh.css").read_text(encoding="utf-8")
+
+    assert ".gallery-grid.selection-mode .gallery-item-order" in css
+    assert "left: 42px;" in css
+    assert ".gallery-grid.selection-mode .gallery-item::before" in css
+    assert "z-index: 6;" in css
+
+
+def test_dataset_local_ids_use_safe_52_bit_hash_slice():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "dataset-maker-local-import.js").read_text(encoding="utf-8")
+
+    assert ".slice(0, 13)" in source
+    assert "Number.MAX_SAFE_INTEGER" in source
+
+
+def test_full_selection_workflows_do_not_fallback_to_gallery_dom():
+    repo_root = Path(__file__).resolve().parents[2]
+    checked = {
+        "frontend/js/v321-ui.js": (repo_root / "frontend" / "js" / "v321-ui.js").read_text(encoding="utf-8"),
+        "frontend/js/vlm-caption.js": (repo_root / "frontend" / "js" / "vlm-caption.js").read_text(encoding="utf-8"),
+        "frontend/js/mass-tag-editor.js": (repo_root / "frontend" / "js" / "mass-tag-editor.js").read_text(encoding="utf-8"),
+    }
+
+    violations = [
+        path for path, source in checked.items()
+        if ".gallery-item[data-id]" in source or "gallery-item[data-id]" in source
+    ]
+
+    assert not violations, (
+        "Full-selection workflows must use SelectionStore/selection-token resolvers, "
+        "not currently rendered gallery DOM nodes: " + ", ".join(violations)
+    )
+
+
+def test_batch_caption_export_requires_selection_not_loaded_gallery_fallback():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "v321-ui.js").read_text(encoding="utf-8")
+
+    assert "allowLoadedFallback = false" in source
+    assert "const source = await this._loadQueueSource();" in source
+    assert "return allowLoadedFallback ? this._getLoadedGalleryImageIds(normalizedCap) : [];" in source
+    assert "return this._getLoadedGalleryImageIds(1000000);" not in source
+
+
+def test_mass_tag_entry_is_visible_on_desktop_and_mobile():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    css = (repo_root / "frontend" / "css" / "ui-refresh.css").read_text(encoding="utf-8")
+    source = (repo_root / "frontend" / "js" / "mass-tag-editor.js").read_text(encoding="utf-8")
+
+    assert 'id="mobile-btn-mass-tag-editor"' in html
+    assert 'document.getElementById("mobile-btn-mass-tag-editor")' in source
+    assert ".nav-actions #btn-mass-tag-editor" not in css
+
+
+def test_mass_tag_does_not_expand_selection_tokens_in_browser():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "mass-tag-editor.js").read_text(encoding="utf-8")
+
+    assert "resolveScopePayload" in source
+    assert "selection_token" in source
+    assert "/api/images/selection-chunk" not in source
+    assert "getSelectionChunk" not in source
+    assert "resolveSelectedImageIds" not in source
+
+
+def test_native_checkbox_radio_are_not_forced_to_button_size():
+    repo_root = Path(__file__).resolve().parents[2]
+    css = (repo_root / "frontend" / "css" / "styles.css").read_text(encoding="utf-8")
+
+    start = css.index("/* Ensure interactive elements have proper touch targets */")
+    end = css.index("/* View buttons in gallery */", start)
+    body = css[start:end]
+    touch_rule = body.split("}", 1)[0]
+    assert 'input[type="checkbox"],' not in touch_rule
+    assert 'input[type="radio"],' not in touch_rule
+    assert "accent-color: var(--accent-primary);" in css
+
+
+def test_app_filter_access_exposes_selection_token_resolver():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+
+    assert "resolveSelectedImageIds" in source
+    assert "getActiveSelectionToken" in source
+    assert "getSelectionChunk(token" in source
+
+
+def test_censor_filtered_selection_uses_token_backed_queue_window():
+    repo_root = Path(__file__).resolve().parents[2]
+    app_source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    censor_source = (repo_root / "frontend" / "js" / "censor-edit.js").read_text(encoding="utf-8")
+
+    send_block = re.search(
+        r"\$\('#btn-send-to-censor'\).*?addEventListener\('click', async \(e\) => \{(?P<body>.*?)\n    \}\);",
+        app_source,
+        re.DOTALL,
+    )
+    assert send_block is not None
+    body = send_block.group("body")
+
+    assert "selectionToken: token" in body
+    assert "visibleImageIds:" in body
+    assert "API.getSelectionChunk" not in body
+    assert "while (!done)" not in body
+
+    assert "CENSOR_TOKEN_QUEUE_WINDOW_SIZE" in censor_source
+    assert "tokenQueueSource" in censor_source
+    assert "loadSelectionDataByToken" in censor_source
+    assert "processCensorBatchItems" in censor_source
+    assert "selection_token" not in body
+
+
+def test_vlm_caption_uses_selection_token_without_resolving_full_id_list():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "vlm-caption.js").read_text(encoding="utf-8")
+
+    assert "getActiveSelectionToken" in source
+    assert "selection_token" in source
+    assert "resolveSelectedImageIds" not in source
+    assert "JSON.stringify(batchTarget.payload)" in source
+
+
+def test_mass_tag_editor_reuses_gallery_filter_contract_for_filter_scope():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "mass-tag-editor.js").read_text(encoding="utf-8")
+
+    assert "window.App.buildSelectionFilterRequest(filters)" in source
+    assert "tagMode" in source
+    assert "excludeTags" in source
+    assert "excludeGenerators" in source
+    assert "excludeRatings" in source
+    assert "excludeCheckpoints" in source
+    assert "excludeLoras" in source
+
+
+def test_dataset_caption_refresh_batches_without_silent_500_cap():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "dataset-maker-part3.js").read_text(encoding="utf-8")
+
+    assert "const batchSize = 500;" in source
+    assert "targetIds.slice(i, i + batchSize)" in source
+    assert "image_ids: ids.slice(0, 500)" not in source
+
+
+def test_dataset_export_uses_background_progress_job():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    part3 = (repo_root / "frontend" / "js" / "dataset-maker-part3.js").read_text(encoding="utf-8")
+    local_import = (repo_root / "frontend" / "js" / "dataset-maker-local-import.js").read_text(encoding="utf-8")
+
+    assert "/api/dataset/export/start" in part3
+    assert "/api/dataset/export/progress" in part3
+    assert "/api/dataset/export/cancel" in part3
+    assert "id=\"dataset-export-progress-text\"" in html
+    assert "id=\"btn-dataset-export-cancel\"" in html
+    assert "DM._buildExportPayload" in local_import
+    assert "/api/dataset/export'" not in part3
+    assert "/api/dataset/export'" not in local_import
+
+
+def test_dataset_maker_ui_removes_confusing_external_tool_copy():
+    repo_root = Path(__file__).resolve().parents[2]
+    checked_files = [
+        repo_root / "frontend" / "index.html",
+        repo_root / "frontend" / "js" / "lang" / "en.js",
+        repo_root / "frontend" / "js" / "lang" / "zh-CN.js",
+    ]
+
+    violations = [
+        file_path.relative_to(repo_root).as_posix()
+        for file_path in checked_files
+        if "LoraHub" in file_path.read_text(encoding="utf-8")
+    ]
+
+    assert not violations, "Dataset Maker UI must not mention external tools: " + ", ".join(violations)
+
+
+def test_dataset_export_tab_does_not_show_workbench_find_replace():
+    repo_root = Path(__file__).resolve().parents[2]
+    css = (repo_root / "frontend" / "css" / "dataset-pipeline.css").read_text(encoding="utf-8")
+
+    assert '[data-active-tab="export"] #dataset-step-findreplace' in css
+
+
+def test_dataset_folder_and_output_browse_buttons_are_real_click_buttons():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    dataset_js = (repo_root / "frontend" / "js" / "dataset-maker.js").read_text(encoding="utf-8")
+    local_import = (repo_root / "frontend" / "js" / "dataset-maker-local-import.js").read_text(encoding="utf-8")
+
+    assert 'type="button" class="btn btn-ghost btn-small" id="btn-dataset-folder-import-browse"' in html
+    assert 'type="button" class="btn btn-ghost btn-small" id="btn-dataset-browse-output"' in html
+    assert "btn-dataset-folder-import-browse" in local_import
+    assert "addEventListener('click', openBrowser)" in local_import
+    assert "btn-dataset-browse-output" in dataset_js
+    assert "showFolderBrowser(input)" in dataset_js
+
+
+def test_dataset_init_syncs_current_naming_preset_ui():
+    repo_root = Path(__file__).resolve().parents[2]
+    dataset_js = (repo_root / "frontend" / "js" / "dataset-maker.js").read_text(encoding="utf-8")
+
+    assert "this._onPresetChange?.();" in dataset_js
+    assert dataset_js.index("this._onPresetChange?.();") < dataset_js.index("this._updateNamingPreview();")
+
+
+def test_dataset_vocab_uses_explicit_actions_not_hidden_click_cycle():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "dataset-maker-pipeline.js").read_text(encoding="utf-8")
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+
+    assert "function cycleTag" not in source
+    assert "dataset-vocab-action" in source
+    assert "dataset.vocabAddCommon" in source
+    assert "Third click clears" not in html
+
+
+def test_smart_tag_supports_path_source_dataset_items():
+    repo_root = Path(__file__).resolve().parents[2]
+    frontend = (repo_root / "frontend" / "js" / "smart-tag.js").read_text(encoding="utf-8")
+    router = (repo_root / "backend" / "routers" / "smart_tag.py").read_text(encoding="utf-8")
+    service = (repo_root / "backend" / "services" / "smart_tag_service.py").read_text(encoding="utf-8")
+
+    assert "image_paths: sources.imagePaths" in frontend
+    assert "selection_token: sources.selectionToken" in frontend
+    assert "dataset_scan_token: sources.datasetScanToken" in frontend
+    assert "/api/smart-tag/results" in frontend
+    assert "selection_token: Optional[str]" in router
+    assert "dataset_scan_token: Optional[str]" in router
+    assert "image_paths: List[str]" in router
+    assert "get_caption_results_page" in service
+    assert "caption_result_count" in service
+
+
+def test_smart_tag_uses_model_specific_tagger_defaults():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    frontend = (repo_root / "frontend" / "js" / "smart-tag.js").read_text(encoding="utf-8")
+    service = (repo_root / "backend" / "services" / "smart_tag_service.py").read_text(encoding="utf-8")
+    tagger_service = (repo_root / "backend" / "services" / "tagging_service.py").read_text(encoding="utf-8")
+    en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
+    zh_source = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
+
+    assert 'id="smart-tag-max-tags"' in html
+    assert 'data-i18n="smartTag.maxTags"' in html
+    assert "smartTag.maxTags" in en_source
+    assert "smartTag.maxTags" in zh_source
+    assert "model?.default_threshold" in frontend
+    assert "model?.default_character_threshold" in frontend
+    assert "model?.default_copyright_threshold" in frontend
+    assert "model?.default_max_tags_per_image" in frontend
+    assert "function maxTagsInputWasTouched()" in frontend
+    assert "return toFiniteMaxTags(input?.value, 0);" in frontend
+    assert "getPayloadThresholdsForModel(model, sharedThresholds)" in frontend
+    assert "const maxTagsPerImage = getPayloadMaxTagsForModels(uniqueTaggers)" in frontend
+    assert "max_tags_per_image: maxTagsPerImage" in frontend
+    assert "default_copyright_threshold" in tagger_service
+    assert "default_max_tags_per_image" in tagger_service
+    assert "def _tagger_defaults(model_name: str)" in service
+    assert "multi_max_tag_defaults" in service
 
 
 def test_manual_sort_resume_failure_does_not_render_null_visible_banner():

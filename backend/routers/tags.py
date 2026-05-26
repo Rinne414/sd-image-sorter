@@ -7,6 +7,7 @@ Refactored to use Service Layer pattern with dependency injection.
 from typing import Optional, List, Dict, Any, Callable
 
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
+from fastapi.responses import FileResponse
 
 from services.service_provider import ServiceProvider
 from services.state_compat import MutableStateProxy
@@ -15,8 +16,10 @@ from services.tagging_service import (
     TagRequest,
     TagImportRequest,
     BatchTagExportRequest,
+    CombinedTagExportRequest,
     ExportPreviewRequest,
 )
+from services.tag_export_service import combined_export_path
 
 
 router = APIRouter(prefix="/api", tags=["tags"])
@@ -274,6 +277,26 @@ async def export_tags_batch(
 ):
     """Export tags for each image to individual .txt files."""
     return service.export_tags_batch(request)
+
+
+@router.post("/tags/export-combined")
+async def export_tags_combined(
+    request: CombinedTagExportRequest,
+    service: TaggingService = Depends(get_tagging_service),
+):
+    """Render selected captions into one server-side downloadable text file."""
+    return service.export_tags_combined(request)
+
+
+@router.get("/tags/export-combined/download/{token}")
+async def download_combined_export(token: str):
+    """Download a server-rendered combined export without building a JS Blob."""
+    path = combined_export_path(token)
+    return FileResponse(
+        path,
+        media_type="text/plain; charset=utf-8",
+        filename=f"sd-image-sorter-combined-{token[:8]}.txt",
+    )
 
 
 @router.post("/tags/fix-ratings")

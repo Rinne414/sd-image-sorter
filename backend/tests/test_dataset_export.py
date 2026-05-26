@@ -6,6 +6,8 @@ output folder with matching stems."""
 from __future__ import annotations
 
 import os
+import threading
+import time
 from pathlib import Path
 import pytest
 from PIL import Image
@@ -32,6 +34,19 @@ def staged_images(test_db, tmp_path: Path):
         ])
         info.append((image_id, name, path))
     return info
+
+
+def _wait_dataset_export_job(test_client, job_id: str, timeout: float = 5.0):
+    deadline = time.time() + timeout
+    last = None
+    while time.time() < deadline:
+        response = test_client.get(f"/api/dataset/export/progress?job_id={job_id}")
+        assert response.status_code == 200, response.text
+        last = response.json()
+        if last["status"] in {"done", "failed", "cancelled"}:
+            return last
+        time.sleep(0.05)
+    pytest.fail(f"dataset export job did not finish in time; last progress={last}")
 
 
 def test_export_default_pattern_keeps_filenames(test_client, staged_images, tmp_path: Path):
@@ -66,6 +81,85 @@ def test_export_default_pattern_keeps_filenames(test_client, staged_images, tmp_
     # The (lora char) image should preserve parens
     assert (out / "my (lora char).png").exists()
     assert (out / "my (lora char).txt").exists()
+
+
+def test_background_export_reports_progress_and_result(test_client, staged_images, tmp_path: Path):
+    out = tmp_path / "background-out"
+    out.mkdir()
+    image_ids = [i[0] for i in staged_images]
+
+    response = test_client.post("/api/dataset/export/start", json={
+        "image_ids": image_ids,
+        "output_folder": str(out),
+        "naming_pattern": "bg_{index:03d}",
+        "image_op": "copy",
+        "overwrite_policy": "unique",
+    })
+    assert response.status_code == 200, response.text
+    started = response.json()
+    assert started["status"] == "started"
+    assert started["total"] == 3
+    assert started["job_id"]
+
+    progress = _wait_dataset_export_job(test_client, started["job_id"])
+    assert progress["status"] == "done"
+    assert progress["current"] == 3
+    assert progress["total"] == 3
+    assert progress["exported"] == 3
+    assert progress["result"]["status"] == "ok"
+    assert progress["result"]["items_truncated"] is False
+    assert (out / "bg_001.png").exists()
+    assert (out / "bg_001.txt").exists()
+
+
+def test_background_export_can_be_cancelled(test_client, staged_images, tmp_path: Path, monkeypatch):
+    import services.dataset_export_service as export_service
+
+    out = tmp_path / "cancel-out"
+    out.mkdir()
+    image_ids = [i[0] for i in staged_images]
+
+    original_copy2 = export_service.shutil.copy2
+    first_copy_started = threading.Event()
+    release_copy = threading.Event()
+
+    def slow_copy2(src, dst, *args, **kwargs):
+        first_copy_started.set()
+        release_copy.wait(timeout=2.0)
+        return original_copy2(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(export_service.shutil, "copy2", slow_copy2)
+
+    response = test_client.post("/api/dataset/export/start", json={
+        "image_ids": image_ids,
+        "output_folder": str(out),
+        "naming_pattern": "cancel_{index:03d}",
+        "image_op": "copy",
+        "overwrite_policy": "unique",
+    })
+    assert response.status_code == 200, response.text
+    job_id = response.json()["job_id"]
+    assert first_copy_started.wait(timeout=2.0), "worker never reached first copy"
+
+    second_start = test_client.post("/api/dataset/export/start", json={
+        "image_ids": image_ids,
+        "output_folder": str(out),
+        "naming_pattern": "second_{index:03d}",
+        "image_op": "copy",
+        "overwrite_policy": "unique",
+    })
+    assert second_start.status_code == 409, second_start.text
+
+    cancel_response = test_client.post("/api/dataset/export/cancel", json={"job_id": job_id})
+    assert cancel_response.status_code == 200, cancel_response.text
+    assert cancel_response.json()["status"] == "cancelling"
+    release_copy.set()
+
+    progress = _wait_dataset_export_job(test_client, job_id)
+    assert progress["status"] == "cancelled"
+    result = progress["result"]
+    assert result["status"] == "cancelled"
+    assert 0 < result["exported"] < len(image_ids)
 
 
 def test_export_renumber_with_padded_index(test_client, staged_images, tmp_path: Path):

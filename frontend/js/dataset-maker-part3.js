@@ -53,14 +53,14 @@
     DM._fetchMissingCaptions = async function () {
         const missing = this.imageIds.filter(id => !this.captions.has(id));
         if (missing.length === 0) return;
-        await this._fetchCaptionsFor(missing);
+        await this._fetchCaptionsFor(missing, { limit: 500 });
     };
 
     DM._refreshAllCaptions = async function () {
         // Re-render captions for the whole queue to reflect updated
         // common-tags / blacklist / underscore settings.
         if (this.imageIds.length === 0) return;
-        await this._fetchCaptionsFor(this.imageIds.slice());
+        await this._fetchCaptionsFor(this.imageIds.filter((id) => !(this.isLocalId?.(id))));
         // If the user is editing one, refresh its textarea (unless they
         // already typed an override -- their edits are sticky)
         if (this.activeId != null && !this.captionEdits.has(this.activeId)) {
@@ -69,24 +69,30 @@
         }
     };
 
-    DM._fetchCaptionsFor = async function (ids) {
+    DM._fetchCaptionsFor = async function (ids, options = {}) {
         if (ids.length === 0) return;
         const opts = this._captionOptions();
+        const limit = Number.isFinite(Number(options.limit)) ? Math.max(0, Number(options.limit)) : ids.length;
+        const targetIds = ids.slice(0, limit || ids.length);
+        const batchSize = 500;
         try {
-            const r = await fetch('/api/tags/export-preview', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image_ids: ids.slice(0, 500), ...opts }),
-            });
-            if (!r.ok) return;
-            const data = await r.json();
-            for (const item of (data.results || [])) {
-                if (item.rendered != null) this.captions.set(Number(item.image_id), item.rendered);
-                if (!this.meta.has(Number(item.image_id))) {
-                    this.meta.set(Number(item.image_id), {
-                        filename: item.filename || '',
-                        thumbnail_path: item.thumbnail_path || '',
-                    });
+            for (let i = 0; i < targetIds.length; i += batchSize) {
+                const batch = targetIds.slice(i, i + batchSize);
+                const r = await fetch('/api/tags/export-preview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_ids: batch, ...opts }),
+                });
+                if (!r.ok) return;
+                const data = await r.json();
+                for (const item of (data.results || [])) {
+                    if (item.rendered != null) this.captions.set(Number(item.image_id), item.rendered);
+                    if (!this.meta.has(Number(item.image_id))) {
+                        this.meta.set(Number(item.image_id), {
+                            filename: item.filename || '',
+                            thumbnail_path: item.thumbnail_path || '',
+                        });
+                    }
                 }
             }
         } catch (e) { /* */ }
@@ -172,7 +178,11 @@
         }
         const trigger = document.getElementById('dataset-trigger')?.value?.trim() || 'subject';
         const sampleStem = trigger;
-        previewEl.textContent = `${sampleStem}_001.png  +  ${sampleStem}_001.txt`;
+        const firstId = (this.imageIds || [])[0];
+        const filename = this.meta?.get?.(firstId)?.filename || '';
+        const match = String(filename).match(/\.([^.]+)$/);
+        const ext = match ? match[1].toLowerCase() : 'png';
+        previewEl.textContent = `${sampleStem}_001.${ext}  +  ${sampleStem}_001.txt`;
     };
 
     // ---------- Export readiness ----------
@@ -197,6 +207,7 @@
         const ready = this._isReadyToExport();
         if (btn) btn.disabled = !ready;
         if (hint) hint.hidden = ready;
+        this._refreshExportPreview?.();
     };
 
     // ---------- Confirm modal ----------
@@ -242,6 +253,9 @@
             '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
         }[c]));
 
+        const logicalCount = this._getLogicalDatasetCount?.() || this.imageIds.length;
+        const loadedCount = this.imageIds.length;
+        const loadedOnlyChecks = logicalCount !== loadedCount;
         const editedCount = this.captionEdits.size;
 
         // v3.2.2 (issue #5 follow-up): warn the user if they're about to
@@ -257,7 +271,7 @@
         const items = [
             this._t('dataset.confirmSummaryImages',
                 '<strong>{count}</strong> images will be {action}',
-                { count: this.imageIds.length, action: escapeHtml(actionLabel) }),
+                { count: logicalCount, action: escapeHtml(actionLabel) }),
             this._t('dataset.confirmSummaryFolder',
                 'Output folder: <code>{folder}</code>',
                 { folder: escapeHtml(folder) }),
@@ -266,8 +280,13 @@
                 { naming: escapeHtml(namingLabel) }),
             this._t('dataset.confirmSummaryCaptions',
                 '<strong>{count}</strong> .txt caption files will be written',
-                { count: this.imageIds.length }),
+                { count: logicalCount }),
         ];
+        if (loadedOnlyChecks) {
+            items.push(`<span class="dataset-confirm-warn">${this._t('dataset.confirmSummaryManifestPreview',
+                'Only {loaded} previews are loaded in the browser; export will still include all {total} manifest images. Caption/size warnings below only cover loaded previews.',
+                { loaded: loadedCount, total: logicalCount })}</span>`);
+        }
         if (editedCount > 0) {
             items.push(this._t('dataset.confirmSummaryEdited',
                 '<strong>{count}</strong> have your manually-edited captions',
@@ -283,10 +302,10 @@
         // size most trainers consider workable (~15-50 images for a
         // character LoRA). Empty / tiny datasets are the most common
         // reason a noob's first LoRA comes out broken.
-        if (this.imageIds.length > 0 && this.imageIds.length < 10) {
+        if (logicalCount > 0 && logicalCount < 10) {
             items.push(`<span class="dataset-confirm-warn">${this._t('dataset.confirmSummaryFewImages',
                 '⚠️ Only <strong>{count}</strong> images. Most LoRA trainers want 15-50 images for a stable character/style; below 10 the model may not generalize.',
-                { count: this.imageIds.length })}</span>`);
+                { count: logicalCount })}</span>`);
         }
 
         // Dimension warning - count images with a side under 512 px,
@@ -315,9 +334,7 @@
     };
 
     // ---------- Run export ----------
-    DM._runExport = async function () {
-        this._hideConfirmModal();
-
+    DM._buildExportPayload = function () {
         const folder = document.getElementById('dataset-output-folder')?.value?.trim();
         const pattern = this._effectivePattern();
         const trigger = document.getElementById('dataset-trigger')?.value || '';
@@ -333,44 +350,194 @@
             image_overrides[String(id)] = val;
         }
 
+        return {
+            image_ids: this.imageIds,
+            output_folder: folder,
+            naming_pattern: pattern,
+            trigger,
+            image_op: imageOp,
+            overwrite_policy: overwrite,
+            normalize_tag_underscores: normalize,
+            blacklist,
+            common_tags: commonTags,
+            image_overrides,
+        };
+    };
+
+    DM._setExportBusy = function (busy, options = {}) {
         const btn = document.getElementById('btn-dataset-export');
+        const progressEl = document.getElementById('dataset-export-progress');
+        const cancelBtn = document.getElementById('btn-dataset-export-cancel');
         if (btn) {
-            btn.disabled = true;
-            btn.dataset.busy = '1';
+            btn.disabled = !!busy;
+            btn.dataset.busy = busy ? '1' : '';
+        }
+        if (progressEl) progressEl.hidden = !busy && !options.keepProgressVisible;
+        if (cancelBtn) {
+            cancelBtn.hidden = !busy;
+            cancelBtn.disabled = !!options.cancelling;
+            cancelBtn.textContent = options.cancelling
+                ? this._t('dataset.exportCancelling', 'Cancelling...')
+                : this._t('common.cancel', 'Cancel');
+        }
+        if (!busy) this._updateExportEnabled();
+    };
+
+    DM._renderExportProgress = function (progress = {}) {
+        const progressEl = document.getElementById('dataset-export-progress');
+        const fill = document.getElementById('dataset-export-progress-fill');
+        const text = document.getElementById('dataset-export-progress-text');
+        const cancelBtn = document.getElementById('btn-dataset-export-cancel');
+        if (progressEl) progressEl.hidden = false;
+
+        const current = Number(progress.current || 0);
+        const total = Number(progress.total || 0);
+        const exported = Number(progress.exported || 0);
+        const errors = Number(progress.errors || 0);
+        const skipped = Number(progress.skipped || 0);
+        const percent = total > 0 ? Math.max(0, Math.min(100, Math.round((current / total) * 100))) : 0;
+
+        if (fill) {
+            fill.classList.toggle('indeterminate', total <= 0);
+            if (total > 0) fill.style.width = `${percent}%`;
+            else fill.style.width = '';
         }
 
+        if (text) {
+            const msg = progress.message || this._t('dataset.exportPreparing', 'Preparing export...');
+            const counts = total > 0
+                ? `${current}/${total} • ${exported} exported${errors ? ` • ${errors} failed` : ''}${skipped ? ` • ${skipped} skipped` : ''}`
+                : `${exported} exported${errors ? ` • ${errors} failed` : ''}`;
+            text.textContent = `${msg} ${counts}`;
+        }
+
+        if (cancelBtn) {
+            const cancelling = progress.status === 'cancelling';
+            cancelBtn.hidden = !['starting', 'running', 'cancelling'].includes(progress.status);
+            cancelBtn.disabled = cancelling;
+            cancelBtn.textContent = cancelling
+                ? this._t('dataset.exportCancelling', 'Cancelling...')
+                : this._t('common.cancel', 'Cancel');
+        }
+    };
+
+    DM._pollExportJob = async function (jobId) {
+        while (true) {
+            const qs = jobId ? `?job_id=${encodeURIComponent(jobId)}` : '';
+            const r = await fetch(`/api/dataset/export/progress${qs}`);
+            if (!r.ok) {
+                const body = await r.text();
+                throw new Error(body.slice(0, 300) || `Progress failed: ${r.status}`);
+            }
+            const progress = await r.json();
+            this._renderExportProgress(progress);
+
+            if (['done', 'failed', 'cancelled'].includes(progress.status)) {
+                return progress;
+            }
+            await new Promise(resolve => setTimeout(resolve, 350));
+        }
+    };
+
+    DM._startExportJob = async function (payload) {
+        const folder = payload.output_folder || '';
+        this._setExportBusy(true);
+        this._renderExportProgress({
+            status: 'starting',
+            current: 0,
+            total: this._getLogicalDatasetCount?.() || (payload.image_ids?.length || 0) + (payload.image_paths?.length || 0),
+            exported: 0,
+            skipped: 0,
+            errors: 0,
+            message: this._t('dataset.exportStarting', 'Starting export...'),
+        });
+
         try {
-            const r = await fetch('/api/dataset/export', {
+            const r = await fetch('/api/dataset/export/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    image_ids: this.imageIds,
-                    output_folder: folder,
-                    naming_pattern: pattern,
-                    trigger,
-                    image_op: imageOp,
-                    overwrite_policy: overwrite,
-                    normalize_tag_underscores: normalize,
-                    blacklist,
-                    common_tags: commonTags,
-                    image_overrides,
-                }),
+                body: JSON.stringify(payload),
             });
             if (!r.ok) {
                 const body = await r.text();
                 this._showResultModal('failed', { errorMessages: [body.slice(0, 400)], output_folder: folder });
                 return;
             }
-            const data = await r.json();
-            this._showResultModal(data.status || 'ok', data);
+            const started = await r.json();
+            this._activeExportJobId = started.job_id || null;
+            this._renderExportProgress({
+                status: 'running',
+                current: 0,
+                total: started.total || 0,
+                exported: 0,
+                skipped: 0,
+                errors: 0,
+                message: started.message || this._t('dataset.exportRunning', 'Export running...'),
+            });
+            const progress = await this._pollExportJob(this._activeExportJobId);
+            const result = progress.result || {
+                status: progress.status === 'cancelled' ? 'cancelled' : 'failed',
+                exported: progress.exported || 0,
+                skipped: progress.skipped || 0,
+                error_count: progress.errors || 0,
+                output_folder: progress.output_folder || folder,
+                error_messages: progress.recent_errors || [],
+            };
+            this._showResultModal(result.status || (progress.status === 'cancelled' ? 'cancelled' : 'ok'), result);
         } catch (e) {
             this._showResultModal('failed', { errorMessages: [e.message], output_folder: folder });
         } finally {
-            if (btn) {
-                btn.dataset.busy = '';
-                this._updateExportEnabled();
-            }
+            this._activeExportJobId = null;
+            this._setExportBusy(false);
+            const progressEl = document.getElementById('dataset-export-progress');
+            if (progressEl) progressEl.hidden = true;
         }
+    };
+
+    DM._cancelExportJob = async function () {
+        const jobId = this._activeExportJobId || null;
+        this._setExportBusy(true, { cancelling: true, keepProgressVisible: true });
+        try {
+            await fetch('/api/dataset/export/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(jobId ? { job_id: jobId } : {}),
+            });
+        } catch (e) {
+            this._toast(`Cancel failed: ${e.message}`, 'error', 4000);
+            this._setExportBusy(true, { keepProgressVisible: true });
+        }
+    };
+
+    DM._resumeExportProgress = async function () {
+        if (this._exportResumeChecked) return;
+        this._exportResumeChecked = true;
+        try {
+            const r = await fetch('/api/dataset/export/progress');
+            if (!r.ok) return;
+            const progress = await r.json();
+            if (!['starting', 'running', 'cancelling'].includes(progress.status)) return;
+            this._activeExportJobId = progress.job_id || null;
+            this._setExportBusy(true, { cancelling: progress.status === 'cancelling', keepProgressVisible: true });
+            this._renderExportProgress(progress);
+            const finalProgress = await this._pollExportJob(this._activeExportJobId);
+            if (finalProgress.result) {
+                this._showResultModal(finalProgress.result.status || 'ok', finalProgress.result);
+            }
+        } catch (e) {
+            this._toast(`Could not resume export progress: ${e.message}`, 'warning', 5000);
+        } finally {
+            this._activeExportJobId = null;
+            this._setExportBusy(false);
+            const progressEl = document.getElementById('dataset-export-progress');
+            if (progressEl) progressEl.hidden = true;
+        }
+    };
+
+    DM._runExport = async function () {
+        this._hideConfirmModal();
+        const payload = this._buildExportPayload();
+        await this._startExportJob(payload);
     };
 
     // ---------- Result modal ----------
@@ -384,7 +551,7 @@
         const openFolderBtn = document.getElementById('btn-dataset-open-folder');
         if (!modal) return;
 
-        const resolved = ['ok', 'partial', 'failed'].includes(status) ? status : 'failed';
+        const resolved = ['ok', 'partial', 'failed', 'cancelled'].includes(status) ? status : 'failed';
         const folder = data.output_folder || '';
         const exported = Number(data.exported || 0);
         const errors = Number(data.error_count || (data.errorMessages?.length || 0));
@@ -393,11 +560,11 @@
 
         if (statusEl) {
             statusEl.className = `dataset-result-status ${resolved}`;
-            statusEl.textContent = resolved === 'ok' ? '✓' : (resolved === 'partial' ? '⚠' : '✕');
+            statusEl.textContent = resolved === 'ok' ? '✓' : (resolved === 'partial' ? '⚠' : (resolved === 'cancelled' ? '!' : '✕'));
         }
         if (titleEl) {
-            const map = { ok: 'dataset.resultOk', partial: 'dataset.resultPartial', failed: 'dataset.resultFailed' };
-            const def = { ok: 'Done!', partial: 'Partial success', failed: 'Export failed' };
+            const map = { ok: 'dataset.resultOk', partial: 'dataset.resultPartial', failed: 'dataset.resultFailed', cancelled: 'dataset.resultCancelled' };
+            const def = { ok: 'Done!', partial: 'Partial success', failed: 'Export failed', cancelled: 'Export cancelled' };
             titleEl.textContent = this._t(map[resolved], def[resolved]);
         }
         if (detailEl) {
@@ -413,6 +580,10 @@
                 html = this._t('dataset.resultDetailPartial',
                     '<strong>{exported}</strong> exported, <strong>{errors}</strong> failed, <strong>{skipped}</strong> skipped. Files are in <code>{folder}</code>',
                     { exported, errors, skipped, folder: escapeHtml(folder) });
+            } else if (resolved === 'cancelled') {
+                html = this._t('dataset.resultDetailCancelled',
+                    'Export stopped. <strong>{exported}</strong> image+caption pairs were written before cancellation. Files are in <code>{folder}</code>',
+                    { exported, folder: escapeHtml(folder) });
             } else {
                 html = this._t('dataset.resultDetailFailed',
                     'No files were written. Check the error details below.');
@@ -457,4 +628,127 @@
             this._toast(`Folder: ${folder}`, 'info', 6000);
         }
     };
+
+    // ---------- Tag autocomplete in right pane ----------
+    (function initTagAutocomplete() {
+        const input = document.getElementById('dataset-tag-add-input');
+        const dropdown = document.getElementById('dataset-tag-add-dropdown');
+        if (!input || !dropdown) return;
+
+        let cachedVocab = null;
+        let fetchTimer = null;
+        let activeIdx = -1;
+
+        async function getVocab() {
+            if (cachedVocab) return cachedVocab;
+            try {
+                const ids = [];
+                const localCaptions = {};
+                for (const id of (DM.imageIds || [])) {
+                    if (DM.isLocalId?.(id)) {
+                        const p = DM.localItemPaths?.get?.(id);
+                        const cap = DM.captionEdits?.get?.(id);
+                        if (p && cap) localCaptions[p] = cap;
+                    } else if (Number(id) > 0) {
+                        ids.push(Number(id));
+                    }
+                }
+                const r = await fetch('/api/dataset/vocab', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_ids: ids,
+                        path_caption_overrides: localCaptions,
+                        top_n: 2000,
+                    }),
+                });
+                if (r.ok) {
+                    const data = await r.json();
+                    cachedVocab = (data.vocab || []).map(t => t.tag || t).filter(Boolean);
+                }
+            } catch { /* ignore */ }
+            if (!cachedVocab || cachedVocab.length === 0) {
+                cachedVocab = ['1girl', '1boy', 'solo', 'long_hair', 'short_hair',
+                    'looking_at_viewer', 'smile', 'simple_background', 'highres'];
+            }
+            return cachedVocab;
+        }
+
+        function showSuggestions(matches) {
+            dropdown.innerHTML = '';
+            activeIdx = -1;
+            if (matches.length === 0) { dropdown.hidden = true; return; }
+            for (const tag of matches.slice(0, 8)) {
+                const div = document.createElement('div');
+                div.className = 'tag-suggestion';
+                div.textContent = tag;
+                div.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    acceptTag(tag);
+                });
+                dropdown.appendChild(div);
+            }
+            dropdown.hidden = false;
+        }
+
+        function acceptTag(tag) {
+            const ta = document.getElementById('dataset-editor-textarea');
+            if (!ta || DM.activeId == null) return;
+            const current = ta.value.trim();
+            const tags = current ? current.split(',').map(s => s.trim()).filter(Boolean) : [];
+            if (!tags.includes(tag)) tags.push(tag);
+            ta.value = tags.join(', ');
+            DM.captionEdits.set(DM.activeId, ta.value);
+            DM._refreshQueueItem(DM.activeId);
+            DM._renderTagPills();
+            input.value = '';
+            dropdown.hidden = true;
+        }
+
+        input.addEventListener('input', () => {
+            const q = input.value.trim().toLowerCase();
+            if (q.length < 1) { dropdown.hidden = true; return; }
+            if (fetchTimer) clearTimeout(fetchTimer);
+            fetchTimer = setTimeout(async () => {
+                const vocab = await getVocab();
+                const matches = vocab.filter(t => t.toLowerCase().includes(q));
+                showSuggestions(matches);
+            }, 150);
+        });
+
+        input.addEventListener('keydown', (e) => {
+            const items = dropdown.querySelectorAll('.tag-suggestion');
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                activeIdx = Math.min(activeIdx + 1, items.length - 1);
+                items.forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                activeIdx = Math.max(activeIdx - 1, 0);
+                items.forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (activeIdx >= 0 && items[activeIdx]) {
+                    acceptTag(items[activeIdx].textContent);
+                } else if (input.value.trim()) {
+                    acceptTag(input.value.trim());
+                }
+            } else if (e.key === 'Escape') {
+                dropdown.hidden = true;
+            }
+        });
+
+        input.addEventListener('blur', () => {
+            setTimeout(() => { dropdown.hidden = true; }, 150);
+        });
+
+        // Invalidate cache when image set changes
+        const origAddImages = DM._addImages;
+        if (origAddImages) {
+            DM._addImages = function (...args) {
+                cachedVocab = null;
+                return origAddImages.apply(this, args);
+            };
+        }
+    })();
 })();

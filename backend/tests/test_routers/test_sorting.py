@@ -958,6 +958,72 @@ class TestBatchMove:
         kwargs = mock_count.call_args.kwargs
         assert kwargs["artist"] == "artist_batch_move_20260428"
 
+    def test_batch_move_forwards_tag_mode_and_exclude_filters(self, test_client, tmp_path: Path):
+        """Auto-Separate batch move must preserve Gallery copied AND/OR and exclude filters."""
+        with patch("services.sorting_service.db.get_filtered_image_count", return_value=0) as mock_count:
+            response = test_client.post(
+                "/api/batch-move",
+                json={
+                    "tags": ["solo", "smile"],
+                    "tag_mode": "or",
+                    "exclude_tags": ["bad_anatomy"],
+                    "exclude_generators": ["unknown"],
+                    "exclude_ratings": ["explicit"],
+                    "exclude_checkpoints": ["bad.ckpt"],
+                    "exclude_loras": ["bad_lora"],
+                    "destination_folder": str(tmp_path),
+                },
+            )
+
+        assert response.status_code == 200
+        kwargs = mock_count.call_args.kwargs
+        assert kwargs["tags"] == ["solo", "smile"]
+        assert kwargs["tag_mode"] == "or"
+        assert kwargs["exclude_tags"] == ["bad_anatomy"]
+        assert kwargs["exclude_generators"] == ["unknown"]
+        assert kwargs["exclude_ratings"] == ["explicit"]
+        assert kwargs["exclude_checkpoints"] == ["bad.ckpt"]
+        assert kwargs["exclude_loras"] == ["bad_lora"]
+
+    def test_batch_move_forwards_tag_mode_and_exclude_filters_to_snapshot_iterator(self, tmp_path: Path, isolated_sorting_service, monkeypatch):
+        """The background batch snapshot must use the same AND/OR and exclude filters as the count."""
+        from services import sorting_service as sorting_service_module
+        from services.sorting_service import BatchMoveRequest
+
+        background_tasks = BackgroundTasks()
+        captured_kwargs = {}
+
+        monkeypatch.setattr(sorting_service_module.db, "get_filtered_image_count", lambda **_kwargs: 1)
+
+        def fake_iter_filtered_image_id_chunks(**kwargs):
+            captured_kwargs.update(kwargs)
+            yield []
+
+        monkeypatch.setattr(sorting_service_module.db, "iter_filtered_image_id_chunks", fake_iter_filtered_image_id_chunks)
+
+        isolated_sorting_service.batch_move_images(
+            BatchMoveRequest(
+                destination_folder=str(tmp_path / "dest"),
+                tags=["solo", "smile"],
+                tag_mode="or",
+                exclude_tags=["bad_anatomy"],
+                exclude_generators=["unknown"],
+                exclude_ratings=["explicit"],
+                exclude_checkpoints=["bad.ckpt"],
+                exclude_loras=["bad_lora"],
+            ),
+            background_tasks,
+        )
+        background_tasks.tasks[0].func()
+
+        assert captured_kwargs["tags"] == ["solo", "smile"]
+        assert captured_kwargs["tag_mode"] == "or"
+        assert captured_kwargs["exclude_tags"] == ["bad_anatomy"]
+        assert captured_kwargs["exclude_generators"] == ["unknown"]
+        assert captured_kwargs["exclude_ratings"] == ["explicit"]
+        assert captured_kwargs["exclude_checkpoints"] == ["bad.ckpt"]
+        assert captured_kwargs["exclude_loras"] == ["bad_lora"]
+
     def test_batch_move_invalid_destination(self, test_client):
         """Batch move to invalid destination - path validation allows creation."""
         response = test_client.post(
@@ -1172,6 +1238,58 @@ class TestSortSession:
         assert response.status_code == 200
         kwargs = mock_ids.call_args.kwargs
         assert kwargs["artist"] == "artist_sort_session_20260428"
+
+    def test_start_sort_session_forwards_tag_mode_and_exclude_filters_from_json_body(self, test_client, tmp_path: Path):
+        """Manual Sort JSON starts must preserve Gallery copied AND/OR and exclude filters."""
+        with patch("services.sorting_service.db.get_filtered_image_ids", return_value=[]) as mock_ids:
+            response = test_client.post(
+                "/api/sort/start",
+                json={
+                    "tags": ["solo", "smile"],
+                    "tag_mode": "or",
+                    "exclude_tags": ["bad_anatomy"],
+                    "exclude_generators": ["unknown"],
+                    "exclude_ratings": ["explicit"],
+                    "exclude_checkpoints": ["bad.ckpt"],
+                    "exclude_loras": ["bad_lora"],
+                    "folders": {"w": str(tmp_path / "manual-dest")},
+                    "operation_mode": "copy",
+                },
+            )
+
+        assert response.status_code == 200
+        kwargs = mock_ids.call_args.kwargs
+        assert kwargs["tags"] == ["solo", "smile"]
+        assert kwargs["tag_mode"] == "or"
+        assert kwargs["exclude_tags"] == ["bad_anatomy"]
+        assert kwargs["exclude_generators"] == ["unknown"]
+        assert kwargs["exclude_ratings"] == ["explicit"]
+        assert kwargs["exclude_checkpoints"] == ["bad.ckpt"]
+        assert kwargs["exclude_loras"] == ["bad_lora"]
+
+    def test_start_sort_session_forwards_tag_mode_and_exclude_filters_from_query(self, test_client):
+        """Legacy Manual Sort query starts must preserve AND/OR and exclude filters."""
+        with patch("services.sorting_service.db.get_filtered_image_ids", return_value=[]) as mock_ids:
+            response = test_client.post(
+                "/api/sort/start"
+                "?tags=solo,smile"
+                "&tag_mode=or"
+                "&exclude_tags=bad_anatomy"
+                "&exclude_generators=unknown"
+                "&exclude_ratings=explicit"
+                "&exclude_checkpoints=bad.ckpt"
+                "&exclude_loras=bad_lora"
+            )
+
+        assert response.status_code == 200
+        kwargs = mock_ids.call_args.kwargs
+        assert kwargs["tags"] == ["solo", "smile"]
+        assert kwargs["tag_mode"] == "or"
+        assert kwargs["exclude_tags"] == ["bad_anatomy"]
+        assert kwargs["exclude_generators"] == ["unknown"]
+        assert kwargs["exclude_ratings"] == ["explicit"]
+        assert kwargs["exclude_checkpoints"] == ["bad.ckpt"]
+        assert kwargs["exclude_loras"] == ["bad_lora"]
 
     def test_start_sort_session_accepts_json_body_for_large_filter_payloads(self, test_client, tmp_path: Path):
         """Manual Sort should not force large tag/LoRA/checkpoint scopes through query-string limits."""

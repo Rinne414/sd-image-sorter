@@ -15,6 +15,9 @@
         meta: new Map(),
         captions: new Map(),
         captionEdits: new Map(),
+        _undoStacks: new Map(),
+        _queueSelection: new Set(),
+        _lastClickedId: null,
         activeId: null,
         boundOnce: false,
 
@@ -30,18 +33,56 @@
                 console.log(`[dataset] ${level}: ${msg}`);
             }
         },
+        _setPipelineTab(tabName = 'import') {
+            const dm = document.querySelector('.dataset-maker');
+            if (dm) dm.setAttribute('data-active-tab', tabName);
+            const tabs = document.querySelectorAll('.dataset-tabs [role="tab"]');
+            for (const t of tabs) {
+                t.setAttribute('aria-selected',
+                    t.getAttribute('data-tab-target') === tabName ? 'true' : 'false');
+            }
+        },
+
+        // ---- Session persistence ----
+        _saveSession() {
+            try {
+                sessionStorage.setItem('sd-image-sorter-dataset-session', JSON.stringify({
+                    imageIds: this.imageIds,
+                    captionEdits: Object.fromEntries(this.captionEdits),
+                    activeId: this.activeId,
+                }));
+            } catch {}
+        },
 
         // ---- Lifecycle ----
         init() {
             if (this.boundOnce) return;
             this.boundOnce = true;
+
+            if (this.imageIds.length === 0) {
+                try {
+                    const saved = sessionStorage.getItem('sd-image-sorter-dataset-session');
+                    if (saved) {
+                        const s = JSON.parse(saved);
+                        if (s.imageIds && s.imageIds.length) {
+                            this.imageIds = s.imageIds;
+                            if (s.captionEdits) {
+                                for (const [k, v] of Object.entries(s.captionEdits)) this.captionEdits.set(Number(k), v);
+                            }
+                        }
+                    }
+                } catch {}
+            }
+
             this._bindEvents();
             this._renderQueue();
             this._renderEmptyEditor();
+            this._onPresetChange?.();
             this._updateNamingPreview();
             this._updateExportEnabled();
             this._initCaptionHelpAutoOpen();
             this._bindBeforeUnload();
+            this._resumeExportProgress?.();
         },
 
         _bindBeforeUnload() {
@@ -119,20 +160,58 @@
             document.getElementById('btn-dataset-prev-image')?.addEventListener('click', () => this._stepActive(-1));
             document.getElementById('btn-dataset-next-image')?.addEventListener('click', () => this._stepActive(1));
             document.getElementById('btn-dataset-revert-caption')?.addEventListener('click', () => this._revertActiveCaption());
+            document.getElementById('btn-dataset-undo-caption')?.addEventListener('click', () => {
+                const ta = document.getElementById('dataset-editor-textarea');
+                if (!ta || this.activeId == null) return;
+                const stack = this._undoStacks.get(this.activeId);
+                if (!stack || stack.length === 0) return;
+                const prev = stack.pop();
+                ta.value = prev;
+                this.captionEdits.set(this.activeId, prev);
+                this._refreshQueueItem(this.activeId);
+                this._renderTagPills();
+            });
             document.getElementById('btn-dataset-remove-image')?.addEventListener('click', () => this._removeActive());
 
             // Caption textarea
             const ta = document.getElementById('dataset-editor-textarea');
             if (ta) {
                 let timer = null;
+                let lastSaved = null;
                 ta.addEventListener('input', () => {
                     if (this.activeId == null) return;
                     if (timer) clearTimeout(timer);
                     const id = this.activeId;
                     timer = setTimeout(() => {
+                        const prev = this.captionEdits.has(id)
+                            ? this.captionEdits.get(id)
+                            : (this.captions.get(id) || '');
+                        if (prev !== ta.value && prev !== lastSaved) {
+                            const stack = this._undoStacks.get(id) || [];
+                            stack.push(prev);
+                            if (stack.length > 20) stack.shift();
+                            this._undoStacks.set(id, stack);
+                        }
+                        lastSaved = ta.value;
                         this.captionEdits.set(id, ta.value);
                         this._refreshQueueItem(id);
+                        this._renderTagPills();
                     }, 200);
+                });
+                ta.addEventListener('keydown', (e) => {
+                    if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+                        const id = this.activeId;
+                        if (id == null) return;
+                        const stack = this._undoStacks.get(id);
+                        if (!stack || stack.length === 0) return;
+                        e.preventDefault();
+                        const prev = stack.pop();
+                        ta.value = prev;
+                        lastSaved = prev;
+                        this.captionEdits.set(id, prev);
+                        this._refreshQueueItem(id);
+                        this._renderTagPills();
+                    }
                 });
             }
 
@@ -181,11 +260,19 @@
                 this._validateOutputFolder();
                 this._updateExportEnabled();
             });
+            document.getElementById('btn-dataset-browse-output')?.addEventListener('click', (event) => {
+                event.preventDefault();
+                const input = document.getElementById('dataset-output-folder');
+                if (input && typeof window.showFolderBrowser === 'function') {
+                    window.showFolderBrowser(input);
+                }
+            });
 
             // Export flow
             document.getElementById('btn-dataset-export')?.addEventListener('click', () => this._showConfirmModal());
             document.getElementById('btn-dataset-confirm-cancel')?.addEventListener('click', () => this._hideConfirmModal());
             document.getElementById('btn-dataset-confirm-go')?.addEventListener('click', () => this._runExport());
+            document.getElementById('btn-dataset-export-cancel')?.addEventListener('click', () => this._cancelExportJob?.());
 
             // Result modal
             document.getElementById('btn-dataset-result-close')?.addEventListener('click', () => this._hideResultModal());
@@ -194,7 +281,7 @@
 
         // ---- Import from Gallery ----
         async _importFromGallery() {
-            const ids = this._getGallerySelectedIds();
+            const ids = await this._resolveGallerySelectionIds();
             if (!ids || ids.length === 0) {
                 // P0 fix from issue #5 follow-up noob review: silent failure
                 // here is the #1 confusion point. Take the user there
@@ -279,6 +366,12 @@
                 try { window.switchView('dataset'); } catch (_e) { /* ignore */ }
             }
 
+            // Ensure we stay on the import tab so the user sees the result
+            if (added > 0) {
+                this._setPipelineTab('import');
+                this._renderImportGallery();
+            }
+
             if (showToast) {
                 if (added > 0) {
                     this._toast(this._t('dataset.gallerySelectionAdded',
@@ -290,7 +383,29 @@
                         'info');
                 }
             }
+            this._checkDuplicateFilenames();
+            this._saveSession();
             return added;
+        },
+
+        _checkDuplicateFilenames() {
+            const stems = new Map();
+            for (const id of this.imageIds) {
+                const meta = this.meta.get(id) || {};
+                const fn = (meta.filename || '').replace(/\.[^.]+$/, '').toLowerCase();
+                if (!fn) continue;
+                if (!stems.has(fn)) stems.set(fn, 0);
+                stems.set(fn, stems.get(fn) + 1);
+            }
+            let dupCount = 0;
+            for (const count of stems.values()) {
+                if (count > 1) dupCount += count;
+            }
+            if (dupCount > 0) {
+                this._toast(this._t('dataset.duplicateWarning',
+                    'Found {count} images with similar filenames. You may want to review for duplicates.',
+                    { count: dupCount }), 'warning', 6000);
+            }
         },
 
         _getGallerySelectedIds() {
@@ -303,6 +418,36 @@
             return [];
         },
 
+        async _resolveGallerySelectionIds() {
+            const explicit = this._getGallerySelectedIds();
+            if (explicit.length > 0) return explicit;
+
+            const app = window.App || {};
+            const state = app.AppState || window.AppState || {};
+            const token = state.selectionScope === 'filtered' ? state.selectionToken : null;
+            const api = app.API;
+            if (!token || !api || typeof api.getSelectionChunk !== 'function') {
+                return [];
+            }
+
+            const out = [];
+            let offset = 0;
+            let hasMore = true;
+            const chunkSize = 10000;
+            while (hasMore) {
+                const chunk = await api.getSelectionChunk(token, {
+                    offset,
+                    limit: chunkSize,
+                });
+                const ids = Array.isArray(chunk?.image_ids) ? chunk.image_ids : [];
+                out.push(...ids.map(Number).filter((id) => Number.isFinite(id) && id > 0));
+                hasMore = Boolean(chunk?.has_more);
+                offset = Number(chunk?.next_offset || 0);
+                if (!offset && hasMore) break;
+            }
+            return out;
+        },
+
         _clearAll() {
             if (this.imageIds.length === 0) return;
             const msg = this._t('dataset.confirmClear',
@@ -312,8 +457,13 @@
             this.imageIds = [];
             this.captions.clear();
             this.captionEdits.clear();
+            this._undoStacks.clear();
+            this._queueSelection.clear();
             this.activeId = null;
+            sessionStorage.removeItem('sd-image-sorter-dataset-session');
+            this._saveSession();
             this._renderQueue();
+            this._renderImportGallery?.();
             this._renderEmptyEditor();
             this._updateCount();
             this._updateExportEnabled();

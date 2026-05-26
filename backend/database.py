@@ -1523,13 +1523,15 @@ def _build_base_query(sort_by: str, select_cols: str) -> str:
         return f"SELECT {select_cols} FROM images i"
 
 
-def _apply_tag_filter(query: str, tags: Optional[List[str]], params: List[Any]) -> tuple:
-    """Apply tag filtering with JOINs (AND logic).
+def _apply_tag_filter(query: str, tags: Optional[List[str]], params: List[Any],
+                      tag_mode: str = "and") -> tuple:
+    """Apply tag filtering with JOINs (AND logic) or subquery (OR logic).
 
     Args:
         query: Current query string
         tags: List of tags to filter by
         params: Current parameter list
+        tag_mode: 'and' (image must have ALL tags) or 'or' (image must have ANY tag)
 
     Returns:
         Tuple of (modified query, modified params)
@@ -1537,11 +1539,15 @@ def _apply_tag_filter(query: str, tags: Optional[List[str]], params: List[Any]) 
     if not tags:
         return query, params
 
-    for i, tag in enumerate(tags):
-        alias = f"t{i}"
-        query += f" INNER JOIN tags {alias} ON i.id = {alias}.image_id AND {alias}.tag = ?"
-        params.append(tag)
-
+    if tag_mode == "or":
+        placeholders = ",".join("?" * len(tags))
+        query += f" INNER JOIN tags _tor ON i.id = _tor.image_id AND _tor.tag IN ({placeholders})"
+        params.extend(tags)
+    else:
+        for i, tag in enumerate(tags):
+            alias = f"t{i}"
+            query += f" INNER JOIN tags {alias} ON i.id = {alias}.image_id AND {alias}.tag = ?"
+            params.append(tag)
 
     return query, params
 
@@ -2224,6 +2230,7 @@ def _post_filter_results(results: List[Dict[str, Any]],
 def get_images(
     generators: Optional[List[str]] = None,
     tags: Optional[List[str]] = None,
+    tag_mode: str = "and",
     ratings: Optional[List[str]] = None,
     checkpoints: Optional[List[str]] = None,
     loras: Optional[List[str]] = None,
@@ -2307,7 +2314,7 @@ def get_images(
         params: List[Any] = []
 
         # Apply tag filter (JOIN)
-        query, params = _apply_tag_filter(query, tags, params)
+        query, params = _apply_tag_filter(query, tags, params, tag_mode)
 
         # Apply image ID include/exclude filters
         conditions, params = _apply_image_ids_filter(conditions, params, image_ids)
@@ -2398,6 +2405,7 @@ def get_images(
 def get_filtered_image_count(
     generators: Optional[List[str]] = None,
     tags: Optional[List[str]] = None,
+    tag_mode: str = "and",
     ratings: Optional[List[str]] = None,
     checkpoints: Optional[List[str]] = None,
     loras: Optional[List[str]] = None,
@@ -2453,10 +2461,15 @@ def get_filtered_image_count(
 
         # Apply tag filter (JOIN)
         if tags:
-            for i, tag in enumerate(tags):
-                alias = f"t{i}"
-                query += f" INNER JOIN tags {alias} ON i.id = {alias}.image_id AND {alias}.tag = ?"
-                params.append(tag)
+            if tag_mode == "or":
+                placeholders = ",".join("?" * len(tags))
+                query += f" INNER JOIN tags _tor ON i.id = _tor.image_id AND _tor.tag IN ({placeholders})"
+                params.extend(tags)
+            else:
+                for i, tag in enumerate(tags):
+                    alias = f"t{i}"
+                    query += f" INNER JOIN tags {alias} ON i.id = {alias}.image_id AND {alias}.tag = ?"
+                    params.append(tag)
 
 
         # Apply image ID include/exclude filters
@@ -2526,6 +2539,7 @@ def get_filtered_image_count(
 def get_filtered_image_ids(
     generators: Optional[List[str]] = None,
     tags: Optional[List[str]] = None,
+    tag_mode: str = "and",
     ratings: Optional[List[str]] = None,
     checkpoints: Optional[List[str]] = None,
     loras: Optional[List[str]] = None,
@@ -2594,7 +2608,7 @@ def get_filtered_image_ids(
         params: List[Any] = []
 
         # Apply tag filter (JOIN)
-        query, params = _apply_tag_filter(query, tags, params)
+        query, params = _apply_tag_filter(query, tags, params, tag_mode)
 
         # Apply image ID include/exclude filters
         conditions, params = _apply_image_ids_filter(conditions, params, image_ids)
@@ -2702,6 +2716,7 @@ def iter_filtered_image_id_chunks(
     chunk_size: int = 2000,
     generators: Optional[List[str]] = None,
     tags: Optional[List[str]] = None,
+    tag_mode: str = "and",
     ratings: Optional[List[str]] = None,
     checkpoints: Optional[List[str]] = None,
     loras: Optional[List[str]] = None,
@@ -2739,6 +2754,7 @@ def iter_filtered_image_id_chunks(
         chunk = get_filtered_image_ids(
             generators=generators,
             tags=tags,
+            tag_mode=tag_mode,
             ratings=ratings,
             checkpoints=checkpoints,
             loras=loras,
@@ -2781,6 +2797,7 @@ def iter_filtered_image_id_chunks(
 def get_images_paginated(
     generators: Optional[List[str]] = None,
     tags: Optional[List[str]] = None,
+    tag_mode: str = "and",
     ratings: Optional[List[str]] = None,
     checkpoints: Optional[List[str]] = None,
     loras: Optional[List[str]] = None,
@@ -2862,7 +2879,7 @@ def get_images_paginated(
         params: List[Any] = []
 
         # Apply tag filter (JOIN)
-        query, params = _apply_tag_filter(query, tags, params)
+        query, params = _apply_tag_filter(query, tags, params, tag_mode)
 
         # Exclude unreadable images from normal library results (unless include_unreadable=True)
         conditions, params = _apply_readable_filter(conditions, params, include_unreadable)
@@ -2993,7 +3010,7 @@ def get_images_paginated(
             total_count = -1  # Indicate count was skipped
         else:
             total_count = _get_filtered_count(
-                conn, generators, tags, ratings, checkpoints, loras,
+                conn, generators, tags, tag_mode, ratings, checkpoints, loras,
                 search_query, prompt_terms, artist, min_width, max_width,
                 min_height, max_height, aspect_ratio, include_unreadable,
                 min_aesthetic, max_aesthetic,
@@ -3018,6 +3035,7 @@ def _get_filtered_count(
     conn,
     generators: Optional[List[str]] = None,
     tags: Optional[List[str]] = None,
+    tag_mode: str = "and",
     ratings: Optional[List[str]] = None,
     checkpoints: Optional[List[str]] = None,
     loras: Optional[List[str]] = None,
@@ -3045,7 +3063,7 @@ def _get_filtered_count(
     params: List[Any] = []
 
     # Apply tag filter (JOIN)
-    query, params = _apply_tag_filter(query, tags, params)
+    query, params = _apply_tag_filter(query, tags, params, tag_mode)
 
     # Exclude unreadable images from normal library results
     conditions, params = _apply_readable_filter(conditions, params, include_unreadable)

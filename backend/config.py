@@ -449,30 +449,50 @@ TAGGER_MODELS: dict = {
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
         "runtime_safety_tier": "heavy",
+        "default_threshold": 0.35,
+        "default_character_threshold": 0.85,
+        "default_copyright_threshold": 0.35,
+        "default_max_tags_per_image": 60,
     },
     "wd-swinv2-tagger-v3": {
         "repo_id": "SmilingWolf/wd-swinv2-tagger-v3",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
         "runtime_safety_tier": "balanced",
+        "default_threshold": 0.35,
+        "default_character_threshold": 0.85,
+        "default_copyright_threshold": 0.35,
+        "default_max_tags_per_image": 50,
     },
     "wd-convnext-tagger-v3": {
         "repo_id": "SmilingWolf/wd-convnext-tagger-v3",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
         "runtime_safety_tier": "balanced",
+        "default_threshold": 0.35,
+        "default_character_threshold": 0.85,
+        "default_copyright_threshold": 0.35,
+        "default_max_tags_per_image": 50,
     },
     "wd-vit-tagger-v3": {
         "repo_id": "SmilingWolf/wd-vit-tagger-v3",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
         "runtime_safety_tier": "light",
+        "default_threshold": 0.35,
+        "default_character_threshold": 0.85,
+        "default_copyright_threshold": 0.35,
+        "default_max_tags_per_image": 40,
     },
     "wd-vit-large-tagger-v3": {
         "repo_id": "SmilingWolf/wd-vit-large-tagger-v3",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
         "runtime_safety_tier": "balanced",
+        "default_threshold": 0.35,
+        "default_character_threshold": 0.85,
+        "default_copyright_threshold": 0.35,
+        "default_max_tags_per_image": 55,
     },
     "camie-tagger-v2": {
         "repo_id": "Camais03/camie-tagger-v2",
@@ -486,6 +506,8 @@ TAGGER_MODELS: dict = {
         "pad_color": [124, 116, 104],
         "default_threshold": 0.62,
         "default_character_threshold": 0.78,
+        "default_copyright_threshold": 0.62,
+        "default_max_tags_per_image": 65,
         "supports_rating": True
     },
     "pixai-tagger-v0.9": {
@@ -503,8 +525,10 @@ TAGGER_MODELS: dict = {
         # identity because prediction is already in [0, 1].
         "output_index": 2,
         "output_activation": "identity",
-        "default_threshold": 0.30,
+        "default_threshold": 0.45,
         "default_character_threshold": 0.85,
+        "default_copyright_threshold": 0.45,
+        "default_max_tags_per_image": 65,
         "supports_rating": False,
         "rating_fallback_mode": "derive_from_tags"
     },
@@ -545,6 +569,8 @@ TAGGER_MODELS: dict = {
         "minimum_cpu_available_ram_gb": 20,
         "default_threshold": 1.0,
         "default_character_threshold": 1.0,
+        "default_copyright_threshold": 1.0,
+        "default_max_tags_per_image": 120,
         "supports_rating": True,
     },
     "oppai-oracle-v1.1": {
@@ -576,6 +602,8 @@ TAGGER_MODELS: dict = {
         # point the model emits ~35-50 tags per image which matches our
         # smoke-test density on real anime images.
         "default_threshold": 0.7927,
+        "default_copyright_threshold": 0.7927,
+        "default_max_tags_per_image": 60,
         # OppaiOracle's vocabulary is general-only — there is no dedicated
         # character category. Setting the character threshold to 1.0 keeps
         # the existing tagging service shape working without forcing

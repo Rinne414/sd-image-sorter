@@ -6,13 +6,14 @@ import json
 import logging
 import threading
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
 from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from config import CONFIG_DIR
 from utils.source_paths import resolve_existing_indexed_image_path
@@ -422,8 +423,124 @@ def _persist_tags(db, image_id: int, vlm_tags: List[str]) -> None:
         logger.warning(f"Failed to persist VLM tags for image {image_id}: {e}")
 
 
+_BATCH_ID_CHUNK_SIZE = 500
+
+
+@dataclass(frozen=True)
+class _BatchImageSource:
+    source_type: str
+    total: int
+    iter_chunks: Callable[[], Iterator[List[int]]]
+
+
+def _iter_image_id_chunks(image_ids: List[int], chunk_size: int = _BATCH_ID_CHUNK_SIZE) -> Iterator[List[int]]:
+    normalized_chunk_size = max(1, int(chunk_size or _BATCH_ID_CHUNK_SIZE))
+    for index in range(0, len(image_ids), normalized_chunk_size):
+        yield image_ids[index:index + normalized_chunk_size]
+
+
+def _filters_to_selection_kwargs(filters: Dict[str, Any]) -> Dict[str, Any]:
+    def pick(camel: str, snake: Optional[str] = None, default: Any = None) -> Any:
+        if camel in filters:
+            return filters.get(camel)
+        if snake and snake in filters:
+            return filters.get(snake)
+        return default
+
+    return {
+        "generators": pick("generators"),
+        "tags": pick("tags"),
+        "tag_mode": pick("tagMode", "tag_mode", "and"),
+        "ratings": pick("ratings"),
+        "checkpoints": pick("checkpoints"),
+        "loras": pick("loras"),
+        "prompts": pick("prompts"),
+        "prompt_match_mode": pick("promptMatchMode", "prompt_match_mode", "exact"),
+        "artist": pick("artist"),
+        "search": pick("search"),
+        "sort_by": pick("sortBy", "sort_by", "newest"),
+        "min_width": pick("minWidth", "min_width"),
+        "max_width": pick("maxWidth", "max_width"),
+        "min_height": pick("minHeight", "min_height"),
+        "max_height": pick("maxHeight", "max_height"),
+        "aspect_ratio": pick("aspectRatio", "aspect_ratio"),
+        "min_aesthetic": pick("minAesthetic", "min_aesthetic"),
+        "max_aesthetic": pick("maxAesthetic", "max_aesthetic"),
+        "brightness_min": pick("brightnessMin", "brightness_min"),
+        "brightness_max": pick("brightnessMax", "brightness_max"),
+        "color_temperature": pick("colorTemperature", "color_temperature"),
+        "brightness_distribution": pick("brightnessDistribution", "brightness_distribution"),
+        "excluded_image_ids": pick("excludedImageIds", "excluded_image_ids"),
+        "exclude_tags": pick("excludeTags", "exclude_tags"),
+        "exclude_generators": pick("excludeGenerators", "exclude_generators"),
+        "exclude_ratings": pick("excludeRatings", "exclude_ratings"),
+        "exclude_checkpoints": pick("excludeCheckpoints", "exclude_checkpoints"),
+        "exclude_loras": pick("excludeLoras", "exclude_loras"),
+    }
+
+
+def _create_selection_token_from_filters(filters: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(filters, dict):
+        raise HTTPException(status_code=400, detail="filters must be an object")
+
+    from services.image_service import ImageService
+
+    return ImageService().create_selection_token(
+        **_filters_to_selection_kwargs(filters),
+        chunk_size=_BATCH_ID_CHUNK_SIZE,
+    )
+
+
+def _build_batch_image_source(request: "BatchCaptionRequest") -> _BatchImageSource:
+    if request.image_ids is not None:
+        image_ids = list(request.image_ids or [])
+        return _BatchImageSource(
+            source_type="image_ids",
+            total=len(image_ids),
+            iter_chunks=lambda: _iter_image_id_chunks(image_ids),
+        )
+
+    if request.selection_token:
+        from services.tag_export_service import count_selection_token_ids, iter_selection_token_id_chunks
+
+        selection_token = request.selection_token
+        total = count_selection_token_ids(selection_token)
+        return _BatchImageSource(
+            source_type="selection_token",
+            total=total,
+            iter_chunks=lambda: iter_selection_token_id_chunks(selection_token, chunk_size=_BATCH_ID_CHUNK_SIZE),
+        )
+
+    token_payload = _create_selection_token_from_filters(request.filters or {})
+    selection_token = token_payload["selection_token"]
+    total = int(token_payload.get("total_estimate") or 0)
+
+    from services.tag_export_service import iter_selection_token_id_chunks
+
+    return _BatchImageSource(
+        source_type="filters",
+        total=total,
+        iter_chunks=lambda: iter_selection_token_id_chunks(selection_token, chunk_size=_BATCH_ID_CHUNK_SIZE),
+    )
+
+
 class BatchCaptionRequest(BaseModel):
-    image_ids: List[int] = Field(default_factory=list, max_length=100000)
+    image_ids: Optional[List[int]] = Field(default=None, max_length=1_000_000)
+    selection_token: Optional[str] = Field(default=None, min_length=1)
+    filters: Optional[Dict[str, Any]] = None
+
+    @model_validator(mode="after")
+    def require_one_image_source(self):
+        source_count = sum([
+            self.image_ids is not None,
+            bool(self.selection_token),
+            self.filters is not None,
+        ])
+        if source_count == 0:
+            raise ValueError("Either image_ids, selection_token, or filters is required")
+        if source_count > 1:
+            raise ValueError("Provide only one of image_ids, selection_token, or filters")
+        return self
 
 
 @router.post("/caption-batch")
@@ -433,20 +550,21 @@ async def caption_batch(request: BatchCaptionRequest):
     with _batch_state_lock:
         if _batch_state["running"]:
             raise HTTPException(409, "Batch captioning already in progress")
+    image_source = _build_batch_image_source(request)
     _reset_debug_chat_events()
     with _batch_state_lock:
         _batch_state.update({
             "running": True,
             "cancel_requested": False,
-            "total": len(request.image_ids),
+            "total": image_source.total,
             "completed": 0,
             "failed": 0,
             "tokens_used": 0,
             "errors": [],
             "current_image": "",
             "active_requests": 0,
-            "api_status": "queued" if request.image_ids else "idle",
-            "api_message": "Waiting to send images to the VLM API" if request.image_ids else "No images queued",
+            "api_status": "queued" if image_source.total else "idle",
+            "api_message": "Waiting to send images to the VLM API" if image_source.total else "No images queued",
             "api_ok": 0,
             "api_error": 0,
             "last_api_latency_ms": None,
@@ -454,8 +572,13 @@ async def caption_batch(request: BatchCaptionRequest):
             "output_format": config.output_format,
         })
 
-    asyncio.create_task(_run_batch(request.image_ids))
-    return {"status": "started", "total": len(request.image_ids), "output_format": config.output_format}
+    asyncio.create_task(_run_batch(image_source))
+    return {
+        "status": "started",
+        "total": image_source.total,
+        "source": image_source.source_type,
+        "output_format": config.output_format,
+    }
 
 
 @router.get("/caption-batch/progress")
@@ -485,19 +608,19 @@ async def batch_cancel():
     return {"status": "cancel_requested"}
 
 
-async def _run_batch(image_ids: List[int]) -> None:
+async def _run_batch(image_source: _BatchImageSource) -> None:
     """Run batch captioning with concurrency control."""
     import database as db
 
     try:
         config = _build_config()
         provider = get_provider(config)
-        semaphore = asyncio.Semaphore(config.concurrent_requests)
+        worker_count = max(1, int(config.concurrent_requests or 1))
     except Exception as exc:
         message = str(exc) or "Failed to initialize VLM batch"
         with _batch_state_lock:
             _batch_state["running"] = False
-            _batch_state["failed"] = int(_batch_state.get("total") or len(image_ids) or 0)
+            _batch_state["failed"] = int(_batch_state.get("total") or image_source.total or 0)
             _batch_state["current_image"] = ""
             _batch_state["active_requests"] = 0
             _batch_state["api_status"] = "error"
@@ -523,108 +646,140 @@ async def _run_batch(image_ids: List[int]) -> None:
             if _batch_state["cancel_requested"]:
                 return
 
-        async with semaphore:
+        try:
+            image = db.get_image_by_id(image_id)
+            if not image:
+                _record_error(image_id, "Image not found in DB", "not_found")
+                return
+
+            image_path = str(image.get("path") or "")
             with _batch_state_lock:
-                if _batch_state["cancel_requested"]:
-                    return
+                _batch_state["current_image"] = Path(image_path).name if image_path else ""
 
             try:
-                image = db.get_image_by_id(image_id)
-                if not image:
-                    _record_error(image_id, "Image not found in DB", "not_found")
-                    return
+                resolved_image_path = _resolve_image_path(image)
+            except HTTPException:
+                _record_error(image_id, "File not found on disk", "file_missing")
+                return
 
-                image_path = str(image.get("path") or "")
+            tag_rows = db.get_image_tags(image_id)
+            tags = [t["tag"] for t in tag_rows] if tag_rows else []
+
+            user_message = provider.build_user_message(tags)
+            image_name = Path(image_path or resolved_image_path).name
+            request_event_id = _append_debug_chat_event(_build_debug_request_event(
+                image_id=image_id,
+                image_name=image_name,
+                config=config,
+                provider_name=getattr(provider, "name", config.provider),
+                tags=tags,
+                user_message=user_message,
+            ))
+
+            start_time = time.monotonic()
+            with _batch_state_lock:
+                _batch_state["active_requests"] += 1
+                _batch_state["api_status"] = "waiting"
+                _batch_state["api_message"] = f"Waiting for API response: {image_name}"
+                _batch_state["last_api_error"] = ""
+
+            result = await provider.caption_image(resolved_image_path, tags=tags)
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            _append_debug_response_event(
+                request_event_id=request_event_id,
+                image_id=image_id,
+                image_name=image_name,
+                result=result,
+                latency_ms=latency_ms,
+            )
+
+            if not result.error and (result.caption or result.tags):
+                if result.caption:
+                    db.update_image_caption(image_id, result.caption)
+                if result.tags:
+                    _persist_tags(db, image_id, result.tags)
                 with _batch_state_lock:
-                    _batch_state["current_image"] = Path(image_path).name if image_path else ""
-
-                try:
-                    resolved_image_path = _resolve_image_path(image)
-                except HTTPException:
-                    _record_error(image_id, "File not found on disk", "file_missing")
-                    return
-
-                tag_rows = db.get_image_tags(image_id)
-                tags = [t["tag"] for t in tag_rows] if tag_rows else []
-
-                user_message = provider.build_user_message(tags)
-                image_name = Path(image_path or resolved_image_path).name
-                request_event_id = _append_debug_chat_event(_build_debug_request_event(
-                    image_id=image_id,
-                    image_name=image_name,
-                    config=config,
-                    provider_name=getattr(provider, "name", config.provider),
-                    tags=tags,
-                    user_message=user_message,
-                ))
-
-                start_time = time.monotonic()
-                with _batch_state_lock:
-                    _batch_state["active_requests"] += 1
-                    _batch_state["api_status"] = "waiting"
-                    _batch_state["api_message"] = f"Waiting for API response: {image_name}"
-                    _batch_state["last_api_error"] = ""
-
-                result = await provider.caption_image(resolved_image_path, tags=tags)
-                latency_ms = int((time.monotonic() - start_time) * 1000)
-                _append_debug_response_event(
-                    request_event_id=request_event_id,
-                    image_id=image_id,
-                    image_name=image_name,
-                    result=result,
-                    latency_ms=latency_ms,
-                )
-
-                if not result.error and (result.caption or result.tags):
-                    if result.caption:
-                        db.update_image_caption(image_id, result.caption)
-                    if result.tags:
-                        _persist_tags(db, image_id, result.tags)
-                    with _batch_state_lock:
-                        _batch_state["completed"] += 1
-                        _batch_state["tokens_used"] += result.tokens_used
-                        _batch_state["api_ok"] += 1
-                        _batch_state["last_api_latency_ms"] = latency_ms
-                        _batch_state["api_status"] = "responded"
-                        _batch_state["api_message"] = f"API response OK in {latency_ms} ms"
-                else:
-                    with _batch_state_lock:
-                        _batch_state["api_error"] += 1
-                        _batch_state["last_api_latency_ms"] = latency_ms
-                        _batch_state["api_status"] = "error"
-                        _batch_state["api_message"] = f"API response failed in {latency_ms} ms"
-                        _batch_state["last_api_error"] = result.error or "No output"
-                    _record_error(image_id, result.error or "No output", result.error_type or "unknown")
-
-            except Exception as e:
-                try:
-                    _append_debug_chat_event({
-                        "phase": "error",
-                        "image_id": image_id,
-                        "image_name": Path(image_path).name if "image_path" in locals() and image_path else "",
-                        "error": _redact_debug_text(str(e)),
-                        "error_type": "exception",
-                    })
-                except Exception:
-                    pass
+                    _batch_state["completed"] += 1
+                    _batch_state["tokens_used"] += result.tokens_used
+                    _batch_state["api_ok"] += 1
+                    _batch_state["last_api_latency_ms"] = latency_ms
+                    _batch_state["api_status"] = "responded"
+                    _batch_state["api_message"] = f"API response OK in {latency_ms} ms"
+            else:
                 with _batch_state_lock:
                     _batch_state["api_error"] += 1
+                    _batch_state["last_api_latency_ms"] = latency_ms
                     _batch_state["api_status"] = "error"
-                    _batch_state["api_message"] = "API request failed before a usable response"
-                    _batch_state["last_api_error"] = str(e)
-                _record_error(image_id, str(e), "exception")
-            finally:
-                with _batch_state_lock:
-                    _batch_state["active_requests"] = max(0, int(_batch_state.get("active_requests") or 0) - 1)
-                    if _batch_state["cancel_requested"]:
-                        _batch_state["api_status"] = "cancelling"
-                        _batch_state["api_message"] = "Cancel requested; waiting for active API calls to finish"
-                    elif _batch_state["active_requests"] > 0:
-                        _batch_state["api_status"] = "waiting"
-                        _batch_state["api_message"] = f"Waiting for {_batch_state['active_requests']} API response(s)"
+                    _batch_state["api_message"] = f"API response failed in {latency_ms} ms"
+                    _batch_state["last_api_error"] = result.error or "No output"
+                _record_error(image_id, result.error or "No output", result.error_type or "unknown")
 
-    tasks = [process_one(img_id) for img_id in image_ids]
-    await asyncio.gather(*tasks, return_exceptions=True)
+        except Exception as e:
+            try:
+                _append_debug_chat_event({
+                    "phase": "error",
+                    "image_id": image_id,
+                    "image_name": Path(image_path).name if "image_path" in locals() and image_path else "",
+                    "error": _redact_debug_text(str(e)),
+                    "error_type": "exception",
+                })
+            except Exception:
+                pass
+            with _batch_state_lock:
+                _batch_state["api_error"] += 1
+                _batch_state["api_status"] = "error"
+                _batch_state["api_message"] = "API request failed before a usable response"
+                _batch_state["last_api_error"] = str(e)
+            _record_error(image_id, str(e), "exception")
+        finally:
+            with _batch_state_lock:
+                _batch_state["active_requests"] = max(0, int(_batch_state.get("active_requests") or 0) - 1)
+                if _batch_state["cancel_requested"]:
+                    _batch_state["api_status"] = "cancelling"
+                    _batch_state["api_message"] = "Cancel requested; waiting for active API calls to finish"
+                elif _batch_state["active_requests"] > 0:
+                    _batch_state["api_status"] = "waiting"
+                    _batch_state["api_message"] = f"Waiting for {_batch_state['active_requests']} API response(s)"
+
+    async def produce_ids(queue: asyncio.Queue) -> None:
+        try:
+            for chunk in image_source.iter_chunks():
+                with _batch_state_lock:
+                    if _batch_state["cancel_requested"]:
+                        break
+                for image_id in chunk:
+                    with _batch_state_lock:
+                        if _batch_state["cancel_requested"]:
+                            break
+                    await queue.put(int(image_id))
+        except Exception as exc:
+            message = str(exc) or "Failed to resolve VLM batch image IDs"
+            _append_debug_chat_event({
+                "phase": "error",
+                "image_id": None,
+                "image_name": "",
+                "error": _redact_debug_text(message),
+                "error_type": "batch_source",
+            })
+            _record_error(None, message, "batch_source")
+        finally:
+            for _ in range(worker_count):
+                await queue.put(None)
+
+    async def worker(queue: asyncio.Queue) -> None:
+        while True:
+            image_id = await queue.get()
+            try:
+                if image_id is None:
+                    return
+                await process_one(image_id)
+            finally:
+                queue.task_done()
+
+    queue: asyncio.Queue = asyncio.Queue(maxsize=max(1, worker_count * 2))
+    producer_task = asyncio.create_task(produce_ids(queue))
+    worker_tasks = [asyncio.create_task(worker(queue)) for _ in range(worker_count)]
+    await asyncio.gather(producer_task, *worker_tasks, return_exceptions=True)
 
     with _batch_state_lock:
         _batch_state["running"] = False
@@ -641,7 +796,7 @@ async def _run_batch(image_ids: List[int]) -> None:
             _batch_state["api_message"] = "Finished"
 
 
-def _record_error(image_id: int, message: str, error_type: str) -> None:
+def _record_error(image_id: Optional[int], message: str, error_type: str) -> None:
     with _batch_state_lock:
         _batch_state["failed"] += 1
         if _batch_state.get("api_status") not in {"error", "cancelling", "cancelled"}:

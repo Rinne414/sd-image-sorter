@@ -105,6 +105,9 @@ def test_release_skip_rules_drop_hidden_and_docs_files():
     assert release_builder.should_skip_path(Path(".tmp_move_target") / "note.txt") is True
     assert release_builder.should_skip_path(Path("docs") / "screenshots" / "gallery.png") is True
     assert release_builder.should_skip_path(Path("data") / "images.db") is True
+    assert release_builder.should_skip_path(Path("data") / "logs" / "backend.log") is True
+    assert release_builder.should_skip_path(Path("data") / "models" / "wd14" / "model.onnx") is True
+    assert release_builder.should_skip_path(Path("backend") / "data" / "logs" / "backend.log") is True
     assert release_builder.should_skip_path(Path("update") / "downloads" / "patch.zip") is True
     assert release_builder.should_skip_path(Path("coverage.xml")) is True
     assert release_builder.should_skip_path(Path("backend") / "coverage.xml") is True
@@ -752,6 +755,44 @@ def test_prepare_bundled_linux_python_rejects_unknown_arch(tmp_path):
     assert "x86_64" in msg
 
 
+def test_linux_portable_prunes_terminfo_symlink_loops(tmp_path):
+    """The bundled PBS terminfo tree can contain self-referential symlinks.
+
+    Those entries are useless for the browser app and can make release
+    tarball creation fail with ELOOP on WSL / Windows-mounted drives.
+    """
+    release_builder = load_release_builder()
+
+    python_dir = tmp_path / "python"
+    terminfo_n = python_dir / "share" / "terminfo" / "n"
+    (python_dir / "bin").mkdir(parents=True)
+    terminfo_n.mkdir(parents=True)
+    (python_dir / "bin" / "python3").write_bytes(b"\x7fELF")
+
+    loop = terminfo_n / "ncr260vt300wpp"
+    try:
+        loop.symlink_to("../n/ncr260vt300wpp")
+    except OSError as exc:  # pragma: no cover - Windows without symlink rights
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    assert loop.is_symlink()
+    release_builder.prune_bundled_linux_python_for_release(python_dir)
+
+    assert (python_dir / "bin" / "python3").exists()
+    assert not (python_dir / "share" / "terminfo").exists()
+
+
+def test_linux_portable_skips_terminfo_members_during_extract():
+    """Self-referential terminfo aliases must be skipped before extraction."""
+    release_builder = load_release_builder()
+
+    assert release_builder.is_linux_python_terminfo_member("python/share/terminfo")
+    assert release_builder.is_linux_python_terminfo_member("python/share/terminfo/n/ncr260vt300wpp")
+    assert release_builder.is_linux_python_terminfo_member("./python/share/terminfo/x/xterm")
+    assert not release_builder.is_linux_python_terminfo_member("python/bin/python3")
+    assert not release_builder.is_linux_python_terminfo_member("python/share/doc/readme.txt")
+
+
 def test_linux_portable_launcher_script_has_lf_endings_and_exec_bit(tmp_path):
     """run-portable.sh must be LF-only in the staged tarball.
 
@@ -874,6 +915,7 @@ def test_linux_portable_tar_filter_sets_correct_mode_bits(tmp_path):
     assert "0o755" in build_script
     assert "0o644" in build_script
     assert "/python/bin/" in build_script
+    assert "python/share/terminfo" in build_script
     assert "run-portable.sh" in build_script
 
 

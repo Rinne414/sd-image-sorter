@@ -152,6 +152,7 @@ function serializeManualSortFilters(filters) {
         generators: [...(source.generators || ['comfyui', 'nai', 'webui', 'forge', 'unknown'])],
         ratings: [...(source.ratings || ['general', 'sensitive', 'questionable', 'explicit'])],
         tags: [...(source.tags || [])],
+        tagMode: source.tagMode === 'or' || source.tag_mode === 'or' ? 'or' : 'and',
         checkpoints: [...(source.checkpoints || [])],
         loras: [...(source.loras || [])],
         prompts: [...(source.prompts || [])],
@@ -167,6 +168,11 @@ function serializeManualSortFilters(filters) {
         aspectRatio: source.aspectRatio || '',
         minAesthetic: source.minAesthetic ?? null,
         maxAesthetic: source.maxAesthetic ?? null,
+        excludeTags: [...(source.excludeTags || [])],
+        excludeGenerators: [...(source.excludeGenerators || [])],
+        excludeRatings: [...(source.excludeRatings || [])],
+        excludeCheckpoints: [...(source.excludeCheckpoints || [])],
+        excludeLoras: [...(source.excludeLoras || [])],
     };
 }
 
@@ -291,6 +297,7 @@ function getManualSortScopeSignature(filters) {
     return JSON.stringify({
         generators: contract.generators || [],
         tags: contract.tags || [],
+        tagMode: contract.tagMode || 'and',
         ratings: contract.ratings || [],
         checkpoints: contract.checkpoints || [],
         loras: contract.loras || [],
@@ -305,6 +312,11 @@ function getManualSortScopeSignature(filters) {
         aspectRatio: contract.aspectRatio || null,
         minAesthetic: contract.minAesthetic ?? null,
         maxAesthetic: contract.maxAesthetic ?? null,
+        excludeTags: contract.excludeTags || [],
+        excludeGenerators: contract.excludeGenerators || [],
+        excludeRatings: contract.excludeRatings || [],
+        excludeCheckpoints: contract.excludeCheckpoints || [],
+        excludeLoras: contract.excludeLoras || [],
     });
 }
 
@@ -833,6 +845,14 @@ async function startSorting() {
             f.artist,
             replaceExisting,
             f.promptMatchMode,
+            f.tagMode,
+            {
+                tags: f.excludeTags?.length > 0 ? f.excludeTags : null,
+                generators: f.excludeGenerators?.length > 0 ? f.excludeGenerators : null,
+                ratings: f.excludeRatings?.length > 0 ? f.excludeRatings : null,
+                checkpoints: f.excludeCheckpoints?.length > 0 ? f.excludeCheckpoints : null,
+                loras: f.excludeLoras?.length > 0 ? f.excludeLoras : null,
+            },
         );
 
         if (result.total_images === 0) {
@@ -855,6 +875,7 @@ async function startSorting() {
             const imagesResult = await API.getImages({
                 generators: generators,
                 tags: tags,
+                tagMode: f.tagMode,
                 ratings: ratings,
                 checkpoints: checkpoints,
                 loras: loras,
@@ -869,6 +890,11 @@ async function startSorting() {
                 aspectRatio: f.aspectRatio,
                 minAesthetic: f.minAesthetic,
                 maxAesthetic: f.maxAesthetic,
+                excludeTags: f.excludeTags?.length > 0 ? f.excludeTags : null,
+                excludeGenerators: f.excludeGenerators?.length > 0 ? f.excludeGenerators : null,
+                excludeRatings: f.excludeRatings?.length > 0 ? f.excludeRatings : null,
+                excludeCheckpoints: f.excludeCheckpoints?.length > 0 ? f.excludeCheckpoints : null,
+                excludeLoras: f.excludeLoras?.length > 0 ? f.excludeLoras : null,
                 limit: remainingPreviewSlots,
                 cursor: previewCursor
             });

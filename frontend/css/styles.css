@@ -1124,6 +1124,30 @@ body::before {
         transform: scale(1.05);
     }
 
+    .gallery-item-order {
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        z-index: 4;
+        min-width: 28px;
+        max-width: calc(100% - 12px);
+        height: 22px;
+        padding: 0 7px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(255,255,255,0.18);
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.78);
+        color: var(--text-primary);
+        box-shadow: 0 5px 14px rgba(0,0,0,0.28);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11px;
+        font-weight: 750;
+        line-height: 1;
+        pointer-events: none;
+    }
+
     /* Skeleton loading styles */
     .skeleton-item {
         background: var(--bg-card);
@@ -5545,8 +5569,15 @@ kbd {
 
     .view-options {
         width: 100%;
-        justify-content: flex-end;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        gap: 8px;
         order: 3;
+    }
+
+    .view-options .sort-dropdown {
+        flex: 1 1 160px;
+        min-width: 0;
     }
 
     /* Gallery grid adjustments */
@@ -6387,11 +6418,14 @@ textarea:focus-visible {
 /* Ensure interactive elements have proper touch targets */
 .btn,
 button,
-input[type="checkbox"],
-input[type="radio"],
 .checkbox-label {
     min-height: 44px;
     min-width: 44px;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+    accent-color: var(--accent-primary);
 }
 
 /* View buttons in gallery */
@@ -6427,7 +6461,9 @@ input[type="radio"],
     }
 
     .btn,
-    button {
+    .nav-tab,
+    .view-btn,
+    .mobile-nav-item {
         border-width: 2px;
     }
 

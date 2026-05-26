@@ -12,6 +12,7 @@ const CENSOR_LOW_MEMORY_UNDO_CAP = 4;
 const CENSOR_PROXY_MAX_PIXELS_DEFAULT = 6_000_000;
 const CENSOR_PROXY_MAX_EDGE_DEFAULT = 4096;
 const CENSOR_ORIGINAL_STATE_TOKEN = '__CENSOR_ORIGINAL__';
+const CENSOR_TOKEN_QUEUE_WINDOW_SIZE = 200;
 
 function getCensorUndoDepth() {
     const raw = parseInt(localStorage.getItem('censor_undo_depth'), 10);
@@ -23,6 +24,7 @@ const CensorState = {
     // Queue of { id, originalFilename, outputFilename, originalUrl, currentDataUrl, regions, isProcessed, isModified }
     queue: [],
     pendingQueueIds: new Set(),
+    tokenQueueSource: null,
     activeId: null, // ID of currently edited image
     pendingActiveId: null, // Latest requested image while a newer canvas load is still pending
     selectedItems: new Set(), // IDs of selected items for multi-select
@@ -167,6 +169,287 @@ function getFocusedCensorImageId() {
 
 function getActiveCensorItem() {
     return CensorState.queue.find((item) => item.id === CensorState.activeId) || null;
+}
+
+function normalizeCensorImageIds(rawIds) {
+    return Array.from(new Set((Array.isArray(rawIds) ? rawIds : [rawIds])
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value) && value > 0)));
+}
+
+function normalizeTokenQueueSourcePayload(source) {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) {
+        return null;
+    }
+
+    const selectionToken = String(source.selectionToken || source.selection_token || '').trim();
+    if (!selectionToken) return null;
+
+    return {
+        selectionToken,
+        total: Math.max(0, Number(source.total ?? source.selectionTotal ?? source.selection_total ?? 0) || 0),
+        exactTotal: source.exactTotal !== false && source.exact_total !== false,
+        filterKey: typeof source.filterKey === 'string' ? source.filterKey : null,
+        visibleImageIds: normalizeCensorImageIds(source.visibleImageIds || source.visible_image_ids || []),
+        nextOffset: 0,
+        hasMore: true,
+        loadedCount: 0,
+        loadedIds: new Set(),
+        loading: false,
+    };
+}
+
+function hasTokenQueueSource() {
+    return Boolean(CensorState.tokenQueueSource?.selectionToken);
+}
+
+function getTokenQueueTotal() {
+    const source = CensorState.tokenQueueSource;
+    if (!source?.selectionToken) return 0;
+    return Math.max(0, Number(source.total || source.loadedCount || 0) || 0);
+}
+
+function getCensorQueueWorkCount() {
+    return Math.max(CensorState.queue.length, getTokenQueueTotal());
+}
+
+function hasCensorQueueWork() {
+    return getCensorQueueWorkCount() > 0;
+}
+
+function switchToCensorView() {
+    const censorTab = document.querySelector('.nav-tab[data-view="censor"]');
+    if (censorTab) {
+        censorTab.click();
+    } else if (typeof window.App?.switchView === 'function') {
+        window.App.switchView('censor');
+    }
+
+    const censorView = document.getElementById('view-censor');
+    if (censorView) {
+        censorView.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
+function buildCensorQueueItemFromImage(image) {
+    const id = Number(image?.id);
+    if (!Number.isFinite(id) || id <= 0 || !image?.filename) {
+        return null;
+    }
+
+    const api = window.App?.API;
+    return {
+        id,
+        originalFilename: image.filename,
+        outputFilename: image.filename,
+        originalUrl: typeof api?.getImageUrl === 'function' ? api.getImageUrl(id) : `/api/image-file/${id}`,
+        currentDataUrl: null,
+        previewDataUrl: null,
+        width: Number(image.width || 0),
+        height: Number(image.height || 0),
+        editOperations: [],
+        regions: [],
+        isProcessed: false,
+        isModified: false,
+    };
+}
+
+function appendCensorQueueImages(images = [], { tokenSource = null } = {}) {
+    const queueIds = new Set(CensorState.queue.map((item) => item.id));
+    const nextItems = [];
+
+    (Array.isArray(images) ? images : []).forEach((image) => {
+        const item = buildCensorQueueItemFromImage(image);
+        if (!item || queueIds.has(item.id) || CensorState.pendingQueueIds.has(item.id)) {
+            if (item && tokenSource?.loadedIds) tokenSource.loadedIds.add(item.id);
+            return;
+        }
+
+        queueIds.add(item.id);
+        nextItems.push(item);
+        if (tokenSource?.loadedIds) tokenSource.loadedIds.add(item.id);
+    });
+
+    if (nextItems.length > 0) {
+        CensorState.queue.push(...nextItems);
+    }
+
+    if (tokenSource?.loadedIds) {
+        tokenSource.loadedCount = tokenSource.loadedIds.size;
+    }
+
+    return nextItems;
+}
+
+async function fetchTokenQueueDataPage(offset = 0, limit = CENSOR_TOKEN_QUEUE_WINDOW_SIZE) {
+    const source = CensorState.tokenQueueSource;
+    const loader = window.App?.loadSelectionDataByToken;
+    if (!source?.selectionToken || typeof loader !== 'function') {
+        throw new Error('Token-backed Censor queue is not available');
+    }
+
+    return loader(source.selectionToken, {
+        offset: Math.max(0, Number(offset) || 0),
+        limit: Math.max(1, Math.min(Number(limit) || CENSOR_TOKEN_QUEUE_WINDOW_SIZE, CENSOR_TOKEN_QUEUE_WINDOW_SIZE)),
+    });
+}
+
+function updateTokenQueueSourceFromPage(source, page, fallbackOffset = 0) {
+    if (!source || !page) return;
+
+    const images = Array.isArray(page.images) ? page.images : [];
+    const pageTotal = Number(page.total || 0);
+    if (Number.isFinite(pageTotal) && pageTotal > 0) {
+        source.total = Math.max(source.total || 0, pageTotal);
+    } else {
+        source.total = Math.max(source.total || 0, Number(fallbackOffset || 0) + images.length);
+    }
+
+    source.exactTotal = page.exact_total !== false;
+
+    const nextOffset = Number(page.next_offset);
+    source.nextOffset = page.has_more && Number.isFinite(nextOffset) && nextOffset >= 0
+        ? nextOffset
+        : null;
+    source.hasMore = Boolean(page.has_more && source.nextOffset !== null);
+}
+
+async function loadTokenQueueWindow({ offset = 0, limit = CENSOR_TOKEN_QUEUE_WINDOW_SIZE, activateFirst = false } = {}) {
+    const source = CensorState.tokenQueueSource;
+    if (!source?.selectionToken || source.loading) {
+        return { images: [], items: [] };
+    }
+
+    source.loading = true;
+    renderTokenQueueLoadMoreControl(document.getElementById('censor-queue-list'));
+
+    try {
+        const page = await fetchTokenQueueDataPage(offset, limit);
+        updateTokenQueueSourceFromPage(source, page, offset);
+        const items = appendCensorQueueImages(page.images || [], { tokenSource: source });
+        renderQueue();
+
+        if (activateFirst && !CensorState.activeId && CensorState.queue.length > 0) {
+            setTimeout(() => loadCanvasImage(CensorState.queue[0].id), 100);
+        }
+
+        return {
+            ...page,
+            images: Array.isArray(page.images) ? page.images : [],
+            items,
+        };
+    } finally {
+        source.loading = false;
+        renderTokenQueueLoadMoreControl(document.getElementById('censor-queue-list'));
+    }
+}
+
+async function loadNextTokenQueueWindow() {
+    const source = CensorState.tokenQueueSource;
+    if (!source?.selectionToken || source.loading || !source.hasMore || source.nextOffset === null) {
+        return { images: [], items: [] };
+    }
+
+    return loadTokenQueueWindow({
+        offset: source.nextOffset,
+        limit: CENSOR_TOKEN_QUEUE_WINDOW_SIZE,
+    });
+}
+
+async function addTokenBackedQueue(sourcePayload) {
+    const source = normalizeTokenQueueSourcePayload(sourcePayload);
+    if (!source) return false;
+
+    switchToCensorView();
+    CensorState.tokenQueueSource = source;
+
+    try {
+        let loadedItems = [];
+        const visibleIds = source.visibleImageIds.slice(0, CENSOR_TOKEN_QUEUE_WINDOW_SIZE);
+        const selectionLoader = window.App?.loadSelectionData;
+        if (visibleIds.length > 0 && typeof selectionLoader === 'function') {
+            try {
+                const payload = await selectionLoader(visibleIds);
+                loadedItems = appendCensorQueueImages(payload?.images || [], { tokenSource: source });
+                renderQueue();
+                if (!CensorState.activeId && CensorState.queue.length > 0) {
+                    setTimeout(() => loadCanvasImage(CensorState.queue[0].id), 100);
+                }
+            } catch (error) {
+                Logger.warn('Failed to load visible Censor queue window, falling back to token page', error);
+            }
+        }
+
+        if (loadedItems.length === 0) {
+            const page = await loadTokenQueueWindow({
+                offset: 0,
+                limit: CENSOR_TOKEN_QUEUE_WINDOW_SIZE,
+                activateFirst: true,
+            });
+            loadedItems = page.items || [];
+        } else {
+            renderTokenQueueLoadMoreControl(document.getElementById('censor-queue-list'));
+        }
+
+        if (!loadedItems.length && source.total === 0) {
+            window.App?.showToast?.(
+                censorT('censor.queueEmpty', null, 'Queue is empty'),
+                'info'
+            );
+        }
+        return true;
+    } catch (error) {
+        CensorState.tokenQueueSource = null;
+        renderQueue();
+        window.App?.showToast?.(
+            formatUserError(error, censorT('censor.queueAddFailed', { count: source.total || 1 }, 'Failed to queue {count} image(s) for Censor.')),
+            'error'
+        );
+        return false;
+    }
+}
+
+function renderTokenQueueLoadMoreControl(list) {
+    if (!list) return;
+
+    const existing = list.querySelector('.queue-token-window-control');
+    const source = CensorState.tokenQueueSource;
+    if (!source?.selectionToken) {
+        existing?.remove();
+        return;
+    }
+
+    let control = existing;
+    if (!control) {
+        control = document.createElement('div');
+        control.className = 'queue-token-window-control';
+        control.innerHTML = `
+            <div class="queue-token-window-summary"></div>
+            <button class="btn btn-secondary btn-small" type="button"></button>
+        `;
+        control.querySelector('button')?.addEventListener('click', () => {
+            loadNextTokenQueueWindow();
+        });
+    }
+
+    const loaded = Math.max(0, Number(source.loadedCount || 0) || 0);
+    const total = source.total || loaded;
+    const summary = control.querySelector('.queue-token-window-summary');
+    const button = control.querySelector('button');
+    if (summary) {
+        summary.textContent = total > loaded
+            ? `Loaded ${loaded.toLocaleString()} of ${total.toLocaleString()} filtered images`
+            : `Loaded ${loaded.toLocaleString()} filtered images`;
+    }
+    if (button) {
+        button.textContent = source.loading
+            ? censorT('common.loading', null, 'Loading...')
+            : censorT('common.loadMore', null, 'Load more');
+        button.disabled = Boolean(source.loading || !source.hasMore);
+        button.style.display = source.hasMore ? '' : 'none';
+    }
+
+    list.appendChild(control);
 }
 
 function getCensorItemLogicalDimensions(item, fallbackWidth = 0, fallbackHeight = 0) {
@@ -514,12 +797,13 @@ function bindEvents() {
 
     // Consolidated Clear Queue
     const clearQueueHandler = () => {
-        if (CensorState.queue.length === 0) return;
+        if (!hasCensorQueueWork()) return;
         window.App.showConfirm(
             censorT('modal.confirm', null, 'Are you sure?'),
             censorT('modal.confirmAction', null, 'This action cannot be undone.'),
             () => {
                 CensorState.queue = [];
+                CensorState.tokenQueueSource = null;
                 CensorState.activeId = null;
                 CensorState.pendingActiveId = null;
                 CensorState.selectedItems.clear();
@@ -834,23 +1118,15 @@ function bindEvents() {
     // Add to Queue bridge for Gallery/App without mutating window.App.
     window.CensorEdit = window.CensorEdit || {};
     window.CensorEdit.addToQueue = async (imageIds) => {
-        const { API } = window.App;
-        // Switch view to censor tab - use nav tab click for reliable switching
-        const censorTab = document.querySelector('.nav-tab[data-view="censor"]');
-        if (censorTab) {
-            censorTab.click();
-        } else if (typeof window.App?.switchView === 'function') {
-            window.App.switchView('censor');
-        }
-        // Ensure the censor view is scrolled into visibility
-        const censorView = document.getElementById('view-censor');
-        if (censorView) {
-            censorView.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const tokenSource = normalizeTokenQueueSourcePayload(imageIds);
+        if (tokenSource) {
+            return addTokenBackedQueue(tokenSource);
         }
 
-        const requestedIds = Array.from(new Set((Array.isArray(imageIds) ? imageIds : [imageIds])
-            .map((value) => Number(value))
-            .filter((value) => Number.isFinite(value) && value > 0)));
+        const { API } = window.App;
+        switchToCensorView();
+
+        const requestedIds = normalizeCensorImageIds(imageIds);
         const queueIds = new Set(CensorState.queue.map((item) => item.id));
         const idsToFetch = requestedIds.filter((id) => !queueIds.has(id) && !CensorState.pendingQueueIds.has(id));
 
@@ -874,25 +1150,13 @@ function bindEvents() {
                 idsToFetch.forEach((id) => {
                     CensorState.pendingQueueIds.delete(id);
                     const image = detailMap.get(id);
-                    if (!image?.filename) {
+                    const item = buildCensorQueueItemFromImage({ ...image, id });
+                    if (!item) {
                         failedIds.push(id);
                         return;
                     }
 
-                    nextItems.push({
-                        id,
-                        originalFilename: image.filename,
-                        outputFilename: image.filename,
-                        originalUrl: API.getImageUrl(id),
-                        currentDataUrl: null,
-                        previewDataUrl: null,
-                        width: Number(image.width || 0),
-                        height: Number(image.height || 0),
-                        editOperations: [],
-                        regions: [],
-                        isProcessed: false,
-                        isModified: false,
-                    });
+                    nextItems.push(item);
                 });
             } else {
                 const settled = await Promise.allSettled(idsToFetch.map((id) => API.getImage(id)));
@@ -906,21 +1170,9 @@ function bindEvents() {
                         return;
                     }
 
-                    const image = entry.value.image;
-                    nextItems.push({
-                        id,
-                        originalFilename: image.filename,
-                        outputFilename: image.filename,
-                        originalUrl: API.getImageUrl(id),
-                        currentDataUrl: null,
-                        previewDataUrl: null,
-                        width: Number(image.width || 0),
-                        height: Number(image.height || 0),
-                        editOperations: [],
-                        regions: [],
-                        isProcessed: false,
-                        isModified: false,
-                    });
+                    const item = buildCensorQueueItemFromImage({ ...entry.value.image, id });
+                    if (item) nextItems.push(item);
+                    else failedIds.push(id);
                 });
             }
         } catch (error) {
@@ -982,6 +1234,63 @@ function _summarizeBatchFailures(items = CensorState.queue) {
     return {
         failedCount: failed.length,
         firstFailedName: failed[0]?.outputFilename || failed[0]?.originalFilename || '',
+    };
+}
+
+async function processCensorBatchItems(handler, { pageSize = CENSOR_TOKEN_QUEUE_WINDOW_SIZE } = {}) {
+    const seenIds = new Set();
+    let completed = 0;
+    let total = getCensorQueueWorkCount();
+
+    for (const item of CensorState.queue) {
+        if (!item?.id || seenIds.has(item.id)) continue;
+        seenIds.add(item.id);
+        await handler(item, {
+            index: completed,
+            total: Math.max(total, completed + 1),
+            transient: false,
+        });
+        completed += 1;
+    }
+
+    const source = CensorState.tokenQueueSource;
+    if (source?.selectionToken) {
+        let offset = 0;
+        let hasMore = true;
+
+        while (hasMore) {
+            const page = await fetchTokenQueueDataPage(offset, pageSize);
+            updateTokenQueueSourceFromPage(source, page, offset);
+            total = Math.max(total, getTokenQueueTotal());
+
+            const images = Array.isArray(page.images) ? page.images : [];
+            for (const image of images) {
+                const id = Number(image?.id);
+                if (!Number.isFinite(id) || id <= 0 || seenIds.has(id)) continue;
+
+                const existingItem = CensorState.queue.find((entry) => entry.id === id);
+                const item = existingItem || buildCensorQueueItemFromImage(image);
+                if (!item) continue;
+
+                seenIds.add(id);
+                await handler(item, {
+                    index: completed,
+                    total: Math.max(total, completed + 1),
+                    transient: !existingItem,
+                });
+                completed += 1;
+            }
+
+            const nextOffset = Number(page.next_offset);
+            hasMore = Boolean(page.has_more && Number.isFinite(nextOffset) && nextOffset >= 0);
+            if (!hasMore) break;
+            offset = nextOffset;
+        }
+    }
+
+    return {
+        completed,
+        total: Math.max(total, completed),
     };
 }
 
@@ -1130,6 +1439,7 @@ function renderQueue() {
         img.setAttribute('aria-pressed', String(isSelected));
     });
 
+    renderTokenQueueLoadMoreControl(list);
     updateQueueSelection();
     updateUndoRedoButtons();
 }
@@ -3662,7 +3972,7 @@ function performClone(ctx, x, y, size, options = {}) {
 
 async function runAutoCensorBatch() {
     const { showToast } = window.App;
-    if (CensorState.queue.length === 0) {
+    if (!hasCensorQueueWork()) {
         showToast(censorT('censor.queueEmpty', null, 'Queue is empty'), 'error');
         return;
     }
@@ -3675,20 +3985,22 @@ async function runAutoCensorBatch() {
 
     const tracker = window.App.createProgressTracker();
 
+    _resetBatchStatus();
     showLoading(true, censorT('censor.autoCensorPreparing', null, 'Auto Censor · preparing queue...'));
 
-    for (let index = 0; index < CensorState.queue.length; index += 1) {
-        const item = CensorState.queue[index];
+    let count = 0;
+    const result = await processCensorBatchItems(async (item, { index, total }) => {
         showLoading(true, window.App.buildProgressText({
             progress: { message: item.originalFilename || item.outputFilename || `Image ${item.id}` },
             completed: index,
-            total: CensorState.queue.length,
+            total,
             tracker,
             defaultMessage: censorT('censor.autoCensorRunning', null, 'Running auto-censor...'),
             primaryLabel: censorT('censor.autoCensorPrimary', null, 'Auto Censor')
         }));
         await runDetectionForImage(item, true, executionPlan); // true = silent/no-refresh
-    }
+        count += 1;
+    });
 
     showLoading(false);
     renderQueue();
@@ -3697,7 +4009,7 @@ async function runAutoCensorBatch() {
     showToast(
         executionPlan.switchMessage
             ? censorT('censor.batchProcessingCompleteAutoRestored', null, 'Batch processing complete. The app auto-restored the privacy detector before running.')
-            : censorT('censor.batchProcessingComplete', null, 'Batch processing complete'),
+            : censorT('censor.batchProcessingComplete', { count, total: result.total }, 'Batch processing complete'),
         'success'
     );
 }
@@ -4339,7 +4651,7 @@ async function applyBatchRename() {
 }
 
 function openSaveOptionsPopup() {
-    if (CensorState.queue.length === 0) {
+    if (!hasCensorQueueWork()) {
         window.App.showToast(censorT('censor.noImagesToSave', null, 'No images in queue to save'), 'error');
         return;
     }
@@ -4403,6 +4715,51 @@ function markGalleryRefreshAfterCensorSave(result) {
     }
 }
 
+async function saveCensorQueueItem(item, formatOption = 'png', metadataOption = 'strip', allowOverwrite = false) {
+    const folder = CensorState.outputFolder;
+    const baseName = item.outputFilename.replace(/\.[^/.]+$/, '');
+    const finalFilename = `${baseName}.${formatOption}`;
+
+    if (shouldUseProxyEditMode(item) || (Array.isArray(item.editOperations) && item.editOperations.length > 0)) {
+        const result = await window.App.API.post('/api/censor/save-operations', {
+            original_image_id: item.id,
+            operations: item.editOperations || [],
+            filename: finalFilename,
+            output_folder: folder,
+            metadata_option: metadataOption,
+            output_format: formatOption,
+            allow_overwrite: allowOverwrite,
+        });
+        markGalleryRefreshAfterCensorSave(result);
+        return result;
+    }
+
+    let dataUrl;
+
+    if (item.currentDataUrl) {
+        // Already edited - canvas data has no metadata
+        dataUrl = item.currentDataUrl;
+    } else if (metadataOption === 'strip') {
+        // No edits but stripping metadata - draw through canvas to remove all metadata
+        dataUrl = await stripMetadataViaCanvas(item.originalUrl);
+    } else {
+        // Keep metadata - use original blob (metadata preserved in blob)
+        dataUrl = await urlToDataUrl(item.originalUrl);
+    }
+
+    const result = await window.App.API.post('/api/censor/save-data', {
+        image_data: dataUrl,
+        filename: finalFilename,
+        output_folder: folder,
+        metadata_option: metadataOption,
+        output_format: formatOption,
+        original_image_id: item.id,
+        allow_overwrite: allowOverwrite,
+    });
+    markGalleryRefreshAfterCensorSave(result);
+    return result;
+}
+
 async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', allowOverwrite = false) {
     const folder = CensorState.outputFolder;
     if (!folder) {
@@ -4418,70 +4775,32 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
     showLoading(true, censorT('censor.loadingSavePreparing', null, 'Save · preparing files...'));
 
     let count = 0;
-    for (let index = 0; index < CensorState.queue.length; index += 1) {
-        const item = CensorState.queue[index];
+    let failedCount = 0;
+    await processCensorBatchItems(async (item, { index, total }) => {
         try {
             showLoading(true, window.App.buildProgressText({
                 progress: { message: item.outputFilename || item.originalFilename || `Image ${item.id}` },
                 completed: index,
-                total: CensorState.queue.length,
+                total,
                 tracker,
                 defaultMessage: censorT('censor.loadingSaveDefault', null, 'Saving processed images...'),
                 primaryLabel: censorT('censor.loadingSavePrimary', null, 'Save')
             }));
 
-            // Update filename extension to match selected format
-            const baseName = item.outputFilename.replace(/\.[^/.]+$/, '');
-            const finalFilename = `${baseName}.${formatOption}`;
-
-            if (shouldUseProxyEditMode(item) || (Array.isArray(item.editOperations) && item.editOperations.length > 0)) {
-                const result = await window.App.API.post('/api/censor/save-operations', {
-                    original_image_id: item.id,
-                    operations: item.editOperations || [],
-                    filename: finalFilename,
-                    output_folder: folder,
-                    metadata_option: metadataOption,
-                    output_format: formatOption,
-                    allow_overwrite: allowOverwrite,
-                });
-                markGalleryRefreshAfterCensorSave(result);
-            } else {
-                let dataUrl;
-
-                if (item.currentDataUrl) {
-                    // Already edited - canvas data has no metadata
-                    dataUrl = item.currentDataUrl;
-                } else if (metadataOption === 'strip') {
-                    // No edits but stripping metadata - draw through canvas to remove all metadata
-                    dataUrl = await stripMetadataViaCanvas(item.originalUrl);
-                } else {
-                    // Keep metadata - use original blob (metadata preserved in blob)
-                    dataUrl = await urlToDataUrl(item.originalUrl);
-                }
-
-                const result = await window.App.API.post('/api/censor/save-data', {
-                    image_data: dataUrl,
-                    filename: finalFilename,
-                    output_folder: folder,
-                    metadata_option: metadataOption,
-                    output_format: formatOption,
-                    original_image_id: item.id,
-                    allow_overwrite: allowOverwrite,
-                });
-                markGalleryRefreshAfterCensorSave(result);
-            }
+            await saveCensorQueueItem(item, formatOption, metadataOption, allowOverwrite);
             item.batchStatus = 'saved';
             count++;
         } catch (e) {
             Logger.error(e);
             item.batchStatus = 'failed';
             item.batchError = `${censorT('censor.saveFailed', null, 'Save failed')}: ${e?.message || e || ''}`.trim();
+            failedCount += 1;
         }
-    }
+    });
 
     showLoading(false);
     renderQueue();
-    const { failedCount } = _summarizeBatchFailures();
+    failedCount = Math.max(failedCount, _summarizeBatchFailures().failedCount);
     if (failedCount > 0) {
         window.App.showToast(
             censorT('censor.savePartial', {
@@ -4970,7 +5289,7 @@ function toggleShowChanges() {
 
 async function runDetectionForAll() {
     const { showToast } = window.App;
-    if (CensorState.queue.length === 0) {
+    if (!hasCensorQueueWork()) {
         showToast(censorT('censor.queueEmpty', null, 'Queue is empty'), 'error');
         return;
     }
@@ -4985,14 +5304,14 @@ async function runDetectionForAll() {
     const tracker = window.App.createProgressTracker();
     showLoading(true, censorT('censor.loadingDetectPreparing', null, 'Detect All · preparing queue...'));
     let count = 0;
+    let failedCount = 0;
 
-    for (let index = 0; index < CensorState.queue.length; index += 1) {
-        const item = CensorState.queue[index];
+    const result = await processCensorBatchItems(async (item, { index, total }) => {
         try {
             showLoading(true, window.App.buildProgressText({
                 progress: { message: item.originalFilename || item.outputFilename || `Image ${item.id}` },
                 completed: index,
-                total: CensorState.queue.length,
+                total,
                 tracker,
                 defaultMessage: censorT('censor.loadingDetectDefault', null, 'Running detection...'),
                 primaryLabel: censorT('censor.loadingDetectPrimary', null, 'Detect All')
@@ -5004,14 +5323,15 @@ async function runDetectionForAll() {
             Logger.error('Detection error for', item.id, e);
             item.batchStatus = 'failed';
             item.batchError = `${censorT('censor.detectFailed', null, 'Detection failed')}: ${e?.message || e || ''}`.trim();
+            failedCount += 1;
         }
-    }
+    });
 
     showLoading(false);
     renderQueue();
     if (CensorState.activeId) loadCanvasImage(CensorState.activeId);
-    const { failedCount } = _summarizeBatchFailures();
-    const total = CensorState.queue.length;
+    failedCount = Math.max(failedCount, _summarizeBatchFailures().failedCount);
+    const total = result.total;
     if (failedCount > 0) {
         showToast(
             censorT('censor.detectPartial', {

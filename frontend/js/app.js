@@ -43,7 +43,13 @@ function throttle(func, limit) {
 // i18n helper for app-level dynamic strings.
 function appT(key, fallback, params) {
     const val = window.I18n?.t?.(key, params);
-    return (val && val !== key) ? val : (fallback || key);
+    let text = (val && val !== key) ? val : (fallback || key);
+    if (params && typeof params === 'object') {
+        for (const [paramKey, paramValue] of Object.entries(params)) {
+            text = String(text).split(`{${paramKey}}`).join(String(paramValue));
+        }
+    }
+    return text;
 }
 
 function normalizeAspectRatioFilter(value) {
@@ -200,6 +206,7 @@ function createDefaultFilterState() {
         generators: [...ALL_GENERATORS],
         ratings: ['general', 'sensitive', 'questionable', 'explicit'],
         tags: [],
+        tagMode: 'and',
         checkpoints: [],
         loras: [],
         prompts: [],
@@ -218,7 +225,12 @@ function createDefaultFilterState() {
         brightnessMin: null,
         brightnessMax: null,
         colorTemperature: '',
-        brightnessDistribution: ''
+        brightnessDistribution: '',
+        excludeTags: [],
+        excludeGenerators: [],
+        excludeRatings: [],
+        excludeCheckpoints: [],
+        excludeLoras: [],
     };
 }
 
@@ -231,6 +243,7 @@ function cloneFilterState(filters) {
         generators: [...(source.generators || [])],
         ratings: [...(source.ratings || [])],
         tags: [...(source.tags || [])],
+        tagMode: source.tagMode || 'and',
         checkpoints: [...(source.checkpoints || [])],
         loras: [...(source.loras || [])],
         prompts: [...(source.prompts || [])],
@@ -253,7 +266,12 @@ function cloneFilterState(filters) {
             : '',
         brightnessDistribution: ['left_heavy', 'right_heavy', 'middle_heavy', 'edge_heavy', 'balanced'].includes(String(source.brightnessDistribution || '').trim())
             ? String(source.brightnessDistribution || '').trim()
-            : ''
+            : '',
+        excludeTags: [...(source.excludeTags || [])],
+        excludeGenerators: [...(source.excludeGenerators || [])],
+        excludeRatings: [...(source.excludeRatings || [])],
+        excludeCheckpoints: [...(source.excludeCheckpoints || [])],
+        excludeLoras: [...(source.excludeLoras || [])],
     };
 }
 
@@ -302,6 +320,7 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
         generators: [...(source.generators || [])],
         ratings: [...(source.ratings || [])],
         tags: [...(source.tags || [])],
+        tagMode: source.tagMode || 'and',
         checkpoints: [...(source.checkpoints || [])]
             .map(normalizeCheckpointFilterValue)
             .filter(Boolean),
@@ -341,6 +360,7 @@ function buildAdvancedFilterContract(filters = AppState?.filters || createDefaul
         generators: request.generators,
         ratings: request.ratings,
         tags: request.tags,
+        tagMode: request.tagMode,
         checkpoints: request.checkpoints,
         loras: request.loras,
         prompts: request.prompts,
@@ -358,6 +378,11 @@ function buildAdvancedFilterContract(filters = AppState?.filters || createDefaul
         brightnessMax: request.brightnessMax ?? null,
         colorTemperature: request.colorTemperature || '',
         brightnessDistribution: request.brightnessDistribution || '',
+        excludeTags: request.excludeTags,
+        excludeGenerators: request.excludeGenerators,
+        excludeRatings: request.excludeRatings,
+        excludeCheckpoints: request.excludeCheckpoints,
+        excludeLoras: request.excludeLoras,
     };
 }
 
@@ -427,13 +452,66 @@ const AppSelectionStore = window.SelectionStore?.create(createDefaultSelectionSt
 window.AppFilterStore = AppFilterStore;
 window.AppSelectionStore = AppSelectionStore;
 window.AppFilterAccess = {
-    /** Returns the current selection as an int[] (empty array if nothing selected). */
+    getSelectionState() {
+        const state = AppSelectionStore?.getState?.();
+        if (!state) return null;
+        return {
+            selectedIds: state.selectedIds,
+            scope: state.scope,
+            filterKey: state.filterKey || null,
+            selectionToken: state.selectionToken || null,
+            selectionTotal: state.selectionTotal || 0,
+        };
+    },
+    getActiveSelectionToken() {
+        const state = AppSelectionStore?.getState?.();
+        if (!state || state.scope !== 'filtered' || !state.selectionToken) return null;
+        const isActive = typeof window.App?.isFilteredSelectionActiveForCurrentFilters === 'function'
+            ? window.App.isFilteredSelectionActiveForCurrentFilters()
+            : (typeof isFilteredSelectionActiveForCurrentFilters === 'function'
+                ? isFilteredSelectionActiveForCurrentFilters()
+                : true);
+        if (isActive) {
+            return state.selectionToken;
+        }
+        return null;
+    },
+    getSelectionTotal() {
+        const state = AppSelectionStore?.getState?.();
+        return Number(state?.selectionTotal || 0);
+    },
+    /** Returns only explicitly selected IDs already held by the UI. */
     getSelectedImageIds() {
         const state = AppSelectionStore?.getState?.();
         if (!state) return [];
         if (state.selectedIds instanceof Set) return Array.from(state.selectedIds);
         if (Array.isArray(state.selectedIds)) return [...state.selectedIds];
         return [];
+    },
+    async resolveSelectedImageIds(limit = 5000) {
+        const token = this.getActiveSelectionToken();
+        const normalizedLimit = Math.max(1, Math.min(Number(limit) || 5000, 10000));
+        if (token && window.App?.API?.getSelectionChunk) {
+            const ids = [];
+            let offset = 0;
+            let hasMore = true;
+            while (hasMore && ids.length < normalizedLimit) {
+                const chunk = await window.App.API.getSelectionChunk(token, {
+                    offset,
+                    limit: Math.min(5000, normalizedLimit - ids.length),
+                });
+                const chunkIds = Array.isArray(chunk?.image_ids) ? chunk.image_ids : [];
+                ids.push(...chunkIds.map(Number).filter((id) => Number.isFinite(id) && id > 0));
+                hasMore = Boolean(chunk?.has_more);
+                offset = Number(chunk?.next_offset || 0);
+                if (!offset && hasMore) break;
+            }
+            return ids;
+        }
+        return this.getSelectedImageIds()
+            .map((id) => Number(id))
+            .filter((id) => Number.isFinite(id) && id > 0)
+            .slice(0, normalizedLimit);
     },
     /**
      * Returns a URLSearchParams instance for the current gallery filter,
@@ -447,6 +525,7 @@ window.AppFilterAccess = {
         if (filters.generators?.length) params.set('generators', filters.generators.join(','));
         if (filters.ratings?.length) params.set('ratings', filters.ratings.join(','));
         if (filters.tags?.length) params.set('tags', filters.tags.join(','));
+        if (filters.tagMode && filters.tagMode !== 'and') params.set('tag_mode', filters.tagMode);
         if (filters.checkpoints?.length) params.set('checkpoints', filters.checkpoints.join(','));
         if (filters.loras?.length) params.set('loras', filters.loras.join(','));
         if (filters.prompts?.length) params.set('prompts', filters.prompts.join(','));
@@ -989,6 +1068,7 @@ const API = {
         }
 
         if (filters.tags?.length) params.set('tags', filters.tags.join(','));
+        if (filters.tagMode && filters.tagMode !== 'and') params.set('tag_mode', filters.tagMode);
         if (filters.checkpoints?.length) params.set('checkpoints', filters.checkpoints.join(','));
         if (filters.loras?.length) params.set('loras', filters.loras.join(','));
         if (filters.prompts?.length) params.set('prompts', filters.prompts.join(','));
@@ -1345,10 +1425,11 @@ const API = {
         return this.post('/api/move', payload);
     },
 
-    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operation = 'move', artist = null, promptMatchMode = 'exact') {
+    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operation = 'move', artist = null, promptMatchMode = 'exact', tagMode = 'and', excludeFilters = null) {
         return this.post('/api/batch-move', {
             generators,
             tags,
+            tag_mode: tagMode === 'or' ? 'or' : 'and',
             ratings,
             checkpoints,
             loras,
@@ -1363,16 +1444,22 @@ const API = {
             aspect_ratio: normalizeAspectRatioFilter(dimensions?.aspectRatio) || null,
             min_aesthetic: aesthetic?.min ?? null,
             max_aesthetic: aesthetic?.max ?? null,
+            exclude_tags: excludeFilters?.tags || null,
+            exclude_generators: excludeFilters?.generators || null,
+            exclude_ratings: excludeFilters?.ratings || null,
+            exclude_checkpoints: excludeFilters?.checkpoints || null,
+            exclude_loras: excludeFilters?.loras || null,
             destination_folder: destinationFolder,
             operation,
         });
     },
 
     // Manual Sort
-    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'copy', artist = null, replaceExisting = false, promptMatchMode = 'exact') {
+    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'copy', artist = null, replaceExisting = false, promptMatchMode = 'exact', tagMode = 'and', excludeFilters = null) {
         return this.post('/api/sort/start', {
             generators,
             tags,
+            tag_mode: tagMode === 'or' ? 'or' : 'and',
             ratings,
             checkpoints,
             loras,
@@ -1392,6 +1479,11 @@ const API = {
             // passed. Locked by Principle #11 in docs/AI_PRINCIPLES.md.
             operation_mode: operationMode || 'copy',
             replace_existing: Boolean(replaceExisting),
+            exclude_tags: excludeFilters?.tags || null,
+            exclude_generators: excludeFilters?.generators || null,
+            exclude_ratings: excludeFilters?.ratings || null,
+            exclude_checkpoints: excludeFilters?.checkpoints || null,
+            exclude_loras: excludeFilters?.loras || null,
         });
     },
 
@@ -1425,6 +1517,12 @@ const API = {
         }
         if (options.imageOverrides && typeof options.imageOverrides === 'object') {
             payload.image_overrides = options.imageOverrides;
+        }
+        if (options.captionTransforms && typeof options.captionTransforms === 'object') {
+            payload.caption_transforms = options.captionTransforms;
+        }
+        if (typeof options.normalizeTagUnderscores === 'boolean') {
+            payload.normalize_tag_underscores = options.normalizeTagUnderscores;
         }
         if (options.selectionToken) {
             payload.selection_token = options.selectionToken;
@@ -3562,6 +3660,17 @@ function switchView(viewName) {
         }
         detachGalleryPaginationListener();
         cancelGalleryImageLoad();
+        // Stop hidden-gallery thumbnail downloads from occupying the browser's
+        // per-host connection pool. This keeps Dataset Maker's folder browser
+        // responsive even when the gallery was still loading many thumbnails.
+        const galleryGrid = $('#gallery-grid');
+        if (galleryGrid) {
+            galleryGrid.querySelectorAll('img').forEach((img) => {
+                img.removeAttribute('srcset');
+                img.removeAttribute('src');
+            });
+        }
+        AppState.galleryNeedsRefresh = true;
     }
 
     // Cleanup censor view listeners when leaving
@@ -3963,7 +4072,8 @@ async function moveOrCopySelectedGalleryImages(operation = 'move') {
 // from the Tag Images modal's Color tab).
 async function sendSelectionToDatasetMaker() {
     const ids = getSelectedGalleryIds();
-    if (!ids || ids.length === 0) {
+    const hasFilteredToken = Boolean(getActiveSelectionTokenForActions());
+    if ((!ids || ids.length === 0) && !hasFilteredToken) {
         showToast(
             appT('selection.emptyHint',
                  'Select images, or choose all current filter matches.'),
@@ -3980,9 +4090,12 @@ async function sendSelectionToDatasetMaker() {
         return;
     }
     try {
-        // addImageIds switches to the dataset view and shows its own toast
-        // when items were added, so we don't double-toast on success.
-        await window.DatasetMaker.addImageIds(ids, { switchView: true, showToast: true });
+        // Route through DatasetMaker so filtered-selection tokens resolve
+        // into real image IDs and the user lands on Dataset tab 1.
+        const resolvedIds = typeof window.DatasetMaker._resolveGallerySelectionIds === 'function'
+            ? await window.DatasetMaker._resolveGallerySelectionIds()
+            : ids;
+        await window.DatasetMaker.addImageIds(resolvedIds, { switchView: true, showToast: true });
     } catch (exc) {
         showToast(
             appT('selection.sendToDatasetMakerFailed',
@@ -4736,23 +4849,12 @@ function initEventListeners() {
         if (getSelectedGalleryCount() > 0) {
             const token = getActiveSelectionTokenForActions();
             if (token) {
-                // Resolve filtered selection into actual IDs
-                try {
-                    const ids = [];
-                    let offset = 0;
-                    const pageSize = 5000;
-                    let done = false;
-                    while (!done) {
-                        const chunk = await API.getSelectionChunk(token, { offset, limit: pageSize });
-                        const batch = Array.isArray(chunk?.image_ids) ? chunk.image_ids : [];
-                        ids.push(...batch);
-                        if (batch.length < pageSize) done = true;
-                        else offset += pageSize;
-                    }
-                    if (ids.length) addToCensorQueue(ids);
-                } catch (_) {
-                    addToCensorQueue(getSelectedGalleryIds());
-                }
+                addToCensorQueue({
+                    selectionToken: token,
+                    total: getSelectedGalleryCount(),
+                    filterKey: AppState.selectionFilterKey || null,
+                    visibleImageIds: normalizeSelectionImageIds((AppState.images || []).map((image) => image?.id)),
+                });
                 return;
             }
             addToCensorQueue(getSelectedGalleryIds());
@@ -8542,7 +8644,20 @@ async function executeBatchExport() {
         const imageOverrides = window.V321Integration?.collectEditedCaptionOverrides
             ? window.V321Integration.collectEditedCaptionOverrides()
             : null;
-        const result = await API.exportTagsBatch(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy, { selectionToken, outputMode, templateOptions, imageOverrides });
+        const captionTransforms = window.V321Integration?.collectCaptionTransforms
+            ? window.V321Integration.collectCaptionTransforms()
+            : null;
+        const normalizeTagUnderscores = $('#batch-export-normalize-underscores')
+            ? !!$('#batch-export-normalize-underscores').checked
+            : undefined;
+        const result = await API.exportTagsBatch(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy, {
+            selectionToken,
+            outputMode,
+            templateOptions,
+            imageOverrides,
+            captionTransforms,
+            normalizeTagUnderscores,
+        });
 
         $('#batch-export-progress-fill').style.width = '100%';
 
@@ -8733,6 +8848,9 @@ async function openFilterModal(options = {}) {
     });
     $$('input[name="prompt-match-mode"]').forEach(radio => {
         radio.checked = radio.value === normalizePromptMatchMode(filterState.promptMatchMode);
+    });
+    $$('input[name="tag-match-mode"]').forEach(radio => {
+        radio.checked = radio.value === (filterState.tagMode || 'and');
     });
     // Don't prefill prompt search bar with AppState.filters.search —
     // the prompt search is for adding prompt filters, not for text search
@@ -10260,6 +10378,8 @@ function applyModalFilters() {
     if (promptSearch) promptSearch.value = '';
     const promptMatchRadio = $('input[name="prompt-match-mode"]:checked');
     filterState.promptMatchMode = normalizePromptMatchMode(promptMatchRadio?.value);
+    const tagModeRadio = $('input[name="tag-match-mode"]:checked');
+    filterState.tagMode = tagModeRadio?.value || 'and';
 
     // Get dimension filters
     const minWidth = parseInt($('#filter-min-width')?.value, 10) || null;
@@ -10417,20 +10537,8 @@ function saveFilterPreset(name) {
 
     const presets = getFilterPresets();
     presets[name.trim()] = {
-        generators: AppState.filters.generators,
-        ratings: AppState.filters.ratings,
-        tags: AppState.filters.tags,
-        checkpoints: AppState.filters.checkpoints,
-        loras: AppState.filters.loras,
-        prompts: AppState.filters.prompts,
+        ...cloneFilterState(AppState.filters),
         promptMatchMode: normalizePromptMatchMode(AppState.filters.promptMatchMode),
-        search: AppState.filters.search,
-        artist: AppState.filters.artist,
-        minWidth: AppState.filters.minWidth,
-        maxWidth: AppState.filters.maxWidth,
-        minHeight: AppState.filters.minHeight,
-        maxHeight: AppState.filters.maxHeight,
-        aspectRatio: AppState.filters.aspectRatio
     };
 
     try {
@@ -10562,27 +10670,8 @@ function clearArtistFilter() {
 function saveFilterState() {
     try {
         const stateToSave = {
-            generators: AppState.filters.generators,
-            ratings: AppState.filters.ratings,
-            tags: AppState.filters.tags,
-            checkpoints: AppState.filters.checkpoints,
-            loras: AppState.filters.loras,
-            prompts: AppState.filters.prompts,
+            ...cloneFilterState(AppState.filters),
             promptMatchMode: normalizePromptMatchMode(AppState.filters.promptMatchMode),
-            search: AppState.filters.search,
-            artist: AppState.filters.artist,
-            sortBy: AppState.filters.sortBy,
-            minWidth: AppState.filters.minWidth,
-            maxWidth: AppState.filters.maxWidth,
-            minHeight: AppState.filters.minHeight,
-            maxHeight: AppState.filters.maxHeight,
-            aspectRatio: AppState.filters.aspectRatio,
-            minAesthetic: AppState.filters.minAesthetic,
-            maxAesthetic: AppState.filters.maxAesthetic,
-            brightnessMin: AppState.filters.brightnessMin,
-            brightnessMax: AppState.filters.brightnessMax,
-            colorTemperature: AppState.filters.colorTemperature,
-            brightnessDistribution: AppState.filters.brightnessDistribution,
         };
         localStorage.setItem(FILTER_STATE_KEY, JSON.stringify(stateToSave));
     } catch (e) {
@@ -11003,8 +11092,26 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-function addToCensorQueue(imageIds = []) {
-    const normalizedIds = Array.from(
+function normalizeCensorQueueSource(source) {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) {
+        return null;
+    }
+
+    const selectionToken = String(source.selectionToken || source.selection_token || '').trim();
+    if (!selectionToken) return null;
+
+    return {
+        selectionToken,
+        total: Math.max(0, Number(source.total ?? source.selectionTotal ?? source.selection_total ?? 0) || 0),
+        exactTotal: source.exactTotal !== false && source.exact_total !== false,
+        filterKey: typeof source.filterKey === 'string' ? source.filterKey : null,
+        visibleImageIds: normalizeSelectionImageIds(source.visibleImageIds || source.visible_image_ids || []),
+    };
+}
+
+function addToCensorQueue(imageIds = [], options = {}) {
+    const tokenSource = normalizeCensorQueueSource(imageIds);
+    const queuePayload = tokenSource || Array.from(
         new Set(
             (Array.isArray(imageIds) ? imageIds : [imageIds])
                 .map((value) => Number(value))
@@ -11018,7 +11125,7 @@ function addToCensorQueue(imageIds = []) {
 
     const runtimeHandler = window.CensorEdit?.addToQueue;
     if (typeof runtimeHandler === 'function') {
-        return runtimeHandler(normalizedIds);
+        return runtimeHandler(queuePayload, options);
     }
 
     switchView('censor');

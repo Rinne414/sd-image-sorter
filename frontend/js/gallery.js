@@ -941,6 +941,7 @@ const Gallery = {
             genColors[generatorValue] || genColors.unknown,
             true
         );
+        this._attachGalleryOrderBadge(item, index);
 
         // Add event listeners
         item.addEventListener('click', (event) => {
@@ -1031,6 +1032,18 @@ const Gallery = {
             grid.querySelectorAll('.skeleton-gallery-item').forEach(el => el.remove());
             grid.querySelectorAll('.skeleton-item').forEach(el => el.remove());
         }
+    },
+
+    _attachGalleryOrderBadge(item, index) {
+        if (!item) return;
+        const order = Number(index) + 1;
+        if (!Number.isFinite(order) || order <= 0) return;
+        item.querySelector('.gallery-item-order')?.remove();
+        const badge = document.createElement('span');
+        badge.className = 'gallery-item-order';
+        badge.textContent = String(order);
+        badge.title = this._t('gallery.order', null, 'Current gallery order');
+        item.appendChild(badge);
     },
 
     setImages(images) {
@@ -1322,6 +1335,7 @@ const Gallery = {
             genColors[generatorValue] || genColors.unknown,
             false
         );
+        this._attachGalleryOrderBadge(item, index);
 
         // Prevent the browser from dragging the rendered thumbnail/webp directly.
         // We always want the gallery card drag payload to point at the original file URL.

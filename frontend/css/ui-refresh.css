@@ -1381,7 +1381,6 @@ textarea:focus,
     }
 
     .nav-actions #btn-refresh-ui,
-    .nav-actions #btn-mass-tag-editor,
     .nav-actions #btn-app-update {
         display: none;
     }
@@ -3240,8 +3239,14 @@ textarea:focus,
     border-radius: 999px;
     border: 2px solid rgba(255, 255, 255, 0.78);
     background: rgba(15, 23, 42, 0.5);
-    z-index: 4;
+    z-index: 6;
     pointer-events: none;
+}
+
+.gallery-grid.selection-mode .gallery-item-order {
+    top: 12px;
+    left: 42px;
+    z-index: 5;
 }
 
 .gallery-grid.selection-mode .gallery-item.selected::before {
@@ -4364,6 +4369,10 @@ html.lang-zh #view-censor .queue-action-btn span {
         transform: translateX(-104%);
         transition: transform 180ms ease;
         z-index: 1400;
+    }
+
+    .mobile-filter-toggle {
+        display: flex;
     }
 
     .filter-sidebar.mobile-visible {
@@ -5951,7 +5960,8 @@ html.lang-zh #view-censor .queue-action-btn span {
         max-height: calc(100vh - 24px);
     }
 
-    .modal-actions {
+    .modal-sticky-actions,
+    .filter-modal-actions {
         position: sticky;
         bottom: -20px;
         padding-top: 12px;

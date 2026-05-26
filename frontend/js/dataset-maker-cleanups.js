@@ -1,16 +1,15 @@
 /**
  * Dataset Maker — category cleanup tag lists (Phase 2E).
  *
- * Curated starter lists per danbooru-style category. Each click of a
- * cleanup button APPENDS the category's tags to the blacklist textarea
- * (deduplicating so the user can click multiple times safely without
- * inflating the field).
+ * Curated category matchers for danbooru-style tags. Each click looks at
+ * the live Dataset Maker vocabulary and only appends tags that are actually
+ * present in the current captions.
  *
- * Lists are deliberately conservative — the most common 30-60 tags per
- * category, not every possible token. Power users can extend the
- * blacklist textarea afterwards. Lists target danbooru-style WD14 tag
- * naming (underscores, lower case); the underscore-to-space step in
- * the export engine handles both forms when matching.
+ * The lists are deliberately conservative match targets, not blind
+ * blacklist payloads. Power users can extend the blacklist textarea
+ * afterwards. Lists target danbooru-style WD14 tag naming (underscores,
+ * lower case); the underscore-to-space step in the export engine handles
+ * both forms when matching.
  *
  * Why this lives in its own file: keeps the four parts of the dataset-maker
  * module under ~400 lines each so each chunk is reviewable.
@@ -107,10 +106,52 @@
 
     // ============== Implementation ==============
 
-    function appendToBlacklist(category) {
+    function normTag(s) {
+        return String(s).replace(/_/g, ' ').toLowerCase().trim();
+    }
+
+    function getLiveCategoryTags(category) {
+        const matchers = new Set((TAG_CATEGORIES[category] || []).map(normTag));
+        if (matchers.size === 0) return [];
+        const vocab = typeof DM._getDatasetVocabItems === 'function'
+            ? DM._getDatasetVocabItems()
+            : [];
+        return (vocab || [])
+            .map((it) => ({
+                tag: String(it.tag || '').trim(),
+                count: Number(it.count || 0),
+            }))
+            .filter((it) => it.tag && matchers.has(normTag(it.tag)))
+            .sort((a, b) => (b.count - a.count) || a.tag.localeCompare(b.tag))
+            .map((it) => it.tag);
+    }
+
+    function syncCleanupButtonCounts() {
+        const byId = {
+            'btn-dataset-cleanup-quality': 'quality',
+            'btn-dataset-cleanup-identity': 'identity',
+            'btn-dataset-cleanup-appearance': 'appearance',
+            'btn-dataset-cleanup-poses': 'poses',
+            'btn-dataset-cleanup-copyright': 'copyright',
+        };
+        for (const [id, category] of Object.entries(byId)) {
+            const btn = document.getElementById(id);
+            if (!btn) continue;
+            const count = getLiveCategoryTags(category).length;
+            btn.dataset.matchCount = String(count);
+            const base = btn.dataset.baseLabel || btn.textContent.trim();
+            btn.dataset.baseLabel = base;
+            btn.textContent = count > 0 ? `${base} (${count})` : base;
+        }
+    }
+
+    async function appendToBlacklist(category) {
+        if (typeof DM._refreshVocab === 'function' && (!DM._getDatasetVocabItems || DM._getDatasetVocabItems().length === 0)) {
+            await DM._refreshVocab();
+        }
         const ta = document.getElementById('dataset-blacklist');
         if (!ta) return 0;
-        const tagsToAdd = TAG_CATEGORIES[category] || [];
+        const tagsToAdd = getLiveCategoryTags(category);
         if (tagsToAdd.length === 0) return 0;
 
         const existing = (ta.value || '')
@@ -119,13 +160,12 @@
             .filter(Boolean);
         // Normalise existing entries for comparison so we don't add
         // duplicates that differ only by underscore vs space or case.
-        const norm = (s) => String(s).replace(/_/g, ' ').toLowerCase().trim();
-        const seen = new Set(existing.map(norm));
+        const seen = new Set(existing.map(normTag));
 
         const added = [];
         for (const tag of tagsToAdd) {
-            if (seen.has(norm(tag))) continue;
-            seen.add(norm(tag));
+            if (seen.has(normTag(tag))) continue;
+            seen.add(normTag(tag));
             added.push(tag);
         }
         if (added.length === 0) return 0;
@@ -134,18 +174,42 @@
         ta.value = merged.join(', ');
         // Trigger input handlers (caption refresh, etc.)
         ta.dispatchEvent(new Event('input', { bubbles: true }));
+
+        const common = document.getElementById('dataset-common-tags');
+        if (common) {
+            const removeSet = new Set(added.map(normTag));
+            const kept = (common.value || '')
+                .split(',')
+                .map(s => s.trim())
+                .filter(Boolean)
+                .filter(tag => !removeSet.has(normTag(tag)));
+            if (kept.join(', ') !== (common.value || '').trim()) {
+                common.value = kept.join(', ');
+                common.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
+        syncCleanupButtonCounts();
         return added.length;
     }
+
+    DM._refreshCleanupButtons = syncCleanupButtonCounts;
 
     DM._initCleanupButtons = function () {
         const wire = (id, category) => {
             const btn = document.getElementById(id);
             if (!btn) return;
-            btn.addEventListener('click', () => {
-                const added = appendToBlacklist(category);
+            if (!btn.dataset.baseLabel) btn.dataset.baseLabel = btn.textContent.trim();
+            btn.addEventListener('click', async () => {
+                btn.disabled = true;
+                let added = 0;
+                try {
+                    added = await appendToBlacklist(category);
+                } finally {
+                    btn.disabled = false;
+                }
                 if (added === 0) {
                     this._toast(this._t('dataset.cleanupAlreadyAdded',
-                        'Those {category} tags are already in the blacklist.',
+                        'No matching {category} tags from the current dataset need to be added.',
                         { category: this._t(`dataset.cleanup${category[0].toUpperCase()}${category.slice(1)}Label`, category) }),
                         'info', 3000);
                 } else {
@@ -161,6 +225,7 @@
         wire('btn-dataset-cleanup-appearance', 'appearance');
         wire('btn-dataset-cleanup-poses', 'poses');
         wire('btn-dataset-cleanup-copyright', 'copyright');
+        syncCleanupButtonCounts();
     };
 
     // Wire on view init (DM.init runs once when the view first becomes active)

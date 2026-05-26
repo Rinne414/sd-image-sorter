@@ -3079,6 +3079,151 @@ test.describe('Smoke Tests', () => {
     }).toEqual([11, 22, 33])
   })
 
+  test('filtered selection sent to censor should keep a token-backed queue window', async ({ page }) => {
+    const visibleImages = [
+      buildMockGalleryImage(11, { filename: 'censor-filter-window-1.png' }),
+      buildMockGalleryImage(22, { filename: 'censor-filter-window-2.png' }),
+    ]
+    const tokenImages = [
+      ...visibleImages,
+      buildMockGalleryImage(33, { filename: 'censor-filter-token-3.png' }),
+      buildMockGalleryImage(44, { filename: 'censor-filter-token-4.png' }),
+    ]
+    let selectionChunkRequests = 0
+    const exportDataPayloads: any[] = []
+    const detectImageIds: number[] = []
+
+    await page.route('**/api/image-thumbnail/**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'image/svg+xml', body: MOCK_IMAGE_SVG })
+    })
+    await page.route('**/api/image-file/**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'image/svg+xml', body: MOCK_IMAGE_SVG })
+    })
+
+    await page.route('**/api/images**', async (route) => {
+      const pathname = new URL(route.request().url()).pathname
+      if (pathname !== '/api/images') {
+        await route.continue()
+        return
+      }
+
+      await route.fulfill({
+        json: {
+          images: visibleImages,
+          total: tokenImages.length,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+
+    await page.route('**/api/images/selection-token', async (route) => {
+      await route.fulfill({
+        json: {
+          selection_token: 'filtered-censor-token',
+          total_estimate: tokenImages.length,
+          exact_total: true,
+          chunk_size: 2000,
+        },
+      })
+    })
+
+    await page.route('**/api/images/selection-chunk**', async (route) => {
+      selectionChunkRequests += 1
+      await route.fulfill({
+        json: {
+          image_ids: tokenImages.map((image) => image.id),
+          offset: 0,
+          limit: 2000,
+          next_offset: null,
+          has_more: false,
+        },
+      })
+    })
+
+    await page.route('**/api/images/export-data', async (route) => {
+      const payload = route.request().postDataJSON()
+      exportDataPayloads.push(payload)
+      const ids = Array.isArray(payload.image_ids)
+        ? payload.image_ids
+        : tokenImages.map((image) => image.id)
+      await route.fulfill({
+        json: {
+          images: tokenImages
+            .filter((image) => ids.includes(image.id))
+            .map((image) => ({ ...image, tags: [] })),
+          missing_ids: [],
+          count: ids.length,
+          total: tokenImages.length,
+          offset: payload.offset || 0,
+          limit: payload.limit || ids.length,
+          next_offset: null,
+          has_more: false,
+          source: payload.selection_token ? 'selection_token' : 'image_ids',
+          exact_total: true,
+        },
+      })
+    })
+
+    await page.route('**/api/censor/models', async (route) => {
+      await route.fulfill({
+        json: {
+          recommended_backend: 'nudenet',
+          models: [
+            { id: 'legacy', name: 'YOLO', available: false, files: [] },
+            { id: 'nudenet', name: 'NudeNet', available: true },
+          ],
+        },
+      })
+    })
+
+    await page.route('**/api/censor/detect', async (route) => {
+      const payload = route.request().postDataJSON()
+      detectImageIds.push(Number(payload.image_id))
+      await route.fulfill({
+        json: {
+          detections: [],
+          image_width: 64,
+          image_height: 64,
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await page.locator('#btn-toggle-select').click()
+    await page.locator('#btn-select-all').click()
+    await page.locator('#btn-send-to-censor').click()
+
+    await expect(page.locator('#view-censor.active')).toBeVisible()
+    await expect(page.locator('#censor-queue-list .queue-thumb-v2')).toHaveCount(2)
+    expect(selectionChunkRequests).toBe(0)
+
+    const queueState = await page.evaluate(() => {
+      const state = (window as any).__CENSOR_STATE__
+      return {
+        token: state?.tokenQueueSource?.selectionToken,
+        total: state?.tokenQueueSource?.total,
+        loadedCount: state?.tokenQueueSource?.loadedCount,
+        queueLength: state?.queue?.length,
+      }
+    })
+    expect(queueState).toMatchObject({
+      token: 'filtered-censor-token',
+      total: tokenImages.length,
+      loadedCount: visibleImages.length,
+      queueLength: visibleImages.length,
+    })
+    expect(exportDataPayloads[0]).toMatchObject({ image_ids: [11, 22] })
+    expect(exportDataPayloads[0].selection_token).toBeUndefined()
+
+    await page.locator('#btn-auto-detect-all-sidebar').click()
+    await expect.poll(() => detectImageIds).toEqual([11, 22, 33, 44])
+    expect(exportDataPayloads.some((payload) => payload.selection_token === 'filtered-censor-token')).toBe(true)
+    expect(selectionChunkRequests).toBe(0)
+  })
+
   test('should populate prompt lab tag set selector from API data', async ({ page }) => {
     await page.route('**/api/prompts/categories', async (route) => {
       await route.fulfill({

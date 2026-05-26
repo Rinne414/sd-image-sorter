@@ -6,10 +6,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
+import traceback
 import urllib.request
 from pathlib import Path
 from typing import Iterable
@@ -120,6 +122,8 @@ EXCLUDED_PREFIXES = (
     ".claude",
     ".vscode",
     "artifacts",
+    "data",
+    "backend/data",
     "backend/venv",
     "backend/favorites",
     "backend/thumbnails",
@@ -1080,6 +1084,42 @@ exec "$PYTHON_CMD" main.py --port "$APP_PORT"
     return portable_sh
 
 
+def prune_bundled_linux_python_for_release(python_dir: Path) -> None:
+    """Remove bundled Linux Python files that are unsafe or useless in release archives."""
+    # The PBS tarball includes a full terminfo database with many alias
+    # symlinks, including a few self-referential entries. They are irrelevant
+    # for this browser-based app and can make tarfile.add() fail with
+    # ELOOP ("Too many levels of symbolic links") when the release is built
+    # from WSL on a Windows-mounted drive. Drop them before re-archiving.
+    terminfo_dir = python_dir / "share" / "terminfo"
+    if not (terminfo_dir.exists() or terminfo_dir.is_symlink()):
+        return
+
+    print(f"[release] Pruning bundled Linux terminfo aliases: {terminfo_dir}")
+
+    def remove_no_follow(path: Path) -> None:
+        try:
+            with os.scandir(path) as entries:
+                for entry in entries:
+                    entry_path = Path(entry.path)
+                    if entry.is_dir(follow_symlinks=False):
+                        remove_no_follow(entry_path)
+                        entry_path.rmdir()
+                    else:
+                        entry_path.unlink(missing_ok=True)
+        except NotADirectoryError:
+            path.unlink(missing_ok=True)
+            return
+
+    remove_no_follow(terminfo_dir)
+    terminfo_dir.rmdir()
+
+
+def is_linux_python_terminfo_member(member_name: str) -> bool:
+    normalized = member_name.replace("\\", "/").lstrip("./")
+    return normalized == "python/share/terminfo" or normalized.startswith("python/share/terminfo/")
+
+
 def prepare_bundled_linux_python(stage_dir: Path, arch: str = "x86_64") -> None:
     """Download and extract python-build-standalone into ``<stage_dir>/python``.
 
@@ -1132,12 +1172,16 @@ def prepare_bundled_linux_python(stage_dir: Path, arch: str = "x86_64") -> None:
                 raise RuntimeError(
                     f"Tarball member escapes stage directory: {member.name!r}"
                 )
-        tar.extractall(stage_dir)
+        for member in tar.getmembers():
+            if is_linux_python_terminfo_member(member.name):
+                continue
+            tar.extract(member, stage_dir)
 
     if not (python_dir / "bin" / "python3").exists():
         raise RuntimeError(
             f"Expected python-build-standalone to drop python/bin/python3 inside {python_dir}"
         )
+    prune_bundled_linux_python_for_release(python_dir)
 
 
 def stage_archive(name: str, version: str, seven_zip: Path | None, *, populate) -> Path:
@@ -1242,6 +1286,10 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
         - everything else → 0o644
         """
         name = info.name
+        if name == "sd-image-sorter/python/share/terminfo" or name.startswith(
+            "sd-image-sorter/python/share/terminfo/"
+        ):
+            return None
         if info.isdir():
             info.mode = 0o755
             return info
@@ -1300,6 +1348,7 @@ def main() -> int:
         assets = build_release_assets(args.version, args.split_size_mb)
     except Exception as exc:  # pragma: no cover - release script should fail loudly
         print(f"[release] FAILED: {exc}", file=sys.stderr)
+        traceback.print_exc()
         return 1
 
     print("[release] Built assets:")

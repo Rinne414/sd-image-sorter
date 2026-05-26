@@ -23,6 +23,7 @@ from metadata_parser import verify_image_readable
 from services.state_compat import MutableStateProxy
 from services.tag_export_service import (
     count_selection_token_ids,
+    export_tags_combined_request,
     export_tags_batch_request,
     iter_selection_token_id_chunks,
     render_export_preview,
@@ -948,6 +949,10 @@ class BatchTagExportRequest(BaseModel):
     template_options: Optional[Dict[str, Any]] = Field(default=None)
     # v3.2.1: per-image caption overrides {image_id: caption_text} from live-preview edits
     image_overrides: Optional[Dict[int, str]] = Field(default=None)
+    # Compact all-image rules from the v321 caption editor. This keeps
+    # "add/remove from all" working for selection tokens without sending
+    # every image ID or caption to the browser.
+    caption_transforms: Optional[Dict[str, Any]] = Field(default=None)
     # v3.2.1 follow-up: convert danbooru-style tag underscores to spaces while
     # preserving ``score_*`` prefixes (LoRA-trainer convention). ``None``
     # (default) means "follow the per-content-mode default" — tag modes
@@ -975,6 +980,7 @@ class ExportPreviewRequest(BaseModel):
     replace_rules: Dict[str, str] = Field(default_factory=dict)
     max_tags: int = 0
     append: List[str] = Field(default_factory=list)
+    caption_transforms: Optional[Dict[str, Any]] = Field(default=None)
     quality_override: Optional[str] = None
     safety_override: Optional[str] = None
     rating_override: Optional[str] = None
@@ -983,7 +989,10 @@ class ExportPreviewRequest(BaseModel):
     # actually write. None = follow preset default.
     underscore_to_space_override: Optional[bool] = None
     preserve_underscore_prefixes_override: Optional[List[str]] = None
-    content_mode: Optional[str] = None
+
+
+class CombinedTagExportRequest(BatchTagExportRequest):
+    """Request model for one-file combined export rendered server-side."""
 
 
 class TaggingService:
@@ -1148,6 +1157,8 @@ class TaggingService:
                 "disabled_reason": config.get("disabled_reason", ""),
                 "default_threshold": config.get("default_threshold"),
                 "default_character_threshold": config.get("default_character_threshold"),
+                "default_copyright_threshold": config.get("default_copyright_threshold"),
+                "default_max_tags_per_image": config.get("default_max_tags_per_image"),
                 "speed": TAGGER_MODEL_HINTS.get(name, {}).get("speed", "Unknown"),
                 "memory": TAGGER_MODEL_HINTS.get(name, {}).get("memory", "Unknown"),
                 "best_for": TAGGER_MODEL_HINTS.get(name, {}).get("best_for", "General use"),
@@ -1160,6 +1171,13 @@ class TaggingService:
                 "quality_score": TAGGER_MODEL_HINTS.get(name, {}).get("quality_score", 3),
                 "speed_score": TAGGER_MODEL_HINTS.get(name, {}).get("speed_score", 3),
                 "stability_score": TAGGER_MODEL_HINTS.get(name, {}).get("stability_score", 3),
+                "runtime_backend": config.get("runtime_backend", "wd14"),
+                "smart_tag_role": "natural_language" if config.get("runtime_backend") == "toriigate" else "booru",
+                "prepare_model_id": (
+                    "toriigate" if config.get("runtime_backend") == "toriigate"
+                    else "oppai-oracle" if config.get("runtime_backend") == "oppai-oracle"
+                    else "wd14"
+                ),
                 "runtime_safety_tier": config.get("runtime_safety_tier", "balanced"),
                 "minimum_total_ram_gb": config.get("minimum_total_ram_gb"),
                 "minimum_available_ram_gb": config.get("minimum_available_ram_gb"),
@@ -1874,6 +1892,15 @@ class TaggingService:
             "overwrite_policy": result.get("overwrite_policy", request.overwrite_policy),
             "output_mode": result.get("output_mode", getattr(request, "output_mode", "folder")),
         }
+
+    def export_tags_combined(self, request: CombinedTagExportRequest) -> Dict[str, Any]:
+        """Render selected captions into one server-side downloadable file."""
+        id_chunks = None
+        total = None
+        if request.selection_token:
+            id_chunks = iter_selection_token_id_chunks(request.selection_token)
+            total = count_selection_token_ids(request.selection_token)
+        return export_tags_combined_request(request, id_chunks=id_chunks, total=total)
 
     def export_preview(self, request: ExportPreviewRequest) -> Dict[str, Any]:
         """Render export captions for the live preview modal."""

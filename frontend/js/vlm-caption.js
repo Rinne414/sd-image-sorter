@@ -281,8 +281,10 @@ const VLMCaption = {
     // --- Batch Captioning ---
 
     async startBatchCaption(imageIdsOverride = null) {
-        const imageIds = Array.isArray(imageIdsOverride) ? imageIdsOverride : this._getTargetImageIds();
-        if (!imageIds.length) {
+        const batchTarget = Array.isArray(imageIdsOverride)
+            ? this._buildImageIdsBatchTarget(imageIdsOverride)
+            : this._getBatchTarget();
+        if (!batchTarget || !batchTarget.count) {
             this._showBatchUI(false, { keepPanel: true });
             this._showStatus('vlm-batch-status', 'No images to caption. Select images or use current view.', 'error');
             return;
@@ -292,7 +294,7 @@ const VLMCaption = {
             const resp = await fetch('/api/vlm/caption-batch', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image_ids: imageIds }),
+                body: JSON.stringify(batchTarget.payload),
             });
             if (resp.status === 409) {
                 this._showBatchUI(false, { keepPanel: true });
@@ -565,23 +567,37 @@ const VLMCaption = {
 
     // --- Helpers ---
 
-    _getTargetImageIds() {
-        // Use selected images if available, else all filtered images
-        const state = window.App?.SelectionStore?.getState?.() || window.App?.AppState || null;
-        const selectedIds = state?.selectedIds instanceof Set
-            ? Array.from(state.selectedIds)
-            : Array.isArray(state?.selectedIds)
-                ? state.selectedIds
-                : Array.from(state?.selectedIds || []);
-        const normalizedSelectedIds = selectedIds
+    _buildImageIdsBatchTarget(imageIds) {
+        const normalized = (Array.isArray(imageIds) ? imageIds : [])
             .map((id) => Number(id))
-            .filter((id) => Number.isFinite(id) && id > 0);
-        if (normalizedSelectedIds.length) {
-            return normalizedSelectedIds;
+            .filter((id) => Number.isFinite(id) && id > 0)
+            .slice(0, 1000000);
+        return {
+            count: normalized.length,
+            payload: { image_ids: normalized },
+        };
+    },
+
+    _getBatchTarget() {
+        const selectionToken = window.AppFilterAccess?.getActiveSelectionToken?.();
+        if (selectionToken) {
+            const total = Number(window.AppFilterAccess?.getSelectionTotal?.() || 0);
+            return {
+                count: total > 0 ? total : 1,
+                payload: { selection_token: selectionToken },
+            };
         }
-        // Fall back to all images in current view
-        const imgs = document.querySelectorAll('.gallery-item[data-id]');
-        return Array.from(imgs).map(el => parseInt(el.dataset.id)).filter(n => !isNaN(n));
+
+        const selected = window.AppFilterAccess?.getSelectedImageIds?.() || [];
+        if (selected.length) return this._buildImageIdsBatchTarget(selected);
+
+        const state = window.App?.AppState || window.AppState || {};
+        const loaded = Array.isArray(state.images) ? state.images : [];
+        const loadedIds = loaded
+            .map((item) => Number(item?.id))
+            .filter((id) => Number.isFinite(id) && id > 0)
+            .slice(0, 1000000);
+        return this._buildImageIdsBatchTarget(loadedIds);
     },
 
     _extractFailedImageIds(data) {

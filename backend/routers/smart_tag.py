@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from services.smart_tag_service import (
     cancel_active_job,
+    get_caption_results_page,
     get_active_job,
     get_job,
     start_smart_tag_job,
@@ -27,17 +28,25 @@ from services.smart_tag_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/smart-tag", tags=["smart-tag"])
+SMART_TAG_MAX_EXPLICIT_SOURCES = 5_000_000
 
 
 class SmartTagStartRequest(BaseModel):
     """Body for POST /api/smart-tag/start.
 
-    image_ids is required; everything else has a sensible default that
-    matches LoraHub's "Style LoRA, replace, auto-strip noise" preset.
+    image_ids and/or image_paths is required; everything else has a sensible
+    default for a LoRA-ready smart caption pass.
     """
     model_config = ConfigDict(extra="ignore")
 
-    image_ids: List[int] = Field(..., min_length=1, max_length=50_000)
+    image_ids: List[int] = Field(default_factory=list, max_length=SMART_TAG_MAX_EXPLICIT_SOURCES)
+    selection_token: Optional[str] = Field(default=None, min_length=1, max_length=16384)
+    image_paths: List[str] = Field(default_factory=list, max_length=SMART_TAG_MAX_EXPLICIT_SOURCES)
+    dataset_scan_token: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    dataset_manifest_token: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    dataset_session_token: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    scan_token: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    session_token: Optional[str] = Field(default=None, min_length=1, max_length=128)
     training_purpose: str = "general"
     trigger_word: str = ""
     merge_strategy: str = "replace"
@@ -47,8 +56,11 @@ class SmartTagStartRequest(BaseModel):
     enable_vlm: bool = True
     tagger_model: str = ""
     use_gpu: bool = True
-    general_threshold: float = 0.35
-    character_threshold: float = 0.85
+    general_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    character_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    copyright_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    max_tags_per_image: Optional[int] = Field(default=None, ge=0, le=2000)
+    natural_language_mode: str = "vlm"
     # v3.2.2 T-power-PR2 (D): multi-tagger consensus.
     taggers: List[Dict[str, Any]] = Field(default_factory=list)
     consensus_min: int = Field(default=2, ge=1, le=10)
@@ -89,6 +101,19 @@ def progress(job_id: Optional[str] = None) -> Dict[str, Any]:
     snapshot = job.snapshot()
     snapshot["active"] = job.status in ("queued", "running")
     return snapshot
+
+
+@router.get("/results")
+def results(
+    job_id: str,
+    offset: int = 0,
+    limit: int = 1000,
+) -> Dict[str, Any]:
+    """Return path-source caption results for a completed Smart Tag job."""
+    job = get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Smart Tag job not found.")
+    return get_caption_results_page(job, offset=offset, limit=limit)
 
 
 @router.post("/cancel")

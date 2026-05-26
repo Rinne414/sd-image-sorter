@@ -34,16 +34,21 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import threading
+import time
+import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
 import database as db
-from services.dataset_naming import plan_renames
+from config import ALLOWED_IMAGE_EXTENSIONS
+from services.dataset_naming import NamingError, render_stem, resolve_collision
 from services.dataset_session_service import (
-    resolve_paths_for_dataset,
+    count_scan_manifest_paths,
+    iter_scan_manifest_paths,
     virtual_image_record_for_path,
 )
 from services.tag_export_service import build_sidecar_content
@@ -55,14 +60,25 @@ logger = logging.getLogger(__name__)
 
 VALID_IMAGE_OPS = {"copy", "move"}
 VALID_OVERWRITE_POLICIES = {"unique", "overwrite", "skip"}
+# Kept as a compatibility symbol for older imports/tests. It is no longer a
+# processing cap; large exports must flow through scan/selection tokens and
+# stream in backend chunks instead of failing validation at an arbitrary count.
+DATASET_EXPORT_MAX_ITEMS = None
+DATASET_EXPORT_RESPONSE_ITEM_LIMIT = 2_000
+DATASET_EXPORT_RECENT_ERROR_LIMIT = 20
+DATASET_EXPORT_DB_CHUNK_SIZE = 500
+_EXPORT_ACTIVE_STATUSES = {"starting", "running", "cancelling"}
+
+ExportProgressCallback = Callable[[Dict[str, Any]], None]
 
 
 class DatasetExportRequest(BaseModel):
     """Request schema for ``POST /api/dataset/export``.
 
-    Bounds are deliberately tight: the Dataset Maker UI only ships a
-    user's curated selection (typically a few hundred images for a LoRA),
-    not the whole library. The 10k cap is a generous safety bound.
+    The UI still behaves best for curated LoRA-sized sets, but the API no
+    longer imposes an arbitrary image-count cap. Large folder imports should
+    use ``dataset_scan_tokens`` so the browser sends only a compact token while
+    the backend streams the manifest.
 
     Two import sources are supported in one request:
 
@@ -76,8 +92,9 @@ class DatasetExportRequest(BaseModel):
 
     At least one of the two must be non-empty.
     """
-    image_ids: List[int] = Field(default_factory=list, max_length=10_000)
-    image_paths: List[str] = Field(default_factory=list, max_length=10_000)
+    image_ids: List[int] = Field(default_factory=list)
+    image_paths: List[str] = Field(default_factory=list)
+    dataset_scan_tokens: List[Dict[str, Any]] = Field(default_factory=list, max_length=100)
     output_folder: str = Field(min_length=1, max_length=4096)
 
     naming_pattern: str = Field(default="{filename}", min_length=1, max_length=200)
@@ -107,75 +124,183 @@ class DatasetExportItemResult(BaseModel):
 
 
 class DatasetExportResponse(BaseModel):
-    status: str  # "ok" | "partial" | "failed"
+    status: str  # "ok" | "partial" | "failed" | "cancelled"
     exported: int
     skipped: int
     error_count: int
     output_folder: str
     items: List[DatasetExportItemResult]
+    total_items: int = 0
+    items_truncated: bool = False
     error_messages: List[str]
 
 
-def export_dataset(request: DatasetExportRequest) -> DatasetExportResponse:
-    """Run a full dataset export. Atomic-per-row: a per-image failure
-    leaves earlier rows intact and adds an error entry for the failed
-    one."""
+class DatasetExportStartResponse(BaseModel):
+    status: str
+    job_id: str
+    total: int
+    output_folder: str
+    message: str
+
+
+def _requested_item_count(request: DatasetExportRequest) -> int:
+    total = len(list(_iter_unique_image_ids(request.image_ids or []))) + len(request.image_paths or [])
+    for source in request.dataset_scan_tokens or []:
+        token = str((source or {}).get("scan_token") or (source or {}).get("token") or "")
+        if not token:
+            continue
+        exclude_paths = (source or {}).get("exclude_paths") or []
+        try:
+            total += count_scan_manifest_paths(token, exclude_paths)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return total
+
+
+def _iter_chunks(values: Iterable[Any], chunk_size: int) -> Iterator[List[Any]]:
+    chunk: List[Any] = []
+    for value in values or []:
+        chunk.append(value)
+        if len(chunk) >= chunk_size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
+
+
+def _iter_unique_image_ids(values: Iterable[Any]) -> Iterator[int]:
+    seen: set[int] = set()
+    for raw in values or []:
+        try:
+            image_id = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if image_id <= 0 or image_id in seen:
+            continue
+        seen.add(image_id)
+        yield image_id
+
+
+def _resolve_dataset_image_path(raw_path: Any) -> Optional[str]:
+    if not raw_path:
+        return None
+    try:
+        resolved = Path(normalize_user_path(str(raw_path))).resolve()
+    except (OSError, ValueError):
+        return None
+    if not resolved.exists() or not resolved.is_file():
+        return None
+    if resolved.suffix.lower() not in ALLOWED_IMAGE_EXTENSIONS:
+        return None
+    return str(resolved)
+
+
+def _iter_requested_scan_paths(request: DatasetExportRequest) -> Iterator[str]:
+    for source in request.dataset_scan_tokens or []:
+        token = str((source or {}).get("scan_token") or (source or {}).get("token") or "")
+        if not token:
+            continue
+        exclude_paths = {
+            str(path)
+            for path in ((source or {}).get("exclude_paths") or [])
+            if str(path)
+        }
+        try:
+            for path in iter_scan_manifest_paths(token):
+                if str(path) not in exclude_paths:
+                    yield str(path)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _plan_single_rename(
+    record: Dict[str, Any],
+    *,
+    output_folder: Path,
+    pattern: str,
+    trigger: str,
+    overwrite_policy: str,
+    index: int,
+    used_image_paths: set[str],
+) -> Tuple[Optional[Path], Optional[Path], Optional[str]]:
+    image_filename = record.get("filename") or os.path.basename(record.get("path") or "")
+    ext = os.path.splitext(image_filename)[1] or ".png"
+    try:
+        stem = render_stem(
+            pattern,
+            image_filename=image_filename,
+            index=index,
+            trigger=trigger,
+            generator=str(record.get("generator") or ""),
+        )
+    except NamingError as exc:
+        return None, None, f"naming_error: {exc}"
+
+    image_path = resolve_collision(
+        output_folder,
+        stem,
+        ext,
+        used_paths=used_image_paths,
+        overwrite_policy=overwrite_policy,
+    )
+    if image_path is None:
+        return None, None, "existing" if overwrite_policy == "skip" else "too_many_collisions"
+    return image_path, output_folder / f"{image_path.stem}.txt", None
+
+
+def _validate_export_request(request: DatasetExportRequest) -> Path:
     if request.image_op not in VALID_IMAGE_OPS:
         raise HTTPException(status_code=400, detail=f"Invalid image_op: {request.image_op!r}")
     if request.overwrite_policy not in VALID_OVERWRITE_POLICIES:
         raise HTTPException(status_code=400, detail=f"Invalid overwrite_policy: {request.overwrite_policy!r}")
-    if not request.image_ids and not request.image_paths:
-        raise HTTPException(status_code=400, detail="Must supply image_ids or image_paths (or both).")
+    if not request.image_ids and not request.image_paths and not request.dataset_scan_tokens:
+        raise HTTPException(status_code=400, detail="Must supply image_ids, image_paths, or dataset_scan_tokens.")
 
-    # ---- Validate output folder ----
     output_folder_norm = normalize_user_path(request.output_folder)
     is_valid, error = validate_folder_path(output_folder_norm, allow_create=True)
     if not is_valid:
         raise HTTPException(status_code=400, detail=error or "Invalid output folder")
     output_path = Path(output_folder_norm)
     output_path.mkdir(parents=True, exist_ok=True)
+    return output_path
 
-    # ---- Load image records + tags for DB-source items ----
-    image_ids = list(dict.fromkeys(int(i) for i in request.image_ids))  # de-dup, preserve order
-    images_map = db.get_images_by_ids(image_ids) if image_ids else {}
-    tags_map = db.get_image_tags_map(image_ids) if image_ids else {}
 
-    image_records: list[Dict[str, Any]] = []
-    missing_ids: list[int] = []
-    for image_id in image_ids:
-        record = images_map.get(image_id)
-        if not record:
-            missing_ids.append(image_id)
-            continue
-        image_records.append(dict(record))  # copy so we can mutate safely
+def export_dataset(
+    request: DatasetExportRequest,
+    *,
+    progress_callback: Optional[ExportProgressCallback] = None,
+    cancel_event: Optional[threading.Event] = None,
+) -> DatasetExportResponse:
+    """Run a full dataset export. Atomic-per-row: a per-image failure
+    leaves earlier rows intact and adds an error entry for the failed
+    one.
 
-    # ---- Build virtual records for path-source items ----
-    # These are images the user imported directly from a folder via the
-    # Dataset Maker session — they have no DB row, so we synthesise a
-    # record shaped like a DB row (path, filename, no tags, no metadata).
-    # The naming + caption pipeline then handles them identically.
-    invalid_paths: list[str] = []
-    for raw_path in request.image_paths:
-        resolved_list = resolve_paths_for_dataset([raw_path])
-        if not resolved_list:
-            invalid_paths.append(raw_path)
-            continue
-        abs_path = resolved_list[0]
-        record = virtual_image_record_for_path(abs_path)
-        # Tag map for this synthetic record is empty by default; the
-        # caller is expected to supply a full caption override via
-        # image_overrides[abs_path]. This matches the small-gallery
-        # design (local captions live in localStorage, NOT in the DB).
-        image_records.append(record)
+    This is intentionally streaming: scan-token folder exports, explicit path
+    exports, and DB-backed image exports are consumed in chunks. The backend no
+    longer builds a 100k-1M ``image_records`` list or a full rename plan before
+    the first file is written.
+    """
+    output_path = _validate_export_request(request)
+    requested_total = _requested_item_count(request)
+    if requested_total <= 0:
+        raise HTTPException(status_code=400, detail="Dataset export has no images after exclusions.")
+    if progress_callback:
+        progress_callback({
+            "step": "loading",
+            "current": 0,
+            "total": requested_total,
+            "message": f"Preparing {requested_total} dataset items...",
+            "output_folder": str(output_path),
+        })
 
-    # ---- Plan the rename ----
-    plan = plan_renames(
-        image_records,
-        output_folder=output_path,
-        pattern=request.naming_pattern,
-        trigger=request.trigger,
-        overwrite_policy=request.overwrite_policy,
-    )
+    if progress_callback:
+        progress_callback({
+            "step": "exporting",
+            "current": 0,
+            "total": requested_total,
+            "message": "Exporting dataset...",
+            "output_folder": str(output_path),
+        })
 
     # ---- Pre-build common state for caption rendering ----
     blacklist_set = {str(t).strip().lower() for t in request.blacklist if str(t).strip()}
@@ -224,25 +349,92 @@ def export_dataset(request: DatasetExportRequest) -> DatasetExportResponse:
     exported = 0
     skipped = 0
     error_count = 0
+    processed = 0
+    total_expected = requested_total
+    total_items = 0
+    cancelled = False
+    export_index = 0
+    used_image_paths: set[str] = set()
+    seen_virtual_paths: set[str] = set()
 
-    for record, dst_image_path, dst_caption_path, skip_reason in plan:
+    def _append_item(item: DatasetExportItemResult) -> None:
+        nonlocal total_items
+        total_items += 1
+        if len(items) < DATASET_EXPORT_RESPONSE_ITEM_LIMIT:
+            items.append(item)
+
+    def _add_error(message: str) -> None:
+        if len(error_messages) < 50:
+            error_messages.append(message)
+        elif len(error_messages) == 50:
+            error_messages.append("... and more errors (showing first 50)")
+
+    def _emit(message: str, current_item: Optional[str] = None) -> None:
+        if not progress_callback:
+            return
+        progress_callback({
+            "step": "exporting",
+            "current": processed,
+            "total": total_expected,
+            "exported": exported,
+            "skipped": skipped,
+            "errors": error_count,
+            "current_item": current_item,
+            "recent_errors": error_messages[-DATASET_EXPORT_RECENT_ERROR_LIMIT:],
+            "message": message,
+            "output_folder": str(output_path),
+            "items_truncated": total_items > DATASET_EXPORT_RESPONSE_ITEM_LIMIT,
+        })
+
+    def _record_error(image_id: int, src_image_path: str, message: str, current_item: Optional[str] = None) -> None:
+        nonlocal error_count, processed
+        error_count += 1
+        processed += 1
+        _add_error(message)
+        _append_item(DatasetExportItemResult(
+            image_id=int(image_id or 0),
+            src_image_path=src_image_path or None,
+            error=message,
+        ))
+        _emit(f"Failed {current_item or src_image_path or image_id} ({processed}/{total_expected})", current_item)
+
+    def _record_skip(image_id: int, src_image_path: str, reason: str, current_item: Optional[str] = None) -> None:
+        nonlocal skipped, processed
+        skipped += 1
+        processed += 1
+        _append_item(DatasetExportItemResult(
+            image_id=int(image_id or 0),
+            src_image_path=src_image_path or None,
+            skipped_reason=reason,
+        ))
+        _emit(f"Skipped {current_item or src_image_path or image_id} ({processed}/{total_expected})", current_item)
+
+    def _export_record(record: Dict[str, Any], tags: Optional[List[Any]] = None) -> bool:
+        nonlocal exported, skipped, error_count, processed, export_index, cancelled
+        if cancel_event is not None and cancel_event.is_set():
+            cancelled = True
+            return False
+
+        export_index += 1
         image_id = int(record.get("id") or 0)
         src_image_path = str(record.get("path") or "")
+        filename = os.path.basename(src_image_path) or f"image-{image_id}"
+        dst_image_path, dst_caption_path, skip_reason = _plan_single_rename(
+            record,
+            output_folder=output_path,
+            pattern=request.naming_pattern,
+            trigger=request.trigger,
+            overwrite_policy=request.overwrite_policy,
+            index=export_index,
+            used_image_paths=used_image_paths,
+        )
 
         if dst_image_path is None:
-            # Naming engine declined this row (skip policy hit, or
-            # too-many collisions, or naming_error)
-            items.append(DatasetExportItemResult(
-                image_id=image_id,
-                src_image_path=src_image_path,
-                skipped_reason=skip_reason,
-            ))
-            skipped += 1
-            continue
+            _record_skip(image_id, src_image_path, skip_reason or "skipped", filename)
+            return True
 
         # Render caption
         try:
-            tags = tags_map.get(image_id, [])
             # Resolve override: int-key for DB-backed records, path-key
             # for small-gallery synthetic records (image_id=0 sentinel).
             override_text = ""
@@ -255,34 +447,22 @@ def export_dataset(request: DatasetExportRequest) -> DatasetExportResponse:
             else:
                 caption_text = build_sidecar_content(
                     record,
-                    tags,
+                    tags or [],
                     content_mode="template",
                     blacklist=blacklist_set,
                     template_options=template_options,
                     normalize_tag_underscores=request.normalize_tag_underscores,
                 )
         except Exception as exc:  # pragma: no cover - defensive
-            error_count += 1
             msg = f"caption render failed for image {image_id}: {exc}"
-            error_messages.append(msg)
-            items.append(DatasetExportItemResult(
-                image_id=image_id,
-                src_image_path=src_image_path,
-                error=msg,
-            ))
-            continue
+            _record_error(image_id, src_image_path, msg, filename)
+            return True
 
         # Verify source exists
         if not src_image_path or not os.path.exists(src_image_path):
-            error_count += 1
             msg = f"image {image_id} source missing on disk: {src_image_path!r}"
-            error_messages.append(msg)
-            items.append(DatasetExportItemResult(
-                image_id=image_id,
-                src_image_path=src_image_path,
-                error=msg,
-            ))
-            continue
+            _record_error(image_id, src_image_path, msg, filename)
+            return True
 
         # Copy / move the image
         try:
@@ -295,67 +475,104 @@ def export_dataset(request: DatasetExportRequest) -> DatasetExportResponse:
                 shutil.move(src_image_path, str(dst_image_path))
                 # Keep the DB in sync so the next time the user opens
                 # the gallery the image isn't shown as "missing on disk".
-                try:
-                    db.update_image_path(image_id, str(dst_image_path))
-                except Exception:
-                    pass
+                if image_id:
+                    try:
+                        db.update_image_path(image_id, str(dst_image_path))
+                    except Exception:
+                        pass
         except Exception as exc:
-            error_count += 1
             msg = f"failed to {request.image_op} image {image_id}: {exc}"
-            error_messages.append(msg)
-            items.append(DatasetExportItemResult(
-                image_id=image_id,
-                src_image_path=src_image_path,
-                error=msg,
-            ))
-            continue
+            _record_error(image_id, src_image_path, msg, filename)
+            return True
 
         # Write caption sidecar
         try:
             with open(dst_caption_path, "w", encoding="utf-8") as handle:
                 handle.write(caption_text)
         except Exception as exc:
-            error_count += 1
             msg = f"failed to write caption for image {image_id}: {exc}"
-            error_messages.append(msg)
             # Don't remove the image — the user can re-run the export and
             # the existing image acts as the resume marker. But do report
             # the partial state in the per-item entry.
-            items.append(DatasetExportItemResult(
+            error_count += 1
+            processed += 1
+            _add_error(msg)
+            _append_item(DatasetExportItemResult(
                 image_id=image_id,
                 src_image_path=src_image_path,
                 dst_image_path=str(dst_image_path),
                 error=msg,
             ))
-            continue
+            _emit(f"Failed to write caption for {filename} ({processed}/{total_expected})", filename)
+            return True
 
         exported += 1
-        items.append(DatasetExportItemResult(
+        processed += 1
+        _append_item(DatasetExportItemResult(
             image_id=image_id,
             src_image_path=src_image_path,
             dst_image_path=str(dst_image_path),
             dst_caption_path=str(dst_caption_path),
         ))
+        _emit(f"Exported {filename} ({processed}/{total_expected})", filename)
+        return True
 
-    # Surface the missing-from-DB rows
-    for missing_id in missing_ids:
-        error_count += 1
-        msg = f"image {missing_id} not found in library"
-        error_messages.append(msg)
-        items.append(DatasetExportItemResult(image_id=missing_id, error=msg))
+    def _process_path_source(raw_path: Any) -> bool:
+        nonlocal cancelled
+        if cancel_event is not None and cancel_event.is_set():
+            cancelled = True
+            return False
+        normalized_path = _resolve_dataset_image_path(raw_path)
+        display_path = str(raw_path or "")
+        if not normalized_path:
+            _record_error(0, display_path, f"path not a readable image: {display_path}", os.path.basename(display_path))
+            return True
+        if normalized_path in seen_virtual_paths:
+            _record_skip(0, normalized_path, "duplicate", os.path.basename(normalized_path))
+            return True
+        seen_virtual_paths.add(normalized_path)
+        record = virtual_image_record_for_path(normalized_path, read_dimensions=False)
+        return _export_record(record, [])
 
-    # Surface the invalid path-source rows so the frontend can show them.
-    for invalid_path in invalid_paths:
-        error_count += 1
-        msg = f"path not a readable image: {invalid_path}"
-        error_messages.append(msg)
-        items.append(DatasetExportItemResult(
-            image_id=0,
-            src_image_path=invalid_path,
-            error=msg,
-        ))
+    _emit(f"Exporting 0/{total_expected} images...")
 
-    if error_count == 0:
+    # ---- DB-source records in bounded chunks ----
+    for image_id_chunk in _iter_chunks(_iter_unique_image_ids(request.image_ids or []), DATASET_EXPORT_DB_CHUNK_SIZE):
+        if cancelled:
+            break
+        if cancel_event is not None and cancel_event.is_set():
+            cancelled = True
+            break
+        ids = [int(image_id) for image_id in image_id_chunk]
+        images_map = db.get_images_by_ids(ids) if ids else {}
+        tags_map = db.get_image_tags_map(ids) if ids else {}
+        for image_id in ids:
+            if cancel_event is not None and cancel_event.is_set():
+                cancelled = True
+                break
+            record = images_map.get(image_id)
+            if not record:
+                _record_error(image_id, "", f"image {image_id} not found in library", f"id-{image_id}")
+                continue
+            if not _export_record(dict(record), tags_map.get(image_id, []) or []):
+                break
+
+    # ---- Explicit path-source records ----
+    if not cancelled:
+        for raw_path in request.image_paths or []:
+            if not _process_path_source(raw_path):
+                break
+
+    # ---- Token-backed folder manifest records ----
+    if not cancelled:
+        for raw_path in _iter_requested_scan_paths(request):
+            if not _process_path_source(raw_path):
+                break
+
+    if cancelled:
+        status = "cancelled"
+        _emit(f"Cancelled at {processed}/{total_expected}. Exported {exported} images.")
+    elif error_count == 0:
         status = "ok"
     elif exported == 0:
         status = "failed"
@@ -369,5 +586,248 @@ def export_dataset(request: DatasetExportRequest) -> DatasetExportResponse:
         error_count=error_count,
         output_folder=str(output_path),
         items=items,
-        error_messages=error_messages[:50],  # cap to avoid huge payloads
+        total_items=total_items,
+        items_truncated=total_items > len(items),
+        error_messages=error_messages,
+    )
+
+
+_EXPORT_JOB_LOCK = threading.Lock()
+_EXPORT_JOB_RUN_ID = 0
+_EXPORT_JOB_THREAD: Optional[threading.Thread] = None
+_EXPORT_JOB_CANCEL_EVENT: Optional[threading.Event] = None
+_EXPORT_JOB_PROGRESS: Dict[str, Any] = {
+    "status": "idle",
+    "job_id": None,
+    "step": "idle",
+    "current": 0,
+    "total": 0,
+    "exported": 0,
+    "skipped": 0,
+    "errors": 0,
+    "current_item": None,
+    "recent_errors": [],
+    "output_folder": "",
+    "items_truncated": False,
+    "result": None,
+    "message": "No dataset export is running.",
+    "started_at": None,
+    "updated_at": time.time(),
+}
+
+
+def _copy_progress(progress: Dict[str, Any]) -> Dict[str, Any]:
+    snapshot = dict(progress)
+    snapshot["recent_errors"] = list(progress.get("recent_errors") or [])
+    result = progress.get("result")
+    if isinstance(result, DatasetExportResponse):
+        snapshot["result"] = result.model_dump()
+    elif result is not None:
+        snapshot["result"] = result
+    return snapshot
+
+
+def get_dataset_export_progress(job_id: Optional[str] = None) -> Dict[str, Any]:
+    with _EXPORT_JOB_LOCK:
+        if job_id and _EXPORT_JOB_PROGRESS.get("job_id") not in {None, job_id}:
+            raise HTTPException(status_code=404, detail="Dataset export job not found")
+        return _copy_progress(_EXPORT_JOB_PROGRESS)
+
+
+def cancel_dataset_export(job_id: Optional[str] = None) -> Dict[str, Any]:
+    global _EXPORT_JOB_PROGRESS
+    with _EXPORT_JOB_LOCK:
+        if job_id and _EXPORT_JOB_PROGRESS.get("job_id") != job_id:
+            raise HTTPException(status_code=404, detail="Dataset export job not found")
+
+        status = str(_EXPORT_JOB_PROGRESS.get("status") or "idle")
+        if status not in _EXPORT_ACTIVE_STATUSES:
+            return {
+                "status": status,
+                "job_id": _EXPORT_JOB_PROGRESS.get("job_id"),
+                "message": "No dataset export job is running.",
+            }
+
+        if _EXPORT_JOB_CANCEL_EVENT is not None:
+            _EXPORT_JOB_CANCEL_EVENT.set()
+
+        current = int(_EXPORT_JOB_PROGRESS.get("current", 0) or 0)
+        total = int(_EXPORT_JOB_PROGRESS.get("total", 0) or 0)
+        _EXPORT_JOB_PROGRESS = {
+            **_EXPORT_JOB_PROGRESS,
+            "status": "cancelling",
+            "step": "cancelling",
+            "message": f"Cancelling dataset export... ({current}/{total})" if total else "Cancelling dataset export...",
+            "updated_at": time.time(),
+        }
+        return {
+            "status": "cancelling",
+            "job_id": _EXPORT_JOB_PROGRESS.get("job_id"),
+            "message": "Dataset export cancellation requested.",
+        }
+
+
+def _set_export_progress_if_current(run_id: int, updates: Dict[str, Any]) -> bool:
+    global _EXPORT_JOB_PROGRESS
+    with _EXPORT_JOB_LOCK:
+        if run_id != _EXPORT_JOB_RUN_ID:
+            return False
+        recent_errors = updates.get("recent_errors")
+        if recent_errors is not None:
+            updates = {
+                **updates,
+                "recent_errors": list(recent_errors)[-DATASET_EXPORT_RECENT_ERROR_LIMIT:],
+            }
+        _EXPORT_JOB_PROGRESS = {
+            **_EXPORT_JOB_PROGRESS,
+            **updates,
+            "updated_at": time.time(),
+        }
+        return True
+
+
+def _clear_export_worker_if_current(run_id: int, cancel_event: threading.Event) -> None:
+    global _EXPORT_JOB_CANCEL_EVENT
+    with _EXPORT_JOB_LOCK:
+        if run_id == _EXPORT_JOB_RUN_ID and _EXPORT_JOB_CANCEL_EVENT is cancel_event:
+            _EXPORT_JOB_CANCEL_EVENT = None
+
+
+def start_dataset_export(request: DatasetExportRequest) -> DatasetExportStartResponse:
+    """Start a cancellable dataset export worker and return immediately."""
+    global _EXPORT_JOB_RUN_ID, _EXPORT_JOB_THREAD, _EXPORT_JOB_CANCEL_EVENT, _EXPORT_JOB_PROGRESS
+
+    output_path = _validate_export_request(request)
+    requested_total = _requested_item_count(request)
+
+    with _EXPORT_JOB_LOCK:
+        current_status = str(_EXPORT_JOB_PROGRESS.get("status") or "idle")
+        if current_status in _EXPORT_ACTIVE_STATUSES:
+            raise HTTPException(status_code=409, detail="Dataset export already in progress")
+
+        _EXPORT_JOB_RUN_ID += 1
+        run_id = _EXPORT_JOB_RUN_ID
+        job_id = uuid.uuid4().hex
+        cancel_event = threading.Event()
+        started_at = time.time()
+        _EXPORT_JOB_CANCEL_EVENT = cancel_event
+        _EXPORT_JOB_PROGRESS = {
+            "status": "starting",
+            "job_id": job_id,
+            "step": "starting",
+            "current": 0,
+            "total": requested_total,
+            "exported": 0,
+            "skipped": 0,
+            "errors": 0,
+            "current_item": None,
+            "recent_errors": [],
+            "output_folder": str(output_path),
+            "items_truncated": False,
+            "result": None,
+            "message": f"Starting dataset export for {requested_total} images...",
+            "started_at": started_at,
+            "updated_at": started_at,
+        }
+
+    def publish(updates: Dict[str, Any]) -> None:
+        _set_export_progress_if_current(run_id, {
+            "status": "cancelling" if cancel_event.is_set() else "running",
+            **updates,
+        })
+
+    def worker() -> None:
+        try:
+            publish({
+                "step": "running",
+                "message": f"Preparing dataset export for {requested_total} images...",
+            })
+            result = export_dataset(
+                request,
+                progress_callback=publish,
+                cancel_event=cancel_event,
+            )
+            terminal_status = "cancelled" if result.status == "cancelled" else "done"
+            _set_export_progress_if_current(run_id, {
+                "status": terminal_status,
+                "step": terminal_status,
+                "current": result.total_items if result.status != "cancelled" else _EXPORT_JOB_PROGRESS.get("current", 0),
+                "total": _EXPORT_JOB_PROGRESS.get("total", result.total_items),
+                "exported": result.exported,
+                "skipped": result.skipped,
+                "errors": result.error_count,
+                "current_item": None,
+                "recent_errors": result.error_messages[-DATASET_EXPORT_RECENT_ERROR_LIMIT:],
+                "items_truncated": result.items_truncated,
+                "result": result,
+                "output_folder": result.output_folder,
+                "message": (
+                    f"Cancelled at {_EXPORT_JOB_PROGRESS.get('current', 0)}/{_EXPORT_JOB_PROGRESS.get('total', 0)}. "
+                    f"Exported {result.exported} images."
+                    if result.status == "cancelled"
+                    else f"Dataset export finished: {result.exported} exported, {result.error_count} failed, {result.skipped} skipped."
+                ),
+            })
+        except HTTPException as exc:
+            detail = str(exc.detail)
+            _set_export_progress_if_current(run_id, {
+                "status": "failed",
+                "step": "failed",
+                "current": _EXPORT_JOB_PROGRESS.get("current", 0),
+                "total": _EXPORT_JOB_PROGRESS.get("total", requested_total),
+                "errors": max(1, int(_EXPORT_JOB_PROGRESS.get("errors", 0) or 0)),
+                "current_item": None,
+                "recent_errors": [detail],
+                "result": {
+                    "status": "failed",
+                    "exported": int(_EXPORT_JOB_PROGRESS.get("exported", 0) or 0),
+                    "skipped": int(_EXPORT_JOB_PROGRESS.get("skipped", 0) or 0),
+                    "error_count": 1,
+                    "output_folder": str(output_path),
+                    "items": [],
+                    "total_items": 0,
+                    "items_truncated": False,
+                    "error_messages": [detail],
+                },
+                "message": detail,
+            })
+        except Exception as exc:  # pragma: no cover - defensive worker guard
+            logger.exception("Dataset export background job failed")
+            detail = f"Dataset export failed: {exc}"
+            _set_export_progress_if_current(run_id, {
+                "status": "failed",
+                "step": "failed",
+                "current": _EXPORT_JOB_PROGRESS.get("current", 0),
+                "total": _EXPORT_JOB_PROGRESS.get("total", requested_total),
+                "errors": max(1, int(_EXPORT_JOB_PROGRESS.get("errors", 0) or 0)),
+                "current_item": None,
+                "recent_errors": [detail],
+                "result": {
+                    "status": "failed",
+                    "exported": int(_EXPORT_JOB_PROGRESS.get("exported", 0) or 0),
+                    "skipped": int(_EXPORT_JOB_PROGRESS.get("skipped", 0) or 0),
+                    "error_count": 1,
+                    "output_folder": str(output_path),
+                    "items": [],
+                    "total_items": 0,
+                    "items_truncated": False,
+                    "error_messages": [detail],
+                },
+                "message": detail,
+            })
+        finally:
+            _clear_export_worker_if_current(run_id, cancel_event)
+
+    thread = threading.Thread(target=worker, name=f"dataset-export-{job_id[:8]}", daemon=True)
+    with _EXPORT_JOB_LOCK:
+        if run_id == _EXPORT_JOB_RUN_ID:
+            _EXPORT_JOB_THREAD = thread
+    thread.start()
+
+    return DatasetExportStartResponse(
+        status="started",
+        job_id=job_id,
+        total=requested_total,
+        output_folder=str(output_path),
+        message=f"Dataset export started for {requested_total} images.",
     )

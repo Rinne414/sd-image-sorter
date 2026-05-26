@@ -44,15 +44,27 @@ keep working unchanged.
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+from pathlib import Path
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple
+
+from config import ALLOWED_IMAGE_EXTENSIONS, DEFAULT_TAGGER_MODEL, TAGGER_MODELS
+from services.tag_export_service import count_selection_token_ids, iter_selection_token_id_chunks
+from utils.path_validation import normalize_user_path
 
 logger = logging.getLogger(__name__)
+
+
+SMART_TAG_ID_CHUNK_SIZE = 500
+SMART_TAG_PATH_CHUNK_SIZE = 500
+SMART_TAG_MAX_ERRORS = 50
+SMART_TAG_RECENT_RESULT_LIMIT = 25
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +118,12 @@ DEFAULT_NOISE_TAGS: frozenset = (
 )
 
 _SCORE_RE: re.Pattern = re.compile(r"^score[\s_]\d+(_up)?$", re.IGNORECASE)
-_YEAR_RE: re.Pattern = re.compile(r"^year\s+\d{4}$", re.IGNORECASE)
+_YEAR_RE: re.Pattern = re.compile(r"^(?:year\s*)?\d{4}$", re.IGNORECASE)
+_SYMBOLIC_TAG_RE: re.Pattern = re.compile(r"^(?:[:;=][a-z0-9]?|[xX][dDpP3]|[<>^@!;:=_\\/-]{2,}|[<>^@!;:=_\\/-]+[a-z0-9])$")
+SYMBOL_NOISE_TAGS: frozenset = frozenset({
+    ":3", ":d", ":o", ":p", ":q", ":t", ":i", ";3", ";d", ";p",
+    ">_<", "<_<", ">_>", "-_-", "^_^", "^^^", "@_@", "=_=", "!?",
+})
 
 
 def is_noise_tag(tag: str, noise_set: Iterable[str] = DEFAULT_NOISE_TAGS) -> bool:
@@ -121,6 +138,8 @@ def is_noise_tag(tag: str, noise_set: Iterable[str] = DEFAULT_NOISE_TAGS) -> boo
     if lowered in noise_set:
         return True
     if _SCORE_RE.match(lowered) or _YEAR_RE.match(lowered):
+        return True
+    if lowered in SYMBOL_NOISE_TAGS or _SYMBOLIC_TAG_RE.match(lowered):
         return True
     return False
 
@@ -161,12 +180,12 @@ def compute_consensus_tags(
         characters reliably, so we use OR semantics there: any single
         tagger detecting it keeps it.
 
-    Returns ``{"general_tags": [...], "character_tags": [...], "rating": str}``
+    Returns ``{"general_tags": [...], "copyright_tags": [...], "character_tags": [...], "rating": str}``
     where each output tag carries:
 
       - ``tag``: name (verbatim from the first tagger that produced it)
       - ``confidence``: max confidence across the taggers that voted yes
-      - ``category``: 'general' | 'character'
+      - ``category``: 'general' | 'copyright' | 'character'
       - ``votes``: int — count of taggers that produced this tag (for diagnostics)
     """
     skip = set(
@@ -183,7 +202,11 @@ def compute_consensus_tags(
 
     for output in per_tagger_outputs or []:
         weight = float(output.get("weight") or 1.0)
-        for category_key, category_label in (("general_tags", "general"), ("character_tags", "character")):
+        for category_key, category_label in (
+            ("general_tags", "general"),
+            ("copyright_tags", "copyright"),
+            ("character_tags", "character"),
+        ):
             for tag_row in (output.get(category_key) or []):
                 if isinstance(tag_row, dict):
                     name = str(tag_row.get("tag") or "").strip()
@@ -210,6 +233,7 @@ def compute_consensus_tags(
                     slot["max_conf"] = conf
 
     general: List[Dict[str, Any]] = []
+    copyright: List[Dict[str, Any]] = []
     character: List[Dict[str, Any]] = []
 
     for slot in accum.values():
@@ -225,6 +249,8 @@ def compute_consensus_tags(
         }
         if category == "character":
             character.append(rendered)
+        elif category == "copyright":
+            copyright.append(rendered)
         else:
             general.append(rendered)
 
@@ -248,6 +274,7 @@ def compute_consensus_tags(
 
     return {
         "general_tags": general,
+        "copyright_tags": copyright,
         "character_tags": character,
         "rating": best_rating,
     }
@@ -345,7 +372,12 @@ def normalize_training_purpose(value: Optional[str]) -> str:
     return TRAINING_PURPOSE_ALIASES.get(key, "general")
 
 
-def build_vlm_prompt(training_purpose: str, wd14_tags: List[str]) -> str:
+def build_vlm_prompt(
+    training_purpose: str,
+    wd14_tags: List[str],
+    *,
+    include_tags: bool = True,
+) -> str:
     """Render the per-image VLM prompt for the given training purpose.
 
     The WD14 tag list is filtered for noise BEFORE being substituted into
@@ -354,7 +386,7 @@ def build_vlm_prompt(training_purpose: str, wd14_tags: List[str]) -> str:
     """
     canonical = normalize_training_purpose(training_purpose)
     template = PROMPT_PRESETS.get(canonical) or PROMPT_PRESETS["general"]
-    cleaned = filter_noise_tags(wd14_tags)
+    cleaned = filter_noise_tags(wd14_tags) if include_tags else []
     return template.replace("{tags}", ", ".join(cleaned))
 
 
@@ -403,7 +435,7 @@ def assemble_caption(
 ) -> str:
     """Assemble the final training caption.
 
-    Layout (LoraHub-compatible, simplified):
+    Layout (local smart-caption pipeline, simplified):
         [trigger] [character_tags] [general_tags] [NL_text]
 
     Notes:
@@ -473,7 +505,7 @@ class SmartTagJobState:
     """
     job_id: str
     status: str = "queued"  # queued | running | completed | failed | cancelled
-    stage: str = ""  # "" | "tagging" | "vlm"
+    stage: str = ""  # "" | "tagging" | "vlm" (legacy single-pass leaves this blank)
     total: int = 0
     processed: int = 0
     succeeded: int = 0
@@ -484,6 +516,10 @@ class SmartTagJobState:
     cancel_requested: bool = False
     last_caption_preview: str = ""
     errors: List[Dict[str, str]] = field(default_factory=list)
+    caption_result_count: int = 0
+    recent_caption_results: List[Dict[str, str]] = field(default_factory=list)
+    caption_results_path: Optional[str] = None
+    _caption_results_handle: Any = field(default=None, repr=False, compare=False)
     settings: Dict[str, Any] = field(default_factory=dict)
 
     def snapshot(self) -> Dict[str, Any]:
@@ -500,6 +536,8 @@ class SmartTagJobState:
             "finished_at": self.finished_at,
             "last_caption_preview": self.last_caption_preview,
             "errors": list(self.errors[-25:]),  # tail-cap so payload stays small
+            "caption_result_count": self.caption_result_count,
+            "recent_caption_results": list(self.recent_caption_results[-SMART_TAG_RECENT_RESULT_LIMIT:]),
             "settings": dict(self.settings),
         }
 
@@ -526,7 +564,13 @@ def get_active_job() -> Optional[SmartTagJobState]:
 
 
 def cancel_active_job() -> Optional[SmartTagJobState]:
-    """Mark the running job (if any) as cancel-requested. Returns the job."""
+    """Mark the running job (if any) as cancel-requested. Returns the job.
+
+    Cancel semantics: the pipeline loop checks ``cancel_requested`` before
+    processing each new image. Already-processed images have their tags
+    persisted via ``_persist_result`` (which commits per-image through
+    ``add_tags_batch``), so cancellation never rolls back completed work.
+    """
     with _jobs_lock:
         if _active_job_id is None:
             return None
@@ -548,11 +592,16 @@ def cancel_active_job() -> Optional[SmartTagJobState]:
 class SmartTagRequest:
     """Input contract for ``start_smart_tag_job``.
 
-    image_ids OR folder_path is required; folder_path is reserved for a
-    future "import-from-folder" path - the MVP only accepts image_ids that
-    are already in the gallery DB.
+    image_ids OR image_paths is required. Gallery IDs write back to the DB;
+    path-source items return captions through the job results endpoint so the
+    Dataset Maker can store them in local caption overrides.
     """
-    image_ids: List[int]
+    image_ids: List[int] = field(default_factory=list)
+    selection_token: Optional[str] = None
+    selection_count: Optional[int] = None
+    image_paths: List[str] = field(default_factory=list)
+    dataset_scan_token: Optional[str] = None
+    dataset_scan_count: Optional[int] = None
     training_purpose: str = "general"
     trigger_word: str = ""
     merge_strategy: str = "replace"  # replace | append
@@ -564,6 +613,9 @@ class SmartTagRequest:
     use_gpu: bool = True
     general_threshold: float = 0.35
     character_threshold: float = 0.85
+    copyright_threshold: float = 0.35
+    max_tags_per_image: int = 0
+    natural_language_mode: str = "vlm"  # vlm | toriigate
     # v3.2.2 T-power-PR2 (D): multi-tagger consensus.
     # When ``taggers`` is non-empty, the orchestrator runs each one
     # sequentially against the image and fuses the per-tag votes via
@@ -580,22 +632,133 @@ class SmartTagRequest:
     )
 
 
+def _coerce_dataset_scan_token(payload: Dict[str, Any]) -> Optional[str]:
+    for key in (
+        "dataset_scan_token",
+        "dataset_manifest_token",
+        "dataset_session_token",
+        "scan_token",
+        "session_token",
+    ):
+        value = str(payload.get(key) or "").strip()
+        if value:
+            return value
+    return None
+
+
+def _load_dataset_scan_paths(scan_token: str) -> List[str]:
+    from services.dataset_session_service import iter_scan_manifest_paths
+
+    return [str(path) for path in iter_scan_manifest_paths(scan_token) if str(path or "").strip()]
+
+
+def _count_dataset_scan_token_paths(scan_token: str) -> int:
+    from services.dataset_session_service import count_scan_manifest_paths
+
+    return count_scan_manifest_paths(scan_token)
+
+
+def _tagger_defaults(model_name: str) -> Dict[str, Any]:
+    name = str(model_name or "").strip().lower()
+    if not name:
+        name = DEFAULT_TAGGER_MODEL
+    if name == "oppai-oracle":
+        name = "oppai-oracle-v1.1"
+    config = TAGGER_MODELS.get(name, {})
+    general = float(config.get("default_threshold", 0.35))
+    character = float(config.get("default_character_threshold", 0.85))
+    copyright = float(config.get("default_copyright_threshold", general))
+    max_tags = int(config.get("default_max_tags_per_image", 0) or 0)
+    return {
+        "general_threshold": general,
+        "character_threshold": character,
+        "copyright_threshold": copyright,
+        "max_tags_per_image": max_tags,
+    }
+
+
+def _coerce_threshold(raw: Any, default: float) -> float:
+    if raw is None or raw == "":
+        return float(default)
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return float(default)
+    return max(0.0, min(1.0, value))
+
+
+def _coerce_max_tags(raw: Any, default: int) -> int:
+    if raw is None or raw == "":
+        return max(0, int(default or 0))
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return max(0, int(default or 0))
+    return max(0, min(2000, value))
+
+
 def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
     image_ids = payload.get("image_ids") or []
     if not isinstance(image_ids, list):
         raise ValueError("image_ids must be a list of integers")
     cleaned_ids: List[int] = []
+    seen_ids: Set[int] = set()
     for raw in image_ids:
         try:
-            cleaned_ids.append(int(raw))
+            image_id = int(raw)
         except (TypeError, ValueError):
             raise ValueError(f"image_ids contains non-integer entry: {raw!r}")
-    if not cleaned_ids:
-        raise ValueError("image_ids is required and must be non-empty")
+        if image_id > 0 and image_id not in seen_ids:
+            seen_ids.add(image_id)
+            cleaned_ids.append(image_id)
+
+    selection_token = str(payload.get("selection_token") or "").strip() or None
+    selection_count: Optional[int] = None
+    if selection_token:
+        try:
+            selection_count = int(count_selection_token_ids(selection_token))
+        except Exception as exc:  # noqa: BLE001
+            detail = getattr(exc, "detail", None) or str(exc)
+            raise ValueError(f"Invalid selection_token: {detail}") from exc
+
+    raw_paths = payload.get("image_paths") or []
+    if not isinstance(raw_paths, list):
+        raise ValueError("image_paths must be a list of file paths")
+    cleaned_paths: List[str] = []
+    seen_paths: Set[str] = set()
+    for raw_path in raw_paths:
+        if not raw_path:
+            continue
+        try:
+            path = Path(normalize_user_path(str(raw_path))).resolve()
+        except (OSError, ValueError) as exc:
+            raise ValueError(f"image_paths contains invalid path: {raw_path!r}") from exc
+        if path.suffix.lower() not in ALLOWED_IMAGE_EXTENSIONS:
+            continue
+        if path.is_file():
+            path_str = str(path)
+            if path_str not in seen_paths:
+                seen_paths.add(path_str)
+                cleaned_paths.append(path_str)
+
+    dataset_scan_token = _coerce_dataset_scan_token(payload)
+    dataset_scan_count: Optional[int] = None
+    if dataset_scan_token:
+        try:
+            dataset_scan_count = _count_dataset_scan_token_paths(dataset_scan_token)
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError(f"Invalid dataset scan token: {exc}") from exc
+
+    if not cleaned_ids and not selection_token and not cleaned_paths and not dataset_scan_token:
+        raise ValueError("Smart Tag needs image_ids, selection_token, image_paths, or dataset_scan_token.")
+
+    tagger_model = str(payload.get("tagger_model") or "").strip()
+    single_defaults = _tagger_defaults(tagger_model)
 
     # T-power-PR2 (D): coerce taggers list to a stable shape.
     raw_taggers = payload.get("taggers") or []
     cleaned_taggers: List[Dict[str, Any]] = []
+    multi_max_tag_defaults: List[int] = []
     if isinstance(raw_taggers, list):
         for entry in raw_taggers:
             if not isinstance(entry, dict):
@@ -603,11 +766,25 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
             model = str(entry.get("model") or "").strip()
             if not model:
                 continue
+            defaults = _tagger_defaults(model)
+            if int(defaults.get("max_tags_per_image") or 0) > 0:
+                multi_max_tag_defaults.append(int(defaults["max_tags_per_image"]))
+            general_threshold = _coerce_threshold(
+                entry.get("general_threshold"),
+                defaults["general_threshold"],
+            )
             cleaned_taggers.append({
                 "model": model,
                 "weight": float(entry.get("weight") or 1.0),
-                "general_threshold": float(entry.get("general_threshold") or 0.35),
-                "character_threshold": float(entry.get("character_threshold") or 0.85),
+                "general_threshold": general_threshold,
+                "character_threshold": _coerce_threshold(
+                    entry.get("character_threshold"),
+                    defaults["character_threshold"],
+                ),
+                "copyright_threshold": _coerce_threshold(
+                    entry.get("copyright_threshold"),
+                    defaults.get("copyright_threshold", general_threshold),
+                ),
             })
 
     raw_skip = payload.get("consensus_skip_categories")
@@ -618,8 +795,19 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
     else:
         skip_categories = ["character", "copyright"]
 
+    max_tags_default = (
+        min(multi_max_tag_defaults)
+        if multi_max_tag_defaults and payload.get("max_tags_per_image") in (None, "")
+        else single_defaults["max_tags_per_image"]
+    )
+
     return SmartTagRequest(
         image_ids=cleaned_ids,
+        selection_token=selection_token,
+        selection_count=selection_count,
+        image_paths=cleaned_paths,
+        dataset_scan_token=dataset_scan_token,
+        dataset_scan_count=dataset_scan_count,
         training_purpose=normalize_training_purpose(payload.get("training_purpose")),
         trigger_word=str(payload.get("trigger_word") or "").strip(),
         merge_strategy=str(payload.get("merge_strategy") or "replace").strip().lower(),
@@ -627,10 +815,29 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
         skip_existing=bool(payload.get("skip_existing", True)),
         enable_wd14=bool(payload.get("enable_wd14", True)),
         enable_vlm=bool(payload.get("enable_vlm", True)),
-        tagger_model=str(payload.get("tagger_model") or "").strip(),
+        tagger_model=tagger_model,
         use_gpu=bool(payload.get("use_gpu", True)),
-        general_threshold=float(payload.get("general_threshold", 0.35)),
-        character_threshold=float(payload.get("character_threshold", 0.85)),
+        general_threshold=_coerce_threshold(
+            payload.get("general_threshold"),
+            single_defaults["general_threshold"],
+        ),
+        character_threshold=_coerce_threshold(
+            payload.get("character_threshold"),
+            single_defaults["character_threshold"],
+        ),
+        copyright_threshold=_coerce_threshold(
+            payload.get("copyright_threshold"),
+            single_defaults["copyright_threshold"],
+        ),
+        max_tags_per_image=_coerce_max_tags(
+            payload.get("max_tags_per_image"),
+            max_tags_default,
+        ),
+        natural_language_mode=(
+            "toriigate"
+            if str(payload.get("natural_language_mode") or "vlm").strip().lower() in {"toriigate", "torii", "toriigate-0.5"}
+            else "vlm"
+        ),
         taggers=cleaned_taggers,
         consensus_min=max(1, int(payload.get("consensus_min", 2) or 2)),
         consensus_skip_categories=skip_categories,
@@ -644,6 +851,8 @@ def _resolve_tagger(req: SmartTagRequest):
     everything else routes through the WD14 wrapper.
     """
     name = (req.tagger_model or "").strip().lower()
+    if name.startswith("toriigate"):
+        raise ValueError("ToriiGate is a natural-language caption model. Use natural_language_mode='toriigate' instead of the booru tagger slot.")
     if name.startswith("oppai-oracle"):
         from oppai_oracle_tagger import get_oppai_oracle_tagger
         return get_oppai_oracle_tagger(
@@ -658,6 +867,7 @@ def _resolve_tagger(req: SmartTagRequest):
         model_name=req.tagger_model or None,
         threshold=req.general_threshold,
         character_threshold=req.character_threshold,
+        copyright_threshold=req.copyright_threshold,
         use_gpu=req.use_gpu,
         force_reload=False,
     )
@@ -668,6 +878,7 @@ def _resolve_tagger_by_model(
     *,
     general_threshold: float,
     character_threshold: float,
+    copyright_threshold: float,
     use_gpu: bool,
 ):
     """v3.2.2 T-power-PR3 (D wire-up): factory that returns a tagger for
@@ -678,6 +889,8 @@ def _resolve_tagger_by_model(
     ``_resolve_tagger``.
     """
     name = (model_name or "").strip().lower()
+    if name.startswith("toriigate"):
+        raise ValueError("ToriiGate cannot be used as a booru consensus tagger.")
     if name.startswith("oppai-oracle"):
         from oppai_oracle_tagger import get_oppai_oracle_tagger
         return get_oppai_oracle_tagger(
@@ -692,6 +905,7 @@ def _resolve_tagger_by_model(
         model_name=model_name or None,
         threshold=general_threshold,
         character_threshold=character_threshold,
+        copyright_threshold=copyright_threshold,
         use_gpu=use_gpu,
         force_reload=False,
     )
@@ -709,6 +923,114 @@ def _flatten_tag_names(items: List[Any]) -> List[str]:
     return out
 
 
+def _normalize_tag_rows(items: List[Any], category: str) -> List[Dict[str, Any]]:
+    """Keep model confidence rows intact while accepting legacy string tags."""
+    rows: List[Dict[str, Any]] = []
+    for item in items or []:
+        if isinstance(item, dict):
+            tag = str(item.get("tag") or "").strip()
+            if not tag:
+                continue
+            try:
+                confidence = float(item.get("confidence", 1.0))
+            except (TypeError, ValueError):
+                confidence = 1.0
+            row = dict(item)
+            row["tag"] = tag
+            row["confidence"] = confidence
+            row["category"] = str(row.get("category") or category)
+            rows.append(row)
+        elif item:
+            tag = str(item).strip()
+            if tag:
+                rows.append({"tag": tag, "confidence": 1.0, "category": category})
+    return rows
+
+
+def _strip_noise_tag_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [
+        row for row in rows
+        if not is_noise_tag(str(row.get("tag") or ""))
+    ]
+
+
+def _top_tag_rows(rows: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
+    if not limit or limit <= 0 or len(rows) <= limit:
+        return rows
+    return sorted(
+        rows,
+        key=lambda row: -float(row.get("confidence") or 0.0),
+    )[:limit]
+
+
+def _prepare_smart_tag_rows(
+    general_rows: List[Dict[str, Any]],
+    copyright_rows: List[Dict[str, Any]],
+    character_rows: List[Dict[str, Any]],
+    *,
+    auto_strip_noise: bool,
+    max_tags_per_image: int,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    if auto_strip_noise:
+        general_rows = _strip_noise_tag_rows(general_rows)
+        copyright_rows = _strip_noise_tag_rows(copyright_rows)
+        character_rows = _strip_noise_tag_rows(character_rows)
+
+    max_tags = int(max_tags_per_image or 0)
+    if max_tags <= 0:
+        return general_rows, copyright_rows, character_rows
+
+    # Character and copyright tags carry identity context and are usually few;
+    # preserve them first, then use the remaining budget for general tags.
+    reserved_count = len(character_rows) + len(copyright_rows)
+    if reserved_count >= max_tags:
+        kept_reserved = _top_tag_rows(character_rows + copyright_rows, max_tags)
+        return [], [
+            row for row in kept_reserved
+            if str(row.get("category") or "").lower() == "copyright"
+        ], [
+            row for row in kept_reserved
+            if str(row.get("category") or "").lower() == "character"
+        ]
+
+    general_budget = max_tags - reserved_count
+    return _top_tag_rows(general_rows, general_budget), copyright_rows, character_rows
+
+
+def _tag_image_with_thresholds(
+    tagger,
+    image_path: str,
+    *,
+    general_threshold: float,
+    character_threshold: float,
+    copyright_threshold: float,
+) -> Dict[str, Any]:
+    """Call tagger.tag with the richest threshold set it supports.
+
+    WD/Camie/PixAI use the copyright threshold. OppaiOracle has no copyright
+    category, so its compatible tag method intentionally ignores that knob.
+    """
+    import inspect
+
+    kwargs: Dict[str, Any] = {
+        "threshold": general_threshold,
+        "character_threshold": character_threshold,
+    }
+    try:
+        params = inspect.signature(tagger.tag).parameters
+        if "copyright_threshold" in params:
+            kwargs["copyright_threshold"] = copyright_threshold
+    except (TypeError, ValueError):
+        # Some proxy objects may not expose a clean signature. Try the richer
+        # call first; if the object rejects it, retry below without copyright.
+        kwargs["copyright_threshold"] = copyright_threshold
+    try:
+        return tagger.tag(image_path, **kwargs)
+    except TypeError:
+        kwargs.pop("copyright_threshold", None)
+        return tagger.tag(image_path, **kwargs)
+
+
 def _process_one_image(
     *,
     image_path: str,
@@ -716,87 +1038,90 @@ def _process_one_image(
     req: SmartTagRequest,
     tagger,
     vlm_provider,
+    nl_tagger=None,
+    precomputed_tagger_outputs: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    """Run the full per-image pipeline. Returns a dict with caption + tags."""
+    """Run the full per-image pipeline. Returns a dict with caption + tags.
+
+    When ``precomputed_tagger_outputs`` is provided (multi-tagger mode),
+    the tagging phase is skipped and the pre-collected outputs are fused
+    directly. This avoids reloading models per-image.
+    """
     # ------- Stage 1: WD14 / OppaiOracle local tagging --------------------
     general_names: List[str] = []
+    copyright_names: List[str] = []
     character_names: List[str] = []
+    general_rows: List[Dict[str, Any]] = []
+    copyright_rows: List[Dict[str, Any]] = []
+    character_rows: List[Dict[str, Any]] = []
     rating: Optional[str] = None
 
-    if req.enable_wd14 and tagger is not None:
-        # T-power-PR3 (D wire-up): when SmartTagRequest.taggers is
-        # populated, run each tagger sequentially on this image and
-        # fuse via compute_consensus_tags. The single-tagger object
-        # passed in (from _resolve_tagger) is ignored here.
-        if req.taggers:
-            per_tagger_outputs: List[Dict[str, Any]] = []
-            for entry in req.taggers:
-                model_name = str(entry.get("model") or "").strip()
-                if not model_name:
-                    continue
-                weight = float(entry.get("weight") or 1.0)
-                gen_th = float(entry.get("general_threshold") or req.general_threshold)
-                char_th = float(entry.get("character_threshold") or req.character_threshold)
-                try:
-                    one_tagger = _resolve_tagger_by_model(
-                        model_name,
-                        general_threshold=gen_th,
-                        character_threshold=char_th,
-                        use_gpu=req.use_gpu,
-                    )
-                    if hasattr(one_tagger, "load"):
-                        one_tagger.load()
-                    out = one_tagger.tag(
-                        image_path,
-                        threshold=gen_th,
-                        character_threshold=char_th,
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "smart-tag consensus: tagger %s failed on %s: %s",
-                        model_name, image_path, exc,
-                    )
-                    continue
-                per_tagger_outputs.append({
-                    "model": model_name,
-                    "weight": weight,
-                    "general_tags": out.get("general_tags") or [],
-                    "character_tags": out.get("character_tags") or [],
-                    "rating": out.get("rating"),
-                })
-            fused = compute_consensus_tags(
-                per_tagger_outputs,
-                consensus_min=req.consensus_min,
-                skip_categories=req.consensus_skip_categories,
-            )
-            general_names = _flatten_tag_names(fused.get("general_tags"))
-            character_names = _flatten_tag_names(fused.get("character_tags"))
-            rating = fused.get("rating") or None
-        else:
-            result = tagger.tag(
-                image_path,
-                threshold=req.general_threshold,
-                character_threshold=req.character_threshold,
-            )
-            general_names = _flatten_tag_names(result.get("general_tags"))
-            character_names = _flatten_tag_names(result.get("character_tags"))
-            rating = result.get("rating") or None
+    if precomputed_tagger_outputs is not None:
+        # Multi-tagger consensus from pre-collected per-tagger results.
+        fused = compute_consensus_tags(
+            precomputed_tagger_outputs,
+            consensus_min=req.consensus_min,
+            skip_categories=req.consensus_skip_categories,
+        )
+        general_rows = _normalize_tag_rows(fused.get("general_tags") or [], "general")
+        copyright_rows = _normalize_tag_rows(fused.get("copyright_tags") or [], "copyright")
+        character_rows = _normalize_tag_rows(fused.get("character_tags") or [], "character")
+        general_names = _flatten_tag_names(general_rows)
+        copyright_names = _flatten_tag_names(copyright_rows)
+        character_names = _flatten_tag_names(character_rows)
+        rating = fused.get("rating") or None
+    elif req.enable_wd14 and tagger is not None:
+        result = _tag_image_with_thresholds(
+            tagger,
+            image_path,
+            general_threshold=req.general_threshold,
+            character_threshold=req.character_threshold,
+            copyright_threshold=req.copyright_threshold,
+        )
+        general_rows = _normalize_tag_rows(result.get("general_tags") or [], "general")
+        copyright_rows = _normalize_tag_rows(result.get("copyright_tags") or [], "copyright")
+        character_rows = _normalize_tag_rows(result.get("character_tags") or [], "character")
+        general_names = _flatten_tag_names(general_rows)
+        copyright_names = _flatten_tag_names(copyright_rows)
+        character_names = _flatten_tag_names(character_rows)
+        rating = result.get("rating") or None
+
+    general_rows, copyright_rows, character_rows = _prepare_smart_tag_rows(
+        general_rows,
+        copyright_rows,
+        character_rows,
+        auto_strip_noise=req.auto_strip_noise,
+        max_tags_per_image=req.max_tags_per_image,
+    )
+    general_names = _flatten_tag_names(general_rows)
+    copyright_names = _flatten_tag_names(copyright_rows)
+    character_names = _flatten_tag_names(character_rows)
 
     # ------- Stage 2: VLM caption --------------------------------------
     nl_text = ""
-    if req.enable_vlm and vlm_provider is not None:
-        prompt = build_vlm_prompt(req.training_purpose, general_names)
-        # Most providers' VLMConfig owns the user_prompt; we override it
-        # for this call only via build_user_message's tag injection so we
-        # don't mutate the shared config.
+    if req.enable_vlm and req.natural_language_mode == "toriigate" and nl_tagger is not None:
+        try:
+            out = nl_tagger.tag(image_path)
+            nl_text = str(out.get("raw_text") or "").strip()
+            if not nl_text:
+                nl_text = ", ".join(_flatten_tag_names(out.get("general_tags") or []))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ToriiGate natural-language caption failed for image %s: %s", image_id, exc)
+            nl_text = ""
+    elif req.enable_vlm and vlm_provider is not None:
+        vlm_context_tags = general_names + copyright_names + character_names
+        include_tags_as_context = bool(
+            getattr(getattr(vlm_provider, "config", None), "include_tags_as_context", True)
+        )
+        prompt = build_vlm_prompt(
+            req.training_purpose,
+            vlm_context_tags,
+            include_tags=include_tags_as_context,
+        )
         try:
             import asyncio
 
             async def _call() -> str:
-                # Stash the original user_prompt and swap in our preset
-                # for this call only. caption_image() reads
-                # config.user_prompt at call time, so this is safe even
-                # for concurrent calls if the caller runs them serially.
                 config = vlm_provider.config
                 original_user_prompt = getattr(config, "user_prompt", "")
                 original_with_tags = getattr(config, "user_prompt_with_tags", "")
@@ -805,7 +1130,7 @@ def _process_one_image(
                     config.user_prompt_with_tags = prompt
                     vlm_result = await vlm_provider.caption_image(
                         image_path,
-                        tags=general_names if general_names else None,
+                        tags=vlm_context_tags if include_tags_as_context and vlm_context_tags else None,
                     )
                     return (vlm_result.caption or "").strip()
                 finally:
@@ -820,7 +1145,7 @@ def _process_one_image(
     # ------- Stage 3: Caption assembly ---------------------------------
     caption = assemble_caption(
         rating=rating,
-        general_tags=general_names,
+        general_tags=general_names + copyright_names,
         character_tags=character_names,
         nl_text=nl_text,
         trigger_word=req.trigger_word,
@@ -831,7 +1156,11 @@ def _process_one_image(
         "image_id": image_id,
         "caption": caption,
         "general_tags": general_names,
+        "copyright_tags": copyright_names,
         "character_tags": character_names,
+        "general_tag_rows": general_rows,
+        "copyright_tag_rows": copyright_rows,
+        "character_tag_rows": character_rows,
         "rating": rating,
         "nl_text": nl_text,
     }
@@ -854,7 +1183,20 @@ def _persist_result(image_id: int, result: Dict[str, Any], merge_strategy: str) 
 
     caption = (result.get("caption") or "").strip()
     general = result.get("general_tags") or []
+    copyright = result.get("copyright_tags") or []
     character = result.get("character_tags") or []
+    general_rows = _normalize_tag_rows(
+        result.get("general_tag_rows") if result.get("general_tag_rows") is not None else general,
+        "general",
+    )
+    copyright_rows = _normalize_tag_rows(
+        result.get("copyright_tag_rows") if result.get("copyright_tag_rows") is not None else copyright,
+        "copyright",
+    )
+    character_rows = _normalize_tag_rows(
+        result.get("character_tag_rows") if result.get("character_tag_rows") is not None else character,
+        "character",
+    )
 
     # On append, glue the new caption onto whatever was there before.
     final_caption = caption
@@ -873,12 +1215,9 @@ def _persist_result(image_id: int, result: Dict[str, Any], merge_strategy: str) 
 
     # Build the per-tag rows the way add_tags_batch expects.
     tag_rows: List[Dict[str, Any]] = []
-    for t in character:
-        if t:
-            tag_rows.append({"tag": t, "confidence": 1.0})
-    for t in general:
-        if t:
-            tag_rows.append({"tag": t, "confidence": 1.0})
+    tag_rows.extend(character_rows)
+    tag_rows.extend(general_rows)
+    tag_rows.extend(copyright_rows)
 
     try:
         db.add_tags_batch([
@@ -908,109 +1247,385 @@ def _resolve_image_paths(image_ids: List[int]) -> Dict[int, str]:
     return out
 
 
+def _iter_chunks(items: Iterable[Any], chunk_size: int) -> Iterator[List[Any]]:
+    normalized_size = max(1, int(chunk_size or 1))
+    chunk: List[Any] = []
+    for item in items or []:
+        chunk.append(item)
+        if len(chunk) >= normalized_size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
+
+
+def _sources_from_image_id_chunk(image_ids: List[int]) -> List[Tuple[str, int, str]]:
+    paths = _resolve_image_paths(image_ids)
+    sources: List[Tuple[str, int, str]] = []
+    for raw_id in image_ids:
+        image_id = int(raw_id)
+        sources.append((str(image_id), image_id, paths.get(image_id, "")))
+    return sources
+
+
+def _iter_dataset_scan_token_path_chunks(scan_token: str, chunk_size: int = SMART_TAG_PATH_CHUNK_SIZE) -> Iterator[List[str]]:
+    from services.dataset_session_service import iter_scan_manifest_paths
+
+    yield from _iter_chunks(iter_scan_manifest_paths(scan_token), chunk_size)
+
+
+def _request_total(req: SmartTagRequest) -> int:
+    total = len(req.image_ids) + len(req.image_paths)
+    if req.selection_token:
+        total += int(req.selection_count if req.selection_count is not None else count_selection_token_ids(req.selection_token))
+    if req.dataset_scan_token:
+        total += int(req.dataset_scan_count if req.dataset_scan_count is not None else _count_dataset_scan_token_paths(req.dataset_scan_token))
+    return total
+
+
+def _iter_request_source_chunks(req: SmartTagRequest) -> Iterator[List[Tuple[str, int, str]]]:
+    for id_chunk in _iter_chunks(req.image_ids, SMART_TAG_ID_CHUNK_SIZE):
+        yield _sources_from_image_id_chunk([int(image_id) for image_id in id_chunk])
+
+    if req.selection_token:
+        for id_chunk in iter_selection_token_id_chunks(req.selection_token, chunk_size=SMART_TAG_ID_CHUNK_SIZE):
+            yield _sources_from_image_id_chunk([int(image_id) for image_id in id_chunk])
+
+    for path_chunk in _iter_chunks(req.image_paths, SMART_TAG_PATH_CHUNK_SIZE):
+        yield [(str(path), 0, str(path)) for path in path_chunk]
+
+    if req.dataset_scan_token:
+        for path_chunk in _iter_dataset_scan_token_path_chunks(req.dataset_scan_token, SMART_TAG_PATH_CHUNK_SIZE):
+            yield [(str(path), 0, str(path)) for path in path_chunk]
+
+
+def _record_job_error(job: SmartTagJobState, source_key: str, message: str) -> None:
+    job.errors.append({"image_id": str(source_key), "error": message})
+    if len(job.errors) > SMART_TAG_MAX_ERRORS:
+        del job.errors[:-SMART_TAG_MAX_ERRORS]
+
+
+def _get_caption_results_dir() -> Path:
+    data_dir = Path(__file__).resolve().parent.parent / "data" / "smart-tag-results"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
+
+
+def _append_caption_result(job: SmartTagJobState, path: str, caption: str) -> None:
+    row = {"path": str(path), "caption": str(caption or "")}
+    if job.caption_results_path is None:
+        target = _get_caption_results_dir() / f"{job.job_id}.jsonl"
+        job.caption_results_path = str(target)
+        job._caption_results_handle = target.open("a", encoding="utf-8")
+    handle = job._caption_results_handle
+    handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+    handle.flush()
+    job.caption_result_count += 1
+    preview = {
+        "path": row["path"],
+        "caption": row["caption"][:200],
+    }
+    job.recent_caption_results.append(preview)
+    if len(job.recent_caption_results) > SMART_TAG_RECENT_RESULT_LIMIT:
+        del job.recent_caption_results[:-SMART_TAG_RECENT_RESULT_LIMIT]
+
+
+def _close_caption_results(job: SmartTagJobState) -> None:
+    handle = getattr(job, "_caption_results_handle", None)
+    if handle is not None:
+        try:
+            handle.close()
+        finally:
+            job._caption_results_handle = None
+
+
+def get_caption_results_page(
+    job: SmartTagJobState,
+    *,
+    offset: int = 0,
+    limit: int = 1000,
+) -> Dict[str, Any]:
+    start = max(0, int(offset or 0))
+    page_limit = max(1, min(5000, int(limit or 1000)))
+    end = start + page_limit
+    results: List[Dict[str, str]] = []
+    path = job.caption_results_path
+    if path:
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                for index, line in enumerate(handle):
+                    if index < start:
+                        continue
+                    if index >= end:
+                        break
+                    try:
+                        row = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(row, dict):
+                        results.append({
+                            "path": str(row.get("path") or ""),
+                            "caption": str(row.get("caption") or ""),
+                        })
+        except OSError:
+            results = []
+    return {
+        "job_id": job.job_id,
+        "offset": start,
+        "limit": page_limit,
+        "total": job.caption_result_count,
+        "results": results,
+        "has_more": end < job.caption_result_count,
+    }
+
+
 def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
     """Body of the worker thread - drives the pipeline and updates job state."""
     global _active_job_id
     job.status = "running"
     job.message = "Resolving images..."
-    paths = _resolve_image_paths(req.image_ids)
-    job.total = len(paths)
-    if not paths:
+    job.total = _request_total(req)
+    if job.total <= 0:
         job.status = "failed"
-        job.message = "No matching images found in the gallery DB."
+        job.message = "No matching images found."
         job.finished_at = time.time()
         with _jobs_lock:
             if _active_job_id == job.job_id:
                 _active_job_id = None
         return
 
-    # Lazy provider construction so importing this module never triggers
-    # heavy ONNX / VLM SDK loads.
-    tagger = None
-    vlm_provider = None
     try:
+        # Lazy provider construction so importing this module never triggers
+        # heavy ONNX / VLM SDK loads.
+        tagger = None
+        vlm_provider = None
+        nl_tagger = None
         if req.enable_wd14:
-            job.message = "Loading local tagger..."
-            tagger = _resolve_tagger(req)
-            if hasattr(tagger, "load"):
-                tagger.load()
+            if req.taggers:
+                job.message = "Local booru taggers will run one at a time..."
+            else:
+                job.message = "Loading local booru tagger..."
+                tagger = _resolve_tagger(req)
+                if hasattr(tagger, "load"):
+                    tagger.load()
         if req.enable_vlm:
-            job.message = "Loading VLM provider..."
-            try:
-                # The vlm router owns the "load saved settings -> VLMConfig"
-                # plumbing; the vlm_providers registry owns "VLMConfig ->
-                # concrete provider instance". Compose them here so the
-                # smart-tag pipeline picks up whatever provider/model the
-                # user already configured in Settings.
-                from routers.vlm import _build_config as _build_vlm_config
-                from vlm_providers import get_provider as _get_vlm_provider
+            if req.natural_language_mode == "toriigate":
+                job.message = "Loading ToriiGate natural-language model..."
+                from toriigate_tagger import get_toriigate_tagger
 
-                vlm_config = _build_vlm_config()
-                if not (vlm_config.endpoint or vlm_config.api_key):
-                    logger.info(
-                        "smart-tag: no VLM endpoint/api_key configured; "
-                        "running tagger-only."
-                    )
+                nl_tagger = get_toriigate_tagger(
+                    model_name="toriigate-0.5",
+                    use_gpu=req.use_gpu,
+                    force_reload=False,
+                )
+                if hasattr(nl_tagger, "load"):
+                    nl_tagger.load()
+            else:
+                job.message = "Loading VLM provider..."
+                try:
+                    from routers.vlm import _build_config as _build_vlm_config
+                    from vlm_providers import get_provider as _get_vlm_provider
+
+                    vlm_config = _build_vlm_config()
+                    if not (vlm_config.endpoint or vlm_config.api_key):
+                        message = (
+                            "Smart Tag natural-language mode is enabled, but VLM Settings has no endpoint or API key."
+                        )
+                        if not req.enable_wd14:
+                            raise RuntimeError(message)
+                        logger.info("smart-tag: %s Running booru-only.", message)
+                        vlm_provider = None
+                    else:
+                        vlm_provider = _get_vlm_provider(vlm_config)
+                except Exception as exc:
+                    if not req.enable_wd14:
+                        raise
+                    logger.warning("VLM provider not available, continuing without it: %s", exc)
                     vlm_provider = None
-                else:
-                    vlm_provider = _get_vlm_provider(vlm_config)
-            except Exception as exc:
-                logger.warning("VLM provider not available, continuing without it: %s", exc)
-                vlm_provider = None
+
+        # ---- Multi-tagger mode: process ALL images per-tagger to avoid
+        # model reload thrashing. Each tagger is loaded once, tags every
+        # image, then the next tagger is loaded. Results are fused after
+        # all taggers finish.
+        if req.enable_wd14 and req.taggers:
+            job.stage = "tagging"
+            # Collect all source items first so we can iterate them per-tagger.
+            all_sources: List[Tuple[str, int, str]] = []
+            for source_chunk in _iter_request_source_chunks(req):
+                all_sources.extend(source_chunk)
+            job.total = len(all_sources)
+
+            # per_image_outputs[i] = list of per-tagger output dicts for image i
+            per_image_outputs: List[List[Dict[str, Any]]] = [[] for _ in all_sources]
+            tagger_count = len(req.taggers)
+
+            for tagger_idx, entry in enumerate(req.taggers):
+                if job.cancel_requested:
+                    break
+                model_name = str(entry.get("model") or "").strip()
+                if not model_name:
+                    continue
+                weight = float(entry.get("weight") or 1.0)
+                gen_th = float(entry.get("general_threshold") or req.general_threshold)
+                char_th = float(entry.get("character_threshold") or req.character_threshold)
+                copy_th = float(entry.get("copyright_threshold") or req.copyright_threshold or gen_th)
+
+                job.message = f"Loading tagger {tagger_idx + 1}/{tagger_count}: {model_name}..."
+                try:
+                    one_tagger = _resolve_tagger_by_model(
+                        model_name,
+                        general_threshold=gen_th,
+                        character_threshold=char_th,
+                        copyright_threshold=copy_th,
+                        use_gpu=req.use_gpu,
+                    )
+                    if hasattr(one_tagger, "load"):
+                        one_tagger.load()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("smart-tag: failed to load tagger %s: %s", model_name, exc)
+                    continue
+
+                for img_idx, (source_key, image_id, path) in enumerate(all_sources):
+                    if job.cancel_requested:
+                        break
+                    if not path:
+                        continue
+                    try:
+                        out = _tag_image_with_thresholds(
+                            one_tagger,
+                            path,
+                            general_threshold=gen_th,
+                            character_threshold=char_th,
+                            copyright_threshold=copy_th,
+                        )
+                        per_image_outputs[img_idx].append({
+                            "model": model_name,
+                            "weight": weight,
+                            "general_tags": out.get("general_tags") or [],
+                            "copyright_tags": out.get("copyright_tags") or [],
+                            "character_tags": out.get("character_tags") or [],
+                            "rating": out.get("rating"),
+                        })
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "smart-tag consensus: tagger %s failed on %s: %s",
+                            model_name, path, exc,
+                        )
+                    job.processed = img_idx + 1 + (tagger_idx * len(all_sources))
+                    job.total = len(all_sources) * tagger_count
+                    job.message = f"Tagging ({model_name}) {img_idx + 1}/{len(all_sources)}"
+
+            if job.cancel_requested:
+                job.status = "cancelled"
+                job.message = "Cancelled by user."
+            else:
+                # Now run consensus + VLM for each image.
+                vlm_enabled = req.enable_vlm and (vlm_provider is not None or nl_tagger is not None)
+                job.stage = "vlm" if vlm_enabled else "tagging"
+                job.total = len(all_sources)
+                job.processed = 0
+                job.message = "Running consensus + VLM..." if vlm_enabled else "Running consensus..."
+
+                for img_idx, (source_key, image_id, path) in enumerate(all_sources):
+                    if job.cancel_requested:
+                        job.status = "cancelled"
+                        job.message = "Cancelled by user."
+                        break
+                    try:
+                        if not path:
+                            raise ValueError("Image path not found")
+                        result = _process_one_image(
+                            image_path=path,
+                            image_id=image_id,
+                            req=req,
+                            tagger=None,
+                            vlm_provider=vlm_provider,
+                            nl_tagger=nl_tagger,
+                            precomputed_tagger_outputs=per_image_outputs[img_idx] or None,
+                        )
+                        # Tags are persisted per-image so cancel preserves
+                        # already-completed results.
+                        if image_id > 0:
+                            _persist_result(image_id, result, req.merge_strategy)
+                        else:
+                            _append_caption_result(
+                                job, path, (result.get("caption") or "").strip(),
+                            )
+                        job.succeeded += 1
+                        preview = (result.get("caption") or "").strip()
+                        if preview:
+                            job.last_caption_preview = preview[:200]
+                    except Exception as exc:  # noqa: BLE001
+                        job.failed += 1
+                        _record_job_error(job, str(source_key), str(exc))
+                        logger.warning("smart-tag failed on image %s: %s", source_key, exc)
+                    finally:
+                        job.processed = img_idx + 1
+                        stage_label = "VLM captioning" if vlm_enabled else "Processing"
+                        job.message = f"{stage_label} {job.processed}/{job.total}"
+
+                if job.status == "running":
+                    job.status = "completed"
+                    job.message = f"Done. {job.succeeded} ok, {job.failed} failed."
+        else:
+            # Single-tagger or no-tagger path: per-image loop as before.
+            vlm_enabled = req.enable_vlm and (vlm_provider is not None or nl_tagger is not None)
+            job.stage = "tagging" if req.enable_wd14 else ("vlm" if vlm_enabled else "")
+            job.message = f"Smart-tagging {job.total} image(s)..."
+            for source_chunk in _iter_request_source_chunks(req):
+                for source_key, image_id, path in source_chunk:
+                    if job.cancel_requested:
+                        job.status = "cancelled"
+                        job.message = "Cancelled by user."
+                        break
+                    try:
+                        if not path:
+                            raise ValueError("Image path not found")
+                        result = _process_one_image(
+                            image_path=path,
+                            image_id=image_id,
+                            req=req,
+                            tagger=tagger,
+                            vlm_provider=vlm_provider,
+                            nl_tagger=nl_tagger,
+                        )
+                        # Tags are persisted per-image so cancel preserves
+                        # already-completed results.
+                        if image_id > 0:
+                            _persist_result(image_id, result, req.merge_strategy)
+                        else:
+                            _append_caption_result(
+                                job,
+                                path,
+                                (result.get("caption") or "").strip(),
+                            )
+                        job.succeeded += 1
+                        preview = (result.get("caption") or "").strip()
+                        if preview:
+                            job.last_caption_preview = preview[:200]
+                    except Exception as exc:  # noqa: BLE001
+                        job.failed += 1
+                        _record_job_error(job, str(source_key), str(exc))
+                        logger.warning("smart-tag failed on image %s: %s", source_key, exc)
+                    finally:
+                        job.processed += 1
+                        job.message = f"Processed {job.processed}/{job.total}"
+                if job.cancel_requested:
+                    break
+
+            if job.status == "running":
+                job.status = "completed"
+                job.message = f"Done. {job.succeeded} ok, {job.failed} failed."
     except Exception as exc:  # noqa: BLE001
         job.status = "failed"
-        job.message = f"Failed to initialise pipeline: {exc}"
+        job.message = f"Smart Tag failed: {exc}"
+        logger.exception("smart-tag pipeline failed")
+    finally:
+        _close_caption_results(job)
         job.finished_at = time.time()
         with _jobs_lock:
             if _active_job_id == job.job_id:
                 _active_job_id = None
-        return
-
-    # Per-image loop (sequential for the MVP - LoraHub does this
-    # in parallel pools, we will follow up with that once the basic
-    # path is verified end-to-end).
-    vlm_enabled = req.enable_vlm and vlm_provider is not None
-    if req.enable_wd14 and vlm_enabled:
-        job.stage = "vlm"
-    elif req.enable_wd14:
-        job.stage = "tagging"
-    elif vlm_enabled:
-        job.stage = "vlm"
-    job.message = f"Smart-tagging {job.total} image(s)..."
-    for image_id, path in paths.items():
-        if job.cancel_requested:
-            job.status = "cancelled"
-            job.message = "Cancelled by user."
-            break
-        try:
-            result = _process_one_image(
-                image_path=path,
-                image_id=image_id,
-                req=req,
-                tagger=tagger,
-                vlm_provider=vlm_provider,
-            )
-            _persist_result(image_id, result, req.merge_strategy)
-            job.succeeded += 1
-            preview = (result.get("caption") or "").strip()
-            if preview:
-                # Cap preview to keep snapshot payload small.
-                job.last_caption_preview = preview[:200]
-        except Exception as exc:  # noqa: BLE001
-            job.failed += 1
-            job.errors.append({"image_id": str(image_id), "error": str(exc)})
-            logger.warning("smart-tag failed on image %s: %s", image_id, exc)
-        finally:
-            job.processed += 1
-            job.message = f"Processed {job.processed}/{job.total}"
-
-    if job.status == "running":
-        job.status = "completed"
-        job.message = f"Done. {job.succeeded} ok, {job.failed} failed."
-    job.finished_at = time.time()
-    with _jobs_lock:
-        if _active_job_id == job.job_id:
-            _active_job_id = None
 
 
 def start_smart_tag_job(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -1034,6 +1649,11 @@ def start_smart_tag_job(payload: Dict[str, Any]) -> Dict[str, Any]:
             job_id=_new_job_id(),
             settings={
                 "image_count": len(req.image_ids),
+                "selection_count": int(req.selection_count or 0),
+                "path_count": len(req.image_paths),
+                "dataset_scan_count": int(req.dataset_scan_count or 0),
+                "has_selection_token": bool(req.selection_token),
+                "has_dataset_scan_token": bool(req.dataset_scan_token),
                 "training_purpose": req.training_purpose,
                 "trigger_word": req.trigger_word,
                 "merge_strategy": req.merge_strategy,
@@ -1042,6 +1662,12 @@ def start_smart_tag_job(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "enable_wd14": req.enable_wd14,
                 "enable_vlm": req.enable_vlm,
                 "tagger_model": req.tagger_model,
+                "taggers": list(req.taggers),
+                "consensus_min": req.consensus_min,
+                "natural_language_mode": req.natural_language_mode,
+                "general_threshold": req.general_threshold,
+                "character_threshold": req.character_threshold,
+                "copyright_threshold": req.copyright_threshold,
             },
         )
         _jobs[job.job_id] = job
