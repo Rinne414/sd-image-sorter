@@ -118,7 +118,7 @@
         const zoomBar = document.getElementById('dataset-zoom-toolbar');
 
         if (img) {
-            img.src = this._thumbSrc(id, 768);
+            img.src = this._thumbSrc(id, 1024);
             img.alt = filename;
             img.hidden = false;
             img.onerror = () => {
