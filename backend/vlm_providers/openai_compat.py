@@ -139,7 +139,33 @@ class OpenAICompatProvider(VLMProvider):
             model=self.config.model,
         )
 
-    async def _request(self, messages: List[Dict]) -> Dict[str, Any]:
+    async def generate_text(
+        self,
+        prompt: str,
+        *,
+        system_prompt: str = "",
+        max_tokens: int = 2048,
+        temperature: float = 0.1,
+    ) -> VLMResult:
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": str(prompt or "")})
+        try:
+            result = await self._request(messages, max_tokens=max_tokens, temperature=temperature)
+            raw_text = result.get("caption", "").strip()
+            if not raw_text:
+                return VLMResult(error="Provider returned an empty text response", error_type="empty_response", model=self.config.model)
+            return VLMResult(
+                caption=raw_text,
+                tokens_used=int(result.get("tokens", 0) or 0),
+                model=self.config.model,
+                raw_text=raw_text,
+            )
+        except ProviderError as e:
+            return VLMResult(error=str(e), error_type=e.error_type, model=self.config.model)
+
+    async def _request(self, messages: List[Dict], *, max_tokens: int = 1024, temperature: float = 0.3) -> Dict[str, Any]:
         url = self.config.endpoint.rstrip("/") + "/chat/completions"
         headers = {"Content-Type": "application/json"}
         if self.config.api_key:
@@ -148,8 +174,8 @@ class OpenAICompatProvider(VLMProvider):
         payload = {
             "model": self.config.model,
             "messages": messages,
-            "max_tokens": 1024,
-            "temperature": 0.3,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
         }
 
         async with make_async_client(self.config) as client:

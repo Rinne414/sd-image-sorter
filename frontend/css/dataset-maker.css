@@ -64,14 +64,16 @@
         gap: 10px;
     }
     #view-dataset .dataset-title {
-        flex: 1 0 100%;
-    }
-    #view-dataset .dataset-tabs {
-        flex: 1 1 220px;
+        flex: 1 1 auto;
         min-width: 0;
     }
+    #view-dataset .dataset-tabs {
+        flex: 1 1 100%;
+        min-width: 0;
+        order: 3;
+    }
     #view-dataset .dataset-count-pill {
-        margin-left: 0;
+        margin-left: auto;
         flex: 0 0 auto;
         white-space: nowrap;
         align-items: center;
@@ -201,14 +203,20 @@
     border-color: var(--accent-primary, #ff8a3d);
 }
 #view-dataset .dataset-queue-select-toggle {
-    width: 22px;
-    height: 22px;
-    flex: 0 0 22px;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    min-width: 18px;
+    min-height: 18px;
+    max-width: 18px;
+    max-height: 18px;
+    box-sizing: border-box;
+    padding: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border: 1px solid rgba(255,255,255,0.28);
-    border-radius: 5px;
+    border-radius: 4px;
     background: rgba(15,23,42,0.72);
     box-shadow: 0 4px 12px rgba(0,0,0,0.22);
 }
@@ -219,7 +227,7 @@
 #view-dataset .dataset-queue-select-toggle[aria-checked="true"]::before {
     content: '✓';
     color: var(--text-primary, #f1f5f9);
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 800;
 }
 #view-dataset .dataset-queue-order {
@@ -310,8 +318,8 @@
 }
 #view-dataset .dataset-queue-grid-mode .dataset-queue-select-toggle {
     position: absolute;
-    top: 7px;
-    left: 7px;
+    top: 5px;
+    left: 5px;
     z-index: 3;
 }
 #view-dataset .dataset-queue-grid-mode .dataset-queue-order {
@@ -532,6 +540,10 @@
     overflow-y: auto;
     gap: 10px;
 }
+#view-dataset .dataset-maker[data-active-tab="export"] .dataset-export-pane {
+    overflow-y: auto;
+    padding-bottom: 0;
+}
 #view-dataset .dataset-card {
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 8px;
@@ -750,8 +762,22 @@
 }
 
 /* ---- Big primary export CTA ---- */
+#view-dataset .dataset-export-action-bar {
+    position: sticky;
+    top: -12px;
+    z-index: 20;
+    margin: -2px -14px 12px;
+    padding: 10px 14px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.10);
+    background: linear-gradient(180deg,
+        rgba(15, 23, 42, 0.97),
+        rgba(15, 23, 42, 0.80));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.26);
+}
 #view-dataset .dataset-export-cta {
-    margin-top: 14px;
+    margin-top: 0;
     font-size: 16px;
     padding: 14px 18px;
     font-weight: 700;
@@ -994,7 +1020,7 @@
 }
 
 
-/* Step B quick-fill button row (one-click common-tag presets) */
+/* Workbench quick-fill button row (one-click common-tag presets) */
 #view-dataset .dataset-quickfill-row {
     display: flex;
     flex-wrap: wrap;
@@ -1066,6 +1092,29 @@
 #view-dataset .dataset-editor-help-body > ul > li {
     margin-bottom: 4px;
 }
+@media (max-width: 700px) {
+    #view-dataset .dataset-pane-head {
+        flex-wrap: wrap;
+        align-items: flex-start;
+    }
+    #view-dataset .dataset-editor-help {
+        position: static;
+    }
+    #view-dataset .dataset-editor-help[open] {
+        flex-basis: 100%;
+        width: 100%;
+        min-width: 100%;
+        margin-left: 0;
+    }
+    #view-dataset .dataset-editor-help-body {
+        position: static;
+        box-sizing: border-box;
+        width: 100%;
+        max-height: none;
+        overflow: visible;
+        margin-top: 8px;
+    }
+}
 #view-dataset .dataset-help-shortcut {
     background: rgba(var(--accent-secondary-rgb, 45, 212, 191), 0.10);
     border-left: 2px solid rgba(var(--accent-secondary-rgb, 45, 212, 191), 0.45);
@@ -1097,15 +1146,10 @@
 }
 
 
-/* Final-pass polish (Phase 2F): keep the right pane reasonably scrollable
-   on viewports where it overflows (1366-1500 px laptops). The Export
-   button stays at the bottom of the scrolling content rather than being
-   pinned, because pinning it visually overlapped the last radio choice
-   in testing. The bottom padding gives the user a clear stopping point
-   when they scroll past the export button. */
+/* Keep the sticky export action above the bottom edge on laptop widths. */
 @media (max-width: 1500px) {
     #view-dataset .dataset-export-pane {
-        padding-bottom: 24px;
+        padding-bottom: 12px;
     }
     #view-dataset .dataset-export-cta {
         scroll-margin-bottom: 24px;
@@ -1133,12 +1177,19 @@
     text-align: center;
 }
 
-/* ---------------- Tag pills (right pane) ---------------- */
+/* ---------------- Tag pills (inline editor) ---------------- */
 #view-dataset .dataset-tag-pills-section {
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 8px;
     padding: 10px 12px;
     background: rgba(255,255,255,0.02);
+}
+#view-dataset .dataset-tag-pills-section-inline {
+    margin-top: 8px;
+    flex: 0 0 auto;
+}
+#view-dataset .dataset-maker[data-active-tab="export"] .dataset-tag-pills-section-inline {
+    display: none !important;
 }
 #view-dataset .dataset-tag-pills-title {
     margin: 0 0 6px 0;
@@ -1150,8 +1201,31 @@
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
-    max-height: 200px;
+    max-height: 118px;
     overflow-y: auto;
+}
+
+#view-dataset .dataset-dedupe-row {
+    display: grid;
+    grid-template-columns: auto minmax(120px, 1fr) auto;
+    gap: 6px;
+    align-items: center;
+    margin: 8px 0;
+}
+#view-dataset .dataset-dedupe-scope {
+    min-height: 30px;
+    padding: 4px 8px;
+    font-size: 12px;
+}
+#view-dataset .dataset-template-options[hidden] {
+    display: none;
+}
+#view-dataset .dataset-translation-options {
+    display: grid;
+    gap: 8px;
+    padding-top: 8px;
+    margin-top: 8px;
+    border-top: 1px dashed rgba(255,255,255,0.08);
 }
 #view-dataset .dataset-tag-pill {
     display: inline-flex;
@@ -1208,6 +1282,16 @@
     flex-direction: column;
     gap: 8px;
     font-size: 12px;
+}
+@media (max-width: 900px) {
+    #view-dataset .dataset-export-preview {
+        overflow: visible;
+    }
+    #view-dataset .dataset-export-preview-list {
+        flex: 0 1 auto;
+        overflow: visible;
+        max-height: none;
+    }
 }
 #view-dataset .dataset-export-preview-summary,
 #view-dataset .dataset-export-preview-warning,
@@ -1316,6 +1400,77 @@
     color: var(--text-muted, rgba(255,255,255,0.55));
     font-size: 12px;
     font-style: italic;
+}
+#view-dataset .dataset-export-caption-row {
+    display: grid;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.035);
+}
+#view-dataset .dataset-export-caption-row.has-error {
+    border-color: rgba(239, 68, 68, 0.42);
+}
+#view-dataset .dataset-export-caption-top {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+#view-dataset .dataset-export-caption-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+#view-dataset .dataset-export-caption-meta strong,
+#view-dataset .dataset-export-caption-meta small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+#view-dataset .dataset-export-caption-meta small {
+    color: var(--accent-secondary, #2dd4bf);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+#view-dataset .dataset-export-caption-textarea {
+    width: 100%;
+    min-height: 92px;
+    resize: vertical;
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 6px;
+    background: rgba(2, 6, 23, 0.5);
+    padding: 8px 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.45;
+}
+#view-dataset .dataset-export-caption-textarea:disabled {
+    opacity: 0.58;
+}
+#view-dataset .dataset-export-caption-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+}
+#view-dataset .dataset-export-translation {
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(45, 212, 191, 0.22);
+    background: rgba(45, 212, 191, 0.08);
+    color: var(--text-secondary, rgba(255,255,255,0.72));
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+#view-dataset .dataset-export-translation[hidden] {
+    display: none;
 }
 #view-dataset .export-caption-preview {
     font-family: monospace;

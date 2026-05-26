@@ -78,6 +78,53 @@ logger = logging.getLogger(__name__)
 
 PHASH_NEAR_DUPLICATE_LIMIT = 5_000
 AUDIT_RESPONSE_ITEM_LIMIT = 5_000
+_PHASH_DCT_BASIS = None
+
+
+def _fallback_phash_hex(image_path: str) -> Optional[str]:
+    """Compute a 64-bit pHash without the optional ``imagehash`` package.
+
+    Core installs do not always include ``imagehash``. The Dataset Maker audit
+    should still be able to catch obvious duplicates, so this mirrors the
+    standard pHash shape with a small numpy DCT implementation.
+    """
+    global _PHASH_DCT_BASIS
+    try:
+        import numpy as np
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("audit: numpy phash fallback unavailable: %s", exc)
+        return None
+
+    try:
+        with Image.open(image_path) as img:
+            resample = getattr(Image, "Resampling", Image).LANCZOS
+            gray = img.convert("L").resize((32, 32), resample)
+            pixels = np.asarray(gray, dtype=np.float32)
+    except (UnidentifiedImageError, OSError, ValueError):
+        return None
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("audit: fallback phash image read failed for %s: %s", image_path, exc)
+        return None
+
+    try:
+        if _PHASH_DCT_BASIS is None:
+            n = 32
+            coords = np.arange(n, dtype=np.float32)
+            freqs = np.arange(n, dtype=np.float32)
+            _PHASH_DCT_BASIS = np.cos(((2 * coords[:, None] + 1) * freqs[None, :] * np.pi) / (2 * n))
+        basis = _PHASH_DCT_BASIS
+        dct = basis.T @ pixels @ basis
+        low = dct[:8, :8].flatten()
+        # Exclude the DC coefficient from the threshold, but keep it in the
+        # final 64 bits for a stable 16-char hash.
+        median = float(np.median(low[1:])) if low.size > 1 else float(low[0])
+        value = 0
+        for bit in (low > median):
+            value = (value << 1) | int(bool(bit))
+        return f"{value:016x}"
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("audit: fallback phash failed for %s: %s", image_path, exc)
+        return None
 
 
 def _safe_aesthetic_score(image_path: str) -> Optional[float]:
@@ -93,19 +140,37 @@ def _safe_aesthetic_score(image_path: str) -> Optional[float]:
 
 
 def _safe_phash_hex(image_path: str) -> Optional[str]:
-    """Compute a perceptual-hash hex digest. Falls back to None if
-    the image can't be opened or PIL/imagehash isn't available."""
+    """Compute a perceptual-hash hex digest.
+
+    Prefer the optional ``imagehash`` package when installed, then fall back to
+    a local numpy implementation so near-duplicate audit still works in the
+    lightweight runtime.
+    """
     try:
-        # imagehash is a hard dep used by similarity.py; if it's missing
-        # we silently skip duplicate detection rather than crashing.
         import imagehash  # type: ignore[import-untyped]
         with Image.open(image_path) as img:
             return str(imagehash.phash(img.convert("RGB")))
+    except ModuleNotFoundError:
+        return _fallback_phash_hex(image_path)
     except (UnidentifiedImageError, OSError, ValueError):
         return None
     except Exception as exc:  # noqa: BLE001
-        logger.debug("audit: phash skipped for %s: %s", image_path, exc)
-        return None
+        logger.debug("audit: imagehash phash skipped for %s: %s", image_path, exc)
+        return _fallback_phash_hex(image_path)
+
+
+def _phash_backend_error() -> str:
+    try:
+        import imagehash  # noqa: F401  # type: ignore[import-untyped]
+        return ""
+    except Exception as exc:  # noqa: BLE001
+        try:
+            import numpy  # noqa: F401
+            return ""
+        except Exception as fallback_exc:  # noqa: BLE001
+            return (
+                f"imagehash unavailable ({exc}); numpy fallback unavailable ({fallback_exc})"
+            )
 
 
 def _hamming_distance_hex(a: str, b: str) -> int:
@@ -266,6 +331,12 @@ def audit_dataset(
     small_count = 0
     missing_count = 0
     aesthetic_scores: List[float] = []
+    phash_checked = bool(enable_phash and phash_max is not None)
+    phash_backend_error = _phash_backend_error() if phash_checked else ""
+    phash_attempted_count = 0
+    phash_success_count = 0
+    phash_failed_count = 0
+    phash_unavailable_count = 0
 
     duplicate_rows: List[Dict[str, Any]] = []
     duplicate_exact_mode = False
@@ -302,6 +373,7 @@ def audit_dataset(
 
     def _process_row(row: Dict[str, Any]) -> None:
         nonlocal total_rows, low_quality_count, untagged_count, small_count, missing_count
+        nonlocal phash_attempted_count, phash_success_count, phash_failed_count, phash_unavailable_count
         total_rows += 1
         path = row.get("abs_path") or ""
         flags = set(row.get("flags") or [])
@@ -320,7 +392,15 @@ def audit_dataset(
             if "missing" not in flags and enable_aesthetic and aesthetic_max is not None:
                 row["aesthetic_score"] = _safe_aesthetic_score(path)
             if "missing" not in flags and enable_phash and phash_max is not None:
-                row["phash_hex"] = _safe_phash_hex(path)
+                phash_attempted_count += 1
+                if phash_backend_error:
+                    phash_unavailable_count += 1
+                else:
+                    row["phash_hex"] = _safe_phash_hex(path)
+                    if row.get("phash_hex"):
+                        phash_success_count += 1
+                    else:
+                        phash_failed_count += 1
 
         if "missing" in flags:
             missing_count += 1
@@ -445,6 +525,12 @@ def audit_dataset(
             "near_duplicate_check_limited": bool(
                 enable_phash and phash_max is not None and total_rows > PHASH_NEAR_DUPLICATE_LIMIT
             ),
+            "near_duplicate_checked": phash_checked,
+            "near_duplicate_attempted": phash_attempted_count,
+            "near_duplicate_hashes": phash_success_count,
+            "near_duplicate_failed": phash_failed_count,
+            "near_duplicate_unavailable_count": phash_unavailable_count,
+            "near_duplicate_error": phash_backend_error,
         },
         "items": returned_items,
         "items_truncated": len(returned_items) < total_rows,

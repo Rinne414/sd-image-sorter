@@ -29,6 +29,85 @@
         return opts;
     };
 
+    DM._parseDatasetReplaceRules = function () {
+        const raw = document.getElementById('dataset-replace-rules')?.value || '';
+        const rules = {};
+        raw.split(/\r?\n/).forEach((line) => {
+            const text = line.trim();
+            if (!text) return;
+            const parts = text.includes('->') ? text.split('->') : text.split('=>');
+            if (parts.length < 2) return;
+            const from = parts.shift().trim();
+            const to = parts.join('->').trim();
+            if (from) rules[from] = to;
+        });
+        return rules;
+    };
+
+    DM._exportContentMode = function () {
+        return document.getElementById('dataset-export-content-mode')?.value || 'template';
+    };
+
+    DM._datasetTemplateOptions = function () {
+        const opts = this._captionOptions();
+        const override = document.getElementById('dataset-template-override')?.value || '';
+        opts.template_override = override.trim() || '{trigger}, {tags:filtered}, {append}';
+        opts.replace_rules = this._parseDatasetReplaceRules();
+        opts.max_tags = Math.max(0, parseInt(document.getElementById('dataset-max-tags')?.value || '0', 10) || 0);
+        return opts;
+    };
+
+    DM._captionTransforms = function () {
+        return {};
+    };
+
+    DM._dedupeCaptionTags = function () {
+        const scope = document.getElementById('dataset-dedupe-scope')?.value || 'all';
+        const ids = scope === 'selected'
+            ? Array.from(this._queueSelection || [])
+            : Array.from(this.imageIds || []);
+        if (scope === 'selected' && ids.length === 0) {
+            this._toast(this._t('dataset.dedupeNoSelection', 'Select images first, or switch scope to All images.'), 'warning', 3500);
+            return;
+        }
+        let changedImages = 0;
+        let removedTags = 0;
+        for (const rawId of ids) {
+            const id = Number(rawId);
+            const caption = this.captionEdits.has(id) ? this.captionEdits.get(id) : (this.captions.get(id) || '');
+            const parts = String(caption || '').split(',').map((s) => s.trim()).filter(Boolean);
+            if (parts.length <= 1) continue;
+            const seen = new Set();
+            const kept = [];
+            for (const part of parts) {
+                const key = part.replace(/\s+/g, ' ').toLowerCase();
+                if (seen.has(key)) {
+                    removedTags += 1;
+                    continue;
+                }
+                seen.add(key);
+                kept.push(part);
+            }
+            if (kept.length !== parts.length) {
+                const next = kept.join(', ');
+                this.captionEdits.set(id, next);
+                changedImages += 1;
+                this._refreshQueueItem?.(id);
+                if (Number(this.activeId) === id) {
+                    const ta = document.getElementById('dataset-editor-textarea');
+                    if (ta) ta.value = next;
+                }
+            }
+        }
+        this._renderTagPills?.();
+        this._refreshVocab?.();
+        this._refreshExportPreview?.();
+        this._toast(this._t('dataset.dedupeDone',
+            'Removed {tags} duplicate tags across {images} images.',
+            { tags: removedTags, images: changedImages }), changedImages ? 'success' : 'info', 3500);
+        this._saveSession?.();
+    };
+
     DM._fetchMissingMeta = async function () {
         const missing = this.imageIds.filter(id => !this.meta.has(id));
         if (missing.length === 0) return;
@@ -294,7 +373,7 @@
         }
         if (untaggedCount > 0) {
             items.push(`<span class="dataset-confirm-warn">${this._t('dataset.confirmSummaryUntagged',
-                '⚠️ <strong>{count}</strong> have empty captions — their .txt files will be blank. Run "Tag all" first or write captions in Step B.',
+                '⚠️ <strong>{count}</strong> have empty captions — their .txt files will be blank. Run "Tag all" first or write captions in Workbench.',
                 { count: untaggedCount })}</span>`);
         }
 
@@ -341,6 +420,8 @@
         const imageOp = document.getElementById('dataset-image-op')?.value || 'copy';
         const overwrite = document.getElementById('dataset-overwrite')?.value || 'unique';
         const normalize = !!document.getElementById('dataset-underscore-to-space')?.checked;
+        const contentMode = this._exportContentMode();
+        const prefix = document.getElementById('dataset-export-prefix')?.value || '';
         const blacklist = (document.getElementById('dataset-blacklist')?.value || '')
             .split(',').map(s => s.trim()).filter(Boolean);
         const commonTags = (document.getElementById('dataset-common-tags')?.value || '')
@@ -357,6 +438,10 @@
             trigger,
             image_op: imageOp,
             overwrite_policy: overwrite,
+            content_mode: contentMode,
+            prefix,
+            template_options: contentMode === 'template' ? this._datasetTemplateOptions() : null,
+            caption_transforms: this._captionTransforms(),
             normalize_tag_underscores: normalize,
             blacklist,
             common_tags: commonTags,
@@ -701,6 +786,7 @@
             DM.captionEdits.set(DM.activeId, ta.value);
             DM._refreshQueueItem(DM.activeId);
             DM._renderTagPills();
+            DM._saveSession?.();
             input.value = '';
             dropdown.hidden = true;
         }

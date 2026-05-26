@@ -104,6 +104,7 @@
     }
 
     DM._setActive = function (imageId) {
+        if (Number(this.activeId) !== Number(imageId)) this._flushPendingCaptionEdit?.();
         const id = Number(imageId);
         if (!this.imageIds.includes(id)) return;
         this.activeId = id;
@@ -118,14 +119,16 @@
         const zoomBar = document.getElementById('dataset-zoom-toolbar');
 
         if (img) {
-            if (this._fullResMode) {
-                img.src = `/api/image-file/${id}`;
-            } else {
-                img.src = this._thumbSrc(id, 1024);
-            }
+            img.src = this._fullResMode ? `/api/image-file/${id}` : this._thumbSrc(id, 1024);
             img.alt = filename;
             img.hidden = false;
+            let usedFallback = false;
             img.onerror = () => {
+                if (!usedFallback) {
+                    usedFallback = true;
+                    img.src = this._thumbSrc(id, 1024);
+                    return;
+                }
                 img.removeAttribute('src');
                 img.hidden = true;
                 if (empty) empty.hidden = false;
@@ -181,7 +184,8 @@
     DM._loadFullResCurrent = function () {
         const img = document.getElementById('dataset-editor-image');
         if (!img || this.activeId == null) return;
-        img.src = `/api/image-file/${this.activeId}`;
+        const id = Number(this.activeId);
+        img.src = this.isLocalId?.(id) ? this._thumbSrc(id, 2048) : `/api/image-file/${id}`;
     };
 
     DM._toggleFullResAll = function () {
@@ -251,6 +255,7 @@
         } else if (wasActive) {
             this._setActive(this.imageIds[Math.min(idx, this.imageIds.length - 1)]);
         }
+        this._saveSession?.();
     };
 
     DM._removeActiveLegacy = function () {
@@ -276,6 +281,7 @@
         } else {
             this._setActive(this.imageIds[Math.min(idx, this.imageIds.length - 1)]);
         }
+        this._saveSession?.();
     };
 
     DM._revertActiveCaption = function () {
@@ -285,6 +291,7 @@
         const ta = document.getElementById('dataset-editor-textarea');
         if (ta) ta.value = this.captions.get(id) || '';
         this._refreshQueueItem(id);
+        this._saveSession?.();
     };
 
     DM._renderEmptyEditor = function () {
@@ -311,10 +318,11 @@
         if (!list) return;
         this._updateCount?.();
         const mode = this._queueViewMode === 'list' ? 'list' : 'grid';
+        const renderIds = this._queueIdsForCurrentFilter();
         list.classList.toggle('dataset-queue-grid-mode', mode === 'grid');
         list.classList.toggle('dataset-queue-list-mode', mode === 'list');
-        if (this.imageIds.length > DATASET_VIRTUAL_THRESHOLD) {
-            this._renderVirtualQueue(list, mode);
+        if (renderIds.length > DATASET_VIRTUAL_THRESHOLD) {
+            this._renderVirtualQueue(list, mode, renderIds);
             return;
         }
         cleanupVirtualRenderer(this, '_queueVirtualCleanup');
@@ -337,7 +345,15 @@
             return;
         }
         list.innerHTML = '';
-        for (const [index, id] of this.imageIds.entries()) {
+        if (renderIds.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'dataset-empty-state';
+            empty.textContent = this._t('dataset.queueFilterEmpty', 'No images match this queue filter.');
+            list.appendChild(empty);
+            this._updateMultiSelectUI();
+            return;
+        }
+        for (const [index, id] of renderIds.entries()) {
             list.appendChild(this._buildQueueItem(id, index));
         }
         this._highlightActiveQueueItem();
@@ -349,7 +365,8 @@
     DM._scrollActiveQueueItemIntoView = function () {
         const list = document.getElementById('dataset-queue-list');
         if (!list || !list.classList.contains('is-virtualized') || this.activeId == null) return;
-        const index = this.imageIds.indexOf(Number(this.activeId));
+        const renderIds = this._queueIdsForCurrentFilter();
+        const index = renderIds.indexOf(Number(this.activeId));
         if (index < 0) return;
         const mode = this._queueViewMode === 'list' ? 'list' : 'grid';
         const gridLayout = getGridLayout(list, DATASET_QUEUE_GRID_MIN, DATASET_QUEUE_GRID_GAP);
@@ -357,11 +374,11 @@
         const columns = mode === 'list' ? 1 : gridLayout.columns;
         const cellWidth = mode === 'list' ? width : gridLayout.cellWidth;
         const itemHeight = mode === 'list' ? DATASET_QUEUE_LIST_HEIGHT : gridLayout.rowStride;
-        list.dataset.virtualRows = String(Math.ceil(this.imageIds.length / columns));
+        list.dataset.virtualRows = String(Math.ceil(renderIds.length / columns));
         scrollVirtualIndexIntoView(list, index, columns, itemHeight);
     };
 
-    DM._renderVirtualQueue = function (list, mode) {
+    DM._renderVirtualQueue = function (list, mode, renderIds = this._queueIdsForCurrentFilter()) {
         cleanupVirtualRenderer(this, '_queueVirtualCleanup');
         list.innerHTML = '';
         list.classList.add('is-virtualized');
@@ -382,7 +399,7 @@
                 const columns = isList ? 1 : gridLayout.columns;
                 const cellWidth = isList ? width : gridLayout.cellWidth;
                 const itemHeight = isList ? DATASET_QUEUE_LIST_HEIGHT : gridLayout.rowStride;
-                const rowCount = Math.ceil(this.imageIds.length / columns);
+                const rowCount = Math.ceil(renderIds.length / columns);
                 const metrics = getVirtualMetrics(list, rowCount, itemHeight);
                 list.dataset.virtualRows = String(rowCount);
                 spacer.style.height = `${metrics.spacerHeight}px`;
@@ -396,8 +413,8 @@
                 for (let row = startRow; row < endRow; row += 1) {
                     for (let col = 0; col < columns; col += 1) {
                         const index = row * columns + col;
-                        if (index >= this.imageIds.length) break;
-                        const node = this._buildQueueItem(this.imageIds[index], index);
+                        if (index >= renderIds.length) break;
+                        const node = this._buildQueueItem(renderIds[index], index);
                         node.style.position = 'absolute';
                         node.style.top = `${metrics.domTopForRow(row)}px`;
                         node.style.left = isList ? '0' : `${col * (cellWidth + DATASET_QUEUE_GRID_GAP)}px`;
@@ -503,7 +520,12 @@
             edited:   { icon: '✏️', key: 'dataset.statusEdited',   fallback: 'edited' },
         };
         const b = badgeMap[status];
-        badge.innerHTML = `<span aria-hidden="true">${b.icon}</span><span>${this._t(b.key, b.fallback)}</span>`;
+        const badgeIcon = document.createElement('span');
+        badgeIcon.setAttribute('aria-hidden', 'true');
+        badgeIcon.textContent = b.icon;
+        const badgeText = document.createElement('span');
+        badgeText.textContent = this._t(b.key, b.fallback);
+        badge.append(badgeIcon, badgeText);
 
         item.append(selectToggle, orderBadge, img, metaWrap, badge);
         item.addEventListener('click', (e) => {
@@ -529,7 +551,12 @@
         if (!list) return;
         const existing = list.querySelector(`.dataset-queue-item[data-image-id="${id}"]`);
         if (!existing) return;
-        existing.replaceWith(this._buildQueueItem(id));
+        if (list.classList.contains('is-virtualized')) {
+            this._renderQueue();
+            return;
+        }
+        const orderIndex = Number(existing.dataset.queueOrder || 0) - 1;
+        existing.replaceWith(this._buildQueueItem(id, Number.isFinite(orderIndex) ? orderIndex : null));
         this._highlightActiveQueueItem();
         this._applyAuditFilterToQueue?.();
     };
@@ -563,17 +590,32 @@
     // ---------- Queue caption filter ----------
     DM._queueCaptionFilter = 'all';
 
+    DM._queueIdsForCurrentFilter = function () {
+        const filter = this._queueCaptionFilter || 'all';
+        if (filter === 'all') return Array.from(this.imageIds || []);
+        return (this.imageIds || []).filter((id) => {
+            const caption = (this.captionEdits?.get?.(id) || this.captions?.get?.(id) || '').trim();
+            const hasCaption = caption.length > 0;
+            return filter === 'tagged' ? hasCaption : !hasCaption;
+        });
+    };
+
     DM._initQueueCaptionFilter = function () {
         const sel = document.getElementById('dataset-queue-caption-filter');
         if (!sel) return;
         sel.addEventListener('change', () => {
             this._queueCaptionFilter = sel.value || 'all';
-            this._applyCaptionFilter();
+            this._renderQueue();
         });
     };
 
     DM._applyCaptionFilter = function () {
         const filter = this._queueCaptionFilter || 'all';
+        const list = document.getElementById('dataset-queue-list');
+        if (list?.classList.contains('is-virtualized')) {
+            this._renderQueue();
+            return;
+        }
         const items = document.querySelectorAll('#dataset-queue-list .dataset-queue-item');
         for (const it of items) {
             if (filter === 'all') {
@@ -675,6 +717,7 @@
         this._updateMultiSelectUI();
         if (this.activeId != null) this._setActive(this.activeId);
         else this._renderEmptyEditor();
+        this._saveSession?.();
     };
 
     DM._initQueueSelectionControls = function () {
@@ -773,6 +816,7 @@
             if (this.activeId != null) this._setActive(this.activeId);
             this._toast(this._t('dataset.multiAddTagDone',
                 'Added tag to {count} images', { count: n }), 'success');
+            this._saveSession?.();
         });
     };
 
@@ -821,15 +865,18 @@
         const panel = document.createElement('div');
         panel.id = 'dataset-split-panel';
         panel.className = 'dataset-split-panel';
-        panel.innerHTML = `
-            <img class="dataset-split-image" src="/api/image-thumbnail/${nextId}?size=512"
-                 alt="${nextMeta.filename || ''}" />
-            <textarea class="dataset-split-textarea"
-                      placeholder="caption...">${nextCaption}</textarea>
-        `;
+        const splitImg = document.createElement('img');
+        splitImg.className = 'dataset-split-image';
+        splitImg.src = this._thumbSrc(nextId, 512);
+        splitImg.alt = nextMeta.filename || '';
+        const splitTa = document.createElement('textarea');
+        splitTa.className = 'dataset-split-textarea';
+        splitTa.placeholder = 'caption...';
+        splitTa.value = nextCaption;
+        panel.append(splitImg, splitTa);
         wrap.after(panel);
 
-        const ta = panel.querySelector('.dataset-split-textarea');
+        const ta = splitTa;
         ta.addEventListener('input', () => {
             this.captionEdits.set(nextId, ta.value);
             this._refreshQueueItem(nextId);
@@ -1075,7 +1122,12 @@
         for (const tag of tags) {
             const pill = document.createElement('span');
             pill.className = 'dataset-tag-pill';
-            pill.innerHTML = `${tag} <span class="dataset-tag-pill-x">x</span>`;
+            const label = document.createElement('span');
+            label.textContent = tag;
+            const x = document.createElement('span');
+            x.className = 'dataset-tag-pill-x';
+            x.textContent = 'x';
+            pill.append(label, x);
             pill.title = `Remove "${tag}"`;
             pill.addEventListener('click', () => this._removeTag(tag));
             wrap.appendChild(pill);

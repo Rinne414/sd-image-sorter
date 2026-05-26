@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 import database as db
 from config import ALLOWED_IMAGE_EXTENSIONS
@@ -51,7 +51,11 @@ from services.dataset_session_service import (
     iter_scan_manifest_paths,
     virtual_image_record_for_path,
 )
-from services.tag_export_service import build_sidecar_content
+from services.tag_export_service import (
+    VALID_CONTENT_MODES,
+    apply_caption_transforms,
+    build_sidecar_content,
+)
 from utils.path_validation import normalize_user_path, validate_folder_path
 
 
@@ -60,6 +64,8 @@ logger = logging.getLogger(__name__)
 
 VALID_IMAGE_OPS = {"copy", "move"}
 VALID_OVERWRITE_POLICIES = {"unique", "overwrite", "skip"}
+TRAINING_TAG_CONTENT_MODES = {"tags", "caption_tags", "caption_merged", "tags_nl"}
+DATASET_LEGACY_TEMPLATE = "{trigger}, {tags:filtered}, {append}"
 # Kept as a compatibility symbol for older imports/tests. It is no longer a
 # processing cap; large exports must flow through scan/selection tokens and
 # stream in backend chunks instead of failing validation at an arbitrary count.
@@ -104,6 +110,10 @@ class DatasetExportRequest(BaseModel):
 
     # Caption rendering options — match the export-template engine knobs
     # the Dataset Maker UI exposes.
+    content_mode: str = Field(default="template", max_length=32)
+    prefix: str = Field(default="", max_length=256)
+    template_options: Optional[Dict[str, Any]] = None
+    caption_transforms: Optional[Dict[str, Any]] = None
     blacklist: List[str] = Field(default_factory=list, max_length=200)
     common_tags: List[str] = Field(default_factory=list, max_length=200)
     normalize_tag_underscores: bool = True
@@ -112,6 +122,36 @@ class DatasetExportRequest(BaseModel):
     # gallery-source items) or absolute path (for local-source items).
     # Empty string means "use whatever the template engine renders".
     image_overrides: Dict[str, str] = Field(default_factory=dict)
+
+
+class DatasetExportPreviewRequest(BaseModel):
+    """Request schema for ``POST /api/dataset/export-preview``.
+
+    This mirrors the export request but does not require an output folder.
+    The preview must render captions through the exact same helper as export
+    so the text the user edits is the text that lands in sidecars.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    image_ids: List[int] = Field(default_factory=list)
+    image_paths: List[str] = Field(default_factory=list)
+    dataset_scan_tokens: List[Dict[str, Any]] = Field(default_factory=list, max_length=100)
+    output_folder: str = Field(default="", max_length=4096)
+
+    naming_pattern: str = Field(default="{filename}", min_length=1, max_length=200)
+    trigger: str = Field(default="", max_length=100)
+    overwrite_policy: str = Field(default="unique")
+
+    content_mode: str = Field(default="template", max_length=32)
+    prefix: str = Field(default="", max_length=256)
+    template_options: Optional[Dict[str, Any]] = None
+    caption_transforms: Optional[Dict[str, Any]] = None
+    blacklist: List[str] = Field(default_factory=list, max_length=500)
+    common_tags: List[str] = Field(default_factory=list, max_length=500)
+    normalize_tag_underscores: bool = True
+    image_overrides: Dict[str, str] = Field(default_factory=dict)
+    limit: int = Field(default=72, ge=1, le=500)
 
 
 class DatasetExportItemResult(BaseModel):
@@ -195,6 +235,10 @@ def _resolve_dataset_image_path(raw_path: Any) -> Optional[str]:
     return str(resolved)
 
 
+def _dataset_sidecar_extension(content_mode: str) -> str:
+    return ".json" if str(content_mode or "").strip().lower() == "json" else ".txt"
+
+
 def _iter_requested_scan_paths(request: DatasetExportRequest) -> Iterator[str]:
     for source in request.dataset_scan_tokens or []:
         token = str((source or {}).get("scan_token") or (source or {}).get("token") or "")
@@ -220,6 +264,7 @@ def _plan_single_rename(
     pattern: str,
     trigger: str,
     overwrite_policy: str,
+    caption_extension: str,
     index: int,
     used_image_paths: set[str],
 ) -> Tuple[Optional[Path], Optional[Path], Optional[str]]:
@@ -245,7 +290,7 @@ def _plan_single_rename(
     )
     if image_path is None:
         return None, None, "existing" if overwrite_policy == "skip" else "too_many_collisions"
-    return image_path, output_folder / f"{image_path.stem}.txt", None
+    return image_path, output_folder / f"{image_path.stem}{caption_extension}", None
 
 
 def _validate_export_request(request: DatasetExportRequest) -> Path:
@@ -253,6 +298,8 @@ def _validate_export_request(request: DatasetExportRequest) -> Path:
         raise HTTPException(status_code=400, detail=f"Invalid image_op: {request.image_op!r}")
     if request.overwrite_policy not in VALID_OVERWRITE_POLICIES:
         raise HTTPException(status_code=400, detail=f"Invalid overwrite_policy: {request.overwrite_policy!r}")
+    if str(request.content_mode or "template").strip().lower() not in VALID_CONTENT_MODES:
+        raise HTTPException(status_code=400, detail=f"Invalid content_mode: {request.content_mode!r}")
     if not request.image_ids and not request.image_paths and not request.dataset_scan_tokens:
         raise HTTPException(status_code=400, detail="Must supply image_ids, image_paths, or dataset_scan_tokens.")
 
@@ -263,6 +310,134 @@ def _validate_export_request(request: DatasetExportRequest) -> Path:
     output_path = Path(output_folder_norm)
     output_path.mkdir(parents=True, exist_ok=True)
     return output_path
+
+
+def _split_image_overrides(request: Any) -> Tuple[Dict[int, str], Dict[str, str]]:
+    """Normalise DB-id and local-path caption overrides.
+
+    Keys are either ``str(image_id)`` for gallery-backed records or absolute
+    paths for local Dataset Maker records. Empty strings are valid overrides:
+    a user can intentionally export a blank sidecar from the review table.
+    """
+    image_overrides_int: Dict[int, str] = {}
+    image_overrides_path: Dict[str, str] = {}
+    for k, v in (getattr(request, "image_overrides", None) or {}).items():
+        text = str(v or "")
+        try:
+            image_overrides_int[int(k)] = text
+        except (TypeError, ValueError):
+            try:
+                normalized = str(Path(normalize_user_path(str(k))).resolve())
+            except (OSError, ValueError):
+                continue
+            image_overrides_path[normalized] = text
+    return image_overrides_int, image_overrides_path
+
+
+def _normalise_common_tag(tag: str, *, normalize_tag_underscores: bool) -> str:
+    value = str(tag or "").strip()
+    if not value or not normalize_tag_underscores:
+        return value
+    try:
+        from services.export_template_engine import normalize_lora_tag
+
+        return normalize_lora_tag(value, ["score_"])
+    except Exception:
+        return value.replace("_", " ")
+
+
+def _append_common_tags_for_mode(content: str, request: Any, content_mode: str) -> str:
+    mode = str(content_mode or "").strip().lower()
+    if mode not in TRAINING_TAG_CONTENT_MODES:
+        return content
+    common_tags = [
+        _normalise_common_tag(tag, normalize_tag_underscores=bool(getattr(request, "normalize_tag_underscores", True)))
+        for tag in (getattr(request, "common_tags", None) or [])
+        if str(tag or "").strip()
+    ]
+    if not common_tags:
+        return content
+    parts = [part.strip() for part in str(content or "").split(",") if part.strip()]
+    seen = {" ".join(part.split()).lower() for part in parts}
+    for tag in common_tags:
+        key = " ".join(tag.split()).lower()
+        if key and key not in seen:
+            seen.add(key)
+            parts.append(tag)
+    return ", ".join(parts)
+
+
+def _build_dataset_template_options(request: Any, blacklist_set: set[str]) -> Dict[str, Any]:
+    raw_options = getattr(request, "template_options", None)
+    if isinstance(raw_options, dict):
+        options = dict(raw_options)
+    else:
+        options = {
+            "preset_id": "custom",
+            "template_override": DATASET_LEGACY_TEMPLATE,
+            "trigger": str(getattr(request, "trigger", "") or ""),
+            "blacklist": list(blacklist_set),
+            "replace_rules": {},
+            "max_tags": 0,
+            "append": [],
+        }
+
+    existing_append = options.get("append") or []
+    if isinstance(existing_append, str):
+        append_values = [part.strip() for part in existing_append.split(",") if part.strip()]
+    elif isinstance(existing_append, list):
+        append_values = [str(part).strip() for part in existing_append if str(part).strip()]
+    else:
+        append_values = []
+    seen_append = {value.lower() for value in append_values}
+    for tag in getattr(request, "common_tags", None) or []:
+        value = str(tag or "").strip()
+        if value and value.lower() not in seen_append:
+            seen_append.add(value.lower())
+            append_values.append(value)
+    options["append"] = append_values
+    options.setdefault("trigger", str(getattr(request, "trigger", "") or ""))
+    options.setdefault("blacklist", list(blacklist_set))
+
+    normalize = bool(getattr(request, "normalize_tag_underscores", True))
+    options.setdefault("underscore_to_space_override", normalize)
+    options.setdefault("preserve_underscore_prefixes_override", ["score_"])
+    return options
+
+
+def _render_dataset_sidecar(
+    record: Dict[str, Any],
+    tags: Optional[List[Any]],
+    request: Any,
+    *,
+    blacklist_set: set[str],
+    image_overrides_int: Dict[int, str],
+    image_overrides_path: Dict[str, str],
+) -> str:
+    image_id = int(record.get("id") or 0)
+    src_image_path = str(record.get("path") or "")
+    if image_id and image_id in image_overrides_int:
+        rendered = image_overrides_int[image_id]
+    elif src_image_path and src_image_path in image_overrides_path:
+        rendered = image_overrides_path[src_image_path]
+    else:
+        content_mode = str(getattr(request, "content_mode", "template") or "template").strip().lower()
+        template_options = (
+            _build_dataset_template_options(request, blacklist_set)
+            if content_mode == "template"
+            else getattr(request, "template_options", None)
+        )
+        rendered = build_sidecar_content(
+            record,
+            tags or [],
+            content_mode=content_mode,
+            blacklist=blacklist_set,
+            prefix=str(getattr(request, "prefix", "") or ""),
+            template_options=template_options,
+            normalize_tag_underscores=bool(getattr(request, "normalize_tag_underscores", True)),
+        )
+        rendered = _append_common_tags_for_mode(rendered, request, content_mode)
+    return apply_caption_transforms(rendered, getattr(request, "caption_transforms", None) or {})
 
 
 def export_dataset(
@@ -305,43 +480,8 @@ def export_dataset(
     # ---- Pre-build common state for caption rendering ----
     blacklist_set = {str(t).strip().lower() for t in request.blacklist if str(t).strip()}
 
-    # image_overrides accepts either ``str(image_id)`` keys (legacy DB
-    # source) or absolute path keys (small-gallery local source). We
-    # normalise both into a single lookup ``record_to_override`` keyed
-    # by (image_id, abs_path) so the per-row loop can fetch in O(1).
-    image_overrides_int: Dict[int, str] = {}
-    image_overrides_path: Dict[str, str] = {}
-    for k, v in request.image_overrides.items():
-        text = str(v or "")
-        try:
-            image_overrides_int[int(k)] = text
-        except (TypeError, ValueError):
-            # Treat as a path key. Normalise to absolute path so it
-            # matches whatever resolve_paths_for_dataset produced.
-            try:
-                normalized = str(Path(normalize_user_path(str(k))).resolve())
-            except (OSError, ValueError):
-                continue
-            image_overrides_path[normalized] = text
-
-    # Use the template engine via the same content_mode the UI sends.
-    # We hard-code the LoRA workflow: tags + common-tags appended,
-    # honoring the underscore checkbox.
-    template_options: Dict[str, Any] = {
-        "preset_id": "custom",
-        "template_override": "{trigger}, {tags:filtered}, {append}",
-        "trigger": str(request.trigger or ""),
-        "blacklist": list(blacklist_set),
-        "replace_rules": {},
-        "max_tags": 0,
-        "append": [str(t).strip() for t in request.common_tags if str(t).strip()],
-    }
-    if request.normalize_tag_underscores:
-        template_options["underscore_to_space_override"] = True
-        template_options["preserve_underscore_prefixes_override"] = ["score_"]
-    else:
-        template_options["underscore_to_space_override"] = False
-        template_options["preserve_underscore_prefixes_override"] = ["score_"]
+    image_overrides_int, image_overrides_path = _split_image_overrides(request)
+    caption_extension = _dataset_sidecar_extension(request.content_mode)
 
     # ---- Execute the plan ----
     items: List[DatasetExportItemResult] = []
@@ -425,6 +565,7 @@ def export_dataset(
             pattern=request.naming_pattern,
             trigger=request.trigger,
             overwrite_policy=request.overwrite_policy,
+            caption_extension=caption_extension,
             index=export_index,
             used_image_paths=used_image_paths,
         )
@@ -435,24 +576,14 @@ def export_dataset(
 
         # Render caption
         try:
-            # Resolve override: int-key for DB-backed records, path-key
-            # for small-gallery synthetic records (image_id=0 sentinel).
-            override_text = ""
-            if image_id and image_id in image_overrides_int:
-                override_text = image_overrides_int[image_id]
-            elif src_image_path and src_image_path in image_overrides_path:
-                override_text = image_overrides_path[src_image_path]
-            if override_text:
-                caption_text = override_text
-            else:
-                caption_text = build_sidecar_content(
-                    record,
-                    tags or [],
-                    content_mode="template",
-                    blacklist=blacklist_set,
-                    template_options=template_options,
-                    normalize_tag_underscores=request.normalize_tag_underscores,
-                )
+            caption_text = _render_dataset_sidecar(
+                record,
+                tags or [],
+                request,
+                blacklist_set=blacklist_set,
+                image_overrides_int=image_overrides_int,
+                image_overrides_path=image_overrides_path,
+            )
         except Exception as exc:  # pragma: no cover - defensive
             msg = f"caption render failed for image {image_id}: {exc}"
             _record_error(image_id, src_image_path, msg, filename)
@@ -590,6 +721,156 @@ def export_dataset(
         items_truncated=total_items > len(items),
         error_messages=error_messages,
     )
+
+
+def preview_dataset_export(request: DatasetExportPreviewRequest) -> Dict[str, Any]:
+    """Render a bounded Dataset Maker export preview without writing files."""
+    if request.overwrite_policy not in VALID_OVERWRITE_POLICIES:
+        raise HTTPException(status_code=400, detail=f"Invalid overwrite_policy: {request.overwrite_policy!r}")
+    content_mode = str(request.content_mode or "template").strip().lower()
+    if content_mode not in VALID_CONTENT_MODES:
+        raise HTTPException(status_code=400, detail=f"Invalid content_mode: {request.content_mode!r}")
+    if not request.image_ids and not request.image_paths and not request.dataset_scan_tokens:
+        return {
+            "total": 0,
+            "returned": 0,
+            "items_truncated": False,
+            "content_mode": content_mode,
+            "sidecar_extension": _dataset_sidecar_extension(content_mode),
+            "items": [],
+        }
+
+    total = _requested_item_count(request)  # type: ignore[arg-type]
+    try:
+        output_path = Path(normalize_user_path(request.output_folder)).resolve() if request.output_folder else Path("__dataset_preview__").resolve()
+    except (OSError, ValueError):
+        output_path = Path("__dataset_preview__").resolve()
+
+    blacklist_set = {str(t).strip().lower() for t in request.blacklist if str(t).strip()}
+    image_overrides_int, image_overrides_path = _split_image_overrides(request)
+    caption_extension = _dataset_sidecar_extension(content_mode)
+    limit = max(1, min(int(request.limit or 72), 500))
+    used_image_paths: set[str] = set()
+    seen_virtual_paths: set[str] = set()
+    items: List[Dict[str, Any]] = []
+    export_index = 0
+
+    def _thumbnail_url(record: Dict[str, Any]) -> str:
+        image_id = int(record.get("id") or 0)
+        if image_id > 0:
+            return f"/api/image-thumbnail/{image_id}?size=256"
+        path = str(record.get("path") or "")
+        if not path:
+            return ""
+        from urllib.parse import quote
+
+        return f"/api/dataset/local-thumbnail?path={quote(path, safe='')}&size=256"
+
+    def _append_preview(record: Dict[str, Any], tags: Optional[List[Any]] = None, *, error: str = "") -> bool:
+        nonlocal export_index
+        export_index += 1
+        if len(items) >= limit:
+            return False
+
+        image_id = int(record.get("id") or 0)
+        src_image_path = str(record.get("path") or "")
+        dst_image_path, dst_caption_path, skip_reason = _plan_single_rename(
+            record,
+            output_folder=output_path,
+            pattern=request.naming_pattern,
+            trigger=request.trigger,
+            overwrite_policy=request.overwrite_policy,
+            caption_extension=caption_extension,
+            index=export_index,
+            used_image_paths=used_image_paths,
+        )
+        rendered = ""
+        render_error = error
+        if not render_error and dst_image_path is not None:
+            try:
+                rendered = _render_dataset_sidecar(
+                    record,
+                    tags or [],
+                    request,
+                    blacklist_set=blacklist_set,
+                    image_overrides_int=image_overrides_int,
+                    image_overrides_path=image_overrides_path,
+                )
+            except Exception as exc:  # pragma: no cover - defensive preview fallback
+                render_error = str(exc)
+
+        items.append({
+            "index": export_index,
+            "image_id": image_id,
+            "abs_path": src_image_path,
+            "filename": record.get("filename") or os.path.basename(src_image_path) or f"image-{image_id}",
+            "thumbnail_url": _thumbnail_url(record),
+            "output_image_name": dst_image_path.name if dst_image_path is not None else "",
+            "output_caption_name": dst_caption_path.name if dst_caption_path is not None else "",
+            "output_image_path": str(dst_image_path) if dst_image_path is not None and request.output_folder else "",
+            "output_caption_path": str(dst_caption_path) if dst_caption_path is not None and request.output_folder else "",
+            "caption": rendered,
+            "skipped_reason": skip_reason,
+            "error": render_error or None,
+        })
+        return len(items) < limit
+
+    def _preview_path_source(raw_path: Any) -> bool:
+        normalized_path = _resolve_dataset_image_path(raw_path)
+        display_path = str(raw_path or "")
+        if not normalized_path:
+            record = {
+                "id": 0,
+                "path": display_path,
+                "filename": os.path.basename(display_path) or "unreadable",
+                "generator": "",
+            }
+            return _append_preview(record, [], error=f"path not a readable image: {display_path}")
+        if normalized_path in seen_virtual_paths:
+            record = virtual_image_record_for_path(normalized_path, read_dimensions=False)
+            return _append_preview(record, [], error="duplicate path in dataset")
+        seen_virtual_paths.add(normalized_path)
+        return _append_preview(virtual_image_record_for_path(normalized_path, read_dimensions=False), [])
+
+    for image_id_chunk in _iter_chunks(_iter_unique_image_ids(request.image_ids or []), DATASET_EXPORT_DB_CHUNK_SIZE):
+        if len(items) >= limit:
+            break
+        ids = [int(image_id) for image_id in image_id_chunk]
+        images_map = db.get_images_by_ids(ids) if ids else {}
+        tags_map = db.get_image_tags_map(ids) if ids else {}
+        for image_id in ids:
+            if len(items) >= limit:
+                break
+            record = images_map.get(image_id)
+            if not record:
+                missing = {
+                    "id": image_id,
+                    "path": "",
+                    "filename": f"image_{image_id}",
+                    "generator": "",
+                }
+                _append_preview(missing, [], error=f"image {image_id} not found in library")
+                continue
+            _append_preview(dict(record), tags_map.get(image_id, []) or [])
+
+    if len(items) < limit:
+        for raw_path in request.image_paths or []:
+            if not _preview_path_source(raw_path):
+                break
+
+    if len(items) < limit:
+        for raw_path in _iter_requested_scan_paths(request):  # type: ignore[arg-type]
+            if not _preview_path_source(raw_path):
+                break
+
+    return {
+        "total": total,
+        "returned": len(items),
+        "items_truncated": total > len(items),
+        "content_mode": content_mode,
+        "sidecar_extension": caption_extension,
+        "items": items,
+    }
 
 
 _EXPORT_JOB_LOCK = threading.Lock()

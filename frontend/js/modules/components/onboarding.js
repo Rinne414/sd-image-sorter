@@ -468,7 +468,13 @@ const OnboardingTour = (function() {
 
         // Allow clicking the overlay backdrop to dismiss the tour
         overlayEl.addEventListener('click', (e) => {
-            if (e.target === overlayEl || e.target.classList.contains('onboarding-highlight-container')) skip();
+            if (e.target !== overlayEl && !e.target.classList.contains('onboarding-highlight-container')) return;
+            overlayEl.style.pointerEvents = 'none';
+            const target = document.elementFromPoint(e.clientX, e.clientY);
+            overlayEl.style.pointerEvents = '';
+            const navTarget = target?.closest?.('.nav-tab, .mobile-nav-item');
+            skip();
+            if (navTarget) navTarget.click();
         });
 
         // Keyboard navigation
@@ -554,11 +560,17 @@ const OnboardingTour = (function() {
         cleanupResidualTourUi();
 
         // Auto-start only on true first-run: user has never loaded images
-        // and hasn't completed or dismissed the tour before.
+        // and hasn't completed or dismissed the tour before. Re-check the
+        // active view after the startup delay so the tour does not cover a
+        // user who already jumped into a focused workflow such as Dataset
+        // Maker.
         if (AUTO_START_ENABLED && !isCompleted() && !wasDismissed()) {
             const hasSeen = localStorage.getItem(FIRST_RUN_CHECK_KEY);
             if (!hasSeen) {
                 setTimeout(() => {
+                    if (window.AppState?.currentView && window.AppState.currentView !== 'gallery') return;
+                    const activeView = document.querySelector('.view.active');
+                    if (activeView && activeView.id && activeView.id !== 'view-gallery') return;
                     start();
                     // Safety: force-clean after 90s in case user is stuck
                     setTimeout(() => {

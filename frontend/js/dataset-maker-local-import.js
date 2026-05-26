@@ -55,6 +55,11 @@
     const FOLDER_SCAN_PAGE_SIZE = 5000;
     const UPLOAD_BATCH_SIZE = 250;
     const LARGE_BROWSER_DROP_WARNING_FILES = 5000;
+    const NativeSet = globalThis.Set;
+    const isNativeSet = (value) => typeof NativeSet === 'function' && value instanceof NativeSet;
+    const newNativeSet = (items = []) => typeof NativeSet === 'function'
+        ? new NativeSet(items)
+        : { add() {}, has() { return false; }, size: 0, [Symbol.iterator]: function* () {} };
 
     /** Negative-id helper: true iff the supplied id refers to a local-source item. */
     DM.isLocalId = function (id) {
@@ -136,8 +141,9 @@
             scan_token: token,
             folder_path: data.folder_path || existing.folder_path || '',
             total: Number(data.total_files_seen || existing.total || 0) || 0,
-            excludedPaths: existing.excludedPaths instanceof Set ? existing.excludedPaths : new Set(),
+            excludedPaths: isNativeSet(existing.excludedPaths) ? existing.excludedPaths : newNativeSet(),
         });
+        this._scheduleSaveSession?.();
         return token;
     };
 
@@ -149,8 +155,9 @@
         if (!token || !absPath) return;
         const source = this.localManifestTokens.get(token);
         if (!source) return;
-        source.excludedPaths = source.excludedPaths instanceof Set ? source.excludedPaths : new Set();
+        source.excludedPaths = isNativeSet(source.excludedPaths) ? source.excludedPaths : newNativeSet();
         source.excludedPaths.add(absPath);
+        this._scheduleSaveSession?.();
     };
 
     DM._excludeLocalPathFromManifests = function (absPath) {
@@ -164,7 +171,7 @@
                 ? (path === root || path.startsWith(root + '/') || path.startsWith(root + '\\'))
                 : sources.length === 1;
             if (!inSource) continue;
-            source.excludedPaths = source.excludedPaths instanceof Set ? source.excludedPaths : new Set();
+            source.excludedPaths = isNativeSet(source.excludedPaths) ? source.excludedPaths : newNativeSet();
             if (!source.excludedPaths.has(path)) {
                 source.excludedPaths.add(path);
                 touched = true;
@@ -200,7 +207,7 @@
         }
         for (const source of this.localManifestTokens.values()) {
             const total = Number(source.total || 0) || 0;
-            const excluded = source.excludedPaths instanceof Set ? source.excludedPaths.size : 0;
+            const excluded = isNativeSet(source.excludedPaths) ? source.excludedPaths.size : 0;
             count += Math.max(0, total - excluded);
         }
         return count;
@@ -299,8 +306,70 @@
             }
         }
         this._checkDuplicateFilenames();
+        if (added > 0 || touchedActive) this._saveSession?.();
         return added;
     };
+
+    DM._serializeLocalDatasetState = function () {
+        const localItems = [];
+        for (const [id, absPath] of this.localItemPaths.entries()) {
+            const numericId = Number(id);
+            const meta = { ...(this.meta.get(numericId) || {}) };
+            delete meta.thumb_b64;
+            localItems.push({
+                id: numericId,
+                abs_path: absPath,
+                ds_id: this.localItemDsIds.get(numericId) || meta.ds_id || '',
+                meta,
+            });
+        }
+        const manifests = [];
+        for (const [token, source] of this.localManifestTokens.entries()) {
+            manifests.push({
+                scan_token: token,
+                folder_path: source?.folder_path || '',
+                total: Number(source?.total || 0) || 0,
+                excludedPaths: Array.from(source?.excludedPaths || []),
+            });
+        }
+        return { localItems, manifests };
+    };
+
+    DM._restoreLocalSession = function (local = {}) {
+        if (!local || typeof local !== 'object') return;
+        this.localItemPaths.clear();
+        this.localItemDsIds.clear();
+        this.localManifestTokens.clear();
+
+        for (const source of (local.manifests || [])) {
+            const token = String(source?.scan_token || '').trim();
+            if (!token) continue;
+            this.localManifestTokens.set(token, {
+                scan_token: token,
+                folder_path: source.folder_path || '',
+                total: Number(source.total || 0) || 0,
+                excludedPaths: newNativeSet(Array.isArray(source.excludedPaths) ? source.excludedPaths : []),
+            });
+        }
+
+        for (const item of (local.localItems || [])) {
+            const id = Number(item?.id);
+            const absPath = String(item?.abs_path || item?.meta?.abs_path || '').trim();
+            if (!Number.isFinite(id) || id >= 0 || !absPath) continue;
+            const meta = { ...(item.meta || {}) };
+            meta.source = 'local';
+            meta.abs_path = absPath;
+            meta.ds_id = item.ds_id || meta.ds_id || '';
+            this.localItemPaths.set(id, absPath);
+            if (meta.ds_id) this.localItemDsIds.set(id, meta.ds_id);
+            this.meta.set(id, meta);
+        }
+    };
+
+    if (DM._pendingLocalSession) {
+        DM._restoreLocalSession(DM._pendingLocalSession);
+        DM._pendingLocalSession = null;
+    }
 
     // -------- Queue + editor patches: render local thumbs lazily --------
 
@@ -354,7 +423,8 @@
         const zoomBar = document.getElementById('dataset-zoom-toolbar');
 
         if (img) {
-            const src = this._thumbSrc(id, 1024);
+            const absPath = meta.abs_path || this.localItemPaths?.get?.(id) || '';
+            const src = absPath ? localThumbnailUrl(absPath, 2048) : this._thumbSrc(id, 1024);
             if (src) img.src = src;
             else img.removeAttribute('src');
             img.alt = filename;
@@ -486,20 +556,13 @@
         }
     };
 
-    const original_clearAll = DM._clearAll;
-    DM._clearAll = function () {
-        const localPathsBefore = Array.from(this.localItemPaths.values());
-        original_clearAll.call(this);
-        // If the user actually confirmed, the imageIds is now [] — drop
-        // local maps. Keep localStorage captions so re-importing the same
-        // folder restores edits instead of silently losing work.
-        // If they cancelled, imageIds still
-        // has entries; bail out without touching anything.
-        if (this.imageIds.length === 0 && localPathsBefore.length) {
-            this.localItemPaths.clear();
-            this.localItemDsIds.clear();
-            this.localManifestTokens.clear();
-        }
+    DM._clearLocalDatasetState = function () {
+        // Keep localStorage captions so re-importing the same folder restores
+        // edits instead of silently losing work.
+        this.localItemPaths.clear();
+        this.localItemDsIds.clear();
+        this.localManifestTokens.clear();
+        this._scheduleSaveSession?.();
     };
 
     // -------- Export: split into image_ids + image_paths + path overrides --------
@@ -511,6 +574,8 @@
         const imageOp = document.getElementById('dataset-image-op')?.value || 'copy';
         const overwrite = document.getElementById('dataset-overwrite')?.value || 'unique';
         const normalize = !!document.getElementById('dataset-underscore-to-space')?.checked;
+        const contentMode = this._exportContentMode?.() || 'template';
+        const prefix = document.getElementById('dataset-export-prefix')?.value || '';
         const blacklist = (document.getElementById('dataset-blacklist')?.value || '')
             .split(',').map((s) => s.trim()).filter(Boolean);
         const commonTags = (document.getElementById('dataset-common-tags')?.value || '')
@@ -549,6 +614,10 @@
             trigger,
             image_op: imageOp,
             overwrite_policy: overwrite,
+            content_mode: contentMode,
+            prefix,
+            template_options: contentMode === 'template' ? this._datasetTemplateOptions?.() : null,
+            caption_transforms: this._captionTransforms?.() || {},
             normalize_tag_underscores: normalize,
             blacklist,
             common_tags: commonTags,

@@ -398,6 +398,70 @@ def test_dataset_export_uses_background_progress_job():
     assert "/api/dataset/export'" not in local_import
 
 
+def test_dataset_maker_guards_session_preview_and_heavy_audit_ux():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    dataset_js = (repo_root / "frontend" / "js" / "dataset-maker.js").read_text(encoding="utf-8")
+    local_import = (repo_root / "frontend" / "js" / "dataset-maker-local-import.js").read_text(encoding="utf-8")
+    part2 = (repo_root / "frontend" / "js" / "dataset-maker-part2.js").read_text(encoding="utf-8")
+    pipeline = (repo_root / "frontend" / "js" / "dataset-maker-pipeline.js").read_text(encoding="utf-8")
+    onboarding = (repo_root / "frontend" / "js" / "modules" / "components" / "onboarding.js").read_text(encoding="utf-8")
+    css = (repo_root / "frontend" / "css" / "dataset-pipeline.css").read_text(encoding="utf-8")
+    maker_css = (repo_root / "frontend" / "css" / "dataset-maker.css").read_text(encoding="utf-8")
+
+    assert 'id="dataset-audit-check-phash" checked' not in html
+    assert ".dataset-audit-inline:not([open]) .dataset-audit-body" in css
+    assert "dataset-export-action-bar" in html
+    assert "#view-dataset .dataset-export-action-bar" in maker_css
+    assert "position: sticky" in maker_css
+    assert "top: -12px" in maker_css
+    assert "max-height: none" in maker_css
+    assert "#view-dataset .dataset-export-preview-list" in maker_css
+    assert "overflow: visible" in maker_css
+    assert "_flushPendingCaptionEdit" in dataset_js
+    assert "const value = ta.value;" in dataset_js
+    assert "_serializeLocalDatasetState" in local_import
+    assert "_restoreLocalSession" in local_import
+    assert "let previewRequestSeq" in pipeline
+    assert "previewAbortController.abort()" in pipeline
+    assert "renderPreviewError" in pipeline
+    assert "Fall through to the old lightweight filename-only preview" not in pipeline
+    assert "_queueIdsForCurrentFilter" in part2
+    assert "list.classList.contains('is-virtualized')" in part2
+    assert "document.elementFromPoint" in onboarding
+    assert "navTarget.click()" in onboarding
+    assert "window.AppState.currentView !== 'gallery'" in onboarding
+    assert "activeView.id !== 'view-gallery'" in onboarding
+
+
+def test_dataset_new_i18n_keys_are_translated():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    en = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
+    zh = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
+
+    keys = set(re.findall(r'data-i18n(?:-[a-z-]+)?="(dataset\.[^"]+)"', html))
+    keys |= {
+        "dataset.exportPreviewLoading",
+        "dataset.exportPreviewFailed",
+        "dataset.translationEmpty",
+        "dataset.queueFilterEmpty",
+        "dataset.sessionRestorePartial",
+        "dataset.confirmClearTitle",
+        "dataset.keepBadge",
+        "dataset.dedupeNoSelection",
+        "dataset.dedupeDone",
+        "dataset.auditPhashUnavailable",
+        "dataset.auditPhashChecked",
+        "dataset.auditPhashUnavailableShort",
+        "dataset.auditPhashCheckedShort",
+        "dataset.exportPreviewLoadedOnlyEdit",
+    }
+    missing = [key for key in sorted(keys) if f"'{key}'" not in en or f"'{key}'" not in zh]
+
+    assert not missing
+
+
 def test_dataset_maker_ui_removes_confusing_external_tool_copy():
     repo_root = Path(__file__).resolve().parents[2]
     checked_files = [

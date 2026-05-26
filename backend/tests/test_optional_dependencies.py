@@ -88,11 +88,25 @@ def test_ensure_group_skips_already_satisfied_packages(monkeypatch):
     monkeypatch.setattr(optional_dependencies.importlib.metadata, "version", lambda package: "999.0.0")
     monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
 
-    result = optional_dependencies.ensure_group("clip")
+    result = optional_dependencies.ensure_group("aesthetic")
 
     assert installed == []
     assert result.installed_packages == ()
     assert result.restart_recommended is False
+
+
+def test_translation_group_installs_translators_runtime(monkeypatch):
+    installed = []
+
+    monkeypatch.setattr(optional_dependencies.importlib.util, "find_spec", lambda module: None if module == "translators" else object())
+    monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
+
+    result = optional_dependencies.ensure_group("translation")
+
+    assert installed == ["translators==6.0.4"]
+    assert result.installed_packages == ("translators==6.0.4",)
+    assert result.restart_recommended is True
+
 
 def test_install_packages_refuses_system_python_without_opt_in(monkeypatch):
     monkeypatch.setattr(optional_dependencies, "_running_in_virtualenv", lambda: False)

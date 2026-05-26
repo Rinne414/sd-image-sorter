@@ -100,6 +100,7 @@
 #view-dataset .dataset-maker[data-active-tab="export"] .dataset-audit-section,
 #view-dataset .dataset-maker[data-active-tab="export"] .dataset-queue-pane,
 #view-dataset .dataset-maker[data-active-tab="export"] .dataset-editor-pane,
+#view-dataset .dataset-maker[data-active-tab="export"] .dataset-vocab-panel,
 #view-dataset .dataset-maker[data-active-tab="export"] #dataset-step-caption,
 #view-dataset .dataset-maker[data-active-tab="export"] #dataset-step-findreplace,
 #view-dataset .dataset-maker[data-active-tab="export"] .dataset-card-details {
@@ -117,6 +118,7 @@
     flex: unset;
     max-width: unset;
     width: 100%;
+    overflow-y: auto;
 }
 #view-dataset .dataset-maker[data-active-tab="export"] .dataset-export-preview {
     display: flex;
@@ -124,6 +126,10 @@
 @media (max-width: 900px) {
     #view-dataset .dataset-maker[data-active-tab="export"] .dataset-workbench {
         grid-template-columns: 1fr;
+    }
+    #view-dataset .dataset-maker[data-active-tab="export"] .dataset-export-pane {
+        max-height: none;
+        overflow: visible;
     }
 }
 
@@ -410,15 +416,15 @@
     position: absolute;
     top: 6px;
     left: 6px;
-    width: 24px;
-    height: 24px;
+    width: 18px;
+    height: 18px;
     display: none;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
+    border-radius: 4px;
     background: rgba(45, 212, 191, 0.86);
     color: #031b1a;
-    font-size: 14px;
+    font-size: 11px;
     font-weight: 900;
     box-shadow: 0 6px 16px rgba(0,0,0,0.25);
 }
@@ -500,34 +506,38 @@
     flex-shrink: 0;
     border: 1px solid var(--border-color, rgba(255,255,255,0.08));
     border-radius: 8px;
-    padding: 8px 12px;
+    padding: 7px 10px;
     background: rgba(255,255,255,0.02);
+}
+.dataset-audit-inline:not([open]) .dataset-audit-body {
+    display: none;
 }
 .dataset-audit-inline[open] .dataset-audit-body {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     flex-wrap: wrap;
-    margin-top: 8px;
+    margin-top: 6px;
 }
 .dataset-audit-inline .dataset-audit-thresholds {
     display: flex;
-    gap: 10px;
+    gap: 6px;
     align-items: center;
     flex-wrap: wrap;
 }
 .dataset-audit-inline .dataset-audit-threshold {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
     font-size: 12px;
+    min-height: 28px;
 }
 .dataset-audit-inline .dataset-audit-threshold input[type="number"] {
-    width: 60px;
+    width: 54px;
 }
 .dataset-audit-inline-summary {
     cursor: pointer;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     display: flex;
     align-items: center;
@@ -771,7 +781,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 12px;
+    padding: 5px 10px;
     border-radius: 999px;
     background: rgba(var(--accent-secondary-rgb), 0.12);
     border: 1px solid rgba(var(--accent-secondary-rgb), 0.30);
@@ -779,6 +789,21 @@
     font-size: 0.82rem;
     cursor: pointer;
     transition: background 120ms ease;
+}
+.dataset-audit-phash-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.055);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+.dataset-audit-phash-status.is-error {
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    background: rgba(239, 68, 68, 0.10);
+    color: #fecaca;
 }
 .dataset-audit-badge:hover { background: rgba(var(--accent-secondary-rgb), 0.22); }
 .dataset-audit-badge.active {
@@ -796,9 +821,11 @@
 }
 
 .dataset-audit-next-steps {
-    display: grid;
-    gap: 8px;
-    padding: 10px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    padding: 8px 10px;
     border: 1px solid rgba(var(--accent-primary-rgb, 255, 138, 61), 0.22);
     border-radius: 8px;
     background: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.06);
@@ -808,13 +835,15 @@
     color: var(--text-primary);
     font-size: 0.86rem;
     font-weight: 700;
+    flex: 0 0 auto;
 }
 
 .dataset-audit-next-copy {
     color: var(--text-secondary);
     font-size: 0.8rem;
-    line-height: 1.45;
+    line-height: 1.35;
     margin: 0;
+    flex: 1 1 260px;
 }
 
 .dataset-audit-next-warning {
@@ -828,6 +857,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+    margin-left: auto;
 }
 
 /* Highlight queue items selected by an audit badge filter. */

@@ -166,12 +166,68 @@ class GeminiProvider(VLMProvider):
             return await self._vertex_request(image_b64, user_message)
         return await self._public_request(image_b64, user_message)
 
+    async def generate_text(
+        self,
+        prompt: str,
+        *,
+        system_prompt: str = "",
+        max_tokens: int = 2048,
+        temperature: float = 0.1,
+    ) -> VLMResult:
+        try:
+            if self.config.use_vertex:
+                result = await self._vertex_text_request(
+                    str(prompt or ""),
+                    system_prompt=system_prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                )
+            else:
+                result = await self._public_text_request(
+                    str(prompt or ""),
+                    system_prompt=system_prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                )
+            raw_text = result.get("caption", "").strip()
+            if not raw_text:
+                return VLMResult(error="Provider returned an empty text response", error_type="empty_response", model=self.config.model)
+            return VLMResult(
+                caption=raw_text,
+                tokens_used=int(result.get("tokens", 0) or 0),
+                model=self.config.model,
+                raw_text=raw_text,
+            )
+        except ProviderError as e:
+            return VLMResult(error=str(e), error_type=e.error_type, model=self.config.model)
+
     async def _public_request(self, image_b64: str, user_message: str) -> Dict[str, Any]:
         """Public Gemini API (generativelanguage.googleapis.com)."""
         model = self.config.model or "gemini-2.0-flash"
         endpoint = self.config.endpoint.rstrip("/") or "https://generativelanguage.googleapis.com"
         url = f"{endpoint}/v1beta/models/{model}:generateContent?key={self.config.api_key}"
         return await self._do_request(url, image_b64, user_message, headers={})
+
+    async def _public_text_request(
+        self,
+        user_message: str,
+        *,
+        system_prompt: str,
+        max_tokens: int,
+        temperature: float,
+    ) -> Dict[str, Any]:
+        model = self.config.model or "gemini-2.0-flash"
+        endpoint = self.config.endpoint.rstrip("/") or "https://generativelanguage.googleapis.com"
+        url = f"{endpoint}/v1beta/models/{model}:generateContent?key={self.config.api_key}"
+        return await self._do_request(
+            url,
+            None,
+            user_message,
+            headers={},
+            system_prompt=system_prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
 
     async def _vertex_request(self, image_b64: str, user_message: str) -> Dict[str, Any]:
         """Vertex AI Gemini endpoint with OAuth bearer token."""
@@ -188,24 +244,57 @@ class GeminiProvider(VLMProvider):
         headers = {"Authorization": f"Bearer {token}"}
         return await self._do_request(url, image_b64, user_message, headers=headers)
 
+    async def _vertex_text_request(
+        self,
+        user_message: str,
+        *,
+        system_prompt: str,
+        max_tokens: int,
+        temperature: float,
+    ) -> Dict[str, Any]:
+        if not self.config.vertex_project:
+            raise ProviderError("Vertex requires vertex_project", error_type="config", retryable=False)
+        model = self.config.model or "gemini-2.0-flash-001"
+        location = self.config.vertex_location or "us-central1"
+        endpoint = self.config.endpoint.rstrip("/") or f"https://{location}-aiplatform.googleapis.com"
+        url = (
+            f"{endpoint}/v1/projects/{self.config.vertex_project}"
+            f"/locations/{location}/publishers/google/models/{model}:generateContent"
+        )
+        token = await _get_vertex_access_token(self.config)
+        headers = {"Authorization": f"Bearer {token}"}
+        return await self._do_request(
+            url,
+            None,
+            user_message,
+            headers=headers,
+            system_prompt=system_prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+
     async def _do_request(
         self,
         url: str,
-        image_b64: str,
+        image_b64: Optional[str],
         user_message: str,
         *,
         headers: Dict[str, str],
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 1024,
+        temperature: float = 0.3,
     ) -> Dict[str, Any]:
-        parts: List[Dict[str, Any]] = [
-            {"inline_data": {"mime_type": "image/jpeg", "data": image_b64}},
-            {"text": user_message},
-        ]
+        parts: List[Dict[str, Any]] = []
+        if image_b64:
+            parts.append({"inline_data": {"mime_type": "image/jpeg", "data": image_b64}})
+        parts.append({"text": user_message})
         payload: Dict[str, Any] = {
             "contents": [{"parts": parts}],
-            "generationConfig": {"maxOutputTokens": 1024, "temperature": 0.3},
+            "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature},
         }
-        if self.config.system_prompt:
-            payload["systemInstruction"] = {"parts": [{"text": self.config.system_prompt}]}
+        effective_system_prompt = self.config.system_prompt if system_prompt is None else system_prompt
+        if effective_system_prompt:
+            payload["systemInstruction"] = {"parts": [{"text": effective_system_prompt}]}
 
         send_headers = {"Content-Type": "application/json", **headers}
 

@@ -2546,8 +2546,14 @@
                             <strong id="dataset-count-num">0</strong>
                             <span data-i18n="dataset.imagesInDataset">images</span>
                         </span>
-                        <button class="btn btn-ghost btn-small" id="btn-dataset-clear" hidden
-                                data-i18n="dataset.clearAll">Clear all</button>
+                        <button class="btn btn-ghost btn-small btn-icon-only danger gallery-clear-button dataset-clear-button"
+                                id="btn-dataset-clear" type="button" hidden
+                                title="Clear Dataset Maker queue (files stay on disk)"
+                                aria-label="Clear Dataset Maker queue"
+                                data-i18n-title="dataset.clearAllTooltip"
+                                data-i18n-aria="dataset.clearAllAria">
+                            <span aria-hidden="true">🗑️</span>
+                        </button>
                     </header>
 
                     <!-- Tab 1: Import + Audit (merged) -->
@@ -2711,7 +2717,7 @@
                                         </p>
                                         <ul>
                                             <li data-i18n="dataset.helpRule1">DO include character / subject features (hair color, clothes, pose, scene).</li>
-                                            <li data-i18n="dataset.helpRule2">DO include your trigger word once (use Step B's "Common tags" so it lands in every caption).</li>
+                                            <li data-i18n="dataset.helpRule2">DO include your trigger word once (use Workbench "Common tags" so it lands in every caption).</li>
                                             <li data-i18n="dataset.helpRule3">DON'T describe things that are constant across all images — that's what your trigger word is for.</li>
                                             <li data-i18n="dataset.helpRule4">DON'T leave .txt files empty — empty captions teach the model nothing.</li>
                                         </ul>
@@ -2725,7 +2731,7 @@
                                 <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-out" title="Zoom out">−</button>
                                 <span class="dataset-zoom-label" id="dataset-zoom-label">100%</span>
                                 <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-in" title="Zoom in">+</button>
-                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-reset" title="Reset zoom">1:1</button>
+                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-reset" title="Reset zoom to 100%">100%</button>
                             </div>
                             <div class="dataset-editor-image-wrap" id="dataset-editor-image-wrap">
                                 <img class="dataset-editor-image" id="dataset-editor-image" alt="" hidden>
@@ -2741,6 +2747,19 @@
                                       placeholder="caption text..."
                                       data-i18n-placeholder="dataset.captionPlaceholder"
                                       hidden></textarea>
+
+                            <!-- Active-image tag edit belongs next to the active caption, not in Step 3. -->
+                            <div class="dataset-tag-pills-section dataset-tag-pills-section-inline" id="dataset-tag-pills-section" hidden>
+                                <h4 class="dataset-tag-pills-title" data-i18n="dataset.tagPillsTitle">Tags</h4>
+                                <div class="dataset-tag-add-wrap">
+                                    <input type="text" class="dataset-tag-add-input" id="dataset-tag-add-input"
+                                           placeholder="Add tag..."
+                                           data-i18n-placeholder="dataset.addTagPlaceholder"
+                                           autocomplete="off">
+                                    <div class="dataset-tag-add-dropdown" id="dataset-tag-add-dropdown" hidden></div>
+                                </div>
+                                <div class="dataset-tag-pills-wrap" id="dataset-tag-pills-wrap"></div>
+                            </div>
 
                             <!-- v3.2.2 T-power-PR2 (C): tag confidence pill panel.
                                  Lets the user spot low-confidence false positives at
@@ -2781,18 +2800,6 @@
                                     <button class="btn btn-ghost btn-small" id="btn-dataset-export-cancel"
                                             type="button" hidden data-i18n="common.cancel">Cancel</button>
                                 </div>
-                            </div>
-                            <!-- Tag pills for active image -->
-                            <div class="dataset-tag-pills-section" id="dataset-tag-pills-section" hidden>
-                                <h4 class="dataset-tag-pills-title" data-i18n="dataset.tagPillsTitle">Tags</h4>
-                                <div class="dataset-tag-add-wrap">
-                                    <input type="text" class="dataset-tag-add-input" id="dataset-tag-add-input"
-                                           placeholder="Add tag..."
-                                           data-i18n-placeholder="dataset.addTagPlaceholder"
-                                           autocomplete="off">
-                                    <div class="dataset-tag-add-dropdown" id="dataset-tag-add-dropdown" hidden></div>
-                                </div>
-                                <div class="dataset-tag-pills-wrap" id="dataset-tag-pills-wrap"></div>
                             </div>
                             <details class="dataset-vocab-panel" id="dataset-vocab-panel">
                                 <summary class="dataset-vocab-summary">
@@ -2876,7 +2883,7 @@
                                             disabled
                                             data-i18n="dataset.quickfillTrigger"
                                             data-i18n-title="dataset.quickfillTriggerTooltip"
-                                            title="Type your trigger word in the Renumber preset (Step C) first, then click here to also have it written into every caption .txt.">
+                                            title="Type your trigger word in the Renumber preset on Export first, then click here to also have it written into every caption .txt.">
                                         🏷️ Add my trigger word here
                                     </button>
                                 </div>
@@ -2929,6 +2936,15 @@
                                         </button>
                                     </div>
                                 </div>
+                                <div class="dataset-dedupe-row">
+                                    <small class="dataset-cleanup-label" data-i18n="dataset.dedupeLabel">Duplicate tags:</small>
+                                    <select id="dataset-dedupe-scope" class="form-input dataset-dedupe-scope">
+                                        <option value="all" data-i18n="dataset.scopeAllImages">All images</option>
+                                        <option value="selected" data-i18n="dataset.scopeSelectedImages">Selected images</option>
+                                    </select>
+                                    <button type="button" class="btn btn-secondary btn-small" id="btn-dataset-dedupe-tags"
+                                            data-i18n="dataset.dedupeTagsBtn">Delete duplicate tags</button>
+                                </div>
                                 <label class="form-checkbox">
                                     <input type="checkbox" id="dataset-underscore-to-space" checked>
                                     <span data-i18n="dataset.underscoreToSpace">Convert tag underscores to spaces (recommended for most LoRA trainers)</span>
@@ -2960,8 +2976,39 @@
                             <section class="dataset-card dataset-card-required" id="dataset-step-export">
                                 <h3 class="dataset-card-title">
                                     <span aria-hidden="true">📤</span>
-                                    <span data-i18n="dataset.cardExportTitle">Step C. Export to folder</span>
+                                    <span data-i18n="dataset.cardExportTitle">Export to folder</span>
                                 </h3>
+
+                                <div class="dataset-export-action-bar">
+                                    <button type="button" class="btn btn-primary btn-large full-width dataset-export-cta"
+                                            id="btn-dataset-export" disabled
+                                            data-i18n-aria="dataset.exportCta">
+                                        <span aria-hidden="true">📤</span>
+                                        <span data-i18n="dataset.exportCta">Export dataset</span>
+                                    </button>
+                                    <p class="dataset-export-disabled-hint" id="dataset-export-disabled-hint"
+                                       data-i18n="dataset.exportDisabledHint">
+                                        Add at least one image and pick an output folder to enable.
+                                    </p>
+                                </div>
+
+                                <label class="form-label">
+                                    <span data-i18n="dataset.exportContentMode">Caption file content</span>
+                                    <select id="dataset-export-content-mode" class="form-input">
+                                        <option value="template" selected data-i18n="batchExport.modeTemplate">LoRA Training Template</option>
+                                        <option value="caption_merged" data-i18n="batchExport.modeCaptionMerged">LoRA caption file</option>
+                                        <option value="tags" data-i18n="batchExport.modeTags">Tags</option>
+                                        <option value="caption_tags" data-i18n="batchExport.modeCaptionTags">Caption + Tags</option>
+                                        <option value="nl_caption" data-i18n="batchExport.modeNlCaption">Natural language caption only</option>
+                                        <option value="tags_nl" data-i18n="batchExport.modeTagsNl">Tags + Natural language caption</option>
+                                        <option value="prompt" data-i18n="batchExport.modePrompt">Prompt text</option>
+                                        <option value="negative" data-i18n="batchExport.modeNegative">Negative prompt</option>
+                                        <option value="prompt_negative" data-i18n="batchExport.modePromptNegative">Prompt + Negative</option>
+                                        <option value="prompt_nl" data-i18n="batchExport.modePromptNl">Prompt + Natural language caption</option>
+                                        <option value="a1111" data-i18n="batchExport.modeA1111">A1111 / Forge block</option>
+                                        <option value="json" data-i18n="batchExport.modeJson">JSON</option>
+                                    </select>
+                                </label>
 
                                 <!-- Naming preset radio (replaces the cryptic pattern field) -->
                                 <fieldset class="dataset-fieldset">
@@ -2988,7 +3035,7 @@
                                                    aria-label="Trigger word">
                                             <small class="dataset-preview-line" id="dataset-naming-preview" aria-live="polite"></small>
                                             <small class="dataset-trigger-clarify" data-i18n="dataset.triggerClarify">
-                                                ℹ️ This only sets the filename prefix. To put a trigger word INSIDE every caption .txt, type it into "Common tags" in Step B instead.
+                                                ℹ️ This only sets the filename prefix. To put a trigger word inside every caption .txt, type it into "Common tags" in Workbench instead.
                                             </small>
                                         </span>
                                     </label>
@@ -3073,23 +3120,81 @@
                                             <option value="skip" data-i18n="dataset.overwriteSkip">Skip</option>
                                         </select>
                                     </label>
+                                    <label class="form-label">
+                                        <span data-i18n="dataset.exportPrefixLabel">Prefix / Class Token</span>
+                                        <input type="text" id="dataset-export-prefix" class="form-input"
+                                               placeholder="masterpiece, best quality"
+                                               data-i18n-placeholder="batchExport.tagPrefix">
+                                    </label>
+                                    <div class="dataset-template-options" id="dataset-template-options">
+                                        <label class="form-label">
+                                            <span data-i18n="batchExport.loraTemplate">Custom template</span>
+                                            <input type="text" id="dataset-template-override" class="form-input"
+                                                   placeholder="{trigger}, {tags:filtered}, {append}"
+                                                   value="{trigger}, {tags:filtered}, {append}">
+                                        </label>
+                                        <label class="form-label">
+                                            <span data-i18n="batchExport.loraReplace">Tag replacements (one per line: from-&gt;to)</span>
+                                            <textarea id="dataset-replace-rules" class="form-input" rows="2"
+                                                      placeholder="school_uniform-&gt;serafuku"></textarea>
+                                        </label>
+                                        <label class="form-label">
+                                            <span data-i18n="batchExport.loraMaxTags">Max tags (0 = unlimited)</span>
+                                            <input type="number" id="dataset-max-tags" class="form-input" value="0" min="0" max="200">
+                                        </label>
+                                    </div>
+                                    <div class="dataset-translation-options">
+                                        <label class="form-label">
+                                            <span data-i18n="dataset.translationProviderLabel">Chinese translation provider</span>
+                                            <select id="dataset-translation-provider-mode" class="form-input">
+                                                <option value="vlm" selected data-i18n="dataset.translationProviderVlm">Existing VLM settings</option>
+                                                <option value="external" data-i18n="dataset.translationProviderExternal">External translation API</option>
+                                            </select>
+                                        </label>
+                                        <label class="form-label">
+                                            <span data-i18n="dataset.translationExternalProvider">External API</span>
+                                            <select id="dataset-translation-external-provider" class="form-input">
+                                                <option value="auto_cn" selected>Auto China-friendly free</option>
+                                                <option value="auto">Auto global free</option>
+                                                <option value="bing_free">[Free] Microsoft Bing web</option>
+                                                <option value="google_free">[Free] Google web</option>
+                                                <option value="itranslate_free">[Free] iTranslate web</option>
+                                                <option value="lingvanex_free">[Free] Lingvanex web</option>
+                                                <option value="modernmt_free">[Free] ModernMT / Translated web</option>
+                                                <option value="systran_free">[Free] SYSTRAN web</option>
+                                                <option value="translatecom_free">[Free] Translate.com web</option>
+                                                <option value="argos_free">[Free] Argos / Libre web</option>
+                                                <option value="papago_free">[Free] Papago / Naver web</option>
+                                                <option value="reverso_free">[Free] Reverso web</option>
+                                                <option value="translateme_free">[Free] TranslateMe / Neosus web</option>
+                                                <option value="elia_free">[Free] Elia / Elhuyar web</option>
+                                                <option value="judic_free">[Free] Judic / CrossLang web</option>
+                                                <option value="alibaba_free">[Free] Alibaba web</option>
+                                                <option value="baidu_free">[Free] Baidu web</option>
+                                                <option value="sogou_free">[Free] Sogou web</option>
+                                                <option value="qqtransmart_free">[Free] QQ TranSmart web</option>
+                                                <option value="youdao_free">[Free] Youdao web</option>
+                                                <option value="iciba_free">[Free] ICIBA web</option>
+                                                <option value="cloudyi_free">[Free] CloudTranslation web</option>
+                                                <option value="caiyun_free">[Free] Caiyun web</option>
+                                                <option value="mymemory_free">[Free] MyMemory no-key</option>
+                                                <option value="baidu">Baidu tag lookup fallback</option>
+                                                <option value="bing">Bing / Microsoft Translator key</option>
+                                                <option value="custom">Custom endpoint</option>
+                                            </select>
+                                        </label>
+                                        <label class="form-label">
+                                            <span data-i18n="dataset.translationPromptLabel">VLM translation prompt</span>
+                                            <textarea id="dataset-translation-prompt" class="form-input" rows="2"
+                                                      placeholder="Translate each tag/caption to Chinese for dataset review. Keep order and separators."></textarea>
+                                        </label>
+                                    </div>
                                     <!-- Hidden mirror element to keep the existing JS that reads
                                          #dataset-image-op working without changes. The radio
                                          above is the visible source of truth. -->
                                     <input type="hidden" id="dataset-image-op" value="copy">
                                 </details>
 
-                                <!-- Big primary CTA -->
-                                <button type="button" class="btn btn-primary btn-large full-width dataset-export-cta"
-                                        id="btn-dataset-export" disabled
-                                        data-i18n-aria="dataset.exportCta">
-                                    <span aria-hidden="true">📤</span>
-                                    <span data-i18n="dataset.exportCta">Export dataset</span>
-                                </button>
-                                <p class="dataset-export-disabled-hint" id="dataset-export-disabled-hint"
-                                   data-i18n="dataset.exportDisabledHint">
-                                    Add at least one image and pick an output folder to enable.
-                                </p>
                             </section>
                         </aside>
 
@@ -3861,7 +3966,7 @@
                                             data-i18n="common.clear">Clear</button>
                                 </div>
                                 <p class="form-hint" data-i18n="modal.tagPreBlacklistAlsoExport">
-                                    💡 You can also blacklist at export time inside Dataset Maker → Step B.
+                                    💡 You can also blacklist at export time inside Dataset Maker → Workbench.
                                 </p>
                             </div>
                         </details>

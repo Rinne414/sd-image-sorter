@@ -316,6 +316,123 @@ def test_export_image_overrides(test_client, staged_images, tmp_path: Path):
     assert cap == "USER_EDITED_CAPTION_FOR_THIS_IMAGE"
 
 
+def test_export_content_mode_tags_writes_common_tags(test_client, staged_images, tmp_path: Path):
+    out = tmp_path / "out"
+    out.mkdir()
+    image_id = staged_images[0][0]
+
+    response = test_client.post("/api/dataset/export", json={
+        "image_ids": [image_id],
+        "output_folder": str(out),
+        "naming_pattern": "tags_only",
+        "image_op": "copy",
+        "overwrite_policy": "unique",
+        "content_mode": "tags",
+        "common_tags": ["masterpiece"],
+        "normalize_tag_underscores": True,
+    })
+
+    assert response.status_code == 200, response.text
+    content = (out / "tags_only.txt").read_text(encoding="utf-8")
+    assert "1girl" in content
+    assert "long hair" in content
+    assert "masterpiece" in content
+
+
+def test_export_content_mode_json_uses_json_sidecar(test_client, staged_images, tmp_path: Path):
+    out = tmp_path / "out"
+    out.mkdir()
+    image_id = staged_images[0][0]
+
+    response = test_client.post("/api/dataset/export", json={
+        "image_ids": [image_id],
+        "output_folder": str(out),
+        "naming_pattern": "json_pair",
+        "image_op": "copy",
+        "overwrite_policy": "unique",
+        "content_mode": "json",
+    })
+
+    assert response.status_code == 200, response.text
+    assert (out / "json_pair.png").exists()
+    json_path = out / "json_pair.json"
+    assert json_path.exists()
+    assert '"tags"' in json_path.read_text(encoding="utf-8")
+    assert not (out / "json_pair.txt").exists()
+
+
+def test_export_template_options_override_legacy_template(test_client, staged_images, tmp_path: Path):
+    out = tmp_path / "out"
+    out.mkdir()
+    image_id = staged_images[0][0]
+
+    response = test_client.post("/api/dataset/export", json={
+        "image_ids": [image_id],
+        "output_folder": str(out),
+        "naming_pattern": "templated",
+        "image_op": "copy",
+        "overwrite_policy": "unique",
+        "content_mode": "template",
+        "template_options": {
+            "preset_id": "custom",
+            "template_override": "{trigger}::{tags:filtered}",
+            "trigger": "MYTRIGGER",
+            "append": ["extra_tag"],
+            "max_tags": 0,
+            "replace_rules": {},
+        },
+    })
+
+    assert response.status_code == 200, response.text
+    content = (out / "templated.txt").read_text(encoding="utf-8")
+    assert "MYTRIGGER" in content
+    assert "extra tag" in content
+
+
+def test_export_local_path_with_path_override(test_client, tmp_path: Path):
+    src = tmp_path / "local.png"
+    Image.new("RGB", (32, 32), color=(10, 20, 30)).save(src)
+    out = tmp_path / "out"
+    out.mkdir()
+
+    response = test_client.post("/api/dataset/export", json={
+        "image_paths": [str(src)],
+        "output_folder": str(out),
+        "naming_pattern": "local_item",
+        "image_op": "copy",
+        "overwrite_policy": "unique",
+        "image_overrides": {str(src): "local caption text"},
+    })
+
+    assert response.status_code == 200, response.text
+    assert (out / "local_item.png").exists()
+    assert (out / "local_item.txt").read_text(encoding="utf-8") == "local caption text"
+
+
+def test_export_preview_uses_dataset_renderer(test_client, staged_images, tmp_path: Path):
+    out = tmp_path / "preview-out"
+    out.mkdir()
+    image_id = staged_images[0][0]
+
+    response = test_client.post("/api/dataset/export-preview", json={
+        "image_ids": [image_id],
+        "output_folder": str(out),
+        "naming_pattern": "preview_{index:03d}",
+        "content_mode": "tags",
+        "common_tags": ["best_quality"],
+        "limit": 10,
+    })
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["total"] == 1
+    assert body["returned"] == 1
+    item = body["items"][0]
+    assert item["output_image_name"] == "preview_001.png"
+    assert item["output_caption_name"] == "preview_001.txt"
+    assert "best quality" in item["caption"]
+
+
 def test_export_invalid_output_folder_returns_400(test_client, staged_images):
     response = test_client.post("/api/dataset/export", json={
         "image_ids": [staged_images[0][0]],

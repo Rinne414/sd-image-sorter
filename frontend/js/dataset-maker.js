@@ -20,6 +20,10 @@
         _lastClickedId: null,
         activeId: null,
         boundOnce: false,
+        _captionInputTimer: null,
+        _pendingCaptionEdit: null,
+        _saveSessionTimer: null,
+        _restoringSession: false,
 
         // ---- i18n helper ----
         _t(key, fallback, params) {
@@ -44,39 +48,115 @@
         },
 
         // ---- Session persistence ----
+        _installCaptionEditPersistence() {
+            if (this._captionEditPersistenceInstalled) return;
+            this._captionEditPersistenceInstalled = true;
+            const map = this.captionEdits;
+            const originalSet = map.set.bind(map);
+            const originalDelete = map.delete.bind(map);
+            const originalClear = map.clear.bind(map);
+            map.set = (key, value) => {
+                const result = originalSet(key, value);
+                if (!this._restoringSession) this._scheduleSaveSession();
+                return result;
+            };
+            map.delete = (key) => {
+                const result = originalDelete(key);
+                if (!this._restoringSession) this._scheduleSaveSession();
+                return result;
+            };
+            map.clear = () => {
+                const result = originalClear();
+                if (!this._restoringSession) this._scheduleSaveSession();
+                return result;
+            };
+        },
+
+        _scheduleSaveSession(delayMs = 250) {
+            if (this._restoringSession) return;
+            if (this._saveSessionTimer) clearTimeout(this._saveSessionTimer);
+            this._saveSessionTimer = setTimeout(() => {
+                this._saveSessionTimer = null;
+                this._saveSession();
+            }, delayMs);
+        },
+
         _saveSession() {
             try {
                 sessionStorage.setItem('sd-image-sorter-dataset-session', JSON.stringify({
                     imageIds: this.imageIds,
                     captionEdits: Object.fromEntries(this.captionEdits),
                     activeId: this.activeId,
+                    local: this._serializeLocalDatasetState?.() || null,
                 }));
             } catch {}
+        },
+
+        _restoreSession() {
+            try {
+                const saved = sessionStorage.getItem('sd-image-sorter-dataset-session');
+                if (!saved) return false;
+                const s = JSON.parse(saved);
+                if (!s || !Array.isArray(s.imageIds) || s.imageIds.length === 0) return false;
+                this._restoringSession = true;
+                this.imageIds = s.imageIds.map(Number).filter(Number.isFinite);
+                this.captionEdits.clear();
+                if (s.captionEdits) {
+                    for (const [k, v] of Object.entries(s.captionEdits)) {
+                        const id = Number(k);
+                        if (Number.isFinite(id)) this.captionEdits.set(id, v);
+                    }
+                }
+                const active = Number(s.activeId);
+                this.activeId = Number.isFinite(active) && this.imageIds.includes(active) ? active : null;
+                if (this._restoreLocalSession) this._restoreLocalSession(s.local || {});
+                else this._pendingLocalSession = s.local || {};
+                return true;
+            } catch {
+                return false;
+            } finally {
+                this._restoringSession = false;
+            }
+        },
+
+        _flushPendingCaptionEdit() {
+            const pending = this._pendingCaptionEdit;
+            if (this._captionInputTimer) {
+                clearTimeout(this._captionInputTimer);
+                this._captionInputTimer = null;
+            }
+            if (!pending || pending.id == null) return;
+            this._pendingCaptionEdit = null;
+            const id = Number(pending.id);
+            const value = String(pending.value ?? '');
+            const prev = this.captionEdits.has(id)
+                ? this.captionEdits.get(id)
+                : (this.captions.get(id) || '');
+            if (prev !== value) {
+                const stack = this._undoStacks.get(id) || [];
+                stack.push(prev);
+                if (stack.length > 20) stack.shift();
+                this._undoStacks.set(id, stack);
+            }
+            this.captionEdits.set(id, value);
+            this._refreshQueueItem?.(id);
         },
 
         // ---- Lifecycle ----
         init() {
             if (this.boundOnce) return;
             this.boundOnce = true;
+            this._installCaptionEditPersistence();
 
-            if (this.imageIds.length === 0) {
-                try {
-                    const saved = sessionStorage.getItem('sd-image-sorter-dataset-session');
-                    if (saved) {
-                        const s = JSON.parse(saved);
-                        if (s.imageIds && s.imageIds.length) {
-                            this.imageIds = s.imageIds;
-                            if (s.captionEdits) {
-                                for (const [k, v] of Object.entries(s.captionEdits)) this.captionEdits.set(Number(k), v);
-                            }
-                        }
-                    }
-                } catch {}
-            }
+            this.imageIds.length === 0 && this._restoreSession();
 
             this._bindEvents();
             this._renderQueue();
-            this._renderEmptyEditor();
+            if (this.activeId != null && this.imageIds.includes(Number(this.activeId))) {
+                this._setActive?.(this.activeId);
+            } else {
+                this._renderEmptyEditor();
+            }
             this._onPresetChange?.();
             this._updateNamingPreview();
             this._updateExportEnabled();
@@ -94,6 +174,9 @@
         },
 
         _initCaptionHelpAutoOpen() {
+            if (document.querySelector('.dataset-maker')?.getAttribute('data-active-tab') !== 'workbench') {
+                return;
+            }
             // Auto-open the "what makes a good caption" popover once on
             // first visit so the knowledge hits new users at the right
             // moment, then remember the dismissal.
@@ -172,28 +255,32 @@
                 this._renderTagPills();
             });
             document.getElementById('btn-dataset-remove-image')?.addEventListener('click', () => this._removeActive());
+            document.getElementById('btn-dataset-dedupe-tags')?.addEventListener('click', () => this._dedupeCaptionTags?.());
 
             // Caption textarea
             const ta = document.getElementById('dataset-editor-textarea');
             if (ta) {
-                let timer = null;
                 let lastSaved = null;
                 ta.addEventListener('input', () => {
                     if (this.activeId == null) return;
-                    if (timer) clearTimeout(timer);
-                    const id = this.activeId;
-                    timer = setTimeout(() => {
+                    if (this._captionInputTimer) clearTimeout(this._captionInputTimer);
+                    const id = Number(this.activeId);
+                    const value = ta.value;
+                    this._pendingCaptionEdit = { id, value };
+                    this._captionInputTimer = setTimeout(() => {
+                        this._captionInputTimer = null;
+                        this._pendingCaptionEdit = null;
                         const prev = this.captionEdits.has(id)
                             ? this.captionEdits.get(id)
                             : (this.captions.get(id) || '');
-                        if (prev !== ta.value && prev !== lastSaved) {
+                        if (prev !== value && prev !== lastSaved) {
                             const stack = this._undoStacks.get(id) || [];
                             stack.push(prev);
                             if (stack.length > 20) stack.shift();
                             this._undoStacks.set(id, stack);
                         }
-                        lastSaved = ta.value;
-                        this.captionEdits.set(id, ta.value);
+                        lastSaved = value;
+                        this.captionEdits.set(id, value);
                         this._refreshQueueItem(id);
                         this._renderTagPills();
                     }, 200);
@@ -244,14 +331,32 @@
             });
 
             // Bulk caption ops -> recompute captions on the fly (debounced)
-            for (const id of ['dataset-common-tags', 'dataset-blacklist', 'dataset-underscore-to-space']) {
+            for (const id of [
+                'dataset-common-tags',
+                'dataset-blacklist',
+                'dataset-underscore-to-space',
+                'dataset-export-content-mode',
+                'dataset-export-prefix',
+                'dataset-template-override',
+                'dataset-replace-rules',
+                'dataset-max-tags',
+            ]) {
                 const el = document.getElementById(id);
                 if (!el) continue;
                 let t = null;
-                const evt = (el.tagName.toLowerCase() === 'input' && el.type === 'checkbox') ? 'change' : 'input';
+                const evt = (el.tagName.toLowerCase() === 'input' && el.type === 'checkbox') || el.tagName.toLowerCase() === 'select'
+                    ? 'change'
+                    : 'input';
                 el.addEventListener(evt, () => {
                     if (t) clearTimeout(t);
-                    t = setTimeout(() => this._refreshAllCaptions(), 400);
+                    t = setTimeout(() => {
+                        if (['dataset-common-tags', 'dataset-blacklist', 'dataset-underscore-to-space'].includes(id)) {
+                            this._refreshAllCaptions();
+                        }
+                        this._refreshExportPreview?.();
+                        const templateWrap = document.getElementById('dataset-template-options');
+                        if (templateWrap) templateWrap.hidden = this._exportContentMode?.() !== 'template';
+                    }, 400);
                 });
             }
 
@@ -450,23 +555,32 @@
 
         _clearAll() {
             if (this.imageIds.length === 0) return;
+            const count = this.imageIds.length;
+            const title = this._t('dataset.confirmClearTitle', 'Clear Dataset Maker');
             const msg = this._t('dataset.confirmClear',
-                'Remove all {count} images from the dataset? (Original files in your library are not affected.)',
-                { count: this.imageIds.length });
-            if (!window.confirm(msg)) return;
-            this.imageIds = [];
-            this.captions.clear();
-            this.captionEdits.clear();
-            this._undoStacks.clear();
-            this._queueSelection.clear();
-            this.activeId = null;
-            sessionStorage.removeItem('sd-image-sorter-dataset-session');
-            this._saveSession();
-            this._renderQueue();
-            this._renderImportGallery?.();
-            this._renderEmptyEditor();
-            this._updateCount();
-            this._updateExportEnabled();
+                'Remove all {count} images from the Dataset Maker queue? Original files and Gallery records will not be deleted.',
+                { count });
+            const doClear = () => {
+                this.imageIds = [];
+                this.captions.clear();
+                this.captionEdits.clear();
+                this._undoStacks.clear();
+                this._queueSelection.clear();
+                this.activeId = null;
+                this._clearLocalDatasetState?.();
+                sessionStorage.removeItem('sd-image-sorter-dataset-session');
+                this._saveSession();
+                this._renderQueue();
+                this._renderImportGallery?.();
+                this._renderEmptyEditor();
+                this._updateCount();
+                this._updateExportEnabled();
+            };
+            if (window.App?.showConfirm) {
+                window.App.showConfirm(title, msg, doClear);
+                return;
+            }
+            if (window.confirm(msg)) doClear();
         },
     };
 

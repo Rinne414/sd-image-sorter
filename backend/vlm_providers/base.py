@@ -205,6 +205,22 @@ class VLMProvider:
         """
         raise NotImplementedError
 
+    async def generate_text(
+        self,
+        prompt: str,
+        *,
+        system_prompt: str = "",
+        max_tokens: int = 2048,
+        temperature: float = 0.1,
+    ) -> VLMResult:
+        """Generate text without an image.
+
+        Dataset Maker uses this for translation. Providers share the same
+        endpoint/auth settings as VLM captioning but receive text-only chat
+        payloads, so translation failures never touch image-caption state.
+        """
+        raise NotImplementedError
+
     async def test_connection(self) -> Dict[str, Any]:
         """Test if the provider is reachable. Returns status dict."""
         raise NotImplementedError

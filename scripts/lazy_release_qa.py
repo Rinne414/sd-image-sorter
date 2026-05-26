@@ -49,17 +49,35 @@ PACKAGE_FORBIDDEN_PREFIXES = (
     "update/worker/",
 )
 
-PACKAGE_REQUIRED_APP_FILES = (
+PACKAGE_REQUIRED_COMMON_APP_FILES = (
     "backend/main.py",
     "backend/config.py",
     "backend/services/service_provider.py",
     "frontend/index.html",
     "frontend/js/app.js",
     "frontend/js/gallery.js",
-    "run.bat",
-    "run.sh",
     "update/package-manifest.json",
 )
+
+PACKAGE_REQUIRED_FILES_BY_KIND = {
+    "windows-portable": (
+        "run.bat",
+        "run.sh",
+        "run-portable.bat",
+    ),
+    "app-patch": (
+        "run.bat",
+        "run.sh",
+        "run-portable.bat",
+    ),
+    "linux": (
+        "run.sh",
+    ),
+    "linux-portable": (
+        "run.sh",
+        "run-portable.sh",
+    ),
+}
 
 OPTIONAL_STATUS_ENDPOINTS = (
     "/api/models/status",
@@ -180,7 +198,11 @@ def normalize_archive_name(name: str) -> str:
 
 def assert_archive_contents(names: Iterable[str], *, package_kind: str) -> None:
     normalized_names = {normalize_archive_name(name) for name in names if normalize_archive_name(name)}
-    for required in PACKAGE_REQUIRED_APP_FILES:
+    required_for_kind = PACKAGE_REQUIRED_FILES_BY_KIND.get(package_kind)
+    if required_for_kind is None:
+        raise LazyQaError(f"Unknown package kind: {package_kind}")
+
+    for required in (*PACKAGE_REQUIRED_COMMON_APP_FILES, *required_for_kind):
         if required not in normalized_names:
             raise LazyQaError(f"{package_kind} archive missing required file: {required}")
 
@@ -196,8 +218,12 @@ def assert_archive_contents(names: Iterable[str], *, package_kind: str) -> None:
     has_python = any(name.startswith("python/") for name in normalized_names)
     if package_kind == "windows-portable" and not has_python:
         raise LazyQaError("windows-portable archive does not include embedded python/")
+    if package_kind == "linux-portable" and not has_python:
+        raise LazyQaError("linux-portable archive does not include embedded python/")
     if package_kind == "app-patch" and has_python:
         raise LazyQaError("app-patch archive must not include embedded python/")
+    if package_kind == "linux" and has_python:
+        raise LazyQaError("linux archive must not include embedded python/")
 
 
 def find_manifest(artifact_root: Path, version: str | None) -> Path:
@@ -216,7 +242,13 @@ def check_release_packages(artifact_root: Path, version: str | None) -> None:
         raise LazyQaError(f"Manifest has too few assets: {manifest_path}")
 
     seen_names = {entry.get("name", "") for entry in entries}
-    required_suffixes = ("windows-portable.zip", "app-patch.zip", "linux.tar.gz")
+    required_suffixes = (
+        "windows-portable.zip",
+        "app-patch.zip",
+        "linux.tar.gz",
+        "linux-portable-x86_64.tar.gz",
+        "linux-portable-aarch64.tar.gz",
+    )
     for suffix in required_suffixes:
         if not any(name.endswith(suffix) for name in seen_names):
             raise LazyQaError(f"Manifest missing asset ending with {suffix}")
@@ -244,7 +276,8 @@ def check_release_packages(artifact_root: Path, version: str | None) -> None:
                     assert_archive_contents(archive.namelist(), package_kind="app-patch")
         elif name.endswith(".tar.gz"):
             with tarfile.open(asset, "r:gz") as archive:
-                assert_archive_contents(archive.getnames(), package_kind="linux")
+                package_kind = "linux-portable" if "-linux-portable-" in name else "linux"
+                assert_archive_contents(archive.getnames(), package_kind=package_kind)
 
 
 def find_free_port() -> int:

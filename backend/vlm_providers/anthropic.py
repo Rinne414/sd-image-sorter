@@ -82,7 +82,42 @@ class AnthropicProvider(VLMProvider):
             model=self.config.model,
         )
 
-    async def _request(self, messages: List[Dict]) -> Dict[str, Any]:
+    async def generate_text(
+        self,
+        prompt: str,
+        *,
+        system_prompt: str = "",
+        max_tokens: int = 2048,
+        temperature: float = 0.1,
+    ) -> VLMResult:
+        messages = [{"role": "user", "content": [{"type": "text", "text": str(prompt or "")}]}]
+        try:
+            result = await self._request(
+                messages,
+                system_prompt=system_prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+            raw_text = result.get("caption", "").strip()
+            if not raw_text:
+                return VLMResult(error="Provider returned an empty text response", error_type="empty_response", model=self.config.model)
+            return VLMResult(
+                caption=raw_text,
+                tokens_used=int(result.get("tokens", 0) or 0),
+                model=self.config.model,
+                raw_text=raw_text,
+            )
+        except ProviderError as e:
+            return VLMResult(error=str(e), error_type=e.error_type, model=self.config.model)
+
+    async def _request(
+        self,
+        messages: List[Dict],
+        *,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 1024,
+        temperature: float = 0.3,
+    ) -> Dict[str, Any]:
         endpoint = self.config.endpoint.rstrip("/") or "https://api.anthropic.com"
         url = endpoint + "/v1/messages"
         headers = {
@@ -93,11 +128,14 @@ class AnthropicProvider(VLMProvider):
 
         payload: Dict[str, Any] = {
             "model": self.config.model or "claude-sonnet-4-6-20250514",
-            "max_tokens": 1024,
+            "max_tokens": max_tokens,
             "messages": messages,
         }
-        if self.config.system_prompt:
-            payload["system"] = self.config.system_prompt
+        effective_system_prompt = self.config.system_prompt if system_prompt is None else system_prompt
+        if effective_system_prompt:
+            payload["system"] = effective_system_prompt
+        if temperature is not None:
+            payload["temperature"] = temperature
 
         async with make_async_client(self.config) as client:
             try:

@@ -45,6 +45,7 @@ OPTIONAL_DEPENDENCY_GROUPS: dict[str, tuple[str, ...]] = {
         "opencv-python>=4.9.0",
     ),
     "toriigate": ("torch>=2.0.0", "transformers>=5.6.0", "safetensors>=0.4.0"),
+    "translation": ("translators==6.0.4",),
 }
 
 SOFT_DEPENDENCY_GROUPS: dict[str, tuple[tuple[str, str], ...]] = {
@@ -60,6 +61,7 @@ GROUP_IMPORTS: dict[str, tuple[str, ...]] = {
     "yolo": ("ultralytics",),
     "sam3": ("torch", "transformers", "safetensors", "cv2"),
     "toriigate": ("torch", "transformers", "safetensors"),
+    "translation": ("translators",),
 }
 
 IMPORT_TO_PACKAGE_HINT: dict[str, str] = {
@@ -73,6 +75,7 @@ IMPORT_TO_PACKAGE_HINT: dict[str, str] = {
     "ultralytics": "ultralytics>=8.4.0",
     "cv2": "opencv-python>=4.9.0",
     "triton": _TRITON_PACKAGE,
+    "translators": "translators==6.0.4",
 }
 
 
@@ -231,7 +234,7 @@ def _assert_safe_install_target(packages: Sequence[str]) -> None:
         return
     package_list = ", ".join(packages)
     raise UnsafeDependencyInstallError(
-        "Refusing to install optional AI Python packages into the system Python environment. "
+        "Refusing to install optional Python packages into the system Python environment. "
         "Start SD Image Sorter with run.bat, run-portable.bat, or run.sh so the app-owned Python runtime is used, then click Prepare again. "
         "If you are intentionally managing your own environment, create/activate a virtual environment first "
         "or set SD_IMAGE_SORTER_ALLOW_SYSTEM_PIP_INSTALL=1. "

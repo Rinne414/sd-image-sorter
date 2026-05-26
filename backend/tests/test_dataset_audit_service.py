@@ -20,6 +20,7 @@ if str(ROOT) not in sys.path:
 
 from services.dataset_audit_service import (  # noqa: E402
     _build_duplicate_groups,
+    _fallback_phash_hex,
     _hamming_distance_hex,
     audit_dataset,
 )
@@ -209,6 +210,69 @@ def test_audit_disable_phash_skips_inference(audit_sandbox, monkeypatch):
         enable_phash=False,
     )
     assert calls == []
+
+
+def test_audit_phash_reports_duplicate_groups_and_counts(audit_sandbox, monkeypatch):
+    import services.dataset_audit_service as dass
+
+    phashes = {
+        str(audit_sandbox[0]): "ff00ff00ff00ff00",
+        str(audit_sandbox[1]): "ff00ff00ff00ff01",
+        str(audit_sandbox[2]): "0000000000000000",
+    }
+    monkeypatch.setattr(dass, "_phash_backend_error", lambda: "")
+    monkeypatch.setattr(dass, "_safe_phash_hex", lambda p: phashes[str(p)])
+
+    report = audit_dataset(
+        image_paths=[str(p) for p in audit_sandbox],
+        phash_max=2,
+        enable_phash=True,
+    )
+
+    assert report["summary"]["near_duplicate_checked"] is True
+    assert report["summary"]["near_duplicate_attempted"] == 3
+    assert report["summary"]["near_duplicate_hashes"] == 3
+    assert report["summary"]["near_duplicate_error"] == ""
+    assert len(report["duplicate_groups"]) == 1
+    assert sorted(report["duplicate_groups"][0]["abs_paths"]) == sorted([str(audit_sandbox[0]), str(audit_sandbox[1])])
+
+
+def test_audit_phash_fallback_hashes_identical_images(tmp_path: Path):
+    folder = tmp_path / "fallback"
+    folder.mkdir()
+    p1 = folder / "one.png"
+    p2 = folder / "two.png"
+    Image.new("RGB", (640, 480), color=(180, 40, 90)).save(p1)
+    Image.new("RGB", (640, 480), color=(180, 40, 90)).save(p2)
+
+    h1 = _fallback_phash_hex(str(p1))
+    h2 = _fallback_phash_hex(str(p2))
+
+    assert h1
+    assert h1 == h2
+    assert len(h1) == 16
+
+
+def test_audit_phash_unavailable_is_reported_without_crashing(audit_sandbox, monkeypatch):
+    import services.dataset_audit_service as dass
+
+    calls = []
+    monkeypatch.setattr(dass, "_phash_backend_error", lambda: "No module named imagehash")
+    monkeypatch.setattr(dass, "_safe_phash_hex", lambda p: calls.append(p) or "ff")
+
+    report = audit_dataset(
+        image_paths=[str(p) for p in audit_sandbox],
+        phash_max=5,
+        enable_phash=True,
+    )
+
+    assert report["summary"]["near_duplicate_checked"] is True
+    assert report["summary"]["near_duplicate_attempted"] == 3
+    assert report["summary"]["near_duplicate_hashes"] == 0
+    assert report["summary"]["near_duplicate_unavailable_count"] == 3
+    assert "imagehash" in report["summary"]["near_duplicate_error"]
+    assert calls == []
+    assert report["duplicate_groups"] == []
 
 
 def test_audit_recognises_missing_gallery_ids(test_db, audit_sandbox):

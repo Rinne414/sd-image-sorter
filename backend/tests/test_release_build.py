@@ -1214,6 +1214,98 @@ def _load_lazy_release_qa_module(name: str):
     return module
 
 
+def _lazy_release_common_archive_names():
+    return {
+        "sd-image-sorter/backend/main.py",
+        "sd-image-sorter/backend/config.py",
+        "sd-image-sorter/backend/services/service_provider.py",
+        "sd-image-sorter/frontend/index.html",
+        "sd-image-sorter/frontend/js/app.js",
+        "sd-image-sorter/frontend/js/gallery.js",
+        "sd-image-sorter/update/package-manifest.json",
+    }
+
+
+def test_lazy_release_qa_accepts_linux_archive_without_windows_launchers():
+    module = _load_lazy_release_qa_module("lazy_release_qa_linux_archive_for_test")
+
+    names = _lazy_release_common_archive_names() | {
+        "sd-image-sorter/run.sh",
+    }
+
+    module.assert_archive_contents(names, package_kind="linux")
+
+
+def test_lazy_release_qa_rejects_linux_archive_with_bundled_python():
+    module = _load_lazy_release_qa_module("lazy_release_qa_linux_no_python_for_test")
+
+    names = _lazy_release_common_archive_names() | {
+        "sd-image-sorter/run.sh",
+        "sd-image-sorter/python/bin/python3",
+    }
+
+    with pytest.raises(module.LazyQaError, match="linux archive must not include embedded python/"):
+        module.assert_archive_contents(names, package_kind="linux")
+
+
+def test_lazy_release_qa_accepts_linux_portable_archive_with_shell_launcher_and_python():
+    module = _load_lazy_release_qa_module("lazy_release_qa_linux_portable_archive_for_test")
+
+    names = _lazy_release_common_archive_names() | {
+        "sd-image-sorter/run.sh",
+        "sd-image-sorter/run-portable.sh",
+        "sd-image-sorter/python/bin/python3",
+    }
+
+    module.assert_archive_contents(names, package_kind="linux-portable")
+
+
+def test_lazy_release_qa_rejects_linux_portable_archive_without_bundled_python():
+    module = _load_lazy_release_qa_module("lazy_release_qa_linux_portable_python_for_test")
+
+    names = _lazy_release_common_archive_names() | {
+        "sd-image-sorter/run.sh",
+        "sd-image-sorter/run-portable.sh",
+    }
+
+    with pytest.raises(module.LazyQaError, match="linux-portable archive does not include embedded python/"):
+        module.assert_archive_contents(names, package_kind="linux-portable")
+
+
+def test_lazy_release_qa_accepts_windows_portable_archive_with_batch_launchers_and_python():
+    module = _load_lazy_release_qa_module("lazy_release_qa_windows_archive_for_test")
+
+    names = _lazy_release_common_archive_names() | {
+        "sd-image-sorter/run.bat",
+        "sd-image-sorter/run.sh",
+        "sd-image-sorter/run-portable.bat",
+        "sd-image-sorter/python/python.exe",
+    }
+
+    module.assert_archive_contents(names, package_kind="windows-portable")
+
+
+def test_lazy_release_qa_rejects_app_patch_archive_with_bundled_python():
+    module = _load_lazy_release_qa_module("lazy_release_qa_app_patch_for_test")
+
+    names = _lazy_release_common_archive_names() | {
+        "sd-image-sorter/run.bat",
+        "sd-image-sorter/run.sh",
+        "sd-image-sorter/run-portable.bat",
+        "sd-image-sorter/python/python.exe",
+    }
+
+    with pytest.raises(module.LazyQaError, match="app-patch archive must not include embedded python/"):
+        module.assert_archive_contents(names, package_kind="app-patch")
+
+
+def test_lazy_release_qa_rejects_unknown_package_kind():
+    module = _load_lazy_release_qa_module("lazy_release_qa_unknown_package_for_test")
+
+    with pytest.raises(module.LazyQaError, match="Unknown package kind"):
+        module.assert_archive_contents(_lazy_release_common_archive_names(), package_kind="mystery")
+
+
 def test_lazy_release_qa_uses_matching_node_runtime_for_linux_python(monkeypatch):
     module = _load_lazy_release_qa_module("lazy_release_qa_for_test")
 
