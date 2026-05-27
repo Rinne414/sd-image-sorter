@@ -52,6 +52,7 @@ import shutil
 import uuid
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
@@ -609,7 +610,14 @@ def _safe_uploaded_name(name: str, fallback: str = "image") -> str:
 
 
 def _append_upload_item(dest: Path, items: List[Dict[str, Any]], *, source_kind: str) -> bool:
-    """Read metadata for an uploaded/extracted image and append a session item."""
+    """Read metadata for an uploaded/extracted image and append a session item.
+
+    Items written here have a real on-disk path under the upload directory,
+    so the export pipeline's ``beside_image`` mode can write a same-name
+    ``.txt`` next to the extracted/uploaded copy. Earlier versions marked
+    these as ``cache_only`` which forced the user into a separate output
+    folder even though the image lives on disk.
+    """
     meta = _read_image_metadata(dest)
     if meta is None:
         dest.unlink(missing_ok=True)
@@ -628,9 +636,122 @@ def _append_upload_item(dest: Path, items: List[Dict[str, Any]], *, source_kind:
         "size": stat.st_size,
         "thumb_b64": thumb_b64,
         "source_kind": source_kind,
-        "sidecar_capability": "cache_only",
+        "sidecar_capability": "beside_image",
     })
     return True
+
+
+@dataclass
+class _ArchiveExtractResult:
+    skipped: int = 0
+
+
+def _try_import_rarfile():
+    """Soft-import the optional ``rarfile`` dependency.
+
+    Returns the module on success or ``None`` if unavailable. We cannot
+    rely on ``rarfile`` being installed because it requires the system
+    ``unrar`` (or ``bsdtar`` / ``7z``) binary at runtime, and shipping
+    those binaries on every platform is out of scope for this release.
+    """
+    try:
+        import rarfile  # type: ignore
+    except ImportError:
+        return None
+    return rarfile
+
+
+async def _extract_rar_into_dataset(
+    upload_file,
+    upload_dir: Path,
+    items: List[Dict[str, Any]],
+) -> _ArchiveExtractResult:
+    """Extract a RAR archive into ``upload_dir`` and append image items.
+
+    Mirrors the ZIP extraction path:
+    - Each archive lands in its own subdirectory under ``upload_dir``.
+    - Path-traversal entries are skipped.
+    - Non-image members are silently skipped.
+    - Images that fail metadata read are counted as skipped.
+
+    Raises ``ValueError`` when the ``rarfile`` dependency is missing or
+    the system extractor binary cannot be found, with a message that
+    points the user at the same workaround as before (extract manually
+    or convert to ZIP).
+    """
+    rarfile = _try_import_rarfile()
+    if rarfile is None:
+        raise ValueError(
+            "RAR archives need the optional 'rarfile' dependency and a system "
+            "'unrar' binary. Install them, or extract the RAR to a folder / "
+            "convert it to ZIP, then import again."
+        )
+
+    filename = upload_file.filename or "archive.rar"
+    archive_dir = upload_dir / f"{_safe_uploaded_name(Path(filename).stem, 'archive')}_{uuid.uuid4().hex[:8]}"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+
+    rar_buffer_path = archive_dir / f"_source_{uuid.uuid4().hex[:8]}.rar"
+    try:
+        if hasattr(upload_file, "file") and upload_file.file is not None:
+            upload_file.file.seek(0)
+            with rar_buffer_path.open("wb") as out:
+                shutil.copyfileobj(upload_file.file, out, length=1024 * 1024)
+        else:
+            content = await upload_file.read()
+            rar_buffer_path.write_bytes(content)
+
+        skipped = 0
+        try:
+            with rarfile.RarFile(str(rar_buffer_path)) as rf:
+                for member in rf.infolist():
+                    if member.isdir():
+                        continue
+                    raw_name = (member.filename or "").replace("\\", "/")
+                    if not raw_name:
+                        skipped += 1
+                        continue
+                    posix = PurePosixPath(raw_name)
+                    if posix.is_absolute() or ".." in posix.parts:
+                        skipped += 1
+                        continue
+                    suffix = Path(posix.name).suffix.lower()
+                    if suffix not in ALLOWED_IMAGE_EXTENSIONS:
+                        continue
+                    safe_name = _safe_uploaded_name(posix.name, f"image{suffix or '.png'}")
+                    dest = archive_dir / safe_name
+                    counter = 1
+                    while dest.exists():
+                        dest = archive_dir / f"{Path(safe_name).stem}_{counter}{Path(safe_name).suffix}"
+                        counter += 1
+                    try:
+                        with rf.open(member) as src, dest.open("wb") as out:
+                            shutil.copyfileobj(src, out, length=1024 * 1024)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("rar-extract: copy failed for %s: %s", raw_name, exc)
+                        skipped += 1
+                        continue
+                    if not _append_upload_item(dest, items, source_kind="rar_extract"):
+                        skipped += 1
+        except getattr(rarfile, "BadRarFile", Exception) as exc:  # noqa: BLE001
+            logger.warning("rar-extract: bad archive %s: %s", filename, exc)
+            skipped += 1
+        except getattr(rarfile, "NeedFirstVolume", Exception):
+            raise ValueError(
+                "Multi-part RAR archives must be uploaded together starting from "
+                "the first volume (.part1.rar). Extract the archive locally and "
+                "import the folder instead."
+            )
+        except FileNotFoundError as exc:
+            # rarfile raises this when the underlying unrar binary is missing.
+            raise ValueError(
+                "RAR extraction needs a system 'unrar' (or 'bsdtar') binary. "
+                "Install it, extract the RAR to a folder, or convert it to ZIP."
+            ) from exc
+    finally:
+        rar_buffer_path.unlink(missing_ok=True)
+
+    return _ArchiveExtractResult(skipped=skipped)
 
 
 async def upload_files_for_dataset(files, *, recursive: bool = True) -> Dict[str, Any]:
@@ -649,7 +770,9 @@ async def upload_files_for_dataset(files, *, recursive: bool = True) -> Dict[str
         ext = Path(filename).suffix.lower()
 
         if ext == ".rar":
-            raise ValueError("RAR archives are not supported. Extract the RAR to a folder or convert it to ZIP, then import again.")
+            extracted = await _extract_rar_into_dataset(upload_file, upload_dir, items)
+            skipped += extracted.skipped
+            continue
 
         if ext == ".zip":
             archive_dir = upload_dir / f"{_safe_uploaded_name(Path(filename).stem, 'archive')}_{uuid.uuid4().hex[:8]}"

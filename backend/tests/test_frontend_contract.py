@@ -513,8 +513,10 @@ def test_dataset_maker_sidecar_export_limits_are_visible_before_caption_work():
     assert 'id="dataset-sidecar-import-notice"' in html
     assert 'id="dataset-sidecar-source-status"' in html
     assert "Gallery" in html and "folder path" in html
-    assert "Drag/drop images and ZIP are app-cache imports" in html
-    assert "RAR is not supported" in html
+    # v3.2.2: drag/drop folders, ZIP, and RAR also support beside_image
+    # by writing the .txt next to the imported copy in the upload dir.
+    assert "next to the imported copy" in html
+    assert "rarfile" in html and "unrar" in html
     assert "dataset.sidecarNoticeTitle" in en and "dataset.sidecarNoticeTitle" in zh
     assert "dataset.sidecarSourceStatus" in en and "dataset.sidecarSourceStatus" in zh
     assert "unsupportedRarFiles" in local_import

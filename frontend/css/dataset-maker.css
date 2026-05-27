@@ -1276,9 +1276,9 @@
     color: #bfdbfe;
 }
 #view-dataset .dataset-tag-pill-category-identity {
-    background: rgba(168, 85, 247, 0.14);
-    border-color: rgba(168, 85, 247, 0.45);
-    color: #e9d5ff;
+    background: rgba(244, 114, 182, 0.14);
+    border-color: rgba(244, 114, 182, 0.45);
+    color: #fbcfe8;
 }
 #view-dataset .dataset-tag-pill-category-appearance {
     background: rgba(255,255,255,0.07);

@@ -168,9 +168,24 @@
         },
 
         _bindBeforeUnload() {
+            // H2 fix: Chrome/Edge ignore preventDefault() on beforeunload
+            // unless ``returnValue`` is also set on the event. Without
+            // ``e.returnValue = ''`` this handler was a silent no-op on
+            // the primary target browsers — users would F5 and lose all
+            // caption edits with no prompt.
+            //
+            // Additionally, only prompt when there are UNSAVED edits
+            // (``captionEdits.size > 0``). Just having images queued is
+            // not a strong enough signal to nag every refresh; queue
+            // contents are persisted to sessionStorage and survive
+            // reload, but in-progress caption edits beyond what is
+            // already saved would still be jarring to lose mid-typing.
             window.addEventListener('beforeunload', (e) => {
-                if (this.imageIds && this.imageIds.length > 0) {
+                const hasQueue = this.imageIds && this.imageIds.length > 0;
+                const hasUnsavedEdits = this.captionEdits && this.captionEdits.size > 0;
+                if (hasQueue && hasUnsavedEdits) {
                     e.preventDefault();
+                    e.returnValue = '';
                 }
             });
         },

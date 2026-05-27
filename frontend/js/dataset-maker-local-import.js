@@ -814,9 +814,11 @@
     // -------- Drag-drop zone --------
 
     const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'tiff', 'tif']);
-    const ARCHIVE_EXTS = new Set(['zip']);
-    const unsupportedRarFiles = (files) => Array.from(files || [])
-        .filter((f) => (f?.name || '').toLowerCase().endsWith('.rar'));
+    // Both ZIP and RAR are unpacked server-side. RAR additionally needs the
+    // optional ``rarfile`` Python package + system ``unrar`` binary; the
+    // backend returns a clear toast when those are missing.
+    const ARCHIVE_EXTS = new Set(['zip', 'rar']);
+    const unsupportedRarFiles = () => [];
 
     function bindDropzone() {
         const dropzone = $('dataset-dropzone');
@@ -927,10 +929,14 @@
     async function handleFileList(files) {
         const imageFiles = [];
         const archiveFiles = [];
+        // RAR is now handled server-side (optional rarfile dep). The
+        // ``unsupportedRarFiles`` helper exists for backward compat tests
+        // and always returns an empty list — the upload route surfaces a
+        // clear error if the runtime is missing the unrar binary.
         const rarFiles = unsupportedRarFiles(files);
         if (rarFiles.length > 0) {
             DM._toast(DM._t('dataset.rarUnsupported',
-                'RAR is not supported. Extract it to a folder or convert it to ZIP first.'),
+                "RAR needs the 'rarfile' package and a system 'unrar' binary. Extract to a folder or convert to ZIP if those aren't installed."),
                 'warning', 7000);
         }
         for (const f of files) {

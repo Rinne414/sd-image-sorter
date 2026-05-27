@@ -258,15 +258,17 @@ def test_upload_files_accepts_zip_and_respects_recursive_flag(tmp_path, monkeypa
     flat = asyncio.run(upload_files_for_dataset([FakeUploadFile("dataset.zip", payload)], recursive=False))
     assert {item["filename"] for item in flat["items"]} == {"top.png"}
     assert {item["source_kind"] for item in flat["items"]} == {"zip_extract"}
-    assert {item["sidecar_capability"] for item in flat["items"]} == {"cache_only"}
+    # v3.2.2: extracted ZIP entries live on disk in the upload dir, so
+    # ``beside_image`` export can write a same-name .txt next to each copy.
+    assert {item["sidecar_capability"] for item in flat["items"]} == {"beside_image"}
 
     deep = asyncio.run(upload_files_for_dataset([FakeUploadFile("dataset.zip", payload)], recursive=True))
     assert {item["filename"] for item in deep["items"]} == {"top.png", "deep.png"}
     assert {item["source_kind"] for item in deep["items"]} == {"zip_extract"}
-    assert {item["sidecar_capability"] for item in deep["items"]} == {"cache_only"}
+    assert {item["sidecar_capability"] for item in deep["items"]} == {"beside_image"}
 
 
-def test_upload_files_marks_direct_images_as_cache_only(tmp_path, monkeypatch):
+def test_upload_files_marks_direct_images_as_beside_image(tmp_path, monkeypatch):
     monkeypatch.setattr(dataset_session_module, "_UPLOAD_DIR", tmp_path / "uploads")
 
     result = asyncio.run(upload_files_for_dataset([FakeUploadFile("loose.png", _image_bytes())]))
@@ -275,13 +277,20 @@ def test_upload_files_marks_direct_images_as_cache_only(tmp_path, monkeypatch):
     item = result["items"][0]
     assert item["filename"] == "loose.png"
     assert item["source_kind"] == "uploaded_file"
-    assert item["sidecar_capability"] == "cache_only"
+    # v3.2.2: drag/drop images land in the upload dir as real files, so the
+    # beside-image export mode can place the .txt right next to them.
+    assert item["sidecar_capability"] == "beside_image"
 
 
-def test_upload_files_rejects_rar_with_clear_error(tmp_path, monkeypatch):
+def test_upload_files_rejects_rar_when_rarfile_dependency_missing(tmp_path, monkeypatch):
+    """Without the optional rarfile dep, .rar uploads must fail with a clear
+    error pointing at the workaround. The behaviour with rarfile installed
+    is exercised via integration on dev machines.
+    """
     monkeypatch.setattr(dataset_session_module, "_UPLOAD_DIR", tmp_path / "uploads")
+    monkeypatch.setattr(dataset_session_module, "_try_import_rarfile", lambda: None)
 
-    with pytest.raises(ValueError, match="RAR"):
+    with pytest.raises(ValueError, match="rarfile"):
         asyncio.run(upload_files_for_dataset([FakeUploadFile("dataset.rar", b"not really rar")]))
 
 

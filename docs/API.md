@@ -1071,6 +1071,14 @@ Returns `{status, exported, skipped, error_count, output_folder, items[], total_
 
 ---
 
+#### POST /api/dataset/export-preview
+
+Preview Dataset Maker export sidecars without writing files. Runs the same caption-assembly engine as `/api/dataset/export` (blacklist removal, common-tag injection, trigger-word prepend, underscore normalization, per-image overrides) but returns the preview rows in-memory instead of touching disk. Used by the Dataset Maker Step C "preview" pane and the renamed-pair chip.
+
+Body matches `/api/dataset/export` minus `output_folder` and `image_op`. Returns `{rows: [{image_id|image_path, src_filename, dst_filename, caption}], skipped, error_count}`.
+
+---
+
 #### POST /api/dataset/export/start
 
 Start the same dataset export as a background job so large queues can show progress and be cancelled without blocking the browser request. Body is the same as `/api/dataset/export`.
@@ -1166,6 +1174,24 @@ Upload image files directly into the Dataset Maker session via multipart form da
 Form data: `files` — one or more image files (PNG, JPG, WebP, etc.)
 
 Returns `{items[], skipped_unreadable}`. Each item carries `{ds_id, abs_path, filename, width, height, mtime, size, thumb_b64}`.
+
+---
+
+#### POST /api/dataset/translate
+
+Translate a list of caption / tag strings between languages (typically English ↔ Chinese) using a chain of free translation providers (google_free / mymemory_free / bing_free / baidu_free / ...) so users can localize a LoRA training set's captions without an API key. The server tries providers in fallback order until one succeeds; failed providers are surfaced via the per-item `provider` and `error` fields.
+
+Body:
+```json
+{
+  "texts": ["1girl, solo, looking_at_viewer"],
+  "source_lang": "auto",
+  "target_lang": "zh-CN",
+  "providers": ["google_free", "mymemory_free"]
+}
+```
+
+`providers` is optional; omit it to use the default free-provider chain. Returns `{results: [{text, translated, provider, error}], errors: int}`.
 
 ---
 

@@ -4067,9 +4067,7 @@ async function moveOrCopySelectedGalleryImages(operation = 'move') {
 }
 
 // v3.2.2 task #4: push the gallery selection into the Dataset Maker
-// queue and switch the user to that view. Replaces the older standalone
-// "Analyze Colors" gallery-toolbar button (color analysis still runs
-// from the Tag Images modal's Color tab).
+// queue and switch the user to that view.
 async function sendSelectionToDatasetMaker() {
     const ids = getSelectedGalleryIds();
     const hasFilteredToken = Boolean(getActiveSelectionTokenForActions());
@@ -4104,71 +4102,6 @@ async function sendSelectionToDatasetMaker() {
             'error'
         );
     }
-}
-
-// v3.2.1 task #34: new common action — analyze colors on currently selected images only.
-async function analyzeColorsOnSelectedImages() {
-    const selectionToken = getActiveSelectionTokenForActions();
-    const ids = getSelectedGalleryIds();
-    const totalCount = selectionToken ? getSelectedGalleryCount() : ids.length;
-
-    if (totalCount === 0) {
-        showToast(appT('selection.emptyHint', 'Select images, or choose all current filter matches.'), 'info');
-        return;
-    }
-
-    // Backend caps a single /api/colors/analyze run at 50_000 images.
-    const BACKEND_LIMIT = 50000;
-    const willBeCapped = totalCount > BACKEND_LIMIT;
-    const targetCount = Math.min(totalCount, BACKEND_LIMIT);
-
-    const title = appT('selection.analyzeColorsConfirmTitle', 'Run color analysis on selection?');
-    const bodyKey = willBeCapped ? 'selection.analyzeColorsConfirmBodyCapped' : 'selection.analyzeColorsConfirmBody';
-    const bodyFallback = willBeCapped
-        ? `Color analysis will run on the first ${BACKEND_LIMIT.toLocaleString()} of ${totalCount.toLocaleString()} selected images. Run again to process the rest.`
-        : `Color analysis will run on ${targetCount.toLocaleString()} selected image(s). It runs locally and you can keep using the app.`;
-    const message = appT(bodyKey, bodyFallback)
-        .replace('{cap}', BACKEND_LIMIT.toLocaleString())
-        .replace('{total}', totalCount.toLocaleString())
-        .replace('{count}', targetCount.toLocaleString());
-
-    showConfirm(title, message, async () => {
-        try {
-            const payload = { limit: BACKEND_LIMIT };
-            if (selectionToken) {
-                payload.selection_token = selectionToken;
-            } else {
-                payload.image_ids = ids.slice(0, BACKEND_LIMIT);
-            }
-            const resp = await fetch('/api/colors/analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-            if (!resp.ok) {
-                const err = await resp.json().catch(() => ({}));
-                throw new Error(err.detail || resp.statusText);
-            }
-            const data = await resp.json();
-            showToast(
-                appT('selection.analyzeColorsStarted', 'Color analysis started for {count} image(s).')
-                    .replace('{count}', (data.total || targetCount).toLocaleString()),
-                'success',
-            );
-            // Trigger the existing color-backfill polling so the chip / toast surface progress.
-            if (window.ColorBackfill?.notifyAnalysisStarted) {
-                window.ColorBackfill.notifyAnalysisStarted();
-            } else if (window.ColorBackfill?.startPolling) {
-                window.ColorBackfill.startPolling();
-                window.ColorBackfill.openToast?.();
-            }
-        } catch (error) {
-            showToast(
-                formatUserError(error, appT('selection.analyzeColorsFailed', 'Failed to start color analysis')),
-                'error',
-            );
-        }
-    });
 }
 
 function updateNavigationOverflowState() {

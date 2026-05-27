@@ -497,15 +497,15 @@
                         </div>
                         <div class="view-options">
                             <select id="gallery-sort" class="sort-dropdown" aria-label="Sort images">
-                                <option value="newest">Date</option>
-                                <option value="name_asc">Name</option>
-                                <option value="generator">Generator</option>
-                                <option value="prompt_length">Prompt Length</option>
-                                <option value="tag_count">Tags</option>
-                                <option value="rating">Rating</option>
-                                <option value="character_count">Characters</option>
-                                <option value="file_size">File Size</option>
-                                <option value="aesthetic">Aesthetic Score</option>
+                                <option value="newest" data-i18n="sort.optionDate">Date</option>
+                                <option value="name_asc" data-i18n="sort.optionName">Name</option>
+                                <option value="generator" data-i18n="sort.optionGenerator">Generator</option>
+                                <option value="prompt_length" data-i18n="sort.optionPromptLength">Prompt Length</option>
+                                <option value="tag_count" data-i18n="sort.optionTags">Tags</option>
+                                <option value="rating" data-i18n="sort.optionRating">Rating</option>
+                                <option value="character_count" data-i18n="sort.optionCharacters">Characters</option>
+                                <option value="file_size" data-i18n="sort.optionFileSize">File Size</option>
+                                <option value="aesthetic" data-i18n="sort.optionAesthetic">Aesthetic Score</option>
                                 <option value="brightness" data-i18n="sort.brightness">Brightest</option>
                                 <option value="saturation" data-i18n="sort.saturation">Most Saturated</option>
                                 <option value="brightness_skew" data-i18n="sort.brightnessSkew">Brightness Spread</option>
@@ -524,10 +524,11 @@
                             <button class="view-btn" data-size="waterfall" title="Waterfall view" aria-label="Waterfall view" aria-pressed="false" data-i18n-title="gallery.viewWaterfall" data-i18n-aria="gallery.viewWaterfall">
                                 <span aria-hidden="true">▥</span>
                             </button>
-                            <div class="divider-v" aria-hidden="true"></div>
-                            <button id="btn-clear-db" class="btn btn-ghost btn-small btn-icon-only danger gallery-clear-button" type="button" title="Remove all images from the current library (files stay on disk)" aria-label="Clear gallery database" data-i18n-title="action.clearGalleryTooltip">
+                            <div class="divider-v" aria-hidden="true" style="margin-left: 8px;"></div>
+                            <button id="btn-clear-db" class="btn btn-ghost btn-small btn-icon-only danger gallery-clear-button" type="button" title="Destructive: removes ALL images from the current library database. Files on disk are preserved. Use carefully." aria-label="Clear gallery database (destructive)" aria-describedby="btn-clear-db-desc" data-i18n-title="action.clearGalleryTooltip">
                                 <span aria-hidden="true">🗑️</span>
                             </button>
+                            <span id="btn-clear-db-desc" class="sr-only">Destructive action — removes every image record from the current library. Files on disk are not deleted.</span>
                         </div>
 
                     </div>
@@ -658,7 +659,7 @@
                                     <span aria-hidden="true" class="onboarding-step-icon">🧭</span>
                                     <div class="onboarding-step-copy">
                                         <strong data-i18n="onboarding.step4Title">Explore the tabs</strong>
-                                        <span data-i18n="onboarding.step4Hint">Use the top-left tabs to switch between Reader, Sort (WASD manual), Censor, Similar, Prompt Lab, Artist ID, and Image Obfuscate.</span>
+                                        <span data-i18n="onboarding.step4Hint">Use the top-left tabs to switch between Reader (with Privacy Tools inside), Sort (WASD manual), Censor, Similar, Prompt Lab, and Artist ID.</span>
                                     </div>
                                 </li>
                             </ol>
@@ -2593,8 +2594,8 @@
                             <strong data-i18n="dataset.sidecarNoticeTitle">Same-name .txt beside original files</strong>
                             <ul>
                                 <li data-i18n="dataset.sidecarNoticeGalleryFolder">Supported when images come from Gallery or the folder path scan above.</li>
-                                <li data-i18n="dataset.sidecarNoticeCacheOnly">Drag/drop images and ZIP are app-cache imports, so they can only export to a target folder.</li>
-                                <li data-i18n="dataset.sidecarNoticeRar">RAR is not supported. Extract it to a folder or convert it to ZIP first.</li>
+                                <li data-i18n="dataset.sidecarNoticeCacheOnly">Drag/drop images, dropped folders, ZIP, and RAR also write the .txt next to the imported copy in the app data directory.</li>
+                                <li data-i18n="dataset.sidecarNoticeRar">RAR needs the optional 'rarfile' Python package and a system 'unrar' binary; if missing, extract to a folder or convert to ZIP first.</li>
                             </ul>
                         </div>
 
@@ -2811,7 +2812,7 @@
                                 </label>
                                 <button class="btn btn-primary full-width" id="btn-dataset-smart-tag" style="margin-top: 8px;">
                                     <span aria-hidden="true">✨</span>
-                                    <span data-i18n="dataset.smartTag">Smart Tag (booru + NL)</span>
+                                    <span data-i18n="dataset.smartTag">Smart Tag (WD14 + VLM)</span>
                                 </button>
                                 <p class="dataset-card-help" data-i18n="dataset.smartTagHelp" style="margin-top: 6px; font-size: 12px; opacity: 0.75;">
                                     Run one or two local taggers, optionally add a VLM sentence, clean noise tags, and write captions back to every image in this dataset.

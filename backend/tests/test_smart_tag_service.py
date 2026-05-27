@@ -106,8 +106,9 @@ def test_symbol_noise_tags_are_stripped() -> None:
 
 def test_filter_noise_tags_preserves_order_and_drops_noise() -> None:
     inp = ["masterpiece", "1girl", "score_9", "blue eyes", "anime", "long hair"]
-    out = filter_noise_tags(inp)
+    out, stripped = filter_noise_tags(inp)
     assert out == ["1girl", "blue eyes", "long hair"]
+    assert stripped == 3
 
 
 def test_default_noise_set_is_union_of_all_buckets() -> None:
@@ -1011,3 +1012,208 @@ def test_run_pipeline_keeps_only_bounded_recent_errors(monkeypatch) -> None:
     assert job.failed == count
     assert len(job.errors) == SMART_TAG_MAX_ERRORS
     assert job.errors[0]["image_id"] == f"/tmp/error-{count - SMART_TAG_MAX_ERRORS}.png"
+
+
+# ---------------------------------------------------------------------------
+# Fix B2: VLM endpoint missing -> reject at _coerce_request, not silent fallback
+# ---------------------------------------------------------------------------
+
+
+def test_coerce_request_rejects_vlm_enabled_without_endpoint(monkeypatch) -> None:
+    """If enable_vlm=True and nl_mode='vlm' but VLM Settings has no endpoint,
+    _coerce_request must raise ValueError so the /start route returns 400
+    instead of letting the worker silently fall back to booru-only output.
+    """
+    fake_config = SimpleNamespace(endpoint="", api_key="")
+    monkeypatch.setattr(
+        "routers.vlm._build_config",
+        lambda overrides=None: fake_config,
+    )
+
+    with pytest.raises(ValueError, match="VLM Settings"):
+        _coerce_request({
+            "image_paths": [],
+            "image_ids": [1],
+            "enable_vlm": True,
+            "enable_wd14": True,
+            "natural_language_mode": "vlm",
+        })
+
+
+def test_coerce_request_rejects_vlm_enabled_with_endpoint_but_no_api_key(monkeypatch) -> None:
+    fake_config = SimpleNamespace(
+        provider="openai_compat",
+        endpoint="https://example.invalid/v1",
+        api_key="",
+        use_vertex=False,
+        vertex_project="",
+    )
+    monkeypatch.setattr(
+        "routers.vlm._build_config",
+        lambda overrides=None: fake_config,
+    )
+
+    with pytest.raises(ValueError, match="VLM Settings"):
+        _coerce_request({
+            "image_ids": [1],
+            "enable_vlm": True,
+            "natural_language_mode": "vlm",
+        })
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "http://localhost:11434/v1",
+        "http://127.0.0.1:11434/v1",
+        "http://[::1]:11434/v1",
+        "http://host.docker.internal:11434/v1",
+        "http://my-rig.local:11434/v1",
+        "http://10.0.0.5:8000/v1",
+        "http://192.168.1.42:1234/v1",
+        "http://172.16.0.5:8080/v1",
+    ],
+)
+def test_coerce_request_allows_local_openai_compat_without_api_key(monkeypatch, endpoint) -> None:
+    """Ollama / vLLM / LM Studio on localhost or LAN need no api_key.
+
+    Reproduces the v3.2.2 bug where a configured local endpoint was rejected
+    with "VLM Settings has no endpoint or API key configured" because the
+    gate required api_key unconditionally.
+    """
+    fake_config = SimpleNamespace(
+        provider="openai_compat",
+        endpoint=endpoint,
+        api_key="",
+        use_vertex=False,
+        vertex_project="",
+    )
+    monkeypatch.setattr(
+        "routers.vlm._build_config",
+        lambda overrides=None: fake_config,
+    )
+
+    req = _coerce_request({
+        "image_ids": [1],
+        "enable_vlm": True,
+        "natural_language_mode": "vlm",
+    })
+    assert req.enable_vlm is True
+
+
+def test_coerce_request_allows_gemini_vertex_without_api_key(monkeypatch) -> None:
+    """Vertex AI auth uses service-account creds, not api_key."""
+    fake_config = SimpleNamespace(
+        provider="gemini",
+        endpoint="",
+        api_key="",
+        use_vertex=True,
+        vertex_project="my-project",
+    )
+    monkeypatch.setattr(
+        "routers.vlm._build_config",
+        lambda overrides=None: fake_config,
+    )
+
+    req = _coerce_request({
+        "image_ids": [1],
+        "enable_vlm": True,
+        "natural_language_mode": "vlm",
+    })
+    assert req.enable_vlm is True
+
+
+def test_coerce_request_rejects_gemini_vertex_without_project(monkeypatch) -> None:
+    fake_config = SimpleNamespace(
+        provider="gemini",
+        endpoint="",
+        api_key="",
+        use_vertex=True,
+        vertex_project="",
+    )
+    monkeypatch.setattr(
+        "routers.vlm._build_config",
+        lambda overrides=None: fake_config,
+    )
+
+    with pytest.raises(ValueError, match="Vertex"):
+        _coerce_request({
+            "image_ids": [1],
+            "enable_vlm": True,
+            "natural_language_mode": "vlm",
+        })
+
+
+def test_coerce_request_allows_toriigate_without_vlm_endpoint(monkeypatch) -> None:
+    """ToriiGate is a local model — it must NOT require a VLM endpoint."""
+    # _build_config should not be called in toriigate mode. Set a sentinel
+    # that would raise if invoked.
+    def _boom(overrides=None):
+        raise AssertionError("VLM config must not be loaded in toriigate mode")
+
+    monkeypatch.setattr("routers.vlm._build_config", _boom)
+
+    req = _coerce_request({
+        "image_ids": [1],
+        "enable_vlm": True,
+        "natural_language_mode": "toriigate",
+    })
+    assert req.natural_language_mode == "toriigate"
+
+
+def test_coerce_request_allows_vlm_disabled_without_endpoint(monkeypatch) -> None:
+    """enable_vlm=False short-circuits the endpoint check."""
+    def _boom(overrides=None):
+        raise AssertionError("VLM config must not be loaded when enable_vlm=False")
+
+    monkeypatch.setattr("routers.vlm._build_config", _boom)
+
+    req = _coerce_request({
+        "image_ids": [1],
+        "enable_vlm": False,
+    })
+    assert req.enable_vlm is False
+
+
+# ---------------------------------------------------------------------------
+# Fix M3: trigger word with internal whitespace is rejected at validation time
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "trigger",
+    [
+        "my lora trigger",
+        "two words",
+        "leading_ok and_trailing_ok with space",
+        "tab\there",
+    ],
+)
+def test_coerce_request_rejects_trigger_word_with_internal_whitespace(trigger) -> None:
+    with pytest.raises(ValueError, match="single token"):
+        _coerce_request({
+            "image_ids": [1],
+            "enable_vlm": False,
+            "trigger_word": trigger,
+        })
+
+
+@pytest.mark.parametrize(
+    "trigger",
+    [
+        "",
+        "  ",  # whitespace-only -> stripped to empty -> allowed
+        "single",
+        "my_lora_trigger",
+        "myLoraTrigger",
+        "  trailing_and_leading_ok  ",  # outer whitespace stripped silently
+    ],
+)
+def test_coerce_request_allows_valid_trigger_words(trigger) -> None:
+    req = _coerce_request({
+        "image_ids": [1],
+        "enable_vlm": False,
+        "trigger_word": trigger,
+    })
+    # Outer whitespace must be stripped, but the inner content stays intact.
+    assert req.trigger_word == trigger.strip()

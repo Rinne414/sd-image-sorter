@@ -3379,7 +3379,7 @@ textarea:focus,
 
 .filter-modal-stat-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    grid-template-columns: repeat(9, minmax(0, 1fr));
     gap: 8px;
 }
 
@@ -3396,16 +3396,22 @@ textarea:focus,
 
 .filter-stat-label {
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .filter-stat-value {
     color: var(--text-primary);
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .filter-modal-summary-grid {

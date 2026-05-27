@@ -83,6 +83,9 @@
         if (AUDIT_STATE.activeFilter) focusFirstAuditMatch(AUDIT_STATE.activeFilter);
         updateBadgeState();
         renderAuditNextSteps();
+        // M6: keep the residue strip in sync when the user toggles a
+        // filter from inside the modal.
+        updateAuditResidueStrip();
     }
 
     function getAuditMatches(flag) {
@@ -250,6 +253,8 @@
         const dlBtn = $('btn-dataset-audit-download');
         if (dlBtn) dlBtn.hidden = true;
         applyFilterToQueue();
+        // M6: report is gone — hide the residue strip.
+        updateAuditResidueStrip();
     }
 
     function removeAuditMatches(flag = preferredAuditFlag()) {
@@ -510,37 +515,20 @@
         updateBadgeState();
         applyFilterToQueue();
         renderAuditNextSteps();
+        // M6: refresh residue strip text/visibility against the fresh
+        // report (modal is typically open here, so strip stays hidden
+        // until the user closes the modal).
+        updateAuditResidueStrip();
     }
 
-    function removeFlaggedFromQueue() {
-        const flag = AUDIT_STATE.activeFilter;
-        if (!flag || !AUDIT_STATE.lastReport) return;
-        const items = document.querySelectorAll('#dataset-queue-list .dataset-queue-item.audit-flagged');
-        const ids = [];
-        for (const it of items) {
-            const id = Number(it.dataset.imageId || 0);
-            if (id) ids.push(id);
-        }
-        if (ids.length === 0) return;
-        const msg = DM._t?.('dataset.auditRemoveConfirm', 'Remove {count} flagged images from the dataset?', { count: ids.length })
-            || `Remove ${ids.length} flagged images from the dataset?`;
-        if (!window.confirm(msg)) return;
-        for (const id of ids) {
-            const idx = DM.imageIds.indexOf(id);
-            if (idx >= 0) DM.imageIds.splice(idx, 1);
-            DM.captions?.delete?.(id);
-            DM.captionEdits?.delete?.(id);
-        }
-        DM._renderQueue?.();
-        DM._updateExportEnabled?.();
-        DM._saveSession?.();
-        AUDIT_STATE.activeFilter = null;
-        AUDIT_STATE.inverted = false;
-        applyFilterToQueue();
-        if (typeof window.showToast === 'function') {
-            window.showToast(DM._t?.('dataset.auditRemovedToast', '{count} images removed', { count: ids.length }) || `${ids.length} images removed`, 'success');
-        }
-    }
+    // H3 fix: removed legacy ``removeFlaggedFromQueue`` (previously
+    // here at ~L515-543). It was dead code with zero call sites — the
+    // ``#btn-dataset-audit-remove-flagged`` handler at L504 already
+    // routes through ``removeAuditMatches`` (the canonical path that
+    // cleans up ``localItemPaths``, ``_undoStacks``, ``_queueSelection``,
+    // and calls ``_excludeLocalPathFromManifests``). Keeping the legacy
+    // function around risked future code accidentally wiring to the
+    // half-baked cleanup path and corrupting local-import state.
 
     async function runAudit() {
         if (AUDIT_STATE.running) return;
@@ -665,14 +653,160 @@
         setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
+    // ============== Audit residue strip (M6) ==============
+    //
+    // When the audit modal closes, ``AUDIT_STATE.lastReport`` and
+    // ``AUDIT_STATE.activeFilter`` may still be active — the queue
+    // shows grayed-out items, but the modal's badges (the only place
+    // that named the filter) are gone. Without a residue indicator
+    // users see filtered items with no way to know WHAT filter is
+    // applied. This strip lives next to ``#btn-dataset-import-audit``
+    // and shows the active filter + a "Clear" link.
+
+    const AUDIT_RESIDUE_FLAG_LABELS = {
+        missing: 'dataset.auditBadgeMissing',
+        low_quality: 'dataset.auditBadgeLowQuality',
+        untagged: 'dataset.auditBadgeUntagged',
+        small: 'dataset.auditBadgeSmall',
+        duplicate: 'dataset.auditBadgeDuplicate',
+    };
+
+    const AUDIT_RESIDUE_FLAG_FALLBACKS = {
+        missing: 'Missing / unreadable',
+        low_quality: 'Low quality',
+        untagged: 'Untagged',
+        small: 'Small',
+        duplicate: 'Duplicates',
+    };
+
+    function ensureAuditResidueStyles() {
+        if (document.getElementById('dataset-audit-residue-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'dataset-audit-residue-styles';
+        style.textContent = `
+            .dataset-audit-residue-strip {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                margin-left: 8px;
+                padding: 4px 10px;
+                font-size: 12px;
+                color: rgba(230, 230, 240, 0.85);
+                background: rgba(255, 255, 255, 0.06);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 999px;
+                white-space: nowrap;
+                vertical-align: middle;
+            }
+            .dataset-audit-residue-strip[hidden] { display: none; }
+            .dataset-audit-residue-label { opacity: 0.95; }
+            .dataset-audit-residue-clear {
+                background: transparent;
+                border: 0;
+                color: rgba(180, 200, 255, 0.95);
+                cursor: pointer;
+                padding: 0;
+                font: inherit;
+                text-decoration: underline;
+            }
+            .dataset-audit-residue-clear:hover { color: #fff; }
+            .dataset-audit-residue-clear:focus-visible {
+                outline: 2px solid rgba(180, 200, 255, 0.7);
+                outline-offset: 2px;
+                border-radius: 4px;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function getOrCreateAuditResidueStrip() {
+        const anchor = $('btn-dataset-import-audit');
+        if (!anchor || !anchor.parentNode) return null;
+        let strip = document.getElementById('dataset-audit-residue-strip');
+        if (strip) return strip;
+        ensureAuditResidueStyles();
+        strip = document.createElement('span');
+        strip.id = 'dataset-audit-residue-strip';
+        strip.className = 'dataset-audit-residue-strip';
+        strip.setAttribute('role', 'status');
+        strip.hidden = true;
+
+        const label = document.createElement('span');
+        label.className = 'dataset-audit-residue-label';
+        strip.appendChild(label);
+
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.id = 'dataset-audit-residue-clear';
+        clearBtn.className = 'dataset-audit-residue-clear';
+        clearBtn.textContent = DM._t?.('common.clear', 'Clear') || 'Clear';
+        clearBtn.addEventListener('click', () => {
+            // Clear filter only — keep ``lastReport`` so the user can
+            // re-open the modal to inspect it; just drop the highlight.
+            AUDIT_STATE.activeFilter = null;
+            AUDIT_STATE.inverted = false;
+            applyFilterToQueue();
+            updateBadgeState();
+            renderAuditNextSteps();
+            updateAuditResidueStrip();
+        });
+        strip.appendChild(clearBtn);
+
+        // Insert immediately after the trigger button so it sits in the
+        // same toolbar row.
+        anchor.parentNode.insertBefore(strip, anchor.nextSibling);
+        return strip;
+    }
+
+    function updateAuditResidueStrip() {
+        const modal = $('dataset-audit-modal');
+        const modalOpen = !!(modal && !modal.hidden);
+        const shouldShow = !modalOpen
+            && !!AUDIT_STATE.lastReport
+            && !!AUDIT_STATE.activeFilter;
+        const strip = shouldShow
+            ? getOrCreateAuditResidueStrip()
+            : document.getElementById('dataset-audit-residue-strip');
+        if (!strip) return;
+        if (!shouldShow) {
+            strip.hidden = true;
+            return;
+        }
+        const flag = AUDIT_STATE.activeFilter;
+        const labelKey = AUDIT_RESIDUE_FLAG_LABELS[flag];
+        const labelFallback = AUDIT_RESIDUE_FLAG_FALLBACKS[flag] || flag;
+        const filterName = (labelKey && DM._t?.(labelKey, labelFallback)) || labelFallback;
+        const count = knownAuditMatchCount(flag) || auditSummaryCount(flag);
+        const labelEl = strip.querySelector('.dataset-audit-residue-label');
+        if (labelEl) {
+            const text = DM._t?.('dataset.auditResidueShowing',
+                'Showing {filter} · {count} items',
+                { filter: filterName, count })
+                || `Showing ${filterName} · ${count} items`;
+            labelEl.textContent = `🔍 ${text} · `;
+        }
+        const clearBtn = strip.querySelector('.dataset-audit-residue-clear');
+        if (clearBtn) clearBtn.textContent = DM._t?.('common.clear', 'Clear') || 'Clear';
+        strip.hidden = false;
+    }
+
     DM._showAuditModal = function () {
         const modal = $('dataset-audit-modal');
         if (modal) modal.hidden = false;
+        // M6 fix: hide the residue strip while the modal is open — the
+        // modal's own badges convey the same information in higher
+        // fidelity.
+        updateAuditResidueStrip();
     };
 
     DM._hideAuditModal = function () {
         const modal = $('dataset-audit-modal');
         if (modal) modal.hidden = true;
+        // M6 fix: surface the active audit filter near the trigger
+        // button so users still see WHAT is filtering the queue after
+        // the modal goes away. Without this strip the queue shows
+        // grayed-out items with no indication of why.
+        updateAuditResidueStrip();
     };
 
     function bindAudit() {

@@ -146,10 +146,22 @@ def is_noise_tag(tag: str, noise_set: Iterable[str] = DEFAULT_NOISE_TAGS) -> boo
 
 def filter_noise_tags(
     tags: List[str], noise_set: Iterable[str] = DEFAULT_NOISE_TAGS
-) -> List[str]:
-    """Return ``tags`` with noise entries dropped, preserving order."""
+) -> Tuple[List[str], int]:
+    """Return ``(kept_tags, stripped_count)`` with noise entries dropped, preserving order.
+
+    Callers that only need the kept list can unpack the tuple; callers that
+    want to surface how many tags were stripped (e.g. the Smart Tag job
+    progress snapshot) read the second element.
+    """
     noise_lower = {n.lower() for n in noise_set}
-    return [t for t in tags if not is_noise_tag(t, noise_lower)]
+    kept: List[str] = []
+    stripped = 0
+    for t in tags:
+        if is_noise_tag(t, noise_lower):
+            stripped += 1
+        else:
+            kept.append(t)
+    return kept, stripped
 
 
 def compute_consensus_tags(
@@ -372,6 +384,74 @@ def normalize_training_purpose(value: Optional[str]) -> str:
     return TRAINING_PURPOSE_ALIASES.get(key, "general")
 
 
+# Hosts that resolve to the user's own machine. Local OpenAI-compatible
+# servers (Ollama, vLLM, LM Studio, llama.cpp) accept requests without
+# an API key, so the smart-tag start gate must let an empty key through
+# in that case. Cloud gateways (api.openai.com, openrouter.ai, aihubmix
+# proxies, etc.) still require a key.
+_LOCAL_OPENAI_COMPAT_HOSTS: frozenset = frozenset({
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "::1",
+    "[::1]",
+    "host.docker.internal",
+})
+
+_LOCAL_OPENAI_COMPAT_HOST_SUFFIXES: Tuple[str, ...] = (
+    ".local",
+    ".lan",
+    ".internal",
+    ".home",
+    ".home.arpa",
+)
+
+
+def _is_local_openai_compat_endpoint(provider_name: str, endpoint: str) -> bool:
+    """Return True if ``endpoint`` is a local OpenAI-compatible server.
+
+    Local servers (Ollama / vLLM / LM Studio / llama.cpp) ship without auth
+    by default. The smart-tag start gate uses this to decide whether an
+    empty ``api_key`` is acceptable. Anthropic and Gemini are always cloud,
+    so we never relax the key check for those providers regardless of the
+    endpoint string.
+    """
+    if (provider_name or "").lower() not in {"", "openai_compat"}:
+        return False
+    cleaned = (endpoint or "").strip()
+    if not cleaned:
+        return False
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(cleaned)
+    except Exception:  # noqa: BLE001
+        return False
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
+        return False
+    if host in _LOCAL_OPENAI_COMPAT_HOSTS:
+        return True
+    for suffix in _LOCAL_OPENAI_COMPAT_HOST_SUFFIXES:
+        if host.endswith(suffix):
+            return True
+    # Private RFC1918 ranges (192.168.x.x, 10.x.x.x, 172.16-31.x.x) are
+    # also LAN-local; treat them the same as loopback.
+    parts = host.split(".")
+    if len(parts) == 4 and all(part.isdigit() for part in parts):
+        try:
+            octets = [int(part) for part in parts]
+        except ValueError:
+            return False
+        if octets[0] == 10:
+            return True
+        if octets[0] == 192 and octets[1] == 168:
+            return True
+        if octets[0] == 172 and 16 <= octets[1] <= 31:
+            return True
+    return False
+
+
 def build_vlm_prompt(
     training_purpose: str,
     wd14_tags: List[str],
@@ -386,7 +466,10 @@ def build_vlm_prompt(
     """
     canonical = normalize_training_purpose(training_purpose)
     template = PROMPT_PRESETS.get(canonical) or PROMPT_PRESETS["general"]
-    cleaned = filter_noise_tags(wd14_tags) if include_tags else []
+    if include_tags:
+        cleaned, _stripped = filter_noise_tags(wd14_tags)
+    else:
+        cleaned = []
     return template.replace("{tags}", ", ".join(cleaned))
 
 
@@ -458,8 +541,8 @@ def assemble_caption(
     character_norm = [_normalize_tag(t) for t in (character_tags or []) if t]
 
     if auto_strip_noise:
-        general_norm = filter_noise_tags(general_norm)
-        character_norm = filter_noise_tags(character_norm)
+        general_norm, _g_stripped = filter_noise_tags(general_norm)
+        character_norm, _c_stripped = filter_noise_tags(character_norm)
 
     general_norm = _dedupe_preserving_order(general_norm)
     character_norm = _dedupe_preserving_order(character_norm)
@@ -521,6 +604,15 @@ class SmartTagJobState:
     caption_results_path: Optional[str] = None
     _caption_results_handle: Any = field(default=None, repr=False, compare=False)
     settings: Dict[str, Any] = field(default_factory=dict)
+    # Fix M2: how many tags the auto-strip filter has removed across all
+    # processed images. Surfaced in the snapshot so the UI can show
+    # "Auto-stripped N noise tags" feedback for the active job.
+    noise_stripped_count: int = 0
+    # Fix M1: per-phase completion (0.0-1.0). Lets the frontend render one
+    # smooth bar across the tagging->vlm transition instead of snapping
+    # back to 0% when the next phase begins. ``total``/``processed`` keep
+    # image-count semantics so "Cancelled at N/M" stays meaningful.
+    phase_completion: float = 0.0
 
     def snapshot(self) -> Dict[str, Any]:
         return {
@@ -539,6 +631,8 @@ class SmartTagJobState:
             "caption_result_count": self.caption_result_count,
             "recent_caption_results": list(self.recent_caption_results[-SMART_TAG_RECENT_RESULT_LIMIT:]),
             "settings": dict(self.settings),
+            "noise_stripped_count": self.noise_stripped_count,
+            "phase_completion": float(self.phase_completion),
         }
 
 
@@ -752,6 +846,76 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
     if not cleaned_ids and not selection_token and not cleaned_paths and not dataset_scan_token:
         raise ValueError("Smart Tag needs image_ids, selection_token, image_paths, or dataset_scan_token.")
 
+    # Fix M3: trigger word must be a single token (no internal whitespace) or
+    # it gets injected as multiple comma-separated tokens in the final caption.
+    # Empty trigger is fine (means "don't inject"); leading/trailing whitespace
+    # is stripped silently.
+    trigger_word_raw = str(payload.get("trigger_word") or "").strip()
+    if trigger_word_raw and re.search(r"\s", trigger_word_raw):
+        raise ValueError(
+            "Trigger word should be a single token without spaces. "
+            "Use underscores or camelcase: 'my_lora_trigger' or 'myLoraTrigger'."
+        )
+
+    # Fix B2: reject (enable_vlm=True, nl_mode='vlm', no VLM endpoint) at
+    # request validation time instead of letting the worker silently fall
+    # back to booru-only output. The user clicked "WD14 + VLM" so an empty
+    # VLM config is an explicit configuration error, not a soft degrade.
+    enable_vlm_flag = bool(payload.get("enable_vlm", True))
+    nl_mode_raw = str(payload.get("natural_language_mode") or "vlm").strip().lower()
+    nl_mode_normalized = (
+        "toriigate"
+        if nl_mode_raw in {"toriigate", "torii", "toriigate-0.5"}
+        else "vlm"
+    )
+    if enable_vlm_flag and nl_mode_normalized == "vlm":
+        try:
+            # Lazy import to avoid hard coupling between the service layer
+            # and the VLM router module on startup.
+            from routers.vlm import _build_config as _build_vlm_config
+
+            vlm_config = _build_vlm_config()
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError(
+                "Natural-language captioning is enabled, but the VLM "
+                f"configuration could not be loaded: {exc}. Open VLM Settings "
+                "and configure an endpoint, or disable natural-language captioning."
+            ) from exc
+        provider_name = (getattr(vlm_config, "provider", "") or "").strip().lower()
+        endpoint = (getattr(vlm_config, "endpoint", "") or "").strip()
+        api_key = (getattr(vlm_config, "api_key", "") or "").strip()
+        use_vertex = bool(getattr(vlm_config, "use_vertex", False))
+        vertex_project = (getattr(vlm_config, "vertex_project", "") or "").strip()
+
+        # Vertex AI auth path: project + service-account credentials, no api_key.
+        if provider_name == "gemini" and use_vertex:
+            if not vertex_project:
+                raise ValueError(
+                    "Natural-language captioning via Vertex AI is enabled, but "
+                    "VLM Settings has no Vertex project configured. Open VLM "
+                    "Settings and set the Vertex project, or disable natural-"
+                    "language captioning."
+                )
+        else:
+            if not endpoint:
+                raise ValueError(
+                    "Natural-language captioning is enabled, but VLM Settings "
+                    "has no endpoint configured. Open VLM Settings and "
+                    "configure an endpoint, or disable natural-language "
+                    "captioning."
+                )
+            # Local OpenAI-compatible servers (Ollama, vLLM, LM Studio, etc.)
+            # accept requests without an api_key. Only require api_key when
+            # the endpoint points at something other than a loopback / *.local
+            # / *.lan host so cloud providers still get caught early.
+            if not api_key and not _is_local_openai_compat_endpoint(provider_name, endpoint):
+                raise ValueError(
+                    "Natural-language captioning is enabled, but VLM Settings "
+                    "has no API key configured. Open VLM Settings and "
+                    "configure an API key, or disable natural-language "
+                    "captioning."
+                )
+
     tagger_model = str(payload.get("tagger_model") or "").strip()
     single_defaults = _tagger_defaults(tagger_model)
 
@@ -809,7 +973,7 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
         dataset_scan_token=dataset_scan_token,
         dataset_scan_count=dataset_scan_count,
         training_purpose=normalize_training_purpose(payload.get("training_purpose")),
-        trigger_word=str(payload.get("trigger_word") or "").strip(),
+        trigger_word=trigger_word_raw,
         merge_strategy=str(payload.get("merge_strategy") or "replace").strip().lower(),
         auto_strip_noise=bool(payload.get("auto_strip_noise", True)),
         skip_existing=bool(payload.get("skip_existing", True)),
@@ -947,11 +1111,15 @@ def _normalize_tag_rows(items: List[Any], category: str) -> List[Dict[str, Any]]
     return rows
 
 
-def _strip_noise_tag_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    return [
-        row for row in rows
-        if not is_noise_tag(str(row.get("tag") or ""))
-    ]
+def _strip_noise_tag_rows(rows: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int]:
+    kept: List[Dict[str, Any]] = []
+    stripped = 0
+    for row in rows:
+        if is_noise_tag(str(row.get("tag") or "")):
+            stripped += 1
+        else:
+            kept.append(row)
+    return kept, stripped
 
 
 def _top_tag_rows(rows: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
@@ -970,15 +1138,17 @@ def _prepare_smart_tag_rows(
     *,
     auto_strip_noise: bool,
     max_tags_per_image: int,
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], int]:
+    noise_stripped = 0
     if auto_strip_noise:
-        general_rows = _strip_noise_tag_rows(general_rows)
-        copyright_rows = _strip_noise_tag_rows(copyright_rows)
-        character_rows = _strip_noise_tag_rows(character_rows)
+        general_rows, g_stripped = _strip_noise_tag_rows(general_rows)
+        copyright_rows, c_stripped = _strip_noise_tag_rows(copyright_rows)
+        character_rows, ch_stripped = _strip_noise_tag_rows(character_rows)
+        noise_stripped = g_stripped + c_stripped + ch_stripped
 
     max_tags = int(max_tags_per_image or 0)
     if max_tags <= 0:
-        return general_rows, copyright_rows, character_rows
+        return general_rows, copyright_rows, character_rows, noise_stripped
 
     # Character and copyright tags carry identity context and are usually few;
     # preserve them first, then use the remaining budget for general tags.
@@ -991,10 +1161,10 @@ def _prepare_smart_tag_rows(
         ], [
             row for row in kept_reserved
             if str(row.get("category") or "").lower() == "character"
-        ]
+        ], noise_stripped
 
     general_budget = max_tags - reserved_count
-    return _top_tag_rows(general_rows, general_budget), copyright_rows, character_rows
+    return _top_tag_rows(general_rows, general_budget), copyright_rows, character_rows, noise_stripped
 
 
 def _tag_image_with_thresholds(
@@ -1086,7 +1256,7 @@ def _process_one_image(
         character_names = _flatten_tag_names(character_rows)
         rating = result.get("rating") or None
 
-    general_rows, copyright_rows, character_rows = _prepare_smart_tag_rows(
+    general_rows, copyright_rows, character_rows, noise_stripped = _prepare_smart_tag_rows(
         general_rows,
         copyright_rows,
         character_rows,
@@ -1163,6 +1333,7 @@ def _process_one_image(
         "character_tag_rows": character_rows,
         "rating": rating,
         "nl_text": nl_text,
+        "noise_stripped_count": noise_stripped,
     }
 
 
@@ -1427,16 +1598,19 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                     from vlm_providers import get_provider as _get_vlm_provider
 
                     vlm_config = _build_vlm_config()
+                    # Fix B2: _coerce_request already rejected the
+                    # (enable_vlm=True, nl_mode='vlm', empty endpoint) case
+                    # with a 400 ValueError. If we reach here without an
+                    # endpoint, configuration drifted between request
+                    # validation and worker start (e.g. user wiped VLM
+                    # settings while the request was in flight) — fail loud
+                    # rather than silently downgrading to booru-only.
                     if not (vlm_config.endpoint or vlm_config.api_key):
-                        message = (
-                            "Smart Tag natural-language mode is enabled, but VLM Settings has no endpoint or API key."
+                        raise RuntimeError(
+                            "VLM endpoint/api_key disappeared between request "
+                            "validation and worker start. Re-check VLM Settings."
                         )
-                        if not req.enable_wd14:
-                            raise RuntimeError(message)
-                        logger.info("smart-tag: %s Running booru-only.", message)
-                        vlm_provider = None
-                    else:
-                        vlm_provider = _get_vlm_provider(vlm_config)
+                    vlm_provider = _get_vlm_provider(vlm_config)
                 except Exception as exc:
                     if not req.enable_wd14:
                         raise
@@ -1453,11 +1627,17 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
             all_sources: List[Tuple[str, int, str]] = []
             for source_chunk in _iter_request_source_chunks(req):
                 all_sources.extend(source_chunk)
+            # Fix M1: keep ``total`` as the image count throughout the job so
+            # "Cancelled at N/M" reads as N/M images. ``phase_completion``
+            # tracks 0.0->1.0 within the active phase for a smooth bar.
             job.total = len(all_sources)
+            job.processed = 0
+            job.phase_completion = 0.0
 
             # per_image_outputs[i] = list of per-tagger output dicts for image i
             per_image_outputs: List[List[Dict[str, Any]]] = [[] for _ in all_sources]
             tagger_count = len(req.taggers)
+            total_tagger_steps = max(1, len(all_sources) * tagger_count)
 
             for tagger_idx, entry in enumerate(req.taggers):
                 if job.cancel_requested:
@@ -1511,8 +1691,11 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                             "smart-tag consensus: tagger %s failed on %s: %s",
                             model_name, path, exc,
                         )
-                    job.processed = img_idx + 1 + (tagger_idx * len(all_sources))
-                    job.total = len(all_sources) * tagger_count
+                    # Fix M1: image-count semantics for processed/total; smooth
+                    # sub-phase progress through phase_completion (0.0-1.0).
+                    steps_done = img_idx + 1 + (tagger_idx * len(all_sources))
+                    job.phase_completion = min(1.0, steps_done / total_tagger_steps)
+                    job.processed = min(len(all_sources), steps_done // tagger_count)
                     job.message = f"Tagging ({model_name}) {img_idx + 1}/{len(all_sources)}"
 
             if job.cancel_requested:
@@ -1522,8 +1705,11 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                 # Now run consensus + VLM for each image.
                 vlm_enabled = req.enable_vlm and (vlm_provider is not None or nl_tagger is not None)
                 job.stage = "vlm" if vlm_enabled else "tagging"
-                job.total = len(all_sources)
+                # Fix M1: total stays at the image count; processed resets so
+                # the second phase counts images cleanly. phase_completion
+                # also resets to 0.0 for the new phase.
                 job.processed = 0
+                job.phase_completion = 0.0
                 job.message = "Running consensus + VLM..." if vlm_enabled else "Running consensus..."
 
                 for img_idx, (source_key, image_id, path) in enumerate(all_sources):
@@ -1552,6 +1738,9 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                                 job, path, (result.get("caption") or "").strip(),
                             )
                         job.succeeded += 1
+                        # Fix M2: accumulate per-image noise-strip counts so
+                        # the snapshot can surface "Auto-stripped N noise tags".
+                        job.noise_stripped_count += int(result.get("noise_stripped_count") or 0)
                         preview = (result.get("caption") or "").strip()
                         if preview:
                             job.last_caption_preview = preview[:200]
@@ -1561,6 +1750,8 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                         logger.warning("smart-tag failed on image %s: %s", source_key, exc)
                     finally:
                         job.processed = img_idx + 1
+                        if job.total > 0:
+                            job.phase_completion = min(1.0, job.processed / job.total)
                         stage_label = "VLM captioning" if vlm_enabled else "Processing"
                         job.message = f"{stage_label} {job.processed}/{job.total}"
 
@@ -1571,6 +1762,7 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
             # Single-tagger or no-tagger path: per-image loop as before.
             vlm_enabled = req.enable_vlm and (vlm_provider is not None or nl_tagger is not None)
             job.stage = "tagging" if req.enable_wd14 else ("vlm" if vlm_enabled else "")
+            job.phase_completion = 0.0
             job.message = f"Smart-tagging {job.total} image(s)..."
             for source_chunk in _iter_request_source_chunks(req):
                 for source_key, image_id, path in source_chunk:
@@ -1600,6 +1792,8 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                                 (result.get("caption") or "").strip(),
                             )
                         job.succeeded += 1
+                        # Fix M2: surface auto-strip noise count to snapshot.
+                        job.noise_stripped_count += int(result.get("noise_stripped_count") or 0)
                         preview = (result.get("caption") or "").strip()
                         if preview:
                             job.last_caption_preview = preview[:200]
@@ -1609,6 +1803,8 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                         logger.warning("smart-tag failed on image %s: %s", source_key, exc)
                     finally:
                         job.processed += 1
+                        if job.total > 0:
+                            job.phase_completion = min(1.0, job.processed / job.total)
                         job.message = f"Processed {job.processed}/{job.total}"
                 if job.cancel_requested:
                     break

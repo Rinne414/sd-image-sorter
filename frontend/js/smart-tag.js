@@ -161,7 +161,101 @@
         const runBtn = $('#btn-smart-tag-run');
         const cancelBtn = $('#btn-smart-tag-cancel-job');
         if (runBtn) runBtn.disabled = show;
-        if (cancelBtn) cancelBtn.hidden = !show;
+        if (cancelBtn) {
+            cancelBtn.hidden = !show;
+            // Reset the disabled state so a fresh job can be cancelled
+            // even if a previous cancel left the button disabled.
+            if (show) cancelBtn.disabled = false;
+        }
+    }
+
+    function ensureSmartTagStyles() {
+        if (document.getElementById('smart-tag-inline-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'smart-tag-inline-styles';
+        style.textContent = `
+.smart-tag-ollama-warning {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem 0.85rem;
+    margin: 0 0 0.75rem 0;
+    background: rgba(255, 176, 46, 0.12);
+    border: 1px solid rgba(255, 176, 46, 0.35);
+    border-radius: 8px;
+    color: var(--text-primary, #f0f0f0);
+    font-size: 0.9rem;
+    line-height: 1.35;
+}
+.smart-tag-ollama-warning .smart-tag-ollama-icon { font-size: 1.1rem; flex: 0 0 auto; }
+.smart-tag-ollama-warning .smart-tag-ollama-text { flex: 1 1 auto; }
+.smart-tag-ollama-warning .smart-tag-ollama-action { flex: 0 0 auto; }
+.smart-tag-tagger-help {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+    font-style: italic;
+    color: var(--text-muted, rgba(255, 255, 255, 0.6));
+}
+`;
+        document.head.appendChild(style);
+    }
+
+    function ensureOllamaWarningBanner() {
+        let banner = document.getElementById('smart-tag-ollama-warning');
+        if (banner) return banner;
+        const naturalSection = document.getElementById('smart-tag-natural-section');
+        if (!naturalSection || !naturalSection.parentNode) return null;
+        ensureSmartTagStyles();
+        banner = document.createElement('div');
+        banner.id = 'smart-tag-ollama-warning';
+        banner.className = 'smart-tag-ollama-warning';
+        banner.hidden = true;
+        banner.innerHTML = `
+            <span class="smart-tag-ollama-icon" aria-hidden="true">⚠️</span>
+            <span class="smart-tag-ollama-text">
+                自然语言描述器不可用 — 请打开 VLM 设置并确认 Ollama 正在运行。<br>
+                Natural-language captioner is unavailable — open VLM Settings and verify Ollama is running.
+            </span>
+            <button type="button" class="btn btn-small btn-primary smart-tag-ollama-action" id="btn-smart-tag-open-vlm-from-warning">
+                Open VLM Settings
+            </button>
+        `;
+        naturalSection.parentNode.insertBefore(banner, naturalSection);
+        banner.querySelector('#btn-smart-tag-open-vlm-from-warning')?.addEventListener('click', () => {
+            if (window.VLMCaption && typeof window.VLMCaption.openSettingsModal === 'function') {
+                window.VLMCaption.openSettingsModal();
+            } else if (typeof window.showModal === 'function') {
+                window.showModal('vlm-settings-modal');
+            } else {
+                document.getElementById('vlm-settings-modal')?.classList.add('visible');
+            }
+        });
+        return banner;
+    }
+
+    async function refreshOllamaWarning() {
+        const banner = ensureOllamaWarningBanner();
+        if (!banner) return;
+        const naturalEnabled = !!$('#smart-tag-enable-vlm')?.checked;
+        const nlMode = $('#smart-tag-nl-mode')?.value || 'vlm';
+        // Only relevant when the user actually plans to use the
+        // VLM-via-Ollama path. ToriiGate runs in-process and doesn't
+        // care about the Ollama daemon.
+        if (!naturalEnabled || nlMode !== 'vlm') {
+            banner.hidden = true;
+            return;
+        }
+        try {
+            const data = await getJson('/api/vlm/local-models/recommended');
+            const unavailable = !data?.ollama_installed || !data?.ollama_running;
+            banner.hidden = !unavailable;
+        } catch (_err) {
+            // If the endpoint itself is unreachable we treat that as
+            // "we can't confirm Ollama is reachable" — show the banner
+            // so the user has a path to fix it.
+            banner.hidden = false;
+        }
     }
 
     async function openModal() {
@@ -180,6 +274,11 @@
 
         loadSmartTaggerModels();
         syncSmartTagVoteUi();
+        // Fire-and-forget; banner appears/disappears on its own once
+        // /api/vlm/local-models/recommended responds. Re-checking on
+        // every openModal lets a user who fixes Ollama mid-session
+        // see the cleared state without reloading the app.
+        refreshOllamaWarning();
 
         // Use the project-wide showModal helper so Escape, focus-trap,
         // focus-restore, and aria semantics all work the same way as
@@ -316,6 +415,36 @@
         }
     }
 
+    function ensureTaggerHelpElement(selectId, helpId) {
+        let help = document.getElementById(helpId);
+        if (help) return help;
+        const select = document.getElementById(selectId);
+        if (!select || !select.parentNode) return null;
+        ensureSmartTagStyles();
+        help = document.createElement('small');
+        help.id = helpId;
+        help.className = 'smart-tag-tagger-help';
+        help.textContent = '';
+        // Insert right after the select element so it sits directly
+        // under the dropdown regardless of the surrounding wrapper.
+        select.parentNode.insertBefore(help, select.nextSibling);
+        return help;
+    }
+
+    function updateTaggerHelpFor(selectId, helpId) {
+        const help = ensureTaggerHelpElement(selectId, helpId);
+        if (!help) return;
+        const select = document.getElementById(selectId);
+        const value = (select?.value || '').trim();
+        const model = taggerModelCatalog.find((m) => m?.name === value);
+        help.textContent = model?.best_for ? String(model.best_for) : '';
+    }
+
+    function updateAllTaggerHelp() {
+        updateTaggerHelpFor('smart-tag-tagger-1', 'smart-tag-tagger-1-help');
+        updateTaggerHelpFor('smart-tag-tagger-2', 'smart-tag-tagger-2-help');
+    }
+
     function populateSmartTaggerSelects() {
         const select1 = $('#smart-tag-tagger-1');
         const select2 = $('#smart-tag-tagger-2');
@@ -354,6 +483,7 @@
         applyThresholdDefaults(selected1, { force: false });
         applyMaxTagsDefault([selected1, selected2].filter(Boolean), { force: false });
         syncSmartTagVoteUi();
+        updateAllTaggerHelp();
     }
 
     function syncSmartTagVoteUi() {
@@ -548,9 +678,33 @@
         if (!snap) return;
         const total = snap.total || 0;
         const processed = snap.processed || 0;
-        const percent = total > 0 ? (processed / total) * 100 : 0;
         const status = snap.status || 'idle';
         const stage = snap.stage || '';
+
+        // v3.2.2: prefer phase_completion (0-1 within current phase) over raw
+        // processed/total so a multi-tagger + VLM run shows a single smooth bar
+        // instead of jumping back to 0% between phases.
+        const phaseCompletion = typeof snap.phase_completion === 'number' ? snap.phase_completion : null;
+        let percent;
+        if (phaseCompletion != null) {
+            const settings = snap.settings || {};
+            const hasVlm = settings.enable_vlm === true && settings.natural_language_mode !== 'off';
+            const hasTagging = (settings.taggers && settings.taggers.length > 0)
+                || settings.enable_wd14 === true;
+            const bothPhases = hasTagging && hasVlm;
+            if (!bothPhases) {
+                percent = Math.max(0, Math.min(1, phaseCompletion)) * 100;
+            } else if (stage === 'tagging' || stage === 'consensus') {
+                percent = Math.max(0, Math.min(1, phaseCompletion)) * 50;
+            } else if (stage === 'vlm') {
+                percent = 50 + Math.max(0, Math.min(1, phaseCompletion)) * 50;
+            } else {
+                percent = total > 0 ? (processed / total) * 100 : 0;
+            }
+        } else {
+            percent = total > 0 ? (processed / total) * 100 : 0;
+        }
+
         let text = snap.message || status;
         if (total > 0) {
             let stagePrefix = '';
@@ -622,11 +776,13 @@
         }
 
         // Reuse the existing toast helper if available; fall back to alert.
+        const noiseStripped = snap.noise_stripped_count || 0;
+        const noiseSuffix = noiseStripped > 0 ? ` · ${noiseStripped} noise tags removed` : '';
         const message = status === 'cancelled'
-            ? `Smart Tag cancelled at ${ok + fail}/${total}.`
+            ? `Smart Tag cancelled at ${ok + fail}/${total}${noiseSuffix}`
             : status === 'failed'
                 ? `Smart Tag failed: ${snap.message || 'unknown error'}`
-                : `Smart Tag finished: ${ok} ok, ${fail} failed.`;
+                : `Smart Tag finished: ${ok} ok, ${fail} failed${noiseSuffix}.`;
 
         if (typeof window.showToast === 'function') {
             window.showToast(message, status === 'failed' ? 'error' : 'success');
@@ -672,6 +828,22 @@
             return;
         }
 
+        // Destructive-replace guard: replace mode overwrites existing
+        // captions and DB images don't get a backup, so confirm before
+        // we commit a large overwrite the user can't undo.
+        if (form.merge_strategy === 'replace') {
+            const explicitTotal = (form.image_ids?.length || 0) + (form.image_paths?.length || 0);
+            const tokenTotal = Number(form.selection_token ? (getDatasetSources().selectionTotal || 0) : 0)
+                + Number(form.dataset_scan_token ? (getDatasetSources().datasetScanTotal || 0) : 0);
+            const total = explicitTotal + tokenTotal;
+            if (total > 100) {
+                const proceed = window.confirm(
+                    `This will overwrite existing captions on ${total} images. Continue?`
+                );
+                if (!proceed) return;
+            }
+        }
+
         showProgress(true);
         setProgressUI({ percent: 0, text: 'Starting...', preview: '' });
         try {
@@ -691,10 +863,26 @@
     }
 
     async function cancelSmartTag() {
+        const cancelBtn = $('#btn-smart-tag-cancel-job');
         try {
             await postJson('/api/smart-tag/cancel', null);
-        } catch (_err) {
-            // 404 means there's nothing to cancel — that's fine.
+            // Immediately reflect intent in the UI so the user gets
+            // feedback instead of watching the progress bar keep moving
+            // for ~1s until the worker checks the cancel flag.
+            if (cancelBtn) cancelBtn.disabled = true;
+            setProgressUI({ text: 'Cancelling — already-tagged results will be kept' });
+            if (typeof window.showToast === 'function') {
+                window.showToast('Smart Tag cancellation requested', 'info');
+            }
+        } catch (err) {
+            // 404 means the job already finished between the user
+            // clicking Stop and the request landing — surface that
+            // explicitly instead of swallowing it silently.
+            if (err && err.status === 404) {
+                if (typeof window.showToast === 'function') {
+                    window.showToast('Job already finished', 'info');
+                }
+            }
         }
     }
 
@@ -720,6 +908,7 @@
                 $('#smart-tag-tagger-2')?.value || '',
             ].filter(Boolean), { force: false });
             syncSmartTagVoteUi();
+            updateAllTaggerHelp();
         });
         $('#smart-tag-tagger-2')?.addEventListener('change', () => {
             applyMaxTagsDefault([
@@ -727,11 +916,18 @@
                 $('#smart-tag-tagger-2')?.value || '',
             ].filter(Boolean), { force: false });
             syncSmartTagVoteUi();
+            updateAllTaggerHelp();
         });
         $('#smart-tag-consensus-mode')?.addEventListener('change', syncSmartTagVoteUi);
         $('#smart-tag-enable-wd14')?.addEventListener('change', syncSmartTagVoteUi);
-        $('#smart-tag-enable-vlm')?.addEventListener('change', syncSmartTagVoteUi);
-        $('#smart-tag-nl-mode')?.addEventListener('change', syncSmartTagVoteUi);
+        $('#smart-tag-enable-vlm')?.addEventListener('change', () => {
+            syncSmartTagVoteUi();
+            refreshOllamaWarning();
+        });
+        $('#smart-tag-nl-mode')?.addEventListener('change', () => {
+            syncSmartTagVoteUi();
+            refreshOllamaWarning();
+        });
         ['#smart-tag-general-threshold', '#smart-tag-character-threshold', '#smart-tag-copyright-threshold'].forEach((selector) => {
             const input = $(selector);
             if (input) input.addEventListener('input', () => { input.dataset.userTouched = 'true'; });
