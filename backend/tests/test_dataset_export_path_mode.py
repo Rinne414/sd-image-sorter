@@ -182,6 +182,43 @@ def test_path_mode_export_accepts_dataset_scan_token_without_path_payload(
     assert (out / "local_c.png").exists()
 
 
+def test_path_mode_beside_image_writes_sidecars_next_to_originals_without_output_folder(
+    test_client, test_db, folder_with_locals
+):
+    """The Dataset Maker's "same-name .txt beside original" mode must work
+    for real folder-path imports without asking for an output folder or
+    copying images into a second location."""
+    _folder, paths = folder_with_locals
+    captions = {
+        str(p.resolve()): f"beside caption for {p.stem}"
+        for p in paths[:2]
+    }
+
+    response = test_client.post("/api/dataset/export", json={
+        "image_ids": [],
+        "image_paths": [str(paths[0]), str(paths[1])],
+        "output_mode": "beside_image",
+        "output_folder": "",
+        "naming_pattern": "ignored_{index:03d}",
+        "trigger": "ignored",
+        "image_op": "copy",
+        "overwrite_policy": "overwrite",
+        "image_overrides": captions,
+        "normalize_tag_underscores": False,
+    })
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "ok", body
+    assert body["exported"] == 2
+    assert body["output_mode"] == "beside_image"
+
+    assert paths[0].exists()
+    assert paths[1].exists()
+    assert (paths[0].with_suffix(".txt")).read_text(encoding="utf-8") == "beside caption for local_a"
+    assert (paths[1].with_suffix(".txt")).read_text(encoding="utf-8") == "beside caption for local_b"
+    assert not (paths[0].parent / "ignored_001.png").exists()
+
+
 def test_export_400_when_neither_ids_nor_paths_supplied(test_client, test_db, tmp_path):
     """Empty request payload should be a 400, not a server error."""
     out = tmp_path / "out"

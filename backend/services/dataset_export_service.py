@@ -52,6 +52,7 @@ from services.dataset_session_service import (
     virtual_image_record_for_path,
 )
 from services.tag_export_service import (
+    VALID_OUTPUT_MODES,
     VALID_CONTENT_MODES,
     apply_caption_transforms,
     build_sidecar_content,
@@ -101,7 +102,8 @@ class DatasetExportRequest(BaseModel):
     image_ids: List[int] = Field(default_factory=list)
     image_paths: List[str] = Field(default_factory=list)
     dataset_scan_tokens: List[Dict[str, Any]] = Field(default_factory=list, max_length=100)
-    output_folder: str = Field(min_length=1, max_length=4096)
+    output_folder: str = Field(default="", max_length=4096)
+    output_mode: str = Field(default="folder", max_length=24)
 
     naming_pattern: str = Field(default="{filename}", min_length=1, max_length=200)
     trigger: str = Field(default="", max_length=100)
@@ -138,6 +140,7 @@ class DatasetExportPreviewRequest(BaseModel):
     image_paths: List[str] = Field(default_factory=list)
     dataset_scan_tokens: List[Dict[str, Any]] = Field(default_factory=list, max_length=100)
     output_folder: str = Field(default="", max_length=4096)
+    output_mode: str = Field(default="folder", max_length=24)
 
     naming_pattern: str = Field(default="{filename}", min_length=1, max_length=200)
     trigger: str = Field(default="", max_length=100)
@@ -169,6 +172,7 @@ class DatasetExportResponse(BaseModel):
     skipped: int
     error_count: int
     output_folder: str
+    output_mode: str = "folder"
     items: List[DatasetExportItemResult]
     total_items: int = 0
     items_truncated: bool = False
@@ -257,6 +261,31 @@ def _iter_requested_scan_paths(request: DatasetExportRequest) -> Iterator[str]:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def _allocate_sidecar_path(
+    target_folder: Path,
+    stem: str,
+    caption_extension: str,
+    *,
+    overwrite_policy: str,
+    used_paths: set[str],
+) -> Tuple[Optional[Path], Optional[str]]:
+    base = target_folder / f"{stem}{caption_extension}"
+    if overwrite_policy == "overwrite":
+        used_paths.add(str(base.resolve()))
+        return base, None
+    if overwrite_policy == "skip" and (base.exists() or str(base.resolve()) in used_paths):
+        return None, "existing"
+    candidate = base
+    counter = 1
+    while candidate.exists() or str(candidate.resolve()) in used_paths:
+        candidate = target_folder / f"{stem}_{counter}{caption_extension}"
+        counter += 1
+        if counter > 9999:
+            return None, "too_many_collisions"
+    used_paths.add(str(candidate.resolve()))
+    return candidate, None
+
+
 def _plan_single_rename(
     record: Dict[str, Any],
     *,
@@ -293,7 +322,38 @@ def _plan_single_rename(
     return image_path, output_folder / f"{image_path.stem}{caption_extension}", None
 
 
-def _validate_export_request(request: DatasetExportRequest) -> Path:
+def _plan_beside_image_sidecar(
+    record: Dict[str, Any],
+    *,
+    caption_extension: str,
+    overwrite_policy: str,
+    used_caption_paths: set[str],
+) -> Tuple[Optional[Path], Optional[str]]:
+    src_image_path = str(record.get("path") or "").strip()
+    if not src_image_path:
+        return None, "missing_source_path"
+    src = Path(src_image_path)
+    if not src.exists() or not src.is_file():
+        return None, "source_missing"
+    if not src.parent.is_dir():
+        return None, "source_folder_missing"
+    return _allocate_sidecar_path(
+        src.parent,
+        src.stem,
+        caption_extension,
+        overwrite_policy=overwrite_policy,
+        used_paths=used_caption_paths,
+    )
+
+
+def _output_mode(request: Any) -> str:
+    return str(getattr(request, "output_mode", "folder") or "folder").strip().lower()
+
+
+def _validate_export_request(request: DatasetExportRequest) -> Optional[Path]:
+    output_mode = _output_mode(request)
+    if output_mode not in VALID_OUTPUT_MODES:
+        raise HTTPException(status_code=400, detail=f"Invalid output_mode: {output_mode!r}")
     if request.image_op not in VALID_IMAGE_OPS:
         raise HTTPException(status_code=400, detail=f"Invalid image_op: {request.image_op!r}")
     if request.overwrite_policy not in VALID_OVERWRITE_POLICIES:
@@ -303,7 +363,12 @@ def _validate_export_request(request: DatasetExportRequest) -> Path:
     if not request.image_ids and not request.image_paths and not request.dataset_scan_tokens:
         raise HTTPException(status_code=400, detail="Must supply image_ids, image_paths, or dataset_scan_tokens.")
 
+    if output_mode == "beside_image":
+        return None
+
     output_folder_norm = normalize_user_path(request.output_folder)
+    if not output_folder_norm:
+        raise HTTPException(status_code=400, detail="Output folder is required for folder export mode.")
     is_valid, error = validate_folder_path(output_folder_norm, allow_create=True)
     if not is_valid:
         raise HTTPException(status_code=400, detail=error or "Invalid output folder")
@@ -455,7 +520,9 @@ def export_dataset(
     longer builds a 100k-1M ``image_records`` list or a full rename plan before
     the first file is written.
     """
+    output_mode = _output_mode(request)
     output_path = _validate_export_request(request)
+    output_mode = _output_mode(request)
     requested_total = _requested_item_count(request)
     if requested_total <= 0:
         raise HTTPException(status_code=400, detail="Dataset export has no images after exclusions.")
@@ -465,7 +532,8 @@ def export_dataset(
             "current": 0,
             "total": requested_total,
             "message": f"Preparing {requested_total} dataset items...",
-            "output_folder": str(output_path),
+            "output_folder": str(output_path or ""),
+            "output_mode": output_mode,
         })
 
     if progress_callback:
@@ -474,7 +542,8 @@ def export_dataset(
             "current": 0,
             "total": requested_total,
             "message": "Exporting dataset...",
-            "output_folder": str(output_path),
+            "output_folder": str(output_path or ""),
+            "output_mode": output_mode,
         })
 
     # ---- Pre-build common state for caption rendering ----
@@ -495,6 +564,7 @@ def export_dataset(
     cancelled = False
     export_index = 0
     used_image_paths: set[str] = set()
+    used_caption_paths: set[str] = set()
     seen_virtual_paths: set[str] = set()
 
     def _append_item(item: DatasetExportItemResult) -> None:
@@ -522,7 +592,8 @@ def export_dataset(
             "current_item": current_item,
             "recent_errors": error_messages[-DATASET_EXPORT_RECENT_ERROR_LIMIT:],
             "message": message,
-            "output_folder": str(output_path),
+            "output_folder": str(output_path or ""),
+            "output_mode": output_mode,
             "items_truncated": total_items > DATASET_EXPORT_RESPONSE_ITEM_LIMIT,
         })
 
@@ -559,18 +630,32 @@ def export_dataset(
         image_id = int(record.get("id") or 0)
         src_image_path = str(record.get("path") or "")
         filename = os.path.basename(src_image_path) or f"image-{image_id}"
-        dst_image_path, dst_caption_path, skip_reason = _plan_single_rename(
-            record,
-            output_folder=output_path,
-            pattern=request.naming_pattern,
-            trigger=request.trigger,
-            overwrite_policy=request.overwrite_policy,
-            caption_extension=caption_extension,
-            index=export_index,
-            used_image_paths=used_image_paths,
-        )
+        dst_image_path: Optional[Path] = None
+        dst_caption_path: Optional[Path] = None
+        skip_reason: Optional[str] = None
+        if output_mode == "beside_image":
+            dst_caption_path, skip_reason = _plan_beside_image_sidecar(
+                record,
+                caption_extension=caption_extension,
+                overwrite_policy=request.overwrite_policy,
+                used_caption_paths=used_caption_paths,
+            )
+        else:
+            if output_path is None:
+                _record_error(image_id, src_image_path, "Output folder is required for folder export mode.", filename)
+                return True
+            dst_image_path, dst_caption_path, skip_reason = _plan_single_rename(
+                record,
+                output_folder=output_path,
+                pattern=request.naming_pattern,
+                trigger=request.trigger,
+                overwrite_policy=request.overwrite_policy,
+                caption_extension=caption_extension,
+                index=export_index,
+                used_image_paths=used_image_paths,
+            )
 
-        if dst_image_path is None:
+        if dst_caption_path is None:
             _record_skip(image_id, src_image_path, skip_reason or "skipped", filename)
             return True
 
@@ -595,29 +680,32 @@ def export_dataset(
             _record_error(image_id, src_image_path, msg, filename)
             return True
 
-        # Copy / move the image
-        try:
-            os.makedirs(dst_image_path.parent, exist_ok=True)
-            if request.image_op == "copy":
-                # copy2 preserves mtime so trainers and downstream tools
-                # see the original recency.
-                shutil.copy2(src_image_path, str(dst_image_path))
-            else:  # move
-                shutil.move(src_image_path, str(dst_image_path))
-                # Keep the DB in sync so the next time the user opens
-                # the gallery the image isn't shown as "missing on disk".
-                if image_id:
-                    try:
-                        db.update_image_path(image_id, str(dst_image_path))
-                    except Exception:
-                        pass
-        except Exception as exc:
-            msg = f"failed to {request.image_op} image {image_id}: {exc}"
-            _record_error(image_id, src_image_path, msg, filename)
-            return True
+        # Copy / move the image in folder mode only. Beside-image mode is a
+        # pure sidecar write and must not duplicate or relocate source images.
+        if output_mode == "folder":
+            try:
+                os.makedirs(dst_image_path.parent, exist_ok=True)
+                if request.image_op == "copy":
+                    # copy2 preserves mtime so trainers and downstream tools
+                    # see the original recency.
+                    shutil.copy2(src_image_path, str(dst_image_path))
+                else:  # move
+                    shutil.move(src_image_path, str(dst_image_path))
+                    # Keep the DB in sync so the next time the user opens
+                    # the gallery the image isn't shown as "missing on disk".
+                    if image_id:
+                        try:
+                            db.update_image_path(image_id, str(dst_image_path))
+                        except Exception:
+                            pass
+            except Exception as exc:
+                msg = f"failed to {request.image_op} image {image_id}: {exc}"
+                _record_error(image_id, src_image_path, msg, filename)
+                return True
 
         # Write caption sidecar
         try:
+            os.makedirs(dst_caption_path.parent, exist_ok=True)
             with open(dst_caption_path, "w", encoding="utf-8") as handle:
                 handle.write(caption_text)
         except Exception as exc:
@@ -631,7 +719,7 @@ def export_dataset(
             _append_item(DatasetExportItemResult(
                 image_id=image_id,
                 src_image_path=src_image_path,
-                dst_image_path=str(dst_image_path),
+                dst_image_path=str(dst_image_path) if dst_image_path is not None else None,
                 error=msg,
             ))
             _emit(f"Failed to write caption for {filename} ({processed}/{total_expected})", filename)
@@ -642,7 +730,7 @@ def export_dataset(
         _append_item(DatasetExportItemResult(
             image_id=image_id,
             src_image_path=src_image_path,
-            dst_image_path=str(dst_image_path),
+            dst_image_path=str(dst_image_path) if dst_image_path is not None else None,
             dst_caption_path=str(dst_caption_path),
         ))
         _emit(f"Exported {filename} ({processed}/{total_expected})", filename)
@@ -715,7 +803,8 @@ def export_dataset(
         exported=exported,
         skipped=skipped,
         error_count=error_count,
-        output_folder=str(output_path),
+        output_folder=str(output_path or ""),
+        output_mode=output_mode,
         items=items,
         total_items=total_items,
         items_truncated=total_items > len(items),
@@ -725,6 +814,9 @@ def export_dataset(
 
 def preview_dataset_export(request: DatasetExportPreviewRequest) -> Dict[str, Any]:
     """Render a bounded Dataset Maker export preview without writing files."""
+    output_mode = _output_mode(request)
+    if output_mode not in VALID_OUTPUT_MODES:
+        raise HTTPException(status_code=400, detail=f"Invalid output_mode: {output_mode!r}")
     if request.overwrite_policy not in VALID_OVERWRITE_POLICIES:
         raise HTTPException(status_code=400, detail=f"Invalid overwrite_policy: {request.overwrite_policy!r}")
     content_mode = str(request.content_mode or "template").strip().lower()
@@ -736,6 +828,7 @@ def preview_dataset_export(request: DatasetExportPreviewRequest) -> Dict[str, An
             "returned": 0,
             "items_truncated": False,
             "content_mode": content_mode,
+            "output_mode": output_mode,
             "sidecar_extension": _dataset_sidecar_extension(content_mode),
             "items": [],
         }
@@ -751,6 +844,7 @@ def preview_dataset_export(request: DatasetExportPreviewRequest) -> Dict[str, An
     caption_extension = _dataset_sidecar_extension(content_mode)
     limit = max(1, min(int(request.limit or 72), 500))
     used_image_paths: set[str] = set()
+    used_caption_paths: set[str] = set()
     seen_virtual_paths: set[str] = set()
     items: List[Dict[str, Any]] = []
     export_index = 0
@@ -774,19 +868,28 @@ def preview_dataset_export(request: DatasetExportPreviewRequest) -> Dict[str, An
 
         image_id = int(record.get("id") or 0)
         src_image_path = str(record.get("path") or "")
-        dst_image_path, dst_caption_path, skip_reason = _plan_single_rename(
-            record,
-            output_folder=output_path,
-            pattern=request.naming_pattern,
-            trigger=request.trigger,
-            overwrite_policy=request.overwrite_policy,
-            caption_extension=caption_extension,
-            index=export_index,
-            used_image_paths=used_image_paths,
-        )
+        if output_mode == "beside_image":
+            dst_image_path = None
+            dst_caption_path, skip_reason = _plan_beside_image_sidecar(
+                record,
+                caption_extension=caption_extension,
+                overwrite_policy=request.overwrite_policy,
+                used_caption_paths=used_caption_paths,
+            )
+        else:
+            dst_image_path, dst_caption_path, skip_reason = _plan_single_rename(
+                record,
+                output_folder=output_path,
+                pattern=request.naming_pattern,
+                trigger=request.trigger,
+                overwrite_policy=request.overwrite_policy,
+                caption_extension=caption_extension,
+                index=export_index,
+                used_image_paths=used_image_paths,
+            )
         rendered = ""
         render_error = error
-        if not render_error and dst_image_path is not None:
+        if not render_error and dst_caption_path is not None:
             try:
                 rendered = _render_dataset_sidecar(
                     record,
@@ -808,7 +911,7 @@ def preview_dataset_export(request: DatasetExportPreviewRequest) -> Dict[str, An
             "output_image_name": dst_image_path.name if dst_image_path is not None else "",
             "output_caption_name": dst_caption_path.name if dst_caption_path is not None else "",
             "output_image_path": str(dst_image_path) if dst_image_path is not None and request.output_folder else "",
-            "output_caption_path": str(dst_caption_path) if dst_caption_path is not None and request.output_folder else "",
+            "output_caption_path": str(dst_caption_path) if dst_caption_path is not None and (request.output_folder or output_mode == "beside_image") else "",
             "caption": rendered,
             "skipped_reason": skip_reason,
             "error": render_error or None,
@@ -868,6 +971,7 @@ def preview_dataset_export(request: DatasetExportPreviewRequest) -> Dict[str, An
         "returned": len(items),
         "items_truncated": total > len(items),
         "content_mode": content_mode,
+        "output_mode": output_mode,
         "sidecar_extension": caption_extension,
         "items": items,
     }
@@ -978,6 +1082,7 @@ def start_dataset_export(request: DatasetExportRequest) -> DatasetExportStartRes
     """Start a cancellable dataset export worker and return immediately."""
     global _EXPORT_JOB_RUN_ID, _EXPORT_JOB_THREAD, _EXPORT_JOB_CANCEL_EVENT, _EXPORT_JOB_PROGRESS
 
+    output_mode = _output_mode(request)
     output_path = _validate_export_request(request)
     requested_total = _requested_item_count(request)
 
@@ -1003,7 +1108,8 @@ def start_dataset_export(request: DatasetExportRequest) -> DatasetExportStartRes
             "errors": 0,
             "current_item": None,
             "recent_errors": [],
-            "output_folder": str(output_path),
+            "output_folder": str(output_path or ""),
+            "output_mode": output_mode,
             "items_truncated": False,
             "result": None,
             "message": f"Starting dataset export for {requested_total} images...",
@@ -1064,7 +1170,8 @@ def start_dataset_export(request: DatasetExportRequest) -> DatasetExportStartRes
                     "exported": int(_EXPORT_JOB_PROGRESS.get("exported", 0) or 0),
                     "skipped": int(_EXPORT_JOB_PROGRESS.get("skipped", 0) or 0),
                     "error_count": 1,
-                    "output_folder": str(output_path),
+                    "output_folder": str(output_path or ""),
+                    "output_mode": output_mode,
                     "items": [],
                     "total_items": 0,
                     "items_truncated": False,
@@ -1088,7 +1195,8 @@ def start_dataset_export(request: DatasetExportRequest) -> DatasetExportStartRes
                     "exported": int(_EXPORT_JOB_PROGRESS.get("exported", 0) or 0),
                     "skipped": int(_EXPORT_JOB_PROGRESS.get("skipped", 0) or 0),
                     "error_count": 1,
-                    "output_folder": str(output_path),
+                    "output_folder": str(output_path or ""),
+                    "output_mode": output_mode,
                     "items": [],
                     "total_items": 0,
                     "items_truncated": False,
@@ -1109,6 +1217,6 @@ def start_dataset_export(request: DatasetExportRequest) -> DatasetExportStartRes
         status="started",
         job_id=job_id,
         total=requested_total,
-        output_folder=str(output_path),
+        output_folder=str(output_path or ""),
         message=f"Dataset export started for {requested_total} images.",
     )

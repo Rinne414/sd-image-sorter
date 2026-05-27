@@ -7926,6 +7926,7 @@ function updateSelectionUI() {
         'btn-export-selected',
         'btn-batch-export-tags',
         'btn-send-to-censor',
+        'btn-send-selection-to-dataset-maker',
         'btn-remove-selected-gallery',
         'btn-delete-selected-files'
     ];

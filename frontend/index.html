@@ -2580,12 +2580,22 @@
                                         data-i18n="dataset.folderImportGo">Scan</button>
                                 <div class="dataset-folder-browser-host" id="dataset-folder-import-browser"></div>
                             </div>
+                            <button type="button" class="btn btn-ghost btn-small dataset-import-audit-button" id="btn-dataset-import-audit"
+                                    data-i18n="dataset.runAudit">Run Audit</button>
                         </div>
                         <div class="dataset-large-import-reminder" role="note">
                             <span aria-hidden="true">⚠️</span>
                             <span data-i18n="dataset.largeImportReminder">
                                 For 100k+ images, use the folder path bar. Browser drag/drop and ZIP import must enumerate files in the browser first and can be slow or memory-heavy.
                             </span>
+                        </div>
+                        <div class="dataset-sidecar-import-notice" id="dataset-sidecar-import-notice" role="note">
+                            <strong data-i18n="dataset.sidecarNoticeTitle">Same-name .txt beside original files</strong>
+                            <ul>
+                                <li data-i18n="dataset.sidecarNoticeGalleryFolder">Supported when images come from Gallery or the folder path scan above.</li>
+                                <li data-i18n="dataset.sidecarNoticeCacheOnly">Drag/drop images and ZIP are app-cache imports, so they can only export to a target folder.</li>
+                                <li data-i18n="dataset.sidecarNoticeRar">RAR is not supported. Extract it to a folder or convert it to ZIP first.</li>
+                            </ul>
                         </div>
 
                         <!-- Drag-drop zone (accepts images, zip, folders) -->
@@ -2613,56 +2623,14 @@
                                             data-i18n="dataset.clearSelection">Clear selection</button>
                                     <button type="button" class="btn btn-secondary btn-small" id="btn-dataset-import-remove-selected"
                                             data-i18n="dataset.removeSelected">Remove selected</button>
-                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-import-audit"
-                                            data-i18n="dataset.runAudit">Run Audit</button>
                                 </div>
                             </div>
                             <div class="dataset-import-gallery-grid" id="dataset-import-gallery-grid"></div>
                         </div>
 
-                        <!-- Audit section (inline, below imported images) -->
-                        <details class="dataset-audit-inline" id="dataset-audit-inline">
-                            <summary class="dataset-audit-inline-summary">
-                                <span aria-hidden="true">🔍</span>
-                                <span data-i18n="dataset.auditTitle">Quality Audit (optional)</span>
-                            </summary>
-                            <div class="dataset-audit-body">
-                                <div class="dataset-audit-thresholds">
-                                    <label class="dataset-audit-threshold">
-                                        <input type="checkbox" id="dataset-audit-check-captions" checked>
-                                        <span data-i18n="dataset.auditCheckCaptions">Empty captions</span>
-                                    </label>
-                                    <label class="dataset-audit-threshold">
-                                        <input type="checkbox" id="dataset-audit-check-dim" checked>
-                                        <span data-i18n="dataset.auditCheckDim">Small images</span>
-                                        <input type="number" id="dataset-audit-dim-min" step="1" value="512" placeholder="512">
-                                        <small>px</small>
-                                    </label>
-                                    <label class="dataset-audit-threshold">
-                                        <input type="checkbox" id="dataset-audit-check-phash">
-                                        <span data-i18n="dataset.auditCheckPhash">Near duplicates</span>
-                                        <input type="number" id="dataset-audit-phash-max" step="1" value="5" placeholder="5">
-                                    </label>
-                                    <label class="dataset-audit-threshold">
-                                        <input type="checkbox" id="dataset-audit-check-aesthetic">
-                                        <span data-i18n="dataset.auditCheckAesthetic">Low aesthetic</span>
-                                        <input type="number" id="dataset-audit-aesthetic-max" step="0.1" value="4.5" placeholder="4.5">
-                                    </label>
-                                </div>
-                                <div class="dataset-audit-actions">
-                                    <button type="button" class="btn btn-primary btn-small" id="btn-dataset-audit-run"
-                                            data-i18n="dataset.auditRun">Run audit</button>
-                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-audit-download"
-                                            data-i18n="dataset.auditDownload" hidden>Download report (.json)</button>
-                                    <span class="dataset-audit-status" id="dataset-audit-status" aria-live="polite"></span>
-                                </div>
-                                <div class="dataset-audit-results" id="dataset-audit-results" hidden>
-                                    <div class="dataset-audit-badges" id="dataset-audit-badges"></div>
-                                </div>
-                            </div>
-                        </details>
                         <div class="dataset-folder-import-status-row">
                             <span class="dataset-folder-import-status" id="dataset-folder-import-status"></span>
+                            <span class="dataset-sidecar-source-status" id="dataset-sidecar-source-status" aria-live="polite"></span>
                             <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-folder-import-more" hidden
                                     data-i18n="dataset.folderImportLoadMore">Load next batch</button>
                         </div>
@@ -2859,6 +2827,14 @@
                                 <p class="dataset-card-help" data-i18n="dataset.cardCaptionHelp">
                                     Bulk-edit every caption: add common tags, remove tags you don't want, control underscore behavior.
                                 </p>
+                                <label class="form-label dataset-caption-scope-row">
+                                    <span data-i18n="dataset.captionScopeLabel">Apply caption actions to</span>
+                                    <select id="dataset-caption-scope" class="form-input">
+                                        <option value="active" data-i18n="dataset.scopeActiveImage">Current image</option>
+                                        <option value="selected" data-i18n="dataset.scopeSelectedImages">Selected images</option>
+                                        <option value="all" selected data-i18n="dataset.scopeAllImages">All images</option>
+                                    </select>
+                                </label>
                                 <!-- Optional caption/export starter defaults. -->
                                 <div class="dataset-anime-defaults-row">
                                     <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-anime-defaults"
@@ -2938,10 +2914,6 @@
                                 </div>
                                 <div class="dataset-dedupe-row">
                                     <small class="dataset-cleanup-label" data-i18n="dataset.dedupeLabel">Duplicate tags:</small>
-                                    <select id="dataset-dedupe-scope" class="form-input dataset-dedupe-scope">
-                                        <option value="all" data-i18n="dataset.scopeAllImages">All images</option>
-                                        <option value="selected" data-i18n="dataset.scopeSelectedImages">Selected images</option>
-                                    </select>
                                     <button type="button" class="btn btn-secondary btn-small" id="btn-dataset-dedupe-tags"
                                             data-i18n="dataset.dedupeTagsBtn">Delete duplicate tags</button>
                                 </div>
@@ -2949,6 +2921,133 @@
                                     <input type="checkbox" id="dataset-underscore-to-space" checked>
                                     <span data-i18n="dataset.underscoreToSpace">Convert tag underscores to spaces (recommended for most LoRA trainers)</span>
                                 </label>
+                                <label class="form-label">
+                                    <span data-i18n="dataset.exportPrefixLabel">Prefix / Class Token</span>
+                                    <input type="text" id="dataset-export-prefix" class="form-input"
+                                           placeholder="masterpiece, best quality"
+                                           data-i18n-placeholder="batchExport.tagPrefix">
+                                </label>
+                                <div id="dataset-template-options" class="dataset-template-options">
+                                    <label class="form-label">
+                                        <span data-i18n="batchExport.loraTemplate">Custom template</span>
+                                        <input type="text" id="dataset-template-override" class="form-input"
+                                               placeholder="{trigger}, {tags:filtered}, {append}"
+                                               value="{trigger}, {tags:filtered}, {append}">
+                                    </label>
+                                    <label class="form-label">
+                                        <span data-i18n="batchExport.loraReplace">Tag replacements (one per line: from-&gt;to)</span>
+                                        <textarea id="dataset-replace-rules" class="form-input" rows="2"
+                                                  placeholder="school_uniform-&gt;serafuku"></textarea>
+                                    </label>
+                                    <label class="form-label">
+                                        <span data-i18n="batchExport.loraMaxTags">Max tags (0 = unlimited)</span>
+                                        <input type="number" id="dataset-max-tags" class="form-input" value="0" min="0" max="200">
+                                    </label>
+                                </div>
+                                <fieldset class="dataset-fieldset dataset-caption-naming-fieldset">
+                                    <legend data-i18n="dataset.captionNamingLegend">Filename pattern for folder export</legend>
+                                    <label class="dataset-preset-row">
+                                        <input type="radio" name="dataset-naming-preset" value="keep" checked>
+                                        <span class="dataset-preset-label">
+                                            <strong data-i18n="dataset.presetKeepTitle">Keep original filenames</strong>
+                                            <small data-i18n="dataset.presetKeepHint">Caption .txt matches each image exactly.</small>
+                                        </span>
+                                    </label>
+                                    <label class="dataset-preset-row">
+                                        <input type="radio" name="dataset-naming-preset" value="renumber">
+                                        <span class="dataset-preset-label">
+                                            <strong data-i18n="dataset.presetRenumberTitle">Renumber: subject_001, subject_002, ...</strong>
+                                            <small data-i18n="dataset.presetRenumberHint">Clean sequential names. Type your subject below.</small>
+                                        </span>
+                                    </label>
+                                    <label class="dataset-preset-row dataset-preset-trigger" id="dataset-trigger-row" hidden>
+                                        <span class="dataset-preset-label dataset-preset-indent">
+                                            <input type="text" id="dataset-trigger" class="form-input"
+                                                   placeholder="subject"
+                                                   data-i18n-placeholder="dataset.triggerPlaceholderShort"
+                                                   aria-label="Trigger word">
+                                            <small class="dataset-preview-line" id="dataset-naming-preview" aria-live="polite"></small>
+                                            <small class="dataset-trigger-clarify" data-i18n="dataset.triggerClarify">
+                                                This only sets the filename prefix. To put a trigger word inside every caption .txt, type it into Common tags.
+                                            </small>
+                                        </span>
+                                    </label>
+                                    <label class="dataset-preset-row">
+                                        <input type="radio" name="dataset-naming-preset" value="custom">
+                                        <span class="dataset-preset-label">
+                                            <strong data-i18n="dataset.presetCustomTitle">Custom pattern (advanced)</strong>
+                                            <small data-i18n="dataset.presetCustomHint">Full control with variables.</small>
+                                        </span>
+                                    </label>
+                                    <div class="dataset-custom-row" id="dataset-custom-row" hidden>
+                                        <input type="text" id="dataset-naming-pattern" class="form-input"
+                                               value="{trigger}_{index:03d}"
+                                               placeholder="{trigger}_{index:03d}">
+                                        <p class="dataset-help">
+                                            <span data-i18n="dataset.namingHelp">Variables:</span>
+                                            <code>{filename}</code> · <code>{index}</code> · <code>{index:03d}</code>
+                                            · <code>{trigger}</code> · <code>{generator}</code> · <code>{date}</code>
+                                        </p>
+                                    </div>
+                                </fieldset>
+                                <div class="dataset-tag-category-order">
+                                    <label class="form-label">
+                                        <span data-i18n="dataset.tagCategoryOrderLabel">Tag category order</span>
+                                        <input type="text" id="dataset-tag-category-order" class="form-input"
+                                               value="quality, identity, appearance, poses, copyright, natural"
+                                               data-i18n-title="dataset.tagCategoryOrderTooltip"
+                                               title="Comma-separated categories: quality, identity, appearance, poses, copyright, natural">
+                                    </label>
+                                    <button type="button" class="btn btn-secondary btn-small" id="btn-dataset-apply-tag-category-order"
+                                            data-i18n="dataset.applyTagCategoryOrder">Apply order to caption tags</button>
+                                </div>
+                                <div id="dataset-translation-options" class="dataset-translation-options">
+                                    <h4 class="dataset-subsection-title" data-i18n="dataset.translationSettings">VLM translation settings</h4>
+                                    <label class="form-label">
+                                        <span data-i18n="dataset.translationProviderLabel">Chinese translation provider</span>
+                                        <select id="dataset-translation-provider-mode" class="form-input">
+                                            <option value="vlm" selected data-i18n="dataset.translationProviderVlm">Existing VLM settings</option>
+                                            <option value="external" data-i18n="dataset.translationProviderExternal">External translation API</option>
+                                        </select>
+                                    </label>
+                                    <label class="form-label">
+                                        <span data-i18n="dataset.translationExternalProvider">External API</span>
+                                        <select id="dataset-translation-external-provider" class="form-input">
+                                            <option value="auto_cn" selected>Auto China-friendly free</option>
+                                            <option value="auto">Auto global free</option>
+                                            <option value="bing_free">[Free] Microsoft Bing web</option>
+                                            <option value="google_free">[Free] Google web</option>
+                                            <option value="itranslate_free">[Free] iTranslate web</option>
+                                            <option value="lingvanex_free">[Free] Lingvanex web</option>
+                                            <option value="modernmt_free">[Free] ModernMT / Translated web</option>
+                                            <option value="systran_free">[Free] SYSTRAN web</option>
+                                            <option value="translatecom_free">[Free] Translate.com web</option>
+                                            <option value="argos_free">[Free] Argos / Libre web</option>
+                                            <option value="papago_free">[Free] Papago / Naver web</option>
+                                            <option value="reverso_free">[Free] Reverso web</option>
+                                            <option value="translateme_free">[Free] TranslateMe / Neosus web</option>
+                                            <option value="elia_free">[Free] Elia / Elhuyar web</option>
+                                            <option value="judic_free">[Free] Judic / CrossLang web</option>
+                                            <option value="alibaba_free">[Free] Alibaba web</option>
+                                            <option value="baidu_free">[Free] Baidu web</option>
+                                            <option value="sogou_free">[Free] Sogou web</option>
+                                            <option value="qqtransmart_free">[Free] QQ TranSmart web</option>
+                                            <option value="youdao_free">[Free] Youdao web</option>
+                                            <option value="iciba_free">[Free] ICIBA web</option>
+                                            <option value="cloudyi_free">[Free] CloudTranslation web</option>
+                                            <option value="caiyun_free">[Free] Caiyun web</option>
+                                            <option value="mymemory_free">[Free] MyMemory no-key</option>
+                                            <option value="baidu">Baidu tag lookup fallback</option>
+                                            <option value="bing">Bing / Microsoft Translator key</option>
+                                            <option value="custom">Custom endpoint</option>
+                                        </select>
+                                    </label>
+                                    <label class="form-label">
+                                        <span data-i18n="dataset.translationPromptLabel">VLM translation prompt</span>
+                                        <textarea id="dataset-translation-prompt" class="form-input" rows="2"
+                                                  placeholder="Translate each tag/caption to Chinese for dataset review. Keep order and separators."></textarea>
+                                    </label>
+                                </div>
                             </details>
 
                             <!-- Section B2: Batch Find/Replace -->
@@ -2992,74 +3091,29 @@
                                     </p>
                                 </div>
 
-                                <label class="form-label">
-                                    <span data-i18n="dataset.exportContentMode">Caption file content</span>
-                                    <select id="dataset-export-content-mode" class="form-input">
-                                        <option value="template" selected data-i18n="batchExport.modeTemplate">LoRA Training Template</option>
-                                        <option value="caption_merged" data-i18n="batchExport.modeCaptionMerged">LoRA caption file</option>
-                                        <option value="tags" data-i18n="batchExport.modeTags">Tags</option>
-                                        <option value="caption_tags" data-i18n="batchExport.modeCaptionTags">Caption + Tags</option>
-                                        <option value="nl_caption" data-i18n="batchExport.modeNlCaption">Natural language caption only</option>
-                                        <option value="tags_nl" data-i18n="batchExport.modeTagsNl">Tags + Natural language caption</option>
-                                        <option value="prompt" data-i18n="batchExport.modePrompt">Prompt text</option>
-                                        <option value="negative" data-i18n="batchExport.modeNegative">Negative prompt</option>
-                                        <option value="prompt_negative" data-i18n="batchExport.modePromptNegative">Prompt + Negative</option>
-                                        <option value="prompt_nl" data-i18n="batchExport.modePromptNl">Prompt + Natural language caption</option>
-                                        <option value="a1111" data-i18n="batchExport.modeA1111">A1111 / Forge block</option>
-                                        <option value="json" data-i18n="batchExport.modeJson">JSON</option>
-                                    </select>
-                                </label>
+                                <input type="hidden" id="dataset-export-content-mode" value="template">
 
-                                <!-- Naming preset radio (replaces the cryptic pattern field) -->
-                                <fieldset class="dataset-fieldset">
-                                    <legend data-i18n="dataset.namingLegend">How should files be named?</legend>
+                                <fieldset class="dataset-fieldset dataset-output-mode-fieldset">
+                                    <legend data-i18n="dataset.outputModeLegend">Where should caption .txt files be written?</legend>
                                     <label class="dataset-preset-row">
-                                        <input type="radio" name="dataset-naming-preset" value="keep" checked>
+                                        <input type="radio" name="dataset-output-mode" value="folder" checked>
                                         <span class="dataset-preset-label">
-                                            <strong data-i18n="dataset.presetKeepTitle">🛡️ Keep original filenames</strong>
-                                            <small data-i18n="dataset.presetKeepHint">Safest. Caption .txt matches each image exactly.</small>
-                                        </span>
-                                    </label>
-                                    <label class="dataset-preset-row">
-                                        <input type="radio" name="dataset-naming-preset" value="renumber">
-                                        <span class="dataset-preset-label">
-                                            <strong data-i18n="dataset.presetRenumberTitle">🔢 Renumber: subject_001, subject_002, …</strong>
-                                            <small data-i18n="dataset.presetRenumberHint">Clean sequential names. Type your subject below.</small>
-                                        </span>
-                                    </label>
-                                    <label class="dataset-preset-row dataset-preset-trigger" id="dataset-trigger-row" hidden>
-                                        <span class="dataset-preset-label dataset-preset-indent">
-                                            <input type="text" id="dataset-trigger" class="form-input"
-                                                   placeholder="subject"
-                                                   data-i18n-placeholder="dataset.triggerPlaceholderShort"
-                                                   aria-label="Trigger word">
-                                            <small class="dataset-preview-line" id="dataset-naming-preview" aria-live="polite"></small>
-                                            <small class="dataset-trigger-clarify" data-i18n="dataset.triggerClarify">
-                                                ℹ️ This only sets the filename prefix. To put a trigger word inside every caption .txt, type it into "Common tags" in Workbench instead.
-                                            </small>
+                                            <strong data-i18n="dataset.outputModeFolderTitle">Export image + .txt pairs to a folder</strong>
+                                            <small data-i18n="dataset.outputModeFolderHint">Works for Gallery, folder scan, drag/drop images, and ZIP imports.</small>
                                         </span>
                                     </label>
                                     <label class="dataset-preset-row">
-                                        <input type="radio" name="dataset-naming-preset" value="custom">
+                                        <input type="radio" name="dataset-output-mode" value="beside_image">
                                         <span class="dataset-preset-label">
-                                            <strong data-i18n="dataset.presetCustomTitle">⚙️ Custom pattern (advanced)</strong>
-                                            <small data-i18n="dataset.presetCustomHint">Full control with variables.</small>
+                                            <strong data-i18n="dataset.outputModeBesideTitle">Write same-name .txt beside original images</strong>
+                                            <small data-i18n="dataset.outputModeBesideHint">Only Gallery and folder path scan can use this. Drag/drop and ZIP are cached paths.</small>
                                         </span>
                                     </label>
-                                    <div class="dataset-custom-row" id="dataset-custom-row" hidden>
-                                        <input type="text" id="dataset-naming-pattern" class="form-input"
-                                               value="{trigger}_{index:03d}"
-                                               placeholder="{trigger}_{index:03d}">
-                                        <p class="dataset-help">
-                                            <span data-i18n="dataset.namingHelp">Variables:</span>
-                                            <code>{filename}</code> · <code>{index}</code> · <code>{index:03d}</code>
-                                            · <code>{trigger}</code> · <code>{generator}</code> · <code>{date}</code>
-                                        </p>
-                                    </div>
+                                    <p class="dataset-warning-inline" id="dataset-beside-image-warning" hidden></p>
                                 </fieldset>
 
                                 <!-- Output folder (required) -->
-                                <label class="form-label dataset-required-label">
+                                <label class="form-label dataset-required-label" data-export-folder-only>
                                     <span>
                                         <span data-i18n="dataset.outputFolderLabel">Output folder</span>
                                         <span class="dataset-required-asterisk" aria-hidden="true">*</span>
@@ -3091,7 +3145,7 @@
 
                                 <!-- P2 fix: Copy vs Move out of Advanced. New users care most about
                                      "will my originals be safe?" so this needs to be visible. -->
-                                <fieldset class="dataset-fieldset dataset-image-op-fieldset">
+                                <fieldset class="dataset-fieldset dataset-image-op-fieldset" data-export-folder-only>
                                     <legend data-i18n="dataset.imageOpLegend">What about the original images?</legend>
                                     <label class="dataset-preset-row">
                                         <input type="radio" name="dataset-image-op-radio" value="copy" checked>
@@ -3120,75 +3174,6 @@
                                             <option value="skip" data-i18n="dataset.overwriteSkip">Skip</option>
                                         </select>
                                     </label>
-                                    <label class="form-label">
-                                        <span data-i18n="dataset.exportPrefixLabel">Prefix / Class Token</span>
-                                        <input type="text" id="dataset-export-prefix" class="form-input"
-                                               placeholder="masterpiece, best quality"
-                                               data-i18n-placeholder="batchExport.tagPrefix">
-                                    </label>
-                                    <div class="dataset-template-options" id="dataset-template-options">
-                                        <label class="form-label">
-                                            <span data-i18n="batchExport.loraTemplate">Custom template</span>
-                                            <input type="text" id="dataset-template-override" class="form-input"
-                                                   placeholder="{trigger}, {tags:filtered}, {append}"
-                                                   value="{trigger}, {tags:filtered}, {append}">
-                                        </label>
-                                        <label class="form-label">
-                                            <span data-i18n="batchExport.loraReplace">Tag replacements (one per line: from-&gt;to)</span>
-                                            <textarea id="dataset-replace-rules" class="form-input" rows="2"
-                                                      placeholder="school_uniform-&gt;serafuku"></textarea>
-                                        </label>
-                                        <label class="form-label">
-                                            <span data-i18n="batchExport.loraMaxTags">Max tags (0 = unlimited)</span>
-                                            <input type="number" id="dataset-max-tags" class="form-input" value="0" min="0" max="200">
-                                        </label>
-                                    </div>
-                                    <div class="dataset-translation-options">
-                                        <label class="form-label">
-                                            <span data-i18n="dataset.translationProviderLabel">Chinese translation provider</span>
-                                            <select id="dataset-translation-provider-mode" class="form-input">
-                                                <option value="vlm" selected data-i18n="dataset.translationProviderVlm">Existing VLM settings</option>
-                                                <option value="external" data-i18n="dataset.translationProviderExternal">External translation API</option>
-                                            </select>
-                                        </label>
-                                        <label class="form-label">
-                                            <span data-i18n="dataset.translationExternalProvider">External API</span>
-                                            <select id="dataset-translation-external-provider" class="form-input">
-                                                <option value="auto_cn" selected>Auto China-friendly free</option>
-                                                <option value="auto">Auto global free</option>
-                                                <option value="bing_free">[Free] Microsoft Bing web</option>
-                                                <option value="google_free">[Free] Google web</option>
-                                                <option value="itranslate_free">[Free] iTranslate web</option>
-                                                <option value="lingvanex_free">[Free] Lingvanex web</option>
-                                                <option value="modernmt_free">[Free] ModernMT / Translated web</option>
-                                                <option value="systran_free">[Free] SYSTRAN web</option>
-                                                <option value="translatecom_free">[Free] Translate.com web</option>
-                                                <option value="argos_free">[Free] Argos / Libre web</option>
-                                                <option value="papago_free">[Free] Papago / Naver web</option>
-                                                <option value="reverso_free">[Free] Reverso web</option>
-                                                <option value="translateme_free">[Free] TranslateMe / Neosus web</option>
-                                                <option value="elia_free">[Free] Elia / Elhuyar web</option>
-                                                <option value="judic_free">[Free] Judic / CrossLang web</option>
-                                                <option value="alibaba_free">[Free] Alibaba web</option>
-                                                <option value="baidu_free">[Free] Baidu web</option>
-                                                <option value="sogou_free">[Free] Sogou web</option>
-                                                <option value="qqtransmart_free">[Free] QQ TranSmart web</option>
-                                                <option value="youdao_free">[Free] Youdao web</option>
-                                                <option value="iciba_free">[Free] ICIBA web</option>
-                                                <option value="cloudyi_free">[Free] CloudTranslation web</option>
-                                                <option value="caiyun_free">[Free] Caiyun web</option>
-                                                <option value="mymemory_free">[Free] MyMemory no-key</option>
-                                                <option value="baidu">Baidu tag lookup fallback</option>
-                                                <option value="bing">Bing / Microsoft Translator key</option>
-                                                <option value="custom">Custom endpoint</option>
-                                            </select>
-                                        </label>
-                                        <label class="form-label">
-                                            <span data-i18n="dataset.translationPromptLabel">VLM translation prompt</span>
-                                            <textarea id="dataset-translation-prompt" class="form-input" rows="2"
-                                                      placeholder="Translate each tag/caption to Chinese for dataset review. Keep order and separators."></textarea>
-                                        </label>
-                                    </div>
                                     <!-- Hidden mirror element to keep the existing JS that reads
                                          #dataset-image-op working without changes. The radio
                                          above is the visible source of truth. -->
@@ -3219,6 +3204,55 @@
                             <div class="dataset-modal-actions">
                                 <button class="btn btn-ghost" id="btn-dataset-confirm-cancel" data-i18n="common.cancel">Cancel</button>
                                 <button class="btn btn-primary" id="btn-dataset-confirm-go" data-i18n="dataset.confirmGo">Yes, export now</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dataset-modal" id="dataset-audit-modal" role="dialog" aria-modal="true"
+                         aria-labelledby="dataset-audit-modal-title" hidden>
+                        <div class="dataset-modal-backdrop"></div>
+                        <div class="dataset-modal-card dataset-audit-modal-card">
+                            <div class="dataset-modal-head">
+                                <h3 id="dataset-audit-modal-title" class="dataset-modal-title">
+                                    <span aria-hidden="true">🔍</span>
+                                    <span data-i18n="dataset.auditTitle">Quality Audit (optional)</span>
+                                </h3>
+                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-audit-close"
+                                        data-i18n="common.close">Close</button>
+                            </div>
+                            <div class="dataset-audit-body">
+                                <div class="dataset-audit-thresholds">
+                                    <label class="dataset-audit-threshold">
+                                        <input type="checkbox" id="dataset-audit-check-captions" checked>
+                                        <span data-i18n="dataset.auditCheckCaptions">Empty captions</span>
+                                    </label>
+                                    <label class="dataset-audit-threshold">
+                                        <input type="checkbox" id="dataset-audit-check-dim" checked>
+                                        <span data-i18n="dataset.auditCheckDim">Small images</span>
+                                        <input type="number" id="dataset-audit-dim-min" step="1" value="512" placeholder="512">
+                                        <small>px</small>
+                                    </label>
+                                    <label class="dataset-audit-threshold">
+                                        <input type="checkbox" id="dataset-audit-check-phash">
+                                        <span data-i18n="dataset.auditCheckPhash">Near duplicates</span>
+                                        <input type="number" id="dataset-audit-phash-max" step="1" value="5" placeholder="5">
+                                    </label>
+                                    <label class="dataset-audit-threshold">
+                                        <input type="checkbox" id="dataset-audit-check-aesthetic">
+                                        <span data-i18n="dataset.auditCheckAesthetic">Low aesthetic</span>
+                                        <input type="number" id="dataset-audit-aesthetic-max" step="0.1" value="4.5" placeholder="4.5">
+                                    </label>
+                                </div>
+                                <div class="dataset-audit-actions">
+                                    <button type="button" class="btn btn-primary btn-small" id="btn-dataset-audit-run"
+                                            data-i18n="dataset.auditRun">Run audit</button>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-audit-download"
+                                            data-i18n="dataset.auditDownload" hidden>Download report (.json)</button>
+                                    <span class="dataset-audit-status" id="dataset-audit-status" aria-live="polite"></span>
+                                </div>
+                                <div class="dataset-audit-results" id="dataset-audit-results" hidden>
+                                    <div class="dataset-audit-badges" id="dataset-audit-badges"></div>
+                                </div>
                             </div>
                         </div>
                     </div>

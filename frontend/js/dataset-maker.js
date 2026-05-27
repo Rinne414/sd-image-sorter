@@ -160,6 +160,8 @@
             this._onPresetChange?.();
             this._updateNamingPreview();
             this._updateExportEnabled();
+            this._syncSourceCapabilityStatus?.();
+            this._syncOutputModeUi?.();
             this._initCaptionHelpAutoOpen();
             this._bindBeforeUnload();
             this._resumeExportProgress?.();
@@ -314,6 +316,13 @@
                 radio.addEventListener('change', () => {
                     const hidden = document.getElementById('dataset-image-op');
                     if (hidden) hidden.value = radio.value;
+                    this._syncOutputModeUi?.();
+                });
+            });
+            document.querySelectorAll('input[name="dataset-output-mode"]').forEach(radio => {
+                radio.addEventListener('change', () => {
+                    this._syncOutputModeUi?.();
+                    this._updateExportEnabled();
                 });
             });
 
@@ -364,6 +373,7 @@
             document.getElementById('dataset-output-folder')?.addEventListener('input', () => {
                 this._validateOutputFolder();
                 this._updateExportEnabled();
+                this._syncOutputModeUi?.();
             });
             document.getElementById('btn-dataset-browse-output')?.addEventListener('click', (event) => {
                 event.preventDefault();
@@ -448,6 +458,9 @@
                     const existing = this.meta.get(Number(id)) || {};
                     this.meta.set(Number(id), {
                         ...existing,
+                        source: existing.source || 'gallery',
+                        source_kind: existing.source_kind || 'gallery',
+                        sidecar_capability: existing.sidecar_capability || 'beside_image',
                         filename: existing.filename || rec.filename || '',
                         thumbnail_path: existing.thumbnail_path || rec.thumbnail_path || '',
                         width: Number(rec.width || 0),
@@ -458,9 +471,19 @@
 
             await this._fetchMissingMeta();
             await this._fetchMissingCaptions();
+            for (const id of newOnes) {
+                const existing = this.meta.get(Number(id)) || {};
+                this.meta.set(Number(id), {
+                    ...existing,
+                    source: existing.source || 'gallery',
+                    source_kind: existing.source_kind || 'gallery',
+                    sidecar_capability: existing.sidecar_capability || 'beside_image',
+                });
+            }
             this._renderQueue();
             this._updateCount();
             this._updateExportEnabled();
+            this._syncSourceCapabilityStatus?.();
             if (this.activeId == null && this.imageIds.length) {
                 this._setActive(this.imageIds[0]);
             }
@@ -575,6 +598,7 @@
                 this._renderEmptyEditor();
                 this._updateCount();
                 this._updateExportEnabled();
+                this._syncSourceCapabilityStatus?.();
             };
             if (window.App?.showConfirm) {
                 window.App.showConfirm(title, msg, doClear);

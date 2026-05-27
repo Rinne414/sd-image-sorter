@@ -8,6 +8,101 @@
     const DM = window.DatasetMaker;
 
     // ---------- Caption rendering ----------
+    DM._outputMode = function () {
+        return document.querySelector('input[name="dataset-output-mode"]:checked')?.value || 'folder';
+    };
+
+    DM._sidecarCapabilityStats = function () {
+        const ids = Array.from(this.imageIds || []);
+        let besideReady = 0;
+        let cacheOnly = 0;
+        let unknown = 0;
+        for (const id of ids) {
+            const meta = this.meta?.get?.(Number(id)) || {};
+            const token = String(meta.folder_scan_token || '').trim();
+            if (token) {
+                continue;
+            }
+            const capability = String(meta.sidecar_capability || '').trim();
+            if (capability === 'beside_image') besideReady += 1;
+            else if (capability === 'cache_only') cacheOnly += 1;
+            else unknown += 1;
+        }
+        if (this.localManifestTokens) {
+            for (const [token, source] of this.localManifestTokens.entries()) {
+                const total = Number(source?.total || 0) || 0;
+                const excluded = source?.excludedPaths?.size || 0;
+                const count = Math.max(0, total - excluded);
+                if (count <= 0) continue;
+                besideReady += count;
+            }
+        }
+        return { total: besideReady + cacheOnly + unknown, besideReady, cacheOnly, unknown };
+    };
+
+    DM._syncSourceCapabilityStatus = function () {
+        const status = document.getElementById('dataset-sidecar-source-status');
+        if (!status) return;
+        const stats = this._sidecarCapabilityStats();
+        if (stats.total <= 0) {
+            status.textContent = this._t('dataset.sidecarSourceStatusEmpty',
+                'Same-name .txt beside originals: use Gallery or folder path scan.');
+            return;
+        }
+        status.textContent = this._t('dataset.sidecarSourceStatus',
+            '{ready} can write beside originals; {cache} cache-only; {unknown} unknown.',
+            { ready: stats.besideReady, cache: stats.cacheOnly, unknown: stats.unknown });
+    };
+
+    DM._syncOutputModeUi = function () {
+        const outputMode = this._outputMode();
+        const stats = this._sidecarCapabilityStats();
+        const warning = document.getElementById('dataset-beside-image-warning');
+        const besideRadio = document.querySelector('input[name="dataset-output-mode"][value="beside_image"]');
+        const folderRadio = document.querySelector('input[name="dataset-output-mode"][value="folder"]');
+        const besideBlocked = stats.total > 0 && (stats.cacheOnly > 0 || stats.unknown > 0);
+        if (besideRadio) {
+            besideRadio.disabled = besideBlocked;
+            if (besideBlocked && besideRadio.checked && folderRadio) folderRadio.checked = true;
+        }
+        const effectiveMode = this._outputMode();
+        document.querySelectorAll('[data-export-folder-only]').forEach((el) => {
+            el.hidden = effectiveMode === 'beside_image';
+        });
+        if (warning) {
+            if (besideBlocked) {
+                warning.hidden = false;
+                warning.textContent = this._t('dataset.outputModeBesideBlocked',
+                    '{count} cache-only or unknown imports cannot write beside originals. Use folder export, or import via Gallery/folder path scan.',
+                    { count: stats.cacheOnly + stats.unknown });
+            } else if (effectiveMode === 'beside_image') {
+                warning.hidden = false;
+                warning.textContent = this._t('dataset.outputModeBesideActive',
+                    'This will write same-name .txt files next to the original images and will not copy or move image files.');
+            } else {
+                warning.hidden = true;
+                warning.textContent = '';
+            }
+        }
+        this._refreshPairChip?.();
+        this._syncSourceCapabilityStatus?.();
+    };
+
+    DM._captionScope = function () {
+        return document.getElementById('dataset-caption-scope')?.value || 'all';
+    };
+
+    DM._captionScopeIds = function () {
+        const scope = this._captionScope();
+        if (scope === 'active') {
+            return this.activeId == null ? [] : [Number(this.activeId)];
+        }
+        if (scope === 'selected') {
+            return Array.from(this._queueSelection || []).map(Number);
+        }
+        return Array.from(this.imageIds || []).map(Number);
+    };
+
     DM._captionOptions = function () {
         const trigger = document.getElementById('dataset-trigger')?.value?.trim() || '';
         const blacklistText = document.getElementById('dataset-blacklist')?.value || '';
@@ -62,12 +157,14 @@
     };
 
     DM._dedupeCaptionTags = function () {
-        const scope = document.getElementById('dataset-dedupe-scope')?.value || 'all';
-        const ids = scope === 'selected'
-            ? Array.from(this._queueSelection || [])
-            : Array.from(this.imageIds || []);
+        const scope = this._captionScope();
+        const ids = this._captionScopeIds();
         if (scope === 'selected' && ids.length === 0) {
             this._toast(this._t('dataset.dedupeNoSelection', 'Select images first, or switch scope to All images.'), 'warning', 3500);
+            return;
+        }
+        if (scope === 'active' && ids.length === 0) {
+            this._toast(this._t('dataset.noActiveImage', 'Select an image first.'), 'warning', 3000);
             return;
         }
         let changedImages = 0;
@@ -267,6 +364,13 @@
     // ---------- Export readiness ----------
     DM._validateOutputFolder = function () {
         const wrap = document.querySelector('.dataset-required-label');
+        if (this._outputMode() === 'beside_image') {
+            if (wrap) {
+                wrap.classList.toggle('valid', true);
+                wrap.classList.toggle('invalid', false);
+            }
+            return true;
+        }
         const value = (document.getElementById('dataset-output-folder')?.value || '').trim();
         if (!wrap) return !!value;
         wrap.classList.toggle('valid', !!value);
@@ -276,6 +380,12 @@
 
     DM._isReadyToExport = function () {
         if (this.imageIds.length === 0) return false;
+        const outputMode = this._outputMode();
+        if (outputMode === 'beside_image') {
+            const stats = this._sidecarCapabilityStats();
+            if (stats.total <= 0 || stats.cacheOnly > 0 || stats.unknown > 0) return false;
+            return true;
+        }
         if (!(document.getElementById('dataset-output-folder')?.value || '').trim()) return false;
         return true;
     };
@@ -286,6 +396,7 @@
         const ready = this._isReadyToExport();
         if (btn) btn.disabled = !ready;
         if (hint) hint.hidden = ready;
+        this._syncOutputModeUi?.();
         this._refreshExportPreview?.();
     };
 
@@ -294,7 +405,7 @@
         if (!this._isReadyToExport()) {
             this._validateOutputFolder();
             const wrap = document.querySelector('.dataset-required-label');
-            if (wrap && !(document.getElementById('dataset-output-folder')?.value || '').trim()) {
+            if (this._outputMode() !== 'beside_image' && wrap && !(document.getElementById('dataset-output-folder')?.value || '').trim()) {
                 wrap.classList.add('invalid');
             }
             this._toast(this._t('dataset.exportDisabledHint',
@@ -309,10 +420,13 @@
         const imageOp = document.getElementById('dataset-image-op')?.value || 'copy';
         const folder = document.getElementById('dataset-output-folder')?.value?.trim() || '';
         const preset = this._currentPreset();
+        const outputMode = this._outputMode();
 
-        const actionLabel = (imageOp === 'move')
-            ? this._t('dataset.confirmActionMove', 'moved (removed from original location)')
-            : this._t('dataset.confirmActionCopy', 'copied (originals stay in place)');
+        const actionLabel = outputMode === 'beside_image'
+            ? this._t('dataset.confirmActionBeside', 'left in place; only .txt sidecars are written')
+            : ((imageOp === 'move')
+                ? this._t('dataset.confirmActionMove', 'moved (removed from original location)')
+                : this._t('dataset.confirmActionCopy', 'copied (originals stay in place)'));
 
         let namingLabel = '';
         if (preset === 'keep') {
@@ -351,16 +465,23 @@
             this._t('dataset.confirmSummaryImages',
                 '<strong>{count}</strong> images will be {action}',
                 { count: logicalCount, action: escapeHtml(actionLabel) }),
-            this._t('dataset.confirmSummaryFolder',
-                'Output folder: <code>{folder}</code>',
-                { folder: escapeHtml(folder) }),
-            this._t('dataset.confirmSummaryNaming',
-                'Naming: <strong>{naming}</strong>',
-                { naming: escapeHtml(namingLabel) }),
             this._t('dataset.confirmSummaryCaptions',
                 '<strong>{count}</strong> .txt caption files will be written',
                 { count: logicalCount }),
         ];
+        if (outputMode === 'beside_image') {
+            items.push(this._t('dataset.confirmSummaryBeside',
+                'Caption files will be written beside each original image with the same stem.'));
+        } else {
+            items.splice(1, 0,
+                this._t('dataset.confirmSummaryFolder',
+                    'Output folder: <code>{folder}</code>',
+                    { folder: escapeHtml(folder) }),
+                this._t('dataset.confirmSummaryNaming',
+                    'Naming: <strong>{naming}</strong>',
+                    { naming: escapeHtml(namingLabel) }),
+            );
+        }
         if (loadedOnlyChecks) {
             items.push(`<span class="dataset-confirm-warn">${this._t('dataset.confirmSummaryManifestPreview',
                 'Only {loaded} previews are loaded in the browser; export will still include all {total} manifest images. Caption/size warnings below only cover loaded previews.',
@@ -418,6 +539,7 @@
         const pattern = this._effectivePattern();
         const trigger = document.getElementById('dataset-trigger')?.value || '';
         const imageOp = document.getElementById('dataset-image-op')?.value || 'copy';
+        const outputMode = this._outputMode();
         const overwrite = document.getElementById('dataset-overwrite')?.value || 'unique';
         const normalize = !!document.getElementById('dataset-underscore-to-space')?.checked;
         const contentMode = this._exportContentMode();
@@ -433,10 +555,11 @@
 
         return {
             image_ids: this.imageIds,
-            output_folder: folder,
+            output_folder: outputMode === 'beside_image' ? '' : folder,
+            output_mode: outputMode,
             naming_pattern: pattern,
             trigger,
-            image_op: imageOp,
+            image_op: outputMode === 'beside_image' ? 'copy' : imageOp,
             overwrite_policy: overwrite,
             content_mode: contentMode,
             prefix,

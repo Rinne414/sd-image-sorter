@@ -360,6 +360,8 @@ def _manifest_item_for_path(path: Any, index: int) -> Dict[str, Any]:
         "size": stat_size,
         "thumb_b64": "",
         "scan_index": index,
+        "source_kind": "folder_path",
+        "sidecar_capability": "beside_image",
     }
 
 
@@ -386,6 +388,8 @@ def _session_item_for_path(path: Path, scan_index: Optional[int] = None) -> Opti
         "size": stat.st_size,
         "thumb_b64": thumb_b64,
         "scan_index": scan_index,
+        "source_kind": "folder_path",
+        "sidecar_capability": "beside_image",
     }
 
 
@@ -585,6 +589,9 @@ _UPLOAD_DIR: Optional[Path] = None
 def _get_upload_dir() -> Path:
     """Return (and lazily create) a persistent temp directory for uploads."""
     global _UPLOAD_DIR
+    if _UPLOAD_DIR is not None:
+        _UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        return _UPLOAD_DIR
     if _UPLOAD_DIR is None or not _UPLOAD_DIR.exists():
         # Use data/dataset-uploads so it lives alongside other runtime data
         from pathlib import Path as _P
@@ -601,7 +608,7 @@ def _safe_uploaded_name(name: str, fallback: str = "image") -> str:
     return cleaned or fallback
 
 
-def _append_upload_item(dest: Path, items: List[Dict[str, Any]]) -> bool:
+def _append_upload_item(dest: Path, items: List[Dict[str, Any]], *, source_kind: str) -> bool:
     """Read metadata for an uploaded/extracted image and append a session item."""
     meta = _read_image_metadata(dest)
     if meta is None:
@@ -620,6 +627,8 @@ def _append_upload_item(dest: Path, items: List[Dict[str, Any]]) -> bool:
         "mtime": stat.st_mtime,
         "size": stat.st_size,
         "thumb_b64": thumb_b64,
+        "source_kind": source_kind,
+        "sidecar_capability": "cache_only",
     })
     return True
 
@@ -638,6 +647,9 @@ async def upload_files_for_dataset(files, *, recursive: bool = True) -> Dict[str
     for upload_file in files:
         filename = upload_file.filename or "unknown.png"
         ext = Path(filename).suffix.lower()
+
+        if ext == ".rar":
+            raise ValueError("RAR archives are not supported. Extract the RAR to a folder or convert it to ZIP, then import again.")
 
         if ext == ".zip":
             archive_dir = upload_dir / f"{_safe_uploaded_name(Path(filename).stem, 'archive')}_{uuid.uuid4().hex[:8]}"
@@ -671,7 +683,7 @@ async def upload_files_for_dataset(files, *, recursive: bool = True) -> Dict[str
                             counter += 1
                         with zf.open(member) as src, dest.open("wb") as out:
                             shutil.copyfileobj(src, out, length=1024 * 1024)
-                        if not _append_upload_item(dest, items):
+                        if not _append_upload_item(dest, items, source_kind="zip_extract"):
                             skipped += 1
             except zipfile.BadZipFile:
                 skipped += 1
@@ -698,7 +710,7 @@ async def upload_files_for_dataset(files, *, recursive: bool = True) -> Dict[str
             content = await upload_file.read()
             dest.write_bytes(content)
 
-        if not _append_upload_item(dest, items):
+        if not _append_upload_item(dest, items, source_kind="uploaded_file"):
             skipped += 1
 
     if not items:

@@ -665,14 +665,25 @@
         setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
+    DM._showAuditModal = function () {
+        const modal = $('dataset-audit-modal');
+        if (modal) modal.hidden = false;
+    };
+
+    DM._hideAuditModal = function () {
+        const modal = $('dataset-audit-modal');
+        if (modal) modal.hidden = true;
+    };
+
     function bindAudit() {
         $('btn-dataset-audit-run')?.addEventListener('click', runAudit);
         $('btn-dataset-audit-download')?.addEventListener('click', downloadReport);
         $('btn-dataset-import-audit')?.addEventListener('click', () => {
-            const panel = $('dataset-audit-inline');
-            if (panel) panel.open = true;
+            DM._showAuditModal?.();
             runAudit();
         });
+        $('btn-dataset-audit-close')?.addEventListener('click', () => DM._hideAuditModal?.());
+        $('dataset-audit-modal')?.querySelector?.('.dataset-modal-backdrop')?.addEventListener('click', () => DM._hideAuditModal?.());
         document.querySelectorAll('[data-audit-dim-preset]').forEach((btn) => {
             btn.addEventListener('click', () => {
                 const input = $('dataset-audit-dim-min');
@@ -980,8 +991,9 @@
         const trigger = (document.getElementById('dataset-trigger')?.value || '').trim();
         const preset = (document.querySelector('input[name="dataset-naming-preset"]:checked')?.value) || 'keep';
         const ext = extensionForDatasetId((DM.imageIds || [])[0]);
+        const outputMode = DM._outputMode?.() || 'folder';
         let stem;
-        if (preset === 'keep') {
+        if (outputMode === 'beside_image' || preset === 'keep') {
             stem = 'your_image_name';
         } else if (preset === 'renumber') {
             stem = `${(trigger || 'your_lora_trigger')}_001`;
@@ -1071,6 +1083,7 @@
         const trigger = (document.getElementById('dataset-trigger')?.value || '').trim();
         const preset = (document.querySelector('input[name="dataset-naming-preset"]:checked')?.value) || 'keep';
         const pattern = (document.getElementById('dataset-naming-pattern')?.value || '{trigger}_{index:03d}');
+        const outputMode = DM._outputMode?.() || 'folder';
         const items = DM.imageIds || [];
         const logicalCount = DM._getLogicalDatasetCount?.() || items.length;
         if (logicalCount === 0) {
@@ -1248,6 +1261,7 @@
         try {
             const payload = DM._buildExportPayload ? DM._buildExportPayload() : null;
             if (payload) {
+                payload.output_mode = outputMode;
                 payload.limit = 72;
                 const r = await fetch('/api/dataset/export-preview', {
                     method: 'POST',
@@ -1279,7 +1293,7 @@
             const meta = DM.meta?.get?.(id) || {};
             const sourceBase = meta.filename ? meta.filename.replace(/\.[^.]+$/, '') : `image_${index + 1}`;
             const ext = extensionForDatasetId(id);
-            if (preset === 'keep') return { stem: sourceBase, ext, sourceBase };
+            if (outputMode === 'beside_image' || preset === 'keep') return { stem: sourceBase, ext, sourceBase };
             if (preset === 'renumber') {
                 return { stem: `${trigger || 'subject'}_${String(index + 1).padStart(3, '0')}`, ext, sourceBase };
             }
@@ -1323,7 +1337,9 @@
 
         const summary = document.createElement('div');
         summary.className = 'dataset-export-preview-summary';
-        const modeLabel = preset === 'keep'
+        const modeLabel = outputMode === 'beside_image'
+            ? (DM._t?.('dataset.outputModeBesideShort', 'Beside originals') || 'Beside originals')
+            : preset === 'keep'
             ? (DM._t?.('dataset.namingKeepLabel', 'Keep original filenames') || 'Keep original filenames')
             : preset === 'renumber'
                 ? (DM._t?.('dataset.namingRenumberShort', 'Renumber') || 'Renumber')
@@ -1498,6 +1514,12 @@
             list.hidden = true;
         }
 
+        function handleOutsideScroll(e) {
+            const target = e.target;
+            if (target === list || (target instanceof Node && list.contains(target))) return;
+            closeList();
+        }
+
         function positionList() {
             const rect = display.getBoundingClientRect();
             const gap = 4;
@@ -1546,7 +1568,7 @@
 
         document.addEventListener('click', closeList);
         window.addEventListener('resize', closeList);
-        window.addEventListener('scroll', closeList, true);
+        window.addEventListener('scroll', handleOutsideScroll, true);
 
         sel.addEventListener('change', () => {
             display.textContent = sel.options[sel.selectedIndex]?.textContent || '';

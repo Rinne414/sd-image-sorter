@@ -83,6 +83,39 @@ def test_export_default_pattern_keeps_filenames(test_client, staged_images, tmp_
     assert (out / "my (lora char).txt").exists()
 
 
+def test_gallery_beside_image_mode_writes_txt_next_to_original_without_copying(
+    test_client, staged_images
+):
+    """Gallery-sourced DB rows should support the same-name .txt beside
+    original mode. The image stays in place and only the sidecar is written.
+    """
+    image_id, original_name, image_path = staged_images[0]
+    sidecar_path = image_path.with_suffix(".txt")
+
+    response = test_client.post("/api/dataset/export", json={
+        "image_ids": [image_id],
+        "output_mode": "beside_image",
+        "output_folder": "",
+        "naming_pattern": "ignored_{index:03d}",
+        "trigger": "gallery_trigger",
+        "image_op": "copy",
+        "overwrite_policy": "overwrite",
+        "image_overrides": {str(image_id): "gallery sidecar caption"},
+        "normalize_tag_underscores": False,
+    })
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "ok", body
+    assert body["exported"] == 1
+    assert body["output_mode"] == "beside_image"
+    assert image_path.exists()
+    assert sidecar_path.read_text(encoding="utf-8") == "gallery sidecar caption"
+    assert not (image_path.parent / f"ignored_001{image_path.suffix}").exists()
+    assert body["items"][0]["dst_image_path"] is None
+    assert body["items"][0]["dst_caption_path"] == str(sidecar_path)
+
+
 def test_background_export_reports_progress_and_result(test_client, staged_images, tmp_path: Path):
     out = tmp_path / "background-out"
     out.mkdir()

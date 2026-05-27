@@ -266,6 +266,8 @@
                 size: Number(item.size || existing.size || 0),
                 scan_index: Number.isFinite(scanIndex) ? scanIndex : existing.scan_index,
                 folder_scan_token: item.folder_scan_token || existing.folder_scan_token || '',
+                source_kind: item.source_kind || existing.source_kind || 'folder_path',
+                sidecar_capability: item.sidecar_capability || existing.sidecar_capability || 'beside_image',
             });
             if (Number(this.activeId) === Number(numericId)) touchedActive = true;
             // Restore any saved caption for this path so re-imports
@@ -280,6 +282,8 @@
         this._renderQueue();
         this._updateCount();
         this._updateExportEnabled();
+        this._syncSourceCapabilityStatus?.();
+        this._syncOutputModeUi?.();
         if (typeof this._renderImportGallery === 'function') {
             this._renderImportGallery();
         }
@@ -360,6 +364,8 @@
             meta.source = 'local';
             meta.abs_path = absPath;
             meta.ds_id = item.ds_id || meta.ds_id || '';
+            meta.source_kind = meta.source_kind || 'folder_path';
+            meta.sidecar_capability = meta.sidecar_capability || 'beside_image';
             this.localItemPaths.set(id, absPath);
             if (meta.ds_id) this.localItemDsIds.set(id, meta.ds_id);
             this.meta.set(id, meta);
@@ -572,6 +578,7 @@
         const pattern = this._effectivePattern();
         const trigger = document.getElementById('dataset-trigger')?.value || '';
         const imageOp = document.getElementById('dataset-image-op')?.value || 'copy';
+        const outputMode = this._outputMode?.() || 'folder';
         const overwrite = document.getElementById('dataset-overwrite')?.value || 'unique';
         const normalize = !!document.getElementById('dataset-underscore-to-space')?.checked;
         const contentMode = this._exportContentMode?.() || 'template';
@@ -609,10 +616,11 @@
             image_ids: galleryIds,
             image_paths: localPaths,
             dataset_scan_tokens: this._getDatasetScanTokenSources(),
-            output_folder: folder,
+            output_folder: outputMode === 'beside_image' ? '' : folder,
+            output_mode: outputMode,
             naming_pattern: pattern,
             trigger,
-            image_op: imageOp,
+            image_op: outputMode === 'beside_image' ? 'copy' : imageOp,
             overwrite_policy: overwrite,
             content_mode: contentMode,
             prefix,
@@ -807,6 +815,8 @@
 
     const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'tiff', 'tif']);
     const ARCHIVE_EXTS = new Set(['zip']);
+    const unsupportedRarFiles = (files) => Array.from(files || [])
+        .filter((f) => (f?.name || '').toLowerCase().endsWith('.rar'));
 
     function bindDropzone() {
         const dropzone = $('dataset-dropzone');
@@ -917,6 +927,12 @@
     async function handleFileList(files) {
         const imageFiles = [];
         const archiveFiles = [];
+        const rarFiles = unsupportedRarFiles(files);
+        if (rarFiles.length > 0) {
+            DM._toast(DM._t('dataset.rarUnsupported',
+                'RAR is not supported. Extract it to a folder or convert it to ZIP first.'),
+                'warning', 7000);
+        }
         for (const f of files) {
             const ext = (f.name.split('.').pop() || '').toLowerCase();
             if (IMAGE_EXTS.has(ext)) imageFiles.push(f);

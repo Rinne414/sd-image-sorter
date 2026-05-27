@@ -410,7 +410,7 @@ def test_dataset_maker_guards_session_preview_and_heavy_audit_ux():
     maker_css = (repo_root / "frontend" / "css" / "dataset-maker.css").read_text(encoding="utf-8")
 
     assert 'id="dataset-audit-check-phash" checked' not in html
-    assert ".dataset-audit-inline:not([open]) .dataset-audit-body" in css
+    assert ".dataset-audit-modal-card" in css
     assert "dataset-export-action-bar" in html
     assert "#view-dataset .dataset-export-action-bar" in maker_css
     assert "position: sticky" in maker_css
@@ -501,6 +501,131 @@ def test_dataset_folder_and_output_browse_buttons_are_real_click_buttons():
     assert "window.showFolderBrowser(pathInput)" in local_import
     assert "btn-dataset-browse-output" in dataset_js
     assert "showFolderBrowser(input)" in dataset_js
+
+
+def test_dataset_maker_sidecar_export_limits_are_visible_before_caption_work():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    local_import = (repo_root / "frontend" / "js" / "dataset-maker-local-import.js").read_text(encoding="utf-8")
+    en = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
+    zh = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
+
+    assert 'id="dataset-sidecar-import-notice"' in html
+    assert 'id="dataset-sidecar-source-status"' in html
+    assert "Gallery" in html and "folder path" in html
+    assert "Drag/drop images and ZIP are app-cache imports" in html
+    assert "RAR is not supported" in html
+    assert "dataset.sidecarNoticeTitle" in en and "dataset.sidecarNoticeTitle" in zh
+    assert "dataset.sidecarSourceStatus" in en and "dataset.sidecarSourceStatus" in zh
+    assert "unsupportedRarFiles" in local_import
+    assert "dataset.rarUnsupported" in local_import
+
+
+def test_dataset_maker_step2_owns_caption_formatting_and_translation_settings():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+
+    caption_start = html.index('data-i18n="dataset.cardCaptionTitle"')
+    find_replace_start = html.index('id="dataset-step-findreplace"', caption_start)
+    caption_block = html[caption_start:find_replace_start]
+    export_start = html.index('id="dataset-step-export"')
+    export_end = html.index('id="dataset-export-preview"', export_start)
+    export_block = html[export_start:export_end]
+
+    for marker in [
+        'id="dataset-export-prefix"',
+        'id="dataset-template-options"',
+        'id="dataset-template-override"',
+        'id="dataset-replace-rules"',
+        'id="dataset-max-tags"',
+        'id="dataset-translation-options"',
+        'id="dataset-translation-provider-mode"',
+        'id="dataset-translation-external-provider"',
+        'id="dataset-translation-prompt"',
+        'id="dataset-naming-pattern"',
+        'id="dataset-trigger"',
+    ]:
+        assert marker in caption_block
+        assert marker not in export_block
+
+    assert 'id="dataset-export-content-mode"' in html
+    assert 'type="hidden" id="dataset-export-content-mode"' in html
+    assert 'data-i18n="dataset.exportContentMode"' not in export_block
+    assert 'data-i18n="dataset.namingLegend"' not in export_block
+
+
+def test_dataset_export_tab_is_export_only_with_output_mode_payload():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    part3 = (repo_root / "frontend" / "js" / "dataset-maker-part3.js").read_text(encoding="utf-8")
+    local_import = (repo_root / "frontend" / "js" / "dataset-maker-local-import.js").read_text(encoding="utf-8")
+    pipeline = (repo_root / "frontend" / "js" / "dataset-maker-pipeline.js").read_text(encoding="utf-8")
+
+    assert 'name="dataset-output-mode"' in html
+    assert 'value="folder"' in html
+    assert 'value="beside_image"' in html
+    assert 'id="dataset-beside-image-warning"' in html
+    assert 'data-export-folder-only' in html
+    assert "DM._outputMode" in part3
+    assert "output_mode: outputMode" in part3
+    assert "output_mode: outputMode" in local_import
+    assert "_sidecarCapabilityStats" in part3
+    assert "_syncOutputModeUi" in part3
+    assert "output_mode" in pipeline
+
+
+def test_dataset_audit_is_modal_not_inline_details():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    pipeline = (repo_root / "frontend" / "js" / "dataset-maker-pipeline.js").read_text(encoding="utf-8")
+    css = (repo_root / "frontend" / "css" / "dataset-pipeline.css").read_text(encoding="utf-8")
+
+    assert '<details class="dataset-audit-inline"' not in html
+    assert 'id="dataset-audit-modal"' in html
+    assert 'dataset-audit-modal-card' in html
+    assert "DM._showAuditModal" in pipeline
+    assert "DM._hideAuditModal" in pipeline
+    assert "panel.open = true" not in pipeline
+    assert ".dataset-audit-modal-card" in css
+    assert ".dataset-audit-inline:not([open]) .dataset-audit-body" not in css
+
+
+def test_dataset_global_caption_scope_and_tag_categories_are_available():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    part2 = (repo_root / "frontend" / "js" / "dataset-maker-part2.js").read_text(encoding="utf-8")
+    part3 = (repo_root / "frontend" / "js" / "dataset-maker-part3.js").read_text(encoding="utf-8")
+    css = (repo_root / "frontend" / "css" / "dataset-maker.css").read_text(encoding="utf-8")
+
+    assert 'id="dataset-caption-scope"' in html
+    assert 'id="dataset-dedupe-scope"' not in html
+    assert "_captionScopeIds" in part3
+    assert "dataset-caption-scope" in part3
+    assert "dataset-dedupe-scope" not in part3
+    assert "_classifyTagCategory" in part2
+    assert "dataset-tag-pill-category-" in part2
+    for category in ["quality", "identity", "appearance", "poses", "copyright", "natural"]:
+        assert f"dataset-tag-pill-category-{category}" in css
+
+
+def test_dataset_custom_dropdown_does_not_close_when_its_own_list_scrolls():
+    repo_root = Path(__file__).resolve().parents[2]
+    pipeline = (repo_root / "frontend" / "js" / "dataset-maker-pipeline.js").read_text(encoding="utf-8")
+
+    assert "function handleOutsideScroll(e)" in pipeline
+    assert "list.contains(target)" in pipeline
+    assert "window.addEventListener('scroll', handleOutsideScroll, true);" in pipeline
+    assert "window.addEventListener('scroll', closeList, true);" not in pipeline
+
+
+def test_gallery_send_to_dataset_maker_button_tracks_selection_state():
+    repo_root = Path(__file__).resolve().parents[2]
+    app_source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+
+    assert "'btn-send-selection-to-dataset-maker'" in app_source
+    button_block = re.search(r"const buttonIds = \[(?P<body>.*?)\];", app_source, re.DOTALL)
+    assert button_block is not None
+    assert "'btn-send-selection-to-dataset-maker'" in button_block.group("body")
 
 
 def test_dataset_init_syncs_current_naming_preset_ui():

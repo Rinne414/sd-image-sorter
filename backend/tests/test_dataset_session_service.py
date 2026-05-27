@@ -257,9 +257,32 @@ def test_upload_files_accepts_zip_and_respects_recursive_flag(tmp_path, monkeypa
 
     flat = asyncio.run(upload_files_for_dataset([FakeUploadFile("dataset.zip", payload)], recursive=False))
     assert {item["filename"] for item in flat["items"]} == {"top.png"}
+    assert {item["source_kind"] for item in flat["items"]} == {"zip_extract"}
+    assert {item["sidecar_capability"] for item in flat["items"]} == {"cache_only"}
 
     deep = asyncio.run(upload_files_for_dataset([FakeUploadFile("dataset.zip", payload)], recursive=True))
     assert {item["filename"] for item in deep["items"]} == {"top.png", "deep.png"}
+    assert {item["source_kind"] for item in deep["items"]} == {"zip_extract"}
+    assert {item["sidecar_capability"] for item in deep["items"]} == {"cache_only"}
+
+
+def test_upload_files_marks_direct_images_as_cache_only(tmp_path, monkeypatch):
+    monkeypatch.setattr(dataset_session_module, "_UPLOAD_DIR", tmp_path / "uploads")
+
+    result = asyncio.run(upload_files_for_dataset([FakeUploadFile("loose.png", _image_bytes())]))
+
+    assert len(result["items"]) == 1
+    item = result["items"][0]
+    assert item["filename"] == "loose.png"
+    assert item["source_kind"] == "uploaded_file"
+    assert item["sidecar_capability"] == "cache_only"
+
+
+def test_upload_files_rejects_rar_with_clear_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(dataset_session_module, "_UPLOAD_DIR", tmp_path / "uploads")
+
+    with pytest.raises(ValueError, match="RAR"):
+        asyncio.run(upload_files_for_dataset([FakeUploadFile("dataset.rar", b"not really rar")]))
 
 
 def test_upload_files_does_not_truncate_zip_imports_at_preview_page_size(tmp_path, monkeypatch):

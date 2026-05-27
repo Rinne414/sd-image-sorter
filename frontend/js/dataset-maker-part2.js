@@ -255,6 +255,8 @@
         } else if (wasActive) {
             this._setActive(this.imageIds[Math.min(idx, this.imageIds.length - 1)]);
         }
+        this._syncSourceCapabilityStatus?.();
+        this._syncOutputModeUi?.();
         this._saveSession?.();
     };
 
@@ -276,6 +278,8 @@
         this._renderQueue();
         this._updateCount();
         this._updateExportEnabled();
+        this._syncSourceCapabilityStatus?.();
+        this._syncOutputModeUi?.();
         if (this.imageIds.length === 0) {
             this._renderEmptyEditor();
         } else {
@@ -1097,6 +1101,75 @@
     };
 
     // ---------- Tag pills ----------
+    const TAG_CATEGORY_ORDER_DEFAULT = ['quality', 'identity', 'appearance', 'poses', 'copyright', 'natural'];
+    const QUALITY_RE = /^(masterpiece|best[_ ]?quality|high[_ ]?quality|absurdres|highres|score_|rating[:_]|safe|sensitive|questionable|explicit)$/i;
+    const IDENTITY_RE = /(hair|eyes?|face|bangs|twintails|ponytail|braid|ahoge|skin|freckles|mole|smile|fang|ears?|tail)$/i;
+    const APPEARANCE_RE = /(shirt|skirt|dress|uniform|sleeves?|jacket|coat|pants|shorts|shoes|boots|gloves|hat|ribbon|bow|body|breasts?|thighs?|legs?|arms?|clothes?|outfit)$/i;
+    const POSE_RE = /(standing|sitting|kneeling|lying|walking|running|jumping|looking|facing|from_|pose|arms_|hand_|spread_|bent_|crouch|leaning)/i;
+    const COPYRIGHT_RE = /(copyright|series|character|touhou|pokemon|vocaloid|hatsune|miku|original|genshin|blue_archive|fate_|hololive|nijisanji|arknights|azur_lane)/i;
+
+    DM._classifyTagCategory = function (tag) {
+        const value = String(tag || '').trim();
+        const normalized = value.toLowerCase().replace(/\s+/g, '_');
+        if (!value) return 'appearance';
+        if (QUALITY_RE.test(normalized)) return 'quality';
+        if (COPYRIGHT_RE.test(normalized)) return 'copyright';
+        if (POSE_RE.test(normalized)) return 'poses';
+        if (IDENTITY_RE.test(normalized)) return 'identity';
+        if (APPEARANCE_RE.test(normalized)) return 'appearance';
+        if (/\s{2,}|[.!?;:]/.test(value) || value.split(/\s+/).length > 3) return 'natural';
+        return 'appearance';
+    };
+
+    DM._tagCategoryOrder = function () {
+        const raw = document.getElementById('dataset-tag-category-order')?.value || '';
+        const parsed = raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+        const seen = new Set();
+        const order = [];
+        for (const name of parsed) {
+            if (TAG_CATEGORY_ORDER_DEFAULT.includes(name) && !seen.has(name)) {
+                seen.add(name);
+                order.push(name);
+            }
+        }
+        for (const name of TAG_CATEGORY_ORDER_DEFAULT) {
+            if (!seen.has(name)) order.push(name);
+        }
+        return order;
+    };
+
+    DM._applyTagCategoryOrder = function () {
+        const ids = typeof this._captionScopeIds === 'function' ? this._captionScopeIds() : [Number(this.activeId)];
+        if (!ids.length) {
+            this._toast(this._t('dataset.noActiveImage', 'Select an image first.'), 'warning', 3000);
+            return;
+        }
+        const order = this._tagCategoryOrder();
+        const rank = new Map(order.map((name, idx) => [name, idx]));
+        let changed = 0;
+        for (const id of ids) {
+            const caption = this.captionEdits.has(id) ? this.captionEdits.get(id) : (this.captions.get(id) || '');
+            const parts = String(caption || '').split(',').map((s) => s.trim()).filter(Boolean);
+            if (parts.length <= 1) continue;
+            const sorted = parts
+                .map((tag, index) => ({ tag, index, category: this._classifyTagCategory(tag) }))
+                .sort((a, b) => (rank.get(a.category) ?? 99) - (rank.get(b.category) ?? 99) || a.index - b.index)
+                .map((item) => item.tag);
+            const next = sorted.join(', ');
+            if (next !== caption) {
+                this.captionEdits.set(id, next);
+                this._refreshQueueItem?.(id);
+                changed += 1;
+            }
+        }
+        if (this.activeId != null) this._setActive(this.activeId);
+        this._renderTagPills();
+        this._refreshExportPreview?.();
+        this._toast(this._t('dataset.tagCategoryOrderApplied',
+            'Reordered tags in {count} captions.', { count: changed }),
+            changed ? 'success' : 'info', 3000);
+    };
+
     DM._renderTagPills = function () {
         const section = document.getElementById('dataset-tag-pills-section');
         const wrap = document.getElementById('dataset-tag-pills-wrap');
@@ -1121,7 +1194,8 @@
         wrap.innerHTML = '';
         for (const tag of tags) {
             const pill = document.createElement('span');
-            pill.className = 'dataset-tag-pill';
+            const category = this._classifyTagCategory(tag);
+            pill.className = `dataset-tag-pill dataset-tag-pill-category-${category}`;
             const label = document.createElement('span');
             label.textContent = tag;
             const x = document.createElement('span');
@@ -1182,13 +1256,19 @@
         const replace = replaceEl.value;
         let count = 0;
         try {
-            const missing = this.imageIds
+            const scopeIds = typeof this._captionScopeIds === 'function' ? this._captionScopeIds() : this.imageIds;
+            if (!scopeIds.length) {
+                this._toast(this._t('dataset.noCaptionScopeImages',
+                    'No images match the current caption action scope.'), 'warning', 3000);
+                return;
+            }
+            const missing = scopeIds
                 .filter(id => !(this.isLocalId?.(id)))
                 .filter(id => !this.captions.has(id) && !this.captionEdits.has(id));
             if (missing.length) {
                 await this._fetchCaptionsFor(missing);
             }
-            for (const id of this.imageIds) {
+            for (const id of scopeIds) {
                 const caption = this.captionEdits.has(id)
                     ? this.captionEdits.get(id)
                     : (this.captions.get(id) || '');
@@ -1213,6 +1293,9 @@
 
     document.getElementById('btn-dataset-find-replace')
         ?.addEventListener('click', () => DM._batchFindReplace());
+
+    document.getElementById('btn-dataset-apply-tag-category-order')
+        ?.addEventListener('click', () => DM._applyTagCategoryOrder());
 
     // ---------- Caption diff indicator ----------
     DM._updateCaptionDiff = function (id) {
