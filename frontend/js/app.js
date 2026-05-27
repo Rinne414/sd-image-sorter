@@ -3663,6 +3663,13 @@ function switchView(viewName) {
         // Stop hidden-gallery thumbnail downloads from occupying the browser's
         // per-host connection pool. This keeps Dataset Maker's folder browser
         // responsive even when the gallery was still loading many thumbnails.
+        // The cached ``AppState.images`` array survives, so when the user
+        // returns to the gallery the ``Gallery.setImages`` path on line ~3729
+        // re-renders the DOM (and re-attaches img.src) from cache without a
+        // network refetch. Setting ``galleryNeedsRefresh = true`` here would
+        // force a full reload on every nav-out and break callers that
+        // explicitly DO NOT want a refresh after their action (e.g. Reader
+        // save-as-new to a path outside the indexed library).
         const galleryGrid = $('#gallery-grid');
         if (galleryGrid) {
             galleryGrid.querySelectorAll('img').forEach((img) => {
@@ -3670,7 +3677,6 @@ function switchView(viewName) {
                 img.removeAttribute('src');
             });
         }
-        AppState.galleryNeedsRefresh = true;
     }
 
     // Cleanup censor view listeners when leaving
