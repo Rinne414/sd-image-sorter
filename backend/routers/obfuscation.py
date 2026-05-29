@@ -13,7 +13,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
-from PIL import UnidentifiedImageError
+from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
@@ -273,9 +273,15 @@ async def preview_process(
         # object's address leaked into the response body. Treat as a client
         # error with a sanitized message.
         raise HTTPException(status_code=400, detail="Upload is not a recognizable image file (PNG / JPEG / WebP).")
+    except Image.DecompressionBombError as exc:
+        # Pixel count exceeds Pillow's MAX_IMAGE_PIXELS guard (decompression
+        # bomb). DecompressionBombError subclasses Exception, NOT OSError, so it
+        # must be caught explicitly or it falls through to the generic 500. The
+        # oversized upload is the caller's fault, so 413 is correct.
+        logger.warning("Obfuscate preview rejected oversized image (decompression bomb): %s", exc)
+        raise HTTPException(status_code=413, detail="Image is too large to process safely.")
     except (OSError, IOError) as exc:
-        # Truncated PNG, corrupt header, or otherwise unreadable bytes.
-        # PIL raises OSError / Image.DecompressionBombError for these. The
+        # Truncated PNG, corrupt header, or otherwise unreadable bytes. The
         # caller's input is at fault, not the server, so 400 is correct.
         logger.warning("Obfuscate preview rejected unreadable upload: %s", exc)
         raise HTTPException(status_code=400, detail="Image file is corrupt or truncated.")
