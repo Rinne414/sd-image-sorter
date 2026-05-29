@@ -156,6 +156,7 @@ def _candidate_hf_endpoints() -> List[str]:
 # mismatch (it just falls back to unverified until you pin the new digest).
 _EXPECTED_ARTIST_FILE_SHA256: Dict[str, str] = {
     "448-90.13/best_checkpoint.pth": "a86ba2fcf430cbb653ac995f7ab9cce34667434ee084973e19edf431808a32ae",
+    "class_mapping.csv": "45aa78dacd9751de1c7a7293237845072c093dc915b72f1d4b5597ea2ff92cd4",
 }
 
 
@@ -187,8 +188,8 @@ def _verify_artist_file_digest(filename: str, file_path: Path) -> None:
 def _hf_download_with_fallback(repo_id: str, filename: str, local_dir: str) -> str:
     # Downloads are verified against pinned SHA-256 digests where available
     # (_EXPECTED_ARTIST_FILE_SHA256, checked just before each tmp_path.replace).
-    # The Kaloscope checkpoint is pinned; the class mapping and the LSNet runtime
-    # zip are not yet — add their digests to that table to make them tamper-evident.
+    # The Kaloscope checkpoint and class mapping are pinned; the LSNet runtime
+    # zip is not yet — add its digest to that table to make it tamper-evident.
     override_url = _artist_override_url(filename)
     if override_url:
         destination = Path(local_dir) / filename

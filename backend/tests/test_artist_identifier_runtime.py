@@ -145,7 +145,7 @@ def test_verify_artist_file_digest_rejects_pinned_mismatch(tmp_path: Path):
 
 
 def test_verify_artist_file_digest_skips_unpinned_file(tmp_path: Path):
-    target = tmp_path / "class_mapping.csv"
+    target = tmp_path / "unpinned.bin"
     target.write_bytes(b"anything goes when no digest is pinned")
     # No pinned digest for this name -> no-op, must not raise.
-    artist_identifier._verify_artist_file_digest("class_mapping.csv", target)
+    artist_identifier._verify_artist_file_digest("unpinned.bin", target)
