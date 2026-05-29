@@ -51,47 +51,54 @@ from utils.model_names import (
 from utils.pagination_cursor import encode_image_cursor_from_image
 from metadata_storage import compact_existing_metadata_json, compact_metadata_json
 
+import db_core
+from db_core import (
+    PROMPT_MATCH_MODE_EXACT,
+    PROMPT_MATCH_MODE_CONTAINS,
+    VALID_PROMPT_MATCH_MODES,
+    _adapt_datetime_for_sqlite,
+    _tags_cache_lock,
+    _TAGS_CACHE_TTL,
+    _generators_cache_lock,
+    _invalidate_facet_caches,
+    _invalidate_tags_cache,
+    SCHEMA_VERSION_ROW_ID,
+    STALE_PENDING_METADATA_READ_ERROR,
+    get_db,
+)
+
 
 logger = logging.getLogger(__name__)
 
 
-PROMPT_MATCH_MODE_EXACT = "exact"
-PROMPT_MATCH_MODE_CONTAINS = "contains"
-VALID_PROMPT_MATCH_MODES = {PROMPT_MATCH_MODE_EXACT, PROMPT_MATCH_MODE_CONTAINS}
+# Connection state stays on the ``database`` module so the test suite can keep
+# monkeypatching ``database.DATABASE_PATH`` / ``database._pragmas_initialized``.
+# The concrete factory below is injected into db_core so every db_* module
+# shares it via ``db_core.get_db``/``db_core.get_connection`` without importing
+# ``database`` (which would create an import cycle).
+_pragmas_initialized: set = set()
+_pragmas_lock = threading.Lock()
 
 
-def _adapt_datetime_for_sqlite(value: datetime) -> str:
-    """Serialize datetimes explicitly; Python 3.12 deprecates sqlite3's default adapter."""
-    return value.isoformat(sep=" ")
+def get_connection() -> sqlite3.Connection:
+    """Get a database connection with row factory and performance optimizations."""
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout=5000")
+    # WAL mode and other persistent PRAGMAs only need to be set once per database path
+    db_path = os.path.abspath(DATABASE_PATH)
+    if db_path not in _pragmas_initialized:
+        with _pragmas_lock:
+            if db_path not in _pragmas_initialized:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA synchronous=NORMAL")
+                conn.execute("PRAGMA cache_size=-64000")  # 64MB cache
+                _pragmas_initialized.add(db_path)
+    return conn
 
 
-sqlite3.register_adapter(datetime, _adapt_datetime_for_sqlite)
-
-
-# ============== Tags Cache ==============
-_tags_cache_lock = threading.Lock()
-_tags_cache_data = None
-_tags_cache_timestamp = 0
-_TAGS_CACHE_TTL = 60  # seconds
-
-# ============== Facet Cache (generators) ==============
-_generators_cache_lock = threading.Lock()
-_generators_cache_data = None
-_generators_cache_timestamp = 0
-
-def _invalidate_facet_caches():
-    """Clear facet caches when images are added/removed/modified."""
-    global _generators_cache_data, _generators_cache_timestamp
-    with _generators_cache_lock:
-        _generators_cache_data = None
-        _generators_cache_timestamp = 0
-
-def _invalidate_tags_cache():
-    """Clear the tags cache when tags are modified."""
-    global _tags_cache_data, _tags_cache_timestamp
-    with _tags_cache_lock:
-        _tags_cache_data = None
-        _tags_cache_timestamp = 0
+db_core.set_connection_provider(get_connection)
 
 
 def _normalize_indexed_image_path(path: Optional[str]) -> str:
@@ -564,45 +571,6 @@ def _sync_image_prompt_tokens(
             "INSERT OR IGNORE INTO image_prompt_tokens (image_id, token) VALUES (?, ?)",
             (image_id, token),
         )
-
-_pragmas_initialized: set = set()
-_pragmas_lock = threading.Lock()
-SCHEMA_VERSION_ROW_ID = 1
-STALE_PENDING_METADATA_READ_ERROR = (
-    "Scan interrupted before metadata refresh completed. Re-scan the source folder to recover this row."
-)
-
-
-def get_connection() -> sqlite3.Connection:
-    """Get a database connection with row factory and performance optimizations."""
-    conn = sqlite3.connect(DATABASE_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA busy_timeout=5000")
-    # WAL mode and other persistent PRAGMAs only need to be set once per database path
-    db_path = os.path.abspath(DATABASE_PATH)
-    if db_path not in _pragmas_initialized:
-        with _pragmas_lock:
-            if db_path not in _pragmas_initialized:
-                conn.execute("PRAGMA journal_mode=WAL")
-                conn.execute("PRAGMA synchronous=NORMAL")
-                conn.execute("PRAGMA cache_size=-64000")  # 64MB cache
-                _pragmas_initialized.add(db_path)
-    return conn
-
-
-@contextmanager
-def get_db():
-    """Context manager for database connections."""
-    conn = get_connection()
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
 
 
 def _ensure_schema_version_table(conn: sqlite3.Connection) -> None:
@@ -3436,35 +3404,33 @@ def get_image_tags_map(image_ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
 
 def get_all_tags() -> List[Dict[str, Any]]:
     """Get all unique tags with their counts.
-    
+
     Uses in-memory caching with TTL to reduce database load.
     Cache is invalidated after 60 seconds or when tags are modified.
     """
-    global _tags_cache_data, _tags_cache_timestamp
-    
     current_time = time.time()
-    
+
     # Check cache
     with _tags_cache_lock:
-        if _tags_cache_data is not None and (current_time - _tags_cache_timestamp) < _TAGS_CACHE_TTL:
-            return _tags_cache_data
-    
+        if db_core._tags_cache_data is not None and (current_time - db_core._tags_cache_timestamp) < _TAGS_CACHE_TTL:
+            return db_core._tags_cache_data
+
     # Fetch from database
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT tag, COUNT(*) as count 
-            FROM tags 
-            GROUP BY tag 
+            SELECT tag, COUNT(*) as count
+            FROM tags
+            GROUP BY tag
             ORDER BY count DESC
         """)
         result = _rows_to_dicts(cursor.fetchall())
-    
+
     # Update cache
     with _tags_cache_lock:
-        _tags_cache_data = result
-        _tags_cache_timestamp = current_time
-    
+        db_core._tags_cache_data = result
+        db_core._tags_cache_timestamp = current_time
+
     return result
 
 
@@ -3646,11 +3612,10 @@ def get_all_loras(*, limit: Optional[int] = None, search_query: Optional[str] = 
 
 def get_all_generators() -> List[Dict[str, Any]]:
     """Get all generators with their counts (cached with 60s TTL)."""
-    global _generators_cache_data, _generators_cache_timestamp
     now = time.time()
     with _generators_cache_lock:
-        if _generators_cache_data is not None and (now - _generators_cache_timestamp) < _TAGS_CACHE_TTL:
-            return _generators_cache_data
+        if db_core._generators_cache_data is not None and (now - db_core._generators_cache_timestamp) < _TAGS_CACHE_TTL:
+            return db_core._generators_cache_data
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -3662,8 +3627,8 @@ def get_all_generators() -> List[Dict[str, Any]]:
         """)
         result = _rows_to_dicts(cursor.fetchall())
     with _generators_cache_lock:
-        _generators_cache_data = result
-        _generators_cache_timestamp = time.time()
+        db_core._generators_cache_data = result
+        db_core._generators_cache_timestamp = time.time()
     return result
 
 
