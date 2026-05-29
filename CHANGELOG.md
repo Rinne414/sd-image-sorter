@@ -5,6 +5,31 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.3] - 2026-05-29
+
+Maintenance / hardening release. No user-facing feature changes; focus is
+security, dependency hygiene, internal structure, and CI quality gates.
+
+维护 / 加固版本。无新使用者功能，重点是安全性、依赖卫生、内部结构与 CI 品质闸门。
+
+### Security / 安全
+- **idna bumped 3.13 → 3.17** to clear CVE-2026-45409 (CPU-DoS on crafted hostnames). An explicit `idna>=3.15` security floor was added to the lock inputs so it cannot regress.
+  - **idna 升级 3.13 → 3.17**，清除 CVE-2026-45409（恶意主机名导致的 CPU-DoS）。lockfile 加了 `idna>=3.15` 安全下限防止回退。
+- **Artist model integrity verification**: the Kaloscope checkpoint and `class_mapping.csv` are now verified against pinned SHA-256 digests before use.
+  - **画师模型完整性校验**：Kaloscope checkpoint 与 `class_mapping.csv` 使用前会比对固定的 SHA-256 摘要。
+- **Decompression-bomb uploads** to the obfuscation endpoint now return HTTP 413 instead of failing late.
+  - **解压炸弹上传**在混淆端点会回传 HTTP 413，而非延后失败。
+- Additional fixes from a full-stack (backend / frontend / pipeline) security and quality review.
+  - 来自全栈（后端 / 前端 / pipeline）安全与品质审查的其他修正。
+
+### Changed / 变更
+- **`database.py` split into focused modules** (`db_core`, `db_helpers`, `db_query`, `db_schema`, `db_images_read`, `db_images_write`, `db_tags`, `db_facets`, `db_collections`). `database.py` is now a thin re-export facade (4441 → 351 lines); the public import surface is unchanged.
+  - **`database.py` 拆分为多个聚焦模块**，`database.py` 变成薄薄的 re-export facade（4441 → 351 行），对外 import 介面不变。
+- **ruff lint is now a blocking CI gate** (`select = F, E9`). Two real undefined-name bugs and assorted dead code/unused imports were fixed as part of adopting it.
+  - **ruff lint 成为阻断式 CI 闸门**。采用时顺手修了两个真正的 undefined-name bug 与一批死码 / 未用 import。
+- The release SOP is now version-controlled under `docs/RELEASE_SOP.md`.
+  - 发布 SOP 现纳入版本控制（`docs/RELEASE_SOP.md`）。
+
 ## [3.2.2] - 2026-05-23
 
 ### Added / 新增
