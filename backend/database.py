@@ -171,6 +171,14 @@ from db_images_write import (
     mark_image_readable,
     delete_image,
 )
+from db_collections import (
+    get_collection_by_slug,
+    get_collection_item,
+    add_collection_item,
+    remove_collection_item,
+    get_favorite_source_ids,
+    get_favorites_count,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -2011,125 +2019,6 @@ def iter_untagged_image_id_chunks(chunk_size: int = 1000) -> Iterator[List[int]]
             if not rows:
                 break
             yield [int(row[0]) for row in rows]
-
-
-def get_collection_by_slug(slug: str) -> Optional[Dict[str, Any]]:
-    """Get a collection by slug."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM collections WHERE slug = ?", (slug,))
-        row = cursor.fetchone()
-        return _row_to_dict(row) if row else None
-
-
-def get_collection_item(collection_id: int, source_image_id: int) -> Optional[Dict[str, Any]]:
-    """Get a collection item by collection and source image IDs."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT * FROM collection_items WHERE collection_id = ? AND source_image_id = ?",
-            (collection_id, source_image_id)
-        )
-        row = cursor.fetchone()
-        return _row_to_dict(row) if row else None
-
-
-def add_collection_item(
-    collection_id: int,
-    source_image_id: int,
-    copied_path: str,
-    prompt: Optional[str],
-    negative_prompt: Optional[str],
-    checkpoint: Optional[str],
-    loras: Optional[str],
-    metadata_json: Optional[str],
-    created_at: Optional[datetime],
-    width: Optional[int],
-    height: Optional[int],
-    file_size: Optional[int],
-) -> int:
-    """Insert or replace a collection snapshot item."""
-    metadata_json = _compact_persisted_metadata_json(metadata_json)
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO collection_items (
-                collection_id, source_image_id, copied_path, prompt, negative_prompt,
-                checkpoint, loras, metadata_json, created_at, width, height, file_size
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(collection_id, source_image_id) DO UPDATE SET
-                copied_path = excluded.copied_path,
-                prompt = excluded.prompt,
-                negative_prompt = excluded.negative_prompt,
-                checkpoint = excluded.checkpoint,
-                loras = excluded.loras,
-                metadata_json = excluded.metadata_json,
-                created_at = excluded.created_at,
-                width = excluded.width,
-                height = excluded.height,
-                file_size = excluded.file_size,
-                added_at = CURRENT_TIMESTAMP
-            """,
-            (
-                collection_id,
-                source_image_id,
-                copied_path,
-                prompt,
-                negative_prompt,
-                checkpoint,
-                loras,
-                metadata_json,
-                created_at,
-                width,
-                height,
-                file_size,
-            )
-        )
-        return cursor.lastrowid
-
-
-def remove_collection_item(collection_id: int, source_image_id: int):
-    """Remove a collection item without deleting the copied file."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "DELETE FROM collection_items WHERE collection_id = ? AND source_image_id = ?",
-            (collection_id, source_image_id)
-        )
-
-
-def get_favorite_source_ids() -> List[int]:
-    """Get all source image IDs currently in Favorites."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT ci.source_image_id
-            FROM collection_items ci
-            INNER JOIN collections c ON c.id = ci.collection_id
-            WHERE c.slug = ?
-            """,
-            (FAVORITES_COLLECTION_SLUG,)
-        )
-        return [row[0] for row in cursor.fetchall()]
-
-
-def get_favorites_count() -> int:
-    """Get Favorites item count."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT COUNT(*)
-            FROM collection_items ci
-            INNER JOIN collections c ON c.id = ci.collection_id
-            WHERE c.slug = ?
-            """,
-            (FAVORITES_COLLECTION_SLUG,)
-        )
-        return cursor.fetchone()[0]
 
 
 def get_image_count() -> int:
