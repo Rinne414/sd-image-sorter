@@ -58,7 +58,7 @@ EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
         "indexed_at = CURRENT_TIMESTAMP WHERE id = ?",
     ): 1,
     (
-        "database.py",
+        "db_tags.py",
         "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, "
         "content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
     ): 1,
@@ -68,7 +68,7 @@ EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
         "content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
     ): 1,
     (
-        "database.py",
+        "db_tags.py",
         "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, ai_caption = ?, "
         "content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
     ): 1,
