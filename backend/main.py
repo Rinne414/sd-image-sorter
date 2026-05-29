@@ -534,7 +534,14 @@ def _open_path_in_file_manager(path: Path) -> bool:
     command = _build_file_manager_command(path)
     if not command:
         return False
-    subprocess.Popen(command)
+    # Detach the file-manager process's stdio so it never inherits or blocks on
+    # the server's console pipes (avoids the child holding our stdout/stderr).
+    subprocess.Popen(
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     return True
 
 

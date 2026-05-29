@@ -109,6 +109,12 @@
          * Falls back to English if the key is missing in the current language.
          * Falls back to the key itself if missing from all languages.
          *
+         * SECURITY CONTRACT: params are interpolated verbatim (String()) and are
+         * NOT HTML-escaped. Some translation values intentionally contain HTML
+         * (e.g. "<strong>{count}</strong>"). Therefore any caller that assigns
+         * t()'s result to innerHTML MUST pre-escape user-influenced params
+         * (filenames, prompts, tags, folder/naming) at the call site.
+         *
          * @param {string} key - Translation key (e.g. 'gallery.imageCount')
          * @param {Object} [params] - Interpolation parameters (e.g. { count: 42 })
          * @returns {string} Translated string

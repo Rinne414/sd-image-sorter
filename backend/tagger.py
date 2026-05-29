@@ -37,26 +37,33 @@ CUSTOM_WD14_PROFILE_MODEL = "wd-swinv2-tagger-v3"
 # Will be imported lazily
 ort = None
 hf_hub = None
+# Serializes the one-time heavy import so two concurrent first-callers don't
+# both run prepare_onnxruntime_environment() / import onnxruntime at once.
+_ensure_imports_lock = threading.Lock()
 
 
 def _ensure_imports():
     """Lazily import heavy dependencies."""
     global ort, hf_hub
-    if ort is None:
-        from runtime_env import prepare_onnxruntime_environment
+    # Fast path: both already imported, no lock needed.
+    if ort is not None and hf_hub is not None:
+        return
+    with _ensure_imports_lock:
+        if ort is None:
+            from runtime_env import prepare_onnxruntime_environment
 
-        prepare_onnxruntime_environment()
-        import onnxruntime as ort_module  # type: ignore
-        ort = ort_module
-        preload = getattr(ort, "preload_dlls", None)
-        if callable(preload):
-            try:
-                preload()
-            except Exception as exc:
-                logger.debug("onnxruntime.preload_dlls() was not usable: %s", exc)
-    if hf_hub is None:
-        import huggingface_hub as hf_module
-        hf_hub = hf_module
+            prepare_onnxruntime_environment()
+            import onnxruntime as ort_module  # type: ignore
+            ort = ort_module
+            preload = getattr(ort, "preload_dlls", None)
+            if callable(preload):
+                try:
+                    preload()
+                except Exception as exc:
+                    logger.debug("onnxruntime.preload_dlls() was not usable: %s", exc)
+        if hf_hub is None:
+            import huggingface_hub as hf_module
+            hf_hub = hf_module
 
 
 class WD14Tagger:
@@ -103,6 +110,11 @@ class WD14Tagger:
         self.rating_indices: Dict[str, int] = {}  # Map rating name to index
 
         self._loaded = False
+        # Guards load() so two concurrent callers can't double-load the ~1GB
+        # model. get_tagger() returns the instance under _tagger_lock but defers
+        # .load() to the first tag() call, which runs OUTSIDE that lock, so the
+        # idempotency check must be protected here at the instance level.
+        self._load_lock = threading.Lock()
         self._resolved_model_path: Optional[str] = None
         self._resolved_tags_path: Optional[str] = None
         self._input_name: Optional[str] = None
@@ -653,10 +665,21 @@ class WD14Tagger:
         return "unknown"
     
     def load(self):
-        """Load the model and tags."""
+        """Load the model and tags. Idempotent and thread-safe.
+
+        Double-checked locking: the common already-loaded case returns without
+        taking the lock; the slow path serializes the one-time init so two
+        concurrent first-callers can't both load the model.
+        """
         if self._loaded:
             return
+        with self._load_lock:
+            if self._loaded:
+                return
+            self._load_locked()
 
+    def _load_locked(self):
+        """Perform the one-time model + tag load. Caller must hold _load_lock."""
         model_path, tags_path = self._get_model_paths()
         self._resolved_model_path = model_path
         self._resolved_tags_path = tags_path

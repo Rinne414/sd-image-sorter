@@ -34,7 +34,7 @@
             if (typeof window.showToast === 'function') {
                 window.showToast(msg, level, durationMs);
             } else {
-                console.log(`[dataset] ${level}: ${msg}`);
+                (window.Logger?.info || console.log)(`[dataset] ${level}: ${msg}`);
             }
         },
         _setPipelineTab(tabName = 'import') {

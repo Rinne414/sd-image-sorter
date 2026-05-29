@@ -18,6 +18,7 @@ import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 from app_info import (
     APP_VERSION,
@@ -116,6 +117,118 @@ def _sha256sum(file_path: Path) -> str:
     return digest.hexdigest()
 
 
+# --- Update-channel SSRF hardening -------------------------------------------------
+# The update channel can be overridden via update-channel.json (proxy-mirror
+# feature) so users behind GitHub-blocking networks can still self-update. That
+# override is attacker-influenceable if the config file is tampered with, so we
+# refuse to fetch from arbitrary hosts: direct channel URLs must point at GitHub,
+# and the opt-in proxy-prefix mirror must be https and must NOT resolve to an
+# internal / loopback / link-local target. Invalid overrides are ignored and we
+# fall back to the built-in GitHub channel instead of crashing.
+_GITHUB_HOST_SUFFIXES = (
+    "github.com",
+    "api.github.com",
+    "codeload.github.com",
+    "objects.githubusercontent.com",
+    "raw.githubusercontent.com",
+    ".githubusercontent.com",
+)
+_INTERNAL_HOST_SUFFIXES = (
+    ".internal",
+    ".local",
+)
+_INTERNAL_HOST_EXACT = (
+    "localhost",
+    "ip6-localhost",
+    "ip6-loopback",
+)
+_INTERNAL_HOST_PREFIXES = (
+    "127.",
+    "10.",
+    "192.168.",
+    "169.254.",
+    "0.",
+)
+
+
+def _host_from_url(url: str) -> str:
+    try:
+        return (urlsplit(url).hostname or "").strip().lower()
+    except ValueError:
+        return ""
+
+
+def _host_is_github(host: str) -> bool:
+    if not host:
+        return False
+    for suffix in _GITHUB_HOST_SUFFIXES:
+        base = suffix.lstrip(".")
+        # Require an exact host match or a real subdomain boundary ("." + base).
+        # A bare host.endswith(base) would also accept attacker-registrable
+        # lookalikes such as "evilgithub.com" (ends with "github.com").
+        if host == base or host.endswith("." + base):
+            return True
+    return False
+
+
+def _host_is_internal(host: str) -> bool:
+    """Reject loopback, RFC1918, link-local, and internal-only hostnames."""
+    if not host:
+        # An empty / unparseable host is treated as unsafe.
+        return True
+    bracketless = host.strip("[]")
+    if bracketless in _INTERNAL_HOST_EXACT:
+        return True
+    # IPv6 loopback / link-local (fe80::/10) / unique-local (fc00::/7). Scope
+    # these prefixes to actual IPv6 literals so hostnames like "fdn.example.com"
+    # are not misclassified as internal.
+    if ":" in bracketless:
+        if bracketless in {"::1", "::"} or bracketless.startswith(("fe80:", "fc", "fd")):
+            return True
+    if any(bracketless == suffix.lstrip(".") or bracketless.endswith(suffix) for suffix in _INTERNAL_HOST_SUFFIXES):
+        return True
+    if any(bracketless.startswith(prefix) for prefix in _INTERNAL_HOST_PREFIXES):
+        return True
+    # 172.16.0.0 – 172.31.255.255 (private range) needs a numeric second octet check.
+    if bracketless.startswith("172."):
+        parts = bracketless.split(".")
+        if len(parts) >= 2 and parts[1].isdigit() and 16 <= int(parts[1]) <= 31:
+            return True
+    return False
+
+
+def _is_safe_proxy_prefix(prefix: str) -> bool:
+    """A proxy/mirror prefix must be https and must not target an internal host."""
+    normalized = str(prefix or "").strip()
+    if not normalized.lower().startswith("https://"):
+        return False
+    return not _host_is_internal(_host_from_url(normalized))
+
+
+def _is_safe_channel_url(url: str) -> bool:
+    """Validate an api_url / web_url channel override.
+
+    Accepts either a direct https GitHub URL, or a proxy-mirror form where a
+    GitHub URL is appended after an https proxy prefix (e.g.
+    ``https://mirror.example/https://github.com/...``). The proxy host itself
+    must not be internal/loopback.
+    """
+    normalized = str(url or "").strip()
+    if not normalized.lower().startswith("https://"):
+        return False
+    if _host_is_github(_host_from_url(normalized)):
+        return True
+    # Proxy-mirror form: an embedded https GitHub URL after the proxy prefix.
+    embedded_index = normalized.find("https://", len("https://"))
+    if embedded_index != -1:
+        embedded = normalized[embedded_index:]
+        if _host_is_github(_host_from_url(embedded)) and not _host_is_internal(
+            _host_from_url(normalized)
+        ):
+            return True
+    return False
+
+
 class UpdateService:
     """Check for, download, and stage package-local application updates."""
 
@@ -156,7 +269,51 @@ class UpdateService:
         except Exception as exc:
             logger.warning("Failed to read update channel override: %s", exc)
             return {}
-        return payload if isinstance(payload, dict) else {}
+        if not isinstance(payload, dict):
+            return {}
+        return self._sanitize_channel_override(payload)
+
+    def _sanitize_channel_override(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Drop any override URL that fails the SSRF host allowlist.
+
+        Reading the override file is a trust boundary: a tampered config must
+        never be able to redirect update fetches at an internal/loopback host
+        or a non-GitHub origin. Invalid fields are dropped with a warning so we
+        fall back to the built-in GitHub channel instead of crashing.
+        """
+        sanitized: dict[str, Any] = {}
+        if "channel_name" in payload:
+            sanitized["channel_name"] = payload.get("channel_name")
+
+        api_url = str(payload.get("api_url") or "").strip()
+        if api_url:
+            if _is_safe_channel_url(api_url):
+                sanitized["api_url"] = api_url
+            else:
+                logger.warning("Ignoring update channel override api_url (failed SSRF allowlist): %s", api_url)
+
+        web_url = str(payload.get("web_url") or "").strip()
+        if web_url:
+            # web_url is only ever opened in the user's browser, but keep it on
+            # the same allowlist so the displayed channel stays consistent.
+            if _is_safe_channel_url(web_url):
+                sanitized["web_url"] = web_url
+            else:
+                logger.warning("Ignoring update channel override web_url (failed SSRF allowlist): %s", web_url)
+
+        if "download_url_prefix" in payload:
+            prefix = str(payload.get("download_url_prefix") or "").strip()
+            if not prefix:
+                # An explicit empty prefix means "no mirror"; keep it as-is.
+                sanitized["download_url_prefix"] = prefix
+            elif _is_safe_proxy_prefix(prefix):
+                sanitized["download_url_prefix"] = prefix
+            else:
+                logger.warning(
+                    "Ignoring update channel override download_url_prefix (failed SSRF allowlist): %s",
+                    prefix,
+                )
+        return sanitized
 
     def _channel_state(self) -> dict[str, Any]:
         base = self._base_channel_state()
@@ -409,10 +566,16 @@ class UpdateService:
         normalized = str(proxy_prefix or "").strip()
         if not normalized:
             return self.reset_channel_settings()
-        if not normalized.startswith(("http://", "https://")):
-            raise RuntimeError("Update proxy prefix must start with http:// or https://")
+        # SSRF guard: the proxy-mirror prefix must be https and must not point
+        # at an internal/loopback target before we persist it as a channel.
+        if not normalized.lower().startswith("https://"):
+            raise RuntimeError("Update proxy prefix must start with https://")
         if not normalized.endswith(("/", "=", "?", "&")) and "?" not in normalized:
             normalized = normalized + "/"
+        if not _is_safe_proxy_prefix(normalized):
+            raise RuntimeError(
+                "Update proxy prefix must be https and must not target an internal or loopback host"
+            )
 
         base = self._base_channel_state()
         payload = {
@@ -421,6 +584,10 @@ class UpdateService:
             "web_url": f"{normalized}{base['web_url']}",
             "download_url_prefix": normalized,
         }
+        # Re-validate the composed URLs so a hostile base channel value cannot
+        # smuggle a non-GitHub / internal target past the prefix check.
+        if not _is_safe_channel_url(payload["api_url"]):
+            raise RuntimeError("Resulting update channel api_url failed the SSRF allowlist")
 
         path = self._channel_config_path()
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -456,6 +623,18 @@ class UpdateService:
         expected_sha256 = self._resolve_asset_sha256(asset)
         if not name or not url:
             raise RuntimeError("Release does not include a downloadable update asset")
+        # The GitHub asset name is used verbatim as the on-disk archive filename;
+        # reject anything that is not a single path component so a hostile name
+        # (e.g. "../run.bat" or "a/b") cannot escape the downloads directory.
+        if Path(name).name != name or ".." in name or "/" in name or "\\" in name:
+            raise RuntimeError(f"Refusing to download update asset with unsafe name: {name}")
+        # Integrity is mandatory: without a verified SHA-256 we have no way to
+        # know the downloaded archive is the one the maintainer published, so we
+        # refuse to apply it rather than silently skipping the check.
+        if not expected_sha256:
+            raise RuntimeError(
+                f"Refusing to apply update asset without a verified SHA-256 checksum: {name}"
+            )
 
         target_dir = self._downloads_dir() / _safe_version_text(version)
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -463,7 +642,7 @@ class UpdateService:
 
         if archive_path.exists() and archive_path.stat().st_size > 0:
             size_matches = size_bytes <= 0 or archive_path.stat().st_size == size_bytes
-            hash_matches = not expected_sha256 or _sha256sum(archive_path) == expected_sha256
+            hash_matches = _sha256sum(archive_path) == expected_sha256
             if size_matches and hash_matches:
                 self._validate_archive(archive_path)
                 return archive_path
@@ -482,14 +661,15 @@ class UpdateService:
                     handle.write(chunk)
                     digest.update(chunk)
             actual_sha256 = digest.hexdigest()
-            if expected_sha256 and actual_sha256 != expected_sha256:
+            if actual_sha256 != expected_sha256:
                 raise RuntimeError(
                     f"Downloaded update checksum mismatch: expected {expected_sha256}, got {actual_sha256}"
                 )
             temp_path.replace(archive_path)
         finally:
-            if temp_path.exists():
-                temp_path.unlink()
+            # temp_path.replace() removes the temp file on success, so guard the
+            # cleanup against the file already being gone (Windows raises here).
+            temp_path.unlink(missing_ok=True)
 
         if size_bytes > 0 and archive_path.stat().st_size != size_bytes:
             raise RuntimeError(

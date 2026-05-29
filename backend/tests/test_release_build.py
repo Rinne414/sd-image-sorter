@@ -1038,8 +1038,11 @@ def test_release_ci_keeps_security_audit_and_windows_linux_guardrails():
     assert "frontend js syntax" in run_ci
     assert "--check" in run_ci
     assert "FRONTEND_JS_FILES" in run_ci
-    assert "--no-deps" in security_check
-    assert "--disable-pip" in security_check
+    # The dependency audit now scans the full resolved tree (no --no-deps flag)
+    # and is blocking, with reviewed advisories explicitly allowlisted in source.
+    assert "--ignore-vuln" in security_check
+    assert "IGNORED_VULN_IDS" in security_check
+    assert "non_blocking_checks: set[str] = set()" in run_ci
     assert "ubuntu-latest" in workflow
     assert "windows-latest" in workflow
     assert "macos-latest" in workflow

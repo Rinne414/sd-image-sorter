@@ -2,6 +2,7 @@
 import json
 import logging
 import platform
+import shutil
 import subprocess
 import threading
 import time
@@ -31,10 +32,15 @@ def invalidate_system_info_cache() -> None:
 
 def _nvidia_smi_probe() -> List[Dict[str, Any]]:
     """Query nvidia-smi for per-GPU name + true VRAM. Returns [] if unavailable."""
+    # Prefer the absolute path via PATH lookup (so we don't execute an
+    # attacker-planted "nvidia-smi" from the CWD, which Windows resolves before
+    # PATH), but fall back to the bare name so GPU detection still works in
+    # unusual PATH/packaging setups.
+    nvidia_smi = shutil.which("nvidia-smi") or "nvidia-smi"
     try:
         raw = subprocess.check_output(
             [
-                "nvidia-smi",
+                nvidia_smi,
                 "--query-gpu=name,memory.total,memory.free",
                 "--format=csv,noheader,nounits",
             ],
@@ -97,6 +103,12 @@ def _detect_windows_gpu_devices() -> List[Dict[str, Any]]:
         ]
         raw = subprocess.check_output(command, text=True, timeout=10).strip()
         if not raw:
+            return []
+        # Guard against a pathologically large JSON blob (e.g. a wedged or
+        # spoofed PowerShell output) before handing it to the parser. A real
+        # video-controller list is a few KB; 256 KB is already absurdly large.
+        if len(raw) > 256_000:
+            logger.debug("Windows GPU enumeration output too large (%d bytes); skipping", len(raw))
             return []
 
         parsed = json.loads(raw)

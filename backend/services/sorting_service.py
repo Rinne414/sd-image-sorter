@@ -1115,25 +1115,30 @@ class SortingService:
                 def progress_cb(current, total, filename, details=None):
                     now = time.time()
                     details = details or {}
+                    # Read shared scan state through a single locked snapshot. The route
+                    # handler reads/writes self._scan_progress under self._scan_lock via
+                    # get_scan_progress(); reading the dict directly here would be a data
+                    # race. One snapshot also gives a consistent view across all fields.
+                    prev_progress = self.get_scan_progress()
                     last_error = details.get("last_error") if isinstance(details, dict) else None
                     phase = details.get("phase") if isinstance(details, dict) else None
-                    library_ready = bool(details.get("library_ready", self._scan_progress.get("library_ready", False))) if isinstance(details, dict) else self._scan_progress.get("library_ready", False)
-                    metadata_processed = int(details.get("metadata_processed", self._scan_progress.get("metadata_processed", 0)) or 0) if isinstance(details, dict) else int(self._scan_progress.get("metadata_processed", 0) or 0)
-                    metadata_total = int(details.get("metadata_total", self._scan_progress.get("metadata_total", 0)) or 0) if isinstance(details, dict) else int(self._scan_progress.get("metadata_total", 0) or 0)
-                    metadata_total_final = bool(details.get("metadata_total_final", self._scan_progress.get("metadata_total_final", False))) if isinstance(details, dict) else bool(self._scan_progress.get("metadata_total_final", False))
-                    total_final = bool(details.get("total_final", self._scan_progress.get("total_final", False))) if isinstance(details, dict) else bool(self._scan_progress.get("total_final", False))
-                    counted = int(details.get("counted", self._scan_progress.get("counted", 0)) or 0) if isinstance(details, dict) else int(self._scan_progress.get("counted", 0) or 0)
+                    library_ready = bool(details.get("library_ready", prev_progress.get("library_ready", False))) if isinstance(details, dict) else prev_progress.get("library_ready", False)
+                    metadata_processed = int(details.get("metadata_processed", prev_progress.get("metadata_processed", 0)) or 0) if isinstance(details, dict) else int(prev_progress.get("metadata_processed", 0) or 0)
+                    metadata_total = int(details.get("metadata_total", prev_progress.get("metadata_total", 0)) or 0) if isinstance(details, dict) else int(prev_progress.get("metadata_total", 0) or 0)
+                    metadata_total_final = bool(details.get("metadata_total_final", prev_progress.get("metadata_total_final", False))) if isinstance(details, dict) else bool(prev_progress.get("metadata_total_final", False))
+                    total_final = bool(details.get("total_final", prev_progress.get("total_final", False))) if isinstance(details, dict) else bool(prev_progress.get("total_final", False))
+                    counted = int(details.get("counted", prev_progress.get("counted", 0)) or 0) if isinstance(details, dict) else int(prev_progress.get("counted", 0) or 0)
                     import_processed = int(details.get("import_processed", current) or 0) if isinstance(details, dict) else int(current or 0)
                     import_total = int(details.get("import_total", total) or 0) if isinstance(details, dict) else int(total or 0)
-                    import_complete = bool(details.get("import_complete", self._scan_progress.get("import_complete", False))) if isinstance(details, dict) else bool(self._scan_progress.get("import_complete", False))
-                    metadata_pending = int(details.get("metadata_pending", self._scan_progress.get("metadata_pending", 0)) or 0) if isinstance(details, dict) else int(self._scan_progress.get("metadata_pending", 0) or 0)
+                    import_complete = bool(details.get("import_complete", prev_progress.get("import_complete", False))) if isinstance(details, dict) else bool(prev_progress.get("import_complete", False))
+                    metadata_pending = int(details.get("metadata_pending", prev_progress.get("metadata_pending", 0)) or 0) if isinstance(details, dict) else int(prev_progress.get("metadata_pending", 0) or 0)
                     state_current = import_processed
                     state_total = import_total or total
                     message = f"Processing: {filename}" if filename else "Scanning files..."
                     current_item = filename or None
                     step = "importing"
                     status = "running"
-                    removed_count = details.get("removed", self._scan_progress.get("removed", 0)) if isinstance(details, dict) else self._scan_progress.get("removed", 0)
+                    removed_count = details.get("removed", prev_progress.get("removed", 0)) if isinstance(details, dict) else prev_progress.get("removed", 0)
 
                     if phase == "counting":
                         state_current = counted or current
@@ -1204,7 +1209,7 @@ class SortingService:
                         total_final=total_final,
                         import_complete=import_complete,
                         step=step,
-                        errors=details.get("errors", self._scan_progress.get("errors", 0)) if isinstance(details, dict) else self._scan_progress.get("errors", 0),
+                        errors=details.get("errors", prev_progress.get("errors", 0)) if isinstance(details, dict) else prev_progress.get("errors", 0),
                         removed=removed_count,
                         library_ready=library_ready,
                         quick_import=request.quick_import,

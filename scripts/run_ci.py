@@ -214,10 +214,14 @@ def main() -> int:
     ]
 
     # Checks that are allowed to fail without blocking the CI pipeline.
-    # The security audit reports upstream CVEs in torch/transformers/idna
-    # that we cannot fix by upgrading (breaking changes in AI runtimes).
-    # It still runs and prints warnings, but does not block the release.
-    non_blocking_checks = {"dependency security audit"}
+    #
+    # The dependency security audit is now BLOCKING: scripts/security_check.py
+    # scans the full resolved dependency tree and explicitly allowlists the
+    # advisories we have reviewed and accepted (IGNORED_VULN_IDS). Any NEW,
+    # un-reviewed advisory will fail CI on purpose. To accept a new advisory,
+    # add its id to IGNORED_VULN_IDS with a documented rationale; do not move the
+    # audit back to non-blocking.
+    non_blocking_checks: set[str] = set()
 
     all_ok = True
     for name, command, cwd in checks:

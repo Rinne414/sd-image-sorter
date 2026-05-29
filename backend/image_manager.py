@@ -5,6 +5,7 @@ import logging
 import os
 import shutil
 import time
+import itertools
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, ThreadPoolExecutor, wait
 from typing import List, Dict, Any, Optional, Callable, Iterator
 from datetime import datetime
@@ -1510,17 +1511,29 @@ def batch_move(
     return result
 
 
-def get_folder_stats(folder_path: str) -> Dict[str, Any]:
-    """Get statistics about a folder's images."""
+def get_folder_stats(folder_path: str, max_files: Optional[int] = None) -> Dict[str, Any]:
+    """Get statistics about a folder's images.
+
+    Args:
+        folder_path: Folder to walk recursively.
+        max_files: Optional cap on the number of entries visited from rglob.
+            None (default) preserves the original unbounded walk. When set, the
+            walk is bounded via itertools.islice so an enormous tree cannot block
+            indefinitely.
+    """
     folder = Path(folder_path)
-    
+
     stats: Dict[str, Any] = {
         "total_files": 0,
         "total_size": 0,
         "by_extension": {}
     }
-    
-    for file_path in folder.rglob("*"):
+
+    entries: Iterator[Path] = folder.rglob("*")
+    if max_files is not None:
+        entries = itertools.islice(entries, max_files)
+
+    for file_path in entries:
         if file_path.is_symlink():
             continue
         if file_path.is_file():
@@ -1529,5 +1542,5 @@ def get_folder_stats(folder_path: str) -> Dict[str, Any]:
                 stats["total_files"] += 1
                 stats["total_size"] += file_path.stat().st_size
                 stats["by_extension"][ext] = stats["by_extension"].get(ext, 0) + 1
-    
+
     return stats

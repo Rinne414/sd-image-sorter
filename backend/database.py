@@ -351,8 +351,7 @@ def extract_lora_names(loras_json: str, prompt: str) -> set:
                     if normalized and len(normalized) > 2:
                         loras.add(normalized)
         except (json.JSONDecodeError, TypeError) as e:
-            # Invalid JSON format, skip
-            pass
+            logger.debug("Skipping unparseable loras_json in extract_lora_names: %s", e)
     
     # Extract from prompt (format: <lora:name:weight>)
     if prompt:
@@ -1107,7 +1106,7 @@ def get_missing_image_reconnect_candidates(limit: Optional[int] = None) -> List[
     """Return image rows whose stored source path no longer resolves on disk."""
     from utils.source_paths import resolve_existing_indexed_image_path
 
-    query = f"SELECT {_IMAGE_COLUMNS_BARE} FROM images ORDER BY id"
+    query = f"SELECT {_RECONNECT_CANDIDATE_COLUMNS} FROM images ORDER BY id"
     params: List[Any] = []
     if limit is not None:
         query += " LIMIT ?"
@@ -1117,14 +1116,16 @@ def get_missing_image_reconnect_candidates(limit: Optional[int] = None) -> List[
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(query, params)
-        rows = _rows_to_dicts(cursor.fetchall())
-
-    for row in rows:
-        source_path = row.get("path") or ""
-        resolved_path = resolve_existing_indexed_image_path(source_path, backend_file=__file__)
-        if resolved_path:
-            continue
-        candidates.append(row)
+        while True:
+            rows = cursor.fetchmany(1000)
+            if not rows:
+                break
+            for row in _rows_to_dicts(rows):
+                source_path = row.get("path") or ""
+                resolved_path = resolve_existing_indexed_image_path(source_path, backend_file=__file__)
+                if resolved_path:
+                    continue
+                candidates.append(row)
 
     return candidates
 
@@ -1225,16 +1226,24 @@ def delete_images_by_ids(image_ids: List[int]) -> int:
 
 def delete_images_by_paths(paths: List[str]) -> int:
     """Delete image rows by absolute file path."""
-    clause, params = _path_query_match_clause(paths)
-    if not clause:
+    if not paths:
         return 0
 
     removed = 0
+    # Conservative path batch size: each path can expand to several lookup
+    # candidates inside _path_query_match_clause, so keep batches small to
+    # stay well under SQLite's 999 bound-variable limit per statement.
+    batch_size = 100
 
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute(f"DELETE FROM images WHERE {clause}", params)
-        removed += cursor.rowcount or 0
+        for start in range(0, len(paths), batch_size):
+            path_batch = paths[start:start + batch_size]
+            clause, params = _path_query_match_clause(path_batch)
+            if not clause:
+                continue
+            cursor.execute(f"DELETE FROM images WHERE {clause}", params)
+            removed += cursor.rowcount or 0
 
     if removed:
         _invalidate_tags_cache()
@@ -1482,9 +1491,26 @@ _IMAGE_COLUMNS_WITH_PROMPT = _format_image_column_list(_IMAGE_COLUMNS_WITH_PROMP
 _IMAGE_COLUMNS_LIGHTWEIGHT = _format_image_column_list(_IMAGE_COLUMNS_LIGHTWEIGHT_FIELDS, alias="i")
 _IMAGE_COLUMNS_BARE = _format_image_column_list(_IMAGE_COLUMNS_BASE_FIELDS)
 
+# Minimal columns the missing-file reconnect flow consumes per candidate
+# (id/path/filename plus the size + mtime fields used by image_service
+# match logic). Kept narrow so large libraries do not load full rows.
+_RECONNECT_CANDIDATE_FIELDS = (
+    "id",
+    "path",
+    "filename",
+    "file_size",
+    "source_size",
+    "source_mtime_ns",
+    "source_file_mtime",
+)
+_RECONNECT_CANDIDATE_COLUMNS = _format_image_column_list(_RECONNECT_CANDIDATE_FIELDS)
+
 _LIBRARY_ORDER_SQL_UNQUALIFIED = "COALESCE(library_order_time, created_at)"
 _LIBRARY_ORDER_SQL = "COALESCE(i.library_order_time, i.created_at)"
 _STABLE_RANDOM_ORDER_SQL = "((i.id * 1103515245 + 12345) & 2147483647)"
+# Default ORDER BY clause; also the fallback for unknown sort keys. Defined
+# once so the fallback stays a fixed constant rather than a per-call f-string.
+_DEFAULT_ORDER_CLAUSE = f"{_LIBRARY_ORDER_SQL} DESC, i.id DESC"
 
 
 def _build_base_query(sort_by: str, select_cols: str) -> str:
@@ -2017,7 +2043,7 @@ def _get_order_clause(sort_by: str) -> str:
         SQL ORDER BY clause string
     """
     sort_options = {
-        "newest": f"{_LIBRARY_ORDER_SQL} DESC, i.id DESC",
+        "newest": _DEFAULT_ORDER_CLAUSE,
         "oldest": f"{_LIBRARY_ORDER_SQL} ASC, i.id ASC",
         "name_asc": "i.filename ASC, i.id ASC",
         "name_desc": "i.filename DESC, i.id DESC",
@@ -2044,7 +2070,7 @@ def _get_order_clause(sort_by: str) -> str:
         "brightness_skew": "COALESCE(i.brightness_skew, -999) DESC, i.id DESC",
         "brightness_skew_asc": "COALESCE(i.brightness_skew, 999) ASC, i.id ASC",
     }
-    return sort_options.get(sort_by, f"{_LIBRARY_ORDER_SQL} DESC, i.id DESC")
+    return sort_options.get(sort_by, _DEFAULT_ORDER_CLAUSE)
 
 
 def _supports_cursor_sort(sort_by: str) -> bool:
@@ -3972,10 +3998,16 @@ def get_all_image_ids() -> List[int]:
     Used by the tagging pipeline to avoid loading all image rows into
     memory at once. Callers fetch full rows in small batches.
     """
+    image_ids: List[int] = []
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM images WHERE COALESCE(is_readable, 1) = 1 ORDER BY id")
-        return [row[0] for row in cursor.fetchall()]
+        while True:
+            rows = cursor.fetchmany(1000)
+            if not rows:
+                break
+            image_ids.extend(int(row[0]) for row in rows)
+    return image_ids
 
 
 def get_untagged_image_ids() -> List[int]:
@@ -3984,10 +4016,16 @@ def get_untagged_image_ids() -> List[int]:
     Lightweight counterpart to get_untagged_images(); callers fetch
     full rows in small batches to avoid OOM on large libraries.
     """
+    image_ids: List[int] = []
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM images WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 ORDER BY id")
-        return [row[0] for row in cursor.fetchall()]
+        while True:
+            rows = cursor.fetchmany(1000)
+            if not rows:
+                break
+            image_ids.extend(int(row[0]) for row in rows)
+    return image_ids
 
 
 def count_all_image_ids() -> int:

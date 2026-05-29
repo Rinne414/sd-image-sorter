@@ -1559,7 +1559,18 @@ const PromptLab = {
             this._syncStatsLoadMore('pl-top-scored-images-more', stats.top_scored_images_total ?? (stats.top_scored_images || []).length, this.statsVisibleCounts.scoredImages);
             this._syncStatsLoadMore('pl-recipe-suggestions-more', stats.checkpoint_recipes_total ?? (stats.checkpoint_recipes || []).length, this.statsVisibleCounts.recipes);
         } catch (e) {
-            console.error('Failed to load prompt stats:', e);
+            (window.Logger?.error || console.error)('Failed to load prompt stats:', e);
+            // Surface the failure instead of leaving a silently stale/empty
+            // panel: inline note in the primary stats column + a toast.
+            const failMsg = this._t('promptlab.statsLoadFailed', 'Could not load prompt stats. Please try again.');
+            const topTagsEl = document.getElementById('pl-top-tags');
+            if (topTagsEl) {
+                topTagsEl.innerHTML = this._renderStatsEmpty(failMsg);
+            }
+            const toast = window.App?.showToast;
+            if (typeof toast === 'function') {
+                toast(typeof formatUserError === 'function' ? formatUserError(e, failMsg) : failMsg, 'error');
+            }
         }
     },
 

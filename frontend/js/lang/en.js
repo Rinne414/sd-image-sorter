@@ -935,6 +935,10 @@ window.I18nLang_en = {
     // ========================
     'promptlab.categories': 'Tag Categories',
     'promptlab.stats': 'Stats',
+    'promptlab.statsLoadFailed': 'Could not load prompt stats. Please try again.',
+    'tag.importNotJson': 'File is not valid JSON.',
+    'tag.importBadShape': 'Wrong structure: expected { images: [...] }.',
+    'models.downloadStalled': 'Download may have stalled. Check your network connection and try again.',
     'promptlab.build': 'Build',
     'promptlab.random': 'Random',
     'promptlab.totalImages': 'Total Images',

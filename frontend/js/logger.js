@@ -75,6 +75,8 @@
          */
         info: function(...args) {
             addToHistory('info', args);
+            // Intentionally not gated by DEBUG: info is the production tier for
+            // significant application events and should surface without debug mode.
             console.info('[INFO]', ...args);
         },
 

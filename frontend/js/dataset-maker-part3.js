@@ -422,6 +422,14 @@
         const preset = this._currentPreset();
         const outputMode = this._outputMode();
 
+        // Declared here (before any _t() interpolation) because _t() does NOT
+        // HTML-escape its params and the result is written via innerHTML below.
+        // User-influenced values (trigger, pattern, folder, naming) must be
+        // escaped at the source, not only when the outer label is later escaped.
+        const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({
+            '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+        }[c]));
+
         const actionLabel = outputMode === 'beside_image'
             ? this._t('dataset.confirmActionBeside', 'left in place; only .txt sidecars are written')
             : ((imageOp === 'move')
@@ -435,16 +443,12 @@
             const trigger = document.getElementById('dataset-trigger')?.value?.trim() || 'subject';
             namingLabel = this._t('dataset.namingRenumberLabel',
                 'renumbered: {trigger}_001.png, {trigger}_002.png, ...',
-                { trigger });
+                { trigger: escapeHtml(trigger) });
         } else {
             const pattern = document.getElementById('dataset-naming-pattern')?.value || '';
             namingLabel = this._t('dataset.namingCustomLabel',
-                'custom pattern: {pattern}', { pattern });
+                'custom pattern: {pattern}', { pattern: escapeHtml(pattern) });
         }
-
-        const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({
-            '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-        }[c]));
 
         const logicalCount = this._getLogicalDatasetCount?.() || this.imageIds.length;
         const loadedCount = this.imageIds.length;
@@ -524,6 +528,10 @@
                 { count: smallCount })}</span>`);
         }
 
+        // innerHTML sink: `items` is trusted markup. Every entry interpolates
+        // only numeric counts or escapeHtml()-wrapped strings (action label,
+        // folder, naming). Any new item that embeds user-influenced text MUST
+        // escapeHtml it before pushing — _t() does not escape its params.
         list.innerHTML = items.map(s => `<li>${s}</li>`).join('');
         modal.hidden = false;
     };
@@ -796,6 +804,10 @@
                 html = this._t('dataset.resultDetailFailed',
                     'No files were written. Check the error details below.');
             }
+            // innerHTML sink: `html` is trusted markup. The only user-influenced
+            // value (folder) is escapeHtml()-wrapped in every branch above and
+            // counts are numeric. _t() does not escape params, so any future
+            // param carrying user text must be escapeHtml()'d before this point.
             detailEl.innerHTML = html;
         }
         if (errorsBox && errorsList) {

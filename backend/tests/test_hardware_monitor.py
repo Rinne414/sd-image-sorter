@@ -33,7 +33,7 @@ def test_nvidia_smi_overrides_wmi_4gb_cap():
         "hardware_monitor.subprocess.check_output"
     ) as mock_check:
         def route(cmd, *args, **kwargs):
-            if cmd and cmd[0] == "nvidia-smi":
+            if cmd and "nvidia-smi" in str(cmd[0]):
                 return _fake_nvidia_smi_ok()
             if cmd and cmd[0] == "powershell":
                 return _fake_powershell_3090_capped()
@@ -236,7 +236,7 @@ def test_dual_nvidia_matches_by_name_not_index():
         "hardware_monitor.subprocess.check_output"
     ) as mock_check:
         def route(cmd, *_a, **_kw):
-            if cmd and cmd[0] == "nvidia-smi":
+            if cmd and "nvidia-smi" in str(cmd[0]):
                 return _fake_nvidia_smi_dual_ordered()
             if cmd and cmd[0] == "powershell":
                 return _fake_powershell_dual_nvidia_capped()
@@ -265,7 +265,7 @@ def test_non_nvidia_devices_do_not_receive_smi_overlay():
         "hardware_monitor.subprocess.check_output"
     ) as mock_check:
         def route(cmd, *_a, **_kw):
-            if cmd and cmd[0] == "nvidia-smi":
+            if cmd and "nvidia-smi" in str(cmd[0]):
                 # Even if a leftover NVIDIA driver responds, Intel/AMD devices must stay clean.
                 return "NVIDIA GeForce RTX 3090, 24576, 21617\n"
             if cmd and cmd[0] == "powershell":

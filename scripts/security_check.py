@@ -24,6 +24,29 @@ import venv
 from pathlib import Path
 
 
+# Accepted-vulnerability allowlist.
+#
+# pip-audit now scans the FULL resolved dependency tree (no --no-deps), so it
+# surfaces advisories in transitive/framework-pinned packages we cannot fix by
+# upgrading without breaking the AI runtime / web stack. Each entry MUST be a
+# deliberate, reviewed decision and MUST document: the package, why it cannot be
+# upgraded right now, and the residual risk for this localhost-only tool. Remove
+# an entry as soon as a compatible fixed version can be pinned.
+#
+# Curate this list before flipping the audit to blocking in run_ci.py: any newly
+# firing advisory that is NOT listed here will (correctly) fail the build.
+IGNORED_VULN_IDS: tuple[str, ...] = (
+    # idna 3.13 (transitive via anyio/httpx/requests). Fix is 3.15; the compiled
+    # lock cannot bump it in isolation yet. CVE is a CPU-DoS during decoding of a
+    # crafted hostname — not reachable from untrusted input in a loopback-only app.
+    "CVE-2026-45409",
+    # starlette 0.52.1 (pinned transitively by fastapi==0.136.1). Fix is 1.0.1,
+    # which is a breaking upgrade for the pinned FastAPI. Advisory is Host-header
+    # path injection; mitigated by the loopback-only middleware in backend/main.py.
+    "PYSEC-2026-161",
+)
+
+
 def _python_has_pip_audit(python_executable: str) -> bool:
     """Check if pip-audit is importable by the given interpreter."""
     result = subprocess.run(
@@ -98,23 +121,33 @@ def ensure_pip_audit_runner() -> str | None:
 
 
 def run_pip_audit(requirements_path: str, python_executable: str) -> int:
-    """Run pip-audit against the backend requirements file."""
-    print(f"Scanning {requirements_path} for known vulnerabilities...")
+    """Run pip-audit against the full resolved backend dependency tree.
+
+    --no-deps is intentionally omitted so transitive packages are audited too.
+    Accepted advisories are suppressed explicitly via IGNORED_VULN_IDS so the
+    allowlist is auditable in source control rather than hidden behind a flag
+    that skips the dependency graph entirely.
+    """
+    print(f"Scanning {requirements_path} (full dependency tree) for known vulnerabilities...")
+    if IGNORED_VULN_IDS:
+        print(f"Ignoring {len(IGNORED_VULN_IDS)} reviewed advisory id(s): {', '.join(IGNORED_VULN_IDS)}")
     print("-" * 60)
+
+    command = [
+        python_executable,
+        "-m",
+        "pip_audit",
+        "-r",
+        requirements_path,
+        "--progress-spinner",
+        "off",
+    ]
+    for vuln_id in IGNORED_VULN_IDS:
+        command.extend(["--ignore-vuln", vuln_id])
 
     try:
         result = subprocess.run(
-            [
-                python_executable,
-                "-m",
-                "pip_audit",
-                "-r",
-                requirements_path,
-                "--progress-spinner",
-                "off",
-                "--no-deps",
-                "--disable-pip",
-            ],
+            command,
             capture_output=False,
             text=True,
         )

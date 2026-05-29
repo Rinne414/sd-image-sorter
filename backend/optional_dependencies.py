@@ -260,8 +260,8 @@ def install_packages(packages: Sequence[str]) -> bool:
         from config import get_data_dir
         import mirror_selector
         selection = mirror_selector.select_pypi_index(data_dir=get_data_dir())
-        if selection and selection.url:
-            index_args = ["--index-url", selection.url, "--extra-index-url", "https://pypi.org/simple"]
+        if selection and selection.index_url:
+            index_args = ["--index-url", selection.index_url, "--extra-index-url", "https://pypi.org/simple"]
     except Exception:
         pass  # fall back to default PyPI
 

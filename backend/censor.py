@@ -270,8 +270,16 @@ class CensorDetector:
             if not providers:
                 providers = ['CPUExecutionProvider']
             sess_options = ort.SessionOptions()
-            sess_options.intra_op_num_threads = 2 if 'CUDAExecutionProvider' in providers else 4
-            sess_options.inter_op_num_threads = 1
+            # Adaptive thread count mirroring tagger._build_session_options:
+            # GPU sessions stay lean (the GPU does the work, CPU just feeds it),
+            # CPU sessions scale with available cores instead of a fixed cap so
+            # large-batch censoring isn't throttled on high-core machines.
+            import multiprocessing
+            cpu_count = max(1, multiprocessing.cpu_count())
+            gpu_enabled = 'CUDAExecutionProvider' in providers
+            num_threads = 2 if gpu_enabled else min(cpu_count, max(2, cpu_count // 2))
+            sess_options.intra_op_num_threads = num_threads
+            sess_options.inter_op_num_threads = max(1, num_threads // 2)
             sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
             sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
             sess_options.add_session_config_entry("session.intra_op.allow_spinning", "0")
@@ -692,12 +700,23 @@ _detector_lock = threading.Lock()
 def get_detector(model_path: Optional[str] = None) -> CensorDetector:
     """Get or create the global detector instance."""
     global _detector
-    
+
     if _detector is None or (model_path and _detector.model_path != model_path):
         with _detector_lock:
             if _detector is None or (model_path and _detector.model_path != model_path):
-                _detector = CensorDetector(model_path)
+                detector = CensorDetector(model_path)
                 if model_path:
-                    _detector.load()
-    
+                    # If load() raises, do NOT leave a half-initialized detector
+                    # cached at module scope. A cached detector with session=None
+                    # would make every later detect() fail "Model not loaded"
+                    # until process restart, because the double-checked guard
+                    # above would treat it as already-present. Only publish the
+                    # module-level _detector after a successful load.
+                    try:
+                        detector.load()
+                    except Exception:
+                        _detector = None
+                        raise
+                _detector = detector
+
     return _detector

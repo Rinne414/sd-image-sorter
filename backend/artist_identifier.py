@@ -146,6 +146,15 @@ def _candidate_hf_endpoints() -> List[str]:
 
 
 def _hf_download_with_fallback(repo_id: str, filename: str, local_dir: str) -> str:
+    # TODO(maintainer): No SHA256 verification of downloaded model files.
+    # model_download_sources.py defines only endpoint/mirror selection — there
+    # are NO expected hashes anywhere in the codebase, and inventing them here
+    # would be wrong (they would not match real upstream artifacts). To make
+    # downloads tamper-evident, the maintainer must supply expected SHA256
+    # digests for ARTIST_KALOSCOPE_CHECKPOINT / ARTIST_KALOSCOPE_CLASS_MAPPING
+    # (and the LSNet runtime zip). Once provided, verify the digest of the
+    # written temp file before tmp_path.replace(destination) and raise on
+    # mismatch.
     override_url = _artist_override_url(filename)
     if override_url:
         destination = Path(local_dir) / filename
@@ -193,6 +202,11 @@ def _download_and_extract_github_zip(zip_url: str, target_dir: Path) -> Path:
     with tempfile.TemporaryDirectory(prefix="kaloscope-runtime-") as tmp_dir:
         tmp_dir_path = Path(tmp_dir)
         zip_path = tmp_dir_path / "repo.zip"
+        # Zip-bomb risk is bounded by the extraction-phase caps below (entry
+        # count + total uncompressed bytes), which are the meaningful protection
+        # here. TODO(maintainer): if hostile-server disk exhaustion from an
+        # oversized compressed download becomes a concern, add a Content-Length
+        # precheck — without breaking the mockable urlretrieve seam.
         urllib.request.urlretrieve(zip_url, zip_path)
         extract_dir = tmp_dir_path / "extract"
         extract_dir.mkdir(parents=True, exist_ok=True)
@@ -1124,8 +1138,32 @@ class ArtistIdentifier:
                     # treat it as a trusted source.
                     try:
                         import torch
+                        # Safety-first: weights_only=True uses the restricted
+                        # unpickler and cannot execute arbitrary code. A full
+                        # state_dict-only checkpoint loads fine this way. Only if
+                        # that fails (e.g. the .pth pickles config classes outside
+                        # torch's safe-globals allowlist) do we fall back to the
+                        # legacy unsafe full unpickle, and we log a visible WARNING
+                        # because weights_only=False on an attacker-controlled file
+                        # enables arbitrary code execution during deserialization.
                         with exclusive_ai_runtime("artist-torch-load"):
-                            self._model = torch.load(path, map_location='cpu', weights_only=False)
+                            try:
+                                self._model = torch.load(
+                                    path, map_location='cpu', weights_only=True
+                                )
+                            except Exception as safe_exc:
+                                logger.warning(
+                                    "Safe load (weights_only=True) failed for artist model "
+                                    "%s: %s. Falling back to an UNSAFE full unpickle "
+                                    "(weights_only=False). This can execute arbitrary code "
+                                    "if the file is untrusted — only use artist .pth files "
+                                    "from sources you trust.",
+                                    path,
+                                    safe_exc,
+                                )
+                                self._model = torch.load(
+                                    path, map_location='cpu', weights_only=False
+                                )
                         self._model.eval()
                         self._backend = "torch-generic"
                     except Exception:

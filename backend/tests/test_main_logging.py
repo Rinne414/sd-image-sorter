@@ -141,7 +141,7 @@ def test_support_open_log_uses_configured_log_path(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "LOG_FILE_ENABLED", True)
     monkeypatch.setattr(main, "LOG_FILE_PATH", str(log_path))
     monkeypatch.setattr(main.sys, "platform", "win32")
-    monkeypatch.setattr(main.subprocess, "Popen", lambda args: calls.append(args))
+    monkeypatch.setattr(main.subprocess, "Popen", lambda args, **kwargs: calls.append(args))
 
     result = main.open_support_log_file()
 
@@ -162,7 +162,7 @@ def test_support_open_log_endpoint_returns_success(test_client, tmp_path, monkey
     monkeypatch.setattr(main, "LOG_FILE_PATH", str(log_path))
     monkeypatch.setattr(main.sys, "platform", "linux")
     monkeypatch.setattr(main.shutil, "which", lambda name: "/usr/bin/xdg-open" if name == "xdg-open" else None)
-    monkeypatch.setattr(main.subprocess, "Popen", lambda args: calls.append(args))
+    monkeypatch.setattr(main.subprocess, "Popen", lambda args, **kwargs: calls.append(args))
 
     response = test_client.post("/api/support/open-log")
 
@@ -184,7 +184,7 @@ def test_support_open_log_returns_path_when_file_manager_is_unavailable(test_cli
     monkeypatch.setattr(main, "LOG_FILE_PATH", str(log_path))
     monkeypatch.setattr(main.sys, "platform", "linux")
     monkeypatch.setattr(main.shutil, "which", lambda name: None)
-    monkeypatch.setattr(main.subprocess, "Popen", lambda args: calls.append(args))
+    monkeypatch.setattr(main.subprocess, "Popen", lambda args, **kwargs: calls.append(args))
 
     response = test_client.post("/api/support/open-log")
 

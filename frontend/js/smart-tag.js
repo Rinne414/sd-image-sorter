@@ -787,7 +787,7 @@
         if (typeof window.showToast === 'function') {
             window.showToast(message, status === 'failed' ? 'error' : 'success');
         } else {
-            console.log('[smart-tag]', message);
+            (window.Logger?.info || console.log)('[smart-tag]', message);
         }
 
         // Tell Dataset Maker to refresh its captions so the new ones show up

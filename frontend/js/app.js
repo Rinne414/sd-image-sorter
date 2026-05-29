@@ -4742,11 +4742,25 @@ function initEventListeners() {
 
         try {
             const text = await file.text();
-            const data = JSON.parse(text);
+
+            // Parse and shape-validate as separate steps so the user gets a
+            // precise reason: a syntactically broken file is reported as
+            // invalid JSON, while a well-formed file with the wrong layout
+            // is reported as a structure mismatch.
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (_parseErr) {
+                showToast(appT('tag.importNotJson', 'File is not valid JSON.'), 'error');
+                e.target.value = '';
+                return;
+            }
 
             // Validate the data structure
-            if (!data.images || !Array.isArray(data.images)) {
-                throw new Error('Invalid format: expected { images: [...] }');
+            if (!data || typeof data !== 'object' || !Array.isArray(data.images)) {
+                showToast(appT('tag.importBadShape', 'Wrong structure: expected { images: [...] }.'), 'error');
+                e.target.value = '';
+                return;
             }
 
             // Ask user about overwrite preference using custom modal
@@ -6324,6 +6338,10 @@ async function resumeScanProgress() {
 
 let _tagProgressTimer = null;
 let _tagPollingActive = false;
+// Guards the window between a startTagging() click and the backend ack.
+// _tagPollingActive only flips true AFTER the await, so without this a
+// double-click would fire two concurrent start requests.
+let _tagStartInFlight = false;
 let _tagMinimizedToBackground = false;
 let _tagLastProgressPercent = 0;
 let _tagLastProgressText = '';
@@ -6512,6 +6530,11 @@ async function exportTagLibraryJson() {
 
 async function startTagging() {
     const t = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
+    // In-flight guard: block a second start request while the first is still
+    // awaiting the backend ack (before _tagPollingActive flips true).
+    if (_tagStartInFlight || _tagPollingActive) {
+        return;
+    }
     if (!hasLoadedTaggerSystemInfo() && typeof loadSystemInfo === 'function') {
         await loadSystemInfo();
     }
@@ -6607,9 +6630,11 @@ async function startTagging() {
     }
 
     try {
+        _tagStartInFlight = true;
         await API.startTagging(options);
 
         _tagPollingActive = true;
+        _tagStartInFlight = false;
         resetTagUiProgressState();
         clearTagProgressTimer();
 
@@ -6628,6 +6653,7 @@ async function startTagging() {
         pollTagProgress();
     } catch (error) {
         _tagPollingActive = false;
+        _tagStartInFlight = false;
         clearTagProgressTimer();
         showToast(formatUserError(error, appT('tag.startFailed', 'Failed to start tagging')), 'error');
     }
@@ -6817,15 +6843,18 @@ function _initBgTagProgressButtons() {
     const cancelBtn = $('#bg-tag-cancel');
     const openBtn = $('#bg-tag-open');
     if (cancelBtn) {
-        cancelBtn.addEventListener('click', async () => {
+        // Use onclick (single handler) instead of addEventListener: this
+        // initializer can run more than once, and stacking listeners would
+        // fire multiple stop-tagging requests on a single click.
+        cancelBtn.onclick = async () => {
             await requestStopTagging();
-        });
+        };
     }
     if (openBtn) {
-        openBtn.addEventListener('click', () => {
+        openBtn.onclick = () => {
             _tagMinimizedToBackground = false;
             showModal('tag-modal');
-        });
+        };
     }
 }
 
@@ -9209,6 +9238,10 @@ async function promptBulkDownloadModels() {
 
     const messageEl = document.getElementById('confirm-message');
     if (messageEl) {
+        // innerHTML sink: callers MUST pass pre-escaped/safe HTML. `bodyHtml`
+        // is built above with escapeHtml() around every interpolated value
+        // (model labels, sizes, excluded ids, and all appT() strings); appT()
+        // does NOT escape its params, so unescaped user text here would be XSS.
         messageEl.innerHTML = bodyHtml;
         messageEl.style.maxHeight = '60vh';
         messageEl.style.overflowY = 'auto';
@@ -9512,7 +9545,9 @@ function renderModelManager(models = []) {
 
             let finished = false;
             let pollCount = 0;
+            let pollErrorStreak = 0;
             const MAX_POLL_COUNT = 300; // ~4 minutes at 800ms intervals
+            const MAX_POLL_ERROR_STREAK = 8; // ~6s of consecutive poll failures before giving up
 
             // Insert a cancel button next to the prepare button
             let cancelBtn = button.parentElement.querySelector('.btn-cancel-download');
@@ -9543,6 +9578,7 @@ function renderModelManager(models = []) {
                 }
                 try {
                     const p = await API.get('/api/models/download-progress');
+                    pollErrorStreak = 0; // a successful read clears the transient-failure streak
                     if (p?.active && p.total > 0) {
                         const pct = Math.round((p.downloaded / p.total) * 100);
                         const mb = (p.downloaded / 1048576).toFixed(0);
@@ -9592,7 +9628,21 @@ function renderModelManager(models = []) {
                             return;
                         }
                     }
-                } catch (_pollErr) {}
+                } catch (_pollErr) {
+                    // A single poll failure is usually transient (server busy
+                    // mid-download). Re-arm below, but bail out after a streak
+                    // of consecutive failures so the button can't hang forever
+                    // in "Working..." when the backend is truly gone.
+                    pollErrorStreak++;
+                    if (pollErrorStreak >= MAX_POLL_ERROR_STREAK && !finished) {
+                        finished = true;
+                        cancelBtn.style.display = 'none';
+                        showToast(appT('models.downloadStalled', 'Download may have stalled. Check your network connection and try again.'), 'warning');
+                        button.disabled = false;
+                        button.textContent = originalLabel;
+                        return;
+                    }
+                }
                 if (!finished) {
                     setTimeout(pollProgress, 800);
                 }

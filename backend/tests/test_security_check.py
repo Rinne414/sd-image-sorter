@@ -15,7 +15,7 @@ def _load_security_check():
     return module
 
 
-def test_run_pip_audit_uses_locked_requirements_without_dependency_resolution(monkeypatch):
+def test_run_pip_audit_scans_full_tree_with_ignore_vuln_allowlist(monkeypatch):
     security_check = _load_security_check()
     calls: list[list[str]] = []
 
@@ -27,7 +27,7 @@ def test_run_pip_audit_uses_locked_requirements_without_dependency_resolution(mo
 
     assert security_check.run_pip_audit("backend/requirements.txt", "/tmp/python") == 0
 
-    assert calls == [[
+    expected_command = [
         "/tmp/python",
         "-m",
         "pip_audit",
@@ -35,9 +35,13 @@ def test_run_pip_audit_uses_locked_requirements_without_dependency_resolution(mo
         "backend/requirements.txt",
         "--progress-spinner",
         "off",
-        "--no-deps",
-        "--disable-pip",
-    ]]
+    ]
+    for vuln_id in security_check.IGNORED_VULN_IDS:
+        expected_command.extend(["--ignore-vuln", vuln_id])
+
+    assert calls == [expected_command]
+    # The full resolved tree must be audited, so --no-deps must NOT be present.
+    assert "--no-deps" not in calls[0]
 
 
 def test_ensure_pip_audit_runner_reuses_current_interpreter_when_available(monkeypatch):

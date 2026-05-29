@@ -19,6 +19,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 import database as db_module
 
 
+# Whitelist of allowed collection sort keys to their fixed ORDER BY clauses.
+# The ORDER BY fragment is interpolated into SQL, so it MUST come only from
+# this constant mapping and never from raw caller input.
+_COLLECTION_SORT_OPTIONS: Dict[str, str] = {
+    "newest": "created_at DESC",
+    "oldest": "created_at ASC",
+    "name_asc": "name ASC",
+    "name_desc": "name DESC",
+}
+_DEFAULT_COLLECTION_ORDER = "created_at DESC"
+
+
 class CollectionRepository(CollectionRepositoryBase):
     """Concrete implementation of CollectionRepositoryBase.
 
@@ -90,21 +102,14 @@ class CollectionRepository(CollectionRepositoryBase):
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
-            # Validate sort_by parameter
-            valid_sort_options = ['newest', 'oldest', 'name_asc', 'name_desc']
-            if sort_by not in valid_sort_options:
+            # Validate sort_by against the whitelist before interpolating it.
+            if sort_by not in _COLLECTION_SORT_OPTIONS:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Invalid sort_by value: '{sort_by}'. Must be one of: {', '.join(valid_sort_options)}"
+                    detail=f"Invalid sort_by value: '{sort_by}'. Must be one of: {', '.join(_COLLECTION_SORT_OPTIONS)}"
                 )
-            
-            order_clause = "created_at DESC"
-            if sort_by == "oldest":
-                order_clause = "created_at ASC"
-            elif sort_by == "name_asc":
-                order_clause = "name ASC"
-            elif sort_by == "name_desc":
-                order_clause = "name DESC"
+
+            order_clause = _COLLECTION_SORT_OPTIONS.get(sort_by, _DEFAULT_COLLECTION_ORDER)
 
             cursor.execute(
                 f"SELECT * FROM collections ORDER BY {order_clause} LIMIT ? OFFSET ?",
