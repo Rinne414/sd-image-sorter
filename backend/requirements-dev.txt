@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file=backend/requirements-dev.txt backend/requirements-dev.in
 #
-# lock-input-sha256: 4875f78176db41557a07270080b5088d249ccebd81e1ad5bef9d7e04f965ed10
+# lock-input-sha256: dc3a68db7ef37e1f0ca898440a0786284e18f412c3a1319dbc75e4ca1d9f7610
 #
 aiofiles==25.1.0
     # via -r backend/requirements.txt
@@ -437,6 +437,8 @@ rich==15.0.0
     # via
     #   -r backend/requirements.txt
     #   typer
+ruff==0.15.15
+    # via -r backend/requirements-dev.in
 safetensors==0.7.0
     # via
     #   -r backend/requirements.txt

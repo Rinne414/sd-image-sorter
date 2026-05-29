@@ -183,6 +183,17 @@ def main() -> int:
             ROOT,
         ),
         (
+            "ruff lint",
+            [
+                str(BACKEND_PYTHON),
+                "-m",
+                "ruff",
+                "check",
+                "backend",
+            ],
+            ROOT,
+        ),
+        (
             "backend full suite",
             [
                 str(BACKEND_PYTHON),

@@ -1,0 +1,22 @@
+# Tooling-only config. No [project]/[build-system] tables: this repo is not a
+# packaged distribution, so this file exists solely to configure ruff.
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+# Signal-heavy, low-noise gate. Pyflakes (F) catches real defects: unused
+# imports/variables, undefined names, and f-string mistakes. E9 catches syntax
+# errors. Pure-style pycodestyle rules (E4/E5/E7) are intentionally left out so
+# the gate flags bugs, not formatting opinions, on this pre-existing codebase.
+select = ["F", "E9"]
+
+[tool.ruff.lint.per-file-ignores]
+# database.py is a pure re-export facade (split out of the old monolith in the
+# refactor(db) series). Its imports exist to expose the public surface, so they
+# are intentionally "unused" inside the module itself.
+"backend/database.py" = ["F401"]
+# Test bodies routinely bind a call result for readability/debugging even when
+# the value is not asserted on; F841 stays enforced for production code (where
+# a dead binding is a real smell) but is relaxed inside the test suite.
+"backend/tests/**" = ["F841"]
