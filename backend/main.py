@@ -23,8 +23,11 @@ import zlib
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from collections import defaultdict, deque
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from contextlib import asynccontextmanager
+
+if TYPE_CHECKING:
+    from tagger import WD14Tagger
 
 # Add current dir to path for imports
 sys.path.insert(0, os.path.dirname(__file__))
@@ -130,7 +133,6 @@ from routers import images, tags, sorting, censor, prompts, similarity, artists,
 # Import services
 from services import (
     ImageService,
-    TaggingService,
     SortingService,
     CensorService,
     SimilarityService,

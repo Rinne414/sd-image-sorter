@@ -13,7 +13,6 @@ import pytest
 import mirror_selector
 import model_download_sources
 from mirror_selector import (
-    MirrorSelection,
     PYPI_CANDIDATES,
     PYPI_OFFICIAL,
     TORCH_CUDA_CANDIDATES,

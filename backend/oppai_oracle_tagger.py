@@ -25,7 +25,6 @@ import csv
 import logging
 import os
 import threading
-import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
@@ -37,7 +36,6 @@ if TYPE_CHECKING:  # pragma: no cover - type-only
 
 from config import (
     TAGGER_MODELS,
-    RATING_CATEGORIES,
     get_oppai_oracle_model_dir,
 )
 from ai_runtime_guard import exclusive_ai_runtime

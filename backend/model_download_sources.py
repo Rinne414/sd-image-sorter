@@ -118,9 +118,6 @@ def apply_hf_endpoint_monkeypatch(endpoint: str, *, purpose: str = "") -> str:
         import huggingface_hub.hf_api as hf_api  # type: ignore
 
         if not getattr(huggingface_hub, "_sd_image_sorter_endpoint_patch", False):
-            original_model_info = huggingface_hub.model_info
-            original_list_repo_tree = huggingface_hub.list_repo_tree
-
             def model_info_with_endpoint(*args, **kwargs):
                 kwargs.pop("endpoint", None)
                 return hf_api.HfApi(endpoint=os.environ.get("HF_ENDPOINT") or HF_OFFICIAL_ENDPOINT).model_info(

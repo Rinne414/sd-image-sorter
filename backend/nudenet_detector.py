@@ -9,7 +9,7 @@ Requires: pip install nudenet
 import logging
 import os
 import threading
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from PIL import Image
 from config import get_nudenet_model_dir

@@ -11,11 +11,8 @@ import os
 import sys
 import json
 import tempfile
-import shutil
 from pathlib import Path
-from typing import Generator, Dict, Any, List
-from datetime import datetime
-from unittest.mock import patch, MagicMock
+from typing import Generator, Dict
 
 import pytest
 from fastapi.testclient import TestClient
@@ -253,7 +250,6 @@ def test_client(test_db):
 
         from main import app
         # Initialize services for testing
-        import main
         from services import ImageService, TaggingService, SortingService, CensorService, SimilarityService
         from routers import images, tags, sorting, censor, similarity
 

@@ -23,8 +23,6 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-import sys
-from pathlib import Path
 
 from migrations._schema_common import table_exists
 

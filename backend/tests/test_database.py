@@ -9,13 +9,10 @@ Tests for SQLite database layer including:
 
 Priority: CRITICAL (SQL injection), HIGH (filtering logic)
 """
-import os
 import sys
 import json
-import tempfile
 from pathlib import Path
 from datetime import datetime
-from unittest.mock import patch
 
 import pytest
 

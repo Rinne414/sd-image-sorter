@@ -5,15 +5,9 @@ Tests HTTP error codes, error message formats, and edge cases.
 
 Priority: CRITICAL
 """
-import os
 import sys
-import json
-import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
 
-import pytest
-from fastapi.testclient import TestClient
 
 # Add parent directories to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))

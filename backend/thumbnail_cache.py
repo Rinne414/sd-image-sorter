@@ -11,7 +11,6 @@ import secrets
 import threading
 import time
 from datetime import datetime, timezone
-from email.utils import format_datetime
 from pathlib import Path
 import asyncio
 from typing import Optional, Tuple

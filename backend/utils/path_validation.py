@@ -10,11 +10,11 @@ from typing import Optional, Tuple
 from urllib.parse import unquote
 
 from config import (
-    ALLOWED_IMAGE_EXTENSIONS,
-    ALLOWED_MODEL_EXTENSIONS,
     MAX_PATH_DEPTH,
     MAX_PATH_LENGTH,
     MAX_FILENAME_LENGTH,
+    ALLOWED_IMAGE_EXTENSIONS,  # noqa: F401  re-exported for image_service/sorting/etc.
+    ALLOWED_MODEL_EXTENSIONS,  # noqa: F401  re-exported for model/download consumers
 )
 
 

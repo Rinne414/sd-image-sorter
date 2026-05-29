@@ -17,7 +17,6 @@ import sqlite3
 import os
 import logging
 import threading
-import time
 from datetime import datetime
 from contextlib import contextmanager
 from typing import Callable, Optional

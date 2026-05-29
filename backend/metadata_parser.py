@@ -16,7 +16,6 @@ import re
 import struct
 from typing import Optional, Dict, Any, Tuple, List, Set
 from PIL import Image
-from PIL.PngImagePlugin import PngInfo
 import os
 from pathlib import Path
 import zlib
@@ -517,12 +516,12 @@ class MetadataParser:
                 # Try to serialize, skip if not possible
                 json.dumps({key: value})
                 result[key] = value
-            except (TypeError, ValueError) as e:
+            except (TypeError, ValueError):
                 # Convert bytes to string - serialization failed
                 if isinstance(value, bytes):
                     try:
                         result[key] = value.decode('utf-8', errors='replace')
-                    except Exception as e:
+                    except Exception:
                         result[key] = str(value)
                 else:
                     result[key] = str(value)
@@ -3417,7 +3416,6 @@ class MetadataParser:
     def _classify_comfyui_asset_candidate(self, key_path: str, class_type: str, asset_name: str) -> Optional[str]:
         """Guess asset type from input semantics instead of node-name whitelists."""
         leaf_key = key_path.split(".")[-1].lower()
-        key_path_lower = key_path.lower()
         class_type_lower = class_type.lower()
 
         if leaf_key in self.COMFYUI_MODEL_KEY_TYPES:
@@ -4236,7 +4234,7 @@ class MetadataParser:
                             metadata[tag_name] = str(value)
                     else:
                         metadata[tag_name] = value
-        except Exception as e:
+        except Exception:
             # Non-critical, some images don't have EXIF IFD
             pass
         return metadata

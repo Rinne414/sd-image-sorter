@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from migrations import _schema_common as schema_common
 
 
 _MIGRATION_PATH = (

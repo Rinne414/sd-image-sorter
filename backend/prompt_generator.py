@@ -9,7 +9,6 @@ from typing import Dict, List, Optional, Set, Tuple, Any
 
 from tag_rules import (
     categorize_tag,
-    categorize_tags_batch,
     get_exclusion_targets,
     BUILTIN_TAG_SETS,
     BUILTIN_EXCLUSION_RULES,

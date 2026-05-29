@@ -32,7 +32,6 @@ from metadata_parser import parse_image, verify_image_readable
 from services.indexed_file_mutation_service import save_and_reconcile_checked
 from services.tag_export_service import extract_generation_params
 from thumbnail_cache import (
-    get_thumbnail,
     get_thumbnail_async,
     generate_placeholder_thumbnail,
     clear_cache as clear_thumbnail_cache,

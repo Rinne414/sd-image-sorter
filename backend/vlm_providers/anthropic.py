@@ -9,7 +9,6 @@ import httpx
 
 from vlm_providers.base import (
     ProviderError,
-    VLMConfig,
     VLMProvider,
     VLMResult,
     encode_image_base64,

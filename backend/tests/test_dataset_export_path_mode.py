@@ -12,7 +12,6 @@ The export must:
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -81,7 +80,6 @@ def test_path_mode_export_works_without_db_rows(test_client, test_db, folder_wit
         assert p.exists(), f"source removed despite copy mode: {p}"
 
     # MAIN DB INVARIANT: no rows for any of these paths
-    import database as db
     list_resp = test_client.get("/api/images?limit=100").json()
     db_rows = list_resp.get("images") or []
     bad_db_rows = [r for r in db_rows if str(folder) in str(r.get("path", ""))]

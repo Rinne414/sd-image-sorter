@@ -17,11 +17,10 @@ import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app_info import APP_VERSION
 from config import TAGGER_MODELS, get_artist_model_dir, get_sam3_model_dir, get_toriigate_model_dir, get_wd14_model_dir, get_yolo_model_dir
-from model_download_sources import endpoint_label, get_hf_endpoint_order
 from model_health import get_model_health, get_sam3_checkpoint_path
 from optional_dependencies import DependencyInstallResult, ensure_group, ensure_group_with_soft_deps
 

@@ -11,9 +11,7 @@ Usage:
         mock_artist_identifier,
     )
 """
-import os
 import sys
-import json
 import numpy as np
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple

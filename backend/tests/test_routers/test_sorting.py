@@ -14,15 +14,12 @@ import asyncio
 import os
 import sys
 import json
-import tempfile
-import shutil
 from pathlib import Path
 from datetime import datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 from fastapi import BackgroundTasks
-from fastapi.testclient import TestClient
 
 # Add parent directories to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -344,7 +341,6 @@ class TestScan:
         """
         import logging
         import threading
-        import time
         from fastapi import BackgroundTasks
         from services import sorting_service as sorting_service_module
         from services.sorting_service import ScanRequest

@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-import shutil
 import pytest
 from PIL import Image
 
@@ -133,7 +132,7 @@ def test_folder_mode_sidecar_preserves_special_chars(test_client, test_db, sandb
             })
 
     assert not mismatches, (
-        f"sidecar filenames don't match image filenames:\n"
+        "sidecar filenames don't match image filenames:\n"
         + "\n".join(f"  image='{m['image']}' expected='{m['expected_txt']}'" for m in mismatches)
     )
 

@@ -639,7 +639,7 @@ class CensorService:
             model_type = request.model_type
 
             if model_type == "sam3":
-                from sam3_refiner import get_sam3_refiner, SAM3_PRIVACY_PROMPTS
+                from sam3_refiner import get_sam3_refiner
                 sam3_health = get_model_health()["censor"]["sam3"]
                 if not sam3_health["available"]:
                     raise HTTPException(status_code=503, detail=sam3_health.get("message", "SAM3 is not available"))

@@ -26,9 +26,7 @@ from __future__ import annotations
 
 import io
 import zipfile
-from pathlib import Path
 
-import pytest
 
 
 def _multipart_upload(client, path: str, file_name: str, file_bytes: bytes,

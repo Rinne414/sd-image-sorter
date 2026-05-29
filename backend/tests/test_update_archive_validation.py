@@ -18,7 +18,6 @@ code on the user's machine. So we test:
 """
 from __future__ import annotations
 
-import io
 import json
 import zipfile
 from pathlib import Path

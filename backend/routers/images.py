@@ -5,14 +5,12 @@ Handles image retrieval, filtering, and file serving.
 Refactored to use Service Layer pattern with dependency injection.
 """
 import logging
-import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Optional, Any, List
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path as FastAPIPath, Query, UploadFile, File
-from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 
 from config import get_temp_dir

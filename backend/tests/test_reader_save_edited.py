@@ -11,10 +11,8 @@ Bug 16 (LOW): The endpoint accepted format="" and silently fell
 """
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
-import pytest
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 

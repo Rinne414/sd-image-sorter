@@ -14,9 +14,8 @@ from typing import (
     Dict,
     Any,
     Protocol,
-    dataclass_transform,
 )
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 import sqlite3
 

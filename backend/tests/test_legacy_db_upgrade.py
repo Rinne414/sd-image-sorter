@@ -23,7 +23,6 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-import pytest
 
 
 def _build_v0_legacy_db(path: Path) -> sqlite3.Connection:

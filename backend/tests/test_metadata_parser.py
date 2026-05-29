@@ -14,10 +14,8 @@ import os
 import struct
 import sys
 import json
-import tempfile
 import zlib
 from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -25,7 +23,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import metadata_parser as metadata_parser_module
-from metadata_parser import MetadataParser, parse_image
+from metadata_parser import parse_image
 
 
 def _write_comfyui_prompt_png(tmp_path: Path, filename: str, workflow: dict, color: str = "white") -> Path:

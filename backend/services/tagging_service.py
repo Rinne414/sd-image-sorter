@@ -1933,7 +1933,6 @@ class TaggingService:
                 ratings = cursor.fetchall()
 
                 if len(ratings) > 1:
-                    keep_id = ratings[0]['id']
                     remove_ids = [r['id'] for r in ratings[1:]]
 
                     placeholders = ",".join("?" * len(remove_ids))

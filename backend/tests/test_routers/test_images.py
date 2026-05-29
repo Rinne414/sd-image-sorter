@@ -13,13 +13,11 @@ import os
 import sys
 import json
 import base64
-import tempfile
 from pathlib import Path
 from datetime import datetime
 from unittest.mock import patch, MagicMock
 
 import pytest
-from fastapi.testclient import TestClient
 from PIL import Image
 from utils.pagination_cursor import decode_image_cursor
 

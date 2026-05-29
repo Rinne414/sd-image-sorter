@@ -4,7 +4,6 @@ LAION Aesthetic Predictor integration.
 Uses CLIP ViT-L/14 embeddings + a tiny linear head trained on human aesthetic ratings.
 Outputs a score from ~1 to ~10. Model downloads automatically on first use (~400MB).
 """
-import os
 import logging
 import threading
 from typing import Optional

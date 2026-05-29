@@ -8,7 +8,7 @@ import csv
 import logging
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 

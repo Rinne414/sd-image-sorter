@@ -11,11 +11,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from vlm_providers.base import (
-    OUTPUT_FORMAT_NL,
-    OUTPUT_FORMAT_TAGS,
-    OUTPUT_FORMAT_BOTH,
     ProviderError,
-    VLMConfig,
     VLMProvider,
     VLMResult,
     encode_image_base64,

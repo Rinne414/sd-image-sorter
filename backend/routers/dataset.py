@@ -16,7 +16,6 @@ import io
 import importlib
 import json
 import os
-import tempfile
 import threading
 import asyncio
 from datetime import datetime, timezone
@@ -963,7 +962,7 @@ async def _translate_translators_web(
     translator_name = _TRANSLATORS_PROVIDER_ALIASES.get(provider, provider)
     try:
         import translators as ts  # type: ignore[import-untyped]
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         try:
             from optional_dependencies import UnsafeDependencyInstallError, ensure_group
             install_result = ensure_group("translation")

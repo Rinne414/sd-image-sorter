@@ -5,7 +5,7 @@ Handles business logic for image embedding, similarity search, and duplicate det
 """
 from typing import Optional, List
 
-from fastapi import HTTPException, UploadFile, File, Query, BackgroundTasks
+from fastapi import HTTPException, UploadFile, BackgroundTasks
 from starlette.concurrency import run_in_threadpool
 
 import database as db

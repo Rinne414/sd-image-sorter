@@ -8,9 +8,7 @@ Priority: CRITICAL
 """
 import os
 import sys
-import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -26,7 +24,6 @@ from utils.path_validation import (
     validate_output_path,
     validate_image_output_path,
     ALLOWED_IMAGE_EXTENSIONS,
-    ALLOWED_MODEL_EXTENSIONS,
     MAX_PATH_DEPTH,
     MAX_PATH_LENGTH,
 )

@@ -11,7 +11,7 @@ Refactored to use Service Layer pattern with dependency injection.
 """
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, UploadFile, Query
+from fastapi import APIRouter, Depends, Query
 from starlette.concurrency import run_in_threadpool
 
 from services.service_provider import ServiceProvider

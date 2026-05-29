@@ -4,7 +4,6 @@ Supports automatic model download from HuggingFace and local model loading.
 """
 import csv
 import gc
-import io
 import os
 import json
 import logging
@@ -16,7 +15,6 @@ from typing import List, Dict, Any, Optional, Tuple, TYPE_CHECKING, Literal, ove
 if TYPE_CHECKING:
     import onnxruntime as ort  # type: ignore
 from PIL import Image
-from pathlib import Path
 
 from config import (
     TAGGER_MODELS as MODELS,
@@ -24,7 +22,6 @@ from config import (
     TAGGER_GENERAL_THRESHOLD,
     TAGGER_CHARACTER_THRESHOLD,
     TAGGER_USE_GPU,
-    RATING_CATEGORIES as RATINGS,
     get_wd14_model_dir,
 )
 from ai_runtime_guard import exclusive_ai_runtime
@@ -341,7 +338,7 @@ class WD14Tagger:
 
                 # Validate after download
                 if not self._validate_model_file(model_path):
-                    raise ValueError(f"Downloaded model file is invalid. Please check your internet connection and try again.")
+                    raise ValueError("Downloaded model file is invalid. Please check your internet connection and try again.")
             except Exception as e:
                 logger.error(f"Error downloading model: {e}")
                 raise

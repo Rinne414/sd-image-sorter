@@ -20,11 +20,9 @@ anime images.
 """
 from __future__ import annotations
 
-import os
 import sys
 import csv
 from pathlib import Path
-from typing import List
 
 import numpy as np
 import pytest

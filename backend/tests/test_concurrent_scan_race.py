@@ -28,7 +28,6 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-import pytest
 
 
 def _build_sandbox_dir(tmp_path: Path) -> Path:
@@ -54,7 +53,7 @@ def test_concurrent_scan_starts_only_one_succeeds(test_client, test_db, tmp_path
         try:
             resp = test_client.post("/api/scan", json=body)
             results.append((label, resp.status_code))
-        except Exception as exc:
+        except Exception:
             results.append((label, -1))
 
     threads = [threading.Thread(target=fire, args=(f"caller-{i}",)) for i in range(3)]
@@ -106,7 +105,6 @@ def test_second_scan_after_first_finishes_is_allowed(test_client, test_db, tmp_p
 def test_starting_state_blocks_concurrent_start(test_client, test_db, tmp_path: Path, monkeypatch):
     """If status is artificially stuck at 'starting', subsequent calls must
     get 409 (in-progress) not 200 (silent overlap)."""
-    from services.service_provider import ServiceProvider
     from routers.sorting import _sorting_service_provider
 
     svc = _sorting_service_provider.get()

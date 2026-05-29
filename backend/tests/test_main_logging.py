@@ -85,7 +85,6 @@ def test_log_file_defaults_are_bounded():
 
 
 def test_support_diagnostics_redacts_log_paths_and_tails_existing_log(tmp_path, monkeypatch):
-    import importlib
     import config
     import main
 

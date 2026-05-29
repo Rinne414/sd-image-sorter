@@ -12,16 +12,13 @@ Tests:
 
 Priority: HIGH
 """
-import os
 import sys
 import json
-import tempfile
 import queue
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
-from fastapi.testclient import TestClient
 
 # Add parent directories to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))

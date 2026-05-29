@@ -7,7 +7,7 @@ import threading
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
-from exceptions import ImageFileNotFoundError, ImageNotFoundError, ServiceError
+from exceptions import ImageNotFoundError, ServiceError
 from services.aesthetic_service import AestheticService
 from services.service_provider import ServiceProvider
 
@@ -99,7 +99,7 @@ def score_all_images(
         return {"status": "already_running", **service.get_scoring_progress()}
 
     try:
-        from aesthetic import predict_score, is_available
+        from aesthetic import is_available
         if not is_available():
             raise HTTPException(status_code=503, detail="Aesthetic predictor dependencies not installed")
     except (ImportError, OSError) as exc:

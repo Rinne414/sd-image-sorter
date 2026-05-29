@@ -30,7 +30,7 @@ from database import (
 from image_fingerprint import compute_image_content_fingerprint
 from metadata_storage import compact_existing_metadata_json, compact_metadata_json
 from metadata_parser import PARSED_METADATA_VERSION, parse_image
-from exceptions import ScanError, ScanCancelledError, FileOperationError, ImageNotFoundError
+from exceptions import ScanError, ScanCancelledError, FileOperationError
 from utils.path_validation import validate_folder_path
 from utils.source_paths import normalize_indexed_image_path, resolve_existing_indexed_image_path
 

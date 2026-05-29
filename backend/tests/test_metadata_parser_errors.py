@@ -8,10 +8,8 @@ Priority: CRITICAL
 import os
 import sys
 import json
-import tempfile
 import zlib
 from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 import pytest
 

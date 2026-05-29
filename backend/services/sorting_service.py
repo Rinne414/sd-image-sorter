@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 
-from fastapi import HTTPException, BackgroundTasks, Query
+from fastapi import HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from app_info import APP_VERSION, GITHUB_REPOSITORY_URL

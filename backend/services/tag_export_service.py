@@ -820,7 +820,7 @@ def export_tags_batch_request(
                 if len(error_messages) < 20:
                     error_messages.append(f"Error exporting sidecar for image {image_id}: {exc}")
                 elif len(error_messages) == 20:
-                    error_messages.append(f"... and more errors (total: showing first 20)")
+                    error_messages.append("... and more errors (total: showing first 20)")
 
     return {
         "exported": exported,

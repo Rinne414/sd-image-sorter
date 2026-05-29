@@ -6,8 +6,6 @@ Wraps the existing database.py functions for backward compatibility.
 """
 
 import os
-import json
-from datetime import datetime
 from typing import Optional, List, Dict, Any
 
 from .base import (

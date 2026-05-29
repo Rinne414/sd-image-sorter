@@ -4,7 +4,7 @@ Handles tag retrieval, tagging operations, import/export.
 
 Refactored to use Service Layer pattern with dependency injection.
 """
-from typing import Optional, List, Dict, Any, Callable
+from typing import Optional, Dict, Any, Callable
 
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from fastapi.responses import FileResponse

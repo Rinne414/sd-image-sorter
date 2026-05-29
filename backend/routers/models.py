@@ -11,7 +11,7 @@ import logging
 import threading
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from optional_dependencies import UnsafeDependencyInstallError

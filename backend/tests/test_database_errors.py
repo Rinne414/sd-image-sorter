@@ -8,9 +8,7 @@ Priority: CRITICAL
 import os
 import sys
 import sqlite3
-import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 import pytest
 
