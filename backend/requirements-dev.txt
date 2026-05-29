@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file=backend/requirements-dev.txt backend/requirements-dev.in
 #
-# lock-input-sha256: 2f2b717c49b52311e92ffb70ab25de2a1e023d043d8f00eac6fcf0242fbc45d1
+# lock-input-sha256: 4875f78176db41557a07270080b5088d249ccebd81e1ad5bef9d7e04f965ed10
 #
 aiofiles==25.1.0
     # via -r backend/requirements.txt
@@ -141,7 +141,7 @@ huggingface-hub==1.12.0
     #   timm
     #   tokenizers
     #   transformers
-idna==3.13
+idna==3.17
     # via
     #   -r backend/requirements.txt
     #   anyio

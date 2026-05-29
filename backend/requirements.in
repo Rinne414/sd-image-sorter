@@ -64,3 +64,6 @@ psutil>=5.9.0
 send2trash>=1.8.3
 # Security floor: urllib3 2.6.3 is flagged by pip-audit (CVE-2026-44431/44432).
 urllib3>=2.7.0
+# Security floor: idna <3.15 is flagged by pip-audit (CVE-2026-45409, CPU-DoS
+# on crafted hostnames). Transitive via anyio/httpx/requests.
+idna>=3.15

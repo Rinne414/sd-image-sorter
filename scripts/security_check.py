@@ -36,10 +36,6 @@ from pathlib import Path
 # Curate this list before flipping the audit to blocking in run_ci.py: any newly
 # firing advisory that is NOT listed here will (correctly) fail the build.
 IGNORED_VULN_IDS: tuple[str, ...] = (
-    # idna 3.13 (transitive via anyio/httpx/requests). Fix is 3.15; the compiled
-    # lock cannot bump it in isolation yet. CVE is a CPU-DoS during decoding of a
-    # crafted hostname — not reachable from untrusted input in a loopback-only app.
-    "CVE-2026-45409",
     # starlette 0.52.1 (pinned transitively by fastapi==0.136.1). Fix is 1.0.1,
     # which is a breaking upgrade for the pinned FastAPI. Advisory is Host-header
     # path injection; mitigated by the loopback-only middleware in backend/main.py.
