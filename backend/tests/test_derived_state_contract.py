@@ -40,12 +40,12 @@ SKIPPED_SOURCE_DIRS = {"tests", "venv", "__pycache__"}
 # direction is to shrink this list toward a single derived-state owner.
 EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
     (
-        "database.py",
+        "db_images_write.py",
         "UPDATE images SET content_fingerprint = NULL, embedding = NULL, "
         "tagged_at = NULL, ai_caption = NULL, aesthetic_score = NULL WHERE id = ?",
     ): 1,
     (
-        "database.py",
+        "db_images_write.py",
         "UPDATE images SET filename = ?, generator = ?, prompt = ?, negative_prompt = ?, "
         "metadata_json = ?, width = ?, height = ?, file_size = ?, checkpoint = ?, "
         "checkpoint_normalized = ?, loras = ?, model_hash = COALESCE(?, model_hash), "
@@ -61,19 +61,24 @@ EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
         "database.py",
         "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, "
         "content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
-    ): 2,
+    ): 1,
+    (
+        "db_images_write.py",
+        "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, "
+        "content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
+    ): 1,
     (
         "database.py",
         "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, ai_caption = ?, "
         "content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
     ): 1,
     (
-        "database.py",
+        "db_images_write.py",
         "UPDATE images SET tagged_at = ?, ai_caption = ?, aesthetic_score = ?, embedding = ?, "
         "content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
     ): 1,
     (
-        "database.py",
+        "db_images_write.py",
         "UPDATE images SET generator = ?, prompt = ?, negative_prompt = ?, metadata_json = ?, "
         "width = ?, height = ?, file_size = ?, checkpoint = ?, checkpoint_normalized = ?, "
         "loras = ?, model_hash = COALESCE(?, model_hash), is_readable = COALESCE(?, is_readable), "
