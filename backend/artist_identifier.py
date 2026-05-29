@@ -24,6 +24,7 @@ Usage:
 import logging
 import os
 import csv
+import hashlib
 import sys
 import threading
 import shutil
@@ -145,16 +146,49 @@ def _candidate_hf_endpoints() -> List[str]:
     return get_hf_endpoint_order(model_name="Artist ID / Kaloscope")
 
 
+# Pinned SHA-256 digests for downloaded artist model files, keyed by the exact
+# repo-relative filename (which embeds the version). A downloaded file whose
+# bytes do not match a pinned digest is rejected before it is moved into place.
+# Files with no entry here are not yet pinned and download unverified — add a
+# digest once you can vouch for the artifact. When bumping a model version, add
+# the NEW filename+digest; a stale entry simply stops applying once the version
+# in the filename changes, so a legitimate version bump never causes a false
+# mismatch (it just falls back to unverified until you pin the new digest).
+_EXPECTED_ARTIST_FILE_SHA256: Dict[str, str] = {
+    "448-90.13/best_checkpoint.pth": "a86ba2fcf430cbb653ac995f7ab9cce34667434ee084973e19edf431808a32ae",
+}
+
+
+def _sha256_file(file_path: Path) -> str:
+    digest = hashlib.sha256()
+    with file_path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _verify_artist_file_digest(filename: str, file_path: Path) -> None:
+    """Reject a freshly-downloaded artist file if its SHA-256 is pinned and wrong.
+
+    No-op for files without a pinned digest (see _EXPECTED_ARTIST_FILE_SHA256).
+    """
+    expected = _EXPECTED_ARTIST_FILE_SHA256.get(filename)
+    if not expected:
+        return
+    actual = _sha256_file(file_path)
+    if actual.lower() != expected.lower():
+        raise RuntimeError(
+            f"SHA-256 mismatch for downloaded artist file '{filename}': expected "
+            f"{expected}, got {actual}. Refusing to use a tampered or "
+            f"version-mismatched artifact."
+        )
+
+
 def _hf_download_with_fallback(repo_id: str, filename: str, local_dir: str) -> str:
-    # TODO(maintainer): No SHA256 verification of downloaded model files.
-    # model_download_sources.py defines only endpoint/mirror selection — there
-    # are NO expected hashes anywhere in the codebase, and inventing them here
-    # would be wrong (they would not match real upstream artifacts). To make
-    # downloads tamper-evident, the maintainer must supply expected SHA256
-    # digests for ARTIST_KALOSCOPE_CHECKPOINT / ARTIST_KALOSCOPE_CLASS_MAPPING
-    # (and the LSNet runtime zip). Once provided, verify the digest of the
-    # written temp file before tmp_path.replace(destination) and raise on
-    # mismatch.
+    # Downloads are verified against pinned SHA-256 digests where available
+    # (_EXPECTED_ARTIST_FILE_SHA256, checked just before each tmp_path.replace).
+    # The Kaloscope checkpoint is pinned; the class mapping and the LSNet runtime
+    # zip are not yet — add their digests to that table to make them tamper-evident.
     override_url = _artist_override_url(filename)
     if override_url:
         destination = Path(local_dir) / filename
@@ -165,6 +199,7 @@ def _hf_download_with_fallback(repo_id: str, filename: str, local_dir: str) -> s
             request = urllib.request.Request(override_url, headers={"User-Agent": "sd-image-sorter/3.2.1"})
             with urllib.request.urlopen(request, timeout=600) as src, tmp_path.open("wb") as dst:
                 shutil.copyfileobj(src, dst)
+            _verify_artist_file_digest(filename, tmp_path)
             tmp_path.replace(destination)
             return str(destination.resolve())
         except Exception:
@@ -182,6 +217,7 @@ def _hf_download_with_fallback(repo_id: str, filename: str, local_dir: str) -> s
             request = urllib.request.Request(url, headers={"User-Agent": "sd-image-sorter/3.1.1"})
             with urllib.request.urlopen(request, timeout=600) as src, tmp_path.open("wb") as dst:
                 shutil.copyfileobj(src, dst)
+            _verify_artist_file_digest(filename, tmp_path)
             tmp_path.replace(destination)
             return str(destination.resolve())
         except Exception as exc:
