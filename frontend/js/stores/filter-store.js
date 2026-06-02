@@ -44,6 +44,9 @@
             // v3.3.0 FEAT-EXCLUDE-EXTRA
             excludePrompts: [],
             excludeColors: [],
+            // v3.3.1: browse within a collection (Favorites view = favorites collection id).
+            // null = no collection constraint (normal gallery listing).
+            collectionId: null,
         };
     }
 
@@ -88,6 +91,8 @@
             // v3.3.0 FEAT-EXCLUDE-EXTRA
             excludePrompts: [...(source.excludePrompts || [])],
             excludeColors: [...(source.excludeColors || [])],
+            // v3.3.1 collection browse
+            collectionId: source.collectionId ?? null,
         };
     }
 

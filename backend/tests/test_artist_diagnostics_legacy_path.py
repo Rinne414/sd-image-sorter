@@ -111,3 +111,51 @@ def test_diagnostics_resolver_parity_with_runtime_resolver(monkeypatch, tmp_path
 
         assert runtime_resolved is not None, f"runtime resolver missed {path}"
         assert diagnostics_resolved is not None, f"diagnostics resolver missed {path}"
+
+
+def test_resolvers_skip_legacy_repo_paths_when_disable_flag_set(monkeypatch, tmp_path):
+    """With SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY=1 the repo's legacy
+    models/artist/ locations are ignored by BOTH resolvers, so a developer's
+    real checkout can't shadow the data-dir runtime (hermetic E2E isolation).
+    Production never sets the flag, so legacy installs keep resolving.
+    """
+    import artist_identifier
+    import model_health
+
+    project_root = tmp_path / "fake-project"
+    artist_root = project_root / "data" / "models" / "artist"
+    artist_root.mkdir(parents=True)
+    fake_backend = project_root / "backend"
+    fake_backend.mkdir()
+    (fake_backend / "model_health.py").write_text("# placeholder\n")
+    (fake_backend / "artist_identifier.py").write_text("# placeholder\n")
+    monkeypatch.setattr(model_health, "__file__", str(fake_backend / "model_health.py"))
+    monkeypatch.setattr(artist_identifier, "__file__", str(fake_backend / "artist_identifier.py"))
+    monkeypatch.setattr(model_health, "get_artist_model_dir", lambda: str(artist_root))
+    monkeypatch.setattr(artist_identifier, "get_artist_model_dir", lambda: str(artist_root))
+    monkeypatch.setattr(model_health, "ARTIST_LSNET_CODE_PATH", "")
+    monkeypatch.setattr(artist_identifier, "ARTIST_LSNET_CODE_PATH", "")
+
+    # Only a LEGACY repo runtime exists (no data-dir runtime yet).
+    legacy_dir = project_root / "models" / "artist" / "comfyui-lsnet-runtime"
+    (legacy_dir / "lsnet_model").mkdir(parents=True)
+    (legacy_dir / "lsnet_model" / "__init__.py").write_text("ok")
+
+    # Flag unset → legacy IS found (parity with the existing behaviour above).
+    monkeypatch.delenv("SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY", raising=False)
+    assert artist_identifier._resolve_lsnet_runtime_path() is not None
+    assert model_health._resolve_artist_runtime_path() is not None
+
+    # Flag set → legacy repo paths skipped → nothing resolves (no data-dir runtime).
+    monkeypatch.setenv("SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY", "1")
+    assert artist_identifier._resolve_lsnet_runtime_path() is None
+    assert model_health._resolve_artist_runtime_path() is None
+
+    # Flag set + a data-dir runtime present → resolves to the data-dir copy.
+    modern_dir = artist_root / "comfyui-lsnet-runtime"
+    (modern_dir / "lsnet_model").mkdir(parents=True)
+    (modern_dir / "lsnet_model" / "__init__.py").write_text("ok")
+    runtime_resolved = artist_identifier._resolve_lsnet_runtime_path()
+    diag_resolved = model_health._resolve_artist_runtime_path()
+    assert runtime_resolved is not None and "data" in runtime_resolved
+    assert diag_resolved is not None and "data" in diag_resolved

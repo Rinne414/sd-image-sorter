@@ -744,7 +744,12 @@ function _galleryHasActiveFilter() {
 
 function _applyGalleryEmptyStateVariant(emptyState) {
     if (!emptyState) return;
-    const filterActive = _galleryHasActiveFilter();
+    // v3.3.1 FEAT-COLLECTIONS: when the gallery is scoped to a collection
+    // (or Favorites), an empty result means "this collection has no images
+    // yet" — NOT "import a folder". Show a friendly, context-aware message
+    // instead of the onboarding card.
+    const browsingCollection = AppState.filters && AppState.filters.collectionId != null;
+    const filterActive = _galleryHasActiveFilter() || browsingCollection;
     emptyState.classList.toggle('empty-state-no-matches', filterActive);
     emptyState.classList.toggle('empty-state-no-library', !filterActive);
 
@@ -757,6 +762,34 @@ function _applyGalleryEmptyStateVariant(emptyState) {
     const importBtn = emptyState.querySelector('#empty-state-scan-btn');
     const onboardingSteps = emptyState.querySelector('.onboarding-steps');
     const clearFiltersBtn = emptyState.querySelector('#empty-state-clear-filters-btn');
+
+    if (browsingCollection) {
+        // Collection / Favorites empty scope.
+        const isFavorites = Boolean(window.CollectionsUI?.isFavoritesActive?.());
+        const titleKey = isFavorites ? 'collections.favoritesEmpty' : 'collections.emptyImages';
+        const titleFallback = isFavorites
+            ? 'No favorites yet'
+            : 'No images in this collection yet';
+        const hintFallback = isFavorites
+            ? 'Click the ♥ on any image to add it to Favorites.'
+            : 'Right-click an image and choose "Add to collection…" to fill this collection.';
+        if (titleEl) {
+            titleEl.setAttribute('data-i18n', titleKey);
+            titleEl.textContent = t(titleKey, titleFallback);
+        }
+        if (hintEl) {
+            const hintKey = isFavorites ? 'collections.favoritesEmptyHint' : 'collections.emptyImagesHint';
+            hintEl.setAttribute('data-i18n', hintKey);
+            hintEl.textContent = t(hintKey, hintFallback);
+        }
+        if (importBtn) importBtn.style.display = 'none';
+        if (onboardingSteps) onboardingSteps.style.display = 'none';
+        if (clearFiltersBtn) clearFiltersBtn.style.display = 'none';
+        if (window.I18n && typeof window.I18n.applyToDOM === 'function') {
+            try { window.I18n.applyToDOM(emptyState); } catch (_e) {}
+        }
+        return;
+    }
 
     if (filterActive) {
         if (titleEl) {
@@ -1148,6 +1181,8 @@ const API = {
         if (filters.excludeLoras?.length) params.set('exclude_loras', filters.excludeLoras.join(','));
         if (filters.excludePrompts?.length) params.set('exclude_prompts', filters.excludePrompts.join(','));
         if (filters.excludeColors?.length) params.set('exclude_colors', filters.excludeColors.join(','));
+        // v3.3.1: restrict to a collection (Favorites view / browse a collection).
+        if (filters.collectionId) params.set('collection_id', filters.collectionId);
 
         return this.get(`/api/images?${params}`, options);
     },
@@ -1564,7 +1599,7 @@ const API = {
     },
 
     // Manual Sort
-    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'copy', artist = null, replaceExisting = false, promptMatchMode = 'exact', tagMode = 'and', excludeFilters = null) {
+    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'copy', artist = null, replaceExisting = false, promptMatchMode = 'exact', tagMode = 'and', excludeFilters = null, collectionSlots = null) {
         return this.post('/api/sort/start', {
             generators,
             tags,
@@ -1593,6 +1628,8 @@ const API = {
             exclude_ratings: excludeFilters?.ratings || null,
             exclude_checkpoints: excludeFilters?.checkpoints || null,
             exclude_loras: excludeFilters?.loras || null,
+            // v3.3.1: per-slot collection ids ({ key: collectionId|null }).
+            collection_slots: (collectionSlots && typeof collectionSlots === 'object') ? collectionSlots : null,
         });
     },
 
@@ -1607,8 +1644,14 @@ const API = {
         return this.post(`/api/sort/action?${params}`);
     },
 
-    async setSortFolders(folders) {
-        return this.post('/api/sort/set-folders', { folders });
+    async setSortFolders(folders, collectionSlots = null) {
+        // v3.3.1: collectionSlots ({ key: collectionId|null }) lets a WASD slot
+        // target a collection by reference instead of a destination folder.
+        const payload = { folders };
+        if (collectionSlots && typeof collectionSlots === 'object') {
+            payload.collection_slots = collectionSlots;
+        }
+        return this.post('/api/sort/set-folders', payload);
     },
 
     // Batch Sidecar Export
@@ -11455,6 +11498,8 @@ document.addEventListener('DOMContentLoaded', () => {
     resumeTaggingProgress();
     // v3.3.0 FEAT-COLLECTIONS: hydrate favorite hearts once on load.
     window.Gallery?.hydrateFavorites?.();
+    // v3.3.1 FEAT-COLLECTIONS: render the sidebar Collections section.
+    window.CollectionsUI?.init?.();
     _initBgTagProgressButtons();
     _initBgScanProgressButtons();
     _initBgReconnectProgressButtons();

@@ -103,3 +103,37 @@ def test_create_collection_rejects_blank_name(test_client, test_db):
     # Pydantic min_length on a blank-after-strip name → 400/422 family.
     assert response.status_code in (400, 422)
 
+
+def test_images_filter_by_collection_id(test_client, test_db, tmp_path: Path):
+    """GET /api/images?collection_id=X returns only that collection's members (v3.3.1)."""
+    in_id = _add_image(tmp_path, "in_collection.png")
+    out_id = _add_image(tmp_path, "out_collection.png")
+    cid = test_client.post("/api/collections", json={"name": "Filter Set"}).json()["id"]
+    test_client.post(f"/api/collections/{cid}/items", json={"image_id": in_id, "member": True})
+
+    # Unfiltered listing sees both images.
+    all_ids = {img["id"] for img in test_client.get("/api/images?limit=100").json()["images"]}
+    assert {in_id, out_id} <= all_ids
+
+    # Filtered listing sees only the collection member, and composes with pagination.
+    filtered_body = test_client.get(f"/api/images?collection_id={cid}&limit=100").json()
+    assert {img["id"] for img in filtered_body["images"]} == {in_id}
+    # v3.3.1: the reported total must ALSO be collection-scoped, not the whole
+    # library (regression guard for _get_filtered_count ignoring collection_id).
+    assert filtered_body.get("total") == 1
+
+
+def test_images_filter_by_favorites_collection(test_client, test_db, tmp_path: Path):
+    """The Favorites view is just collection_id=<favorites id> (v3.3.1)."""
+    import database as db
+
+    fav_id = db.get_favorites_collection_id()
+    liked = _add_image(tmp_path, "liked.png")
+    plain = _add_image(tmp_path, "plain.png")
+    test_client.post("/api/collections/favorites", json={"image_id": liked, "favorited": True})
+
+    filtered = test_client.get(f"/api/images?collection_id={fav_id}&limit=100").json()["images"]
+    filtered_ids = {img["id"] for img in filtered}
+    assert liked in filtered_ids
+    assert plain not in filtered_ids
+

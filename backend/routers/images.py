@@ -495,6 +495,11 @@ async def get_images(
         default=None,
         description="Comma-separated color temperatures to exclude: warm/cool/neutral (v3.3.0)",
     ),
+    collection_id: Optional[int] = Query(
+        default=None,
+        ge=1,
+        description="Restrict results to images in this collection (v3.3.1). Composes with all other filters.",
+    ),
     service: ImageService = Depends(get_image_service),
 ):
     """Retrieve images with optional filtering using cursor-based pagination."""
@@ -553,6 +558,7 @@ async def get_images(
         exclude_loras=exclude_loras,
         exclude_prompts=exclude_prompts,
         exclude_colors=exclude_colors,
+        collection_id=collection_id,
     )
 
 

@@ -1086,10 +1086,52 @@ const PromptLab = {
 
     // ============== Copy ==============
 
+    // Prompt Lab -> Gallery round-trip: take the composed/active prompt and use
+    // it as the gallery's prompt filter, then switch to the Gallery view.
+    // The prompt is split on commas into individual terms (same convention as the
+    // gallery prompt-filter input), so 'exact' match mode ANDs across tags.
     usePromptInGallery() {
-        const prompt = document.getElementById('promptlab-output')?.value || this.generatedPrompt;
-        if (!prompt) return;
-        window.App.applyPromptFilter(prompt);
+        const App = window.App;
+        if (!App) return;
+
+        const raw = (document.getElementById('promptlab-output')?.value || this.generatedPrompt || '').trim();
+        if (!raw) {
+            App.showToast?.(
+                this._t('promptlab.findInGalleryEmpty', 'Build or type a prompt first, then find it in the gallery.'),
+                'info'
+            );
+            return;
+        }
+
+        const terms = [];
+        const seen = new Set();
+        for (const part of raw.split(',')) {
+            const term = part.trim();
+            if (!term) continue;
+            const key = term.toLowerCase();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            terms.push(term);
+        }
+        if (terms.length === 0) {
+            App.showToast?.(
+                this._t('promptlab.findInGalleryEmpty', 'Build or type a prompt first, then find it in the gallery.'),
+                'info'
+            );
+            return;
+        }
+
+        App.updateFilters?.((filters) => {
+            filters.prompts = terms;
+            filters.promptMatchMode = 'exact';
+        });
+        App.updateFilterSummary?.();
+        App.switchView?.('gallery');
+        App.loadImages?.();
+        App.showToast?.(
+            this._t('promptlab.findInGalleryDone', 'Gallery filtered by this prompt'),
+            'success'
+        );
     },
 
     copyPrompt() {

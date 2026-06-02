@@ -83,17 +83,25 @@ def _resolve_lsnet_runtime_path() -> Optional[str]:
         candidates.append(ARTIST_LSNET_CODE_PATH)
 
     artist_root = Path(get_artist_model_dir())
-    project_root = Path(__file__).resolve().parent.parent
     candidates.extend([
         artist_root / "comfyui-lsnet-runtime",
         artist_root / "comfyui-lsnet",
         artist_root / "lsnet-test",
-        project_root / "models" / "artist" / "comfyui-lsnet",
-        project_root / "models" / "artist" / "lsnet-test",
-        project_root / "models" / "artist" / "comfyui-lsnet-runtime",
-        project_root / "third_party" / "comfyui-lsnet",
-        project_root / "third_party" / "lsnet-test",
     ])
+    # Legacy pre-migration locations under the repo. Skipped when the env opts
+    # out of legacy model locations (the hermetic E2E harness sets
+    # SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY=1) so a developer's real
+    # models/artist/ checkout can't shadow the data-dir runtime. Production
+    # never sets the flag, so legacy installs keep resolving exactly as before.
+    if os.environ.get("SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY") != "1":
+        project_root = Path(__file__).resolve().parent.parent
+        candidates.extend([
+            project_root / "models" / "artist" / "comfyui-lsnet",
+            project_root / "models" / "artist" / "lsnet-test",
+            project_root / "models" / "artist" / "comfyui-lsnet-runtime",
+            project_root / "third_party" / "comfyui-lsnet",
+            project_root / "third_party" / "lsnet-test",
+        ])
 
     for candidate in candidates:
         candidate_path = Path(candidate).expanduser().resolve()

@@ -49,6 +49,7 @@ from db_query import (
     _apply_artist_filter,
     _apply_image_ids_filter,
     _apply_excluded_image_ids_filter,
+    _apply_collection_filter,
     _apply_readable_filter,
     _get_order_clause,
     _supports_cursor_sort,
@@ -155,6 +156,7 @@ def get_images(
     exclude_loras: Optional[List[str]] = None,
     exclude_prompts: Optional[List[str]] = None,
     exclude_colors: Optional[List[str]] = None,
+    collection_id: Optional[int] = None,
 ) ->List[Dict[str, Any]]:
     """
     Get images with optional filters.
@@ -264,6 +266,7 @@ def get_images(
         conditions, params = _apply_exclude_loras_filter(conditions, params, exclude_loras)
         conditions, params = _apply_exclude_prompts_filter(conditions, params, exclude_prompts, prompt_match_mode)
         conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
+        conditions, params = _apply_collection_filter(conditions, params, collection_id)
 
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
@@ -334,6 +337,7 @@ def get_filtered_image_count(
     exclude_loras: Optional[List[str]] = None,
     exclude_prompts: Optional[List[str]] = None,
     exclude_colors: Optional[List[str]] = None,
+    collection_id: Optional[int] = None,
 ) ->int:
     """Get count of images matching filters without loading image data.
 
@@ -426,6 +430,7 @@ def get_filtered_image_count(
         conditions, params = _apply_exclude_loras_filter(conditions, params, exclude_loras)
         conditions, params = _apply_exclude_prompts_filter(conditions, params, exclude_prompts, prompt_match_mode)
         conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
+        conditions, params = _apply_collection_filter(conditions, params, collection_id)
 
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
@@ -477,6 +482,7 @@ def get_filtered_image_ids(
     exclude_loras: Optional[List[str]] = None,
     exclude_prompts: Optional[List[str]] = None,
     exclude_colors: Optional[List[str]] = None,
+    collection_id: Optional[int] = None,
 ) ->List[int]:
     """Get list of image IDs matching filters without loading full image data.
 
@@ -568,6 +574,7 @@ def get_filtered_image_ids(
         conditions, params = _apply_exclude_loras_filter(conditions, params, exclude_loras)
         conditions, params = _apply_exclude_prompts_filter(conditions, params, exclude_prompts, prompt_match_mode)
         conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
+        conditions, params = _apply_collection_filter(conditions, params, collection_id)
 
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
@@ -658,6 +665,7 @@ def get_images_paginated(
     exclude_loras: Optional[List[str]] = None,
     exclude_prompts: Optional[List[str]] = None,
     exclude_colors: Optional[List[str]] = None,
+    collection_id: Optional[int] = None,
 ) ->Dict[str, Any]:
     """
     Get images with cursor-based pagination for efficient handling of large datasets.
@@ -760,6 +768,7 @@ def get_images_paginated(
         conditions, params = _apply_exclude_loras_filter(conditions, params, exclude_loras)
         conditions, params = _apply_exclude_prompts_filter(conditions, params, exclude_prompts, prompt_match_mode)
         conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
+        conditions, params = _apply_collection_filter(conditions, params, collection_id)
 
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
@@ -848,6 +857,7 @@ def get_images_paginated(
                 min_height, max_height, aspect_ratio, include_unreadable,
                 min_aesthetic, max_aesthetic,
                 prompt_match_mode=normalized_prompt_match_mode,
+                collection_id=collection_id,
             )
 
         # Determine next cursor from the last row returned in this page
@@ -884,6 +894,7 @@ def _get_filtered_count(
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
     prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
+    collection_id: Optional[int] = None,
 ) -> int:
     """Get total count for filtered images.
 
@@ -937,6 +948,10 @@ def _get_filtered_count(
 
     # Apply artist filter (JOIN)
     query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
+
+    # v3.3.1: restrict the count to a collection's members so the gallery's
+    # "total" matches the collection-scoped page query (mirrors get_images_paginated).
+    conditions, params = _apply_collection_filter(conditions, params, collection_id)
 
     if conditions:
         query += " WHERE " + " AND ".join(conditions)

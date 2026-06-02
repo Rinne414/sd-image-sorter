@@ -1701,6 +1701,94 @@ class TestSortSession:
         assert copied_path.exists()
         assert db.get_image_count() == 2
 
+    def test_sort_collect_adds_membership_without_moving_file(self, test_client, test_db, tmp_path: Path):
+        """v3.3.1: a collection-typed slot adds the image to the collection by
+        reference (file stays put) and advances; undo removes membership and
+        steps back; redo re-adds membership."""
+        from PIL import Image
+
+        source_dir = tmp_path / "collect_source"
+        source_dir.mkdir()
+        image_path = source_dir / "collect_me.png"
+        Image.new("RGB", (48, 48), color="purple").save(image_path)
+
+        db = test_client.test_db
+        image_id = db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            generator="unknown",
+            prompt="collect me",
+            metadata_json="{}",
+        )
+
+        # Create a target collection.
+        created = test_client.post("/api/collections", json={"name": "Collect Slot"})
+        assert created.status_code == 200
+        collection_id = created.json()["id"]
+
+        # Start a session, then assign slot 'w' to the collection.
+        test_client.delete("/api/sort/session")
+        start_response = test_client.post("/api/sort/start?generators=unknown")
+        assert start_response.status_code == 200
+
+        set_response = test_client.post(
+            "/api/sort/set-folders",
+            json={"folders": {}, "collection_slots": {"w": collection_id}},
+        )
+        assert set_response.status_code == 200
+        assert set_response.json()["collection_slots"]["w"] == collection_id
+
+        # Collect: image added by reference, file NOT moved, cursor advanced.
+        collect_response = test_client.post("/api/sort/action?action=collect&folder_key=w")
+        assert collect_response.status_code == 200
+        collect_payload = collect_response.json()
+        assert collect_payload.get("done") is True or collect_payload.get("image") is not None
+        assert collect_payload["collected_count"] == 1
+        assert image_path.exists()  # file stays put
+        assert db.get_image_count() == 1  # no copy row created
+        assert image_id in db.get_collection_image_ids(collection_id)
+
+        # Undo: membership removed, cursor steps back.
+        undo_response = test_client.post("/api/sort/action?action=undo")
+        assert undo_response.status_code == 200
+        undo_payload = undo_response.json()
+        assert undo_payload["status"] == "undone"
+        assert undo_payload["undone_action"] == "collect"
+        assert undo_payload["folder_key"] == "w"
+        assert undo_payload["collected_count"] == 0
+        assert image_path.exists()
+        assert image_id not in db.get_collection_image_ids(collection_id)
+
+        # Redo: membership re-added.
+        redo_response = test_client.post("/api/sort/action?action=redo")
+        assert redo_response.status_code == 200
+        redo_payload = redo_response.json()
+        assert redo_payload["status"] == "redone"
+        assert redo_payload["redone_action"] == "collect"
+        assert redo_payload["collected_count"] == 1
+        assert image_path.exists()
+        assert image_id in db.get_collection_image_ids(collection_id)
+
+    def test_sort_collect_requires_assigned_slot(self, test_client, test_db_with_images):
+        """Pressing a slot that is not assigned to a collection returns a clear
+        error and does not advance/raise."""
+        test_client.delete("/api/sort/session")
+        test_client.post("/api/sort/start?generators=unknown")
+
+        response = test_client.post("/api/sort/action?action=collect&folder_key=w")
+        assert response.status_code == 200
+        data = response.json()
+        assert "error" in data
+        assert "collection" in data["error"].lower()
+
+    def test_set_sort_folders_rejects_unknown_collection(self, test_client, tmp_path: Path):
+        """Assigning a non-existent collection id to a slot is a 400."""
+        response = test_client.post(
+            "/api/sort/set-folders",
+            json={"folders": {}, "collection_slots": {"w": 999999}},
+        )
+        assert response.status_code == 400
+
     def test_sort_redo_replays_persisted_skip(self, test_client, isolated_sorting_service, tmp_path: Path):
         """Redo should be driven by backend session state so it survives resume/reload."""
         db = test_client.test_db

@@ -765,6 +765,31 @@ def _apply_excluded_image_ids_filter(conditions: List[str], params: List[Any],
     return _apply_id_list_filter(conditions, params, excluded_image_ids, include=False)
 
 
+def _apply_collection_filter(conditions: List[str], params: List[Any],
+                             collection_id: Optional[int]) -> tuple:
+    """Restrict results to images belonging to a collection (v3.3.1).
+
+    Membership is a reference row in ``collection_items`` (see db_collections.py),
+    so this composes with every other filter at the SQL level and stays correct
+    under cursor pagination. ``None`` (or a non-positive id) is a no-op, leaving
+    the gallery's normal unfiltered listing untouched.
+    """
+    if collection_id is None:
+        return conditions, params
+    try:
+        cid = int(collection_id)
+    except (TypeError, ValueError):
+        return conditions, params
+    if cid <= 0:
+        return conditions, params
+    conditions.append(
+        "i.id IN (SELECT ci.source_image_id FROM collection_items ci "
+        "WHERE ci.collection_id = ?)"
+    )
+    params.append(cid)
+    return conditions, params
+
+
 def _apply_readable_filter(
     conditions: List[str],
     params: List[Any],

@@ -1133,11 +1133,12 @@ class TestSimilarityRouterValidation:
         from routers import similarity as similarity_router
 
         class FakeService:
-            def search_similar(self, image_id, limit, threshold, offset):
+            def search_similar(self, image_id, limit, threshold, offset, collection_id=None):
                 assert image_id == 77
                 assert limit == 2
                 assert offset == 2
                 assert threshold == 0.6
+                assert collection_id is None
                 return {
                     "query_image_id": image_id,
                     "results": [{"id": 101, "filename": "match.png", "similarity": 0.91}],

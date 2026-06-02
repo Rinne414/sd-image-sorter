@@ -9,6 +9,11 @@ const ManualSortState = {
     currentImage: null,
     currentTags: [],
     folders: { w: '', a: '', s: '', d: '' },
+    // v3.3.1: per-slot collection ids ({ key: collectionId|null }). A slot with
+    // a non-null id is "collection-typed": pressing it adds the current image to
+    // that collection by reference (no file move) instead of moving the file.
+    collectionSlots: { w: null, a: null, s: null, d: null },
+    collectionsCache: [],
     operationMode: 'move',
     index: 0,
     total: 0,
@@ -41,6 +46,9 @@ const MANUAL_SORT_COOLDOWN_KEY = 'manual_sort_cooldown_ms_v1';
 const MANUAL_SORT_FILTER_STATE_KEY = 'manual_sort_filter_state_v1';
 const MANUAL_SORT_SCOPE_META_KEY = 'manual_sort_scope_meta_v1';
 const MANUAL_SORT_OPERATION_MODE_KEY = 'manual_sort_operation_mode_v1';
+// v3.3.1: persists per-slot collection assignments ({ key: collectionId|null }).
+const MANUAL_SORT_SLOT_COLLECTIONS_KEY = 'manual_sort_slot_collections_v1';
+const MANUAL_SORT_SLOT_KEYS = ['w', 'a', 's', 'd'];
 const MAX_MINIMAP_IMAGES = 1000;
 const MANUAL_SORT_PROMPT_MATCH_MODES = new Set(['exact', 'contains']);
 
@@ -148,6 +156,132 @@ function setManualSortOperationMode(mode, { persist = true, updateUi = true } = 
             });
         }
     }
+}
+
+// ============== Collection Slots (v3.3.1) ==============
+
+function loadManualSortSlotCollections() {
+    const slots = { w: null, a: null, s: null, d: null };
+    try {
+        const raw = localStorage.getItem(MANUAL_SORT_SLOT_COLLECTIONS_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (parsed && typeof parsed === 'object') {
+            MANUAL_SORT_SLOT_KEYS.forEach((key) => {
+                const value = Number(parsed[key]);
+                slots[key] = Number.isInteger(value) && value > 0 ? value : null;
+            });
+        }
+    } catch (_) {
+        // Ignore corrupt saved state; fall back to all-folder slots.
+    }
+    ManualSortState.collectionSlots = slots;
+}
+
+function saveManualSortSlotCollections() {
+    localStorage.setItem(
+        MANUAL_SORT_SLOT_COLLECTIONS_KEY,
+        JSON.stringify(ManualSortState.collectionSlots || {})
+    );
+}
+
+function isManualSortCollectionSlot(key) {
+    const id = ManualSortState.collectionSlots?.[key];
+    return Number.isInteger(id) && id > 0;
+}
+
+function getManualSortCollectionName(collectionId) {
+    const match = (ManualSortState.collectionsCache || []).find((c) => c.id === collectionId);
+    return match ? match.name : '';
+}
+
+// Build the non-folder ({ key: collectionId }) map to send to the backend.
+function getManualSortActiveCollectionSlots() {
+    const out = {};
+    MANUAL_SORT_SLOT_KEYS.forEach((key) => {
+        out[key] = isManualSortCollectionSlot(key) ? ManualSortState.collectionSlots[key] : null;
+    });
+    return out;
+}
+
+function populateManualSortCollectionSelects() {
+    const selects = document.querySelectorAll('.slot-collection-select');
+    if (!selects.length) return;
+    const placeholder = manualSortText('manual.collectChoose', 'Choose a collection…', '选择一个收藏夹…');
+    const options = (ManualSortState.collectionsCache || [])
+        .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
+        .join('');
+    selects.forEach((select) => {
+        const key = select.dataset.key;
+        select.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>${options}`;
+        const assigned = ManualSortState.collectionSlots?.[key];
+        select.value = isManualSortCollectionSlot(key) ? String(assigned) : '';
+    });
+}
+
+async function loadManualSortCollections() {
+    try {
+        const result = await window.App?.API?.listCollections?.();
+        const list = Array.isArray(result?.collections) ? result.collections : [];
+        ManualSortState.collectionsCache = list.map((c) => ({ id: Number(c.id), name: String(c.name || '') }));
+    } catch (e) {
+        ManualSortState.collectionsCache = [];
+        if (window.Logger) Logger.warn('Failed to load collections for manual sort:', e);
+    }
+    // Drop any saved slot id that no longer exists so the UI never shows a
+    // stale assignment.
+    const validIds = new Set(ManualSortState.collectionsCache.map((c) => c.id));
+    MANUAL_SORT_SLOT_KEYS.forEach((key) => {
+        if (isManualSortCollectionSlot(key) && !validIds.has(ManualSortState.collectionSlots[key])) {
+            ManualSortState.collectionSlots[key] = null;
+        }
+    });
+    populateManualSortCollectionSelects();
+    MANUAL_SORT_SLOT_KEYS.forEach(refreshManualSortSlotUi);
+}
+
+// Toggle the folder-input vs collection-select for a slot based on its type.
+function refreshManualSortSlotUi(key) {
+    const slot = document.querySelector(`.slot-target[data-key="${key}"]`);
+    if (!slot) return;
+    const isCollection = isManualSortCollectionSlot(key);
+    const explicitCollectionType = slot.querySelector('input[name="slot-type-' + key + '"][value="collection"]')?.checked;
+    const showCollection = isCollection || Boolean(explicitCollectionType);
+
+    const folderTarget = slot.querySelector('.slot-folder-target');
+    const collectionSelect = slot.querySelector('.slot-collection-select');
+    if (folderTarget) folderTarget.hidden = showCollection;
+    if (collectionSelect) collectionSelect.hidden = !showCollection;
+
+    const radios = slot.querySelectorAll(`input[name="slot-type-${key}"]`);
+    radios.forEach((radio) => {
+        radio.checked = showCollection ? radio.value === 'collection' : radio.value === 'folder';
+    });
+}
+
+function initManualSortSlotControls() {
+    document.querySelectorAll('input[name^="slot-type-"]').forEach((radio) => {
+        radio.addEventListener('change', () => {
+            const key = radio.dataset.key;
+            if (!radio.checked || !key) return;
+            if (radio.value === 'folder') {
+                ManualSortState.collectionSlots[key] = null;
+                saveManualSortSlotCollections();
+            }
+            refreshManualSortSlotUi(key);
+            updateFolderNames();
+        });
+    });
+
+    document.querySelectorAll('.slot-collection-select').forEach((select) => {
+        select.addEventListener('change', () => {
+            const key = select.dataset.key;
+            const value = Number(select.value);
+            ManualSortState.collectionSlots[key] = Number.isInteger(value) && value > 0 ? value : null;
+            saveManualSortSlotCollections();
+            refreshManualSortSlotUi(key);
+            updateFolderNames();
+        });
+    });
 }
 
 function serializeManualSortFilters(filters) {
@@ -567,12 +701,17 @@ async function initManualSort() {
     const $$ = (sel) => document.querySelectorAll(sel);
     loadManualSortFilters();
     loadManualSortScopeMeta();
+    loadManualSortSlotCollections();
     setManualSortOperationMode(localStorage.getItem(MANUAL_SORT_OPERATION_MODE_KEY) || 'copy', {
         persist: false,
         updateUi: true,
     });
     updateManualSortFilterSummary();
     initManualSortCooldownControls($);
+    initManualSortSlotControls();
+    // Populate the collection <select>s from the API (best-effort; folder slots
+    // keep working even if this fails).
+    loadManualSortCollections();
 
     // Folder path inputs
     $$('.folder-path-input').forEach(input => {
@@ -784,16 +923,21 @@ async function startSorting() {
         if (window.Logger) Logger.warn('Failed to check existing sort session before start:', error);
     }
 
-    // Collect folder paths
+    // Collect folder paths (folder-typed slots only).
     const folders = {};
     $$('.folder-path-input').forEach(input => {
-        if (input.value.trim()) {
-            folders[input.dataset.key] = input.value.trim();
+        const key = input.dataset.key;
+        if (input.value.trim() && !isManualSortCollectionSlot(key)) {
+            folders[key] = input.value.trim();
         }
     });
 
-    // Validate at least one folder
-    if (Object.keys(folders).length === 0) {
+    // v3.3.1: collection-typed slots ({ key: collectionId }).
+    const collectionSlots = getManualSortActiveCollectionSlots();
+    const hasCollectionSlot = MANUAL_SORT_SLOT_KEYS.some((key) => isManualSortCollectionSlot(key));
+
+    // Validate at least one destination (folder OR collection).
+    if (Object.keys(folders).length === 0 && !hasCollectionSlot) {
         showToast(manualSortText('manual.configureFolder', 'Please configure at least one destination folder', '请至少配置一个目标文件夹'), 'error');
         return;
     }
@@ -865,8 +1009,8 @@ async function startSorting() {
     };
 
     try {
-        // Set folders on server
-        await API.setSortFolders(folders);
+        // Set folders + collection slots on server
+        await API.setSortFolders(folders, collectionSlots);
 
         // Start session with unified filters including prompts and dimensions
         const result = await API.startSortSession(
@@ -895,6 +1039,7 @@ async function startSorting() {
                 checkpoints: f.excludeCheckpoints?.length > 0 ? f.excludeCheckpoints : null,
                 loras: f.excludeLoras?.length > 0 ? f.excludeLoras : null,
             },
+            collectionSlots,
         );
 
         if (result.total_images === 0) {
@@ -992,10 +1137,25 @@ function updateFolderNames() {
     const { $ } = window.App;
 
     Object.keys(DEFAULT_FOLDER_LABELS).forEach((key) => {
-        const path = ManualSortState.folders[key];
         const nameEl = $(`#folder-name-${key}`);
         if (!nameEl) return;
 
+        // v3.3.1: collection-typed slots show the collection name + a hint that
+        // the action adds by reference (the file is not moved).
+        if (isManualSortCollectionSlot(key)) {
+            const name = getManualSortCollectionName(ManualSortState.collectionSlots[key]);
+            const label = name || manualSortText('manual.collectSlotFallback', 'Collection', '收藏夹');
+            nameEl.textContent = `★ ${label}`;
+            nameEl.title = formatManualSortI18n(
+                'manual.collectHint',
+                'Adds to “{name}” by reference — the file is not moved.',
+                { name: label }
+            );
+            return;
+        }
+
+        nameEl.title = '';
+        const path = ManualSortState.folders[key];
         if (path) {
             const parts = path.split(/[/\\]/);
             nameEl.textContent = parts[parts.length - 1] || path;
@@ -1081,6 +1241,19 @@ function applyCurrentSortPayload(result, options = {}) {
     if (result?.folders && typeof result.folders === 'object') {
         ManualSortState.folders = { ...ManualSortState.folders, ...result.folders };
         restoreFolderInputs();
+    }
+
+    // v3.3.1: adopt the session's per-slot collection assignments so a resumed
+    // session keeps its collection-typed slots (and the legend/labels match).
+    if (result?.collection_slots && typeof result.collection_slots === 'object') {
+        MANUAL_SORT_SLOT_KEYS.forEach((key) => {
+            const value = Number(result.collection_slots[key]);
+            ManualSortState.collectionSlots[key] = Number.isInteger(value) && value > 0 ? value : null;
+        });
+        saveManualSortSlotCollections();
+        populateManualSortCollectionSelects();
+        MANUAL_SORT_SLOT_KEYS.forEach(refreshManualSortSlotUi);
+        updateFolderNames();
     }
 
     if (Array.isArray(result?.image_ids)) {
@@ -1360,7 +1533,12 @@ function flashManualSortBusy() {
 
 async function performMove(folderKey, fast = false) {
     const { $, API, showToast } = window.App;
-    const operationVerb = getManualSortOperationVerb();
+    // v3.3.1: a collection-typed slot adds the image to a collection by
+    // reference ("collect") instead of moving the file.
+    const isCollect = isManualSortCollectionSlot(folderKey);
+    const operationVerb = isCollect
+        ? manualSortText('manual.actionVerbCollect', 'add', '收藏')
+        : getManualSortOperationVerb();
 
     // Prevent race condition from rapid keypresses
     if (ManualSortState.isProcessing) {
@@ -1376,8 +1554,8 @@ async function performMove(folderKey, fast = false) {
     ManualSortState.isProcessing = true;
 
     try {
-        // Check if folder is configured
-        if (!ManualSortState.folders[folderKey]) {
+        // Check the slot is configured (folder path OR collection assignment).
+        if (!isCollect && !ManualSortState.folders[folderKey]) {
             showToast(formatManualSortI18n('manual.folderNotConfigured', 'Folder {key} is not configured', {
                 key: folderKey.toUpperCase(),
             }), 'error');
@@ -1405,8 +1583,8 @@ async function performMove(folderKey, fast = false) {
             await sleep(300);
         }
 
-        // Send action to server
-        const result = await API.sortAction('move', folderKey);
+        // Send action to server: 'collect' (by reference) or 'move' (file op).
+        const result = await API.sortAction(isCollect ? 'collect' : 'move', folderKey);
 
         if (result.error) {
             updateHistoryControlState(result);
@@ -1420,11 +1598,20 @@ async function performMove(folderKey, fast = false) {
             return;
         }
 
-        // Update combo/stats only after successful move
+        // Update combo/stats only after a successful action.
         updateCombo();
         ManualSortState.actionTimestamps.push(Date.now());
         const cutoff = Date.now() - 30000;
         ManualSortState.actionTimestamps = ManualSortState.actionTimestamps.filter(t => t > cutoff);
+
+        if (isCollect) {
+            const name = getManualSortCollectionName(ManualSortState.collectionSlots[folderKey]) || folderKey.toUpperCase();
+            showToast(
+                formatManualSortI18n('manual.collectedToast', 'Added to “{name}” (original kept in place)', { name }),
+                'success'
+            );
+        }
+
         await loadCurrentImage(result);
 
     } catch (error) {

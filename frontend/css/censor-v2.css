@@ -1438,7 +1438,7 @@
 .queue-manager-count {
     font-size: 12px;
     font-weight: 700;
-    color: var(--accent-secondary, #14b8a6);
+    color: var(--accent-secondary, #33d6e0);
     margin-right: auto;
 }
 
@@ -1492,18 +1492,18 @@
 
 .queue-manager-grid-item:hover {
     transform: translateY(-2px);
-    border-color: rgba(245, 158, 11, 0.3);
+    border-color: rgba(124, 139, 255, 0.3);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
 }
 
 .queue-manager-grid-item.is-selected {
-    border-color: rgba(245, 158, 11, 0.5);
-    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+    border-color: rgba(124, 139, 255, 0.5);
+    box-shadow: 0 0 0 2px rgba(124, 139, 255, 0.2);
 }
 
 .queue-manager-grid-item.is-active {
-    border-color: rgba(20, 184, 166, 0.5);
-    box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.2);
+    border-color: rgba(51, 214, 224, 0.5);
+    box-shadow: 0 0 0 2px rgba(51, 214, 224, 0.2);
 }
 
 .queue-manager-grid-item.is-processed {
@@ -1515,8 +1515,8 @@
 }
 
 .queue-manager-grid-item.drag-over {
-    border-color: rgba(20, 184, 166, 0.8);
-    box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
+    border-color: rgba(51, 214, 224, 0.8);
+    box-shadow: 0 0 0 3px rgba(51, 214, 224, 0.15);
 }
 
 .queue-manager-grid-thumb {
@@ -1538,8 +1538,8 @@
 }
 
 .queue-manager-grid-label[contenteditable="true"] {
-    background: rgba(245, 158, 11, 0.1);
-    outline: 1px solid rgba(245, 158, 11, 0.3);
+    background: rgba(124, 139, 255, 0.1);
+    outline: 1px solid rgba(124, 139, 255, 0.3);
     border-radius: 4px;
     white-space: normal;
     word-break: break-all;
@@ -1577,8 +1577,8 @@
 }
 
 .queue-manager-grid-badge.is-active {
-    background: #14b8a6;
-    box-shadow: 0 0 6px rgba(20, 184, 166, 0.5);
+    background: #33d6e0;
+    box-shadow: 0 0 6px rgba(51, 214, 224, 0.5);
 }
 
 .queue-manager-empty {

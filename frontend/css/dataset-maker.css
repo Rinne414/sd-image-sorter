@@ -195,12 +195,12 @@
     border-color: rgba(255,255,255,0.12);
 }
 #view-dataset .dataset-queue-item:focus-visible {
-    outline: 2px solid rgba(var(--accent-primary-rgb, 255, 138, 61), 0.72);
+    outline: 2px solid rgba(var(--accent-primary-rgb, 124, 139, 255), 0.72);
     outline-offset: 2px;
 }
 #view-dataset .dataset-queue-item.active {
-    background: rgba(255, 138, 61, 0.18);
-    border-color: var(--accent-primary, #ff8a3d);
+    background: rgba(124, 139, 255, 0.18);
+    border-color: var(--accent-primary, #7c8bff);
 }
 #view-dataset .dataset-queue-select-toggle {
     width: 18px;
@@ -221,8 +221,8 @@
     box-shadow: 0 4px 12px rgba(0,0,0,0.22);
 }
 #view-dataset .dataset-queue-select-toggle[aria-checked="true"] {
-    border-color: rgba(45, 212, 191, 0.78);
-    background: rgba(45, 212, 191, 0.24);
+    border-color: rgba(51, 214, 224, 0.78);
+    background: rgba(51, 214, 224, 0.24);
 }
 #view-dataset .dataset-queue-select-toggle[aria-checked="true"]::before {
     content: '✓';
@@ -401,8 +401,8 @@
     color: var(--text-primary, #f1f5f9);
 }
 #view-dataset .dataset-queue-mode-btn.active {
-    background: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.22);
-    color: var(--accent-primary, #ff8a3d);
+    background: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.22);
+    color: var(--accent-primary, #7c8bff);
 }
 #view-dataset .dataset-queue-filter-select {
     height: 26px;
@@ -441,7 +441,7 @@
     margin: 0;
 }
 #view-dataset .dataset-empty-arrow {
-    color: var(--accent-primary, #ff8a3d);
+    color: var(--accent-primary, #7c8bff);
     font-weight: 700;
     font-size: 18px;
 }
@@ -519,8 +519,8 @@
 #view-dataset .dataset-editor-textarea[hidden] { display: none; }
 #view-dataset .dataset-editor-textarea:focus {
     outline: none;
-    border-color: var(--accent-primary, #ff8a3d);
-    box-shadow: 0 0 0 3px rgba(255, 138, 61, 0.15);
+    border-color: var(--accent-primary, #7c8bff);
+    box-shadow: 0 0 0 3px rgba(124, 139, 255, 0.15);
 }
 
 #view-dataset .dataset-editor-actions {
@@ -552,10 +552,10 @@
     margin-bottom: 0;
 }
 #view-dataset .dataset-card-required {
-    border-color: rgba(255, 138, 61, 0.30);
+    border-color: rgba(124, 139, 255, 0.30);
     background: linear-gradient(180deg,
-        rgba(255, 138, 61, 0.06),
-        rgba(255, 138, 61, 0.02));
+        rgba(124, 139, 255, 0.06),
+        rgba(124, 139, 255, 0.02));
 }
 #view-dataset .dataset-card-title {
     margin: 0 0 6px 0;
@@ -621,8 +621,8 @@
 }
 #view-dataset .dataset-card .form-input:focus {
     outline: none;
-    border-color: var(--accent-primary, #ff8a3d);
-    box-shadow: 0 0 0 3px rgba(255, 138, 61, 0.15);
+    border-color: var(--accent-primary, #7c8bff);
+    box-shadow: 0 0 0 3px rgba(124, 139, 255, 0.15);
 }
 #view-dataset .dataset-card textarea.form-input {
     font-family: var(--font-mono, ui-monospace, monospace);
@@ -687,8 +687,8 @@
     background: rgba(255,255,255,0.03);
 }
 #view-dataset .dataset-preset-row:has(input:checked) {
-    background: rgba(255, 138, 61, 0.10);
-    border-color: rgba(255, 138, 61, 0.45);
+    background: rgba(124, 139, 255, 0.10);
+    border-color: rgba(124, 139, 255, 0.45);
 }
 #view-dataset .dataset-preset-row[hidden] { display: none; }
 #view-dataset .dataset-preset-row > input[type="radio"] {
@@ -718,9 +718,9 @@
 #view-dataset .dataset-preview-line {
     margin-top: 6px;
     font-size: 11px;
-    color: var(--accent-primary, #ff8a3d);
+    color: var(--accent-primary, #7c8bff);
     font-family: var(--font-mono, ui-monospace, monospace);
-    background: rgba(255, 138, 61, 0.08);
+    background: rgba(124, 139, 255, 0.08);
     padding: 4px 8px;
     border-radius: 4px;
     display: block;
@@ -782,14 +782,14 @@
     padding: 14px 18px;
     font-weight: 700;
     letter-spacing: 0.01em;
-    background: linear-gradient(135deg, var(--accent-primary, #ff8a3d), var(--accent-secondary, #2dd4bf));
+    background: linear-gradient(135deg, var(--accent-primary, #7c8bff), var(--accent-secondary, #33d6e0));
     border: none;
-    box-shadow: 0 6px 16px rgba(var(--accent-primary-rgb, 255, 138, 61), 0.30);
+    box-shadow: 0 6px 16px rgba(var(--accent-primary-rgb, 124, 139, 255), 0.30);
     transition: transform 0.10s ease, box-shadow 0.10s ease;
 }
 #view-dataset .dataset-export-cta:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 8px 22px rgba(var(--accent-primary-rgb, 255, 138, 61), 0.40);
+    box-shadow: 0 8px 22px rgba(var(--accent-primary-rgb, 124, 139, 255), 0.40);
 }
 #view-dataset .dataset-export-cta:disabled {
     background: rgba(255,255,255,0.10);
@@ -869,7 +869,7 @@
 }
 #view-dataset .dataset-confirm-summary li::before {
     content: '·';
-    color: var(--accent-primary, #ff8a3d);
+    color: var(--accent-primary, #7c8bff);
     font-weight: 700;
     font-size: 18px;
     line-height: 0;
@@ -899,7 +899,7 @@
     margin-bottom: 12px;
 }
 #view-dataset .dataset-result-card .dataset-result-status.ok       { color: #22c55e; }
-#view-dataset .dataset-result-card .dataset-result-status.partial  { color: #f59e0b; }
+#view-dataset .dataset-result-card .dataset-result-status.partial  { color: #7c8bff; }
 #view-dataset .dataset-result-card .dataset-result-status.failed   { color: #ef4444; }
 #view-dataset .dataset-result-card .dataset-result-status.cancelled { color: #94a3b8; }
 #view-dataset .dataset-result-card .dataset-modal-title {
@@ -955,8 +955,8 @@
     font-size: 11px;
     color: var(--text-muted, rgba(255,255,255,0.55));
     line-height: 1.5;
-    background: rgba(var(--accent-tertiary-rgb, 251, 191, 36), 0.08);
-    border-left: 2px solid rgba(var(--accent-tertiary-rgb, 251, 191, 36), 0.5);
+    background: rgba(var(--accent-tertiary-rgb, 255, 184, 107), 0.08);
+    border-left: 2px solid rgba(var(--accent-tertiary-rgb, 255, 184, 107), 0.5);
     padding: 6px 8px;
     border-radius: 4px;
 }
@@ -988,30 +988,30 @@
     white-space: nowrap;
 }
 #view-dataset .dataset-queue-badge-untagged {
-    background: rgba(var(--accent-tertiary-rgb, 251, 191, 36), 0.15);
-    color: rgba(var(--accent-tertiary-rgb, 251, 191, 36), 1);
-    border: 1px solid rgba(var(--accent-tertiary-rgb, 251, 191, 36), 0.30);
+    background: rgba(var(--accent-tertiary-rgb, 255, 184, 107), 0.15);
+    color: rgba(var(--accent-tertiary-rgb, 255, 184, 107), 1);
+    border: 1px solid rgba(var(--accent-tertiary-rgb, 255, 184, 107), 0.30);
 }
 #view-dataset .dataset-queue-badge-tagged {
-    background: rgba(var(--accent-secondary-rgb, 45, 212, 191), 0.12);
-    color: rgba(var(--accent-secondary-rgb, 45, 212, 191), 1);
-    border: 1px solid rgba(var(--accent-secondary-rgb, 45, 212, 191), 0.25);
+    background: rgba(var(--accent-secondary-rgb, 51, 214, 224), 0.12);
+    color: rgba(var(--accent-secondary-rgb, 51, 214, 224), 1);
+    border: 1px solid rgba(var(--accent-secondary-rgb, 51, 214, 224), 0.25);
 }
 #view-dataset .dataset-queue-badge-edited {
-    background: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.15);
-    color: rgba(var(--accent-primary-rgb, 255, 138, 61), 1);
-    border: 1px solid rgba(var(--accent-primary-rgb, 255, 138, 61), 0.30);
+    background: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.15);
+    color: rgba(var(--accent-primary-rgb, 124, 139, 255), 1);
+    border: 1px solid rgba(var(--accent-primary-rgb, 124, 139, 255), 0.30);
 }
 /* Subtle left-border accent on the row so the user can scan a long list */
-#view-dataset .dataset-queue-item.status-untagged { border-left: 2px solid rgba(var(--accent-tertiary-rgb, 251, 191, 36), 0.45); }
-#view-dataset .dataset-queue-item.status-tagged   { border-left: 2px solid rgba(var(--accent-secondary-rgb, 45, 212, 191), 0.30); }
-#view-dataset .dataset-queue-item.status-edited   { border-left: 2px solid rgba(var(--accent-primary-rgb, 255, 138, 61), 0.45); }
+#view-dataset .dataset-queue-item.status-untagged { border-left: 2px solid rgba(var(--accent-tertiary-rgb, 255, 184, 107), 0.45); }
+#view-dataset .dataset-queue-item.status-tagged   { border-left: 2px solid rgba(var(--accent-secondary-rgb, 51, 214, 224), 0.30); }
+#view-dataset .dataset-queue-item.status-edited   { border-left: 2px solid rgba(var(--accent-primary-rgb, 124, 139, 255), 0.45); }
 
 
 /* Pre-flight warning row for empty captions */
 #view-dataset .dataset-confirm-summary li:has(.dataset-confirm-warn) {
-    background: rgba(var(--accent-tertiary-rgb, 251, 191, 36), 0.10);
-    border-left: 3px solid rgba(var(--accent-tertiary-rgb, 251, 191, 36), 0.55);
+    background: rgba(var(--accent-tertiary-rgb, 255, 184, 107), 0.10);
+    border-left: 3px solid rgba(var(--accent-tertiary-rgb, 255, 184, 107), 0.55);
     padding-left: 10px;
 }
 #view-dataset .dataset-confirm-warn {
@@ -1116,8 +1116,8 @@
     }
 }
 #view-dataset .dataset-help-shortcut {
-    background: rgba(var(--accent-secondary-rgb, 45, 212, 191), 0.10);
-    border-left: 2px solid rgba(var(--accent-secondary-rgb, 45, 212, 191), 0.45);
+    background: rgba(var(--accent-secondary-rgb, 51, 214, 224), 0.10);
+    border-left: 2px solid rgba(var(--accent-secondary-rgb, 51, 214, 224), 0.45);
     padding: 6px 8px;
     border-radius: 4px;
     color: var(--text-primary, #f1f5f9);
@@ -1423,14 +1423,14 @@
     white-space: nowrap;
 }
 #view-dataset .dataset-export-preview-pair .file-img {
-    color: var(--accent-primary, #ff8a3d);
+    color: var(--accent-primary, #7c8bff);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 #view-dataset .dataset-export-preview-pair .file-txt {
-    color: var(--accent-secondary, #2dd4bf);
+    color: var(--accent-secondary, #33d6e0);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1496,7 +1496,7 @@
     white-space: nowrap;
 }
 #view-dataset .dataset-export-caption-meta small {
-    color: var(--accent-secondary, #2dd4bf);
+    color: var(--accent-secondary, #33d6e0);
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 #view-dataset .dataset-export-caption-textarea {
@@ -1522,8 +1522,8 @@
 #view-dataset .dataset-export-translation {
     padding: 8px 10px;
     border-radius: 6px;
-    border: 1px solid rgba(45, 212, 191, 0.22);
-    background: rgba(45, 212, 191, 0.08);
+    border: 1px solid rgba(51, 214, 224, 0.22);
+    background: rgba(51, 214, 224, 0.08);
     color: var(--text-secondary, rgba(255,255,255,0.72));
     line-height: 1.5;
     white-space: pre-wrap;
@@ -1560,7 +1560,7 @@
 #view-dataset input,
 #view-dataset textarea {
     color: var(--text-primary, #f1f5f9);
-    accent-color: var(--accent-primary, #ff8a3d);
+    accent-color: var(--accent-primary, #7c8bff);
 }
 #view-dataset input[type="checkbox"],
 #view-dataset input[type="radio"] {
@@ -1574,7 +1574,7 @@
     margin: 0;
     border: 1px solid rgba(255,255,255,0.28);
     background: rgba(15, 23, 42, 0.86);
-    color: var(--accent-primary, #ff8a3d);
+    color: var(--accent-primary, #7c8bff);
 }
 #view-dataset input[type="checkbox"] {
     border-radius: 4px;
@@ -1602,8 +1602,8 @@
 }
 #view-dataset input[type="checkbox"]:checked,
 #view-dataset input[type="radio"]:checked {
-    border-color: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.85);
-    background: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.18);
+    border-color: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.85);
+    background: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.18);
 }
 #view-dataset input[type="checkbox"]:checked::before,
 #view-dataset input[type="radio"]:checked::before {
@@ -1618,7 +1618,7 @@
     color: var(--text-primary, #f1f5f9);
 }
 #view-dataset .btn.btn-primary {
-    background: var(--accent-primary, #ff8a3d);
+    background: var(--accent-primary, #7c8bff);
     color: #1b1208;
 }
 #view-dataset .btn.btn-ghost {
@@ -1665,14 +1665,14 @@
     width: 0%;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, #22c55e 0%, var(--accent-primary, #ff8a3d) 100%);
+    background: linear-gradient(90deg, #22c55e 0%, var(--accent-primary, #7c8bff) 100%);
     transition: width 180ms ease;
 }
 .dataset-export-progress-fill.indeterminate {
     width: 35%;
     background: linear-gradient(90deg,
         rgba(255, 255, 255, 0) 0%,
-        var(--accent-primary, #ff8a3d) 35%,
+        var(--accent-primary, #7c8bff) 35%,
         #22c55e 70%,
         rgba(255, 255, 255, 0) 100%);
     animation: indeterminateSlide 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
@@ -1731,7 +1731,7 @@
 }
 .dataset-tag-add-dropdown .tag-suggestion:hover,
 .dataset-tag-add-dropdown .tag-suggestion.active {
-    background: rgba(255, 138, 61, 0.2);
+    background: rgba(124, 139, 255, 0.2);
     color: #fff;
 }
 
@@ -1756,7 +1756,7 @@
     text-overflow: ellipsis;
 }
 #view-dataset .dataset-custom-dropdown-display:hover {
-    border-color: var(--accent-primary, #ff8a3d);
+    border-color: var(--accent-primary, #7c8bff);
 }
 .dataset-custom-dropdown-list {
     position: fixed;
@@ -1778,11 +1778,11 @@
     cursor: pointer;
 }
 .dataset-custom-dropdown-option:hover {
-    background: rgba(255, 138, 61, 0.15);
+    background: rgba(124, 139, 255, 0.15);
     color: var(--text-primary, #f1f5f9);
 }
 .dataset-custom-dropdown-option.selected {
-    color: var(--accent-primary, #ff8a3d);
+    color: var(--accent-primary, #7c8bff);
 }
 
 
@@ -1839,6 +1839,6 @@
     min-height: 60px;
 }
 #view-dataset #btn-dataset-split-view.active {
-    background: rgba(255, 138, 61, 0.2);
-    color: var(--accent-primary, #ff8a3d);
+    background: rgba(124, 139, 255, 0.2);
+    color: var(--accent-primary, #7c8bff);
 }

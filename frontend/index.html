@@ -389,6 +389,19 @@
 
                     <div class="divider-h" aria-hidden="true"></div>
 
+                    <!-- v3.3.1 FEAT-COLLECTIONS: Collections / Favorites browser -->
+                    <div class="collections-section" aria-label="Collections">
+                        <div class="collections-section-header">
+                            <h4 class="collections-section-title" data-i18n="collections.title">Collections</h4>
+                            <button id="btn-new-collection" class="btn btn-ghost btn-small btn-icon-only" title="New collection" aria-label="New collection" data-i18n-title="collections.new">
+                                <span aria-hidden="true">＋</span>
+                            </button>
+                        </div>
+                        <div id="collections-list" class="collections-list"></div>
+                    </div>
+
+                    <div class="divider-h" aria-hidden="true"></div>
+
                     <button id="btn-toggle-select" class="btn btn-primary btn-large full-width" aria-pressed="false" aria-label="Toggle image selection mode">
                         <span aria-hidden="true">✔</span>
                         <span data-i18n="gallery.selectImages">Select Images</span>
@@ -1233,18 +1246,34 @@
                             <div class="folder-slot" data-key="w">
                                 <div class="folder-key">W</div>
                                 <div class="folder-arrow">↑</div>
-                                <input type="text" class="folder-path-input" placeholder="D:\sorted\top"
-                                    data-key="w">
-                                <button class="btn btn-small btn-secondary browse-folder">📁</button>
+                                <div class="slot-target" data-key="w">
+                                    <div class="slot-type-toggle" role="radiogroup" aria-label="Slot W destination type">
+                                        <label><input type="radio" name="slot-type-w" value="folder" data-key="w" checked> <span data-i18n="manual.slotTypeFolder">Folder</span></label>
+                                        <label><input type="radio" name="slot-type-w" value="collection" data-key="w"> <span data-i18n="manual.slotTypeCollection">Collection</span></label>
+                                    </div>
+                                    <div class="slot-folder-target">
+                                        <input type="text" class="folder-path-input" placeholder="D:\sorted\top" data-key="w">
+                                        <button class="btn btn-small btn-secondary browse-folder">📁</button>
+                                    </div>
+                                    <select class="slot-collection-select" data-key="w" hidden></select>
+                                </div>
                             </div>
 
                             <div class="folder-row-middle">
                                 <div class="folder-slot" data-key="a">
                                     <div class="folder-key">A</div>
                                     <div class="folder-arrow">←</div>
-                                    <input type="text" class="folder-path-input" placeholder="D:\sorted\keep"
-                                        data-key="a">
-                                    <button class="btn btn-small btn-secondary browse-folder">📁</button>
+                                    <div class="slot-target" data-key="a">
+                                        <div class="slot-type-toggle" role="radiogroup" aria-label="Slot A destination type">
+                                            <label><input type="radio" name="slot-type-a" value="folder" data-key="a" checked> <span data-i18n="manual.slotTypeFolder">Folder</span></label>
+                                            <label><input type="radio" name="slot-type-a" value="collection" data-key="a"> <span data-i18n="manual.slotTypeCollection">Collection</span></label>
+                                        </div>
+                                        <div class="slot-folder-target">
+                                            <input type="text" class="folder-path-input" placeholder="D:\sorted\keep" data-key="a">
+                                            <button class="btn btn-small btn-secondary browse-folder">📁</button>
+                                        </div>
+                                        <select class="slot-collection-select" data-key="a" hidden></select>
+                                    </div>
                                 </div>
 
                                 <div class="space-indicator">
@@ -1255,18 +1284,34 @@
                                 <div class="folder-slot" data-key="d">
                                     <div class="folder-key">D</div>
                                     <div class="folder-arrow">→</div>
-                                    <input type="text" class="folder-path-input" placeholder="D:\sorted\best"
-                                        data-key="d">
-                                    <button class="btn btn-small btn-secondary browse-folder">📁</button>
+                                    <div class="slot-target" data-key="d">
+                                        <div class="slot-type-toggle" role="radiogroup" aria-label="Slot D destination type">
+                                            <label><input type="radio" name="slot-type-d" value="folder" data-key="d" checked> <span data-i18n="manual.slotTypeFolder">Folder</span></label>
+                                            <label><input type="radio" name="slot-type-d" value="collection" data-key="d"> <span data-i18n="manual.slotTypeCollection">Collection</span></label>
+                                        </div>
+                                        <div class="slot-folder-target">
+                                            <input type="text" class="folder-path-input" placeholder="D:\sorted\best" data-key="d">
+                                            <button class="btn btn-small btn-secondary browse-folder">📁</button>
+                                        </div>
+                                        <select class="slot-collection-select" data-key="d" hidden></select>
+                                    </div>
                                 </div>
                             </div>
 
                             <div class="folder-slot" data-key="s">
                                 <div class="folder-key">S</div>
                                 <div class="folder-arrow">↓</div>
-                                <input type="text" class="folder-path-input" placeholder="D:\sorted\delete"
-                                    data-key="s">
-                                <button class="btn btn-small btn-secondary browse-folder">📁</button>
+                                <div class="slot-target" data-key="s">
+                                    <div class="slot-type-toggle" role="radiogroup" aria-label="Slot S destination type">
+                                        <label><input type="radio" name="slot-type-s" value="folder" data-key="s" checked> <span data-i18n="manual.slotTypeFolder">Folder</span></label>
+                                        <label><input type="radio" name="slot-type-s" value="collection" data-key="s"> <span data-i18n="manual.slotTypeCollection">Collection</span></label>
+                                    </div>
+                                    <div class="slot-folder-target">
+                                        <input type="text" class="folder-path-input" placeholder="D:\sorted\delete" data-key="s">
+                                        <button class="btn btn-small btn-secondary browse-folder">📁</button>
+                                    </div>
+                                    <select class="slot-collection-select" data-key="s" hidden></select>
+                                </div>
                             </div>
                         </div>
 
@@ -2120,6 +2165,12 @@
                                     <input type="range" id="similar-search-threshold" min="0.0" max="1.0" step="0.05" value="0.50" style="flex:1;">
                                     <span id="similar-search-threshold-value" style="font-size:12px;min-width:32px;">50%</span>
                                 </div>
+                                <div class="similar-scope-row" style="display:flex;align-items:center;gap:8px;width:100%;margin-top:4px;">
+                                    <label for="similar-search-scope" style="font-size:12px;white-space:nowrap;color:var(--text-muted,#8899aa);" data-i18n="similar.scopeLabel">Search in:</label>
+                                    <select id="similar-search-scope" class="input" style="flex:1;">
+                                        <option value="" data-i18n="similar.scopeAll">All images</option>
+                                    </select>
+                                </div>
                                 <div class="similar-upload-dropzone" id="similar-upload-dropzone" role="button" tabindex="0" aria-describedby="similar-upload-hint">
                                     <div class="similar-upload-copy">
                                         <span class="similar-upload-title">Drop an image here</span>
@@ -2369,7 +2420,7 @@
                                 <div class="promptlab-output-header">
                                     <h4 data-i18n="promptlab.output">Generated Prompt</h4>
                                     <div class="promptlab-gen-buttons">
-                                        <button class="btn btn-secondary" id="btn-promptlab-use-gallery" title="Send prompt to Gallery filters" data-i18n-title="promptlab.useInGallery">🔎 <span data-i18n="promptlab.useInGallery">Gallery</span></button>
+                                        <button class="btn btn-secondary" id="btn-promptlab-use-gallery" title="Find images containing this prompt in the Gallery" data-i18n-title="promptlab.findInGallery">🔎 <span data-i18n="promptlab.findInGallery">Find in Gallery</span></button>
                                         <button class="btn btn-primary" id="btn-promptlab-generate" data-i18n="promptlab.generate">Generate</button>
                                         <button class="btn btn-secondary" id="btn-promptlab-copy" title="Copy" aria-label="Copy" data-i18n-title="promptlab.copy" data-i18n-aria="promptlab.copy">📋</button>
                                         <button class="btn btn-secondary" id="btn-promptlab-validate" title="Validate" aria-label="Validate" data-i18n-title="promptlab.validate" data-i18n-aria="promptlab.validate">✅</button>
@@ -5075,6 +5126,7 @@
     <script src="/static/js/app.js"></script>
     <script src="/static/js/folder-browser.js"></script>
     <script src="/static/js/gallery.js"></script>
+    <script src="/static/js/collections-ui.js"></script>
     <script src="/static/js/autosep.js"></script>
     <script src="/static/js/manual-sort.js"></script>
     <script src="/static/js/audio.js"></script>

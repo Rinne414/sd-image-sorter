@@ -16,20 +16,20 @@
 
 /* Drop zone */
 .obfuscate-drop-zone {
-    border: 2px dashed rgba(245, 158, 11, 0.25);
+    border: 2px dashed rgba(124, 139, 255, 0.25);
     border-radius: 14px;
     padding: 24px 16px;
     text-align: center;
     cursor: pointer;
     transition: all 0.2s;
-    background: linear-gradient(135deg, rgba(20, 184, 166, 0.04), rgba(245, 158, 11, 0.04));
+    background: linear-gradient(135deg, rgba(51, 214, 224, 0.04), rgba(124, 139, 255, 0.04));
 }
 
 .obfuscate-drop-zone:hover,
 .obfuscate-drop-zone.drag-over {
-    border-color: rgba(245, 158, 11, 0.5);
-    background: linear-gradient(135deg, rgba(20, 184, 166, 0.08), rgba(245, 158, 11, 0.08));
-    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.08);
+    border-color: rgba(124, 139, 255, 0.5);
+    background: linear-gradient(135deg, rgba(51, 214, 224, 0.08), rgba(124, 139, 255, 0.08));
+    box-shadow: 0 0 0 4px rgba(124, 139, 255, 0.08);
 }
 
 .obfuscate-drop-inner {
@@ -234,7 +234,7 @@
 
 .obfuscate-item-name-input:focus {
     outline: none;
-    border-color: rgba(245, 158, 11, 0.5);
+    border-color: rgba(124, 139, 255, 0.5);
     background: rgba(0, 0, 0, 0.3);
 }
 

@@ -5,6 +5,39 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.1] - 2026-06-03
+
+UI/UX + visual release. Finishes the Favorites & Collections experience whose backend
+shipped in v3.3.0 (you could click the heart but had no way to *see* what you favorited):
+a left-sidebar Collections section, browse-by-collection, create / rename / delete, and a
+right-click "Add to collection" with multi-select. Four features now connect — similarity
+search and the WASD manual sort can target a collection, Prompt Lab and the gallery
+cross-link, and collections thread through the gallery filters. Plus a full "Aurora Glass"
+visual refresh (indigo→cyan accent). No functionality limits added.
+
+UI/UX + 视觉版本。把 v3.3.0 只做了后端的「收藏与合集」补成完整体验（之前能点爱心却无处
+查看）：左侧栏合集区、按合集浏览、新建 / 重命名 / 删除，以及右键「加入合集」（支持多选）。
+四项功能打通——相似度搜索与 WASD 手动分拣可指向某个合集、Prompt Lab 与图库互相跳转、合集
+贯穿图库筛选。另含完整「Aurora Glass」视觉翻新（靛→青强调色）。未新增任何功能上限。
+
+### Added / 新增
+- **Favorites & Collections UI**: the read / browse / manage half of the feature. A new left-sidebar Collections section lists Favorites plus your named collections with live counts; click one to browse only its images. Create, rename, and delete collections inline (the Favorites collection is protected from deletion). A right-click **Add to collection** menu supports multi-select batches.
+  - **收藏与合集界面**：补上「查看 / 浏览 / 管理」这一半。左侧栏新增合集区，列出收藏与你的具名合集（带实时数量）；点一下即可只浏览该合集的图片。可就地新建 / 重命名 / 删除（收藏合集受删除保护）。右键「加入合集」菜单支持多选批量。
+
+### Changed / 变更
+- **"Aurora Glass" visual refresh**: a unified indigo→cyan accent over refined dark glassmorphism, replacing the previous amber / teal palette. Token-driven, so accents, gradients, borders, glows, focus rings, and hover states move together across every view.
+  - **「Aurora Glass」视觉翻新**：统一的靛→青强调色配精修的深色玻璃拟态，取代旧的琥珀 / 青绿配色。完全 token 驱动，强调色、渐变、边框、光晕、聚焦环、悬停态在所有视图一起更新。
+- **Features connect further**: similarity search can be scoped to a collection or Favorites; the WASD manual sort can drop images into a collection by reference (no file move) with undo / redo; Prompt Lab and the gallery cross-link (use a built prompt's terms as a gallery filter, and jump from an image back into the Lab).
+  - **功能进一步打通**：相似度搜索可限定在某个合集或收藏内；WASD 手动分拣可按引用「收入合集」（不移动文件）并支持撤销 / 重做；Prompt Lab 与图库互相跳转（把构建好的 prompt 词条当图库筛选用，或从某张图跳回 Lab）。
+
+### Fixed / 修复
+- **Collection browse total count**: browsing a collection reported the whole library's image count as the gallery total. The cursor-path count now honors the collection filter, so the reported total matches what you see.
+  - **合集浏览总数**：浏览合集时图库总数显示的是整库数量。游标路径的计数现在会遵守合集筛选，显示的总数与你看到的一致。
+
+### Internal / 内部
+- **Hermetic E2E artist runtime**: the model-manager E2E suite no longer resolves the LSNet artist runtime to a developer's real `models/artist/` checkout. Both runtime resolvers skip the legacy in-repo paths when `SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY=1` (set only by the test harness; production is unchanged), so local runs match clean CI.
+  - **E2E 画师运行时隔离**：model-manager E2E 不再把 LSNet 画师运行时解析到开发者本机真实的 `models/artist/` 目录。两个运行时解析器在 `SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY=1` 时跳过 repo legacy 路径（仅测试环境设置，生产不变），本机结果与干净 CI 一致。
+
 ## [3.3.0] - 2026-06-02
 
 Feature + workflow release. Three user-reported pain points fixed (file moves

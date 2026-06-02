@@ -30,7 +30,7 @@
 
 .caption-autocomplete-item:hover,
 .caption-autocomplete-item.active {
-    background: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.20);
+    background: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.20);
 }
 
 .caption-autocomplete-name {

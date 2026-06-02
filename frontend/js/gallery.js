@@ -248,6 +248,8 @@ const Gallery = {
             const favorited = Boolean(result?.favorited);
             if (favorited) this.favoriteIds.add(id); else this.favoriteIds.delete(id);
             this._applyFavoriteStateToDom();
+            // v3.3.1 FEAT-COLLECTIONS: refresh the sidebar Favorites count.
+            window.CollectionsUI?.notifyChanged?.();
         } catch (error) {
             // Roll back.
             if (next) this.favoriteIds.delete(id); else this.favoriteIds.add(id);
@@ -3363,6 +3365,8 @@ ${String(value)}`)
                 : t('collections.contextFavorite', 'Add to Favorites'),
               icon: this.isFavorited(image.id) ? '\u{1F494}' : '♥',
               action: () => this.toggleFavorite(image.id) },
+            { label: labelWithScope('collections.contextAddTo', 'Add to collection…'), icon: '\u{1F4DA}',
+              action: () => window.CollectionsUI?.openAddToCollectionPicker?.(actionImageIds) },
             { type: 'separator' },
             { label: labelWithScope('gallery.contextMoveImage', 'Move...'), icon: '\u{1F4C1}', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'move', { source: 'context' }) },
             { label: labelWithScope('gallery.contextCopyImage', 'Copy...'), icon: '\u{1F4C4}', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'copy', { source: 'context' }) },

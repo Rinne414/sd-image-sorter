@@ -1283,6 +1283,7 @@ class ImageService:
         # v3.3.0 FEAT-EXCLUDE-EXTRA
         exclude_prompts: Optional[str] = None,
         exclude_colors: Optional[str] = None,
+        collection_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Retrieve images with optional filtering using cursor-based pagination.
@@ -1398,6 +1399,7 @@ class ImageService:
                     exclude_loras=ex_lr_list,
                     exclude_prompts=ex_prompt_list,
                     exclude_colors=ex_color_list,
+                    collection_id=collection_id,
                     skip_count=total >= 0,
                 )
                 if total < 0:
@@ -1466,6 +1468,7 @@ class ImageService:
                 exclude_loras=ex_lr_list,
                 exclude_prompts=ex_prompt_list,
                 exclude_colors=ex_color_list,
+                collection_id=collection_id,
             )
             if not batch:
                 break
@@ -1511,6 +1514,7 @@ class ImageService:
             exclude_loras=ex_lr_list,
             exclude_prompts=ex_prompt_list,
             exclude_colors=ex_color_list,
+            collection_id=collection_id,
         )
 
         return {

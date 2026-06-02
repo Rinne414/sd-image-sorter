@@ -50,7 +50,7 @@ BATCH_MOVE_FETCH_CHUNK = 500
 STATS_FACET_LIMIT = 50
 ANALYTICS_DEFAULT_LIMIT = 500
 SEARCH_MAX_LENGTH = 1000
-VALID_SORT_ACTIONS = ["move", "skip", "undo", "redo"]
+VALID_SORT_ACTIONS = ["move", "skip", "undo", "redo", "collect"]
 VALID_FILE_OPERATIONS = ["move", "copy"]
 VALID_PROMPT_MATCH_MODES = {"exact", "contains"}
 SCAN_LOG_HEARTBEAT_SECONDS = max(
@@ -263,13 +263,23 @@ class BatchMoveRequest(SortFilterRequest):
 class ManualSortStartRequest(SortFilterRequest):
     """Request model for starting manual sort without query-string size limits."""
     folders: Optional[Dict[str, str]] = None
+    # v3.3.1: optional per-slot collection ids ({key: collection_id|None}).
+    collection_slots: Optional[Dict[str, Optional[int]]] = None
     operation_mode: str = Field(default="move", max_length=16)
     replace_existing: bool = False
 
 
 class FolderConfig(BaseModel):
-    """Request model for folder configuration."""
+    """Request model for folder configuration.
+
+    v3.3.1: ``collection_slots`` is an optional per-slot collection mapping
+    (``{key: collection_id|None}``). When omitted, existing folder behavior is
+    untouched; when present, a slot with a collection id becomes
+    "collection-typed" and its key adds the current image to that collection by
+    reference instead of moving the file.
+    """
     folders: Dict[str, str] = Field(...)
+    collection_slots: Optional[Dict[str, Optional[int]]] = Field(default=None)
 
     @field_validator('folders')
     @classmethod
@@ -279,6 +289,16 @@ class FolderConfig(BaseModel):
                 raise ValueError(f'Folder key "{key}" exceeds max length of {FOLDER_KEY_MAX_LENGTH}')
             if path and len(path) > PATH_MAX_LENGTH:
                 raise ValueError(f'Path for key "{key}" exceeds max length of {PATH_MAX_LENGTH}')
+        return v
+
+    @field_validator('collection_slots')
+    @classmethod
+    def validate_collection_slots(cls, v: Optional[Dict[str, Optional[int]]]) -> Optional[Dict[str, Optional[int]]]:
+        if v is None:
+            return v
+        for key in v:
+            if len(key) > FOLDER_KEY_MAX_LENGTH:
+                raise ValueError(f'Collection slot key "{key}" exceeds max length of {FOLDER_KEY_MAX_LENGTH}')
         return v
 
 
@@ -376,6 +396,11 @@ class SortingService:
             "image_ids": [],
             "current_index": 0,
             "folders": {},
+            # v3.3.1: per-slot collection mapping. A slot key (w/a/s/d) whose
+            # value is a collection id is "collection-typed": pressing it adds
+            # the current image to that collection BY REFERENCE (no file move).
+            # Slots with a None value fall back to the normal folder behavior.
+            "collection_slots": {},
             "operation_mode": "move",
             "history": [],
             "redo_stack": [],
@@ -492,9 +517,11 @@ class SortingService:
         active_history = history if history is not None else self._sort_session.get("history", [])
         sorted_count = sum(1 for item in active_history if item.get("action") == "move")
         skipped_count = sum(1 for item in active_history if item.get("action") == "skip")
+        collected_count = sum(1 for item in active_history if item.get("action") == "collect")
         return {
             "sorted_count": sorted_count,
             "skipped_count": skipped_count,
+            "collected_count": collected_count,
         }
 
     def _get_sort_session_flags(
@@ -577,6 +604,32 @@ class SortingService:
             coerced.update(state)
         return coerced
 
+    @staticmethod
+    def _coerce_collection_slots(slots: Optional[Any]) -> Dict[str, Optional[int]]:
+        """Normalize a per-slot collection mapping to ``{key: int|None}``.
+
+        v3.3.1: accepts the JSON/dict form the frontend sends. Non-int / blank
+        / 0 / negative values collapse to ``None`` (a normal folder slot). Slot
+        keys are bounded by ``FOLDER_KEY_MAX_LENGTH`` to match folder configs.
+        """
+        if not isinstance(slots, dict):
+            return {}
+        normalized: Dict[str, Optional[int]] = {}
+        for key, value in slots.items():
+            key_str = str(key)
+            if not key_str or len(key_str) > FOLDER_KEY_MAX_LENGTH:
+                continue
+            if value is None or value == "":
+                normalized[key_str] = None
+                continue
+            try:
+                collection_id = int(value)
+            except (TypeError, ValueError):
+                normalized[key_str] = None
+                continue
+            normalized[key_str] = collection_id if collection_id > 0 else None
+        return normalized
+
     def _coerce_sort_session_state(self, session: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """Normalize externally injected sort-session state onto the canonical shape."""
         coerced = self._build_default_sort_session_state()
@@ -584,6 +637,7 @@ class SortingService:
         coerced["active"] = bool(session.get("active", False))
         coerced["image_ids"] = list(session.get("image_ids", []))
         coerced["folders"] = dict(session.get("folders", {}))
+        coerced["collection_slots"] = self._coerce_collection_slots(session.get("collection_slots"))
         coerced["history"] = list(session.get("history", []))
         coerced["redo_stack"] = list(session.get("redo_stack", []))
         coerced["operation_mode"] = self._validate_file_operation(session.get("operation_mode", "move"))
@@ -603,6 +657,7 @@ class SortingService:
             "active": session["active"],
             "current_index": session["current_index"],
             "folders": session["folders"],
+            "collection_slots": session["collection_slots"],
             "operation_mode": session["operation_mode"],
             "history": session["history"],
             "redo_stack": session["redo_stack"],
@@ -1029,6 +1084,19 @@ class SortingService:
         )
         if source_path and original_folder:
             move_image(history_entry["image_id"], original_folder, source_path)
+
+    @staticmethod
+    def _undo_collect_action(history_entry: Dict[str, Any]) -> None:
+        """Undo a previous collect action by removing the membership reference.
+
+        v3.3.1: collect never touches the file, so undo only drops the
+        ``collection_items`` row for ``(collection_id, image_id)``.
+        """
+        collection_id = history_entry.get("collection_id")
+        image_id = history_entry.get("image_id")
+        if collection_id is None or image_id is None:
+            return
+        db.set_collection_membership(int(collection_id), int(image_id), False)
 
     def _filter_readable_image_ids(self, image_ids: List[int]) -> tuple[List[int], List[Dict[str, Any]]]:
         """Drop unreadable images from interactive sorting/move flows and mark them in DB."""
@@ -2097,6 +2165,8 @@ class SortingService:
         exclude_ratings: Optional[Any] = None,
         exclude_checkpoints: Optional[Any] = None,
         exclude_loras: Optional[Any] = None,
+        # v3.3.1: per-slot collection ids ({key: collection_id|None}).
+        collection_slots: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """Start a manual sort session."""
         operation_mode = self._validate_file_operation(operation_mode)
@@ -2167,6 +2237,7 @@ class SortingService:
         # starting a session doesn't stall on thousands of PIL decodes.
 
         folder_config = self._parse_sort_folders(folders)
+        collection_slot_config = self._coerce_collection_slots(collection_slots)
 
         with self._sort_session_lock:
             self._sort_session = self._coerce_sort_session_state({
@@ -2174,6 +2245,7 @@ class SortingService:
                 "image_ids": image_ids,
                 "current_index": 0,
                 "folders": folder_config,
+                "collection_slots": collection_slot_config,
                 "operation_mode": operation_mode,
                 "history": [],
                 "redo_stack": [],
@@ -2206,6 +2278,7 @@ class SortingService:
                         "remaining": 0,
                         "image_ids": [],
                         "folders": {},
+                        "collection_slots": {},
                         "operation_mode": "move",
                         **self._get_sort_session_flags([], []),
                     }
@@ -2251,6 +2324,7 @@ class SortingService:
                 "remaining": len(image_ids) - current_index,
                 "image_ids": list(image_ids),
                 "folders": dict(self._sort_session["folders"]),
+                "collection_slots": dict(self._sort_session.get("collection_slots", {})),
                 "operation_mode": self._sort_session.get("operation_mode", "move"),
                 **self._get_sort_session_flags(history_snapshot, self._sort_session.get("redo_stack", [])),
             }
@@ -2302,6 +2376,25 @@ class SortingService:
                                     status_code=500,
                                     detail=f"Could not undo last action: {e}",
                                 )
+                    elif last["action"] == "collect":
+                        # v3.3.1: collect adds a membership reference (no file
+                        # move). Undo removes that membership. A missing/invalid
+                        # collection id can't be reversed; roll the session back
+                        # so the user can retry rather than silently advancing.
+                        try:
+                            self._undo_collect_action(last)
+                        except Exception as e:
+                            logger.error(
+                                "Error undoing collect for image %s: %s",
+                                last.get("image_id"),
+                                e,
+                            )
+                            self._sort_session["redo_stack"].pop()
+                            self._sort_session["history"].append(last)
+                            raise HTTPException(
+                                status_code=500,
+                                detail=f"Could not undo last action: {e}",
+                            )
                     self._sort_session["current_index"] = max(0, self._sort_session["current_index"] - 1)
                 else:
                     return {
@@ -2400,6 +2493,25 @@ class SortingService:
                             "operation_mode": operation_mode,
                             **self._get_sort_session_flags(),
                         }
+                elif redone_action == "collect":
+                    # v3.3.1: re-add the membership reference (no file move).
+                    collection_id = redo_entry.get("collection_id")
+                    try:
+                        if collection_id is not None and target_id is not None:
+                            db.set_collection_membership(int(collection_id), int(target_id), True)
+                    except Exception as e:
+                        logger.error(
+                            "Redo collect failed for image %s into collection %s: %s",
+                            target_id,
+                            collection_id,
+                            e,
+                        )
+                        redo_stack.append(redo_entry)
+                        return {
+                            "error": "Failed to redo collect",
+                            "operation_mode": operation_mode,
+                            **self._get_sort_session_flags(),
+                        }
 
                 self._sort_session["history"].append(redo_entry)
                 self._sort_session["current_index"] += 1
@@ -2448,6 +2560,13 @@ class SortingService:
             if action == "move" and not folder_key:
                 return {
                     "error": "Folder key is required for move",
+                    "operation_mode": operation_mode,
+                    **self._get_sort_session_flags(),
+                }
+
+            if action == "collect" and not folder_key:
+                return {
+                    "error": "Folder key is required for collect",
                     "operation_mode": operation_mode,
                     **self._get_sort_session_flags(),
                 }
@@ -2520,6 +2639,51 @@ class SortingService:
                         "operation_mode": operation_mode,
                         **self._get_sort_session_flags(),
                     }
+            elif action == "collect":
+                # v3.3.1: add the current image to the slot's collection BY
+                # REFERENCE. No file is moved/copied — the file stays in place
+                # and only a membership row is written, mirroring how the
+                # gallery heart/Favorites toggle works.
+                collection_id = self._sort_session.get("collection_slots", {}).get(folder_key)
+                if not collection_id:
+                    return {
+                        "error": f"Slot {folder_key.upper()} is not assigned to a collection",
+                        "operation_mode": operation_mode,
+                        **self._get_sort_session_flags(),
+                    }
+                try:
+                    db.set_collection_membership(int(collection_id), current["id"], True)
+                except ValueError as e:
+                    logger.error(
+                        "Collect failed for image %d into collection %s: %s",
+                        current["id"],
+                        collection_id,
+                        e,
+                    )
+                    return {
+                        "error": "Failed to add image to collection",
+                        "operation_mode": operation_mode,
+                        **self._get_sort_session_flags(),
+                    }
+                except Exception as e:
+                    logger.error(
+                        "Collect failed for image %d into collection %s: %s",
+                        current["id"],
+                        collection_id,
+                        e,
+                    )
+                    return {
+                        "error": "Failed to add image to collection",
+                        "operation_mode": operation_mode,
+                        **self._get_sort_session_flags(),
+                    }
+                self._sort_session["redo_stack"] = []
+                self._sort_session["history"].append({
+                    "action": "collect",
+                    "image_id": current["id"],
+                    "collection_id": int(collection_id),
+                    "folder_key": folder_key,
+                })
             elif action == "skip":
                 self._sort_session["redo_stack"] = []
                 self._sort_session["history"].append({
@@ -2552,7 +2716,7 @@ class SortingService:
             }
 
     def set_sort_folders(self, config: FolderConfig) -> Dict[str, Any]:
-        """Set folder destinations for sort keys."""
+        """Set folder destinations (and optional per-slot collections) for sort keys."""
         normalized_folders = dict(config.folders)
         for key, path in config.folders.items():
             if path:
@@ -2566,15 +2730,37 @@ class SortingService:
                     raise HTTPException(status_code=400, detail=f"Cannot create folder for key '{key}': {exc}") from exc
                 normalized_folders[key] = normalized_path
 
+        # v3.3.1: collection_slots is optional. When provided, validate that
+        # each referenced collection actually exists so a stale id can't be
+        # silently stored and then no-op at collect time.
+        collection_slots = self._validate_collection_slots(config.collection_slots)
+
         with self._sort_session_lock:
             self._sort_session["folders"] = normalized_folders
+            if config.collection_slots is not None:
+                self._sort_session["collection_slots"] = collection_slots
             self._save_session_to_disk()
-        return {"status": "ok", "folders": normalized_folders}
+            stored_slots = dict(self._sort_session.get("collection_slots", {}))
+        return {"status": "ok", "folders": normalized_folders, "collection_slots": stored_slots}
+
+    def _validate_collection_slots(self, slots: Optional[Any]) -> Dict[str, Optional[int]]:
+        """Coerce + verify per-slot collection ids; unknown ids raise a 400."""
+        normalized = self._coerce_collection_slots(slots)
+        for key, collection_id in normalized.items():
+            if collection_id is not None and not db.collection_exists(int(collection_id)):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Collection {collection_id} for slot '{key}' does not exist",
+                )
+        return normalized
 
     def get_sort_folders(self) -> Dict[str, Any]:
-        """Get current folder configuration."""
+        """Get current folder configuration (and per-slot collections)."""
         with self._sort_session_lock:
-            return {"folders": self._sort_session["folders"]}
+            return {
+                "folders": self._sort_session["folders"],
+                "collection_slots": dict(self._sort_session.get("collection_slots", {})),
+            }
 
     def clear_sort_session(self) -> Dict[str, str]:
         """Clear the current sort session."""
@@ -2949,6 +3135,9 @@ class SortingService:
                             'image_ids': valid_ids,
                             'current_index': restored_index,
                             'folders': validated_folders,
+                            # v3.3.1: restore per-slot collection mapping.
+                            # Missing in legacy v0 files -> coerces to {}.
+                            'collection_slots': data.get('collection_slots'),
                             'operation_mode': operation_mode,
                             'history': restored_history,
                             'redo_stack': restored_redo_stack,

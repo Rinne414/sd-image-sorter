@@ -12,7 +12,7 @@ import os
 import tempfile
 import threading
 import time
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Set, Tuple, Any
 
 import numpy as np
 from PIL import Image, UnidentifiedImageError
@@ -519,8 +519,14 @@ class SimilarityIndex:
         limit: int = SIMILARITY_DEFAULT_LIMIT,
         threshold: float = SIMILARITY_DEFAULT_THRESHOLD,
         offset: int = 0,
+        allowed_ids: Optional[Set[int]] = None,
     ) -> Dict[str, Any]:
-        """Find images similar to a given image ID."""
+        """Find images similar to a given image ID.
+
+        When ``allowed_ids`` is provided, results are restricted to that set of
+        image ids (e.g. a collection or Favorites). ``None`` searches the whole
+        library — the long-standing default behavior.
+        """
         with self.db.get_db() as conn:
             cursor = conn.cursor()
 
@@ -541,6 +547,7 @@ class SimilarityIndex:
             page_limit,
             page_offset,
             exclude_id=image_id,
+            allowed_ids=allowed_ids,
         )
         return {
             "results": page,
@@ -556,8 +563,14 @@ class SimilarityIndex:
         limit: int = SIMILARITY_DEFAULT_LIMIT,
         threshold: float = SIMILARITY_DEFAULT_THRESHOLD,
         offset: int = 0,
+        allowed_ids: Optional[Set[int]] = None,
     ) -> Dict[str, Any]:
-        """Find images similar to an uploaded image."""
+        """Find images similar to an uploaded image.
+
+        When ``allowed_ids`` is provided, results are restricted to that set of
+        image ids (e.g. a collection or Favorites). ``None`` searches the whole
+        library — the long-standing default behavior.
+        """
         try:
             pil_image = Image.open(io.BytesIO(image_data))
             pil_image.load()
@@ -583,6 +596,7 @@ class SimilarityIndex:
             threshold,
             page_limit,
             page_offset,
+            allowed_ids=allowed_ids,
         )
         return {
             "results": page,
@@ -797,6 +811,7 @@ class SimilarityIndex:
         offset: int,
         *,
         exclude_id: Optional[int] = None,
+        allowed_ids: Optional[Set[int]] = None,
     ) -> Tuple[List[Dict[str, Any]], int, bool]:
         """Rank candidates, preferring the in-memory vectorized cache.
 
@@ -804,17 +819,23 @@ class SimilarityIndex:
         If the cache is unavailable (disabled, not buildable, dimension mismatch,
         or any failure) it transparently falls back to the streaming heap scan so
         results are identical and never capped.
+
+        When ``allowed_ids`` is set, both paths restrict candidates to that id set
+        (collection / Favorites scope) before threshold filtering and pagination,
+        so ``total`` / ``has_more`` reflect the scoped result set.
         """
         page_limit, page_offset, keep_count = self._normalize_similarity_window(limit, offset)
 
         cached = self._try_cached_ranked_candidates(
-            query_emb, threshold, page_limit, page_offset, exclude_id=exclude_id
+            query_emb, threshold, page_limit, page_offset,
+            exclude_id=exclude_id, allowed_ids=allowed_ids,
         )
         if cached is not None:
             return cached
 
         return self._stream_ranked_candidates(
-            query_emb, threshold, page_limit, page_offset, keep_count, exclude_id=exclude_id
+            query_emb, threshold, page_limit, page_offset, keep_count,
+            exclude_id=exclude_id, allowed_ids=allowed_ids,
         )
 
     def _stream_ranked_candidates(
@@ -826,13 +847,20 @@ class SimilarityIndex:
         keep_count: int,
         *,
         exclude_id: Optional[int] = None,
+        allowed_ids: Optional[Set[int]] = None,
     ) -> Tuple[List[Dict[str, Any]], int, bool]:
-        """Stream candidates through a bounded heap to avoid loading every embedding at once."""
+        """Stream candidates through a bounded heap to avoid loading every embedding at once.
+
+        When ``allowed_ids`` is set, candidates outside that id set are skipped so
+        ``total`` counts only scoped matches, keeping pagination/``has_more`` correct.
+        """
         total = 0
         top_heap: List[Tuple[float, int, Dict[str, Any]]] = []
 
         for chunk in self._iter_embedding_candidate_chunks(exclude_id=exclude_id):
             for result in self._rank_candidate_rows(query_emb, chunk, threshold):
+                if allowed_ids is not None and int(result["id"]) not in allowed_ids:
+                    continue
                 total += 1
                 item = (float(result["similarity"]), -int(result["id"]), result)
                 if len(top_heap) < keep_count:
@@ -987,6 +1015,7 @@ class SimilarityIndex:
         page_offset: int,
         *,
         exclude_id: Optional[int] = None,
+        allowed_ids: Optional[Set[int]] = None,
     ) -> Optional[Tuple[List[Dict[str, Any]], int, bool]]:
         """Vectorized ranking over the cached matrix.
 
@@ -994,6 +1023,10 @@ class SimilarityIndex:
         ordering matches _stream_ranked_candidates exactly: filter on the raw
         cosine (>= threshold), sort by the 4-decimal-rounded similarity descending
         with ascending id as the tie-break.
+
+        When ``allowed_ids`` is set, a boolean membership mask over ``cache["ids"]``
+        is folded into the threshold/exclude mask before sort + pagination, so the
+        scoped result matches the streaming path exactly.
         """
         cache = self._ensure_vector_cache()
         if cache is None:
@@ -1013,6 +1046,10 @@ class SimilarityIndex:
         mask = sims >= threshold
         if exclude_id is not None:
             mask &= ids != int(exclude_id)
+        if allowed_ids is not None:
+            # Restrict to the scoped id set (collection / Favorites) before ranking.
+            allowed_arr = np.fromiter(allowed_ids, dtype=np.int64, count=len(allowed_ids))
+            mask &= np.isin(ids, allowed_arr)
 
         valid_idx = np.nonzero(mask)[0]
         total = int(valid_idx.size)

@@ -267,7 +267,7 @@
             this._setButton('#btn-promptlab-random', 'promptlab.randomize', '🎲', 'promptlab.randomize');
             this._setButton('#btn-promptlab-clear', 'promptlab.clear', '🗑️', 'promptlab.clear');
             this._setText('#view-promptlab .promptlab-output-header h4', 'promptlab.output');
-            this._setButton('#btn-promptlab-use-gallery', 'promptlab.useInGallery', '🔎', 'promptlab.useInGallery');
+            this._setButton('#btn-promptlab-use-gallery', 'promptlab.findInGallery', '🔎', 'promptlab.findInGallery');
             this._setButton('#btn-promptlab-generate', 'promptlab.generate');
             this._setButton('#btn-promptlab-copy', 'promptlab.copy', '📋', 'promptlab.copy');
             this._setButton('#btn-promptlab-validate', 'promptlab.validate', '✅', 'promptlab.validate');

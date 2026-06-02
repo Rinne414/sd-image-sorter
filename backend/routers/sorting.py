@@ -407,6 +407,7 @@ async def start_sort_session(
             exclude_ratings=request.exclude_ratings,
             exclude_checkpoints=request.exclude_checkpoints,
             exclude_loras=request.exclude_loras,
+            collection_slots=request.collection_slots,
         )
 
     return service.start_sort_session(
@@ -448,11 +449,15 @@ async def get_current_sort_image(
 
 @router.post("/sort/action")
 def sort_action(
-    action: str = Query(..., description="Action: move, skip, undo"),
+    action: str = Query(..., description="Action: move, skip, undo, redo, collect"),
     folder_key: Optional[str] = Query(default=None, max_length=100),
     service: SortingService = Depends(get_sorting_service),
 ):
-    """Perform a sort action: move (with folder_key), skip, or undo."""
+    """Perform a sort action: move/collect (with folder_key), skip, undo, or redo.
+
+    v3.3.1: ``collect`` adds the current image to the collection mapped to
+    ``folder_key`` by reference (no file move) and advances the cursor.
+    """
     return service.sort_action(action, folder_key)
 
 

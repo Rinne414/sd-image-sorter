@@ -17,7 +17,7 @@
     background: linear-gradient(
         135deg,
         rgba(var(--accent-secondary-rgb), 0.12),
-        rgba(var(--accent-primary-rgb, 255, 138, 61), 0.08)
+        rgba(var(--accent-primary-rgb, 124, 139, 255), 0.08)
     );
     border: 1px solid rgba(var(--accent-secondary-rgb), 0.32);
     box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12);
@@ -159,9 +159,9 @@
 
 #smart-tag-modal .smart-tag-safety-note {
     padding: 10px 12px;
-    border: 1px solid rgba(var(--accent-secondary-rgb, 45, 212, 191), 0.26);
+    border: 1px solid rgba(var(--accent-secondary-rgb, 51, 214, 224), 0.26);
     border-radius: var(--radius-md, 8px);
-    background: rgba(var(--accent-secondary-rgb, 45, 212, 191), 0.08);
+    background: rgba(var(--accent-secondary-rgb, 51, 214, 224), 0.08);
     color: var(--text-secondary, #cbd5e1);
     font-size: 13px;
     line-height: 1.45;
@@ -258,7 +258,7 @@
     border: 1px solid rgba(255, 255, 255, 0.28);
     border-radius: 4px;
     background: var(--input-bg, var(--surface-1, #151922));
-    color: var(--accent-primary, #ff8a3d);
+    color: var(--accent-primary, #7c8bff);
 }
 
 #smart-tag-modal input[type="checkbox"]::before {
@@ -272,8 +272,8 @@
 }
 
 #smart-tag-modal input[type="checkbox"]:checked {
-    border-color: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.85);
-    background: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.18);
+    border-color: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.85);
+    background: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.18);
 }
 
 #smart-tag-modal input[type="checkbox"]:checked::before {

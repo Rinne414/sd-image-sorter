@@ -135,10 +135,13 @@ async def search_similar(
     limit: int = Query(default=100, ge=1, le=1000, description="Maximum results (1-1000)"),
     offset: int = Query(default=0, ge=0, description="Number of ranked results to skip for pagination"),
     threshold: float = Query(default=0.5, ge=0.0, le=1.0, description="Minimum similarity threshold (0.0-1.0)"),
+    collection_id: Optional[int] = Query(default=None, ge=1, description="Restrict similar results to this collection's members (v3.3.1)"),
     service: SimilarityService = Depends(get_similarity_service),
 ):
     """Find images similar to a given image ID."""
-    return await run_in_threadpool(service.search_similar, image_id, limit, threshold, offset)
+    return await run_in_threadpool(
+        service.search_similar, image_id, limit, threshold, offset, collection_id
+    )
 
 
 @router.post(
@@ -172,10 +175,11 @@ async def search_by_upload(
     limit: int = Query(default=100, ge=1, le=1000, description="Maximum results (1-1000)"),
     offset: int = Query(default=0, ge=0, description="Number of ranked results to skip for pagination"),
     threshold: float = Query(default=0.5, ge=0.0, le=1.0, description="Minimum similarity threshold"),
+    collection_id: Optional[int] = Query(default=None, ge=1, description="Restrict similar results to this collection's members (v3.3.1)"),
     service: SimilarityService = Depends(get_similarity_service),
 ):
     """Find images similar to an uploaded image."""
-    return await service.search_by_upload(file, limit, threshold, offset)
+    return await service.search_by_upload(file, limit, threshold, offset, collection_id)
 
 
 @router.get(

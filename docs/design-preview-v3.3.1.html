@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="aurora">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SD Image Sorter — v3.3.1 视觉方向预览</title>
+<style>
+/* ============================================================
+   SD Image Sorter — v3.3.1 visual-direction preview (mockup)
+   Three directions share ONE layout; only the design tokens swap.
+   Switch with the buttons at the top. Dark + image-forward.
+   This file is a throwaway design artifact, NOT app code.
+   ============================================================ */
+
+/* ---------- shared scale (rhythm, radius, motion) ---------- */
+:root{
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px;
+  --r1:8px; --r2:12px; --r3:18px; --r4:26px;
+  --dur:220ms; --ease:cubic-bezier(.16,1,.3,1);
+  --font-ui:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,"Microsoft YaHei",sans-serif;
+  --font-display:var(--font-ui);
+  color-scheme:dark;
+}
+
+/* ============================================================
+   THEME A — "Aurora Glass" (refined glassmorphism, evolved) [DEFAULT]
+   ============================================================ */
+[data-theme="aurora"]{
+  --bg:#0c1018;
+  --bg-glow-1:rgba(99,102,241,.20); --bg-glow-2:rgba(34,211,238,.14);
+  --surface:rgba(28,33,48,.55); --surface-2:rgba(40,46,66,.62);
+  --surface-solid:#161a26;
+  --hairline:rgba(255,255,255,.10); --hairline-strong:rgba(255,255,255,.18);
+  --text:#eef1f8; --text-dim:#aeb6cc; --text-mut:#7b829c;
+  --accent:#7c8bff; --accent-2:#33d6e0;
+  --accent-grad:linear-gradient(120deg,#7c8bff,#33d6e0);
+  --danger:#ff6b81; --warm:#ffb86b; --good:#5ee0a8;
+  --shadow:0 18px 40px -16px rgba(0,0,0,.7),0 2px 8px -2px rgba(0,0,0,.5);
+  --shadow-lift:0 30px 60px -18px rgba(0,0,0,.8),0 0 0 1px var(--hairline-strong);
+  --blur:18px; --card-r:var(--r3); --panel-r:var(--r4); --chip-r:999px;
+  --title-track:-.02em; --label-tt:none; --label-track:0; --label-weight:600;
+}
+/* ============================================================
+   THEME B — "Studio Noir" (dark luxury): solid near-black, warm gold
+   ============================================================ */
+[data-theme="noir"]{
+  --bg:#070708;
+  --bg-glow-1:rgba(212,175,108,.08); --bg-glow-2:rgba(212,175,108,.04);
+  --surface:#121113; --surface-2:#1a1819;
+  --surface-solid:#121113;
+  --hairline:rgba(212,184,140,.14); --hairline-strong:rgba(212,184,140,.30);
+  --text:#f4efe7; --text-dim:#b8b0a2; --text-mut:#7d766b;
+  --accent:#d8b46a; --accent-2:#e8cf95;
+  --accent-grad:linear-gradient(120deg,#d8b46a,#c8a458);
+  --danger:#e0666f; --warm:#d8b46a; --good:#9fcf8e;
+  --shadow:0 16px 36px -18px rgba(0,0,0,.9);
+  --shadow-lift:0 28px 60px -20px rgba(0,0,0,.95),0 0 0 1px var(--hairline-strong);
+  --blur:4px; --card-r:6px; --panel-r:10px; --chip-r:4px;
+  --title-track:.01em; --label-tt:uppercase; --label-track:.14em; --label-weight:600;
+}
+/* ============================================================
+   THEME C — "Atlas" (editorial / Swiss): flat, structured, bold type
+   ============================================================ */
+[data-theme="atlas"]{
+  --bg:#101113;
+  --bg-glow-1:transparent; --bg-glow-2:transparent;
+  --surface:#17191d; --surface-2:#1d2025;
+  --surface-solid:#17191d;
+  --hairline:rgba(255,255,255,.12); --hairline-strong:rgba(255,255,255,.24);
+  --text:#f3f5f7; --text-dim:#a7adb6; --text-mut:#6f757e;
+  --accent:#ff5a3c; --accent-2:#ff5a3c;
+  --accent-grad:none;
+  --danger:#ff5a3c; --warm:#ffb020; --good:#36c98a;
+  --shadow:none;
+  --shadow-lift:0 0 0 2px var(--accent);
+  --blur:0px; --card-r:2px; --panel-r:2px; --chip-r:2px;
+  --title-track:-.03em; --label-tt:uppercase; --label-track:.16em; --label-weight:700;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:var(--font-ui); color:var(--text); background:var(--bg);
+  background-image:
+    radial-gradient(900px 600px at 12% -8%,var(--bg-glow-1),transparent 60%),
+    radial-gradient(800px 700px at 110% 120%,var(--bg-glow-2),transparent 55%);
+  background-attachment:fixed;
+  -webkit-font-smoothing:antialiased; line-height:1.45;
+  transition:background var(--dur) var(--ease),color var(--dur) var(--ease);
+}
+
+/* ---------- theme switcher bar ---------- */
+.switch{position:sticky;top:0;z-index:30;display:flex;gap:var(--s3);align-items:center;
+  padding:var(--s3) var(--s5);background:rgba(0,0,0,.35);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--hairline)}
+.switch .lab{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-mut);margin-right:var(--s2)}
+.switch button{font:inherit;font-size:13px;cursor:pointer;color:var(--text-dim);
+  padding:8px 16px;border-radius:var(--chip-r);border:1px solid var(--hairline);
+  background:var(--surface);transition:all var(--dur) var(--ease)}
+.switch button:hover{color:var(--text);border-color:var(--hairline-strong);transform:translateY(-1px)}
+.switch button[aria-current="true"]{color:#0a0c12;background:var(--accent);border-color:transparent;
+  background-image:var(--accent-grad);font-weight:700}
+[data-theme="atlas"] .switch button[aria-current="true"]{color:#fff}
+.switch .note{margin-left:auto;font-size:12px;color:var(--text-mut)}
+
+/* ---------- app shell ---------- */
+.app{display:grid;grid-template-columns:268px 1fr;gap:var(--s5);max-width:1320px;margin:0 auto;padding:var(--s5)}
+.topbar{grid-column:1/-1;display:flex;align-items:center;gap:var(--s5);
+  padding:var(--s3) var(--s4);border-radius:var(--panel-r);background:var(--surface);
+  backdrop-filter:blur(var(--blur));border:1px solid var(--hairline);box-shadow:var(--shadow)}
+.brand{display:flex;align-items:center;gap:var(--s2);font-weight:800;letter-spacing:var(--title-track)}
+.brand .logo{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
+  background-image:var(--accent-grad);background-color:var(--accent);font-size:16px}
+.brand .ver{font-size:11px;color:var(--text-mut);font-weight:600;padding:2px 7px;border:1px solid var(--hairline);border-radius:var(--chip-r)}
+.tabs{display:flex;gap:var(--s1);flex-wrap:wrap}
+.tab{display:flex;align-items:center;gap:7px;padding:8px 13px;border-radius:var(--chip-r);
+  color:var(--text-dim);font-size:13.5px;cursor:pointer;border:1px solid transparent;transition:all var(--dur) var(--ease);text-transform:var(--label-tt);letter-spacing:var(--label-track)}
+.tab:hover{color:var(--text);background:var(--surface-2)}
+.tab.active{color:var(--text);background:var(--surface-2);border-color:var(--hairline-strong)}
+.tab.active::before{content:"";width:6px;height:6px;border-radius:50%;background-image:var(--accent-grad);background-color:var(--accent)}
+.topbar .acts{margin-left:auto;display:flex;gap:6px}
+.iconbtn{width:36px;height:36px;border-radius:var(--r1);display:grid;place-items:center;cursor:pointer;
+  background:var(--surface-2);border:1px solid var(--hairline);color:var(--text-dim);font-size:15px;transition:all var(--dur) var(--ease)}
+.iconbtn:hover{color:var(--text);border-color:var(--hairline-strong);transform:translateY(-1px)}
+.iconbtn.primary{background-image:var(--accent-grad);background-color:var(--accent);color:#0a0c12;border-color:transparent}
+[data-theme="atlas"] .iconbtn.primary{color:#fff}
+
+/* ---------- sidebar ---------- */
+.side{display:flex;flex-direction:column;gap:var(--s4);
+  padding:var(--s4);border-radius:var(--panel-r);background:var(--surface);
+  backdrop-filter:blur(var(--blur));border:1px solid var(--hairline);box-shadow:var(--shadow);align-self:start}
+.side h3{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-mut);font-weight:var(--label-weight)}
+.summary{display:flex;flex-direction:column;gap:7px}
+.srow{display:flex;justify-content:space-between;font-size:13px}
+.srow .k{color:var(--text-mut)} .srow .v{color:var(--text-dim);font-weight:600}
+.divider{height:1px;background:var(--hairline)}
+
+/* Collections — the v3.3.x feature, featured here */
+.col-head{display:flex;align-items:center;justify-content:space-between}
+.col-title{font-size:15px;font-weight:700;letter-spacing:var(--title-track)}
+.col-new{width:28px;height:28px;border-radius:var(--r1);display:grid;place-items:center;cursor:pointer;
+  background:var(--surface-2);border:1px solid var(--hairline);color:var(--text-dim);font-size:16px}
+.col-new:hover{color:var(--text);border-color:var(--accent)}
+.col-list{display:flex;flex-direction:column;gap:4px;margin-top:var(--s2)}
+.col-row{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:var(--r1);cursor:pointer;
+  border:1px solid transparent;transition:all var(--dur) var(--ease);position:relative}
+.col-row:hover{background:var(--surface-2)}
+.col-row .ic{width:22px;text-align:center;font-size:15px;color:var(--text-dim)}
+.col-row .nm{flex:1;font-size:14px}
+.col-row .ct{font-size:12px;color:var(--text-mut);background:var(--surface-2);padding:2px 9px;border-radius:var(--chip-r);border:1px solid var(--hairline)}
+.col-row.fav .ic{color:var(--danger)}
+.col-row.active{background:var(--surface-2);border-color:var(--hairline)}
+.col-row.active::before{content:"";position:absolute;left:0;top:18%;bottom:18%;width:3px;border-radius:3px;background-image:var(--accent-grad);background-color:var(--accent)}
+.col-row.active .ct{color:#0a0c12;background-image:var(--accent-grad);background-color:var(--accent);border-color:transparent}
+[data-theme="atlas"] .col-row.active .ct{color:#fff}
+.browsing{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-dim);
+  padding:8px 11px;border-radius:var(--r1);background:color-mix(in oklab,var(--accent) 14%,transparent);border:1px solid var(--hairline)}
+.browsing .x{margin-left:auto;cursor:pointer;color:var(--text-mut)}
+.btn{font:inherit;font-size:13.5px;cursor:pointer;padding:11px 14px;border-radius:var(--r1);
+  border:1px solid var(--hairline);background:var(--surface-2);color:var(--text);width:100%;
+  display:flex;align-items:center;justify-content:center;gap:8px;transition:all var(--dur) var(--ease);text-transform:var(--label-tt);letter-spacing:var(--label-track)}
+.btn:hover{border-color:var(--hairline-strong);transform:translateY(-1px)}
+.btn.primary{background-image:var(--accent-grad);background-color:var(--accent);color:#0a0c12;border-color:transparent;font-weight:700}
+[data-theme="atlas"] .btn.primary{color:#fff}
+.btn.ghost{background:transparent}
+
+/* ---------- main / toolbar ---------- */
+.main{display:flex;flex-direction:column;gap:var(--s4);min-width:0}
+.toolbar{display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap;
+  padding:var(--s3) var(--s4);border-radius:var(--panel-r);background:var(--surface);
+  backdrop-filter:blur(var(--blur));border:1px solid var(--hairline);box-shadow:var(--shadow)}
+.gtabs{display:flex;gap:4px;flex-wrap:wrap}
+.gtab{font-size:12.5px;padding:6px 11px;border-radius:var(--chip-r);color:var(--text-dim);cursor:pointer;border:1px solid var(--hairline);background:transparent;transition:all var(--dur) var(--ease)}
+.gtab .n{color:var(--text-mut);margin-left:6px;font-variant-numeric:tabular-nums}
+.gtab:hover{color:var(--text)}
+.gtab.active{color:var(--text);background:var(--surface-2);border-color:var(--hairline-strong)}
+.toolbar .right{margin-left:auto;display:flex;gap:6px;align-items:center}
+.sel{font:inherit;font-size:13px;color:var(--text-dim);background:var(--surface-2);border:1px solid var(--hairline);border-radius:var(--r1);padding:8px 12px;cursor:pointer}
+
+/* ---------- gallery grid ---------- */
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--s4)}
+.card{position:relative;border-radius:var(--card-r);overflow:hidden;cursor:pointer;aspect-ratio:3/4;
+  border:1px solid var(--hairline);box-shadow:var(--shadow);transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+.card:hover{transform:translateY(-4px);box-shadow:var(--shadow-lift)}
+.card .thumb{position:absolute;inset:0}
+.card .grad{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.78) 0%,rgba(0,0,0,.12) 42%,transparent 70%);opacity:.9}
+.card .heart{position:absolute;top:9px;right:9px;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(8,10,16,.5);backdrop-filter:blur(6px);border:1px solid var(--hairline);font-size:15px;color:#fff;transition:all var(--dur) var(--ease)}
+[data-theme="atlas"] .card .heart{border-radius:2px}
+.card:hover .heart{background:rgba(8,10,16,.7)}
+.card .heart.on{color:var(--danger);border-color:color-mix(in oklab,var(--danger) 60%,transparent)}
+.card .badge{position:absolute;top:9px;left:9px;font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:var(--chip-r);
+  background:rgba(8,10,16,.55);backdrop-filter:blur(6px);border:1px solid var(--hairline);color:var(--text-dim);text-transform:var(--label-tt);letter-spacing:var(--label-track)}
+.card .meta{position:absolute;left:11px;right:11px;bottom:10px;display:flex;align-items:center;gap:8px}
+.card .meta .ord{font-size:11px;color:#fff;opacity:.85;font-variant-numeric:tabular-nums}
+.card .meta .nm{font-size:11.5px;color:#fff;opacity:.92;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card .rate{width:7px;height:7px;border-radius:50%}
+
+/* placeholder "thumbnails" */
+.t1{background:linear-gradient(135deg,#1b2a4a,#3b1d52 60%,#6d2b54)}
+.t2{background:linear-gradient(135deg,#0f3b3a,#1f6b5c 55%,#9fce86)}
+.t3{background:linear-gradient(135deg,#3a1f12,#7d3b22 50%,#e0a06b)}
+.t4{background:linear-gradient(135deg,#10131f,#2a2350 60%,#7c8bff)}
+.t5{background:linear-gradient(135deg,#2a0f1f,#6b2046 55%,#ff6b81)}
+.t6{background:linear-gradient(135deg,#12203a,#1d4e7e 55%,#5fb0e0)}
+.t7{background:linear-gradient(135deg,#241a06,#6b5320 55%,#d8b46a)}
+.t8{background:linear-gradient(135deg,#1a1430,#3a2a6b 55%,#a98bff)}
+
+/* ---------- components strip ---------- */
+.strip{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:var(--s5);margin-top:var(--s2)}
+.panel{padding:var(--s5);border-radius:var(--panel-r);background:var(--surface);backdrop-filter:blur(var(--blur));border:1px solid var(--hairline);box-shadow:var(--shadow)}
+.panel h4{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-mut);margin-bottom:var(--s4);font-weight:var(--label-weight)}
+.modalcard{border-radius:var(--panel-r);border:1px solid var(--hairline-strong);background:var(--surface-2);padding:var(--s5);box-shadow:var(--shadow-lift)}
+.modalcard .mt{font-size:18px;font-weight:700;letter-spacing:var(--title-track);margin-bottom:6px}
+.modalcard p{color:var(--text-dim);font-size:13.5px;margin-bottom:var(--s4)}
+.field{width:100%;font:inherit;font-size:14px;color:var(--text);background:var(--bg);border:1px solid var(--hairline-strong);border-radius:var(--r1);padding:11px 13px;margin-bottom:var(--s4)}
+.field:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in oklab,var(--accent) 30%,transparent)}
+.rowbtns{display:flex;gap:var(--s3)} .rowbtns .btn{width:auto}
+.toast{display:flex;align-items:center;gap:10px;padding:12px 15px;border-radius:var(--r2);background:var(--surface-2);border:1px solid var(--hairline);box-shadow:var(--shadow);font-size:13.5px;margin-bottom:var(--s3)}
+.toast .dot{width:8px;height:8px;border-radius:50%}
+.toast.ok .dot{background:var(--good)} .toast.warn .dot{background:var(--warm)}
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:var(--s6) var(--s4);color:var(--text-dim)}
+.empty .ei{font-size:34px} .empty h5{font-size:16px;color:var(--text);letter-spacing:var(--title-track)}
+.empty p{font-size:13px;color:var(--text-mut);max-width:340px}
+.cap{grid-column:1/-1;text-align:center;color:var(--text-mut);font-size:12px;padding:var(--s4) 0 var(--s2)}
+@media(max-width:1080px){.app{grid-template-columns:1fr}.grid{grid-template-columns:repeat(3,1fr)}.strip{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="switch" role="tablist" aria-label="视觉方向">
+  <span class="lab">视觉方向</span>
+  <button data-set="aurora" aria-current="true">A · Aurora Glass（精致玻璃·演进）</button>
+  <button data-set="noir" aria-current="false">B · Studio Noir（深色轻奢）</button>
+  <button data-set="atlas" aria-current="false">C · Atlas（编辑/Swiss）</button>
+  <span class="note">同一套画面，仅切换设计 token · 深色 image-forward</span>
+</div>
+
+<div class="app">
+
+  <!-- top bar -->
+  <header class="topbar">
+    <div class="brand"><span class="logo">🎨</span> SD 图片管理器 <span class="ver">v3.3.1</span></div>
+    <nav class="tabs">
+      <span class="tab active">🖼️ 图片库</span>
+      <span class="tab">🔍 找相似</span>
+      <span class="tab">🧪 提示词助手</span>
+      <span class="tab">📁 整理图片</span>
+      <span class="tab">🔳 打码编辑</span>
+    </nav>
+    <div class="acts">
+      <span class="iconbtn">🌐</span><span class="iconbtn">📚</span>
+      <span class="iconbtn primary">📂</span><span class="iconbtn">🏷️</span>
+    </div>
+  </header>
+
+  <!-- sidebar -->
+  <aside class="side">
+    <h3>筛选器</h3>
+    <div class="summary">
+      <div class="srow"><span class="k">生成器</span><span class="v">全部</span></div>
+      <div class="srow"><span class="k">分级</span><span class="v">全部</span></div>
+      <div class="srow"><span class="k">标签</span><span class="v">无</span></div>
+      <div class="srow"><span class="k">颜色</span><span class="v">任意</span></div>
+    </div>
+    <div class="divider"></div>
+
+    <!-- Collections — the v3.3.x feature -->
+    <div>
+      <div class="col-head"><span class="col-title">合集</span><span class="col-new">＋</span></div>
+      <div class="col-list">
+        <div class="col-row fav active"><span class="ic">♥</span><span class="nm">收藏</span><span class="ct">128</span></div>
+        <div class="col-row"><span class="ic">📁</span><span class="nm">精选大图</span><span class="ct">34</span></div>
+        <div class="col-row"><span class="ic">📁</span><span class="nm">风景参考</span><span class="ct">52</span></div>
+        <div class="col-row"><span class="ic">📁</span><span class="nm">角色设定</span><span class="ct">19</span></div>
+      </div>
+      <div class="browsing" style="margin-top:8px">正在浏览：收藏 <span class="x">✕</span></div>
+    </div>
+    <div class="divider"></div>
+    <button class="btn primary">✔ 选择图片</button>
+    <button class="btn ghost">清除所有筛选</button>
+  </aside>
+
+  <!-- main -->
+  <section class="main">
+    <div class="toolbar">
+      <div class="gtabs">
+        <span class="gtab active">全部 <span class="n">4055</span></span>
+        <span class="gtab">NovelAI <span class="n">1820</span></span>
+        <span class="gtab">ComfyUI <span class="n">980</span></span>
+        <span class="gtab">WebUI <span class="n">612</span></span>
+      </div>
+      <div class="right">
+        <select class="sel"><option>最新</option><option>美学评分</option><option>随机</option></select>
+        <span class="iconbtn">◼◼</span><span class="iconbtn">▥</span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card"><div class="thumb t4"></div><div class="grad"></div><span class="badge">ComfyUI</span><span class="heart on">♥</span><div class="meta"><span class="rate" style="background:var(--good)"></span><span class="ord">#1</span><span class="nm">aurora_knight_01.png</span></div></div>
+      <div class="card"><div class="thumb t2"></div><div class="grad"></div><span class="badge">NovelAI</span><span class="heart">♡</span><div class="meta"><span class="rate" style="background:var(--warm)"></span><span class="ord">#2</span><span class="nm">forest_spirit.png</span></div></div>
+      <div class="card"><div class="thumb t5"></div><div class="grad"></div><span class="badge">WebUI</span><span class="heart on">♥</span><div class="meta"><span class="rate" style="background:var(--danger)"></span><span class="ord">#3</span><span class="nm">crimson_portrait.jpg</span></div></div>
+      <div class="card"><div class="thumb t6"></div><div class="grad"></div><span class="badge">ComfyUI</span><span class="heart">♡</span><div class="meta"><span class="rate" style="background:var(--good)"></span><span class="ord">#4</span><span class="nm">ocean_city.png</span></div></div>
+      <div class="card"><div class="thumb t1"></div><div class="grad"></div><span class="badge">NovelAI</span><span class="heart on">♥</span><div class="meta"><span class="rate" style="background:var(--accent)"></span><span class="ord">#5</span><span class="nm">nebula_study.png</span></div></div>
+      <div class="card"><div class="thumb t7"></div><div class="grad"></div><span class="badge">Forge</span><span class="heart">♡</span><div class="meta"><span class="rate" style="background:var(--warm)"></span><span class="ord">#6</span><span class="nm">golden_hour.jpg</span></div></div>
+      <div class="card"><div class="thumb t8"></div><div class="grad"></div><span class="badge">ComfyUI</span><span class="heart">♡</span><div class="meta"><span class="rate" style="background:var(--good)"></span><span class="ord">#7</span><span class="nm">violet_mech.png</span></div></div>
+      <div class="card"><div class="thumb t3"></div><div class="grad"></div><span class="badge">WebUI</span><span class="heart on">♥</span><div class="meta"><span class="rate" style="background:var(--danger)"></span><span class="ord">#8</span><span class="nm">desert_caravan.jpg</span></div></div>
+    </div>
+
+    <!-- components strip -->
+    <div class="strip">
+      <div class="panel">
+        <h4>对话框 · 加入合集</h4>
+        <div class="modalcard">
+          <div class="mt">新建合集</div>
+          <p>合集是引用，不会复制或移动磁盘上的文件。</p>
+          <input class="field" value="我的精选" />
+          <div class="rowbtns"><button class="btn primary">创建</button><button class="btn ghost">取消</button></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h4>反馈 · 状态</h4>
+        <div class="toast ok"><span class="dot"></span>已将 12 张图片加入「精选大图」</div>
+        <div class="toast warn"><span class="dot"></span>有 6 张图打不开——原始文件不在原位</div>
+        <div class="empty">
+          <span class="ei">🖼️</span>
+          <h5>这个合集还没有图片</h5>
+          <p>右键任意图片选「加入合集…」，或在手动整理时把 WASD 槽指向这个合集。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="cap">SD Image Sorter · v3.3.1 视觉方向预览（mockup，占位缩略图为渐变） · 点顶部切换 A / B / C</div>
+  </section>
+</div>
+
+<script>
+  const btns=[...document.querySelectorAll('.switch button')];
+  btns.forEach(b=>b.addEventListener('click',()=>{
+    document.documentElement.setAttribute('data-theme',b.dataset.set);
+    btns.forEach(x=>x.setAttribute('aria-current', x===b?'true':'false'));
+  }));
+</script>
+</body>
+</html>

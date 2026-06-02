@@ -235,3 +235,71 @@ def test_signature_undeterminable_falls_back(tmp_path, monkeypatch):
 
     assert index._vector_cache is None
     assert result["total"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# Scoped search (v3.3.1): restrict results to a collection / Favorites subset.
+# allowed_ids is the index-level primitive the service derives from a
+# collection_id. These pin: (1) only members are returned, ranked, (2) the
+# cached and streaming paths agree on the scoped result, (3) exclude_id still
+# applies on top of the scope.
+# ---------------------------------------------------------------------------
+
+def test_scoped_search_returns_only_members_ranked(tmp_path, monkeypatch):
+    db = _make_db(tmp_path, _ROWS)
+    streaming, cached = _both_indexes(db, monkeypatch)
+
+    # Subset "collection" = ids {3, 4} (mid + far). Query is id 1 (excluded).
+    allowed = {3, 4}
+    base = streaming.search_by_id(1, limit=10, threshold=-1.0, allowed_ids=allowed)
+    got = cached.search_by_id(1, limit=10, threshold=-1.0, allowed_ids=allowed)
+
+    ids = [r["id"] for r in got["results"]]
+    assert set(ids) == {3, 4}            # only collection members
+    assert ids == [3, 4]                 # mid (higher sim to query) before far
+    assert got["total"] == 2
+    # Cached and streaming scoped results must be identical.
+    _assert_result_parity(got, base)
+    assert cached._vector_cache is not None
+
+
+def test_scoped_search_excludes_query_image(tmp_path, monkeypatch):
+    db = _make_db(tmp_path, _ROWS)
+    _, cached = _both_indexes(db, monkeypatch)
+
+    # Collection contains the query image itself (1) plus 2 and 3.
+    allowed = {1, 2, 3}
+    result = cached.search_by_id(1, limit=10, threshold=-1.0, allowed_ids=allowed)
+    ids = [r["id"] for r in result["results"]]
+
+    assert 1 not in ids                  # query image still excluded inside scope
+    assert set(ids) == {2, 3}
+    assert result["total"] == 2
+
+
+def test_scoped_search_empty_when_no_members_embedded(tmp_path, monkeypatch):
+    db = _make_db(tmp_path, _ROWS)
+    streaming, cached = _both_indexes(db, monkeypatch)
+
+    # Scope only references the unreadable row (6, is_readable=0) → no candidates.
+    allowed = {6}
+    base = streaming.search_by_id(1, limit=10, threshold=-1.0, allowed_ids=allowed)
+    got = cached.search_by_id(1, limit=10, threshold=-1.0, allowed_ids=allowed)
+
+    assert got["results"] == []
+    assert got["total"] == 0
+    assert got["has_more"] is False
+    _assert_result_parity(got, base)
+
+
+def test_scoped_search_pagination_matches(tmp_path, monkeypatch):
+    db = _make_db(tmp_path, _ROWS)
+    streaming, cached = _both_indexes(db, monkeypatch)
+
+    allowed = {2, 3, 4, 5}
+    # Page through the scoped set one result at a time; cache must match streaming.
+    for offset in range(0, 4):
+        base = streaming.search_by_id(1, limit=1, threshold=-1.0, offset=offset, allowed_ids=allowed)
+        got = cached.search_by_id(1, limit=1, threshold=-1.0, offset=offset, allowed_ids=allowed)
+        _assert_result_parity(got, base)
+        assert base["total"] == 4

@@ -442,7 +442,7 @@
 
 .stat-card:hover {
     background: rgba(12, 29, 41, 0.9);
-    border-color: rgba(45, 212, 191, 0.28);
+    border-color: rgba(51, 214, 224, 0.28);
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16);
 }
 
@@ -492,7 +492,7 @@
 }
 
 .similar-tab.active {
-    background: rgba(255, 138, 61, 0.16);
+    background: rgba(124, 139, 255, 0.16);
     color: #ffe4cc;
 }
 
@@ -676,8 +676,8 @@
     width: 100%;
     padding: 12px 14px;
     border-radius: var(--radius-lg);
-    border: 1px solid rgba(45, 212, 191, 0.22);
-    background: rgba(45, 212, 191, 0.08);
+    border: 1px solid rgba(51, 214, 224, 0.22);
+    background: rgba(51, 214, 224, 0.08);
     color: var(--text-secondary);
     font-size: 13px;
     line-height: 1.6;
@@ -733,8 +733,8 @@
 }
 
 .model-health-banner.model-health-banner-warning {
-    border-color: rgba(255, 138, 61, 0.32);
-    background: rgba(255, 138, 61, 0.08);
+    border-color: rgba(124, 139, 255, 0.32);
+    background: rgba(124, 139, 255, 0.08);
     color: #ffd4b0;
 }
 
@@ -873,16 +873,16 @@
 .toggle-btn:hover,
 .toggle-btn:focus-visible {
     outline: none;
-    background: rgba(255, 138, 61, 0.14);
+    background: rgba(124, 139, 255, 0.14);
     color: var(--text-primary);
 }
 
 .toggle-btn:focus-visible {
-    box-shadow: 0 0 0 2px rgba(255, 138, 61, 0.24);
+    box-shadow: 0 0 0 2px rgba(124, 139, 255, 0.24);
 }
 
 .toggle-btn.active {
-    background: rgba(255, 138, 61, 0.16);
+    background: rgba(124, 139, 255, 0.16);
     color: #ffe4cc;
 }
 
@@ -941,17 +941,17 @@
 .artist-card:hover,
 .artist-card:focus-visible {
     background: rgba(12, 29, 41, 0.92);
-    border-color: rgba(45, 212, 191, 0.4);
+    border-color: rgba(51, 214, 224, 0.4);
 }
 
 .artist-card:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.2);
+    box-shadow: 0 0 0 2px rgba(51, 214, 224, 0.2);
 }
 
 .artist-card.selected {
-    background: rgba(45, 212, 191, 0.12);
-    border-color: rgba(45, 212, 191, 0.4);
+    background: rgba(51, 214, 224, 0.12);
+    border-color: rgba(51, 214, 224, 0.4);
 }
 
 .artist-bar {
@@ -1117,7 +1117,7 @@
 .artist-image-card:hover,
 .artist-image-card:focus-visible {
     transform: translateY(-2px);
-    border-color: rgba(45, 212, 191, 0.45);
+    border-color: rgba(51, 214, 224, 0.45);
     background: rgba(12, 29, 41, 0.94);
     outline: none;
 }

@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -512,22 +513,31 @@ def _resolve_artist_runtime_path() -> Optional[str]:
         candidates.append(Path(ARTIST_LSNET_CODE_PATH).expanduser())
 
     artist_root = Path(get_artist_model_dir())
-    project_root = Path(__file__).resolve().parent.parent
     candidates.extend(
         [
             artist_root / "comfyui-lsnet-runtime",
             artist_root / "comfyui-lsnet",
             artist_root / "lsnet-test",
-            # Legacy paths (pre-data/models/ migration). Keep parity with
-            # artist_identifier._resolve_lsnet_runtime_path so diagnostics
-            # don't drift from runtime behaviour.
-            project_root / "models" / "artist" / "comfyui-lsnet",
-            project_root / "models" / "artist" / "lsnet-test",
-            project_root / "models" / "artist" / "comfyui-lsnet-runtime",
-            project_root / "third_party" / "comfyui-lsnet",
-            project_root / "third_party" / "lsnet-test",
         ]
     )
+    # Legacy paths (pre-data/models/ migration). Keep parity with
+    # artist_identifier._resolve_lsnet_runtime_path so diagnostics don't drift
+    # from runtime behaviour. Skipped when the env opts out of legacy model
+    # locations (the hermetic E2E harness sets
+    # SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY=1) so a developer's real
+    # models/artist/ checkout can't shadow the data-dir runtime. Production
+    # never sets the flag, so legacy installs keep resolving exactly as before.
+    if os.environ.get("SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY") != "1":
+        project_root = Path(__file__).resolve().parent.parent
+        candidates.extend(
+            [
+                project_root / "models" / "artist" / "comfyui-lsnet",
+                project_root / "models" / "artist" / "lsnet-test",
+                project_root / "models" / "artist" / "comfyui-lsnet-runtime",
+                project_root / "third_party" / "comfyui-lsnet",
+                project_root / "third_party" / "lsnet-test",
+            ]
+        )
 
     for candidate in candidates:
         resolved = candidate.resolve()

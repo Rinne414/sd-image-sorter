@@ -62,22 +62,65 @@ class SimilarityService:
         index = get_similarity_index(db)
         return index.request_cancel()
 
+    def _resolve_scope_ids(self, collection_id: Optional[int]) -> Optional[set]:
+        """Resolve a collection scope into a set of allowed image ids.
+
+        Returns ``None`` when no scope is requested (whole-library search, the
+        default). Returns a (possibly empty) set of source image ids when a
+        collection is requested. An empty set means "scope exists but has no
+        members" — callers short-circuit to an empty result without touching the
+        index.
+        """
+        if not collection_id or collection_id <= 0:
+            return None
+        return set(db.get_collection_image_ids(collection_id))
+
+    @staticmethod
+    def _empty_search_result(image_id: Optional[int], limit: int, offset: int) -> dict:
+        """Build a well-formed empty search envelope for an empty scope."""
+        page_limit = max(1, int(limit))
+        page_offset = max(0, int(offset))
+        result = {
+            "results": [],
+            "count": 0,
+            "total": 0,
+            "has_more": False,
+            "offset": page_offset,
+            "limit": page_limit,
+        }
+        if image_id is not None:
+            result["query_image_id"] = image_id
+        return result
+
     def search_similar(
         self,
         image_id: int,
         limit: int = 100,
         threshold: float = 0.5,
         offset: int = 0,
+        collection_id: Optional[int] = None,
     ) -> dict:
         """
         Find images similar to a given image ID.
 
         Uses pre-computed CLIP embeddings to find visually and semantically
-        similar images.
+        similar images. When ``collection_id`` is provided, results are scoped to
+        that collection's members (e.g. Favorites); ``None`` searches the whole
+        library.
         """
+        allowed_ids = self._resolve_scope_ids(collection_id)
+        if allowed_ids is not None and not allowed_ids:
+            return self._empty_search_result(image_id, limit, offset)
+
         index = get_similarity_index(db)
         try:
-            result = index.search_by_id(image_id, limit=limit, threshold=threshold, offset=offset)
+            result = index.search_by_id(
+                image_id,
+                limit=limit,
+                threshold=threshold,
+                offset=offset,
+                allowed_ids=allowed_ids,
+            )
         except SimilarityImageNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except SimilarityEmbeddingMissingError as exc:
@@ -100,12 +143,15 @@ class SimilarityService:
         limit: int = 100,
         threshold: float = 0.5,
         offset: int = 0,
+        collection_id: Optional[int] = None,
     ) -> dict:
         """
         Find images similar to an uploaded image.
 
         Generates an embedding for the uploaded image and searches
-        the database for visually/semantically similar images.
+        the database for visually/semantically similar images. When
+        ``collection_id`` is provided, results are scoped to that collection's
+        members (e.g. Favorites); ``None`` searches the whole library.
         """
         MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
         image_data = bytearray()
@@ -119,6 +165,11 @@ class SimilarityService:
         if not image_data:
             raise HTTPException(status_code=400, detail="Empty file uploaded")
 
+        allowed_ids = self._resolve_scope_ids(collection_id)
+        if allowed_ids is not None and not allowed_ids:
+            await file.close()
+            return self._empty_search_result(None, limit, offset)
+
         index = get_similarity_index(db)
         try:
             result = await run_in_threadpool(
@@ -127,6 +178,7 @@ class SimilarityService:
                 limit,
                 threshold,
                 offset,
+                allowed_ids,
             )
         except SimilarityInvalidImageError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
