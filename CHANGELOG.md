@@ -5,6 +5,58 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-06-02
+
+Feature + workflow release. Three user-reported pain points fixed (file moves
+now show a progress bar, new-folder scans no longer "flash back" to the previous
+folder, and the crowded generator filter gained select-all / clear / invert with
+shift-range). Adds Favorites & Collections, a Library Checkpoints tab, exclude-by-
+prompt / exclude-by-color filters, a manual-sort cooldown, a faster similarity
+search, and a tiered AI runtime scheduler. No functionality limits were added.
+
+功能 + 工作流版本。修复三个用户反馈的痛点：移动文件重新显示进度条；指定新文件夹
+扫描不再「猛回头」扫回上一个文件夹；拥挤的生成器筛选新增全选 / 清除 / 反选与
+Shift 范围选取。新增收藏与合集、Library Checkpoints 分页、按 Prompt / 颜色排除的
+筛选、手动分拣冷却、更快的相似度搜索，以及分层 AI 运行调度器。未新增任何功能上限。
+
+### Added / 新增
+- **Favorites & Collections**: a heart toggle on every gallery card plus named collections, exposed through a new `/api/collections` API. Membership is stored as a *reference* (no image files are copied), so toggling is instant and reversible.
+  - **收藏与合集**：每张图卡上新增爱心切换，加上具名合集，经由新的 `/api/collections` API 提供。成员关系以「引用」方式保存（不复制图片文件），切换即时且可逆。
+- **Library Checkpoints tab**: the Library view gained a Checkpoints facet (`GET /api/checkpoints/library`) alongside Tags and LoRAs, searchable across the full indexed library.
+  - **Library Checkpoints 分页**：Library 视图在 Tags / LoRAs 之外新增 Checkpoints 分页（`GET /api/checkpoints/library`），可对整个索引库搜索。
+- **Exclude by prompt / color**: gallery filters can now exclude images by prompt text and by color temperature. Active prompt chips cycle include → exclude → remove on click.
+  - **按 Prompt / 颜色排除**：图库筛选新增按 prompt 文本与色温排除。已选 prompt 标签点击循环 包含 → 排除 → 移除。
+- **AI runtime job snapshot**: `GET /api/system/ai-jobs` reports the live scheduler state (VRAM-exclusive vs CPU-pool jobs) for diagnostics.
+  - **AI 运行任务快照**：`GET /api/system/ai-jobs` 报告实时调度状态（VRAM 独占 vs CPU 池任务）以便诊断。
+
+### Fixed / 修复
+- **File moves show a progress bar again**: moving/copying a selection runs as a background job (`/api/move/start` + `/api/move/progress`) with a cancelable progress bar, so you can tell when originals have actually been moved and it is safe to proceed.
+  - **移动文件重新显示进度条**：移动 / 复制选中项改为后台任务（`/api/move/start` + `/api/move/progress`），带可取消的进度条，让你清楚知道原文件何时真正被移动、何时可以安全继续。
+- **Scan no longer "flashes back" to the previous folder**: starting a scan on a new folder while a previous poll was in flight could revert progress to the old folder. A poll-generation guard now bails out stale pollers, and a second concurrent scan returns a clear "already running" toast.
+  - **扫描不再「猛回头」扫回上一个文件夹**：在上一轮轮询还在进行时对新文件夹开始扫描，进度可能回退到旧文件夹。新增轮询代数守卫会丢弃过期轮询，重复扫描会返回明确的「已在运行」提示。
+
+### Changed / 变更
+- **Generator filter is manageable**: the generator / rating / checkpoint / LoRA filter groups gained Select all / Clear / Invert buttons and Shift-click range selection, so a 14-checkbox list no longer needs an autoclicker.
+  - **生成器筛选更好管理**：生成器 / 评级 / checkpoint / LoRA 筛选组新增 全选 / 清除 / 反选 按钮与 Shift 点击范围选取，14 个勾选框的列表不再需要连点器。
+- **Manual sort (WASD) cooldown**: an optional per-action cooldown prevents an autoclicker or held key from firing several sorts at once and scattering images.
+  - **手动分拣（WASD）冷却**：可选的每动作冷却，避免连点器或长按一次触发多次分拣把图片分散乱放。
+- **Censor detector default explained**: the detector picker labels **Both** as the recommended option and explains that the app auto-selects the best detector you have ready (privacy YOLO + NudeNet for the widest coverage).
+  - **遮挡检测器默认说明**：检测器选择器把 **Both** 标为推荐项，并说明程序会自动选择你已就绪的最佳检测器（隐私 YOLO + NudeNet 覆盖最完整）。
+
+### Performance / 性能
+- **Faster similarity search**: repeated similarity searches reuse an in-memory, L2-normalized embedding matrix instead of re-reading and re-decoding every embedding from SQLite on each query. The streaming scan remains as an automatic fallback, so results are identical and large libraries that don't fit in memory still work. Zero new dependencies (numpy only); opt out with `SD_SIMILARITY_DISABLE_VECTOR_CACHE=1`.
+  - **相似度搜索更快**：重复搜索改为复用内存中的 L2 归一化嵌入矩阵，而非每次查询都从 SQLite 重新读取并解码全部嵌入。流式扫描作为自动后备保留，结果完全一致，内存放不下的超大库仍可运行。零新增依赖（仅 numpy）；可用 `SD_SIMILARITY_DISABLE_VECTOR_CACHE=1` 关闭。
+- **Tiered AI runtime scheduler**: GPU/VRAM work stays mutually exclusive, but CPU-only AI work now runs on a bounded pool instead of serializing behind GPU jobs, improving throughput when mixing tagging / censor / embedding work.
+  - **分层 AI 运行调度器**：GPU/VRAM 工作仍互斥，但纯 CPU 的 AI 工作改在有界线程池上运行，不再排在 GPU 任务后面串行，混合打标 / 遮挡 / 嵌入时吞吐更好。
+
+### Security / 安全
+- **VLM endpoint scheme guard**: the captioning endpoint now rejects non-`http(s)` schemes (e.g. `file://`, `gopher://`) before connecting. Local / private / loopback endpoints (Ollama, LM Studio, llama.cpp) remain first-class and are intentionally not blocked.
+  - **VLM 端点协议守卫**：captioning 端点在连接前拒绝非 `http(s)` 协议（如 `file://`、`gopher://`）。本地 / 私有 / loopback 端点（Ollama、LM Studio、llama.cpp）仍是一级支持，刻意不拦截。
+
+### Internal / 内部
+- Removed a dead GPU-confirmation branch in the tagger risk check, narrowed an over-broad `except` in the artist-model downloader, and unified the gallery grid keyboard navigation onto the shared accessibility helper (no behavior change).
+  - 移除打标风险检查中的死 GPU 确认分支，收窄 artist 模型下载器中过宽的 `except`，并将图库网格键盘导航统一到共享无障碍 helper（行为不变）。
+
 ## [3.2.4] - 2026-06-02
 
 Stability + security patch. Behavior-preserving fixes from a multi-agent code

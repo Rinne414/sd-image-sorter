@@ -28,7 +28,15 @@ const ManualSortState = {
     inheritedCurrentGalleryFilters: false,
     scopeMeta: null,
     resumeBannerSessionSnapshot: null,
+    // v3.3.0 USR-4: optional action cooldown (opt-in, default OFF). When > 0,
+    // presses within the window after the previous action completes are
+    // ignored so an autoclicker can't fire a chaotic burst. lastActionCompletedAt
+    // is set in the finally block of performMove/performSkip.
+    actionCooldownMs: 0,
+    lastActionCompletedAt: 0,
 };
+
+const MANUAL_SORT_COOLDOWN_KEY = 'manual_sort_cooldown_ms_v1';
 
 const MANUAL_SORT_FILTER_STATE_KEY = 'manual_sort_filter_state_v1';
 const MANUAL_SORT_SCOPE_META_KEY = 'manual_sort_scope_meta_v1';
@@ -520,6 +528,39 @@ function renderManualSortResumeBanner(session, { visible = true } = {}) {
 
 // ============== Initialization ==============
 
+// v3.3.0 USR-4: wire the opt-in action-cooldown controls and restore the
+// persisted value. Default is OFF (0 ms) so existing users see no change.
+function initManualSortCooldownControls($) {
+    const toggle = $('#manual-sort-cooldown-toggle');
+    const slider = $('#manual-sort-cooldown-ms');
+    const valueLabel = $('#manual-sort-cooldown-value');
+    const row = $('#manual-sort-cooldown-row');
+    if (!toggle || !slider) return;
+
+    const savedMs = Number(localStorage.getItem(MANUAL_SORT_COOLDOWN_KEY) || 0) || 0;
+    const enabled = savedMs > 0;
+    toggle.checked = enabled;
+    if (enabled) slider.value = String(savedMs);
+    if (row) row.style.display = enabled ? 'flex' : 'none';
+    ManualSortState.actionCooldownMs = enabled ? Number(slider.value) || 0 : 0;
+    if (valueLabel) valueLabel.textContent = `${slider.value} ms`;
+
+    const persist = () => {
+        const ms = toggle.checked ? (Number(slider.value) || 0) : 0;
+        ManualSortState.actionCooldownMs = ms;
+        localStorage.setItem(MANUAL_SORT_COOLDOWN_KEY, String(ms));
+    };
+
+    toggle.addEventListener('change', () => {
+        if (row) row.style.display = toggle.checked ? 'flex' : 'none';
+        persist();
+    });
+    slider.addEventListener('input', () => {
+        if (valueLabel) valueLabel.textContent = `${slider.value} ms`;
+        if (toggle.checked) persist();
+    });
+}
+
 async function initManualSort() {
     // Use direct selectors to avoid timing issues with window.App
     const $ = (sel) => document.querySelector(sel);
@@ -531,6 +572,7 @@ async function initManualSort() {
         updateUi: true,
     });
     updateManualSortFilterSummary();
+    initManualSortCooldownControls($);
 
     // Folder path inputs
     $$('.folder-path-input').forEach(input => {
@@ -1297,12 +1339,40 @@ function handleSortKeypress(e) {
     }
 }
 
+// v3.3.0 USR-4: cooldown + visible busy feedback for manual sort.
+function isManualSortInCooldown() {
+    const cd = Number(ManualSortState.actionCooldownMs) || 0;
+    if (cd <= 0) return false;
+    return (Date.now() - (ManualSortState.lastActionCompletedAt || 0)) < cd;
+}
+
+// A dropped press (busy or in cooldown) is otherwise invisible. Flash the
+// current image wrapper briefly so the user can tell the press was ignored.
+function flashManualSortBusy() {
+    const wrapper = window.App?.$?.('.current-image-wrapper');
+    if (!wrapper) return;
+    wrapper.classList.remove('sort-busy-flash');
+    // Force reflow so re-adding the class restarts the animation.
+    void wrapper.offsetWidth;
+    wrapper.classList.add('sort-busy-flash');
+    setTimeout(() => wrapper.classList.remove('sort-busy-flash'), 220);
+}
+
 async function performMove(folderKey, fast = false) {
     const { $, API, showToast } = window.App;
     const operationVerb = getManualSortOperationVerb();
 
     // Prevent race condition from rapid keypresses
-    if (ManualSortState.isProcessing) return;
+    if (ManualSortState.isProcessing) {
+        flashManualSortBusy();
+        return;
+    }
+    // v3.3.0 USR-4: optional cooldown (opt-in). Ignore presses fired within
+    // the window after the previous action completed.
+    if (isManualSortInCooldown()) {
+        flashManualSortBusy();
+        return;
+    }
     ManualSortState.isProcessing = true;
 
     try {
@@ -1367,6 +1437,7 @@ async function performMove(folderKey, fast = false) {
         );
     } finally {
         ManualSortState.isProcessing = false;
+        ManualSortState.lastActionCompletedAt = Date.now();
     }
 }
 
@@ -1374,7 +1445,15 @@ async function performSkip(fast = false) {
     const { $, API, showToast } = window.App;
 
     // Prevent race condition from rapid keypresses
-    if (ManualSortState.isProcessing) return;
+    if (ManualSortState.isProcessing) {
+        flashManualSortBusy();
+        return;
+    }
+    // v3.3.0 USR-4: optional cooldown (opt-in).
+    if (isManualSortInCooldown()) {
+        flashManualSortBusy();
+        return;
+    }
     ManualSortState.isProcessing = true;
 
     try {
@@ -1418,6 +1497,7 @@ async function performSkip(fast = false) {
         showToast(manualSortText('manual.skipFailed', 'Failed to skip image', '跳过图片失败'), 'error');
     } finally {
         ManualSortState.isProcessing = false;
+        ManualSortState.lastActionCompletedAt = Date.now();
     }
 }
 

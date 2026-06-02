@@ -69,6 +69,46 @@ def _url_is_secure_or_loopback(url: str) -> bool:
     return True
 
 
+_ALLOWED_REQUEST_SCHEMES = frozenset({"http", "https"})
+
+
+def assert_safe_request_url(url: str) -> None:
+    """Reject endpoint URLs whose scheme is not http/https before connecting.
+
+    A small SSRF hardening for the user-configured VLM endpoint (SEC-4): it
+    blocks classic non-http request vectors — ``file://``, ``gopher://``,
+    ``ftp://``, ``data:`` — that are never valid for an OpenAI-compatible API
+    and that an attacker-influenced config could otherwise smuggle in.
+
+    It deliberately does **not** block private, loopback, or link-local
+    addresses. Local VLM servers (Ollama, LM Studio, llama.cpp on ``127.0.0.1``)
+    are a first-class, documented use case, and the existing key-withholding
+    guard in :class:`VLMConfig` already keeps secrets off cleartext non-loopback
+    transports. Blocking internal IPs here would cap a core feature, not harden
+    it, so DNS-rebinding/private-IP filtering is intentionally out of scope.
+
+    Raises:
+        ProviderError: when the scheme is unsupported or the host is missing.
+    """
+    try:
+        parts = urlsplit(url)
+    except ValueError as exc:
+        raise ProviderError(f"Invalid endpoint URL: {exc}", error_type="config", retryable=False)
+    scheme = (parts.scheme or "").lower()
+    if scheme not in _ALLOWED_REQUEST_SCHEMES:
+        raise ProviderError(
+            f"Unsupported endpoint scheme '{parts.scheme or ''}'. Use http:// or https://.",
+            error_type="config",
+            retryable=False,
+        )
+    if not parts.hostname:
+        raise ProviderError(
+            "Endpoint URL is missing a host. Set a full http(s):// endpoint.",
+            error_type="config",
+            retryable=False,
+        )
+
+
 # Output format constants
 OUTPUT_FORMAT_NL = "nl_caption"
 OUTPUT_FORMAT_TAGS = "danbooru_tags"

@@ -39,6 +39,8 @@ from db_query import (
     _apply_exclude_ratings_filter,
     _apply_exclude_checkpoints_filter,
     _apply_exclude_loras_filter,
+    _apply_exclude_prompts_filter,
+    _apply_exclude_colors_filter,
     _apply_search_filter,
     _apply_prompt_terms_filter,
     _apply_dimension_filters,
@@ -151,7 +153,9 @@ def get_images(
     exclude_ratings: Optional[List[str]] = None,
     exclude_checkpoints: Optional[List[str]] = None,
     exclude_loras: Optional[List[str]] = None,
-) -> List[Dict[str, Any]]:
+    exclude_prompts: Optional[List[str]] = None,
+    exclude_colors: Optional[List[str]] = None,
+) ->List[Dict[str, Any]]:
     """
     Get images with optional filters.
 
@@ -258,6 +262,8 @@ def get_images(
         conditions, params = _apply_exclude_ratings_filter(conditions, params, exclude_ratings)
         conditions, params = _apply_exclude_checkpoints_filter(conditions, params, exclude_checkpoints)
         conditions, params = _apply_exclude_loras_filter(conditions, params, exclude_loras)
+        conditions, params = _apply_exclude_prompts_filter(conditions, params, exclude_prompts, prompt_match_mode)
+        conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
 
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
@@ -326,7 +332,9 @@ def get_filtered_image_count(
     exclude_ratings: Optional[List[str]] = None,
     exclude_checkpoints: Optional[List[str]] = None,
     exclude_loras: Optional[List[str]] = None,
-) -> int:
+    exclude_prompts: Optional[List[str]] = None,
+    exclude_colors: Optional[List[str]] = None,
+) ->int:
     """Get count of images matching filters without loading image data.
 
     Memory-efficient: Only returns a count, doesn't load any image rows.
@@ -416,6 +424,8 @@ def get_filtered_image_count(
         conditions, params = _apply_exclude_ratings_filter(conditions, params, exclude_ratings)
         conditions, params = _apply_exclude_checkpoints_filter(conditions, params, exclude_checkpoints)
         conditions, params = _apply_exclude_loras_filter(conditions, params, exclude_loras)
+        conditions, params = _apply_exclude_prompts_filter(conditions, params, exclude_prompts, prompt_match_mode)
+        conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
 
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
@@ -465,7 +475,9 @@ def get_filtered_image_ids(
     exclude_ratings: Optional[List[str]] = None,
     exclude_checkpoints: Optional[List[str]] = None,
     exclude_loras: Optional[List[str]] = None,
-) -> List[int]:
+    exclude_prompts: Optional[List[str]] = None,
+    exclude_colors: Optional[List[str]] = None,
+) ->List[int]:
     """Get list of image IDs matching filters without loading full image data.
 
     Memory-efficient: Returns only IDs, not full image dictionaries.
@@ -554,6 +566,8 @@ def get_filtered_image_ids(
         conditions, params = _apply_exclude_ratings_filter(conditions, params, exclude_ratings)
         conditions, params = _apply_exclude_checkpoints_filter(conditions, params, exclude_checkpoints)
         conditions, params = _apply_exclude_loras_filter(conditions, params, exclude_loras)
+        conditions, params = _apply_exclude_prompts_filter(conditions, params, exclude_prompts, prompt_match_mode)
+        conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
 
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
@@ -642,7 +656,9 @@ def get_images_paginated(
     exclude_ratings: Optional[List[str]] = None,
     exclude_checkpoints: Optional[List[str]] = None,
     exclude_loras: Optional[List[str]] = None,
-) -> Dict[str, Any]:
+    exclude_prompts: Optional[List[str]] = None,
+    exclude_colors: Optional[List[str]] = None,
+) ->Dict[str, Any]:
     """
     Get images with cursor-based pagination for efficient handling of large datasets.
 
@@ -742,6 +758,8 @@ def get_images_paginated(
         conditions, params = _apply_exclude_ratings_filter(conditions, params, exclude_ratings)
         conditions, params = _apply_exclude_checkpoints_filter(conditions, params, exclude_checkpoints)
         conditions, params = _apply_exclude_loras_filter(conditions, params, exclude_loras)
+        conditions, params = _apply_exclude_prompts_filter(conditions, params, exclude_prompts, prompt_match_mode)
+        conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
 
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)

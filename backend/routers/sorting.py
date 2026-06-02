@@ -147,6 +147,17 @@ async def get_system_info_endpoint():
     return service.get_system_info_payload()
 
 
+@router.get(
+    "/system/ai-jobs",
+    summary="Get in-flight AI runtime jobs",
+    description="v3.3.0 PERF-2: snapshot of active AI runtime leases (VRAM-exclusive vs CPU-pool) for a status badge.",
+)
+async def get_ai_jobs_endpoint():
+    """Return a snapshot of in-flight AI runtime leases."""
+    from ai_runtime_guard import get_ai_jobs_snapshot
+    return get_ai_jobs_snapshot()
+
+
 @router.post(
     "/browse-folder",
     summary="Browse folder contents",
@@ -263,8 +274,44 @@ def move_images(
     request: MoveRequest,
     service: SortingService = Depends(get_sorting_service),
 ):
-    """Move or copy specific images to a folder."""
+    """Move or copy specific images to a folder (synchronous; returns per-id
+    results). The gallery UI uses ``/api/move/start`` for progress; this stays
+    for programmatic callers and tests."""
     return service.move_images(request)
+
+
+@router.post("/move/start")
+def start_move_job(
+    request: MoveRequest,
+    background_tasks: BackgroundTasks,
+    service: SortingService = Depends(get_sorting_service),
+):
+    """v3.3.0 USR-1: start a background move/copy job with progress polling."""
+    return service.start_move_job(request, background_tasks)
+
+
+@router.get("/move/progress")
+async def get_move_progress(
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Get current gallery move/copy job progress."""
+    return service.get_move_progress()
+
+
+@router.post("/move/reset")
+async def reset_move_progress(
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Reset a stuck move job."""
+    return service.reset_move_progress()
+
+
+@router.post("/move/cancel")
+async def cancel_move(
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Request cooperative cancellation of the active move job."""
+    return service.cancel_move()
 
 
 @router.post("/batch-move")

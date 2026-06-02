@@ -231,6 +231,8 @@ function createDefaultFilterState() {
         excludeRatings: [],
         excludeCheckpoints: [],
         excludeLoras: [],
+        excludePrompts: [],
+        excludeColors: [],
     };
 }
 
@@ -272,6 +274,8 @@ function cloneFilterState(filters) {
         excludeRatings: [...(source.excludeRatings || [])],
         excludeCheckpoints: [...(source.excludeCheckpoints || [])],
         excludeLoras: [...(source.excludeLoras || [])],
+        excludePrompts: [...(source.excludePrompts || [])],
+        excludeColors: [...(source.excludeColors || [])],
     };
 }
 
@@ -347,6 +351,8 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
         excludeRatings: [...(source.excludeRatings || [])],
         excludeCheckpoints: [...(source.excludeCheckpoints || [])],
         excludeLoras: [...(source.excludeLoras || [])],
+        excludePrompts: [...(source.excludePrompts || [])],
+        excludeColors: [...(source.excludeColors || [])],
     };
 }
 
@@ -383,6 +389,8 @@ function buildAdvancedFilterContract(filters = AppState?.filters || createDefaul
         excludeRatings: request.excludeRatings,
         excludeCheckpoints: request.excludeCheckpoints,
         excludeLoras: request.excludeLoras,
+        excludePrompts: request.excludePrompts,
+        excludeColors: request.excludeColors,
     };
 }
 
@@ -552,6 +560,8 @@ window.AppFilterAccess = {
         if (filters.excludeRatings?.length) params.set('exclude_ratings', filters.excludeRatings.join(','));
         if (filters.excludeCheckpoints?.length) params.set('exclude_checkpoints', filters.excludeCheckpoints.join(','));
         if (filters.excludeLoras?.length) params.set('exclude_loras', filters.excludeLoras.join(','));
+        if (filters.excludePrompts?.length) params.set('exclude_prompts', filters.excludePrompts.join(','));
+        if (filters.excludeColors?.length) params.set('exclude_colors', filters.excludeColors.join(','));
         return params;
     },
 };
@@ -1061,6 +1071,36 @@ const API = {
         }
     },
 
+    // v3.3.0 FEAT-COLLECTIONS: PATCH for partial updates (e.g. rename).
+    async patch(endpoint, data = {}, options = {}) {
+        const { signal } = options;
+        try {
+            const response = await fetch(`${API_BASE}${endpoint}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+                signal
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                const message = formatApiError(response.status, errorData);
+                const error = new Error(message);
+                error.apiStatus = response.status;
+                error.apiData = errorData;
+                throw error;
+            }
+            return response.json();
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                throw { name: 'AbortError', cancelled: true };
+            }
+            if (error.name === 'SyntaxError') {
+                throw new Error('Server returned invalid data. Please try again.');
+            }
+            throw error;
+        }
+    },
+
     // Images with cursor-based pagination
     async getImages(filters = {}, options = {}) {
         const params = new URLSearchParams();
@@ -1106,6 +1146,8 @@ const API = {
         if (filters.excludeRatings?.length) params.set('exclude_ratings', filters.excludeRatings.join(','));
         if (filters.excludeCheckpoints?.length) params.set('exclude_checkpoints', filters.excludeCheckpoints.join(','));
         if (filters.excludeLoras?.length) params.set('exclude_loras', filters.excludeLoras.join(','));
+        if (filters.excludePrompts?.length) params.set('exclude_prompts', filters.excludePrompts.join(','));
+        if (filters.excludeColors?.length) params.set('exclude_colors', filters.excludeColors.join(','));
 
         return this.get(`/api/images?${params}`, options);
     },
@@ -1224,6 +1266,16 @@ const API = {
         if (requestOptions.query) params.set('q', requestOptions.query);
         const queryString = params.toString();
         return this.get(`/api/loras/library${queryString ? `?${queryString}` : ''}`);
+    },
+
+    // v3.3.0 FEAT-CHECKPOINT-TAB
+    async getCheckpointsLibrary(options = {}) {
+        const requestOptions = typeof options === 'number' ? { limit: options } : (options || {});
+        const params = new URLSearchParams();
+        if (requestOptions.limit != null) params.set('limit', String(requestOptions.limit));
+        if (requestOptions.query) params.set('q', requestOptions.query);
+        const queryString = params.toString();
+        return this.get(`/api/checkpoints/library${queryString ? `?${queryString}` : ''}`);
     },
 
     async getGenerators() {
@@ -1428,6 +1480,58 @@ const API = {
             payload.image_ids = imageIds;
         }
         return this.post('/api/move', payload);
+    },
+
+    // v3.3.0 USR-1: background move/copy job with progress polling.
+    async startMoveJob(imageIds, destinationFolder, operation = 'move', options = {}) {
+        const payload = { destination_folder: destinationFolder, operation };
+        if (options.selectionToken) {
+            payload.selection_token = options.selectionToken;
+        } else {
+            payload.image_ids = imageIds;
+        }
+        return this.post('/api/move/start', payload);
+    },
+
+    async getMoveProgress() {
+        return this.get('/api/move/progress');
+    },
+
+    async cancelMove() {
+        return this.post('/api/move/cancel', {});
+    },
+
+    // v3.3.0 FEAT-COLLECTIONS
+    async getFavoriteIds() {
+        return this.get('/api/collections/favorites/ids');
+    },
+
+    async setFavorite(imageId, favorited) {
+        return this.post('/api/collections/favorites', { image_id: imageId, favorited });
+    },
+
+    async listCollections() {
+        return this.get('/api/collections');
+    },
+
+    async createCollection(name, folderPath = null) {
+        return this.post('/api/collections', { name, folder_path: folderPath });
+    },
+
+    async renameCollection(collectionId, name) {
+        return this.patch(`/api/collections/${collectionId}`, { name });
+    },
+
+    async deleteCollection(collectionId) {
+        return this.delete(`/api/collections/${collectionId}`);
+    },
+
+    async getCollectionImageIds(collectionId) {
+        return this.get(`/api/collections/${collectionId}/images`);
+    },
+
+    async setCollectionMembership(collectionId, imageId, member) {
+        return this.post(`/api/collections/${collectionId}/items`, { image_id: imageId, member });
     },
 
     async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operation = 'move', artist = null, promptMatchMode = 'exact', tagMode = 'and', excludeFilters = null) {
@@ -2565,17 +2669,11 @@ function isRiskyTaggerGpuSelection(modelName, options = {}) {
     const {
         isCustom = false,
         useGpu = false,
-        recommendedGpu = null,
-        treatConfirmationRequiredAsRisky = false
+        recommendedGpu = null
     } = options;
     if (!useGpu) return false;
     if (isCustom) return true;
     if (isGpuLockedTaggerModel(modelName, { isCustom })) return false;
-
-    const meta = getTaggerModelMeta(modelName);
-    if (treatConfirmationRequiredAsRisky && meta?.gpu_confirmation_required) {
-        return true;
-    }
 
     if (typeof recommendedGpu === 'boolean') {
         return useGpu && !recommendedGpu;
@@ -4014,8 +4112,23 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
 
     showConfirm(confirmTitle, confirmBody, async () => {
         try {
-            const result = await API.moveImages(ids, trimmedDestination, normalizedOperation, { selectionToken });
-            const results = Array.isArray(result?.results) ? result.results : [];
+            // v3.3.0 USR-1: drive the move through the background job so the
+            // progress bar streams (and the user can see how far the per-file
+            // source deletion has advanced) instead of a silent blocking POST.
+            const start = await API.startMoveJob(ids, trimmedDestination, normalizedOperation, { selectionToken });
+            let finalProgress = start;
+            if (start?.status !== 'done') {
+                finalProgress = await pollMoveProgressUntilDone();
+            }
+            if (finalProgress?.status === 'error') {
+                showToast(
+                    finalProgress.message || appT('selection.moveCopyFailed', 'Failed to {operation} selected images')
+                        .replace('{operation}', operationLabel.toLowerCase()),
+                    'error'
+                );
+                return;
+            }
+            const results = Array.isArray(finalProgress?.results) ? finalProgress.results : [];
             const successes = results.filter((item) => item?.success);
             // For filtered selection mode the API expanded the token server-side,
             // so the per-id failure mapping uses results[].id rather than the
@@ -4046,6 +4159,16 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
             await loadImages();
             await loadStats();
 
+            if (finalProgress?.status === 'cancelled') {
+                showToast(
+                    appT('selection.moveCopyCancelled', '{operation} cancelled after {count} image(s).')
+                        .replace('{operation}', operationLabel)
+                        .replace('{count}', successes.length),
+                    'info'
+                );
+                return;
+            }
+
             if (failed.length > 0) {
                 showToast(
                     appT('selection.moveCopyPartial', '{operation} completed for {success} image(s). {failed} failed.')
@@ -4064,6 +4187,7 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
                 'success'
             );
         } catch (error) {
+            _hideBgMoveProgress();
             showToast(
                 formatUserError(error, appT('selection.moveCopyFailed', 'Failed to {operation} selected images')
                     .replace('{operation}', operationLabel.toLowerCase())),
@@ -4071,6 +4195,64 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
             );
         }
     });
+}
+
+// v3.3.0 USR-1: floating move/copy progress bar (mirrors bg-scan-progress).
+function _showBgMoveProgress() {
+    const bar = $('#bg-move-progress');
+    if (bar) bar.style.display = 'flex';
+}
+
+function _hideBgMoveProgress() {
+    const bar = $('#bg-move-progress');
+    if (bar) bar.style.display = 'none';
+}
+
+function _updateBgMoveProgress(progress) {
+    const fill = $('#bg-move-progress-fill');
+    const textEl = $('#bg-move-progress-text');
+    const total = Number(progress?.total || 0);
+    const current = Number(progress?.current || 0);
+    const isCopy = progress?.operation === 'copy';
+    const indeterminate = total <= 0 || progress?.status === 'starting';
+    if (fill) {
+        const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+        fill.classList.toggle('is-indeterminate', indeterminate);
+        fill.style.width = indeterminate ? '' : (pct + '%');
+    }
+    if (textEl) {
+        if (progress?.status === 'cancelling') {
+            textEl.textContent = appT('move.cancelling', 'Stopping...');
+            return;
+        }
+        const verb = isCopy
+            ? appT('move.copyingVerb', 'Copying')
+            : appT('move.movingVerb', 'Moving');
+        // Move (not copy) deletes each source as it advances — make that visible
+        // so the user knows exactly when originals are gone (USR-1).
+        const sourceNote = isCopy ? '' : appT('move.sourceNote', ' · originals removed as each file moves');
+        textEl.textContent = `${verb} ${current}/${total}${sourceNote}`;
+    }
+}
+
+async function pollMoveProgressUntilDone() {
+    _showBgMoveProgress();
+    const TERMINAL = new Set(['done', 'cancelled', 'error', 'idle']);
+    try {
+        // Loop until the job reports a terminal state. 300ms cadence matches
+        // the scan/batch-move pollers.
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+            const progress = await API.getMoveProgress();
+            _updateBgMoveProgress(progress);
+            if (TERMINAL.has(progress?.status)) {
+                return progress;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+    } finally {
+        _hideBgMoveProgress();
+    }
 }
 
 async function moveOrCopySelectedGalleryImages(operation = 'move') {
@@ -4639,6 +4821,58 @@ function initEventListeners() {
     $('#filter-modal')?.addEventListener('change', () => updateFilterModalSummary());
     $('#filter-modal')?.addEventListener('input', () => updateFilterModalSummary());
 
+    // v3.3.0 USR-3: per-group select-all / clear / invert for checkbox groups
+    // (generators, ratings, and the dynamic checkpoint/lora lists). One
+    // delegated listener keyed by data-group + data-action — no FilterStore
+    // change is needed because updateFiltersFromUI reads :checked on Apply.
+    $('#filter-modal')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('.btn-group-action[data-group][data-action]');
+        if (!btn) return;
+        e.preventDefault();
+        const group = document.getElementById(btn.dataset.group);
+        if (!group) return;
+        const inputs = group.querySelectorAll('input[type="checkbox"]');
+        const action = btn.dataset.action;
+        inputs.forEach((cb) => {
+            if (action === 'select-all') cb.checked = true;
+            else if (action === 'clear') cb.checked = false;
+            else if (action === 'invert') cb.checked = !cb.checked;
+        });
+        // Reset the shift-range anchor so the next range starts fresh.
+        delete group.dataset.rangeAnchor;
+        updateFilterModalSummary();
+    });
+
+    // v3.3.0 USR-3: shift-click range select within a checkbox group so the
+    // user can sweep many options without an autoclicker ("用连点器" fix).
+    $('#filter-modal')?.addEventListener('click', (e) => {
+        const label = e.target.closest('.checkbox-label');
+        if (!label) return;
+        // Covers both the static toggle grids (generators/ratings) and the
+        // dynamic .filter-list groups (checkpoints/loras).
+        const group = label.closest('.filter-toggle-grid[role="group"], .filter-list');
+        if (!group) return;
+        const cb = label.querySelector('input[type="checkbox"]');
+        if (!cb) return;
+        const labels = Array.from(group.querySelectorAll('.checkbox-label'));
+        const index = labels.indexOf(label);
+        const anchor = group.dataset.rangeAnchor !== undefined
+            ? Number(group.dataset.rangeAnchor)
+            : -1;
+        if (e.shiftKey && anchor >= 0 && index >= 0) {
+            // The browser will toggle cb on this click; mirror its resulting
+            // state across the whole range.
+            const targetState = cb.checked;
+            const [lo, hi] = anchor < index ? [anchor, index] : [index, anchor];
+            for (let i = lo; i <= hi; i++) {
+                const rangeCb = labels[i].querySelector('input[type="checkbox"]');
+                if (rangeCb) rangeCb.checked = targetState;
+            }
+            updateFilterModalSummary();
+        }
+        group.dataset.rangeAnchor = String(index);
+    });
+
     // Aesthetic quick filter buttons
     $$('.aesthetic-quick').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -4732,6 +4966,7 @@ function initEventListeners() {
     $('#library-tab-tags')?.addEventListener('click', () => switchLibraryTab('tags'));
     $('#library-tab-prompts')?.addEventListener('click', () => switchLibraryTab('prompts'));
     $('#library-tab-loras')?.addEventListener('click', () => switchLibraryTab('loras'));
+    $('#library-tab-checkpoints')?.addEventListener('click', () => switchLibraryTab('checkpoints'));
 
     // Checkpoint search in filter modal - query backend facets, not just loaded rows
     const debouncedCheckpointSearch = debounce((value) => searchModalFilterFacet('checkpoints', value), 200);
@@ -5736,13 +5971,27 @@ async function startScan() {
             'info'
         );
 
-        pollScanProgress();
+        // v3.3.0 USR-2: invalidate any stale poll loop from a previous scan,
+        // then attach exactly one loop bound to this generation.
+        _scanPollGeneration += 1;
+        pollScanProgress(0, _scanPollGeneration);
     } catch (error) {
+        // v3.3.0 USR-2: a 409 means a scan is already running — the leftover
+        // loop (if any) keeps owning the UI. Tell the user plainly instead of
+        // leaking the raw "Scan already in progress" string, which reads like
+        // the scan silently reverted to the previous folder.
+        const rawMessage = error instanceof Error ? error.message : String(error || '');
+        if (error?.apiStatus === 409 || /already in progress|in progress/i.test(rawMessage)) {
+            showToast(
+                appT('scan.alreadyRunning', 'A scan is already running. Please wait for it to finish or stop it first.'),
+                'warning'
+            );
+            return;
+        }
         const userMessage = mapScanPathError(error);
         if (isScanPathError(error)) {
             setScanFolderValidation('error', userMessage);
         }
-        const rawMessage = error instanceof Error ? error.message : String(error || '');
         const toastMessage = userMessage !== rawMessage
             ? userMessage
             : formatUserError(error, appT('scan.failedStart', 'Failed to start import'));
@@ -6134,11 +6383,27 @@ function _initBgScanProgressButtons() {
             showModal('scan-modal');
         });
     }
+
+    // v3.3.0 USR-1: cancel the background move/copy job.
+    const moveCancelBtn = $('#bg-move-cancel');
+    if (moveCancelBtn) {
+        moveCancelBtn.addEventListener('click', async () => {
+            try {
+                await API.cancelMove();
+            } catch (error) {
+                Logger.warn('Failed to request move cancellation:', error);
+            }
+        });
+    }
 }
 
-async function pollScanProgress(retryCount = 0) {
+async function pollScanProgress(retryCount = 0, generation = _scanPollGeneration) {
+    // v3.3.0 USR-2: bail if a newer scan/resume superseded this loop.
+    if (generation !== _scanPollGeneration) return;
     try {
         const progress = await API.getScanProgress();
+        // Re-check after the await: a new scan may have started mid-flight.
+        if (generation !== _scanPollGeneration) return;
 
         const metrics = getScanProgressMetrics(progress);
         const scanFillEl = $('#scan-progress-fill');
@@ -6290,13 +6555,13 @@ async function pollScanProgress(retryCount = 0) {
             updateScanDiagnosticsCard(null);
         } else if (progress.status === 'running') {
             setScanCancelButtonState('running');
-            setTimeout(() => pollScanProgress(0), 500);
+            setTimeout(() => pollScanProgress(0, generation), 500);
         } else if (progress.status === 'cancelling') {
             setScanCancelButtonState('cancelling');
-            setTimeout(() => pollScanProgress(0), 250);
+            setTimeout(() => pollScanProgress(0, generation), 250);
         } else if (progress.status === 'idle' && retryCount < 10) {
             // Allow a brief idle window when attaching to an in-flight background task.
-            setTimeout(() => pollScanProgress(0), 500);
+            setTimeout(() => pollScanProgress(0, generation), 500);
         } else if (progress.status === 'idle') {
             $('#scan-progress-container').style.display = 'none';
             $('#btn-start-scan').disabled = false;
@@ -6309,9 +6574,10 @@ async function pollScanProgress(retryCount = 0) {
             updateScanDiagnosticsCard(null);
         }
     } catch (error) {
+        if (generation !== _scanPollGeneration) return;
         Logger.error('Poll error:', error);
         if (retryCount < 3) {
-            setTimeout(() => pollScanProgress(retryCount + 1), 1000);
+            setTimeout(() => pollScanProgress(retryCount + 1, generation), 1000);
         } else {
             showToast(appT('scan.failedProgress', 'Could not update import progress'), 'error');
             $('#scan-progress-container').style.display = 'none';
@@ -6339,7 +6605,9 @@ async function resumeScanProgress() {
         if (progress?.library_ready && progress?.status === 'running') {
             _scanLibraryReadyHandled = true;
             _updateBgScanProgress(progress);
-            pollScanProgress();
+            // v3.3.0 USR-2: supersede any stale loop before re-attaching.
+            _scanPollGeneration += 1;
+            pollScanProgress(0, _scanPollGeneration);
             return;
         }
 
@@ -6353,7 +6621,9 @@ async function resumeScanProgress() {
         resetProgressTracker(_scanBackgroundProgressTracker);
         $('#scan-progress-text').textContent = progress.message || 'Resuming scan progress...';
         _updateBgScanProgress(progress);
-        pollScanProgress();
+        // v3.3.0 USR-2: supersede any stale loop before re-attaching.
+        _scanPollGeneration += 1;
+        pollScanProgress(0, _scanPollGeneration);
     } catch (error) {
         Logger.warn('Failed to resume scan progress:', error);
     }
@@ -6381,6 +6651,13 @@ const SCAN_DIAGNOSTICS_HOLD_MS = 10000;
 let _scanDiagnosticsHoldUntil = 0;
 let _scanLibraryReadyHandled = false;
 let _scanLastAutoRefreshAt = 0;
+// v3.3.0 USR-2: pollScanProgress is a self-rescheduling setTimeout loop with no
+// cancellation token. A previous scan's loop could stay alive and keep
+// repainting the OLD folder's progress when a new scan started ("闪回/猛回头").
+// Every poll captures the generation active when it was scheduled; if a newer
+// scan (or resume) bumps the counter, the stale loop bails on its next tick so
+// exactly ONE poll loop is ever live.
+let _scanPollGeneration = 0;
 let _reconnectPollTimer = null;
 let _tagProgressTracker = createProgressTracker();
 
@@ -7654,6 +7931,7 @@ function switchLibraryTab(tab) {
     const tagsTab = $('#library-tab-tags');
     const promptsTab = $('#library-tab-prompts');
     const lorasTab = $('#library-tab-loras');
+    const checkpointsTab = $('#library-tab-checkpoints');
     if (tagsTab) {
         tagsTab.classList.toggle('active', tab === 'tags');
         tagsTab.classList.toggle('btn-secondary', tab === 'tags');
@@ -7668,6 +7946,11 @@ function switchLibraryTab(tab) {
         lorasTab.classList.toggle('active', tab === 'loras');
         lorasTab.classList.toggle('btn-secondary', tab === 'loras');
         lorasTab.classList.toggle('btn-ghost', tab !== 'loras');
+    }
+    if (checkpointsTab) {
+        checkpointsTab.classList.toggle('active', tab === 'checkpoints');
+        checkpointsTab.classList.toggle('btn-secondary', tab === 'checkpoints');
+        checkpointsTab.classList.toggle('btn-ghost', tab !== 'checkpoints');
     }
     loadLibraryContent();
 }
@@ -7694,6 +7977,10 @@ async function fetchLibraryFacet(tab, { sortBy = 'frequency', query = '', option
         const result = await API.getLorasLibrary({ query: normalizedQuery || null });
         return { items: result.loras || [], total: result.total || 0 };
     }
+    if (tab === 'checkpoints') {
+        const result = await API.getCheckpointsLibrary({ query: normalizedQuery || null });
+        return { items: result.checkpoints || [], total: result.total || 0 };
+    }
     const result = await API.getPromptsLibrary({ query: normalizedQuery || null });
     return { items: result.prompts || [], total: result.total || 0 };
 }
@@ -7705,6 +7992,9 @@ function renderLibraryFacet(tab, items) {
     } else if (tab === 'loras') {
         libraryData.loras = items;
         renderLibraryLoras(items);
+    } else if (tab === 'checkpoints') {
+        libraryData.checkpoints = items;
+        renderLibraryCheckpoints(items);
     } else {
         libraryData.prompts = items;
         renderLibraryPrompts(items);
@@ -7722,6 +8012,8 @@ function setLibraryStatsText(tab, count) {
         statsText.textContent = t('library.tagsFound', { count }, `${count} unique tags found`);
     } else if (tab === 'loras') {
         statsText.textContent = t('library.lorasFound', { count }, `${count} unique LoRAs found`);
+    } else if (tab === 'checkpoints') {
+        statsText.textContent = t('library.checkpointsFound', { count }, `${count} unique checkpoints found`);
     } else {
         statsText.textContent = t('library.promptsFound', { count }, `${count} unique prompts found`);
     }
@@ -7739,7 +8031,8 @@ async function loadLibraryContent() {
     const loadingLabels = {
         tags: t('library.loadingTags', null, 'Loading tag library…'),
         prompts: t('library.loadingPrompts', null, 'Loading prompt library…'),
-        loras: t('library.loadingLoras', null, 'Loading LoRA library…')
+        loras: t('library.loadingLoras', null, 'Loading LoRA library…'),
+        checkpoints: t('library.loadingCheckpoints', null, 'Loading checkpoint library…')
     };
     const loadingLabel = loadingLabels[currentTab] || loadingLabels.tags;
 
@@ -7764,7 +8057,8 @@ async function loadLibraryContent() {
         const fallbackMessages = {
             tags: t('library.loadTagsFailed', null, 'Failed to load tag library'),
             prompts: t('library.loadPromptsFailed', null, 'Failed to load prompt library'),
-            loras: t('library.loadLorasFailed', null, 'Failed to load LoRA library')
+            loras: t('library.loadLorasFailed', null, 'Failed to load LoRA library'),
+            checkpoints: t('library.loadCheckpointsFailed', null, 'Failed to load checkpoint library')
         };
         const fallbackMessage = fallbackMessages[currentTab] || fallbackMessages.tags;
         const message = escapeHtml(formatUserError(error, fallbackMessage));
@@ -7873,6 +8167,45 @@ function renderLibraryLoras(loras) {
                 }
                 finishTagsLibraryInteraction();
                 showToast(appT('library.addedFilter', 'Added "{value}" to filters').replace('{value}', lora), 'success');
+            }
+        });
+    });
+}
+
+// v3.3.0 FEAT-CHECKPOINT-TAB: render the Checkpoints library tab (mirrors LoRAs).
+function renderLibraryCheckpoints(checkpoints) {
+    const content = $('#library-content');
+    content.style.flexDirection = 'row';
+    if (!checkpoints || checkpoints.length === 0) {
+        content.innerHTML = '<p class="empty-state-text" style="width:100%;text-align:center;padding:32px;color:var(--text-muted)">' + escapeHtml(appT('library.checkpointsEmpty', 'No checkpoint info yet. Import images with checkpoint info first.')) + '</p>';
+        return;
+    }
+    const addHint = escapeHtml(appT('library.clickToAddFilter', 'Click to add as filter'));
+    content.innerHTML = checkpoints.map(c => {
+        const value = c.checkpoint_normalized || c.checkpoint || '';
+        const display = c.checkpoint || value;
+        return `
+        <div class="library-tag" data-checkpoint="${escapeHtml(value)}" title="${addHint}">
+            <span class="tag-name">${escapeHtml(display)}</span>
+            <span class="tag-count">${c.count}</span>
+        </div>`;
+    }).join('');
+
+    content.querySelectorAll('.library-tag').forEach(el => {
+        el.addEventListener('click', () => {
+            const checkpoint = normalizeCheckpointFilterValue
+                ? normalizeCheckpointFilterValue(el.dataset.checkpoint)
+                : el.dataset.checkpoint;
+            const filterState = libraryData.filterState || AppState.filters;
+            const currentCheckpoints = filterState.checkpoints || [];
+            if (checkpoint && !currentCheckpoints.includes(checkpoint)) {
+                filterState.checkpoints = [...currentCheckpoints, checkpoint];
+                if (!libraryData.returnFilterOptions) {
+                    updateFilterSummary();
+                    loadImages();
+                }
+                finishTagsLibraryInteraction();
+                showToast(appT('library.addedFilter', 'Added "{value}" to filters').replace('{value}', el.dataset.checkpoint), 'success');
             }
         });
     });
@@ -8970,14 +9303,50 @@ function renderModalActivePrompts() {
     filterState.prompts.forEach(prompt => {
         const promptEl = document.createElement('span');
         promptEl.className = 'active-tag';
+        promptEl.title = appT('filter.clickToExcludeHint', 'Click to exclude; click again to remove');
         promptEl.appendChild(document.createTextNode(`${prompt} `));
 
         const removeEl = document.createElement('span');
         removeEl.className = 'remove-modal-prompt';
         removeEl.dataset.prompt = prompt;
         removeEl.textContent = '×';
-        removeEl.addEventListener('click', () => {
+        removeEl.addEventListener('click', (e) => {
+            e.stopPropagation();
             filterState.prompts = filterState.prompts.filter(p => p !== prompt);
+            renderModalActivePrompts();
+        });
+
+        // v3.3.0 FEAT-EXCLUDE-EXTRA: cycle include -> exclude.
+        promptEl.addEventListener('click', () => {
+            filterState.prompts = filterState.prompts.filter(p => p !== prompt);
+            if (!filterState.excludePrompts) filterState.excludePrompts = [];
+            if (!filterState.excludePrompts.includes(prompt)) filterState.excludePrompts.push(prompt);
+            renderModalActivePrompts();
+        });
+
+        promptEl.appendChild(removeEl);
+        container.appendChild(promptEl);
+    });
+
+    // v3.3.0 FEAT-EXCLUDE-EXTRA: render excluded prompts (cycle exclude -> remove).
+    (filterState.excludePrompts || []).forEach(prompt => {
+        const promptEl = document.createElement('span');
+        promptEl.className = 'active-tag active-tag-exclude';
+        promptEl.title = appT('filter.clickToRemoveExclusion', 'Click to remove exclusion');
+        promptEl.appendChild(document.createTextNode(`${prompt} `));
+
+        const removeEl = document.createElement('span');
+        removeEl.className = 'remove-modal-prompt';
+        removeEl.dataset.prompt = prompt;
+        removeEl.textContent = '×';
+        removeEl.addEventListener('click', (e) => {
+            e.stopPropagation();
+            filterState.excludePrompts = (filterState.excludePrompts || []).filter(p => p !== prompt);
+            renderModalActivePrompts();
+        });
+
+        promptEl.addEventListener('click', () => {
+            filterState.excludePrompts = (filterState.excludePrompts || []).filter(p => p !== prompt);
             renderModalActivePrompts();
         });
 
@@ -11084,6 +11453,8 @@ document.addEventListener('DOMContentLoaded', () => {
     resumeScanProgress();
     resumeReconnectProgress();
     resumeTaggingProgress();
+    // v3.3.0 FEAT-COLLECTIONS: hydrate favorite hearts once on load.
+    window.Gallery?.hydrateFavorites?.();
     _initBgTagProgressButtons();
     _initBgScanProgressButtons();
     _initBgReconnectProgressButtons();

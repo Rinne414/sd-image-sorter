@@ -210,6 +210,20 @@ def get_loras_library(
     return service.get_loras_library(limit=limit, search_query=q)
 
 
+@router.get(
+    "/checkpoints/library",
+    summary="Get Checkpoints library",
+    description="Get unique normalized checkpoints with frequency counts (v3.3.0 FEAT-CHECKPOINT-TAB).",
+)
+def get_checkpoints_library(
+    limit: Optional[int] = Query(default=None, ge=1, description="Optional display limit; omitted returns all matching checkpoints"),
+    q: Optional[str] = Query(default=None, description="Search all checkpoints with normalized substring matching"),
+    service: TaggingService = Depends(get_tagging_service),
+):
+    """Get unique checkpoints from images with frequency counts."""
+    return service.get_checkpoints_library(limit=limit, search_query=q)
+
+
 @router.get("/tags/export")
 async def export_tags(
     service: TaggingService = Depends(get_tagging_service),

@@ -41,6 +41,9 @@
             excludeRatings: [],
             excludeCheckpoints: [],
             excludeLoras: [],
+            // v3.3.0 FEAT-EXCLUDE-EXTRA
+            excludePrompts: [],
+            excludeColors: [],
         };
     }
 
@@ -82,6 +85,9 @@
             excludeRatings: [...(source.excludeRatings || [])],
             excludeCheckpoints: [...(source.excludeCheckpoints || [])],
             excludeLoras: [...(source.excludeLoras || [])],
+            // v3.3.0 FEAT-EXCLUDE-EXTRA
+            excludePrompts: [...(source.excludePrompts || [])],
+            excludeColors: [...(source.excludeColors || [])],
         };
     }
 

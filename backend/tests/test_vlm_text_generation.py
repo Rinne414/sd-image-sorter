@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from vlm_providers import VLMConfig
 from vlm_providers.anthropic import AnthropicProvider
+from vlm_providers.base import ProviderError, assert_safe_request_url
 from vlm_providers.gemini import GeminiProvider
 from vlm_providers.openai_compat import OpenAICompatProvider
 
@@ -73,6 +76,47 @@ def test_anthropic_generate_text_rejects_empty_response(monkeypatch):
     result = asyncio.run(provider.generate_text("hello"))
 
     assert result.error_type == "empty_response"
+
+
+# --- SEC-4: endpoint scheme guard --------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://api.openai.com/v1/chat/completions",
+        "http://127.0.0.1:11434/v1/chat/completions",   # Ollama loopback — MUST be allowed
+        "http://localhost:1234/v1/chat/completions",     # LM Studio — MUST be allowed
+        "http://192.168.1.50:8000/v1/chat/completions",  # LAN box — private IPs are NOT blocked
+    ],
+)
+def test_assert_safe_request_url_allows_http_https_including_local(url):
+    # Should not raise — local/private endpoints are a first-class use case.
+    assert_safe_request_url(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "file:///etc/passwd",
+        "gopher://internal/_",
+        "ftp://internal/x",
+        "data:text/plain,hi",
+        "",                  # empty: no scheme/host
+        "https:///no-host",  # valid scheme, missing host
+    ],
+)
+def test_assert_safe_request_url_rejects_non_http_or_hostless(url):
+    with pytest.raises(ProviderError) as exc:
+        assert_safe_request_url(url)
+    assert exc.value.error_type == "config"
+    assert exc.value.retryable is False
+
+
+def test_openai_compat_generate_text_surfaces_bad_scheme_as_config_error():
+    provider = OpenAICompatProvider(VLMConfig(endpoint="file:///etc/passwd", model="dummy"))
+    result = asyncio.run(provider.generate_text("hello"))
+    assert result.error_type == "config"
 
 
 def test_gemini_generate_text_uses_public_text_request(monkeypatch):

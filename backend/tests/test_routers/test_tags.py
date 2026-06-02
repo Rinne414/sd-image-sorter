@@ -350,6 +350,41 @@ class TestLorasLibrary:
         assert [lora["lora"] for lora in data["loras"]] == ["nagisa_blue_archive"]
 
 
+class TestCheckpointsLibrary:
+    """Tests for GET /api/checkpoints/library endpoint (v3.3.0 FEAT-CHECKPOINT-TAB)."""
+
+    def test_get_checkpoints_library_shape(self, test_client, test_db):
+        import database as db
+
+        db.add_image(path="/t/a.png", filename="a.png", checkpoint="animagineXL.safetensors")
+        db.add_image(path="/t/b.png", filename="b.png", checkpoint="animagineXL.safetensors")
+        db.add_image(path="/t/c.png", filename="c.png", checkpoint="ponyDiffusion.safetensors")
+
+        response = test_client.get("/api/checkpoints/library")
+        assert response.status_code == 200
+        data = response.json()
+        assert "checkpoints" in data
+        assert "total" in data
+        assert isinstance(data["checkpoints"], list)
+        if data["checkpoints"]:
+            first = data["checkpoints"][0]
+            assert "checkpoint" in first
+            assert "count" in first
+
+    def test_checkpoints_library_search(self, test_client, test_db):
+        import database as db
+
+        db.add_image(path="/t/d.png", filename="d.png", checkpoint="animagineXL.safetensors")
+        db.add_image(path="/t/e.png", filename="e.png", checkpoint="ponyDiffusion.safetensors")
+
+        response = test_client.get("/api/checkpoints/library?q=pony")
+        assert response.status_code == 200
+        data = response.json()
+        names = " ".join(c["checkpoint"].lower() for c in data["checkpoints"])
+        assert "pony" in names
+        assert "animagine" not in names
+
+
 class TestTagImportExport:
     """Tests for tag import/export endpoints."""
 

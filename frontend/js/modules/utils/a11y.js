@@ -163,7 +163,7 @@ function getOrCreateToastLiveRegion() {
  * @param {Function} options.onSelect - Callback when Enter is pressed on an item
  */
 function handleGridKeyboardNavigation(event, container, itemSelector, options = {}) {
-    const { columns = 4, onSelect } = options;
+    const { columns = 4, onSelect, onNavigate, wrap = true } = options;
     const items = Array.from(container.querySelectorAll(itemSelector));
     if (items.length === 0) return;
 
@@ -174,11 +174,11 @@ function handleGridKeyboardNavigation(event, container, itemSelector, options = 
     switch (event.key) {
         case 'ArrowRight':
             event.preventDefault();
-            nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+            nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : (wrap ? 0 : currentIndex);
             break;
         case 'ArrowLeft':
             event.preventDefault();
-            nextIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+            nextIndex = currentIndex > 0 ? currentIndex - 1 : (wrap ? items.length - 1 : currentIndex);
             break;
         case 'ArrowDown':
             event.preventDefault();
@@ -209,6 +209,9 @@ function handleGridKeyboardNavigation(event, container, itemSelector, options = 
 
     if (nextIndex >= 0 && items[nextIndex]) {
         items[nextIndex].focus();
+        if (typeof onNavigate === 'function') {
+            onNavigate(items[nextIndex], nextIndex);
+        }
     }
 }
 

@@ -14,6 +14,7 @@ from vlm_providers.base import (
     ProviderError,
     VLMProvider,
     VLMResult,
+    assert_safe_request_url,
     encode_image_base64,
     make_async_client,
 )
@@ -163,6 +164,7 @@ class OpenAICompatProvider(VLMProvider):
 
     async def _request(self, messages: List[Dict], *, max_tokens: int = 1024, temperature: float = 0.3) -> Dict[str, Any]:
         url = self.config.endpoint.rstrip("/") + "/chat/completions"
+        assert_safe_request_url(url)
         headers = {"Content-Type": "application/json"}
         if self.config.api_key:
             headers["Authorization"] = f"Bearer {self.config.api_key}"
@@ -217,6 +219,10 @@ class OpenAICompatProvider(VLMProvider):
 
     async def test_connection(self) -> Dict[str, Any]:
         url = self.config.endpoint.rstrip("/") + "/models"
+        try:
+            assert_safe_request_url(url)
+        except ProviderError as e:
+            return {"status": "error", "error": str(e), "error_type": e.error_type}
         headers = {}
         if self.config.api_key:
             headers["Authorization"] = f"Bearer {self.config.api_key}"

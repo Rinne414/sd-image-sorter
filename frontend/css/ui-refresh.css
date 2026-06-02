@@ -3545,6 +3545,56 @@ textarea:focus,
     color: var(--text-primary);
 }
 
+/* v3.3.0 USR-3: per-group bulk-select action row (All / None / Invert). */
+.filter-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.filter-section-header h5 {
+    margin: 0;
+}
+
+.filter-group-actions {
+    display: inline-flex;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+.btn-group-action {
+    appearance: none;
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.14));
+    background: var(--surface-2, rgba(255, 255, 255, 0.06));
+    color: var(--text-secondary, #c9d1d9);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 5px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background var(--duration-fast, 150ms) ease,
+                color var(--duration-fast, 150ms) ease,
+                border-color var(--duration-fast, 150ms) ease;
+}
+
+.btn-group-action:hover {
+    background: var(--surface-3, rgba(255, 255, 255, 0.12));
+    color: var(--text-primary, #fff);
+    border-color: var(--accent, #6ea8fe);
+}
+
+.btn-group-action:focus-visible {
+    outline: 2px solid var(--accent, #6ea8fe);
+    outline-offset: 2px;
+}
+
+.btn-group-action:active {
+    transform: translateY(1px);
+}
+
 .filter-panel-help {
     flex: 0 1 260px;
     color: var(--text-muted);

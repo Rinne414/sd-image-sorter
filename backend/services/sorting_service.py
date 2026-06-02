@@ -418,6 +418,34 @@ class SortingService:
         # for the entire batch to finish.
         self._batch_move_cancel_event: Optional[threading.Event] = None
 
+        # v3.3.0 USR-1: gallery selection move/copy progress.
+        # The synchronous ``/api/move`` endpoint stays for tests and
+        # programmatic callers, but the gallery UI now drives a background
+        # job so large selections stream progress (and the user can see how
+        # far the per-file ``shutil.move`` source-deletion has advanced)
+        # instead of staring at a silent blocking request. Mirrors the
+        # batch-move run-id epoch + cancel-event pattern exactly. The final
+        # progress payload embeds the per-id ``results`` list so the frontend
+        # success/failure mapping is identical to the sync endpoint.
+        self._move_progress: Dict[str, Any] = {
+            "status": "idle",
+            "step": "idle",
+            "current": 0,
+            "total": 0,
+            "message": "",
+            "errors": 0,
+            "moved": 0,
+            "current_item": None,
+            "recent_errors": [],
+            "operation": "move",
+            "results": [],
+            "started_at": None,
+            "updated_at": None,
+        }
+        self._move_lock = threading.Lock()
+        self._move_run_id = 0
+        self._move_cancel_event: Optional[threading.Event] = None
+
     @staticmethod
     def _resolve_image_path(path: str) -> Optional[str]:
         """Resolve a library image path across native Windows and WSL mounts."""
@@ -888,6 +916,67 @@ class SortingService:
                 **updates,
             }
             return True
+
+    # ------------------------------------------------------------------
+    # v3.3.0 USR-1: background gallery move/copy job (progress + cancel).
+    # Mirrors the batch-move helpers above.
+    # ------------------------------------------------------------------
+    def get_move_progress(self) -> Dict[str, Any]:
+        """Get the current gallery move/copy job progress."""
+        with self._move_lock:
+            return self._move_progress.copy()
+
+    def reset_move_progress(self) -> Dict[str, Any]:
+        """Reset move job progress to idle (refused while still running)."""
+        with self._move_lock:
+            if self._move_progress["status"] == "running":
+                raise HTTPException(status_code=409, detail="Cannot reset move while it is still running")
+            return {"status": self._move_progress["status"], "message": "Nothing to reset"}
+
+    def cancel_move(self) -> Dict[str, Any]:
+        """Request cooperative cancellation of the active gallery move/copy job."""
+        with self._move_lock:
+            current_status = self._move_progress.get("status")
+            if current_status not in {"running", "cancelling"}:
+                return {"status": current_status, "message": "No move task is running"}
+
+            current = int(self._move_progress.get("current", 0) or 0)
+            total = int(self._move_progress.get("total", 0) or 0)
+            operation = self._move_progress.get("operation", "move")
+
+            if self._move_cancel_event is not None:
+                self._move_cancel_event.set()
+
+            verb = "copy" if operation == "copy" else "move"
+            self._move_progress["status"] = "cancelling"
+            self._move_progress["step"] = "cancelling"
+            self._move_progress["message"] = (
+                f"Cancelling {verb}... ({current}/{total})"
+                if total > 0
+                else f"Cancelling {verb}..."
+            )
+            self._move_progress["updated_at"] = time.time()
+            return {"status": "cancelling", "message": "Move cancellation requested"}
+
+    def _set_move_progress_if_current(self, run_id: int, state: Dict[str, Any]) -> bool:
+        """Only allow the active move job to replace shared progress state."""
+        with self._move_lock:
+            if run_id != self._move_run_id:
+                return False
+            self._move_progress = state
+            return True
+
+    def _update_move_progress_if_current(self, run_id: int, **updates: Any) -> bool:
+        """Only allow the active move job to mutate shared progress state."""
+        with self._move_lock:
+            if run_id != self._move_run_id:
+                return False
+            self._move_progress = {
+                **self._move_progress,
+                **updates,
+            }
+            return True
+
 
     def _apply_file_operation(
         self,
@@ -1401,19 +1490,62 @@ class SortingService:
         background_tasks.add_task(run_scan)
         return {"status": "started", "message": "Scan started in background"}
 
-    def move_images(self, request: MoveRequest) -> Dict[str, Any]:
-        """Move specific images to a folder."""
-        operation = self._validate_file_operation(request.operation)
-        destination_folder = normalize_user_path(request.destination_folder)
-        is_valid, error = validate_folder_path(destination_folder, allow_create=True)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error or "Invalid destination folder")
+    def _move_one_image(
+        self,
+        image_id: int,
+        image: Optional[Dict[str, Any]],
+        operation: str,
+        destination_folder: str,
+    ) -> Dict[str, Any]:
+        """Process a single move/copy and return a normalized per-id result.
 
-        # v3.2.1 task #34: when caller passed a selection_token (Select All
-        # Filtered scope), expand it to a concrete id list before reusing the
-        # existing per-image flow. We instantiate ImageService directly to
-        # avoid an import cycle with main.py; the helper is a stateless decoder
-        # over db (no shared per-instance state matters here).
+        v3.3.0 USR-1: shared by the synchronous ``move_images`` endpoint and
+        the background move job so both paths produce identical result rows
+        and apply the same readability guard before any byte-level move
+        deletes a source file.
+        """
+        source_path = self._resolve_image_path(image.get("path") or "") if image else None
+        if not image or not source_path:
+            return {"id": image_id, "error": "Image not found", "operation": operation, "success": False}
+
+        readable, read_error = verify_image_readable(source_path)
+        if not readable:
+            error_message = read_error or "Unreadable image"
+            db.mark_image_unreadable(image_id, error_message)
+            return {"id": image_id, "error": error_message, "operation": operation, "success": False}
+
+        try:
+            operation_result = self._apply_file_operation(
+                operation=operation,
+                image_id=image_id,
+                destination_folder=destination_folder,
+                source_path=source_path,
+                source_row=image,
+            )
+            return {
+                "id": image_id,
+                "new_path": operation_result["new_path"],
+                "new_image_id": operation_result.get("new_image_id"),
+                "operation": operation,
+                "success": True,
+            }
+        except Exception as e:
+            logger.error("Failed to %s image %d: %s", operation, image_id, e)
+            return {
+                "id": image_id,
+                "error": f"Failed to {operation} image",
+                "operation": operation,
+                "success": False,
+            }
+
+    def _expand_move_request_ids(self, request: MoveRequest) -> List[int]:
+        """Resolve a MoveRequest into a concrete image-id list.
+
+        v3.2.1 task #34: a ``selection_token`` (Select All Filtered scope) is
+        expanded to ids here. ImageService is instantiated directly to avoid
+        an import cycle with main.py; the helper is a stateless decoder over
+        db (no shared per-instance state matters).
+        """
         if request.selection_token:
             from services.image_service import ImageService
             decoder = ImageService()
@@ -1422,72 +1554,212 @@ class SortingService:
                 request.selection_token, chunk_size=500
             ):
                 image_ids.extend(chunk)
-        else:
-            image_ids = request.image_ids or []
+            return image_ids
+        return request.image_ids or []
 
+    def move_images(self, request: MoveRequest) -> Dict[str, Any]:
+        """Move specific images to a folder (synchronous; kept for tests and
+        programmatic callers — the gallery UI uses ``start_move_job``)."""
+        operation = self._validate_file_operation(request.operation)
+        destination_folder = normalize_user_path(request.destination_folder)
+        is_valid, error = validate_folder_path(destination_folder, allow_create=True)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error or "Invalid destination folder")
+
+        image_ids = self._expand_move_request_ids(request)
         if not image_ids:
             return {"results": []}
 
-        # Batch fetch all images in a single query (N+1 fix). The
-        # readability check is done *inside* the loop instead of up front:
-        # the previous call to ``_filter_readable_image_ids`` ran a full
-        # pixel decode (``verify_image_readable``) on every image before
-        # the loop started. For large selections that produced minutes of
-        # silent up-front blocking with no per-image feedback, but a
-        # byte-level move would otherwise cheerfully copy truncated/corrupt
-        # PNGs to the destination — so we still need the decode, just
-        # spread across the iteration so each result lands as it happens.
+        # Batch fetch all images in a single query (N+1 fix). The readability
+        # check is done per-image inside ``_move_one_image`` so each result
+        # lands as it happens (a byte-level move would otherwise silently copy
+        # truncated/corrupt PNGs to the destination).
         images_map = db.get_images_by_ids(image_ids)
-        destination_ready = os.path.isdir(destination_folder)
+        os.makedirs(destination_folder, exist_ok=True)
 
-        results = []
-        for image_id in image_ids:
-            image = images_map.get(image_id)
-            source_path = self._resolve_image_path(image.get("path") or "") if image else None
-            if not image or not source_path:
-                results.append({"id": image_id, "error": "Image not found", "operation": operation, "success": False})
-                continue
-
-            readable, read_error = verify_image_readable(source_path)
-            if not readable:
-                error_message = read_error or "Unreadable image"
-                db.mark_image_unreadable(image_id, error_message)
-                results.append({
-                    "id": image_id,
-                    "error": error_message,
-                    "operation": operation,
-                    "success": False,
-                })
-                continue
-
-            try:
-                if not destination_ready:
-                    os.makedirs(destination_folder, exist_ok=True)
-                    destination_ready = True
-                operation_result = self._apply_file_operation(
-                    operation=operation,
-                    image_id=image_id,
-                    destination_folder=destination_folder,
-                    source_path=source_path,
-                    source_row=image,
-                )
-                results.append({
-                    "id": image_id,
-                    "new_path": operation_result["new_path"],
-                    "new_image_id": operation_result.get("new_image_id"),
-                    "operation": operation,
-                    "success": True,
-                })
-            except Exception as e:
-                logger.error("Failed to %s image %d: %s", operation, image_id, e)
-                results.append({
-                    "id": image_id,
-                    "error": f"Failed to {operation} image",
-                    "operation": operation,
-                    "success": False,
-                })
-
+        results = [
+            self._move_one_image(image_id, images_map.get(image_id), operation, destination_folder)
+            for image_id in image_ids
+        ]
         return {"results": results}
+
+    def start_move_job(
+        self,
+        request: MoveRequest,
+        background_tasks: BackgroundTasks,
+    ) -> Dict[str, Any]:
+        """v3.3.0 USR-1: gallery selection move/copy as a background job with
+        progress polling, mirroring ``batch_move_images``. The final progress
+        payload embeds the per-id ``results`` list so the frontend mapping is
+        identical to the synchronous endpoint. Source files are deleted one at
+        a time as the worker advances, so the progress bar tracks deletion."""
+        operation = self._validate_file_operation(request.operation)
+        destination_folder = normalize_user_path(request.destination_folder)
+        is_valid, error = validate_folder_path(destination_folder, allow_create=True)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error or "Invalid destination folder")
+
+        with self._move_lock:
+            if self._move_progress["status"] in {"running", "cancelling"}:
+                raise HTTPException(status_code=409, detail="A move is already in progress")
+
+        image_ids = self._expand_move_request_ids(request)
+        total_count = len(image_ids)
+        if total_count == 0:
+            return {"status": "done", "message": "No images to move", "results": [], "total": 0}
+
+        cancel_event = threading.Event()
+        with self._move_lock:
+            self._move_run_id += 1
+            run_id = self._move_run_id
+            self._move_cancel_event = cancel_event
+            progress_verb = "Copying" if operation == "copy" else "Moving"
+            self._move_progress = {
+                "status": "running",
+                "step": "starting",
+                "current": 0,
+                "total": total_count,
+                "message": f"Starting {operation} of {total_count} images...",
+                "errors": 0,
+                "moved": 0,
+                "current_item": None,
+                "recent_errors": [],
+                "operation": operation,
+                "results": [],
+                "started_at": time.time(),
+                "updated_at": time.time(),
+            }
+
+        def run_move():
+            results: List[Dict[str, Any]] = []
+            moved = 0
+            processed = 0
+            errors: List[Dict[str, Any]] = []
+            try:
+                os.makedirs(destination_folder, exist_ok=True)
+
+                def _write_cancelled_state() -> None:
+                    completed_verb_local = "Copied" if operation == "copy" else "Moved"
+                    self._set_move_progress_if_current(
+                        run_id,
+                        {
+                            "status": "cancelled",
+                            "step": "cancelled",
+                            "current": processed,
+                            "total": total_count,
+                            "errors": len(errors),
+                            "moved": moved,
+                            "message": (
+                                f"Cancelled at {processed}/{total_count}. "
+                                f"{completed_verb_local} {moved} images so far."
+                            ),
+                            "current_item": None,
+                            "recent_errors": errors[-3:],
+                            "operation": operation,
+                            "results": results,
+                            "started_at": self._move_progress.get("started_at"),
+                            "updated_at": time.time(),
+                        },
+                    )
+
+                # Walk the id list in chunks so the per-image DB rows are
+                # fetched in batches (matches batch-move's IN(...) chunking)
+                # while progress advances per image.
+                for start in range(0, total_count, BATCH_MOVE_FETCH_CHUNK):
+                    if cancel_event.is_set():
+                        _write_cancelled_state()
+                        return
+                    chunk_ids = image_ids[start:start + BATCH_MOVE_FETCH_CHUNK]
+                    image_map = db.get_images_by_ids(chunk_ids)
+
+                    for image_id in chunk_ids:
+                        if cancel_event.is_set():
+                            _write_cancelled_state()
+                            return
+
+                        image = image_map.get(image_id)
+                        result = self._move_one_image(image_id, image, operation, destination_folder)
+                        results.append(result)
+                        filename = (image.get("filename") if image else None) or f"id-{image_id}"
+                        if result.get("success"):
+                            moved += 1
+                        else:
+                            errors.append({
+                                "image_id": image_id,
+                                "filename": filename,
+                                "error": result.get("error") or "Failed",
+                            })
+                        processed += 1
+                        if not self._update_move_progress_if_current(
+                            run_id,
+                            step="moving",
+                            current=processed,
+                            total=total_count,
+                            errors=len(errors),
+                            moved=moved,
+                            message=f"Processed {filename} ({processed}/{total_count})",
+                            current_item=filename,
+                            recent_errors=errors[-3:],
+                            operation=operation,
+                            updated_at=time.time(),
+                        ):
+                            return
+
+                completed_verb = "Copied" if operation == "copy" else "Moved"
+                self._set_move_progress_if_current(
+                    run_id,
+                    {
+                        "status": "done",
+                        "step": "done",
+                        "current": total_count,
+                        "total": total_count,
+                        "errors": len(errors),
+                        "moved": moved,
+                        "message": f"Completed! {completed_verb} {moved} images." + (f" {len(errors)} errors." if errors else ""),
+                        "current_item": None,
+                        "recent_errors": errors[-3:],
+                        "operation": operation,
+                        "results": results,
+                        "started_at": self._move_progress.get("started_at"),
+                        "updated_at": time.time(),
+                    },
+                )
+            except Exception as e:
+                logger.error("Move job failed: %s", e)
+                self._set_move_progress_if_current(
+                    run_id,
+                    {
+                        "status": "error",
+                        "step": "error",
+                        "current": processed,
+                        "total": total_count,
+                        "errors": len(errors),
+                        "moved": moved,
+                        "message": "Move failed due to an internal error",
+                        "current_item": None,
+                        "recent_errors": errors[-3:],
+                        "operation": operation,
+                        "results": results,
+                        "started_at": self._move_progress.get("started_at"),
+                        "updated_at": time.time(),
+                    },
+                )
+            finally:
+                with self._move_lock:
+                    if (
+                        self._move_run_id == run_id
+                        and self._move_cancel_event is cancel_event
+                    ):
+                        self._move_cancel_event = None
+
+        background_tasks.add_task(run_move)
+        return {
+            "status": "started",
+            "message": f"{progress_verb} {total_count} images in background",
+            "total": total_count,
+            "count": total_count,
+            "operation": operation,
+        }
 
     def batch_move_images(
         self,

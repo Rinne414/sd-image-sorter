@@ -98,3 +98,42 @@ def test_exclude_tags_in_get_filtered_image_ids(test_db_with_images):
     all_ids = db.get_filtered_image_ids()
     excluded_ids = db.get_filtered_image_ids(exclude_tags=["1girl"])
     assert len(excluded_ids) < len(all_ids)
+
+
+# v3.3.0 FEAT-EXCLUDE-EXTRA: exclude by prompt term and by color temperature.
+def test_exclude_prompts_filters_out_matching_images(test_db):
+    """Images whose prompt contains an excluded term should be removed."""
+    import database as db
+
+    keep = db.add_image(path="/t/keep.png", filename="keep.png", prompt="masterpiece, landscape")
+    drop = db.add_image(path="/t/drop.png", filename="drop.png", prompt="masterpiece, ugly, blurry")
+
+    result = db.get_images_paginated(exclude_prompts=["ugly"], prompt_match_mode="contains", limit=100)
+    ids = [img["id"] for img in result["images"]]
+    assert keep in ids
+    assert drop not in ids
+
+
+def test_exclude_colors_filters_out_matching_images(test_db):
+    """Images whose color_temperature is excluded should be removed."""
+    import database as db
+
+    warm = db.add_image(path="/t/warm.png", filename="warm.png")
+    cool = db.add_image(path="/t/cool.png", filename="cool.png")
+    with db.get_db() as conn:
+        conn.execute("UPDATE images SET color_temperature = 'warm' WHERE id = ?", (warm,))
+        conn.execute("UPDATE images SET color_temperature = 'cool' WHERE id = ?", (cool,))
+
+    result = db.get_images_paginated(exclude_colors=["warm"], limit=100)
+    ids = [img["id"] for img in result["images"]]
+    assert cool in ids
+    assert warm not in ids
+
+
+def test_exclude_extra_empty_no_effect(test_db_with_images):
+    """Empty prompts/colors exclude arrays should not change results."""
+    import database as db
+
+    baseline = db.get_images_paginated(limit=100)
+    with_empty = db.get_images_paginated(exclude_prompts=[], exclude_colors=[], limit=100)
+    assert len(baseline["images"]) == len(with_empty["images"])

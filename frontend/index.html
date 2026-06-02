@@ -318,6 +318,15 @@
             <button class="bg-tag-progress-btn" id="bg-reconnect-open" title="Open find moved files" data-i18n-title="reconnect.bgDetailsTitle">📋</button>
         </div>
 
+        <!-- v3.3.0 USR-1: Move/Copy Progress Bar (gallery selection move runs as a background job) -->
+        <div id="bg-move-progress" class="bg-tag-progress bg-scan-progress" style="display: none;" role="status" aria-live="polite">
+            <div class="bg-tag-progress-inner">
+                <div class="bg-tag-progress-fill bg-scan-progress-fill" id="bg-move-progress-fill"></div>
+            </div>
+            <span class="bg-tag-progress-text" id="bg-move-progress-text">Moving files...</span>
+            <button class="bg-tag-progress-btn bg-tag-stop-btn bg-scan-stop-btn" id="bg-move-cancel" title="Stop moving" data-i18n-title="move.bgStopTitle">⏹</button>
+        </div>
+
         <!-- Main Content Area -->
         <main id="main-content" class="main-content" role="main" tabindex="-1">
             <!-- Gallery View -->
@@ -1317,6 +1326,21 @@
                             </div>
                             <div class="helper-text" id="manual-sort-operation-help" data-i18n="manual.actionModeCopyHelp">Copies into the sort folders and keeps the originals in place. Safer when date-based library order matters.</div>
                             <div class="helper-text" id="manual-sort-execution-mode" data-i18n="manual.executionMode">Action mode: Copy and keep originals</div>
+                        </div>
+                        <div class="filter-section">
+                            <div class="filter-header-compact">
+                                <h4 data-i18n="manual.cooldownTitle">Action Cooldown</h4>
+                            </div>
+                            <label class="checkbox-label" style="margin-bottom:8px;">
+                                <input type="checkbox" id="manual-sort-cooldown-toggle">
+                                <span class="checkbox-custom" aria-hidden="true"></span>
+                                <span class="checkbox-text" data-i18n="manual.cooldownEnable">Enable a delay between actions</span>
+                            </label>
+                            <div id="manual-sort-cooldown-row" style="display:none; align-items:center; gap:8px;">
+                                <input type="range" id="manual-sort-cooldown-ms" min="100" max="2000" step="50" value="400" style="flex:1;">
+                                <span id="manual-sort-cooldown-value" style="min-width:64px; text-align:right;">400 ms</span>
+                            </div>
+                            <div class="helper-text" data-i18n="manual.cooldownHelp">Off by default. When on, presses fired during the delay are ignored, so an autoclicker can't fire a chaotic burst.</div>
                         </div>
                         <button class="btn btn-primary btn-large btn-glow" id="btn-start-sorting">
                             🎮 <span data-i18n="manual.startSorting">Start Sorting</span>
@@ -4460,7 +4484,14 @@
                             </div>
 
                             <div class="filter-section">
-                                <h5 id="generator-filters-heading" data-i18n="filter.generators">Generators</h5>
+                                <div class="filter-section-header">
+                                    <h5 id="generator-filters-heading" data-i18n="filter.generators">Generators</h5>
+                                    <span class="filter-group-actions">
+                                        <button type="button" class="btn-group-action" data-group="modal-generator-filters" data-action="select-all" data-i18n="filter.selectAll">All</button>
+                                        <button type="button" class="btn-group-action" data-group="modal-generator-filters" data-action="clear" data-i18n="filter.clear">None</button>
+                                        <button type="button" class="btn-group-action" data-group="modal-generator-filters" data-action="invert" data-i18n="filter.invert">Invert</button>
+                                    </span>
+                                </div>
                                 <div class="filter-options filter-toggle-grid" id="modal-generator-filters" role="group" aria-labelledby="generator-filters-heading">
                                     <label class="checkbox-label"><input type="checkbox" value="comfyui" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">ComfyUI</span></label>
                                     <label class="checkbox-label"><input type="checkbox" value="nai" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">NovelAI</span></label>
@@ -4480,7 +4511,14 @@
                             </div>
 
                             <div class="filter-section">
-                                <h5 id="rating-filters-heading" data-i18n="filter.ratings">Ratings</h5>
+                                <div class="filter-section-header">
+                                    <h5 id="rating-filters-heading" data-i18n="filter.ratings">Ratings</h5>
+                                    <span class="filter-group-actions">
+                                        <button type="button" class="btn-group-action" data-group="modal-rating-filters" data-action="select-all" data-i18n="filter.selectAll">All</button>
+                                        <button type="button" class="btn-group-action" data-group="modal-rating-filters" data-action="clear" data-i18n="filter.clear">None</button>
+                                        <button type="button" class="btn-group-action" data-group="modal-rating-filters" data-action="invert" data-i18n="filter.invert">Invert</button>
+                                    </span>
+                                </div>
                                 <div class="filter-options filter-toggle-grid" id="modal-rating-filters" role="group" aria-labelledby="rating-filters-heading">
                                     <label class="checkbox-label"><input type="checkbox" value="general" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">General</span></label>
                                     <label class="checkbox-label"><input type="checkbox" value="sensitive" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Sensitive</span></label>
@@ -4720,13 +4758,27 @@
                         <section class="filter-panel">
                             <div class="filter-list-grid">
                                 <div class="filter-section">
-                                    <h5 data-i18n="filter.checkpoints">Checkpoints</h5>
+                                    <div class="filter-section-header">
+                                        <h5 data-i18n="filter.checkpoints">Checkpoints</h5>
+                                        <span class="filter-group-actions">
+                                            <button type="button" class="btn-group-action" data-group="modal-checkpoint-list" data-action="select-all" data-i18n="filter.selectAll">All</button>
+                                            <button type="button" class="btn-group-action" data-group="modal-checkpoint-list" data-action="clear" data-i18n="filter.clear">None</button>
+                                            <button type="button" class="btn-group-action" data-group="modal-checkpoint-list" data-action="invert" data-i18n="filter.invert">Invert</button>
+                                        </span>
+                                    </div>
                                     <input type="text" id="modal-checkpoint-search" class="input-field" placeholder="Search checkpoints..." data-i18n-placeholder="filter.searchCheckpoints">
                                     <div class="filter-list" id="modal-checkpoint-list"></div>
                                 </div>
 
                                 <div class="filter-section">
-                                    <h5 data-i18n="filter.loras">Loras</h5>
+                                    <div class="filter-section-header">
+                                        <h5 data-i18n="filter.loras">Loras</h5>
+                                        <span class="filter-group-actions">
+                                            <button type="button" class="btn-group-action" data-group="modal-lora-list" data-action="select-all" data-i18n="filter.selectAll">All</button>
+                                            <button type="button" class="btn-group-action" data-group="modal-lora-list" data-action="clear" data-i18n="filter.clear">None</button>
+                                            <button type="button" class="btn-group-action" data-group="modal-lora-list" data-action="invert" data-i18n="filter.invert">Invert</button>
+                                        </span>
+                                    </div>
                                     <input type="text" id="modal-lora-search" class="input-field" placeholder="Search loras..." data-i18n-placeholder="filter.searchLoras">
                                     <div class="filter-list" id="modal-lora-list"></div>
                                 </div>
@@ -4958,6 +5010,10 @@
                         <button class="btn btn-ghost" id="library-tab-loras" data-tab="loras">
                             <span aria-hidden="true">🧩</span>
                             <span data-i18n="library.loras">LoRAs</span>
+                        </button>
+                        <button class="btn btn-ghost" id="library-tab-checkpoints" data-tab="checkpoints">
+                            <span aria-hidden="true">🧠</span>
+                            <span data-i18n="library.checkpoints">Checkpoints</span>
                         </button>
                     </div>
                     <select id="library-sort" class="sort-dropdown library-sort">

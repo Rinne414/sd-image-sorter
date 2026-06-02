@@ -166,6 +166,10 @@ const Gallery = {
     currentPreviewIndex: -1,
     currentPreviewRequestId: 0,
     showAllTags: false,
+    // v3.3.0 FEAT-COLLECTIONS: source-image ids currently in Favorites.
+    // Hydrated from /api/collections/favorites/ids on load; kept in sync as
+    // the user toggles hearts so re-renders show the correct state.
+    favoriteIds: new Set(),
     modalSectionState: {
         prompt: false,
         negative: false,
@@ -192,6 +196,67 @@ const Gallery = {
      */
     _getGenColors() {
         return window.GENERATOR_COLORS || DEFAULT_GENERATOR_COLORS;
+    },
+
+    // v3.3.0 FEAT-COLLECTIONS: favorite (heart) state + toggle.
+    async hydrateFavorites() {
+        try {
+            const result = await window.App?.API?.getFavoriteIds?.();
+            const ids = Array.isArray(result?.image_ids) ? result.image_ids : [];
+            this.favoriteIds = new Set(ids.map((id) => Number(id)).filter((id) => Number.isFinite(id)));
+            this._applyFavoriteStateToDom();
+        } catch (error) {
+            window.App?.Logger?.warn?.('Failed to hydrate favorites:', error);
+        }
+    },
+
+    isFavorited(imageId) {
+        return this.favoriteIds.has(Number(imageId));
+    },
+
+    _favoriteButtonHtml(image) {
+        const id = Number(image?.id);
+        const on = this.favoriteIds.has(id);
+        const title = this._t('collections.favoriteToggle', null, 'Favorite');
+        return `<button type="button" class="gallery-item-fav${on ? ' is-favorited' : ''}" `
+            + `data-fav-id="${id}" aria-pressed="${on ? 'true' : 'false'}" `
+            + `title="${this._escapeHtml(title)}" aria-label="${this._escapeHtml(title)}">`
+            + `<span aria-hidden="true">♥</span></button>`;
+    },
+
+    _applyFavoriteStateToDom() {
+        document.querySelectorAll('#gallery-grid .gallery-item[data-id]').forEach((item) => {
+            const id = Number(item.dataset.id);
+            const btn = item.querySelector('.gallery-item-fav');
+            if (btn) {
+                const on = this.favoriteIds.has(id);
+                btn.classList.toggle('is-favorited', on);
+                btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+            }
+        });
+    },
+
+    async toggleFavorite(imageId) {
+        const app = window.App || {};
+        const id = Number(imageId);
+        const next = !this.favoriteIds.has(id);
+        // Optimistic update with rollback on failure.
+        if (next) this.favoriteIds.add(id); else this.favoriteIds.delete(id);
+        this._applyFavoriteStateToDom();
+        try {
+            const result = await app.API?.setFavorite?.(id, next);
+            const favorited = Boolean(result?.favorited);
+            if (favorited) this.favoriteIds.add(id); else this.favoriteIds.delete(id);
+            this._applyFavoriteStateToDom();
+        } catch (error) {
+            // Roll back.
+            if (next) this.favoriteIds.delete(id); else this.favoriteIds.add(id);
+            this._applyFavoriteStateToDom();
+            app.showToast?.(
+                app.appT?.('collections.favoriteFailed', 'Could not update favorite') || 'Could not update favorite',
+                'error'
+            );
+        }
     },
 
     _normalizeGenerator(generator) {
@@ -777,6 +842,7 @@ const Gallery = {
 
             return `
                 ${imageTag}
+                ${this._favoriteButtonHtml(image)}
                 <div class="gallery-item-overlay" aria-hidden="true">
                     <span class="gallery-item-generator" data-generator-value="${this._escapeHtml(generatorValue)}" style="background: ${generatorColor}">
                         ${this._escapeHtml(generatorLabel)}
@@ -813,6 +879,7 @@ const Gallery = {
         return `
             <div class="gallery-item-media">
                 <img ${imgAttributes} alt="${safeFilename}" draggable="false"${highResAttr}>
+                ${this._favoriteButtonHtml(image)}
             </div>
             <div class="gallery-item-large-meta">
                 <div class="gallery-item-large-top">
@@ -945,6 +1012,15 @@ const Gallery = {
 
         // Add event listeners
         item.addEventListener('click', (event) => {
+            // v3.3.0 FEAT-COLLECTIONS: heart button toggles favorite without
+            // triggering selection/preview.
+            const favBtn = event.target.closest?.('.gallery-item-fav');
+            if (favBtn) {
+                event.preventDefault();
+                event.stopPropagation();
+                this.toggleFavorite(image.id);
+                return;
+            }
             if (AppState.selectionMode) {
                 this.handleSelectionInteraction(event, image.id, Number(item.dataset.index));
             } else {
@@ -1344,6 +1420,15 @@ const Gallery = {
         });
 
         item.addEventListener('click', (event) => {
+            // v3.3.0 FEAT-COLLECTIONS: heart button toggles favorite without
+            // triggering selection/preview.
+            const favBtn = event.target.closest?.('.gallery-item-fav');
+            if (favBtn) {
+                event.preventDefault();
+                event.stopPropagation();
+                this.toggleFavorite(image.id);
+                return;
+            }
             if (AppState.selectionMode) {
                 this.handleSelectionInteraction(event, image.id, Number(item.dataset.index));
             } else {
@@ -3273,6 +3358,12 @@ ${String(value)}`)
             { label: t('gallery.contextPreview', 'Preview'), icon: '\u{1F5BC}', action: () => this.openPreview(image.id) },
             { label: isSelected ? t('gallery.contextDeselectImage', 'Deselect Image') : t('gallery.contextSelectImage', 'Select Image'), icon: isSelected ? '\u2715' : '\u2713', action: () => this._setContextImageSelection(image.id, !isSelected) },
             { type: 'separator' },
+            { label: this.isFavorited(image.id)
+                ? t('collections.contextUnfavorite', 'Remove from Favorites')
+                : t('collections.contextFavorite', 'Add to Favorites'),
+              icon: this.isFavorited(image.id) ? '\u{1F494}' : '♥',
+              action: () => this.toggleFavorite(image.id) },
+            { type: 'separator' },
             { label: labelWithScope('gallery.contextMoveImage', 'Move...'), icon: '\u{1F4C1}', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'move', { source: 'context' }) },
             { label: labelWithScope('gallery.contextCopyImage', 'Copy...'), icon: '\u{1F4C4}', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'copy', { source: 'context' }) },
             { type: 'separator' },
@@ -3415,56 +3506,28 @@ ${String(value)}`)
         if (!grid) return;
 
         grid.addEventListener('keydown', (e) => {
-            // Only handle arrow keys when focus is on a gallery item
+            // Only handle arrow keys when focus is on a gallery item.
             if (!e.target.classList.contains('gallery-item')) return;
+            // Delegate the shared grid-navigation logic to the A11y utility so
+            // the switch/focus handling lives in one place. We keep the gallery
+            // semantics intact: clamp at edges (wrap:false), dynamic column
+            // count from the live layout, and a screen-reader position announce
+            // on each move. Enter/Space still open via the per-item keydown.
+            const a11y = window.A11y;
+            if (!a11y || typeof a11y.handleGridKeyboardNavigation !== 'function') return;
 
-            const items = Array.from(grid.querySelectorAll('.gallery-item'));
-            const currentIndex = items.findIndex(item => item === e.target);
-            if (currentIndex < 0) return;
-
-            // Get the grid layout to determine column count
+            const total = grid.querySelectorAll('.gallery-item').length;
             const gridStyle = window.getComputedStyle(grid);
             const gridWidth = grid.offsetWidth;
-            const itemWidth = items[0]?.offsetWidth || 200;
+            const itemWidth = grid.querySelector('.gallery-item')?.offsetWidth || 200;
             const columnGap = parseInt(gridStyle.columnGap) || 16;
             const columns = Math.max(1, Math.floor((gridWidth + columnGap) / (itemWidth + columnGap)));
 
-            let nextIndex = -1;
-
-            switch (e.key) {
-                case 'ArrowRight':
-                    e.preventDefault();
-                    nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : currentIndex;
-                    break;
-                case 'ArrowLeft':
-                    e.preventDefault();
-                    nextIndex = currentIndex > 0 ? currentIndex - 1 : currentIndex;
-                    break;
-                case 'ArrowDown':
-                    e.preventDefault();
-                    nextIndex = currentIndex + columns < items.length ? currentIndex + columns : currentIndex;
-                    break;
-                case 'ArrowUp':
-                    e.preventDefault();
-                    nextIndex = currentIndex - columns >= 0 ? currentIndex - columns : currentIndex;
-                    break;
-                case 'Home':
-                    e.preventDefault();
-                    nextIndex = 0;
-                    break;
-                case 'End':
-                    e.preventDefault();
-                    nextIndex = items.length - 1;
-                    break;
-                default:
-                    return;
-            }
-
-            if (nextIndex >= 0 && items[nextIndex]) {
-                items[nextIndex].focus();
-                // Announce to screen readers
-                this.announceImagePosition(nextIndex, items.length);
-            }
+            a11y.handleGridKeyboardNavigation(e, grid, '.gallery-item', {
+                columns,
+                wrap: false,
+                onNavigate: (_item, index) => this.announceImagePosition(index, total),
+            });
         });
     },
 

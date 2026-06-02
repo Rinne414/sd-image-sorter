@@ -2373,11 +2373,16 @@ test.describe('Smoke Tests', () => {
     ])
 
     const movePayloads: any[] = []
-    await page.route('**/api/move', async (route) => {
+    // v3.3.0 USR-1: moves now run through the background job endpoint
+    // (/api/move/start) with progress polling instead of the synchronous
+    // /api/move. Returning status:'done' inline lets the frontend skip the
+    // poll loop, so the test stays a single round-trip.
+    await page.route('**/api/move/start', async (route) => {
       const payload = route.request().postDataJSON()
       movePayloads.push(payload)
       await route.fulfill({
         json: {
+          status: 'done',
           results: payload.image_ids.map((id: number) => ({
             id,
             new_path: `${payload.destination_folder}/${id}.png`,
@@ -4986,7 +4991,7 @@ test.describe('Smoke Tests', () => {
     // censor-simple-guide is hidden in the redesigned UI (info moved to settings popup)
     await page.locator('#btn-open-detect-modal').click()
     await expect(page.locator('#detect-modal.visible')).toBeVisible()
-    await expect(page.locator('#censor-model-type-help')).toContainText('YOLO uses the local file shown below')
+    await expect(page.locator('#censor-model-type-help')).toContainText('YOLO alone uses the local file below')
     await expect(page.locator('#censor-model-type-status')).toContainText('Use this file: wenaka_yolov8s-seg.onnx')
 
     // Model details and advanced picker are in collapsed <details> sections

@@ -886,6 +886,86 @@ class TestMove:
         assert "Truncated" in (row["read_error"] or "")
 
 
+class TestMoveJob:
+    """v3.3.0 USR-1: background move/copy job (progress + cancel)."""
+
+    def test_move_job_completes_and_embeds_results(self, isolated_sorting_service, test_db, tmp_path: Path):
+        import database as db
+        from PIL import Image
+        from services.sorting_service import MoveRequest
+
+        source_dir = tmp_path / "src"
+        source_dir.mkdir()
+        dest_dir = tmp_path / "dst"
+        dest_dir.mkdir()
+
+        img_path = source_dir / "job_move.png"
+        Image.new("RGB", (48, 48), color="orange").save(img_path)
+        image_id = db.add_image(path=str(img_path), filename="job_move.png")
+
+        background_tasks = BackgroundTasks()
+        start = isolated_sorting_service.start_move_job(
+            MoveRequest(image_ids=[image_id], destination_folder=str(dest_dir)),
+            background_tasks,
+        )
+        assert start["status"] == "started"
+        assert start["total"] == 1
+
+        # Run the background worker synchronously.
+        background_tasks.tasks[0].func()
+
+        progress = isolated_sorting_service.get_move_progress()
+        assert progress["status"] == "done"
+        assert progress["moved"] == 1
+        assert progress["current"] == 1
+        assert progress["total"] == 1
+        assert len(progress["results"]) == 1
+        assert progress["results"][0]["success"] is True
+
+        # Source moved, destination populated.
+        assert not img_path.exists()
+        assert (dest_dir / "job_move.png").exists()
+
+    def test_move_job_records_failure_for_missing_row(self, isolated_sorting_service, test_db, tmp_path: Path):
+        from services.sorting_service import MoveRequest
+
+        background_tasks = BackgroundTasks()
+        result = isolated_sorting_service.start_move_job(
+            MoveRequest(image_ids=[999999], destination_folder=str(tmp_path / "dst")),
+            background_tasks,
+        )
+        # The id resolves to no rows, but the request still has a concrete id
+        # list of length 1, so the worker runs and records a failure result.
+        assert result["status"] == "started"
+        background_tasks.tasks[0].func()
+        progress = isolated_sorting_service.get_move_progress()
+        assert progress["status"] == "done"
+        assert progress["moved"] == 0
+        assert progress["errors"] == 1
+
+    def test_move_job_rejects_concurrent_start(self, isolated_sorting_service, tmp_path: Path):
+        from fastapi import HTTPException
+        from services.sorting_service import MoveRequest
+
+        # Force the progress into a running state to simulate an in-flight job.
+        isolated_sorting_service._move_progress["status"] = "running"
+        with pytest.raises(HTTPException) as exc:
+            isolated_sorting_service.start_move_job(
+                MoveRequest(image_ids=[1], destination_folder=str(tmp_path / "dst")),
+                BackgroundTasks(),
+            )
+        assert exc.value.status_code == 409
+
+    def test_move_progress_endpoint_returns_idle_initially(self, test_client, isolated_sorting_service):
+        response = test_client.get("/api/move/progress")
+        assert response.status_code == 200
+        assert response.json()["status"] == "idle"
+
+    def test_cancel_move_when_idle_is_noop(self, isolated_sorting_service):
+        result = isolated_sorting_service.cancel_move()
+        assert result["status"] == "idle"
+
+
 class TestBatchMove:
     """Tests for POST /api/batch-move endpoint."""
 

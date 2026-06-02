@@ -466,6 +466,59 @@ def _apply_exclude_loras_filter(conditions: List[str], params: List[Any],
     return conditions, params
 
 
+def _apply_exclude_prompts_filter(conditions: List[str], params: List[Any],
+                                  exclude_prompts: Optional[List[str]],
+                                  prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT) -> tuple:
+    """Exclude images whose prompt matches ANY of the specified terms.
+
+    v3.3.0 FEAT-EXCLUDE-EXTRA: the negation of _apply_prompt_terms_filter.
+    'contains' mode does a normalized substring NOT LIKE on the raw prompt;
+    'exact' mode excludes any image with a matching prompt token.
+    """
+    if not exclude_prompts:
+        return conditions, params
+    match_mode = normalize_prompt_match_mode(prompt_match_mode)
+    for term in exclude_prompts:
+        normalized_term = normalize_prompt_token(term)
+        if not normalized_term:
+            continue
+        if match_mode == PROMPT_MATCH_MODE_CONTAINS:
+            conditions.append(
+                "LOWER(REPLACE(COALESCE(i.prompt, ''), '_', ' ')) NOT LIKE ? ESCAPE '\\'"
+            )
+            params.append(f"%{escape_like_pattern(normalized_term)}%")
+        else:
+            conditions.append(
+                "NOT EXISTS (SELECT 1 FROM image_prompt_tokens ipt "
+                "WHERE ipt.image_id = i.id AND ipt.token LIKE ? ESCAPE '\\')"
+            )
+            params.append(f"%{escape_like_pattern(normalized_term)}%")
+    return conditions, params
+
+
+def _apply_exclude_colors_filter(conditions: List[str], params: List[Any],
+                                 exclude_colors: Optional[List[str]]) -> tuple:
+    """Exclude images whose color_temperature is ANY of the specified values.
+
+    v3.3.0 FEAT-EXCLUDE-EXTRA: the negation of the color_temperature side of
+    _apply_color_filter. Values are warm/cool/neutral (others are ignored).
+    Images with NULL color_temperature are NOT excluded (they simply lack the
+    attribute, mirroring how the include filter only matches non-null rows).
+    """
+    if not exclude_colors:
+        return conditions, params
+    valid = {"warm", "cool", "neutral"}
+    normalized = [c.lower() for c in exclude_colors if c and c.lower() in valid]
+    if not normalized:
+        return conditions, params
+    placeholders = ",".join("?" * len(normalized))
+    conditions.append(
+        f"(i.color_temperature IS NULL OR i.color_temperature NOT IN ({placeholders}))"
+    )
+    params.extend(normalized)
+    return conditions, params
+
+
 def _apply_search_filter(conditions: List[str], params: List[Any],
                          search_query: Optional[str]) -> tuple:
     """Apply prompt search filtering with normalization.

@@ -132,3 +132,225 @@ def get_favorites_count() -> int:
             (FAVORITES_COLLECTION_SLUG,)
         )
         return cursor.fetchone()[0]
+
+
+# ---------------------------------------------------------------------------
+# v3.3.0 FEAT-COLLECTIONS: lightweight "favorite" (heart) toggle.
+#
+# Favorites use the existing collection_items table as a *reference* (the
+# copied_path points at the source image's own path) instead of physically
+# copying the file. This keeps the heart toggle instant and reversible with no
+# schema migration. The richer "copy into a collection folder" snapshot path
+# (add_collection_item with a real copied_path) still exists for callers that
+# want physical copies.
+# ---------------------------------------------------------------------------
+def get_favorites_collection_id() -> Optional[int]:
+    """Return the seeded Favorites collection id (or None if missing)."""
+    collection = get_collection_by_slug(FAVORITES_COLLECTION_SLUG)
+    return int(collection["id"]) if collection else None
+
+
+def is_favorited(source_image_id: int) -> bool:
+    """True when the source image is in the Favorites collection."""
+    fav_id = get_favorites_collection_id()
+    if fav_id is None:
+        return False
+    return get_collection_item(fav_id, source_image_id) is not None
+
+
+def set_favorite(source_image_id: int, favorited: bool) -> bool:
+    """Toggle Favorites membership for a source image (reference, no file copy).
+
+    Returns the resulting favorited state. Raises ValueError if the image row
+    does not exist (the caller maps that to a 404).
+    """
+    fav_id = get_favorites_collection_id()
+    if fav_id is None:
+        raise ValueError("Favorites collection is not initialised")
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT path, prompt, negative_prompt, checkpoint, loras, metadata_json, "
+            "created_at, width, height, file_size FROM images WHERE id = ?",
+            (source_image_id,),
+        )
+        row = cursor.fetchone()
+    if row is None:
+        raise ValueError(f"Image {source_image_id} not found")
+
+    if not favorited:
+        remove_collection_item(fav_id, source_image_id)
+        return False
+
+    image = _row_to_dict(row)
+    add_collection_item(
+        collection_id=fav_id,
+        source_image_id=source_image_id,
+        # Reference the source path itself — no physical copy for favorites.
+        copied_path=image.get("path") or "",
+        prompt=image.get("prompt"),
+        negative_prompt=image.get("negative_prompt"),
+        checkpoint=image.get("checkpoint"),
+        loras=image.get("loras"),
+        metadata_json=image.get("metadata_json"),
+        created_at=image.get("created_at"),
+        width=image.get("width"),
+        height=image.get("height"),
+        file_size=image.get("file_size"),
+    )
+    return True
+
+
+# ---------------------------------------------------------------------------
+# v3.3.0 FEAT-COLLECTIONS: user-managed collections (list / create / rename /
+# delete) plus reference-style membership and an image listing for the UI.
+# ---------------------------------------------------------------------------
+import re as _re
+
+
+def _slugify_collection_name(name: str) -> str:
+    """Derive a URL-safe slug from a display name."""
+    base = _re.sub(r"[^a-z0-9]+", "-", (name or "").strip().lower()).strip("-")
+    return base or "collection"
+
+
+def list_collections() -> List[Dict[str, Any]]:
+    """List all collections with their item counts, newest first."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT c.id, c.slug, c.name, c.folder_path, c.created_at,
+                   COUNT(ci.id) AS item_count
+            FROM collections c
+            LEFT JOIN collection_items ci ON ci.collection_id = c.id
+            GROUP BY c.id
+            ORDER BY c.created_at DESC, c.id DESC
+            """
+        )
+        return [_row_to_dict(row) for row in cursor.fetchall()]
+
+
+def create_collection(name: str, folder_path: Optional[str] = None) -> Dict[str, Any]:
+    """Create a new collection with a unique slug. Returns the created row."""
+    clean_name = (name or "").strip()
+    if not clean_name:
+        raise ValueError("Collection name is required")
+
+    base_slug = _slugify_collection_name(clean_name)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        # Ensure slug uniqueness by suffixing -2, -3, ... on collision.
+        slug = base_slug
+        suffix = 2
+        while True:
+            cursor.execute("SELECT 1 FROM collections WHERE slug = ?", (slug,))
+            if cursor.fetchone() is None:
+                break
+            slug = f"{base_slug}-{suffix}"
+            suffix += 1
+        cursor.execute(
+            "INSERT INTO collections (slug, name, folder_path) VALUES (?, ?, ?)",
+            (slug, clean_name, folder_path or ""),
+        )
+        new_id = cursor.lastrowid
+        cursor.execute("SELECT * FROM collections WHERE id = ?", (new_id,))
+        return _row_to_dict(cursor.fetchone())
+
+
+def rename_collection(collection_id: int, name: str) -> bool:
+    """Rename a collection (the slug is left stable to keep references valid)."""
+    clean_name = (name or "").strip()
+    if not clean_name:
+        raise ValueError("Collection name is required")
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE collections SET name = ? WHERE id = ?",
+            (clean_name, collection_id),
+        )
+        return cursor.rowcount > 0
+
+
+def delete_collection(collection_id: int) -> bool:
+    """Delete a collection and its items (the Favorites collection is protected)."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT slug FROM collections WHERE id = ?", (collection_id,))
+        row = cursor.fetchone()
+        if row is None:
+            return False
+        if _row_to_dict(row).get("slug") == FAVORITES_COLLECTION_SLUG:
+            raise ValueError("The Favorites collection cannot be deleted")
+        cursor.execute("DELETE FROM collection_items WHERE collection_id = ?", (collection_id,))
+        cursor.execute("DELETE FROM collections WHERE id = ?", (collection_id,))
+        return cursor.rowcount > 0
+
+
+def collection_exists(collection_id: int) -> bool:
+    """True when a collection with this id exists."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM collections WHERE id = ?", (collection_id,))
+        return cursor.fetchone() is not None
+
+
+def set_collection_membership(collection_id: int, source_image_id: int, member: bool) -> bool:
+    """Add/remove a source image to/from a collection as a reference (no copy).
+
+    Returns the resulting membership state. Raises ValueError on a missing
+    collection or image row (the caller maps that to a 404).
+    """
+    if not collection_exists(collection_id):
+        raise ValueError(f"Collection {collection_id} not found")
+
+    if not member:
+        remove_collection_item(collection_id, source_image_id)
+        return False
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT path, prompt, negative_prompt, checkpoint, loras, metadata_json, "
+            "created_at, width, height, file_size FROM images WHERE id = ?",
+            (source_image_id,),
+        )
+        row = cursor.fetchone()
+    if row is None:
+        raise ValueError(f"Image {source_image_id} not found")
+
+    image = _row_to_dict(row)
+    add_collection_item(
+        collection_id=collection_id,
+        source_image_id=source_image_id,
+        copied_path=image.get("path") or "",
+        prompt=image.get("prompt"),
+        negative_prompt=image.get("negative_prompt"),
+        checkpoint=image.get("checkpoint"),
+        loras=image.get("loras"),
+        metadata_json=image.get("metadata_json"),
+        created_at=image.get("created_at"),
+        width=image.get("width"),
+        height=image.get("height"),
+        file_size=image.get("file_size"),
+    )
+    return True
+
+
+def get_collection_image_ids(collection_id: int) -> List[int]:
+    """Return the source image ids in a collection (newest-added first)."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT ci.source_image_id
+            FROM collection_items ci
+            INNER JOIN images i ON i.id = ci.source_image_id
+            WHERE ci.collection_id = ?
+            ORDER BY ci.added_at DESC, ci.id DESC
+            """,
+            (collection_id,),
+        )
+        return [row[0] for row in cursor.fetchall()]
+

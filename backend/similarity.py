@@ -111,6 +111,22 @@ SIMILARITY_SEARCH_MAX_WINDOW = max(
     min(200000, int(os.environ.get("SD_SIMILARITY_SEARCH_MAX_WINDOW", "50000") or 50000)),
 )
 
+# In-memory vectorized embedding cache (PERF-1).
+#
+# The streaming search re-reads and re-decodes every embedding BLOB from SQLite
+# on each query (e.g. ~400MB of I/O for 200k images), which dominates latency.
+# Caching a single L2-normalized float32 matrix in RAM turns each search into one
+# vectorized matmul. This is a pure accelerator: the streaming scan below stays as
+# the always-available fallback, so results are never capped or degraded — if the
+# cache cannot be built (memory pressure, odd DB shape) we silently fall back.
+#
+# Opt-out via SD_SIMILARITY_DISABLE_VECTOR_CACHE=1 (ops escape hatch, not a feature
+# cap — the feature works at full fidelity either way).
+SIMILARITY_VECTOR_CACHE_ENABLED = (
+    os.environ.get("SD_SIMILARITY_DISABLE_VECTOR_CACHE", "").strip().lower()
+    not in ("1", "true", "yes", "on")
+)
+
 
 def _get_embed_model():
     """Get or create the FastEmbed CLIP model (singleton)."""
@@ -266,6 +282,11 @@ class SimilarityIndex:
             "current_batch": 0,
             "total_batches": 0,
         }
+        # Vectorized embedding cache (PERF-1). Guarded by _vector_cache_lock.
+        # _vector_cache holds {"matrix", "ids", "paths", "filenames", "dim",
+        # "signature"} once built; None means "not built / invalidated".
+        self._vector_cache_lock = threading.Lock()
+        self._vector_cache: Optional[Dict[str, Any]] = None
 
     def get_progress(self) -> Dict[str, Any]:
         """Get current embedding progress (snapshot guarded by lock)."""
@@ -436,6 +457,10 @@ class SimilarityIndex:
                     with self.db.get_db() as conn:
                         cursor = conn.cursor()
                         write_image_embeddings(cursor, updates)
+
+                    # Embeddings changed → the vectorized search cache is stale.
+                    # Drop it so the next search rebuilds from fresh vectors.
+                    self.invalidate_vector_cache()
 
                 gc.collect()
 
@@ -773,8 +798,36 @@ class SimilarityIndex:
         *,
         exclude_id: Optional[int] = None,
     ) -> Tuple[List[Dict[str, Any]], int, bool]:
-        """Stream candidates through a bounded heap to avoid loading every embedding at once."""
+        """Rank candidates, preferring the in-memory vectorized cache.
+
+        Validates the pagination window once, then tries the cached matmul path.
+        If the cache is unavailable (disabled, not buildable, dimension mismatch,
+        or any failure) it transparently falls back to the streaming heap scan so
+        results are identical and never capped.
+        """
         page_limit, page_offset, keep_count = self._normalize_similarity_window(limit, offset)
+
+        cached = self._try_cached_ranked_candidates(
+            query_emb, threshold, page_limit, page_offset, exclude_id=exclude_id
+        )
+        if cached is not None:
+            return cached
+
+        return self._stream_ranked_candidates(
+            query_emb, threshold, page_limit, page_offset, keep_count, exclude_id=exclude_id
+        )
+
+    def _stream_ranked_candidates(
+        self,
+        query_emb: np.ndarray,
+        threshold: float,
+        page_limit: int,
+        page_offset: int,
+        keep_count: int,
+        *,
+        exclude_id: Optional[int] = None,
+    ) -> Tuple[List[Dict[str, Any]], int, bool]:
+        """Stream candidates through a bounded heap to avoid loading every embedding at once."""
         total = 0
         top_heap: List[Tuple[float, int, Dict[str, Any]]] = []
 
@@ -795,6 +848,196 @@ class SimilarityIndex:
             )
         ]
         page = ranked[page_offset:page_offset + page_limit]
+        has_more = total > (page_offset + len(page))
+        return page, total, has_more
+
+    # ------------------------------------------------------------------
+    # Vectorized in-memory cache (PERF-1)
+    # ------------------------------------------------------------------
+
+    def invalidate_vector_cache(self) -> None:
+        """Drop the cached embedding matrix so the next search rebuilds it."""
+        with self._vector_cache_lock:
+            self._vector_cache = None
+
+    def _compute_embedding_signature(self) -> Optional[Tuple[int, int]]:
+        """Cheap (count, max_id) fingerprint of readable embeddings.
+
+        Returns None when the signature cannot be determined (e.g. a minimal DB
+        mock that doesn't answer the aggregate query) — the caller then skips the
+        cache and uses the streaming scan.
+        """
+        try:
+            with self.db.get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT COUNT(*), COALESCE(MAX(id), 0)
+                    FROM images
+                    WHERE embedding IS NOT NULL
+                      AND COALESCE(is_readable, 1) = 1
+                    """
+                )
+                row = cursor.fetchone()
+        except Exception as exc:
+            logger.debug("[Similarity] Could not compute embedding signature: %s", exc)
+            return None
+
+        if not row or len(row) < 2 or row[0] is None:
+            return None
+        try:
+            return (int(row[0]), int(row[1]))
+        except (TypeError, ValueError):
+            return None
+
+    def _ensure_vector_cache(self) -> Optional[Dict[str, Any]]:
+        """Return a fresh embedding cache, building it if missing or stale.
+
+        Returns None (caller falls back to streaming) when the cache is disabled,
+        the DB signature is undeterminable, there are no embeddings, or building
+        the matrix fails (including MemoryError on very large libraries).
+        """
+        if not SIMILARITY_VECTOR_CACHE_ENABLED:
+            return None
+
+        signature = self._compute_embedding_signature()
+        if signature is None or signature[0] == 0:
+            return None
+
+        cache = self._vector_cache
+        if cache is not None and cache.get("signature") == signature:
+            return cache
+
+        with self._vector_cache_lock:
+            cache = self._vector_cache
+            if cache is not None and cache.get("signature") == signature:
+                return cache
+            try:
+                built = self._build_vector_cache(signature)
+            except MemoryError:
+                logger.warning(
+                    "[Similarity] Not enough memory to build vectorized cache "
+                    "(%s embeddings); falling back to streaming search.",
+                    signature[0],
+                )
+                self._vector_cache = None
+                return None
+            except Exception as exc:
+                logger.warning("[Similarity] Failed to build vectorized cache: %s", exc)
+                self._vector_cache = None
+                return None
+            self._vector_cache = built
+            return built
+
+    def _build_vector_cache(self, signature: Tuple[int, int]) -> Optional[Dict[str, Any]]:
+        """Materialize an L2-normalized matrix + parallel id/path/filename arrays.
+
+        Streams rows via fetchmany (never fetchall) so memory stays bounded during
+        the build. Rows whose embedding dimension differs from the modal dimension
+        are skipped, matching the streaming path's per-row shape guard.
+        """
+        ids: List[int] = []
+        paths: List[str] = []
+        filenames: List[str] = []
+        vectors: List[np.ndarray] = []
+        dim: Optional[int] = None
+        skipped = 0
+
+        for chunk in self._iter_embedding_candidate_chunks(exclude_id=None):
+            for row in chunk:
+                embedding = bytes_to_embedding(row[3])
+                if dim is None:
+                    dim = int(embedding.shape[0])
+                if embedding.shape[0] != dim:
+                    skipped += 1
+                    continue
+                ids.append(int(row[0]))
+                paths.append(row[1])
+                filenames.append(row[2])
+                vectors.append(embedding)
+
+        if not vectors or dim is None:
+            return None
+
+        matrix = np.vstack(vectors).astype(np.float32, copy=False)
+        norms = np.linalg.norm(matrix, axis=1)
+        norms[norms == 0] = 1.0
+        matrix = matrix / norms[:, None]
+
+        if skipped:
+            logger.info(
+                "[Similarity] Vector cache skipped %s embedding(s) with mismatched dimension.",
+                skipped,
+            )
+
+        return {
+            "matrix": matrix,
+            "ids": np.asarray(ids, dtype=np.int64),
+            "paths": paths,
+            "filenames": filenames,
+            "dim": dim,
+            "signature": signature,
+        }
+
+    def _try_cached_ranked_candidates(
+        self,
+        query_emb: np.ndarray,
+        threshold: float,
+        page_limit: int,
+        page_offset: int,
+        *,
+        exclude_id: Optional[int] = None,
+    ) -> Optional[Tuple[List[Dict[str, Any]], int, bool]]:
+        """Vectorized ranking over the cached matrix.
+
+        Returns None to signal the caller should fall back to streaming. Result
+        ordering matches _stream_ranked_candidates exactly: filter on the raw
+        cosine (>= threshold), sort by the 4-decimal-rounded similarity descending
+        with ascending id as the tie-break.
+        """
+        cache = self._ensure_vector_cache()
+        if cache is None:
+            return None
+        if int(query_emb.shape[0]) != cache["dim"]:
+            # Dimension mismatch — streaming handles per-row shape skipping.
+            return None
+
+        query_norm = float(np.linalg.norm(query_emb))
+        if query_norm == 0:
+            return [], 0, False
+
+        query_unit = (query_emb.astype(np.float32, copy=False)) / query_norm
+        sims = cache["matrix"] @ query_unit  # cosine, matrix rows are unit vectors
+
+        ids = cache["ids"]
+        mask = sims >= threshold
+        if exclude_id is not None:
+            mask &= ids != int(exclude_id)
+
+        valid_idx = np.nonzero(mask)[0]
+        total = int(valid_idx.size)
+        if total == 0:
+            return [], 0, False
+
+        sub_rounded = np.round(sims[valid_idx], 4)
+        sub_ids = ids[valid_idx]
+        # lexsort sorts by the LAST key first: primary = -rounded (asc => rounded
+        # desc), tie-break = id ascending.
+        order = np.lexsort((sub_ids, -sub_rounded))
+        ordered_idx = valid_idx[order]
+
+        page_idx = ordered_idx[page_offset:page_offset + page_limit]
+        paths = cache["paths"]
+        filenames = cache["filenames"]
+        page = [
+            {
+                "id": int(ids[i]),
+                "path": paths[i],
+                "filename": filenames[i],
+                "similarity": round(float(sims[i]), 4),
+            }
+            for i in page_idx
+        ]
         has_more = total > (page_offset + len(page))
         return page, total, has_more
 

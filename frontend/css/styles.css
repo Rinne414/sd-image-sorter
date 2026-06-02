@@ -1216,6 +1216,54 @@ body::before {
         opacity: 1;
     }
 
+    /* v3.3.0 FEAT-COLLECTIONS: favorite (heart) toggle on gallery cards. */
+    .gallery-item-fav {
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        z-index: 3;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.45);
+        color: rgba(255, 255, 255, 0.85);
+        font-size: 16px;
+        line-height: 1;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity var(--transition-normal, 200ms) ease,
+                    transform 120ms ease,
+                    color 120ms ease,
+                    background 120ms ease;
+    }
+
+    .gallery-item:hover .gallery-item-fav,
+    .gallery-item:focus-within .gallery-item-fav,
+    .gallery-item-fav.is-favorited {
+        opacity: 1;
+    }
+
+    .gallery-item-fav:hover {
+        background: rgba(0, 0, 0, 0.65);
+        transform: scale(1.12);
+    }
+
+    .gallery-item-fav.is-favorited {
+        color: #ff5d7a;
+        background: rgba(0, 0, 0, 0.55);
+    }
+
+    .gallery-item-fav:focus-visible {
+        outline: 2px solid var(--accent-primary, #6ea8fe);
+        outline-offset: 2px;
+        opacity: 1;
+    }
+
     .gallery-item-generator {
         display: inline-block;
         padding: 4px 8px;
@@ -2185,6 +2233,18 @@ body::before {
 
     .current-image-wrapper.skip {
         animation: skipPulse 0.3s ease forwards;
+    }
+
+    /* v3.3.0 USR-4: brief flash when a press is ignored (busy or in cooldown)
+       so a dropped autoclicker press is visible instead of silently swallowed. */
+    .current-image-wrapper.sort-busy-flash {
+        animation: sortBusyFlash 0.22s ease;
+    }
+
+    @keyframes sortBusyFlash {
+        0% { box-shadow: 0 0 0 0 rgba(255, 170, 60, 0); }
+        40% { box-shadow: 0 0 0 4px rgba(255, 170, 60, 0.55); }
+        100% { box-shadow: 0 0 0 0 rgba(255, 170, 60, 0); }
     }
 
     @keyframes flyUp {

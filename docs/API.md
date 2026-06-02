@@ -1,6 +1,6 @@
 # SD Image Sorter API Documentation
 
-**Version:** 3.2.4
+**Version:** 3.3.0
 **Base URL:** `http://127.0.0.1:8487` (default; configurable via `SD_IMAGE_SORTER_PORT`)
 **Interactive Docs:** `http://127.0.0.1:8487/docs` (Swagger UI, same port as runtime)
 
@@ -398,6 +398,9 @@ Get prompt token library. Optional query params: `q=<text>`, `limit=<n>`. Search
 #### GET /api/loras/library
 Get LoRA library. Optional query params: `q=<text>`, `limit=<n>`. Search runs across the full LoRA index before applying `limit`.
 
+#### GET /api/checkpoints/library
+Get the checkpoint (base model) library for the Library tab's Checkpoints facet. Returns `{ "checkpoints": [{ "name", "count" }], "total" }` aggregated across the full indexed library.
+
 #### GET /api/tagger/models
 Get available tagger models and runtime guidance. Each model item includes default thresholds, GPU/runtime guidance, and Custom profile metadata such as `custom_profile_supported`, `custom_metadata_format`, and `custom_tags_file_hint`.
 
@@ -480,7 +483,19 @@ Cancel the active scan task.
 Reset stuck scan progress.
 
 #### POST /api/move
-Move or copy selected images. Request body includes `image_ids`, `destination_folder`, and optional `operation` (`move` or `copy`, default `move`).
+Move or copy selected images synchronously. Request body includes `image_ids`, `destination_folder`, and optional `operation` (`move` or `copy`, default `move`). Returns the per-image `results` once complete; kept for small selections and existing integrations.
+
+#### POST /api/move/start
+Start a background move/copy job for the same request body as `/api/move`, returning immediately so the UI can show a progress bar. Responds `409` if a move job is already running. Use this for large selections where the synchronous endpoint would block.
+
+#### GET /api/move/progress
+Get background move/copy progress: `running`, `total`, `processed`, `moved`, `copied`, `errors`, `step`, `message`, and the final per-image `results` when done. Progress is guarded by a run-id epoch so a newly started job never reports a stale previous job's state.
+
+#### POST /api/move/cancel
+Cooperatively cancel an in-flight background move/copy. The worker checks the cancel flag at per-image boundaries, finishes any file already mid-write, and reports `status: "cancelled"` with partial counts.
+
+#### POST /api/move/reset
+Reset stuck background move progress.
 
 #### POST /api/batch-move
 Move all images matching filters. JSON filter payloads accept `prompt_match_mode` (`exact` or `contains`, default `exact`) alongside `prompts`.
@@ -577,8 +592,37 @@ Clients should present this as guidance, not as an automatic cleanup operation. 
 #### GET /api/system-info
 Get local hardware summary and tagger runtime recommendation.
 
+#### GET /api/system/ai-jobs
+Get a live snapshot of the AI runtime scheduler (tiered semaphore). Returns `active`, `vram_active`, `cpu_active`, `cpu_pool_size`, and a `jobs` list of `{ label, tier }` for currently running AI work (tagging, censor detection, CLIP embedding). VRAM-tier work is mutually exclusive; CPU-tier work runs on a bounded pool so concurrent CPU jobs no longer serialize behind GPU work.
+
 #### POST /api/browse-folder
 List subdirectories for folder picker flows.
+
+### Collections
+
+#### GET /api/collections
+List all collections, including the built-in **Favorites** collection. Each item includes `id`, `name`, `slug`, and `count`.
+
+#### POST /api/collections
+Create a collection from a `name`. The name is slugified and a numeric suffix is appended if the slug already exists, so creation never collides.
+
+#### PATCH /api/collections/{collection_id}
+Rename a collection. The display `name` changes while the stable `slug` is preserved so existing references keep working.
+
+#### DELETE /api/collections/{collection_id}
+Delete a collection. The built-in Favorites collection is protected and returns `400`.
+
+#### GET /api/collections/{collection_id}/images
+List the image ids that are members of the collection.
+
+#### POST /api/collections/{collection_id}/items
+Set collection membership for one image. Body carries `image_id` and a `member` flag (add when true, remove when false). Uses the reference model — no image files are copied. Returns `{ "member": bool }`.
+
+#### GET /api/collections/favorites/ids
+List the ids of all favorited images (plus `count`) for fast client-side heart-state hydration.
+
+#### POST /api/collections/favorites
+Set the favorite state of one image. Body carries `image_id` and `favorited` (default `true`; pass `false` to unfavorite). Returns `{ "favorited": bool }`.
 
 ### Model Manager
 

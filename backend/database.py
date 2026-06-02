@@ -178,6 +178,17 @@ from db_collections import (
     remove_collection_item,
     get_favorite_source_ids,
     get_favorites_count,
+    # v3.3.0 FEAT-COLLECTIONS
+    get_favorites_collection_id,
+    is_favorited,
+    set_favorite,
+    list_collections,
+    create_collection,
+    rename_collection,
+    delete_collection,
+    collection_exists,
+    set_collection_membership,
+    get_collection_image_ids,
 )
 from db_tags import (
     add_tags,

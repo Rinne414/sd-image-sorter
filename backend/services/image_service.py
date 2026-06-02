@@ -1280,6 +1280,9 @@ class ImageService:
         exclude_ratings: Optional[str] = None,
         exclude_checkpoints: Optional[str] = None,
         exclude_loras: Optional[str] = None,
+        # v3.3.0 FEAT-EXCLUDE-EXTRA
+        exclude_prompts: Optional[str] = None,
+        exclude_colors: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Retrieve images with optional filtering using cursor-based pagination.
@@ -1340,6 +1343,9 @@ class ImageService:
         ex_rating_list = _sanitize_filter_values(exclude_ratings)
         ex_cp_list = _sanitize_filter_values(exclude_checkpoints)
         ex_lr_list = _sanitize_filter_values(exclude_loras)
+        # v3.3.0 FEAT-EXCLUDE-EXTRA
+        ex_prompt_list = _sanitize_filter_values(exclude_prompts)
+        ex_color_list = _sanitize_filter_values(exclude_colors)
 
         cursor_payload = None
         if cursor:
@@ -1390,6 +1396,8 @@ class ImageService:
                     exclude_ratings=ex_rating_list,
                     exclude_checkpoints=ex_cp_list,
                     exclude_loras=ex_lr_list,
+                    exclude_prompts=ex_prompt_list,
+                    exclude_colors=ex_color_list,
                     skip_count=total >= 0,
                 )
                 if total < 0:
@@ -1456,6 +1464,8 @@ class ImageService:
                 exclude_ratings=ex_rating_list,
                 exclude_checkpoints=ex_cp_list,
                 exclude_loras=ex_lr_list,
+                exclude_prompts=ex_prompt_list,
+                exclude_colors=ex_color_list,
             )
             if not batch:
                 break
@@ -1499,6 +1509,8 @@ class ImageService:
             exclude_ratings=ex_rating_list,
             exclude_checkpoints=ex_cp_list,
             exclude_loras=ex_lr_list,
+            exclude_prompts=ex_prompt_list,
+            exclude_colors=ex_color_list,
         )
 
         return {

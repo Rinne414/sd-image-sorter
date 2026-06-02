@@ -1224,6 +1224,20 @@ class TaggingService:
         """Get unique LoRAs from the normalized indexed LoRA table."""
         return db.get_all_loras(limit=limit, search_query=search_query)
 
+    def get_checkpoints_library(
+        self,
+        limit: Optional[int] = None,
+        search_query: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Get unique checkpoints (normalized) with frequency counts.
+
+        v3.3.0 FEAT-CHECKPOINT-TAB: mirrors get_loras_library so the library
+        modal can show a Checkpoints tab. db.get_all_checkpoints returns a
+        list, so wrap it in the {items, total} envelope the frontend expects.
+        """
+        checkpoints = db.get_all_checkpoints(limit=limit, search_query=search_query)
+        return {"checkpoints": checkpoints, "total": len(checkpoints)}
+
     def export_tags(self) -> Dict[str, Any]:
         """Export all image tags as JSON for backup/transfer."""
         with db.get_db() as conn:

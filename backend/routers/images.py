@@ -487,6 +487,14 @@ async def get_images(
         default=None,
         description="Comma-separated LoRAs to exclude",
     ),
+    exclude_prompts: Optional[str] = Query(
+        default=None,
+        description="Comma-separated prompt terms to exclude (v3.3.0)",
+    ),
+    exclude_colors: Optional[str] = Query(
+        default=None,
+        description="Comma-separated color temperatures to exclude: warm/cool/neutral (v3.3.0)",
+    ),
     service: ImageService = Depends(get_image_service),
 ):
     """Retrieve images with optional filtering using cursor-based pagination."""
@@ -543,6 +551,8 @@ async def get_images(
         exclude_ratings=exclude_ratings,
         exclude_checkpoints=exclude_checkpoints,
         exclude_loras=exclude_loras,
+        exclude_prompts=exclude_prompts,
+        exclude_colors=exclude_colors,
     )
 
 

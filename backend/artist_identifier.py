@@ -233,8 +233,8 @@ def _hf_download_with_fallback(repo_id: str, filename: str, local_dir: str) -> s
             logger.warning("Download failed for %s via %s: %s", filename, endpoint_label(endpoint), exc)
             try:
                 tmp_path.unlink(missing_ok=True)
-            except Exception:
-                pass
+            except OSError as cleanup_exc:
+                logger.debug("Could not remove partial download %s: %s", tmp_path, cleanup_exc)
 
     if last_error is None:
         raise RuntimeError(f"Failed to download {filename} from {repo_id}")
