@@ -5,11 +5,68 @@ import base64
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from PIL import Image
 
+try:  # pragma: no cover - import shim
+    from launcher_port import is_loopback_host
+except Exception:  # pragma: no cover - launcher_port is stdlib-only; this is defensive
+    def is_loopback_host(host: Optional[str]) -> bool:
+        if not host:
+            return False
+        return host.strip().lower() in {"localhost", "127.0.0.1", "::1", "[::1]"}
+
 logger = logging.getLogger(__name__)
+
+
+def _redact_url(url: str) -> str:
+    """Redact secrets in a URL for safe logging / display.
+
+    Keeps the scheme + host (so a misconfiguration is still diagnosable) but
+    strips any embedded ``user:pass@`` credentials and the query string, which
+    can carry API keys (e.g. Gemini's ``?key=...``). Empty input passes through.
+    """
+    if not url:
+        return url
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return "<redacted-url>"
+    host = parts.hostname or ""
+    if parts.port:
+        host = f"{host}:{parts.port}"
+    netloc = host
+    if parts.username:
+        # Never echo embedded credentials back.
+        netloc = f"***@{host}"
+    query = "***" if parts.query else ""
+    return urlunsplit((parts.scheme, netloc, parts.path, query, ""))
+
+
+def _url_is_secure_or_loopback(url: str) -> bool:
+    """Return True when sending an API key over ``url`` is acceptable.
+
+    https is always fine. Plain http is only acceptable for loopback hosts
+    (local VLM servers such as Ollama / llama.cpp on 127.0.0.1, ::1 or
+    localhost). An empty URL means the provider will use its own https default,
+    so it is treated as safe.
+    """
+    if not url:
+        return True
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return False
+    scheme = (parts.scheme or "").lower()
+    if scheme in ("https", "wss"):
+        return True
+    if scheme in ("http", "ws"):
+        return is_loopback_host(parts.hostname)
+    # Unknown / relative scheme: be conservative and treat as unsafe only when
+    # it explicitly looks like cleartext; otherwise let the provider default win.
+    return True
 
 
 # Output format constants
@@ -58,10 +115,41 @@ class VLMConfig:
     vertex_location: str = "us-central1"
     service_account_json: str = ""  # JSON content or path to file
 
+    def __post_init__(self) -> None:
+        """Refuse to transmit the API key over an insecure transport.
+
+        Local VLM servers legitimately use plain ``http://`` on a loopback
+        host, so those are allowed untouched. But if an API key is configured
+        and the endpoint (or a key-carrying proxy) is non-loopback ``http://``,
+        sending the key would leak it in cleartext. We strip the key in that
+        case rather than transmit it — the request will then fail auth loudly
+        instead of leaking the secret silently. This is a security guard, not a
+        feature limit: switching the endpoint to https (or pointing at a
+        loopback host) restores the key.
+        """
+        if not self.api_key:
+            return
+
+        insecure_targets: List[str] = []
+        if not _url_is_secure_or_loopback(self.endpoint):
+            insecure_targets.append(self.endpoint)
+        # A cleartext proxy can observe the key even if the endpoint is https.
+        for proxy_url in (self.http_proxy, self.https_proxy, self.socks_proxy):
+            if proxy_url and not _url_is_secure_or_loopback(proxy_url):
+                insecure_targets.append(proxy_url)
+
+        if insecure_targets:
+            logger.warning(
+                "VLM API key withheld: refusing to send it over a non-loopback "
+                "cleartext (http) transport %s. Use https or a loopback host.",
+                [_redact_url(u) for u in insecure_targets],
+            )
+            self.api_key = ""
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "provider": self.provider,
-            "endpoint": self.endpoint,
+            "endpoint": _redact_url(self.endpoint),
             "api_key": "***" if self.api_key else "",
             "model": self.model,
             "max_retries": self.max_retries,
@@ -75,9 +163,9 @@ class VLMConfig:
             "max_image_size": self.max_image_size,
             "nsfw_retry_prompt": self.nsfw_retry_prompt,
             "output_format": self.output_format,
-            "http_proxy": self.http_proxy,
-            "https_proxy": self.https_proxy,
-            "socks_proxy": self.socks_proxy,
+            "http_proxy": _redact_url(self.http_proxy),
+            "https_proxy": _redact_url(self.https_proxy),
+            "socks_proxy": _redact_url(self.socks_proxy),
             "use_vertex": self.use_vertex,
             "vertex_project": self.vertex_project,
             "vertex_location": self.vertex_location,

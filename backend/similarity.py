@@ -171,7 +171,7 @@ def ensure_clip_model_ready() -> Optional[str]:
         if model_dir:
             return str(model_dir)
     except Exception:
-        pass
+        logger.debug("Could not introspect FastEmbed model directory", exc_info=True)
     # Model is loaded in memory — return a sentinel so callers know it works
     return "fastembed:in-memory"
 

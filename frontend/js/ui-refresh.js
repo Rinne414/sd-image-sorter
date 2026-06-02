@@ -201,16 +201,11 @@
                 'summary.search',
                 'summary.dimensions'
             ]);
-            this._setTextAll('#filter-summary .summary-label', [
-                'summary.generators',
-                'summary.ratings',
-                'summary.tags',
-                'summary.checkpoints',
-                'summary.loras',
-                'summary.prompt',
-                'summary.search',
-                'summary.artist'
-            ]);
+            // Gallery filter-summary labels are translated declaratively via
+            // their own `data-i18n` attributes (see index.html #filter-summary).
+            // The previous positional `_setTextAll` over `.summary-label`
+            // misaligned once the Colors row was inserted, so the data-i18n
+            // path is now the single source of truth for these labels.
         },
 
         _translateAutoSeparate: function () {

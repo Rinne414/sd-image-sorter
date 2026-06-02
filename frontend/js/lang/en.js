@@ -119,6 +119,8 @@ window.I18nLang_en = {
     'gallery.viewGrid': 'Grid view',
     'gallery.viewLarge': 'Large view',
     'gallery.viewWaterfall': 'Waterfall view',
+    'gallery.aspectToggle': 'Filter by aspect ratio',
+    'gallery.aspectAll': 'Any aspect ratio',
     'gallery.selectionModeOn': 'Selection mode ON',
     'gallery.selectionModeOff': 'Selection mode OFF',
     'gallery.selectionCleared': 'Selection cleared',

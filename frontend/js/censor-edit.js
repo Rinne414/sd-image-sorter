@@ -666,6 +666,26 @@ function initCensorEdit() {
     updateUndoRedoButtons();
 }
 
+// Open/close censor-owned modals (#detect-modal, #rename-modal) through the
+// shared modal helpers in app.js so they get the single shared focus-trap,
+// Esc-to-close, and focus-restore behavior. Falls back to a raw class toggle
+// only if the shared helper is somehow unavailable.
+function openCensorModal(modalId) {
+    if (typeof window.App?.showModal === 'function') {
+        window.App.showModal(modalId);
+    } else {
+        document.getElementById(modalId)?.classList.add('visible');
+    }
+}
+
+function closeCensorModal(modalId) {
+    if (typeof window.App?.hideModal === 'function') {
+        window.App.hideModal(modalId);
+    } else {
+        document.getElementById(modalId)?.classList.remove('visible');
+    }
+}
+
 function bindEvents() {
     const { $, $$ } = window.App;
 
@@ -682,12 +702,12 @@ function bindEvents() {
         }
         refreshRenameSelectionUi();
         updateRenamePreview();
-        $('#rename-modal').classList.add('visible');
+        openCensorModal('rename-modal');
     });
 
     // Detection Modal handlers
     $('#btn-open-detect-modal')?.addEventListener('click', async () => {
-        $('#detect-modal')?.classList.add('visible');
+        openCensorModal('detect-modal');
         if (!CensorState.backendModelStatus) {
             renderCensorCapabilityPanel({ loading: true });
             await loadCensorModelStatus();
@@ -698,17 +718,17 @@ function bindEvents() {
     });
 
     $('#btn-close-detect-modal')?.addEventListener('click', () => {
-        $('#detect-modal')?.classList.remove('visible');
+        closeCensorModal('detect-modal');
     });
 
     // Close modal when clicking backdrop
     $('#detect-modal .modal-backdrop')?.addEventListener('click', () => {
-        $('#detect-modal')?.classList.remove('visible');
+        closeCensorModal('detect-modal');
     });
 
     // Rename Modal
-    $('#btn-cancel-rename')?.addEventListener('click', () => $('#rename-modal').classList.remove('visible'));
-    $('#btn-close-rename')?.addEventListener('click', () => $('#rename-modal').classList.remove('visible'));
+    $('#btn-cancel-rename')?.addEventListener('click', () => closeCensorModal('rename-modal'));
+    $('#btn-close-rename')?.addEventListener('click', () => closeCensorModal('rename-modal'));
     $('#btn-apply-rename')?.addEventListener('click', applyBatchRename);
 
     // Live preview for rename
@@ -871,7 +891,7 @@ function bindEvents() {
 
     $('#btn-auto-detect-current-modal')?.addEventListener('click', () => {
         if (CensorState.activeId) {
-            $('#detect-modal')?.classList.remove('visible');
+            closeCensorModal('detect-modal');
             runDetectionForImage(CensorState.queue.find(i => i.id === CensorState.activeId));
         } else {
             window.App.showToast(censorT('censor.noImageSelected', null, 'No image selected'), 'error');
@@ -879,7 +899,7 @@ function bindEvents() {
     });
 
     $('#btn-auto-detect-all-modal')?.addEventListener('click', () => {
-        $('#detect-modal')?.classList.remove('visible');
+        closeCensorModal('detect-modal');
         runDetectionForAll();
     });
 
@@ -895,7 +915,7 @@ function bindEvents() {
 
     // SAM3 Batch Refine button
     $('#btn-sam3-batch-refine')?.addEventListener('click', async () => {
-        $('#detect-modal')?.classList.remove('visible');
+        closeCensorModal('detect-modal');
         await runSam3BatchRefine();
     });
 
@@ -1015,11 +1035,7 @@ function bindEvents() {
             onlySelectedCheckbox.checked = true;
         }
         populateRenamePreview();
-        if (typeof showModal === 'function') {
-            showModal('rename-modal');
-        } else {
-            document.getElementById('rename-modal')?.classList.add('visible');
-        }
+        openCensorModal('rename-modal');
     });
 
     // Queue Manager: Remove selected from queue
@@ -1041,7 +1057,7 @@ function bindEvents() {
     });
 
     $('#btn-segment-text-current')?.addEventListener('click', async () => {
-        $('#detect-modal')?.classList.remove('visible');
+        closeCensorModal('detect-modal');
         await segmentCurrentImageByText();
     });
 
@@ -4636,7 +4652,7 @@ async function applyBatchRename() {
     });
 
     renderQueue();
-    document.getElementById('rename-modal').classList.remove('visible');
+    closeCensorModal('rename-modal');
 
     // Refresh current title if viewing
     if (CensorState.activeId) {

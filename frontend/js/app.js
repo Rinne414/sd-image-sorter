@@ -612,6 +612,11 @@ if (AppFilterStore) {
     AppFilterStore.subscribe((nextState) => {
         AppState.filters = nextState;
         clearFilteredSelectionIfFilterChanged(nextState);
+        // Keep the gallery-header aspect quick-toggle (FE-7) in sync with the
+        // single source of truth, regardless of what changed aspectRatio.
+        if (typeof syncAspectToggleWithFilters === 'function') {
+            syncAspectToggleWithFilters();
+        }
     });
 }
 
@@ -4326,6 +4331,26 @@ function initEventListeners() {
     $$('.view-btn[data-size]').forEach(btn => {
         btn.addEventListener('click', () => {
             setGalleryViewMode(btn.dataset.size);
+        });
+    });
+
+    // Gallery-header aspect quick-toggle (FE-7). Drives the SAME FilterStore
+    // `aspectRatio` field as the filter modal's aspect radios — no parallel
+    // state. Clicking writes through updateAppFilters, then syncs the modal
+    // radios, the sidebar summary, this toggle, and reloads the gallery.
+    $$('.aspect-quick-btn[data-aspect]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const value = normalizeAspectRatioFilter(btn.dataset.aspect);
+            updateAppFilters((filters) => {
+                filters.aspectRatio = value;
+            });
+            // Keep the modal's aspect radios in sync with the quick-toggle.
+            $$('input[name="aspect-ratio"]').forEach(radio => {
+                radio.checked = radio.value === value;
+            });
+            updateFilterSummary();
+            syncAspectToggleWithFilters();
+            loadImages();
         });
     });
 
@@ -10437,6 +10462,21 @@ function syncGenTabsWithFilters() {
     });
 }
 
+// Reflect the current FilterStore aspectRatio on the gallery-header
+// quick-toggle (FE-7). Reads the single source of truth so the toggle stays
+// correct no matter how aspectRatio changed (toggle click, filter modal,
+// preset load, clear filters). Safe no-op when the toggle is not in the DOM.
+function syncAspectToggleWithFilters() {
+    const buttons = $$('.aspect-quick-btn[data-aspect]');
+    if (!buttons.length) return;
+    const current = normalizeAspectRatioFilter(AppState.filters.aspectRatio);
+    buttons.forEach(btn => {
+        const isActive = normalizeAspectRatioFilter(btn.dataset.aspect) === current;
+        btn.classList.toggle('is-active', isActive);
+        btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+}
+
 function resetAllFilters() {
     const filterState = getFilterModalState();
     copyFilterState(filterState, createDefaultFilterState());
@@ -11039,6 +11079,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadStats();
     const aestheticStatusReady = refreshAestheticStatus();
     updateFilterSummary();
+    syncAspectToggleWithFilters();
     updateSelectionUI();
     resumeScanProgress();
     resumeReconnectProgress();

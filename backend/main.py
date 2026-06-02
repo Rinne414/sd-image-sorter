@@ -561,7 +561,10 @@ def open_support_log_file() -> Dict[str, Any]:
         opened = _open_path_in_file_manager(log_path)
     except OSError as exc:
         logger.warning("Failed to open support log file %s: %s", LOG_FILE_PATH, exc)
-        raise HTTPException(status_code=500, detail=f"Failed to open support log file: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to open support log file. / 開啟支援記錄檔失敗。",
+        ) from exc
 
     payload = {
         "success": opened,

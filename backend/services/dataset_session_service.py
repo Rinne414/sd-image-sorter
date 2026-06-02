@@ -81,6 +81,17 @@ SCAN_THUMB_WORKERS = max(4, min(16, (os.cpu_count() or 4)))
 _SCAN_TOKEN_RE = re.compile(r"^[a-f0-9]{32}$")
 _SCAN_DIR: Optional[Path] = None
 
+# Decompression-bomb guard for uploaded ZIP/RAR archives.
+#
+# These are a malware / zip-bomb safeguard, NOT a dataset-size limit: the
+# values mirror update_service's bounded-extraction caps
+# (_MAX_UPDATE_ARCHIVE_ENTRIES / _MAX_UPDATE_ARCHIVE_UNCOMPRESSED_BYTES) and
+# are deliberately generous so they sit far above any legitimate LoRA dataset
+# (20k images, 2 GiB uncompressed). A real training set never trips them; a
+# crafted bomb that inflates a tiny archive into terabytes does.
+_MAX_ARCHIVE_ENTRIES = 20000
+_MAX_ARCHIVE_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
+
 
 def _ds_id_for_path(abs_path: str) -> str:
     """Stable session id derived from the absolute file path.
@@ -704,9 +715,25 @@ async def _extract_rar_into_dataset(
         skipped = 0
         try:
             with rarfile.RarFile(str(rar_buffer_path)) as rf:
-                for member in rf.infolist():
+                members = rf.infolist()
+                if len(members) > _MAX_ARCHIVE_ENTRIES:
+                    raise ValueError(
+                        "RAR archive contains too many entries "
+                        f"(> {_MAX_ARCHIVE_ENTRIES}); refusing to extract a "
+                        "possible decompression bomb. / RAR 內含過多檔案，已拒絕解壓。"
+                    )
+                total_uncompressed_bytes = 0
+                for member in members:
                     if member.isdir():
                         continue
+                    total_uncompressed_bytes += int(getattr(member, "file_size", 0) or 0)
+                    if total_uncompressed_bytes > _MAX_ARCHIVE_UNCOMPRESSED_BYTES:
+                        raise ValueError(
+                            "RAR archive uncompressed size exceeds the safe "
+                            f"limit ({_MAX_ARCHIVE_UNCOMPRESSED_BYTES} bytes); "
+                            "refusing to extract a possible decompression bomb. "
+                            "/ RAR 解壓後體積過大，已拒絕解壓。"
+                        )
                     raw_name = (member.filename or "").replace("\\", "/")
                     if not raw_name:
                         skipped += 1
@@ -733,6 +760,11 @@ async def _extract_rar_into_dataset(
                         continue
                     if not _append_upload_item(dest, items, source_kind="rar_extract"):
                         skipped += 1
+        except ValueError:
+            # Decompression-bomb guard (and multi-volume / path errors below)
+            # must surface as a clear client error, not be swallowed by the
+            # broad BadRarFile fallback when rarfile lacks a BadRarFile attr.
+            raise
         except getattr(rarfile, "BadRarFile", Exception) as exc:  # noqa: BLE001
             logger.warning("rar-extract: bad archive %s: %s", filename, exc)
             skipped += 1
@@ -785,9 +817,25 @@ async def upload_files_for_dataset(files, *, recursive: bool = True) -> Dict[str
                     zip_source = io.BytesIO(await upload_file.read())
 
                 with zipfile.ZipFile(zip_source) as zf:
-                    for member in zf.infolist():
+                    members = zf.infolist()
+                    if len(members) > _MAX_ARCHIVE_ENTRIES:
+                        raise ValueError(
+                            "ZIP archive contains too many entries "
+                            f"(> {_MAX_ARCHIVE_ENTRIES}); refusing to extract a "
+                            "possible decompression bomb. / ZIP 內含過多檔案，已拒絕解壓。"
+                        )
+                    total_uncompressed_bytes = 0
+                    for member in members:
                         if member.is_dir():
                             continue
+                        total_uncompressed_bytes += member.file_size
+                        if total_uncompressed_bytes > _MAX_ARCHIVE_UNCOMPRESSED_BYTES:
+                            raise ValueError(
+                                "ZIP archive uncompressed size exceeds the safe "
+                                f"limit ({_MAX_ARCHIVE_UNCOMPRESSED_BYTES} bytes); "
+                                "refusing to extract a possible decompression bomb. "
+                                "/ ZIP 解壓後體積過大，已拒絕解壓。"
+                            )
                         raw_name = member.filename.replace("\\", "/")
                         posix = PurePosixPath(raw_name)
                         if posix.is_absolute() or ".." in posix.parts:

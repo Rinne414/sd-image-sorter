@@ -153,9 +153,12 @@ async def encode_single(request: SingleProcessRequest):
         raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error("Encode failed: %s", e)
-        raise HTTPException(status_code=500, detail=f"Encode failed: {str(e)}")
+    except Exception:
+        logger.exception("Encode failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Encode failed. / 加密失敗。",
+        )
 
 
 @router.post("/decode")
@@ -181,9 +184,12 @@ async def decode_single(request: SingleProcessRequest):
         raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error("Decode failed: %s", e)
-        raise HTTPException(status_code=500, detail=f"Decode failed: {str(e)}")
+    except Exception:
+        logger.exception("Decode failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Decode failed. / 解密失敗。",
+        )
 
 
 @router.post("/batch")

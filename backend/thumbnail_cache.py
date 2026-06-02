@@ -269,7 +269,12 @@ def get_cached_thumbnail(source_path: str, size: int) -> Optional[Tuple[bytes, d
     cache_key = _get_cache_key(source_path, size, source_mtime)
     cache_path = _get_cache_path(cache_key)
 
-    if not cache_path.exists():
+    # Single stat for the cache file: serves both the existence check and the
+    # mtime read. A missing file (FileNotFoundError) is a cache miss, identical
+    # to the old ``cache_path.exists() == False`` branch.
+    try:
+        cache_stat = cache_path.stat()
+    except (FileNotFoundError, OSError):
         return None
 
     try:
@@ -277,9 +282,9 @@ def get_cached_thumbnail(source_path: str, size: int) -> Optional[Tuple[bytes, d
         with open(cache_path, "rb") as f:
             thumbnail_bytes = f.read()
 
-        # Get last modified time of cached file
+        # Get last modified time of cached file (from the stat above)
         last_modified = datetime.fromtimestamp(
-            cache_path.stat().st_mtime,
+            cache_stat.st_mtime,
             tz=timezone.utc
         )
 

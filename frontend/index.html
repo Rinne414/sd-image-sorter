@@ -336,39 +336,39 @@
                     <!-- Active Filter Summary -->
                     <div class="filter-summary" id="filter-summary">
                         <div class="summary-row">
-                            <span class="summary-label">Generators:</span>
+                            <span class="summary-label" data-i18n="summary.generators">Generators:</span>
                             <span class="summary-value" id="summary-generators" data-i18n="common.all">All</span>
                         </div>
                         <div class="summary-row">
-                            <span class="summary-label">Ratings:</span>
+                            <span class="summary-label" data-i18n="summary.ratings">Ratings:</span>
                             <span class="summary-value" id="summary-ratings" data-i18n="common.all">All</span>
                         </div>
                         <div class="summary-row">
-                            <span class="summary-label">Tags:</span>
+                            <span class="summary-label" data-i18n="summary.tags">Tags:</span>
                             <span class="summary-value" id="summary-tags" data-i18n="common.none">None</span>
                         </div>
                         <div class="summary-row">
-                            <span class="summary-label">Checkpoints:</span>
+                            <span class="summary-label" data-i18n="summary.checkpoints">Checkpoints:</span>
                             <span class="summary-value" id="summary-checkpoints" data-i18n="common.none">None</span>
                         </div>
                         <div class="summary-row">
-                            <span class="summary-label">Loras:</span>
+                            <span class="summary-label" data-i18n="summary.loras">Loras:</span>
                             <span class="summary-value" id="summary-loras" data-i18n="common.none">None</span>
                         </div>
                         <div class="summary-row">
-                            <span class="summary-label">Prompt:</span>
+                            <span class="summary-label" data-i18n="summary.prompt">Prompt:</span>
                             <span class="summary-value" id="summary-prompt">-</span>
                         </div>
                         <div class="summary-row">
-                            <span class="summary-label">Search:</span>
+                            <span class="summary-label" data-i18n="summary.search">Search:</span>
                             <span class="summary-value" id="summary-search" data-i18n="common.none">None</span>
                         </div>
                         <div class="summary-row">
                             <span class="summary-label" data-i18n="filter.colors">Colors:</span>
-                            <span class="summary-value" id="summary-colors">Any</span>
+                            <span class="summary-value" id="summary-colors" data-i18n="filter.any">Any</span>
                         </div>
                         <div class="summary-row" id="artist-filter-row" style="display: none;">
-                            <span class="summary-label">Artist:</span>
+                            <span class="summary-label" data-i18n="summary.artist">Artist:</span>
                             <span class="summary-value" id="summary-artist">-</span>
                             <button class="btn-clear-filter" id="btn-clear-artist" title="Clear artist filter" aria-label="Clear artist filter">
                                 <span aria-hidden="true">✕</span>
@@ -524,6 +524,22 @@
                             <button class="view-btn" data-size="waterfall" title="Waterfall view" aria-label="Waterfall view" aria-pressed="false" data-i18n-title="gallery.viewWaterfall" data-i18n-aria="gallery.viewWaterfall">
                                 <span aria-hidden="true">▥</span>
                             </button>
+                            <div class="divider-v" aria-hidden="true"></div>
+                            <div class="aspect-quick-toggle" id="aspect-quick-toggle" role="group" aria-label="Filter by aspect ratio" data-i18n-aria="gallery.aspectToggle">
+                                <button class="aspect-quick-btn is-active" data-aspect="" type="button" aria-pressed="true" title="Any aspect ratio" data-i18n-title="gallery.aspectAll">
+                                    <span aria-hidden="true">▦</span>
+                                    <span data-i18n="common.all">All</span>
+                                </button>
+                                <button class="aspect-quick-btn" data-aspect="square" type="button" aria-pressed="false" title="Square" data-i18n-title="filter.square" aria-label="Square" data-i18n-aria="filter.square">
+                                    <span aria-hidden="true">■</span>
+                                </button>
+                                <button class="aspect-quick-btn" data-aspect="landscape" type="button" aria-pressed="false" title="Landscape" data-i18n-title="filter.landscape" aria-label="Landscape" data-i18n-aria="filter.landscape">
+                                    <span aria-hidden="true">▬</span>
+                                </button>
+                                <button class="aspect-quick-btn" data-aspect="portrait" type="button" aria-pressed="false" title="Portrait" data-i18n-title="filter.portrait" aria-label="Portrait" data-i18n-aria="filter.portrait">
+                                    <span aria-hidden="true">▮</span>
+                                </button>
+                            </div>
                             <div class="divider-v" aria-hidden="true" style="margin-left: 8px;"></div>
                             <button id="btn-clear-db" class="btn btn-ghost btn-small btn-icon-only danger gallery-clear-button" type="button" title="Destructive: removes ALL images from the current library database. Files on disk are preserved. Use carefully." aria-label="Clear gallery database (destructive)" aria-describedby="btn-clear-db-desc" data-i18n-title="action.clearGalleryTooltip">
                                 <span aria-hidden="true">🗑️</span>
@@ -1865,11 +1881,11 @@
                 </div>
 
                 <!-- Auto-Detect Modal -->
-                <div class="modal" id="detect-modal">
+                <div class="modal" id="detect-modal" role="dialog" aria-modal="true" aria-labelledby="detect-modal-title">
                     <div class="modal-backdrop"></div>
                     <div class="modal-content modal-medium">
                         <button class="modal-close" id="btn-close-detect-modal">✕</button>
-                        <h3>🔍 <span data-i18n="censor.autoDetectSettings">Auto-Detect Settings</span></h3>
+                        <h3 id="detect-modal-title">🔍 <span data-i18n="censor.autoDetectSettings">Auto-Detect Settings</span></h3>
 
                         <!-- SECTION 1: What to detect (most important — top position) -->
                         <div class="censor-detect-section">
@@ -4728,11 +4744,11 @@
         </div>
 
         <!-- Rename Modal (for Censor Edit) -->
-        <div class="modal" id="rename-modal">
+        <div class="modal" id="rename-modal" role="dialog" aria-modal="true" aria-labelledby="rename-modal-title">
             <div class="modal-backdrop"></div>
             <div class="modal-content modal-large rename-modal-shell">
                 <button class="modal-close" id="btn-close-rename">✕</button>
-                <h3>📝 <span data-i18n="rename.title">Batch Rename Images</span></h3>
+                <h3 id="rename-modal-title">📝 <span data-i18n="rename.title">Batch Rename Images</span></h3>
                 <p class="modal-description" data-i18n="rename.description">Set naming pattern for all queued images</p>
 
                 <div class="rename-form-grid">

@@ -89,6 +89,15 @@
     --nav-height: 72px;
     --sidebar-width: 300px;
 
+    /* Button heights (FE-3): single source of truth for .btn min-height.
+       Each token preserves an existing effective height so no button
+       visually changes — the base default is 40px (the unscoped .btn),
+       with size variants for small/nav/icon buttons. */
+    --btn-h: 40px;       /* base .btn / .btn-help */
+    --btn-h-sm: 32px;    /* .btn-small and other compact buttons */
+    --btn-h-nav: 38px;   /* nav-actions text+icon buttons */
+    --btn-h-icon: 30px;  /* gallery/view icon-only buttons */
+
     /* Animation */
     --transition-fast: 150ms ease;
     --transition-normal: 250ms ease;
@@ -500,7 +509,7 @@ body::before {
     .btn-small {
         padding: 6px 12px;
         font-size: 12px;
-        min-height: 32px;
+        min-height: var(--btn-h-sm);
     }
 
     .btn-glow {

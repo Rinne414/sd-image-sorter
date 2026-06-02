@@ -2197,8 +2197,12 @@ class ImageService:
             if cleanup_tmp and tmp_path and os.path.exists(tmp_path):
                 try:
                     os.unlink(tmp_path)
-                except OSError:
-                    pass
+                except OSError as cleanup_exc:
+                    logger.warning(
+                        "Failed to remove temp upload file %s: %s",
+                        tmp_path,
+                        cleanup_exc,
+                    )
 
     def get_image_file(self, image_id: int) -> FileResponse:
         """

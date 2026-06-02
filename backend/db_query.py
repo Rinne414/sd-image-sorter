@@ -188,13 +188,20 @@ def _build_base_query(sort_by: str, select_cols: str) -> str:
         sort_by = "newest"
 
     if sort_by in ("tag_count", "tag_count_asc"):
-        return f"""SELECT DISTINCT {select_cols},
-                   (SELECT COUNT(*) FROM tags t WHERE t.image_id = i.id) as tag_count
-                   FROM images i"""
+        # LEFT JOIN + GROUP BY (COUNT DISTINCT) instead of a per-row correlated
+        # subquery. COUNT(DISTINCT ...) keeps the count correct even when other
+        # filters (tag-filter OR/AND joins, artist join) multiply rows; the
+        # caller appends "GROUP BY i.id" after the WHERE clause (see
+        # _group_by_clause). Zero-tag images keep tag_count = 0 via LEFT JOIN.
+        return f"""SELECT {select_cols},
+                   COUNT(DISTINCT _agg_tag.id) as tag_count
+                   FROM images i
+                   LEFT JOIN tags _agg_tag ON _agg_tag.image_id = i.id"""
     elif sort_by in ("character_count", "character_count_asc"):
-        return f"""SELECT DISTINCT {select_cols},
-                   (SELECT COUNT(*) FROM tags t WHERE t.image_id = i.id AND t.tag LIKE '%character%') as char_count
-                   FROM images i"""
+        return f"""SELECT {select_cols},
+                   COUNT(DISTINCT CASE WHEN _agg_char.tag LIKE '%character%' THEN _agg_char.id END) as char_count
+                   FROM images i
+                   LEFT JOIN tags _agg_char ON _agg_char.image_id = i.id"""
     elif sort_by in ("rating", "rating_desc"):
         # Priority: explicit > questionable > sensitive > general > unrated
         return f"""SELECT DISTINCT {select_cols},
@@ -208,6 +215,21 @@ def _build_base_query(sort_by: str, select_cols: str) -> str:
                    FROM images i"""
     else:
         return f"SELECT {select_cols} FROM images i"
+
+
+def _group_by_clause(sort_by: str) -> str:
+    """Return the GROUP BY fragment required by the base query, if any.
+
+    Only the aggregate sort modes (``tag_count`` / ``character_count``) need a
+    GROUP BY because they were rewritten from per-row correlated subqueries to a
+    ``LEFT JOIN tags ... COUNT(DISTINCT ...)``. It must be appended *after* the
+    WHERE clause and *before* ORDER BY/LIMIT. Every other sort (including the
+    ``rating`` modes, which still use ``SELECT DISTINCT`` + ``EXISTS``) returns
+    an empty string so the emitted SQL is unchanged from before this rewrite.
+    """
+    if sort_by in ("tag_count", "tag_count_asc", "character_count", "character_count_asc"):
+        return " GROUP BY i.id"
+    return ""
 
 
 def _apply_tag_filter(query: str, tags: Optional[List[str]], params: List[Any],
@@ -369,8 +391,12 @@ def _apply_exclude_tags_filter(conditions: List[str], params: List[Any],
     if not exclude_tags:
         return conditions, params
     placeholders = ",".join("?" * len(exclude_tags))
+    # NOT EXISTS (instead of NOT IN) so the engine can use an index on
+    # LOWER(tag) (idx_tags_lower_tag) instead of full-scanning tags. tags.image_id
+    # is NOT NULL, so NOT EXISTS and the old NOT IN exclude exactly the same rows.
     conditions.append(
-        f"i.id NOT IN (SELECT image_id FROM tags WHERE LOWER(tag) IN ({placeholders}))"
+        f"NOT EXISTS (SELECT 1 FROM tags _ex_tag WHERE _ex_tag.image_id = i.id "
+        f"AND LOWER(_ex_tag.tag) IN ({placeholders}))"
     )
     params.extend([t.lower() for t in exclude_tags])
     return conditions, params
@@ -393,8 +419,12 @@ def _apply_exclude_ratings_filter(conditions: List[str], params: List[Any],
     if not exclude_ratings:
         return conditions, params
     placeholders = ",".join("?" * len(exclude_ratings))
+    # NOT EXISTS (instead of NOT IN) so the engine can use an index on
+    # LOWER(tag) (idx_tags_lower_tag) instead of full-scanning tags. tags.image_id
+    # is NOT NULL, so NOT EXISTS and the old NOT IN exclude exactly the same rows.
     conditions.append(
-        f"i.id NOT IN (SELECT image_id FROM tags WHERE LOWER(tag) IN ({placeholders}))"
+        f"NOT EXISTS (SELECT 1 FROM tags _ex_rating WHERE _ex_rating.image_id = i.id "
+        f"AND LOWER(_ex_rating.tag) IN ({placeholders}))"
     )
     params.extend([r.lower() for r in exclude_ratings])
     return conditions, params

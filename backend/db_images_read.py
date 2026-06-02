@@ -28,6 +28,7 @@ from db_query import (
     _RECONNECT_CANDIDATE_COLUMNS,
     _LIBRARY_ORDER_SQL_UNQUALIFIED,
     _build_base_query,
+    _group_by_clause,
     _apply_tag_filter,
     _apply_generator_filter,
     _apply_rating_filter,
@@ -264,6 +265,9 @@ def get_images(
         # Build WHERE clause
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
+
+        # Aggregate sorts (tag_count/character_count) need GROUP BY after WHERE.
+        query += _group_by_clause(sort_by)
 
         # Get order clause and append to query
         order_clause = _get_order_clause(sort_by)
@@ -558,6 +562,9 @@ def get_filtered_image_ids(
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
+        # Aggregate sorts (tag_count/character_count) need GROUP BY after WHERE.
+        query += _group_by_clause(sort_by)
+
         # Get order clause
         order_clause = _get_order_clause(sort_by)
 
@@ -778,6 +785,9 @@ def get_images_paginated(
                     params.extend([effective_cursor_sort_value, effective_cursor_sort_value, cursor_id])
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
+
+        # Aggregate sorts (tag_count/character_count) need GROUP BY after WHERE.
+        query += _group_by_clause(sort_by)
 
         # Get order clause and append to query
         order_clause = _get_order_clause(sort_by)

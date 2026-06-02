@@ -204,7 +204,7 @@ class CleanupRequest(BulkTagScopeRequest):
 # ====================================================================
 
 @router.post("/find-replace")
-async def find_replace(request: FindReplaceRequest):
+def find_replace(request: FindReplaceRequest):
     """Bulk find & replace a tag across multiple images.
 
     Returns dry-run preview if dry_run=True, otherwise commits.
@@ -213,7 +213,7 @@ async def find_replace(request: FindReplaceRequest):
 
 
 @router.post("/add")
-async def bulk_add(request: BulkAddRequest):
+def bulk_add(request: BulkAddRequest):
     """Append tags to multiple images (dedupe against existing tags).
 
     Tags added with the specified confidence (default 0.85 = manual tier).
@@ -222,13 +222,13 @@ async def bulk_add(request: BulkAddRequest):
 
 
 @router.post("/remove")
-async def bulk_remove(request: BulkRemoveRequest):
+def bulk_remove(request: BulkRemoveRequest):
     """Remove specified tags from multiple images."""
     return _run_exclusive("bulk_remove", _do_bulk_remove, request)
 
 
 @router.post("/cleanup")
-async def cleanup(request: CleanupRequest):
+def cleanup(request: CleanupRequest):
     """Remove tags below confidence threshold and optionally dedupe."""
     return _run_exclusive("cleanup", _do_cleanup, request)
 

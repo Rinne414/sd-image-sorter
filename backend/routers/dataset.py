@@ -82,7 +82,10 @@ def post_dataset_export(payload: DatasetExportRequest) -> DatasetExportResponse:
         raise
     except Exception as exc:
         logger.exception("Dataset export failed")
-        raise HTTPException(status_code=500, detail=f"Dataset export failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Dataset export failed. / 資料集匯出失敗。",
+        ) from exc
 
 
 @router.post(
@@ -100,7 +103,10 @@ def post_dataset_export_preview(payload: DatasetExportPreviewRequest) -> Dict[st
         raise
     except Exception as exc:
         logger.exception("Dataset export preview failed")
-        raise HTTPException(status_code=500, detail=f"Dataset export preview failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Dataset export preview failed. / 資料集匯出預覽失敗。",
+        ) from exc
 
 
 class DatasetExportJobRequest(BaseModel):
@@ -126,7 +132,10 @@ def post_dataset_export_start(payload: DatasetExportRequest) -> DatasetExportSta
         raise
     except Exception as exc:
         logger.exception("Dataset export start failed")
-        raise HTTPException(status_code=500, detail=f"Dataset export start failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Dataset export start failed. / 資料集匯出啟動失敗。",
+        ) from exc
 
 
 @router.get(
@@ -140,7 +149,10 @@ def get_dataset_export_job_progress(job_id: Optional[str] = None) -> Dict[str, A
         raise
     except Exception as exc:
         logger.exception("Dataset export progress failed")
-        raise HTTPException(status_code=500, detail=f"Dataset export progress failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Dataset export progress failed. / 取得匯出進度失敗。",
+        ) from exc
 
 
 @router.post(
@@ -156,7 +168,10 @@ def post_dataset_export_cancel(
         raise
     except Exception as exc:
         logger.exception("Dataset export cancel failed")
-        raise HTTPException(status_code=500, detail=f"Dataset export cancel failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Dataset export cancel failed. / 取消匯出失敗。",
+        ) from exc
 
 
 # ------------------------------ folder-scan ------------------------------
@@ -213,7 +228,10 @@ def post_dataset_folder_scan(payload: DatasetFolderScanRequest) -> Dict[str, Any
         raise
     except Exception as exc:
         logger.exception("Dataset folder-scan failed")
-        raise HTTPException(status_code=500, detail=f"Folder scan failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Folder scan failed. / 資料夾掃描失敗。",
+        ) from exc
 
 
 @router.get(
@@ -369,7 +387,10 @@ def post_dataset_audit(payload: DatasetAuditRequest) -> Dict[str, Any]:
         raise
     except Exception as exc:
         logger.exception("Dataset audit failed")
-        raise HTTPException(status_code=500, detail=f"Audit failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Audit failed. / 資料集稽核失敗。",
+        ) from exc
 
 
 # ------------------------------ vocab ------------------------------
@@ -1003,8 +1024,12 @@ async def _translate_translators_web(
             if to_lang.lower() in {"zh-cn", "zh-hans"}:
                 try:
                     return await asyncio.to_thread(call, "zh")
-                except Exception:
-                    pass
+                except Exception as zh_exc:  # noqa: BLE001
+                    logger.debug(
+                        "Translate zh-fallback failed for target %s: %s",
+                        to_lang,
+                        zh_exc,
+                    )
             raise exc
 
     return [await one(text) for text in texts]
@@ -1229,4 +1254,7 @@ async def post_dataset_upload_files(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Dataset upload-files failed")
-        raise HTTPException(status_code=500, detail=f"Upload failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Upload failed. / 上傳失敗。",
+        ) from exc

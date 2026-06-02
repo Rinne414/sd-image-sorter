@@ -121,6 +121,8 @@ window.I18nLang_zhCN = {
     'gallery.viewGrid': '网格视图',
     'gallery.viewLarge': '大图视图',
     'gallery.viewWaterfall': '瀑布流视图',
+    'gallery.aspectToggle': '按比例筛选',
+    'gallery.aspectAll': '任意比例',
     'gallery.selectionModeOn': '已开启选择模式',
     'gallery.selectionModeOff': '已关闭选择模式',
     'gallery.selectionCleared': '已清空选择',

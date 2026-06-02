@@ -98,7 +98,7 @@ _bind_lazy_tagging_compat_state()
         }
     }
 )
-async def get_all_tags(
+def get_all_tags(
     limit: Optional[int] = Query(default=None, ge=1, description="Optional display limit; omitted returns all tags"),
     service: TaggingService = Depends(get_tagging_service),
 ):
@@ -127,7 +127,7 @@ async def get_all_tags(
         }
     }
 )
-async def get_generators(
+def get_generators(
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Get all generators with image counts."""
@@ -156,7 +156,7 @@ async def get_generators(
         }
     }
 )
-async def get_tags_library(
+def get_tags_library(
     sort_by: str = Query(default="frequency", description="Sort order: 'frequency' or 'alphabetical'"),
     limit: Optional[int] = Query(default=None, ge=1, description="Optional display limit; omitted returns all matching tags"),
     q: Optional[str] = Query(default=None, description="Search all tags with normalized substring matching"),
@@ -167,7 +167,7 @@ async def get_tags_library(
 
 
 @router.get("/prompts/library")
-async def get_prompts_library(
+def get_prompts_library(
     limit: Optional[int] = Query(default=None, ge=1, description="Optional display limit; omitted returns all matching prompt tokens"),
     q: Optional[str] = Query(default=None, description="Search all prompt tokens with normalized substring matching"),
     service: TaggingService = Depends(get_tagging_service),
@@ -201,7 +201,7 @@ The index is maintained from both the `loras` JSON array and `<lora:name:weight>
         }
     }
 )
-async def get_loras_library(
+def get_loras_library(
     limit: Optional[int] = Query(default=None, ge=1, description="Optional display limit; omitted returns all matching LoRAs"),
     q: Optional[str] = Query(default=None, description="Search all LoRAs with normalized substring matching"),
     service: TaggingService = Depends(get_tagging_service),

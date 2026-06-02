@@ -259,7 +259,7 @@ async def reset_scan_progress(
 
 
 @router.post("/move")
-async def move_images(
+def move_images(
     request: MoveRequest,
     service: SortingService = Depends(get_sorting_service),
 ):
@@ -268,7 +268,7 @@ async def move_images(
 
 
 @router.post("/batch-move")
-async def batch_move_images(
+def batch_move_images(
     request: BatchMoveRequest,
     background_tasks: BackgroundTasks,
     service: SortingService = Depends(get_sorting_service),
@@ -400,7 +400,7 @@ async def get_current_sort_image(
 
 
 @router.post("/sort/action")
-async def sort_action(
+def sort_action(
     action: str = Query(..., description="Action: move, skip, undo"),
     folder_key: Optional[str] = Query(default=None, max_length=100),
     service: SortingService = Depends(get_sorting_service),
@@ -435,7 +435,7 @@ async def clear_sort_session(
 
 
 @router.delete("/clear-gallery")
-async def clear_gallery(
+def clear_gallery(
     service: SortingService = Depends(get_sorting_service),
 ):
     """Clear all image records from the database."""
@@ -443,7 +443,7 @@ async def clear_gallery(
 
 
 @router.get("/analytics")
-async def get_analytics(
+def get_analytics(
     facet: Optional[str] = Query(default=None, description="Optional facet to fetch: checkpoints, loras, or tags"),
     q: Optional[str] = Query(default=None, description="Search all values in the selected facet"),
     limit: Optional[int] = Query(default=None, ge=1, description="Optional display limit; omitted returns all matching values"),
@@ -454,7 +454,7 @@ async def get_analytics(
 
 
 @router.get("/stats")
-async def get_stats(
+def get_stats(
     service: SortingService = Depends(get_sorting_service),
 ):
     """Get database statistics."""

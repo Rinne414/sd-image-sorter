@@ -5,6 +5,44 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.4] - 2026-06-02
+
+Stability + security patch. Behavior-preserving fixes from a multi-agent code
+review: heavy API routes no longer block the event loop, faster filtered
+queries on large libraries, a decompression-bomb guard on dataset uploads, no
+raw exceptions leaked to clients, plus a round of UI accessibility / layout /
+i18n polish. No functionality limits were added.
+
+稳定性 + 安全修补。来自多 agent 代码审查的行为保持型修正：重型 API 路由不再阻塞
+event loop；大图库筛选查询更快；数据集上传新增解压炸弹防护；不再向客户端泄漏原始
+异常；以及一轮 UI 无障碍 / 版面 / i18n 优化。未新增任何功能上限。
+
+### Performance / 性能
+- **Event loop no longer blocks under large libraries**: ~16 synchronous API routes (tags, sorting, colors, bulk-tag, analytics/stats) were moved off the event loop into FastAPI's threadpool, so the server stays responsive while one request does heavy SQL/CPU work.
+  - **大图库下 event loop 不再卡死**：约 16 个同步 API 路由（tags / sorting / colors / 批量打标 / analytics）改到 FastAPI threadpool 执行，单一重型请求不再让整个 server 卡住。
+- **Faster gallery sort/filter on large libraries**: tag-count / character-count sorts use a single `LEFT JOIN ... GROUP BY` instead of per-row correlated subqueries; exclude-tag/rating filters use `NOT EXISTS` + a new `LOWER(tag)` index; new partial indexes on `aesthetic_score` / `color_saturation`. Query results are unchanged (verified against the previous SQL).
+  - **大图库排序 / 筛选更快**：tag / 角色数排序改用单次 `LEFT JOIN ... GROUP BY`；排除筛选改用 `NOT EXISTS` + 新增 `LOWER(tag)` 索引；新增 `aesthetic_score` / `color_saturation` 偏索引。查询结果不变（已对照旧 SQL 验证）。
+- **Thumbnail cache**: one fewer filesystem `stat()` call per cached-thumbnail request.
+  - **缩图快取**：每次命中快取少一次 `stat()` 系统呼叫。
+
+### Security / 安全
+- **Decompression-bomb guard on dataset ZIP/RAR uploads**: archives are rejected before extraction if they exceed a generous entry-count / uncompressed-size cap (a malware guard, not a dataset-size limit). Complements the obfuscation-endpoint guard added in 3.2.3.
+  - **数据集 ZIP/RAR 上传解压炸弹防护**：超过宽松的档案数 / 解压体积上限的压缩档会在解压前被拒（防恶意档，非数据集大小限制）。补齐 3.2.3 已加的混淆端点防护。
+- **No raw exceptions leaked to clients**: dataset / obfuscation / support-log endpoints now return a generic message and log the detail server-side; status codes unchanged.
+  - **不再向客户端泄漏原始异常**：dataset / 混淆 / 支援日志端点改回传通用讯息，详细错误仅记录在 server 端；状态码不变。
+- **VLM API key withheld over cleartext**: the captioning API key is no longer transmitted over a non-loopback `http://` endpoint or proxy; local loopback servers (Ollama / llama.cpp / LM Studio) are unaffected.
+  - **VLM API key 不走明文**：captioning API key 不再经由非 loopback 的 `http://` 端点或代理传送；本地 loopback 服务（Ollama / llama.cpp / LM Studio）不受影响。
+- Several previously-swallowed exceptions (censor mask draw, similarity model probe, dataset translator fallback, temp-file cleanup) are now logged.
+  - 若干先前被吞掉的异常（censor 遮罩绘制、相似度模型探测、dataset 翻译 fallback、暂存档清理）现在会记录。
+
+### UI / 介面
+- **Modal accessibility**: the Auto-Detect and Rename dialogs now have proper `role="dialog"` / focus-trap / Esc handling routed through the shared modal helpers.
+  - **弹窗无障碍**：自动侦测与重命名弹窗补上 `role="dialog"` / focus-trap / Esc，统一走共用 modal helper。
+- **Gallery aspect quick-toggle**: square / landscape / portrait filtering is now a one-click toggle in the gallery header (previously only inside the filter modal).
+  - **图库比例快速切换**：方形 / 横向 / 纵向筛选现在是图库标题列的一键切换（以前只在筛选弹窗里）。
+- **Layout / i18n polish**: unified button heights via a `--btn-h` token, no more single-CJK-character label wrapping, a cleaner Processing-Queue button grid, and the gallery sidebar summary labels + "Any" colors default are now translatable.
+  - **版面 / i18n 优化**：用 `--btn-h` token 统一按钮高度、修掉单个中文字换行、整理处理队列按钮版面、图库侧栏摘要标签与「任意」颜色预设可翻译。
+
 ## [3.2.3] - 2026-05-29
 
 Maintenance / hardening release. No user-facing feature changes; focus is

@@ -270,7 +270,7 @@ body::after {
 .nav-actions .btn-help {
     flex: 0 1 auto;
     max-width: 168px;
-    min-height: 38px;
+    min-height: var(--btn-h-nav);
     white-space: nowrap;
     padding: 7px 14px;
     font-size: 13px;
@@ -315,7 +315,7 @@ body::after {
 .view-options .btn-icon-only {
     min-width: 32px;
     max-width: 36px;
-    min-height: 30px;
+    min-height: var(--btn-h-icon);
     padding: 4px 8px;
 }
 
@@ -348,7 +348,7 @@ body::after {
 
 .gallery-header-left .btn {
     max-width: 160px;
-    min-height: 32px;
+    min-height: var(--btn-h-sm);
     white-space: nowrap;
 }
 
@@ -383,18 +383,18 @@ body::after {
     align-items: center;
     justify-content: center;
     line-height: 1.2;
-    min-height: 40px;
+    min-height: var(--btn-h);
     border-radius: 14px;
     border: 1px solid rgba(191, 219, 254, 0.12);
     font-weight: 700;
     letter-spacing: 0.01em;
-    white-space: normal;
+    white-space: nowrap;
     box-shadow: none;
     transition: background 160ms ease, box-shadow 160ms ease, transform 100ms ease, opacity 100ms ease, border-color 160ms ease;
 }
 
 .btn.btn-small {
-    min-height: 32px;
+    min-height: var(--btn-h-sm);
 }
 
 .btn > span:not([aria-hidden]),
@@ -1422,6 +1422,59 @@ textarea:focus,
 .gen-tab.active,
 .view-btn[aria-pressed="true"] {
     background: linear-gradient(135deg, rgba(245, 158, 11, 0.92), rgba(20, 184, 166, 0.72));
+    border-color: transparent;
+}
+
+/* FE-7: gallery-header aspect quick-toggle. A compact segmented control
+   driving the same FilterStore aspectRatio field as the filter modal. */
+.aspect-quick-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 999px;
+    border: 1px solid rgba(191, 219, 254, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+    flex: 0 0 auto;
+}
+
+.aspect-quick-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-height: var(--btn-h-icon);
+    padding: 4px 9px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 160ms ease, color 160ms ease, border-color 160ms ease, opacity 100ms ease;
+}
+
+.aspect-quick-btn span[aria-hidden] {
+    font-size: 13px;
+    line-height: 1;
+}
+
+.aspect-quick-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.aspect-quick-btn:focus-visible {
+    outline: 2px solid rgba(245, 158, 11, 0.7);
+    outline-offset: 1px;
+}
+
+.aspect-quick-btn.is-active {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.92), rgba(20, 184, 166, 0.72));
+    color: #1f2937;
     border-color: transparent;
 }
 

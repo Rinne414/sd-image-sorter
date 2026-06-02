@@ -115,7 +115,7 @@ async def missing_count():
 
 
 @router.post("/analyze-single/{image_id}")
-async def analyze_single(image_id: int):
+def analyze_single(image_id: int):
     """Analyze a single image immediately (synchronous)."""
     image = db.get_image_by_id(image_id)
     if not image:

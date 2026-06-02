@@ -424,7 +424,12 @@ class CensorService:
                             drew_any = True
                             continue
                 except Exception:
-                    pass
+                    logger.warning(
+                        "censor: failed to composite detection mask (label=%s); "
+                        "falling back to polygon/box",
+                        detection.get("label") or detection.get("class_name"),
+                        exc_info=True,
+                    )
 
             polygon = detection.get("polygon")
             if isinstance(polygon, list):
