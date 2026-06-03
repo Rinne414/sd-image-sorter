@@ -56,8 +56,17 @@ VALID_SORT_ACTIONS = ["move", "skip", "undo", "redo", "collect"]
 # caller and persisted session keeps identical behavior. New modes (e.g. the A/B
 # "bracket" King-of-Hill) are added in later slices and registered here.
 SORT_MODE_SLOT = "slot"
+# v3.3.2 WB-S2: A/B "King-of-Hill" bracket mode. A champion stays on screen and
+# each remaining candidate challenges it; after N-1 comparisons a single winner
+# remains. Pure in-memory pointer logic — no file moves (winner handling is a
+# later slice). Reuses the session's current_index as the challenger pointer and
+# adds champion_index.
+SORT_MODE_BRACKET = "bracket"
 SORT_MODE_DEFAULT = SORT_MODE_SLOT
-VALID_SORT_MODES = [SORT_MODE_SLOT]
+VALID_SORT_MODES = [SORT_MODE_SLOT, SORT_MODE_BRACKET]
+# Bracket actions: pick the champion (A keeps the crown), promote the challenger
+# (B wins), skip (no preference — champion stays), plus undo/redo.
+VALID_BRACKET_ACTIONS = ["champion", "challenger", "skip", "undo", "redo"]
 VALID_FILE_OPERATIONS = ["move", "copy"]
 VALID_PROMPT_MATCH_MODES = {"exact", "contains"}
 SCAN_LOG_HEARTBEAT_SECONDS = max(
@@ -407,6 +416,9 @@ class SortingService:
             "mode": SORT_MODE_DEFAULT,
             "image_ids": [],
             "current_index": 0,
+            # v3.3.2 WB-S2: bracket champion pointer (unused in slot mode). The
+            # challenger pointer reuses current_index.
+            "champion_index": 0,
             "folders": {},
             # v3.3.1: per-slot collection mapping. A slot key (w/a/s/d) whose
             # value is a collection id is "collection-typed": pressing it adds
@@ -663,6 +675,13 @@ class SortingService:
         except (TypeError, ValueError):
             current_index = 0
         coerced["current_index"] = max(0, min(current_index, len(coerced["image_ids"])))
+
+        # WB-S2 bracket champion pointer: clamp into the candidate range.
+        try:
+            champion_index = int(session.get("champion_index", 0) or 0)
+        except (TypeError, ValueError):
+            champion_index = 0
+        coerced["champion_index"] = max(0, min(champion_index, max(0, len(coerced["image_ids"]) - 1)))
         return coerced
 
     def _build_persisted_sort_session_payload(self) -> Dict[str, Any]:
@@ -673,6 +692,7 @@ class SortingService:
             "active": session["active"],
             "mode": session["mode"],
             "current_index": session["current_index"],
+            "champion_index": session["champion_index"],
             "folders": session["folders"],
             "collection_slots": session["collection_slots"],
             "operation_mode": session["operation_mode"],
@@ -2264,12 +2284,17 @@ class SortingService:
         folder_config = self._parse_sort_folders(folders)
         collection_slot_config = self._coerce_collection_slots(collection_slots)
 
+        # Bracket starts the first candidate (index 0) as champion and the
+        # second (index 1) as the first challenger. Slot mode starts at 0.
+        initial_index = 1 if normalized_mode == SORT_MODE_BRACKET else 0
+
         with self._sort_session_lock:
             self._sort_session = self._coerce_sort_session_state({
                 "active": True,
                 "mode": normalized_mode,
                 "image_ids": image_ids,
-                "current_index": 0,
+                "current_index": initial_index,
+                "champion_index": 0,
                 "folders": folder_config,
                 "collection_slots": collection_slot_config,
                 "operation_mode": operation_mode,
@@ -2289,8 +2314,182 @@ class SortingService:
             "mode": normalized_mode,
         }
 
+    def _resolve_readable_sort_image(self, image_id: int) -> Optional[Dict[str, Any]]:
+        """Return {image, tags} for a sortable image, or None if missing/unreadable.
+
+        Marks the row unreadable as a side effect (mirrors the slot path's lazy
+        verification) so the caller can advance past it.
+        """
+        current = db.get_image_by_id(image_id)
+        if not current:
+            return None
+        current_path = self._resolve_image_path(current.get("path") or "")
+        if not current_path:
+            db.mark_image_unreadable(image_id, "File not found")
+            return None
+        readable, read_error = verify_image_readable(current_path)
+        if not readable:
+            db.mark_image_unreadable(image_id, read_error or "Unreadable image")
+            return None
+        return {"image": current, "tags": db.get_image_tags(image_id)}
+
+    def _get_current_bracket_image(self) -> Dict[str, Any]:
+        """Return the current champion/challenger pair for A/B bracket mode.
+
+        Skips unreadable challengers (advance) and unreadable champions (the
+        challenger is promoted uncontested), so the user never lands on a broken
+        image — mirroring the slot path's lazy readability handling.
+        """
+        while True:
+            with self._sort_session_lock:
+                if not self._sort_session.get("active"):
+                    return {
+                        "active": False,
+                        "done": True,
+                        "mode": SORT_MODE_BRACKET,
+                        "message": "No active sort session",
+                        "champion": None,
+                        "challenger": None,
+                        "winner": None,
+                        "total": 0,
+                        "remaining": 0,
+                        **self._get_sort_session_flags([], []),
+                    }
+                image_ids = self._sort_session["image_ids"]
+                total = len(image_ids)
+                champion_index = int(self._sort_session.get("champion_index", 0) or 0)
+                challenger_index = int(self._sort_session.get("current_index", 0) or 0)
+                history_snapshot = list(self._sort_session.get("history", []))
+                redo_snapshot = list(self._sort_session.get("redo_stack", []))
+
+            if total == 0 or challenger_index >= total:
+                winner_payload = None
+                if total and 0 <= champion_index < total:
+                    winner_payload = self._resolve_readable_sort_image(image_ids[champion_index])
+                return {
+                    "active": True,
+                    "done": True,
+                    "mode": SORT_MODE_BRACKET,
+                    "winner": winner_payload,
+                    "champion": winner_payload,
+                    "challenger": None,
+                    "total": total,
+                    "remaining": 0,
+                    "message": "Bracket complete" if winner_payload else "No images to compare",
+                    **self._get_sort_session_flags(history_snapshot, redo_snapshot),
+                }
+
+            champion = self._resolve_readable_sort_image(image_ids[champion_index])
+            if champion is None:
+                # Champion is broken → the current challenger takes the crown.
+                with self._sort_session_lock:
+                    self._sort_session["champion_index"] = challenger_index
+                    self._sort_session["current_index"] = challenger_index + 1
+                    self._save_session_to_disk()
+                continue
+
+            challenger = self._resolve_readable_sort_image(image_ids[challenger_index])
+            if challenger is None:
+                with self._sort_session_lock:
+                    self._sort_session["current_index"] = challenger_index + 1
+                    self._save_session_to_disk()
+                continue
+
+            return {
+                "active": True,
+                "done": False,
+                "mode": SORT_MODE_BRACKET,
+                "champion": champion,
+                "challenger": challenger,
+                "champion_index": champion_index,
+                "challenger_index": challenger_index,
+                "index": challenger_index,
+                "total": total,
+                "comparisons_total": max(0, total - 1),
+                "remaining": total - challenger_index,
+                "image_ids": list(image_ids),
+                **self._get_sort_session_flags(history_snapshot, redo_snapshot),
+            }
+
+    def _bracket_action(self, action: str) -> Dict[str, Any]:
+        """Apply an A/B bracket action (champion/challenger/skip/undo/redo)."""
+        if action not in VALID_BRACKET_ACTIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid bracket action. Must be one of: {', '.join(VALID_BRACKET_ACTIONS)}",
+            )
+
+        with self._sort_session_lock:
+            if not self._sort_session.get("active"):
+                raise HTTPException(status_code=400, detail="No active sort session")
+
+            total = len(self._sort_session["image_ids"])
+            champion_index = int(self._sort_session.get("champion_index", 0) or 0)
+            challenger_index = int(self._sort_session.get("current_index", 0) or 0)
+            history = self._sort_session.setdefault("history", [])
+            redo_stack = self._sort_session.setdefault("redo_stack", [])
+
+            if action == "undo":
+                if not history:
+                    return {"status": "nothing_to_undo", **self._get_sort_session_flags(history, redo_stack)}
+                last = history.pop()
+                redo_stack.append(last)
+                self._sort_session["champion_index"] = int(last.get("prev_champion_index", 0))
+                self._sort_session["current_index"] = int(last.get("prev_challenger_index", 0))
+                self._save_session_to_disk()
+                return {"status": "undone", **self._get_sort_session_flags(history, redo_stack)}
+
+            if action == "redo":
+                if not redo_stack:
+                    return {"status": "nothing_to_redo", **self._get_sort_session_flags(history, redo_stack)}
+                entry = redo_stack.pop()
+                prev_challenger = int(entry.get("prev_challenger_index", 0))
+                if entry.get("action") == "challenger":
+                    self._sort_session["champion_index"] = prev_challenger
+                else:  # champion / skip → champion stays
+                    self._sort_session["champion_index"] = int(entry.get("prev_champion_index", 0))
+                self._sort_session["current_index"] = prev_challenger + 1
+                history.append(entry)
+                self._save_session_to_disk()
+                return {"status": "redone", **self._get_sort_session_flags(history, redo_stack)}
+
+            # Forward action.
+            if challenger_index >= total:
+                raise HTTPException(status_code=400, detail="Bracket already complete")
+            entry = {
+                "action": action,
+                "mode": SORT_MODE_BRACKET,
+                "prev_champion_index": champion_index,
+                "prev_challenger_index": challenger_index,
+            }
+            if action == "challenger":
+                self._sort_session["champion_index"] = challenger_index
+            # champion / skip: champion stays
+            self._sort_session["current_index"] = challenger_index + 1
+            history.append(entry)
+            # A fresh forward choice invalidates any redo branch.
+            self._sort_session["redo_stack"] = []
+            self._save_session_to_disk()
+
+            new_challenger = self._sort_session["current_index"]
+            return {
+                "status": "ok",
+                "done": new_challenger >= total,
+                "mode": SORT_MODE_BRACKET,
+                "champion_index": self._sort_session["champion_index"],
+                "challenger_index": new_challenger,
+                **self._get_sort_session_flags(history, self._sort_session["redo_stack"]),
+            }
+
     def get_current_sort_image(self) -> Dict[str, Any]:
         """Get the current image in the sort session."""
+        with self._sort_session_lock:
+            is_bracket = (
+                bool(self._sort_session.get("active"))
+                and self._sort_session.get("mode") == SORT_MODE_BRACKET
+            )
+        if is_bracket:
+            return self._get_current_bracket_image()
         while True:
             with self._sort_session_lock:
                 if not self._sort_session["active"]:
@@ -2367,7 +2566,19 @@ class SortingService:
         action: str,
         folder_key: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Perform a sort action: move, skip, undo, or redo."""
+        """Perform a sort action.
+
+        Slot mode: move, skip, undo, redo, collect. Bracket mode dispatches to
+        the A/B handler (champion, challenger, skip, undo, redo).
+        """
+        with self._sort_session_lock:
+            is_bracket = (
+                bool(self._sort_session.get("active"))
+                and self._sort_session.get("mode") == SORT_MODE_BRACKET
+            )
+        if is_bracket:
+            return self._bracket_action(action)
+
         if action not in VALID_SORT_ACTIONS:
             raise HTTPException(
                 status_code=400,

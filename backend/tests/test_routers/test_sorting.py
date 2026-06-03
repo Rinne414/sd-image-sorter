@@ -2771,3 +2771,175 @@ def test_coerce_unknown_mode_falls_back_to_slot():
         {"active": True, "mode": "garbage", "image_ids": []}
     )
     assert coerced["mode"] == "slot"
+
+
+# ---------------------------------------------------------------------------
+# v3.3.2 Sort & Cull Workbench — WB-S2: A/B "King-of-Hill" bracket mode.
+# A champion stays; each remaining candidate challenges it; N-1 comparisons →
+# one winner. Pure in-memory pointer logic (no file moves). Tests drive the
+# service directly with real on-disk images (bracket get_current verifies
+# readability), reading image order from the session so they don't depend on
+# the DB's id ordering.
+# ---------------------------------------------------------------------------
+
+def _make_bracket_images(db, tmp_path, count):
+    from PIL import Image
+
+    ids = []
+    for i in range(count):
+        path = tmp_path / f"wb_brk_{i}.png"
+        Image.new("RGB", (16, 16), color=(i * 30 % 255, 40, 60)).save(path)
+        ids.append(
+            db.add_image(
+                path=str(path),
+                filename=path.name,
+                generator="unknown",
+                prompt=None,
+                negative_prompt=None,
+                checkpoint=None,
+                loras=[],
+                width=16,
+                height=16,
+                file_size=1,
+                metadata_json="{}",
+            )
+        )
+    return ids
+
+
+def _bracket_service(tmp_path, monkeypatch):
+    from services import sorting_service as sorting_module
+    from services.sorting_service import SortingService
+
+    monkeypatch.setattr(sorting_module, "SESSION_FILE", str(tmp_path / "sort_session.json"))
+    return SortingService()
+
+
+def test_bracket_start_initializes_champion_and_challenger(test_db, tmp_path, monkeypatch):
+    _make_bracket_images(test_db, tmp_path, 3)
+    service = _bracket_service(tmp_path, monkeypatch)
+
+    result = service.start_sort_session(mode="bracket")
+    assert result["mode"] == "bracket"
+
+    cur = service.get_current_sort_image()
+    order = cur["image_ids"]
+    assert cur["mode"] == "bracket"
+    assert cur["done"] is False
+    assert cur["total"] == 3
+    assert cur["champion"]["image"]["id"] == order[0]
+    assert cur["challenger"]["image"]["id"] == order[1]
+
+
+def test_bracket_keep_champion_advances_challenger(test_db, tmp_path, monkeypatch):
+    _make_bracket_images(test_db, tmp_path, 3)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="bracket")
+    order = service.get_current_sort_image()["image_ids"]
+
+    service.sort_action("champion")
+    cur = service.get_current_sort_image()
+    assert cur["champion"]["image"]["id"] == order[0]   # champion kept
+    assert cur["challenger"]["image"]["id"] == order[2]  # next challenger
+
+
+def test_bracket_promote_challenger_changes_champion(test_db, tmp_path, monkeypatch):
+    _make_bracket_images(test_db, tmp_path, 3)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="bracket")
+    order = service.get_current_sort_image()["image_ids"]
+
+    service.sort_action("challenger")
+    cur = service.get_current_sort_image()
+    assert cur["champion"]["image"]["id"] == order[1]   # challenger promoted
+    assert cur["challenger"]["image"]["id"] == order[2]
+
+
+def test_bracket_completes_with_single_winner(test_db, tmp_path, monkeypatch):
+    _make_bracket_images(test_db, tmp_path, 3)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="bracket")
+    order = service.get_current_sort_image()["image_ids"]
+
+    service.sort_action("champion")  # order[0] beats order[1]
+    service.sort_action("champion")  # order[0] beats order[2]
+    done = service.get_current_sort_image()
+    assert done["done"] is True
+    assert done["winner"]["image"]["id"] == order[0]
+
+
+def test_bracket_single_candidate_auto_wins(test_db, tmp_path, monkeypatch):
+    ids = _make_bracket_images(test_db, tmp_path, 1)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="bracket")
+
+    done = service.get_current_sort_image()
+    assert done["done"] is True
+    assert done["winner"]["image"]["id"] == ids[0]
+
+
+def test_bracket_undo_restores_previous_pair(test_db, tmp_path, monkeypatch):
+    _make_bracket_images(test_db, tmp_path, 3)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="bracket")
+    order = service.get_current_sort_image()["image_ids"]
+
+    service.sort_action("challenger")          # champion → order[1]
+    service.sort_action("undo")
+    cur = service.get_current_sort_image()
+    assert cur["champion"]["image"]["id"] == order[0]   # restored
+    assert cur["challenger"]["image"]["id"] == order[1]
+
+
+def test_bracket_redo_reapplies_choice(test_db, tmp_path, monkeypatch):
+    _make_bracket_images(test_db, tmp_path, 3)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="bracket")
+    order = service.get_current_sort_image()["image_ids"]
+
+    service.sort_action("challenger")
+    service.sort_action("undo")
+    service.sort_action("redo")
+    cur = service.get_current_sort_image()
+    assert cur["champion"]["image"]["id"] == order[1]
+    assert cur["challenger"]["image"]["id"] == order[2]
+
+
+def test_bracket_rejects_invalid_action(test_db, tmp_path, monkeypatch):
+    from fastapi import HTTPException
+
+    _make_bracket_images(test_db, tmp_path, 2)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="bracket")
+
+    with pytest.raises(HTTPException) as exc_info:
+        service.sort_action("move")  # a slot action is invalid in bracket mode
+    assert exc_info.value.status_code == 400
+
+
+def test_bracket_start_and_action_via_api(test_client, tmp_path):
+    from PIL import Image
+
+    db = test_client.test_db
+    for i in range(3):
+        path = tmp_path / f"wb_api_{i}.png"
+        Image.new("RGB", (16, 16), color=(i * 30 % 255, 10, 20)).save(path)
+        db.add_image(
+            path=str(path), filename=path.name, generator="unknown", prompt=None,
+            negative_prompt=None, checkpoint=None, loras=[], width=16, height=16,
+            file_size=1, metadata_json="{}",
+        )
+
+    start = test_client.post("/api/sort/start?mode=bracket")
+    assert start.status_code == 200
+    assert start.json()["mode"] == "bracket"
+
+    current = test_client.get("/api/sort/current")
+    assert current.status_code == 200
+    body = current.json()
+    assert body["mode"] == "bracket"
+    assert body["champion"] is not None and body["challenger"] is not None
+
+    action = test_client.post("/api/sort/action?action=champion")
+    assert action.status_code == 200
+    assert action.json()["mode"] == "bracket"
