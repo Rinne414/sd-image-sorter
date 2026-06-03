@@ -289,6 +289,18 @@ Rules:
 - Token mode snapshots matching IDs server-side into a temporary bounded stream before mutating rows/files, so deletion does not skip records as the filtered set shrinks.
 - Response includes `deleted`, `missing_ids`, `failed`, `errors`, and `permanent_delete: true`.
 
+#### POST /api/images/delete-selected/start
+Run the same deletion as a background job so a large selection does not freeze the browser. Requires `confirm_delete_files: true` and accepts the same `image_ids` / `selection_token` body; matching IDs are snapshotted server-side before any mutation. Response includes `status` and `message`.
+
+#### GET /api/images/delete-selected/progress
+Return the current delete-job progress. Fields: `status` (`idle`/`running`/`done`/`cancelled`/`error`), `step`, `current`, `total`, `deleted`, `failed`, `errors`, `recent_errors`, `current_item`, `message`, `operation: "delete"`, `started_at`, `updated_at`.
+
+#### POST /api/images/delete-selected/cancel
+Request cancellation of the running delete job. The task stops between items and returns the latest progress snapshot.
+
+#### POST /api/images/delete-selected/reset
+Reset a stuck or finished delete job back to `idle`.
+
 #### POST /api/images/remove-selected
 Remove selected image rows from the gallery index without deleting the backing files from disk.
 
@@ -310,6 +322,18 @@ Rules:
 - Provide either `image_ids` or `selection_token`, not both.
 - Token mode snapshots matching IDs server-side into a temporary bounded stream before removing rows, so the operation does not depend on a browser-materialized 200k-ID array.
 - Response includes `removed`, `missing_ids`, and `permanent_delete: false`. Re-scanning the source folder can add the files back.
+
+#### POST /api/images/remove-selected/start
+Run the same index removal as a background job for large selections. Accepts the same `image_ids` / `selection_token` body; matching IDs are snapshotted server-side before rows are removed. Files on disk are never touched. Response includes `status` and `message`.
+
+#### GET /api/images/remove-selected/progress
+Return the current remove-job progress. Fields: `status` (`idle`/`running`/`done`/`cancelled`/`error`), `step`, `current`, `total`, `removed`, `missing_ids`, `current_item`, `message`, `operation: "remove"`, `permanent_delete: false`, `started_at`, `updated_at`.
+
+#### POST /api/images/remove-selected/cancel
+Request cancellation of the running remove job. The task stops between items and returns the latest progress snapshot.
+
+#### POST /api/images/remove-selected/reset
+Reset a stuck or finished remove job back to `idle`.
 
 #### POST /api/tags/export-batch
 Write same-name sidecar `.txt` exports for explicit IDs or a filtered-selection token.
@@ -460,6 +484,15 @@ Export one same-name sidecar per selected image. Text modes write `.txt`; `json`
 Mode rules: `prompt`, `negative`, `prompt_negative`, `a1111`, and `json` preserve the stored Prompt / generation data and ignore `prefix`. `tags` exports only tags after blacklist filtering. `caption_tags` writes optional Class Token + AI caption + Tags. `caption_merged` writes optional Class Token + AI caption + Prompt + Tags as one LoRA-training caption line.
 
 Response includes `status` (`ok`, `partial`, or `error`), `exported`, `skipped`, numeric `errors`/`error_count`, `error_messages`, `total`, `content_mode`, and `overwrite_policy`. `overwrite_policy=skip` returns `partial` when existing sidecars are intentionally left untouched.
+
+#### POST /api/tags/export-batch/start
+Run the same sidecar export as a background job so a large selection does not block the request. Accepts the same body as `POST /api/tags/export-batch`. This is a coarse background wrap (no mid-run cancel). Response includes `status` and `message`.
+
+#### GET /api/tags/export-batch/progress
+Return the current export-job progress. Fields: `status` (`idle`/`running`/`done`/`error`), `step`, `current`, `total`, `current_item`, `message`, `operation: "export"`, and `result` — the full `export_tags_batch` payload (`exported`, `skipped`, `errors`, `content_mode`, `overwrite_policy`, …) once finished.
+
+#### POST /api/tags/export-batch/reset
+Reset a stuck or finished export job back to `idle`.
 
 #### POST /api/tags/fix-ratings
 Clean up duplicate rating tags in existing database.
