@@ -45,6 +45,28 @@ if os.name == "nt" and len(os.environ.get("PATH", "")) > 30000:
 
 
 # ============================================================================
+# Similarity index isolation
+# ============================================================================
+
+@pytest.fixture(autouse=True)
+def _isolate_similarity_index_dir(tmp_path, monkeypatch):
+    """Persist the similarity vector cache to a per-test temp dir, never the real
+    STATE_DIR.
+
+    similarity.py persists its exact vector cache under ``get_state_dir()``.
+    Without isolation, tests would write into the user's real state directory and
+    could even cross-contaminate when two different test databases happen to share
+    the cheap ``(count, max_id)`` signature. Redirect only similarity's persist
+    dir (config.get_state_dir is untouched) to this test's tmp_path.
+    """
+    try:
+        import similarity
+    except Exception:
+        return
+    monkeypatch.setattr(similarity, "get_state_dir", lambda: str(tmp_path))
+
+
+# ============================================================================
 # Test Database Fixture
 # ============================================================================
 

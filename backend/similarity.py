@@ -7,11 +7,13 @@ Supports finding similar images by ID, by upload, and finding duplicates.
 import gc
 import io
 import heapq
+import json
 import logging
 import os
 import tempfile
 import threading
 import time
+from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple, Any
 
 import numpy as np
@@ -20,6 +22,7 @@ from PIL import Image, UnidentifiedImageError
 from config import (
     CLIP_MODEL_NAME,
     get_clip_model_dir,
+    get_state_dir,
     SIMILARITY_DEFAULT_LIMIT,
     SIMILARITY_DEFAULT_THRESHOLD,
     DUPLICATE_THRESHOLD,
@@ -887,6 +890,136 @@ class SimilarityIndex:
         """Drop the cached embedding matrix so the next search rebuilds it."""
         with self._vector_cache_lock:
             self._vector_cache = None
+            self._delete_persisted_vector_cache()
+
+    # ------------------------------------------------------------------
+    # On-disk persistence of the exact vector cache (v3.3.2 Phase 1)
+    #
+    # Persisting the built matrix to STATE_DIR/similarity-index/ lets a cold
+    # start (or the first search after a restart) skip re-reading and
+    # re-normalizing every embedding BLOB from SQLite. It stays EXACT — the
+    # same normalized matrix the in-RAM path uses, just loaded from disk — so
+    # results never change. Keyed on the (count, max_id) signature: any row
+    # add/delete invalidates by mismatch; re-embeds (same signature, new
+    # vectors) are invalidated explicitly via invalidate_vector_cache().
+    # All disk I/O is best-effort: any failure silently falls back to rebuilding
+    # in RAM, so persistence can never break or cap search.
+    # ------------------------------------------------------------------
+
+    _PERSIST_MATRIX_NAME = "matrix.npy"
+    _PERSIST_IDS_NAME = "ids.npy"
+    _PERSIST_META_NAME = "meta.json"
+
+    def _get_index_dir(self) -> Path:
+        return Path(get_state_dir()) / "similarity-index"
+
+    def _persist_vector_cache(self, cache: Dict[str, Any]) -> None:
+        """Best-effort write of the normalized matrix + parallel arrays to disk."""
+        try:
+            index_dir = self._get_index_dir()
+            index_dir.mkdir(parents=True, exist_ok=True)
+            tmp_matrix = index_dir / (self._PERSIST_MATRIX_NAME + ".tmp")
+            tmp_ids = index_dir / (self._PERSIST_IDS_NAME + ".tmp")
+            tmp_meta = index_dir / (self._PERSIST_META_NAME + ".tmp")
+
+            # Save to a file handle so np.save does not append a second ".npy".
+            with open(tmp_matrix, "wb") as handle:
+                np.save(handle, np.ascontiguousarray(cache["matrix"], dtype=np.float32))
+            with open(tmp_ids, "wb") as handle:
+                np.save(handle, np.asarray(cache["ids"], dtype=np.int64))
+            meta = {
+                "dim": int(cache["dim"]),
+                "signature": [int(cache["signature"][0]), int(cache["signature"][1])],
+                "paths": list(cache["paths"]),
+                "filenames": list(cache["filenames"]),
+            }
+            tmp_meta.write_text(json.dumps(meta), encoding="utf-8")
+
+            os.replace(tmp_matrix, index_dir / self._PERSIST_MATRIX_NAME)
+            os.replace(tmp_ids, index_dir / self._PERSIST_IDS_NAME)
+            os.replace(tmp_meta, index_dir / self._PERSIST_META_NAME)
+            logger.debug(
+                "[Similarity] Persisted vector cache (%s vectors) to %s",
+                len(cache["paths"]),
+                index_dir,
+            )
+        except Exception as exc:
+            logger.debug("[Similarity] Could not persist vector cache: %s", exc)
+            # A partial write is worse than none — clear it so we never load junk.
+            self._delete_persisted_vector_cache()
+
+    def _load_persisted_vector_cache(self, signature: Tuple[int, int]) -> Optional[Dict[str, Any]]:
+        """Load a persisted cache iff it matches the signature and is self-consistent.
+
+        Returns None (caller rebuilds) when the files are missing, the stored
+        signature differs, or any shape/parse check fails. The signature gate makes
+        a stale on-disk cache from a different library state simply ignored.
+        """
+        try:
+            index_dir = self._get_index_dir()
+            meta_path = index_dir / self._PERSIST_META_NAME
+            matrix_path = index_dir / self._PERSIST_MATRIX_NAME
+            ids_path = index_dir / self._PERSIST_IDS_NAME
+            if not (meta_path.exists() and matrix_path.exists() and ids_path.exists()):
+                return None
+
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            stored_sig = meta.get("signature")
+            if (
+                not isinstance(stored_sig, list)
+                or len(stored_sig) != 2
+                or (int(stored_sig[0]), int(stored_sig[1])) != signature
+            ):
+                return None
+
+            matrix = np.load(matrix_path)
+            ids = np.load(ids_path)
+            paths = meta.get("paths") or []
+            filenames = meta.get("filenames") or []
+            dim = int(meta.get("dim", 0))
+            rows = int(matrix.shape[0]) if matrix.ndim == 2 else -1
+            # Self-consistency: the parallel arrays must all describe the same rows.
+            # (rows may be < signature count when build skipped odd-dim embeddings.)
+            if not (
+                matrix.ndim == 2
+                and dim > 0
+                and matrix.shape[1] == dim
+                and int(ids.shape[0]) == rows
+                and len(paths) == rows
+                and len(filenames) == rows
+            ):
+                logger.debug("[Similarity] Persisted cache shape mismatch; ignoring.")
+                return None
+
+            return {
+                "matrix": np.ascontiguousarray(matrix, dtype=np.float32),
+                "ids": np.asarray(ids, dtype=np.int64),
+                "paths": list(paths),
+                "filenames": list(filenames),
+                "dim": dim,
+                "signature": signature,
+            }
+        except Exception as exc:
+            logger.debug("[Similarity] Could not load persisted vector cache: %s", exc)
+            return None
+
+    def _delete_persisted_vector_cache(self) -> None:
+        """Best-effort removal of any persisted cache files (incl. temp writes)."""
+        try:
+            index_dir = self._get_index_dir()
+            for name in (
+                self._PERSIST_MATRIX_NAME,
+                self._PERSIST_IDS_NAME,
+                self._PERSIST_META_NAME,
+                self._PERSIST_MATRIX_NAME + ".tmp",
+                self._PERSIST_IDS_NAME + ".tmp",
+                self._PERSIST_META_NAME + ".tmp",
+            ):
+                target = index_dir / name
+                if target.exists():
+                    target.unlink()
+        except Exception as exc:
+            logger.debug("[Similarity] Could not delete persisted vector cache: %s", exc)
 
     def _compute_embedding_signature(self) -> Optional[Tuple[int, int]]:
         """Cheap (count, max_id) fingerprint of readable embeddings.
@@ -940,6 +1073,14 @@ class SimilarityIndex:
             cache = self._vector_cache
             if cache is not None and cache.get("signature") == signature:
                 return cache
+
+            # Prefer a persisted matrix (exact, just deserialized) over re-reading
+            # and re-normalizing every embedding BLOB from SQLite.
+            loaded = self._load_persisted_vector_cache(signature)
+            if loaded is not None:
+                self._vector_cache = loaded
+                return loaded
+
             try:
                 built = self._build_vector_cache(signature)
             except MemoryError:
@@ -955,6 +1096,8 @@ class SimilarityIndex:
                 self._vector_cache = None
                 return None
             self._vector_cache = built
+            if built is not None:
+                self._persist_vector_cache(built)
             return built
 
     def _build_vector_cache(self, signature: Tuple[int, int]) -> Optional[Dict[str, Any]]:

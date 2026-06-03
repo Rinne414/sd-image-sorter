@@ -9,6 +9,7 @@ queries, and verify the cache build / invalidation contract.
 from __future__ import annotations
 
 import contextlib
+import json
 import sqlite3
 from typing import Sequence, Tuple
 
@@ -303,3 +304,107 @@ def test_scoped_search_pagination_matches(tmp_path, monkeypatch):
         got = cached.search_by_id(1, limit=1, threshold=-1.0, offset=offset, allowed_ids=allowed)
         _assert_result_parity(got, base)
         assert base["total"] == 4
+
+
+# ---------------------------------------------------------------------------
+# On-disk persistence of the exact vector cache (v3.3.2 Phase 1).
+#
+# The conftest autouse fixture _isolate_similarity_index_dir points
+# similarity.get_state_dir() at this test's tmp_path, so the index dir is
+# tmp_path / "similarity-index". Persistence is a pure cold-start accelerator:
+# the loaded matrix is the SAME normalized matrix, so results never change, and
+# any disk problem must transparently fall back to an in-RAM rebuild.
+# ---------------------------------------------------------------------------
+
+def _index_dir(tmp_path):
+    return tmp_path / "similarity-index"
+
+
+def test_vector_cache_persists_to_disk(tmp_path, monkeypatch):
+    db = _make_db(tmp_path, _ROWS)
+    monkeypatch.setattr(similarity_module, "SIMILARITY_VECTOR_CACHE_ENABLED", True)
+    index = similarity_module.SimilarityIndex(db)
+
+    index.search_by_id(1, limit=5, threshold=0.1)
+
+    index_dir = _index_dir(tmp_path)
+    assert (index_dir / "matrix.npy").exists()
+    assert (index_dir / "ids.npy").exists()
+    assert (index_dir / "meta.json").exists()
+    meta = json.loads((index_dir / "meta.json").read_text(encoding="utf-8"))
+    assert meta["dim"] == 4
+    assert len(meta["signature"]) == 2
+    assert len(meta["paths"]) == len(meta["filenames"])
+    # _ROWS has 5 readable embeddings (id 6 is unreadable, excluded from the cache).
+    assert len(meta["paths"]) == 5
+
+
+def test_persisted_cache_loaded_without_rebuild(tmp_path, monkeypatch):
+    db = _make_db(tmp_path, _ROWS)
+    monkeypatch.setattr(similarity_module, "SIMILARITY_VECTOR_CACHE_ENABLED", True)
+
+    index_a = similarity_module.SimilarityIndex(db)
+    base = index_a.search_by_id(1, limit=10, threshold=-1.0)  # builds + persists
+
+    index_b = similarity_module.SimilarityIndex(db)
+
+    def _must_not_rebuild(*_args, **_kwargs):
+        raise AssertionError("expected persisted cache load, not a rebuild")
+
+    monkeypatch.setattr(index_b, "_build_vector_cache", _must_not_rebuild)
+    got = index_b.search_by_id(1, limit=10, threshold=-1.0)
+
+    assert index_b._vector_cache is not None
+    assert [r["id"] for r in got["results"]] == [r["id"] for r in base["results"]]
+    assert got["total"] == base["total"]
+
+
+def test_persisted_cache_signature_mismatch_is_ignored(tmp_path, monkeypatch):
+    db = _make_db(tmp_path, _ROWS)
+    monkeypatch.setattr(similarity_module, "SIMILARITY_VECTOR_CACHE_ENABLED", True)
+    index_a = similarity_module.SimilarityIndex(db)
+    index_a.search_by_id(1, limit=10, threshold=-1.0)  # persists signature of _ROWS
+
+    # A new readable embedding changes (count, max_id) → stale disk is ignored.
+    with db.get_db() as conn:
+        blob = similarity_module.embedding_to_bytes(np.asarray([0.9, 0.1, 0.0, 0.0], dtype=np.float32))
+        conn.execute(
+            "INSERT INTO images (id, path, filename, embedding, is_readable) VALUES (?, ?, ?, ?, ?)",
+            (7, "/img/new.png", "new.png", blob, 1),
+        )
+
+    index_b = similarity_module.SimilarityIndex(db)
+    result = index_b.search_by_id(1, limit=10, threshold=-1.0)
+    assert 7 in [r["id"] for r in result["results"]]  # rebuilt from fresh rows
+
+
+def test_invalidate_deletes_persisted_files(tmp_path, monkeypatch):
+    db = _make_db(tmp_path, _ROWS)
+    monkeypatch.setattr(similarity_module, "SIMILARITY_VECTOR_CACHE_ENABLED", True)
+    index = similarity_module.SimilarityIndex(db)
+    index.search_by_id(1, limit=5, threshold=0.1)
+
+    index_dir = _index_dir(tmp_path)
+    assert (index_dir / "matrix.npy").exists()
+
+    index.invalidate_vector_cache()
+    assert index._vector_cache is None
+    assert not (index_dir / "matrix.npy").exists()
+    assert not (index_dir / "ids.npy").exists()
+    assert not (index_dir / "meta.json").exists()
+
+
+def test_corrupt_persisted_cache_falls_back_to_rebuild(tmp_path, monkeypatch):
+    db = _make_db(tmp_path, _ROWS)
+    monkeypatch.setattr(similarity_module, "SIMILARITY_VECTOR_CACHE_ENABLED", True)
+    index_a = similarity_module.SimilarityIndex(db)
+    base = index_a.search_by_id(1, limit=10, threshold=-1.0)
+
+    # Corrupt the on-disk matrix; signature meta still matches.
+    (_index_dir(tmp_path) / "matrix.npy").write_bytes(b"not a valid npy payload")
+
+    index_b = similarity_module.SimilarityIndex(db)
+    got = index_b.search_by_id(1, limit=10, threshold=-1.0)
+
+    assert [r["id"] for r in got["results"]] == [r["id"] for r in base["results"]]
+    assert got["total"] == base["total"]
