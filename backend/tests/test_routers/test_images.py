@@ -1334,6 +1334,38 @@ class TestAestheticEndpoints:
 class TestRemoveSelectedImages:
     """Tests for POST /api/images/remove-selected endpoint."""
 
+    def test_remove_selected_start_job_removes_rows_keeps_files_and_completes(self, test_client, test_db, tmp_path):
+        """v3.3.2 Phase-1: the background remove job drops DB rows (files stay on
+        disk) and reports a terminal 'done' progress payload mirroring the
+        synchronous endpoint's removed/missing_ids shape. TestClient runs the
+        BackgroundTask synchronously after the response."""
+        import database as db
+        from PIL import Image
+
+        image_path = tmp_path / "remove-job.png"
+        Image.new("RGB", (8, 8), color="white").save(image_path)
+        image_id = db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        start = test_client.post(
+            "/api/images/remove-selected/start",
+            json={"image_ids": [image_id]},
+        )
+        assert start.status_code == 200
+        assert start.json().get("status") == "started"
+
+        progress = test_client.get("/api/images/remove-selected/progress").json()
+        assert progress["status"] == "done"
+        assert progress["total"] == 1
+        assert progress["removed"] == 1
+        assert progress["missing_ids"] == []
+
+        assert image_path.exists()  # remove keeps the file on disk
+        assert db.get_image_by_id(image_id) is None
+
     def test_remove_selected_images_removes_database_rows_but_keeps_files(self, test_client, test_db, tmp_path):
         import database as db
         from PIL import Image
@@ -1425,6 +1457,72 @@ class TestDeleteSelectedImages:
         assert trashed_paths == [image_path]
         assert not image_path.exists()
         assert db.get_image_by_id(image_id) is None
+
+    def test_delete_selected_start_job_trashes_files_and_completes(self, test_client, test_db, tmp_path, monkeypatch):
+        """v3.3.2 Phase-1: the background delete job trashes files, removes DB
+        rows, and reports a terminal 'done' progress payload mirroring the
+        synchronous endpoint's deleted/failed shape. TestClient runs the
+        BackgroundTask synchronously after the response, so the job is terminal
+        by the time we poll /progress."""
+        import database as db
+        from PIL import Image
+        from services import image_service
+
+        trashed_paths = []
+
+        def fake_move_file_to_trash(path):
+            trashed_paths.append(Path(path))
+            Path(path).unlink()
+
+        monkeypatch.setattr(image_service, "move_file_to_trash", fake_move_file_to_trash)
+
+        image_path = tmp_path / "delete-job.png"
+        Image.new("RGB", (8, 8), color="white").save(image_path)
+        image_id = db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        start = test_client.post(
+            "/api/images/delete-selected/start",
+            json={"image_ids": [image_id], "confirm_delete_files": True},
+        )
+        assert start.status_code == 200
+        assert start.json().get("status") == "started"
+
+        progress = test_client.get("/api/images/delete-selected/progress").json()
+        assert progress["status"] == "done"
+        assert progress["total"] == 1
+        assert progress["deleted"] == 1
+        assert progress["failed"] == []
+
+        assert trashed_paths == [image_path]
+        assert not image_path.exists()
+        assert db.get_image_by_id(image_id) is None
+
+    def test_delete_selected_start_job_requires_explicit_confirmation(self, test_client, test_db, tmp_path):
+        """v3.3.2 Phase-1: the background delete job refuses to start without
+        explicit file-deletion confirmation, just like the sync endpoint."""
+        import database as db
+        from PIL import Image
+
+        image_path = tmp_path / "delete-job-confirm.png"
+        Image.new("RGB", (8, 8), color="white").save(image_path)
+        image_id = db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        response = test_client.post(
+            "/api/images/delete-selected/start",
+            json={"image_ids": [image_id], "confirm_delete_files": False},
+        )
+
+        assert response.status_code == 400
+        assert image_path.exists()
+        assert db.get_image_by_id(image_id) is not None
 
     def test_delete_selected_images_reports_partial_failures_without_deleting_db_rows(self, test_client, test_db, tmp_path, monkeypatch):
         import database as db

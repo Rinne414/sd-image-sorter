@@ -1390,6 +1390,14 @@ window.I18nLang_en = {
     'move.sourceNote': ' · originals removed as each file moves',
     'move.cancelling': 'Stopping...',
     'move.bgStopTitle': 'Stop moving',
+    'delete.trashingVerb': 'Moving to Trash',
+    'delete.cancelling': 'Stopping...',
+    'delete.bgStopTitle': 'Stop deleting',
+    'selection.deleteCancelled': 'Stopped. Moved {count} file(s) to Trash before cancelling.',
+    'remove.removingVerb': 'Removing from gallery',
+    'remove.cancelling': 'Stopping...',
+    'remove.bgStopTitle': 'Stop removing',
+    'selection.removeCancelled': 'Stopped. Removed {count} image record(s) before cancelling.',
     'selection.largeFilteredConfirm': 'This will select {count} current filter matches and may use a lot of memory. Continue?',
 
     // ========================

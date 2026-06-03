@@ -327,6 +327,24 @@
             <button class="bg-tag-progress-btn bg-tag-stop-btn bg-scan-stop-btn" id="bg-move-cancel" title="Stop moving" data-i18n-title="move.bgStopTitle">⏹</button>
         </div>
 
+        <!-- v3.3.2 Phase-1: Delete-to-Trash Progress Bar (gallery selection delete runs as a background job) -->
+        <div id="bg-delete-progress" class="bg-tag-progress bg-scan-progress" style="display: none;" role="status" aria-live="polite">
+            <div class="bg-tag-progress-inner">
+                <div class="bg-tag-progress-fill bg-scan-progress-fill" id="bg-delete-progress-fill"></div>
+            </div>
+            <span class="bg-tag-progress-text" id="bg-delete-progress-text">Moving to Trash...</span>
+            <button class="bg-tag-progress-btn bg-tag-stop-btn bg-scan-stop-btn" id="bg-delete-cancel" title="Stop deleting" data-i18n-title="delete.bgStopTitle">⏹</button>
+        </div>
+
+        <!-- v3.3.2 Phase-1: Remove-from-Gallery Progress Bar (gallery selection remove runs as a background job) -->
+        <div id="bg-remove-progress" class="bg-tag-progress bg-scan-progress" style="display: none;" role="status" aria-live="polite">
+            <div class="bg-tag-progress-inner">
+                <div class="bg-tag-progress-fill bg-scan-progress-fill" id="bg-remove-progress-fill"></div>
+            </div>
+            <span class="bg-tag-progress-text" id="bg-remove-progress-text">Removing from gallery...</span>
+            <button class="bg-tag-progress-btn bg-tag-stop-btn bg-scan-stop-btn" id="bg-remove-cancel" title="Stop removing" data-i18n-title="remove.bgStopTitle">⏹</button>
+        </div>
+
         <!-- Main Content Area -->
         <main id="main-content" class="main-content" role="main" tabindex="-1">
             <!-- Gallery View -->

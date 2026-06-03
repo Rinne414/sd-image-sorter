@@ -1248,6 +1248,27 @@ const API = {
         return this.post('/api/images/delete-selected', payload);
     },
 
+    // v3.3.2 Phase-1: background delete-to-trash job (start + poll) so large
+    // selections stream progress instead of freezing the request. Mirrors the
+    // move job's startMoveJob/getMoveProgress/cancelMove client methods.
+    async startDeleteJob(imageIds, options = {}) {
+        const payload = { confirm_delete_files: true };
+        if (options.selectionToken) {
+            payload.selection_token = options.selectionToken;
+        } else {
+            payload.image_ids = imageIds;
+        }
+        return this.post('/api/images/delete-selected/start', payload);
+    },
+
+    async getDeleteProgress() {
+        return this.get('/api/images/delete-selected/progress');
+    },
+
+    async cancelDelete() {
+        return this.post('/api/images/delete-selected/cancel', {});
+    },
+
     async removeSelectedImages(imageIds, options = {}) {
         const payload = {};
         if (options.selectionToken) {
@@ -1256,6 +1277,25 @@ const API = {
             payload.image_ids = imageIds;
         }
         return this.post('/api/images/remove-selected', payload);
+    },
+
+    // v3.3.2 Phase-1: background remove-from-gallery job (start + poll), DB-only.
+    async startRemoveJob(imageIds, options = {}) {
+        const payload = {};
+        if (options.selectionToken) {
+            payload.selection_token = options.selectionToken;
+        } else {
+            payload.image_ids = imageIds;
+        }
+        return this.post('/api/images/remove-selected/start', payload);
+    },
+
+    async getRemoveProgress() {
+        return this.get('/api/images/remove-selected/progress');
+    },
+
+    async cancelRemove() {
+        return this.post('/api/images/remove-selected/cancel', {});
     },
 
     getImageUrl(id) {
@@ -1655,7 +1695,9 @@ const API = {
     },
 
     // Batch Sidecar Export
-    async exportTagsBatch(imageIds, outputFolder, blacklist = [], prefix = '', contentMode = 'tags', overwritePolicy = 'unique', options = {}) {
+    // Shared payload builder so the synchronous export and the v3.3.2 background
+    // export job send byte-identical requests.
+    _buildExportBatchPayload(imageIds, outputFolder, blacklist = [], prefix = '', contentMode = 'tags', overwritePolicy = 'unique', options = {}) {
         const payload = {
             output_folder: outputFolder,
             output_mode: options.outputMode || 'folder',
@@ -1681,7 +1723,21 @@ const API = {
         } else {
             payload.image_ids = imageIds;
         }
-        return this.post('/api/tags/export-batch', payload);
+        return payload;
+    },
+
+    async exportTagsBatch(imageIds, outputFolder, blacklist = [], prefix = '', contentMode = 'tags', overwritePolicy = 'unique', options = {}) {
+        return this.post('/api/tags/export-batch', this._buildExportBatchPayload(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy, options));
+    },
+
+    // v3.3.2 Phase-1: background batch tag-export job (coarse progress, no
+    // mid-run cancel — the underlying export pipeline is monolithic).
+    async startExportJob(imageIds, outputFolder, blacklist = [], prefix = '', contentMode = 'tags', overwritePolicy = 'unique', options = {}) {
+        return this.post('/api/tags/export-batch/start', this._buildExportBatchPayload(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy, options));
+    },
+
+    async getExportProgress() {
+        return this.get('/api/tags/export-batch/progress');
     },
 
     // Prompts Library — removed duplicate, kept single definition above
@@ -3980,7 +4036,17 @@ async function deleteGalleryImagesByIds(imageIds) {
 
     showConfirm(title, message, async () => {
         try {
-            const result = await API.deleteSelectedImages(ids, { selectionToken });
+            await API.startDeleteJob(ids, { selectionToken });
+            const result = await pollDeleteProgressUntilDone();
+            if (result?.status === 'error') {
+                showToast(
+                    formatUserError(null, appT('selection.deleteFailed', 'Failed to move selected image files to Trash')),
+                    'error'
+                );
+                await loadImages();
+                loadStats();
+                return;
+            }
             const failed = Array.isArray(result.failed) ? result.failed : [];
             const failedIds = new Set(failed.map((item) => Number(item.image_id)));
 
@@ -4001,6 +4067,15 @@ async function deleteGalleryImagesByIds(imageIds) {
 
             await loadImages();
             loadStats();
+
+            if (result?.status === 'cancelled') {
+                showToast(
+                    appT('selection.deleteCancelled', 'Stopped. Moved {count} file(s) to Trash before cancelling.')
+                        .replace('{count}', result.deleted || 0),
+                    'info'
+                );
+                return;
+            }
 
             if (failed.length > 0) {
                 showToast(
@@ -4053,7 +4128,17 @@ async function removeGalleryImagesByIds(imageIds) {
 
     showConfirm(title, message, async () => {
         try {
-            const result = await API.removeSelectedImages(ids, { selectionToken });
+            await API.startRemoveJob(ids, { selectionToken });
+            const result = await pollRemoveProgressUntilDone();
+            if (result?.status === 'error') {
+                showToast(
+                    formatUserError(null, appT('selection.removeFailed', 'Failed to remove selected images from gallery')),
+                    'error'
+                );
+                await loadImages();
+                await loadStats();
+                return;
+            }
             if (selectionToken) {
                 clearGallerySelectionAfterBulkAction();
             } else {
@@ -4070,6 +4155,15 @@ async function removeGalleryImagesByIds(imageIds) {
 
             await loadImages();
             await loadStats();
+
+            if (result?.status === 'cancelled') {
+                showToast(
+                    appT('selection.removeCancelled', 'Stopped. Removed {count} image record(s) before cancelling.')
+                        .replace('{count}', result?.removed || 0),
+                    'info'
+                );
+                return;
+            }
 
             const missingCount = Array.isArray(result?.missing_ids) ? result.missing_ids.length : 0;
             if (missingCount > 0) {
@@ -4295,6 +4389,127 @@ async function pollMoveProgressUntilDone() {
         }
     } finally {
         _hideBgMoveProgress();
+    }
+}
+
+// v3.3.2 Phase-1: floating delete-to-trash progress bar + poller, mirrors the
+// move job's _showBgMoveProgress/_updateBgMoveProgress/pollMoveProgressUntilDone.
+function _showBgDeleteProgress() {
+    const bar = $('#bg-delete-progress');
+    if (bar) bar.style.display = 'flex';
+}
+
+function _hideBgDeleteProgress() {
+    const bar = $('#bg-delete-progress');
+    if (bar) bar.style.display = 'none';
+}
+
+function _updateBgDeleteProgress(progress) {
+    const fill = $('#bg-delete-progress-fill');
+    const textEl = $('#bg-delete-progress-text');
+    const total = Number(progress?.total || 0);
+    const current = Number(progress?.current || 0);
+    const indeterminate = total <= 0 || progress?.status === 'starting';
+    if (fill) {
+        const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+        fill.classList.toggle('is-indeterminate', indeterminate);
+        fill.style.width = indeterminate ? '' : (pct + '%');
+    }
+    if (textEl) {
+        if (progress?.status === 'cancelling') {
+            textEl.textContent = appT('delete.cancelling', 'Stopping...');
+            return;
+        }
+        textEl.textContent = `${appT('delete.trashingVerb', 'Moving to Trash')} ${current}/${total}`;
+    }
+}
+
+async function pollDeleteProgressUntilDone() {
+    _showBgDeleteProgress();
+    const TERMINAL = new Set(['done', 'cancelled', 'error', 'idle']);
+    try {
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+            const progress = await API.getDeleteProgress();
+            _updateBgDeleteProgress(progress);
+            if (TERMINAL.has(progress?.status)) {
+                return progress;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+    } finally {
+        _hideBgDeleteProgress();
+    }
+}
+
+// v3.3.2 Phase-1: floating remove-from-gallery progress bar + poller (mirrors delete).
+function _showBgRemoveProgress() {
+    const bar = $('#bg-remove-progress');
+    if (bar) bar.style.display = 'flex';
+}
+
+function _hideBgRemoveProgress() {
+    const bar = $('#bg-remove-progress');
+    if (bar) bar.style.display = 'none';
+}
+
+function _updateBgRemoveProgress(progress) {
+    const fill = $('#bg-remove-progress-fill');
+    const textEl = $('#bg-remove-progress-text');
+    const total = Number(progress?.total || 0);
+    const current = Number(progress?.current || 0);
+    const indeterminate = total <= 0 || progress?.status === 'starting';
+    if (fill) {
+        const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+        fill.classList.toggle('is-indeterminate', indeterminate);
+        fill.style.width = indeterminate ? '' : (pct + '%');
+    }
+    if (textEl) {
+        if (progress?.status === 'cancelling') {
+            textEl.textContent = appT('remove.cancelling', 'Stopping...');
+            return;
+        }
+        textEl.textContent = `${appT('remove.removingVerb', 'Removing from gallery')} ${current}/${total}`;
+    }
+}
+
+async function pollRemoveProgressUntilDone() {
+    _showBgRemoveProgress();
+    const TERMINAL = new Set(['done', 'cancelled', 'error', 'idle']);
+    try {
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+            const progress = await API.getRemoveProgress();
+            _updateBgRemoveProgress(progress);
+            if (TERMINAL.has(progress?.status)) {
+                return progress;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+    } finally {
+        _hideBgRemoveProgress();
+    }
+}
+
+// v3.3.2 Phase-1: poll the background batch tag-export job until terminal. The
+// batch-export modal owns its own progress UI, so this just returns the terminal
+// payload (which embeds the full export result under `result`). Coarse progress:
+// no per-chunk advance, no mid-run cancel.
+async function pollExportProgressUntilDone() {
+    const TERMINAL = new Set(['done', 'cancelled', 'error', 'idle']);
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+        let progress;
+        try {
+            progress = await API.getExportProgress();
+        } catch (e) {
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            continue;
+        }
+        if (TERMINAL.has(progress?.status)) {
+            return progress;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 300));
     }
 }
 
@@ -6435,6 +6650,30 @@ function _initBgScanProgressButtons() {
                 await API.cancelMove();
             } catch (error) {
                 Logger.warn('Failed to request move cancellation:', error);
+            }
+        });
+    }
+
+    // v3.3.2 Phase-1: cancel the background delete-to-trash job.
+    const deleteCancelBtn = $('#bg-delete-cancel');
+    if (deleteCancelBtn) {
+        deleteCancelBtn.addEventListener('click', async () => {
+            try {
+                await API.cancelDelete();
+            } catch (error) {
+                Logger.warn('Failed to request delete cancellation:', error);
+            }
+        });
+    }
+
+    // v3.3.2 Phase-1: cancel the background remove-from-gallery job.
+    const removeCancelBtn = $('#bg-remove-cancel');
+    if (removeCancelBtn) {
+        removeCancelBtn.addEventListener('click', async () => {
+            try {
+                await API.cancelRemove();
+            } catch (error) {
+                Logger.warn('Failed to request remove cancellation:', error);
             }
         });
     }
@@ -9020,7 +9259,7 @@ async function executeBatchExport() {
         const normalizeTagUnderscores = $('#batch-export-normalize-underscores')
             ? !!$('#batch-export-normalize-underscores').checked
             : undefined;
-        const result = await API.exportTagsBatch(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy, {
+        await API.startExportJob(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy, {
             selectionToken,
             outputMode,
             templateOptions,
@@ -9028,6 +9267,11 @@ async function executeBatchExport() {
             captionTransforms,
             normalizeTagUnderscores,
         });
+        // v3.3.2 Phase-1: poll the background job instead of blocking the request.
+        // The terminal payload embeds the export result under `result`, so the
+        // mapping below is unchanged.
+        const finalProgress = await pollExportProgressUntilDone();
+        const result = (finalProgress && finalProgress.result) ? finalProgress.result : (finalProgress || {});
 
         $('#batch-export-progress-fill').style.width = '100%';
 

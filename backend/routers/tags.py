@@ -293,6 +293,33 @@ async def export_tags_batch(
     return service.export_tags_batch(request)
 
 
+@router.post("/tags/export-batch/start")
+async def start_export_tags_batch_job(
+    request: BatchTagExportRequest,
+    background_tasks: BackgroundTasks,
+    service: TaggingService = Depends(get_tagging_service),
+):
+    """v3.3.2 Phase-1: start batch tag export as a background job (coarse progress,
+    no mid-run cancel) so large exports don't freeze the request."""
+    return service.start_export_tags_batch_job(request, background_tasks)
+
+
+@router.get("/tags/export-batch/progress")
+async def get_export_tags_batch_progress(
+    service: TaggingService = Depends(get_tagging_service),
+):
+    """Get current batch tag-export job progress (embeds the export result when done)."""
+    return service.get_export_progress()
+
+
+@router.post("/tags/export-batch/reset")
+async def reset_export_tags_batch_progress(
+    service: TaggingService = Depends(get_tagging_service),
+):
+    """Reset a stuck batch tag-export job."""
+    return service.reset_export_progress()
+
+
 @router.post("/tags/export-combined")
 async def export_tags_combined(
     request: CombinedTagExportRequest,

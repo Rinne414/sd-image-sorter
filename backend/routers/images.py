@@ -809,6 +809,68 @@ async def delete_selected_images(
 
 
 @router.post(
+    "/images/delete-selected/start",
+    summary="Start a background delete-to-trash job for selected images",
+    description="""
+Move the selected image files to the OS Trash / Recycle Bin and remove their
+database rows as a **background job** with progress polling. Cloned from the
+gallery move job (``/api/move/start``) so large selections stream progress
+instead of freezing the request.
+
+This is a destructive action and requires explicit confirmation from the client.
+The selected ids are snapshotted server-side before any deletion. The final
+progress payload reports ``deleted`` and per-image ``failed`` entries, matching
+the synchronous endpoint's shape.
+    """,
+)
+async def start_delete_selected_images_job(
+    request: DeleteSelectedImagesRequest,
+    background_tasks: BackgroundTasks,
+    service: ImageService = Depends(get_image_service),
+):
+    """Start the background delete-to-trash job with partial-failure reporting."""
+    if not request.confirm_delete_files:
+        raise HTTPException(
+            status_code=400,
+            detail="Deleting image files requires explicit confirmation",
+        )
+    return service.start_delete_selected_job(request, background_tasks)
+
+
+@router.get(
+    "/images/delete-selected/progress",
+    summary="Get delete-to-trash job progress",
+)
+async def get_delete_selected_images_progress(
+    service: ImageService = Depends(get_image_service),
+):
+    """Get current gallery delete-to-trash job progress."""
+    return service.get_delete_progress()
+
+
+@router.post(
+    "/images/delete-selected/cancel",
+    summary="Stop the delete-to-trash job",
+)
+async def cancel_delete_selected_images(
+    service: ImageService = Depends(get_image_service),
+):
+    """Request cooperative cancellation of the active delete-to-trash job."""
+    return service.cancel_delete()
+
+
+@router.post(
+    "/images/delete-selected/reset",
+    summary="Reset a stuck delete-to-trash job",
+)
+async def reset_delete_selected_images(
+    service: ImageService = Depends(get_image_service),
+):
+    """Reset a stuck delete-to-trash job."""
+    return service.reset_delete_progress()
+
+
+@router.post(
     "/images/remove-selected",
     response_model=RemoveSelectedImagesResponse,
     summary="Remove selected images from the gallery index",
@@ -825,6 +887,58 @@ async def remove_selected_images(
     if request.selection_token:
         return service.remove_selected_images_from_gallery_by_token(request.selection_token)
     return service.remove_selected_images_from_gallery(request.image_ids or [])
+
+
+@router.post(
+    "/images/remove-selected/start",
+    summary="Start a background remove-from-gallery job for selected images",
+    description="""
+Remove selected database rows from the local gallery (files stay on disk) as a
+**background job** with progress polling. Cloned from the move/delete jobs so
+large selections stream progress instead of freezing the request. The selected
+ids are snapshotted server-side before any removal.
+    """,
+)
+async def start_remove_selected_images_job(
+    request: RemoveSelectedImagesRequest,
+    background_tasks: BackgroundTasks,
+    service: ImageService = Depends(get_image_service),
+):
+    """Start the background remove-from-gallery job (DB rows only, files kept)."""
+    return service.start_remove_selected_job(request, background_tasks)
+
+
+@router.get(
+    "/images/remove-selected/progress",
+    summary="Get remove-from-gallery job progress",
+)
+async def get_remove_selected_images_progress(
+    service: ImageService = Depends(get_image_service),
+):
+    """Get current gallery remove-from-gallery job progress."""
+    return service.get_remove_progress()
+
+
+@router.post(
+    "/images/remove-selected/cancel",
+    summary="Stop the remove-from-gallery job",
+)
+async def cancel_remove_selected_images(
+    service: ImageService = Depends(get_image_service),
+):
+    """Request cooperative cancellation of the active remove-from-gallery job."""
+    return service.cancel_remove()
+
+
+@router.post(
+    "/images/remove-selected/reset",
+    summary="Reset a stuck remove-from-gallery job",
+)
+async def reset_remove_selected_images(
+    service: ImageService = Depends(get_image_service),
+):
+    """Reset a stuck remove-from-gallery job."""
+    return service.reset_remove_progress()
 
 
 @router.post(

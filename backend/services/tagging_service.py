@@ -1008,6 +1008,13 @@ class TaggingService:
         self._worker_process: Optional[Any] = None
         self._worker_cancel_event: Optional[Any] = None
         self._active_run_id = 0
+        # v3.3.2 Phase-1: background batch tag-export job. The underlying
+        # export_tags_batch is monolithic, so this runs it off the request thread
+        # to avoid freezing the browser; progress is coarse (running -> done),
+        # no mid-run cancel. The terminal payload embeds the full export result.
+        self._export_progress: Dict[str, Any] = self._build_default_export_progress_state()
+        self._export_lock = threading.Lock()
+        self._export_run_id = 0
 
     @staticmethod
     def _coerce_progress_state(state: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1905,6 +1912,122 @@ class TaggingService:
             "content_mode": result.get("content_mode", request.content_mode),
             "overwrite_policy": result.get("overwrite_policy", request.overwrite_policy),
             "output_mode": result.get("output_mode", getattr(request, "output_mode", "folder")),
+        }
+
+    @staticmethod
+    def _build_default_export_progress_state() -> Dict[str, Any]:
+        """Idle progress payload for the background batch tag-export job. The
+        terminal 'done' payload embeds the full ``export_tags_batch`` result under
+        ``result`` so the frontend's existing mapping works unchanged."""
+        return {
+            "status": "idle",
+            "step": "idle",
+            "current": 0,
+            "total": 0,
+            "message": "",
+            "operation": "export",
+            "result": None,
+            "started_at": None,
+            "updated_at": None,
+        }
+
+    def get_export_progress(self) -> Dict[str, Any]:
+        with self._export_lock:
+            return self._export_progress.copy()
+
+    def reset_export_progress(self) -> Dict[str, Any]:
+        with self._export_lock:
+            if self._export_progress["status"] == "running":
+                return {"status": "running", "message": "Cannot reset a running job"}
+            self._export_progress = self._build_default_export_progress_state()
+            return {"status": self._export_progress["status"], "message": "Nothing to reset"}
+
+    def _set_export_progress_if_current(self, run_id: int, state: Dict[str, Any]) -> bool:
+        with self._export_lock:
+            if run_id != self._export_run_id:
+                return False
+            self._export_progress = state
+            return True
+
+    def start_export_tags_batch_job(self, request: BatchTagExportRequest, background_tasks: Any) -> Dict[str, Any]:
+        """v3.3.2 Phase-1: run ``export_tags_batch`` as a background job so large
+        exports don't freeze the request. The export pipeline is monolithic, so
+        progress is coarse (running -> done) with no mid-run cancel; the terminal
+        payload embeds the full export result under ``result`` for the frontend.
+        """
+        with self._export_lock:
+            if self._export_progress["status"] == "running":
+                raise HTTPException(status_code=409, detail="An export is already in progress")
+
+        if request.selection_token:
+            total = count_selection_token_ids(request.selection_token)
+        else:
+            total = len(request.image_ids or [])
+
+        with self._export_lock:
+            self._export_run_id += 1
+            run_id = self._export_run_id
+            self._export_progress = {
+                **self._build_default_export_progress_state(),
+                "status": "running",
+                "step": "exporting",
+                "current": 0,
+                "total": total,
+                "message": f"Exporting tags for {total} images...",
+                "started_at": time.time(),
+                "updated_at": time.time(),
+            }
+
+        def run_export():
+            try:
+                result = self.export_tags_batch(request)
+                self._set_export_progress_if_current(
+                    run_id,
+                    {
+                        **self._build_default_export_progress_state(),
+                        "status": "done",
+                        "step": "done",
+                        "current": total,
+                        "total": total,
+                        "message": f"Export complete: {int(result.get('exported', 0) or 0)} files.",
+                        "operation": "export",
+                        "result": result,
+                        "started_at": self._export_progress.get("started_at"),
+                        "updated_at": time.time(),
+                    },
+                )
+            except Exception as e:
+                logger.error("Export job failed: %s", e)
+                self._set_export_progress_if_current(
+                    run_id,
+                    {
+                        **self._build_default_export_progress_state(),
+                        "status": "error",
+                        "step": "error",
+                        "current": 0,
+                        "total": total,
+                        "message": "Export failed due to an internal error",
+                        "operation": "export",
+                        "result": {
+                            "status": "error",
+                            "exported": 0,
+                            "errors": 1,
+                            "error_count": 1,
+                            "error_messages": [str(e)],
+                            "skipped": 0,
+                            "total": total,
+                        },
+                        "started_at": self._export_progress.get("started_at"),
+                        "updated_at": time.time(),
+                    },
+                )
+
+        background_tasks.add_task(run_export)
+        return {
+            "status": "started",
+            "message": f"Exporting {total} images in background",
+            "total": total,
+            "operation": "export",
         }
 
     def export_tags_combined(self, request: CombinedTagExportRequest) -> Dict[str, Any]:

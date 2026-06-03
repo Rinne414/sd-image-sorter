@@ -1563,6 +1563,14 @@ window.I18nLang_zhCN = {
     'move.sourceNote': ' · 每移动一张就会删除一张原文件',
     'move.cancelling': '正在停止...',
     'move.bgStopTitle': '停止移动',
+    'delete.trashingVerb': '移至回收站',
+    'delete.cancelling': '正在停止...',
+    'delete.bgStopTitle': '停止删除',
+    'selection.deleteCancelled': '已停止。取消前已将 {count} 个文件移至回收站。',
+    'remove.removingVerb': '正在移出图库',
+    'remove.cancelling': '正在停止...',
+    'remove.bgStopTitle': '停止移除',
+    'selection.removeCancelled': '已停止。取消前已移除 {count} 条图片记录。',
     'selection.largeFilteredConfirm': '这将一次性选择当前筛选命中的 {count} 张图片，可能占用较多内存。要继续吗？',
 
     // ========================

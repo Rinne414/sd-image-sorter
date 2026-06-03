@@ -928,6 +928,42 @@ class TestExportTagsBatch:
         # prefix is unchanged.
         assert content == "sks person, test tag, second tag"
 
+    def test_export_batch_start_job_writes_files_and_completes(self, test_client, test_db, tmp_path: Path):
+        """v3.3.2 Phase-1: the background export job writes tag files off the
+        request thread and reports a terminal 'done' progress payload that embeds
+        the full export result under ``result``. TestClient runs the
+        BackgroundTask synchronously after the response."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "export_job.png"
+        Image.new("RGB", (100, 100), color="white").save(img_path)
+        image_id = db.add_image(path=str(img_path), filename="export_job.png")
+        db.add_tags(image_id, [
+            {"tag": "alpha", "confidence": 0.9},
+            {"tag": "beta", "confidence": 0.7},
+        ])
+
+        output_dir = tmp_path / "export_job_out"
+        output_dir.mkdir()
+
+        start = test_client.post(
+            "/api/tags/export-batch/start",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "content_mode": "caption_merged",
+            },
+        )
+        assert start.status_code == 200
+        assert start.json().get("status") == "started"
+
+        progress = test_client.get("/api/tags/export-batch/progress").json()
+        assert progress["status"] == "done"
+        result = progress["result"]
+        assert result["exported"] == 1
+        assert (output_dir / "export_job.txt").exists()
+
     def test_export_batch_prompt_mode_ignores_training_prefix(self, test_client, test_db, tmp_path: Path):
         """Prompt sidecars should contain exact Prompt text even if the LoRA prefix field has stale text."""
         import database as db
