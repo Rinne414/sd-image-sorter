@@ -33,6 +33,7 @@ from metadata_parser import PARSED_METADATA_VERSION, parse_image
 from exceptions import ScanError, ScanCancelledError, FileOperationError
 from utils.path_validation import validate_folder_path
 from utils.source_paths import normalize_indexed_image_path, resolve_existing_indexed_image_path
+import scan_state
 
 logger = logging.getLogger(__name__)
 
@@ -1049,6 +1050,7 @@ def scan_folder(
 
     executor: Optional[Any] = None
     try:
+        scan_state.scan_started()
         if precise_total:
             result["counted"] = _count_images_for_total()
             result["total"] = result["counted"]
@@ -1178,6 +1180,8 @@ def scan_folder(
     except Exception:
         _reconcile_interrupted_scan_placeholders()
         raise
+    finally:
+        scan_state.scan_finished()
 
     _flush_metadata_records(pending_metadata_records)
     _flush_deleted_new_paths(pending_deleted_new_paths)

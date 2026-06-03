@@ -1,5 +1,7 @@
+import asyncio
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -7,6 +9,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import scan_state  # noqa: E402
 import thumbnail_cache  # noqa: E402
 
 
@@ -131,3 +134,87 @@ def test_force_cache_cleanup_uses_limited_scan(monkeypatch, tmp_path):
 
     assert calls == [thumbnail_cache.FORCE_CLEANUP_SCAN_LIMIT]
     assert result["partial"] is True
+
+
+def _drain_scan_state() -> None:
+    """Reset the process-wide scan counter to a clean baseline for a test."""
+    while scan_state.is_scan_running():
+        scan_state.scan_finished()
+
+
+def test_scan_state_counter_tracks_overlapping_scans():
+    _drain_scan_state()
+    assert scan_state.is_scan_running() is False
+
+    scan_state.scan_started()
+    scan_state.scan_started()
+    assert scan_state.is_scan_running() is True
+    assert scan_state.active_scan_count() == 2
+
+    scan_state.scan_finished()
+    assert scan_state.is_scan_running() is True  # one scan still in flight
+
+    scan_state.scan_finished()
+    assert scan_state.is_scan_running() is False
+
+    # Over-finishing never drives the counter negative.
+    scan_state.scan_finished()
+    assert scan_state.active_scan_count() == 0
+
+
+def test_thumbnail_generation_throttles_during_scan(monkeypatch):
+    _drain_scan_state()
+
+    # Force the cache-miss branch so generation runs through the executor.
+    monkeypatch.setattr(thumbnail_cache, "get_cached_thumbnail", lambda *a, **k: None)
+    # Rebind the throttle semaphore to this test's fresh event loop.
+    monkeypatch.setattr(thumbnail_cache, "_THUMB_CONCURRENCY_DURING_SCAN", 2)
+    monkeypatch.setattr(thumbnail_cache, "_thumb_scan_semaphore", None)
+
+    observed = {"current": 0, "max": 0}
+    guard = threading.Lock()
+
+    def fake_generate(source_path, size):
+        with guard:
+            observed["current"] += 1
+            observed["max"] = max(observed["max"], observed["current"])
+        time.sleep(0.05)
+        with guard:
+            observed["current"] -= 1
+        return (b"thumb-bytes", 1234.5)
+
+    monkeypatch.setattr(thumbnail_cache, "generate_and_cache_thumbnail", fake_generate)
+
+    async def run_many():
+        scan_state.scan_started()
+        try:
+            return await asyncio.gather(
+                *(thumbnail_cache.get_thumbnail_async(f"img-{i}.png", 256) for i in range(8))
+            )
+        finally:
+            scan_state.scan_finished()
+
+    results = asyncio.run(run_many())
+
+    assert len(results) == 8
+    assert all(cache_hit is False for *_payload, cache_hit in results)
+    assert observed["max"] <= 2  # scan-time throttle held the line
+
+
+def test_thumbnail_generation_runs_unthrottled_without_scan(monkeypatch):
+    _drain_scan_state()
+    monkeypatch.setattr(thumbnail_cache, "get_cached_thumbnail", lambda *a, **k: None)
+
+    def fake_generate(source_path, size):
+        return (b"thumb-bytes", 9.0)
+
+    monkeypatch.setattr(thumbnail_cache, "generate_and_cache_thumbnail", fake_generate)
+
+    async def run_one():
+        return await thumbnail_cache.get_thumbnail_async("solo.png", 256)
+
+    thumbnail_bytes, last_modified, cache_hit = asyncio.run(run_one())
+
+    assert thumbnail_bytes == b"thumb-bytes"
+    assert last_modified == 9.0
+    assert cache_hit is False

@@ -13,10 +13,12 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Tuple
 
 from PIL import Image, ImageDraw
 from config import get_thumbnail_cache_dir, get_thumbnail_cache_max_mb
+import scan_state
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +39,48 @@ _approx_cache_size_bytes: Optional[int] = None
 SIZE_CLEANUP_INTERVAL_SECONDS = 60
 FORCE_CLEANUP_SCAN_LIMIT = 20000
 FORCE_CLEANUP_DELETE_LIMIT = 2000
+
+# --- Thumbnail generation concurrency (scan-aware backpressure) ---
+# Thumbnails own a dedicated thread pool instead of sharing the asyncio default
+# executor with every other run_in_executor caller (metadata, file ops). The
+# steady-state size matches CPython's default executor, so isolating the pool
+# does not reduce throughput — it only lets us throttle thumbnails while a scan
+# is hot, and keeps a viewport burst from contending with unrelated work.
+_THUMB_WORKERS = max(4, min(32, (os.cpu_count() or 4) + 4))
+# While a folder scan is actively parsing metadata, hard-cap concurrent
+# thumbnail generation so it stops competing with the scan for CPU. The scan is
+# the user's foreground intent; thumbnails may lag a beat and catch up after.
+_THUMB_CONCURRENCY_DURING_SCAN = 2
+
+_thumb_executor: Optional[ThreadPoolExecutor] = None
+_thumb_executor_lock = threading.Lock()
+_thumb_scan_semaphore: Optional["asyncio.Semaphore"] = None
+
+
+def _get_thumb_executor() -> ThreadPoolExecutor:
+    """Lazily build the bounded thumbnail-generation thread pool."""
+    global _thumb_executor
+    if _thumb_executor is None:
+        with _thumb_executor_lock:
+            if _thumb_executor is None:
+                _thumb_executor = ThreadPoolExecutor(
+                    max_workers=_THUMB_WORKERS,
+                    thread_name_prefix="thumb-gen",
+                )
+    return _thumb_executor
+
+
+def _get_thumb_scan_semaphore() -> "asyncio.Semaphore":
+    """Lazily build the scan-time throttle semaphore.
+
+    Created on first use so it binds to the running event loop. No lock needed:
+    every caller runs on the single asyncio event-loop thread, so the
+    check-then-create has no interleaving ``await`` between test and assignment.
+    """
+    global _thumb_scan_semaphore
+    if _thumb_scan_semaphore is None:
+        _thumb_scan_semaphore = asyncio.Semaphore(_THUMB_CONCURRENCY_DURING_SCAN)
+    return _thumb_scan_semaphore
 
 
 def _ensure_cache_dir() -> Path:
@@ -428,9 +472,19 @@ async def get_thumbnail_async(source_path, size=256):
         return (*cached, True)
 
     loop = asyncio.get_running_loop()
-    thumbnail_bytes, last_modified = await loop.run_in_executor(
-        None, generate_and_cache_thumbnail, source_path, size
-    )
+    executor = _get_thumb_executor()
+
+    if scan_state.is_scan_running():
+        # Back off during scans: cap in-flight generation so metadata parsing
+        # keeps the CPU it needs. Thumbnails catch up once the scan settles.
+        async with _get_thumb_scan_semaphore():
+            thumbnail_bytes, last_modified = await loop.run_in_executor(
+                executor, generate_and_cache_thumbnail, source_path, size
+            )
+    else:
+        thumbnail_bytes, last_modified = await loop.run_in_executor(
+            executor, generate_and_cache_thumbnail, source_path, size
+        )
     return (thumbnail_bytes, last_modified, False)
 
 
