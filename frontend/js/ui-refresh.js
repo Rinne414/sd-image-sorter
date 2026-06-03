@@ -236,7 +236,16 @@
             this._setText('#view-manual .space-indicator span', 'manual.skip');
             this._setText('#view-manual .filter-header-compact h4', 'filter.imagesToSort');
             this._setButton('#btn-manual-sort-filters', 'gallery.editFilters', '🔍', 'gallery.editFilters');
-            this._setButton('#btn-start-sorting', 'manual.startSorting', '🎮', 'manual.startSorting');
+            // v3.3.2 WB-S3: the start button reflects the selected Workbench mode
+            // (A/B Showdown vs slot sort). Read the persisted mode so the
+            // MutationObserver-driven re-apply keeps the right label.
+            var startSortKey = 'manual.startSorting';
+            try {
+                if (localStorage.getItem('manual_sort_mode_v1') === 'bracket') {
+                    startSortKey = 'manual.startShowdown';
+                }
+            } catch (e) { /* localStorage may be unavailable */ }
+            this._setButton('#btn-start-sorting', startSortKey, '🎮', startSortKey);
             this._setText('#gallery-preview-bar .minimap-label', 'manual.minimap');
             this._setTextAll('.minimap-legend .legend-item', ['manual.current', 'manual.sorted', 'manual.pending']);
             this._setTextAll('.progress-stat-label', ['manual.sorted', 'manual.skipped', 'manual.progress', 'manual.remaining', 'manual.speed']);

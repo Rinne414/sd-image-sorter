@@ -1639,7 +1639,7 @@ const API = {
     },
 
     // Manual Sort
-    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'copy', artist = null, replaceExisting = false, promptMatchMode = 'exact', tagMode = 'and', excludeFilters = null, collectionSlots = null) {
+    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'copy', artist = null, replaceExisting = false, promptMatchMode = 'exact', tagMode = 'and', excludeFilters = null, collectionSlots = null, mode = 'slot') {
         return this.post('/api/sort/start', {
             generators,
             tags,
@@ -1670,6 +1670,9 @@ const API = {
             exclude_loras: excludeFilters?.loras || null,
             // v3.3.1: per-slot collection ids ({ key: collectionId|null }).
             collection_slots: (collectionSlots && typeof collectionSlots === 'object') ? collectionSlots : null,
+            // v3.3.2 WB-S3: session mode. "slot" = WASD folder sort (default);
+            // "bracket" = A/B king-of-the-hill culling.
+            mode: mode === 'bracket' ? 'bracket' : 'slot',
         });
     },
 

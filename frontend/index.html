@@ -1260,7 +1260,24 @@
                         <h2 class="setup-title" data-i18n="manual.title">Manual Sort Mode</h2>
                         <p class="setup-description" data-i18n="manual.description">Configure your folder destinations and start sorting!</p>
 
-                        <div class="folder-config">
+                        <!-- v3.3.2 WB-S3: Sort & Cull Workbench mode switcher -->
+                        <div class="sort-mode-switch" id="sort-mode-switch" role="tablist" aria-label="Sort mode">
+                            <span class="sort-mode-label" data-i18n="manual.modeLabel">Mode</span>
+                            <button type="button" class="sort-mode-btn is-active" data-sort-mode="slot" role="tab" aria-selected="true">
+                                <span aria-hidden="true">⌨</span> <span data-i18n="manual.modeSlot">Slot sort (WASD)</span>
+                            </button>
+                            <button type="button" class="sort-mode-btn" data-sort-mode="bracket" role="tab" aria-selected="false">
+                                <span aria-hidden="true">🥊</span> <span data-i18n="manual.modeBracket">A/B Showdown</span>
+                            </button>
+                            <span class="sort-mode-soon" title="Coming soon"><span aria-hidden="true">▦</span> <span data-i18n="manual.modeMoreSoon">More modes soon</span></span>
+                        </div>
+
+                        <!-- Shown only in A/B Showdown (bracket) mode -->
+                        <div class="sort-bracket-intro sort-bracket-only" id="sort-bracket-intro" style="display:none;">
+                            <p data-i18n="manual.bracketIntro">Compare two images at a time and keep picking the winner to find the single best of a batch. Non-destructive: winners are not moved.</p>
+                        </div>
+
+                        <div class="folder-config sort-slot-only">
                             <div class="folder-slot" data-key="w">
                                 <div class="folder-key">W</div>
                                 <div class="folder-arrow">↑</div>
@@ -1373,7 +1390,7 @@
                         </div>
 
                         <div class="helper-text" id="manual-sort-execution-scope" data-i18n="manual.executionScope">This session uses the Manual Sort filters shown here, not the live Gallery filters.</div>
-                        <div class="filter-section">
+                        <div class="filter-section sort-slot-only">
                             <div class="filter-header-compact">
                                 <h4 data-i18n="manual.actionModeTitle">File Action Mode</h4>
                             </div>
@@ -1406,7 +1423,7 @@
                             <div class="helper-text" data-i18n="manual.cooldownHelp">Off by default. When on, presses fired during the delay are ignored, so an autoclicker can't fire a chaotic burst.</div>
                         </div>
                         <button class="btn btn-primary btn-large btn-glow" id="btn-start-sorting">
-                            🎮 <span data-i18n="manual.startSorting">Start Sorting</span>
+                            🎮 <span id="sort-start-label" data-i18n="manual.startSorting">Start Sorting</span>
                         </button>
 
                         <!-- Resume banner shown when a saved session is detected -->
@@ -1514,6 +1531,46 @@
                         <button class="btn btn-ghost sort-exit" id="btn-exit-sorting">
                             ✕ <span data-i18n="manual.exit">Exit</span>
                         </button>
+                    </div>
+
+                    <!-- v3.3.2 WB-S3: A/B Showdown (bracket) interface -->
+                    <div class="sort-bracket-interface" id="sort-bracket-interface" style="display: none;">
+                        <div class="bracket-hint" data-i18n="manual.bracketHint">Pick the better image. The winner stays champion and faces the next challenger.</div>
+
+                        <div class="bracket-duel">
+                            <button type="button" class="bracket-fighter is-champion" id="bracket-champion" data-bracket-pick="champion" aria-label="Keep A (champion)">
+                                <span class="bracket-tag">A</span>
+                                <span class="bracket-crown" aria-hidden="true">👑</span>
+                                <img id="bracket-champion-image" src="" alt="Champion image">
+                                <span class="bracket-name" id="bracket-champion-name"></span>
+                            </button>
+                            <div class="bracket-vs" aria-hidden="true"><span>VS</span></div>
+                            <button type="button" class="bracket-fighter" id="bracket-challenger" data-bracket-pick="challenger" aria-label="Keep B (challenger)">
+                                <span class="bracket-tag">B</span>
+                                <img id="bracket-challenger-image" src="" alt="Challenger image">
+                                <span class="bracket-name" id="bracket-challenger-name"></span>
+                            </button>
+                        </div>
+
+                        <div class="bracket-actions">
+                            <button type="button" class="btn btn-secondary" id="bracket-btn-champion"><span class="bracket-key" aria-hidden="true">←</span> <span data-i18n="manual.bracketKeepA">Keep A</span></button>
+                            <button type="button" class="btn btn-ghost" id="bracket-btn-skip"><span class="bracket-key" aria-hidden="true">↑</span> <span data-i18n="manual.bracketTie">Tie / skip</span></button>
+                            <button type="button" class="btn btn-secondary" id="bracket-btn-challenger"><span class="bracket-key" aria-hidden="true">→</span> <span data-i18n="manual.bracketKeepB">Keep B</span></button>
+                        </div>
+
+                        <div class="bracket-progress">
+                            <div class="progress-bar"><div class="progress-fill" id="bracket-progress-fill"></div></div>
+                            <div class="bracket-progress-info">
+                                <span id="bracket-progress-text">0 / 0</span>
+                                <span class="bracket-progress-hint" data-i18n="manual.bracketProgressHint">← keep A • → keep B • ↑ skip • Z undo • ESC exit</span>
+                            </div>
+                        </div>
+
+                        <div class="bracket-footer">
+                            <button type="button" class="btn btn-ghost btn-small" id="bracket-btn-undo" disabled>↶ <span data-i18n="manual.undoLabel">Undo</span></button>
+                            <button type="button" class="btn btn-ghost btn-small" id="bracket-btn-redo" disabled>↷ <span data-i18n="manual.redoLabel">Redo</span></button>
+                            <button type="button" class="btn btn-ghost btn-small" id="bracket-btn-exit">✕ <span data-i18n="manual.exit">Exit</span></button>
+                        </div>
                     </div>
                 </div>
             </div>

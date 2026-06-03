@@ -39,9 +39,16 @@ const ManualSortState = {
     // is set in the finally block of performMove/performSkip.
     actionCooldownMs: 0,
     lastActionCompletedAt: 0,
+    // v3.3.2 WB-S3: active session mode. "slot" = WASD folder sort (default);
+    // "bracket" = A/B king-of-the-hill culling. Set from the server's
+    // result.mode so a resumed session renders the right interface.
+    mode: 'slot',
 };
 
 const MANUAL_SORT_COOLDOWN_KEY = 'manual_sort_cooldown_ms_v1';
+// v3.3.2 WB-S3: remembers the mode chosen in the setup screen across reloads.
+const MANUAL_SORT_MODE_KEY = 'manual_sort_mode_v1';
+const MANUAL_SORT_MODES = new Set(['slot', 'bracket']);
 
 const MANUAL_SORT_FILTER_STATE_KEY = 'manual_sort_filter_state_v1';
 const MANUAL_SORT_SCOPE_META_KEY = 'manual_sort_scope_meta_v1';
@@ -70,6 +77,65 @@ const DIRECTION_MAP = {
     's': 'down',
     'd': 'right'
 };
+
+// ============== Workbench Mode (v3.3.2 WB-S3) ==============
+
+// The mode selected on the setup screen for the NEXT session. Persisted so the
+// choice survives reloads. ManualSortState.mode tracks the ACTIVE session's mode.
+function getManualSortSelectedMode() {
+    try {
+        const stored = localStorage.getItem(MANUAL_SORT_MODE_KEY);
+        if (stored && MANUAL_SORT_MODES.has(stored)) return stored;
+    } catch (_) { /* ignore storage errors */ }
+    return 'slot';
+}
+
+// Reflect the chosen mode in the setup UI: highlight the button, toggle the
+// slot-only vs bracket-only blocks, and relabel the start button. Never touches
+// an active session (mode is locked once sorting starts).
+function setManualSortSelectedMode(mode, { persist = true } = {}) {
+    const normalized = MANUAL_SORT_MODES.has(mode) ? mode : 'slot';
+    if (persist) {
+        try { localStorage.setItem(MANUAL_SORT_MODE_KEY, normalized); } catch (_) { /* ignore */ }
+    }
+
+    document.querySelectorAll('.sort-mode-btn[data-sort-mode]').forEach((btn) => {
+        const isActive = btn.dataset.sortMode === normalized;
+        btn.classList.toggle('is-active', isActive);
+        btn.setAttribute('aria-selected', String(isActive));
+    });
+
+    document.querySelectorAll('.sort-slot-only').forEach((el) => {
+        el.style.display = normalized === 'slot' ? '' : 'none';
+    });
+    document.querySelectorAll('.sort-bracket-only').forEach((el) => {
+        el.style.display = normalized === 'bracket' ? '' : 'none';
+    });
+
+    // ui-refresh.js may rebuild the start button into
+    // <span>🎮</span><span class="ui-label">…</span>, stripping the original
+    // id/data-i18n — so fall back to the normalized label span.
+    const startBtn = document.getElementById('btn-start-sorting');
+    const startLabel = document.getElementById('sort-start-label')
+        || (startBtn && (startBtn.querySelector('.ui-label') || startBtn.querySelector('[data-i18n]')));
+    if (startLabel) {
+        startLabel.textContent = normalized === 'bracket'
+            ? manualSortText('manual.startShowdown', 'Start Showdown', '开始擂台')
+            : manualSortText('manual.startSorting', 'Start Sorting', '开始排序');
+    }
+}
+
+function bindManualSortModeSwitch() {
+    document.querySelectorAll('.sort-mode-btn[data-sort-mode]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            // Locking the mode mid-session would desync the UI from the server.
+            if (ManualSortState.active) return;
+            setManualSortSelectedMode(btn.dataset.sortMode);
+        });
+    });
+    // Restore the persisted choice on load.
+    setManualSortSelectedMode(getManualSortSelectedMode(), { persist: false });
+}
 
 function normalizeManualSortPromptMatchMode(value) {
     const appNormalize = window.App?.normalizePromptMatchMode;
@@ -798,6 +864,17 @@ async function initManualSort() {
         startBtn.addEventListener('click', startSorting);
     }
 
+    // v3.3.2 WB-S3: Workbench mode switch + A/B Showdown (bracket) controls.
+    bindManualSortModeSwitch();
+    $('#bracket-champion')?.addEventListener('click', () => performBracketAction('champion'));
+    $('#bracket-challenger')?.addEventListener('click', () => performBracketAction('challenger'));
+    $('#bracket-btn-champion')?.addEventListener('click', () => performBracketAction('champion'));
+    $('#bracket-btn-challenger')?.addEventListener('click', () => performBracketAction('challenger'));
+    $('#bracket-btn-skip')?.addEventListener('click', () => performBracketAction('skip'));
+    $('#bracket-btn-undo')?.addEventListener('click', () => performBracketAction('undo'));
+    $('#bracket-btn-redo')?.addEventListener('click', () => performBracketAction('redo'));
+    $('#bracket-btn-exit')?.addEventListener('click', exitSorting);
+
     // Exit sorting button
     const exitBtn = $('#btn-exit-sorting');
     if (exitBtn) {
@@ -909,6 +986,12 @@ async function confirmResumeSavedSessionFromStart(savedSession) {
 }
 
 async function startSorting() {
+    // v3.3.2 WB-S3: A/B Showdown uses a separate, folder-free start path so the
+    // slot (WASD) flow below stays exactly as it was.
+    if (getManualSortSelectedMode() === 'bracket') {
+        return startBracketSorting();
+    }
+
     const { $, $$, API, showToast } = window.App;
     const operationMode = getManualSortOperationMode();
     const operationLabel = getManualSortOperationLabel(operationMode);
@@ -1211,13 +1294,30 @@ function updateHistoryControlState(state = {}) {
     });
 }
 
-function activateSortingUi() {
+// v3.3.2 WB-S3: hide both the slot and bracket interfaces (used by
+// finish/exit/rollback so neither lingers when returning to setup).
+function hideSortInterfaces() {
+    const { $ } = window.App;
+    const slot = $('#sort-interface');
+    if (slot) slot.style.display = 'none';
+    const bracket = $('#sort-bracket-interface');
+    if (bracket) bracket.style.display = 'none';
+}
+
+function activateSortingUi(mode = 'slot') {
     const { $ } = window.App;
     ManualSortState.active = true;
+    ManualSortState.mode = MANUAL_SORT_MODES.has(mode) ? mode : 'slot';
     document.removeEventListener('keydown', handleSortKeypress);
     document.addEventListener('keydown', handleSortKeypress);
     $('#sort-setup').style.display = 'none';
-    $('#sort-interface').style.display = 'flex';
+    if (ManualSortState.mode === 'bracket') {
+        $('#sort-interface').style.display = 'none';
+        $('#sort-bracket-interface').style.display = 'flex';
+    } else {
+        $('#sort-bracket-interface').style.display = 'none';
+        $('#sort-interface').style.display = 'flex';
+    }
     updateHistoryControlState();
 }
 
@@ -1225,12 +1325,18 @@ function rollbackSortingUi() {
     const { $ } = window.App;
     ManualSortState.active = false;
     document.removeEventListener('keydown', handleSortKeypress);
-    $('#sort-interface').style.display = 'none';
+    hideSortInterfaces();
     $('#sort-setup').style.display = 'block';
     updateHistoryControlState({ undo_available: false, redo_available: false });
 }
 
 function applyCurrentSortPayload(result, options = {}) {
+    // v3.3.2 WB-S3: bracket sessions render the A/B interface instead of the
+    // single-image slot view. Keeps the slot path below byte-identical.
+    if (result?.mode === 'bracket') {
+        return applyBracketPayload(result, options);
+    }
+
     const { $, API } = window.App;
     const { cacheBust = false } = options;
 
@@ -1306,6 +1412,263 @@ function applyCurrentSortPayload(result, options = {}) {
     return true;
 }
 
+// ============== A/B Showdown (bracket) — v3.3.2 WB-S3 ==============
+
+// Folder-free start path for A/B Showdown. Mirrors startSorting's filter
+// building but skips destination folders (bracket is non-destructive culling)
+// and the move/copy confirmation.
+async function startBracketSorting() {
+    const { $, API, showToast } = window.App;
+
+    // Resume any unfinished session in its own mode rather than clobbering it.
+    try {
+        const existing = await API.getCurrentSortImage();
+        const hasActive = existing && !existing.done && (existing.image || existing.champion);
+        if (hasActive) {
+            if (existing.mode === 'bracket') {
+                ManualSortState.startTime = Date.now();
+                ManualSortState.history = [];
+                ManualSortState.actionTimestamps = [];
+                activateSortingUi('bracket');
+                applyCurrentSortPayload(existing);
+                showToast(manualSortText('manual.bracketResumed', 'Resumed your A/B Showdown.', '已恢复 A/B 擂台。'), 'info');
+            } else {
+                await resumeSavedSession(existing);
+            }
+            return;
+        }
+    } catch (error) {
+        if (window.Logger) Logger.warn('Failed to check existing session before bracket start:', error);
+    }
+
+    const f = buildManualSortFilterContract(getManualSortFilters());
+    const generators = f.generators?.length > 0 ? f.generators : null;
+    const ratings = f.ratings?.length > 0 ? f.ratings : null;
+    const tags = f.tags?.length > 0 ? f.tags : null;
+    const checkpoints = f.checkpoints?.length > 0 ? f.checkpoints : null;
+    const loras = f.loras?.length > 0 ? f.loras : null;
+    const prompts = f.prompts?.length > 0 ? f.prompts : null;
+    const search = f.search?.trim() || null;
+    const dimensions = {
+        minWidth: f.minWidth,
+        maxWidth: f.maxWidth,
+        minHeight: f.minHeight,
+        maxHeight: f.maxHeight,
+        aspectRatio: f.aspectRatio,
+    };
+
+    try {
+        const result = await API.startSortSession(
+            generators,
+            tags,
+            ratings,
+            {}, // no destination folders for bracket
+            checkpoints,
+            loras,
+            prompts,
+            dimensions,
+            search,
+            { min: f.minAesthetic, max: f.maxAesthetic },
+            'copy', // operation mode is irrelevant; bracket does not move files
+            f.artist,
+            false,
+            f.promptMatchMode,
+            f.tagMode,
+            {
+                tags: f.excludeTags?.length > 0 ? f.excludeTags : null,
+                generators: f.excludeGenerators?.length > 0 ? f.excludeGenerators : null,
+                ratings: f.excludeRatings?.length > 0 ? f.excludeRatings : null,
+                checkpoints: f.excludeCheckpoints?.length > 0 ? f.excludeCheckpoints : null,
+                loras: f.excludeLoras?.length > 0 ? f.excludeLoras : null,
+            },
+            null, // collection slots
+            'bracket',
+        );
+
+        const totalImages = Number(result?.total_images ?? 0);
+        if (totalImages === 0) {
+            showToast(manualSortText('manual.noImages', 'No images match Manual Sort filters', '没有图片匹配手动分类筛选'), 'error');
+            return;
+        }
+        if (totalImages < 2) {
+            showToast(manualSortText('manual.bracketNeedTwo', 'A/B Showdown needs at least 2 images to compare.', 'A/B 擂台至少需要 2 张图片才能比较。'), 'error');
+            return;
+        }
+
+        // Fresh session bookkeeping.
+        ManualSortState.startTime = Date.now();
+        ManualSortState.history = [];
+        ManualSortState.images = [];
+        ManualSortState.currentImage = null;
+        ManualSortState.currentTags = [];
+        ManualSortState.actionTimestamps = [];
+        ManualSortState.sortedCount = 0;
+        ManualSortState.skippedCount = 0;
+        ManualSortState.combo = 0;
+
+        activateSortingUi('bracket');
+        await loadCurrentImage();
+    } catch (error) {
+        rollbackSortingUi();
+        Logger.error('Failed to start A/B Showdown:', error);
+        showToast(formatUserError(error, manualSortText('manual.bracketStartFailed', 'Failed to start A/B Showdown', '开始 A/B 擂台失败')), 'error');
+    }
+}
+
+function bracketImageName(image) {
+    if (!image) return '';
+    if (image.filename) return image.filename;
+    if (image.path) return String(image.path).split(/[\\/]/).pop();
+    return image.id ? `#${image.id}` : '';
+}
+
+function renderBracketFighterName(selector, image) {
+    const { $ } = window.App;
+    const el = $(selector);
+    if (!el) return;
+    el.textContent = bracketImageName(image);
+}
+
+function updateBracketProgress(result) {
+    const { $ } = window.App;
+    const total = Number(result?.total ?? ManualSortState.total ?? 0);
+    const comparisonsTotal = Number(result?.comparisons_total ?? Math.max(0, total - 1));
+    const challengerIndex = Number(result?.challenger_index ?? result?.index ?? 0);
+    const decided = Math.max(0, Math.min(challengerIndex - 1, comparisonsTotal));
+    const pct = comparisonsTotal > 0 ? (decided / comparisonsTotal) * 100 : 0;
+
+    const fill = $('#bracket-progress-fill');
+    if (fill) fill.style.width = `${pct}%`;
+    const text = $('#bracket-progress-text');
+    if (text) text.textContent = `${decided} / ${comparisonsTotal}`;
+}
+
+// Renders the current champion/challenger pair. Returns false when the bracket
+// is finished (so callers mirror applyCurrentSortPayload's contract).
+function applyBracketPayload(result, options = {}) {
+    const { $, API } = window.App;
+    ManualSortState.mode = 'bracket';
+
+    updateHistoryControlState(result || {});
+
+    if (result?.done) {
+        finishBracketSorting(result);
+        return false;
+    }
+
+    const champion = result?.champion?.image || null;
+    const challenger = result?.challenger?.image || null;
+    ManualSortState.currentImage = challenger;
+    ManualSortState.index = Number(result?.challenger_index ?? result?.index ?? 0);
+    ManualSortState.total = Number(result?.total ?? 0);
+
+    const cacheSuffix = options.cacheBust ? `?t=${Date.now()}` : '';
+    const champImg = $('#bracket-champion-image');
+    if (champImg) champImg.src = champion?.id ? API.getImageUrl(champion.id) + cacheSuffix : '';
+    const challImg = $('#bracket-challenger-image');
+    if (challImg) challImg.src = challenger?.id ? API.getImageUrl(challenger.id) + cacheSuffix : '';
+
+    renderBracketFighterName('#bracket-champion-name', champion);
+    renderBracketFighterName('#bracket-challenger-name', challenger);
+    updateBracketProgress(result);
+
+    const undoBtn = $('#bracket-btn-undo');
+    if (undoBtn) undoBtn.disabled = !result?.undo_available;
+    const redoBtn = $('#bracket-btn-redo');
+    if (redoBtn) redoBtn.disabled = !result?.redo_available;
+
+    return true;
+}
+
+async function performBracketAction(action, fast = false) {
+    const { API, showToast } = window.App;
+    if (!ManualSortState.active || ManualSortState.mode !== 'bracket') return;
+
+    const isHistory = action === 'undo' || action === 'redo';
+    if (!isHistory) {
+        if (ManualSortState.isProcessing) { flashManualSortBusy(); return; }
+        if (isManualSortInCooldown()) { flashManualSortBusy(); return; }
+    }
+    ManualSortState.isProcessing = true;
+
+    try {
+        window.AudioManager?.play(action === 'skip' ? 'skip' : isHistory ? 'undo' : 'move');
+
+        const result = await API.sortAction(action);
+        if (result?.error) {
+            updateHistoryControlState(result);
+            showToast(result.error, 'error');
+            return;
+        }
+
+        if (!isHistory) {
+            ManualSortState.actionTimestamps.push(Date.now());
+            const cutoff = Date.now() - 30000;
+            ManualSortState.actionTimestamps = ManualSortState.actionTimestamps.filter(t => t > cutoff);
+        }
+
+        // A bracket action returns only status flags/indices, never the next
+        // pair — reload fresh so the new champion/challenger render.
+        await loadCurrentImage();
+    } catch (error) {
+        Logger.error('Bracket action failed:', error);
+        showToast(manualSortText('manual.bracketActionFailed', 'Action failed', '操作失败'), 'error');
+    } finally {
+        ManualSortState.isProcessing = false;
+        ManualSortState.lastActionCompletedAt = Date.now();
+    }
+}
+
+function finishBracketSorting(result) {
+    const { $, showToast } = window.App;
+
+    ManualSortState.active = false;
+    ManualSortState.undoAvailable = false;
+    ManualSortState.redoAvailable = false;
+    document.removeEventListener('keydown', handleSortKeypress);
+    updateHistoryControlState({ undo_available: false, redo_available: false });
+
+    window.AudioManager?.play('finish');
+
+    const winner = result?.winner?.image || result?.champion?.image || null;
+    const winnerName = bracketImageName(winner);
+
+    hideSortInterfaces();
+    $('#sort-setup').style.display = 'block';
+
+    if (winnerName) {
+        showToast(
+            formatManualSortI18n('manual.bracketWinner', 'Showdown complete — winner: {name}', { name: winnerName }),
+            'success'
+        );
+    } else {
+        showToast(manualSortText('manual.bracketComplete', 'Showdown complete.', '擂台结束。'), 'success');
+    }
+
+    window.App.API.delete('/api/sort/session').catch(e => {
+        if (window.Logger) Logger.warn('Failed to clean up bracket session:', e);
+    });
+
+    if (window.App && window.App.loadImages) {
+        window.App.loadImages();
+    }
+}
+
+function handleBracketKeypress(e) {
+    const key = e.key;
+    let action = null;
+    if (key === 'ArrowLeft' || key === 'a' || key === 'A') action = 'champion';
+    else if (key === 'ArrowRight' || key === 'd' || key === 'D') action = 'challenger';
+    else if (key === ' ' || key === 'ArrowUp' || key === 'w' || key === 'W') action = 'skip';
+    else if (key === 'z' || key === 'Z') action = 'undo';
+    else if (key === 'y' || key === 'Y') action = 'redo';
+    else if (key === 'Escape') { e.preventDefault(); exitSorting(); return; }
+
+    if (!action) return;
+    e.preventDefault();
+    performBracketAction(action, Boolean(e.repeat));
+}
+
 async function resumeSavedSession(prefetchedSession = null) {
     const { $, API, showToast } = window.App;
     const previousResumeSnapshot = ManualSortState.resumeBannerSessionSnapshot
@@ -1346,7 +1709,7 @@ async function resumeSavedSession(prefetchedSession = null) {
         }
 
         restoreFolderInputs();
-        activateSortingUi();
+        activateSortingUi(session.mode === 'bracket' ? 'bracket' : 'slot');
         applyCurrentSortPayload(session);
 
         renderManualSortResumeBanner(null, { visible: false });
@@ -1470,11 +1833,15 @@ function updateGalleryPreview() {
 function handleSortKeypress(e) {
     if (!ManualSortState.active) return;
 
+    const isBracket = ManualSortState.mode === 'bracket';
+
     // Handle Ctrl+Z (undo) and Ctrl+Y / Ctrl+Shift+Z (redo) explicitly
     if (e.ctrlKey || e.metaKey) {
         if (e.key === 'z' || e.key === 'Z') {
             e.preventDefault();
-            if (e.shiftKey) {
+            if (isBracket) {
+                performBracketAction(e.shiftKey ? 'redo' : 'undo');
+            } else if (e.shiftKey) {
                 redoLastAction();
             } else {
                 undoLastAction();
@@ -1483,10 +1850,17 @@ function handleSortKeypress(e) {
         }
         if (e.key === 'y' || e.key === 'Y') {
             e.preventDefault();
-            redoLastAction();
+            if (isBracket) performBracketAction('redo');
+            else redoLastAction();
             return;
         }
         return; // Ignore other Ctrl+key combos
+    }
+
+    // v3.3.2 WB-S3: A/B Showdown has its own key map (←/→ pick, ↑ skip).
+    if (isBracket) {
+        handleBracketKeypress(e);
+        return;
     }
 
     const action = KEY_MAP[e.key];
@@ -1795,7 +2169,7 @@ function finishSorting() {
     );
 
     // Return to setup
-    $('#sort-interface').style.display = 'none';
+    hideSortInterfaces();
     $('#sort-setup').style.display = 'block';
 
     window.App.API.delete('/api/sort/session').catch(e => {
@@ -1817,7 +2191,7 @@ function exitSorting() {
     document.removeEventListener('keydown', handleSortKeypress);
     updateHistoryControlState({ undo_available: false, redo_available: false });
 
-    $('#sort-interface').style.display = 'none';
+    hideSortInterfaces();
     $('#sort-setup').style.display = 'block';
 
     const remaining = Math.max(0, ManualSortState.total - ManualSortState.index);
