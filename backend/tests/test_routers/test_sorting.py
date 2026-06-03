@@ -2668,3 +2668,106 @@ def test_library_health_reports_metadata_and_archive_signals(test_client, tmp_pa
     assert data["duplicate_filenames"]["samples"][0]["filename"] == "same.png"
     assert data["recommendations"]
     assert 0 <= data["summary"]["quality_score"] <= 100
+
+
+# ---------------------------------------------------------------------------
+# v3.3.2 Sort & Cull Workbench — WB-S1: unified session `mode` field.
+# "slot" is the default and reproduces the original WASD slot-sort exactly;
+# new modes register in VALID_SORT_MODES in later slices. These pin the
+# backward-compatible contract (no schema-version bump): default slot, unknown
+# mode rejected at start / coerced to slot on load, mode persists + round-trips.
+# ---------------------------------------------------------------------------
+
+def _add_wb_image(db, name):
+    return db.add_image(
+        path=f"/tmp/{name}",
+        filename=name,
+        generator="unknown",
+        prompt=None,
+        negative_prompt=None,
+        checkpoint=None,
+        loras=[],
+        width=64,
+        height=64,
+        file_size=1,
+        metadata_json="{}",
+    )
+
+
+def test_start_sort_session_defaults_to_slot_mode(test_client):
+    db = test_client.test_db
+    _add_wb_image(db, "wb_slot_default.png")
+
+    response = test_client.post("/api/sort/start")
+    assert response.status_code == 200
+    assert response.json()["mode"] == "slot"
+
+    current = test_client.get("/api/sort/current")
+    assert current.status_code == 200
+    assert current.json()["mode"] == "slot"
+
+
+def test_start_sort_session_rejects_unknown_mode(test_client):
+    db = test_client.test_db
+    _add_wb_image(db, "wb_bad_mode.png")
+
+    response = test_client.post("/api/sort/start?mode=nonsense")
+    assert response.status_code == 400
+
+
+def test_persisted_sort_session_round_trips_mode(tmp_path, monkeypatch):
+    from services import sorting_service as sorting_module
+    from services.sorting_service import SortingService
+
+    session_path = tmp_path / "sort_session.json"
+    monkeypatch.setattr(sorting_module, "SESSION_FILE", str(session_path))
+
+    service = SortingService()
+    service.set_sort_session({
+        "active": True,
+        "mode": "slot",
+        "image_ids": [1, 2, 3],
+        "current_index": 0,
+        "folders": {"a": "/tmp/sorted"},
+        "history": [],
+        "redo_stack": [],
+    })
+    service._save_session_to_disk()
+
+    persisted = json.loads(session_path.read_text(encoding="utf-8"))
+    assert persisted["mode"] == "slot"
+
+
+def test_load_legacy_session_without_mode_defaults_to_slot(test_client, tmp_path, monkeypatch):
+    from services import sorting_service as sorting_module
+    from services.sorting_service import SORT_SESSION_SCHEMA_VERSION, SortingService
+
+    db = test_client.test_db
+    img_id = _add_wb_image(db, "wb_legacy_mode.png")
+
+    session_path = tmp_path / "sort_session.json"
+    # A pre-v3.3.2 persisted session has NO "mode" key.
+    session_path.write_text(json.dumps({
+        "session_schema_version": SORT_SESSION_SCHEMA_VERSION,
+        "active": True,
+        "image_ids": [img_id],
+        "current_index": 0,
+        "folders": {},
+        "history": [],
+        "redo_stack": [],
+    }), encoding="utf-8")
+    monkeypatch.setattr(sorting_module, "SESSION_FILE", str(session_path))
+
+    service = SortingService()
+    service.load_session_from_disk()
+    assert service.get_sort_session()["mode"] == "slot"
+
+
+def test_coerce_unknown_mode_falls_back_to_slot():
+    from services.sorting_service import SortingService
+
+    service = SortingService()
+    coerced = service._coerce_sort_session_state(
+        {"active": True, "mode": "garbage", "image_ids": []}
+    )
+    assert coerced["mode"] == "slot"

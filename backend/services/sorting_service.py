@@ -51,6 +51,13 @@ STATS_FACET_LIMIT = 50
 ANALYTICS_DEFAULT_LIMIT = 500
 SEARCH_MAX_LENGTH = 1000
 VALID_SORT_ACTIONS = ["move", "skip", "undo", "redo", "collect"]
+# v3.3.2 Sort & Cull Workbench: the manual-sort session is becoming mode-aware.
+# "slot" is the original WASD slot-sort and stays the default, so every existing
+# caller and persisted session keeps identical behavior. New modes (e.g. the A/B
+# "bracket" King-of-Hill) are added in later slices and registered here.
+SORT_MODE_SLOT = "slot"
+SORT_MODE_DEFAULT = SORT_MODE_SLOT
+VALID_SORT_MODES = [SORT_MODE_SLOT]
 VALID_FILE_OPERATIONS = ["move", "copy"]
 VALID_PROMPT_MATCH_MODES = {"exact", "contains"}
 SCAN_LOG_HEARTBEAT_SECONDS = max(
@@ -267,6 +274,8 @@ class ManualSortStartRequest(SortFilterRequest):
     collection_slots: Optional[Dict[str, Optional[int]]] = None
     operation_mode: str = Field(default="move", max_length=16)
     replace_existing: bool = False
+    # v3.3.2 Workbench: culling/sorting mode ("slot" = WASD slot-sort, default).
+    mode: str = Field(default=SORT_MODE_DEFAULT, max_length=16)
 
 
 class FolderConfig(BaseModel):
@@ -393,6 +402,9 @@ class SortingService:
         """Return the canonical inactive manual-sort session payload."""
         return {
             "active": False,
+            # v3.3.2 Workbench: which culling/sorting mode this session runs.
+            # "slot" == the original WASD slot-sort (default → unchanged behavior).
+            "mode": SORT_MODE_DEFAULT,
             "image_ids": [],
             "current_index": 0,
             "folders": {},
@@ -635,6 +647,10 @@ class SortingService:
         coerced = self._build_default_sort_session_state()
         session = session or {}
         coerced["active"] = bool(session.get("active", False))
+        # Unknown / missing mode (e.g. a session persisted before v3.3.2) falls
+        # back to "slot" so old files load without a schema-version bump.
+        requested_mode = session.get("mode", SORT_MODE_DEFAULT)
+        coerced["mode"] = requested_mode if requested_mode in VALID_SORT_MODES else SORT_MODE_DEFAULT
         coerced["image_ids"] = list(session.get("image_ids", []))
         coerced["folders"] = dict(session.get("folders", {}))
         coerced["collection_slots"] = self._coerce_collection_slots(session.get("collection_slots"))
@@ -655,6 +671,7 @@ class SortingService:
         return {
             "session_schema_version": SORT_SESSION_SCHEMA_VERSION,
             "active": session["active"],
+            "mode": session["mode"],
             "current_index": session["current_index"],
             "folders": session["folders"],
             "collection_slots": session["collection_slots"],
@@ -2167,9 +2184,17 @@ class SortingService:
         exclude_loras: Optional[Any] = None,
         # v3.3.1: per-slot collection ids ({key: collection_id|None}).
         collection_slots: Optional[Any] = None,
+        # v3.3.2 Workbench: which culling/sorting mode to run ("slot" = WASD).
+        mode: str = SORT_MODE_DEFAULT,
     ) -> Dict[str, Any]:
         """Start a manual sort session."""
         operation_mode = self._validate_file_operation(operation_mode)
+        normalized_mode = str(mode or SORT_MODE_DEFAULT).strip().lower()
+        if normalized_mode not in VALID_SORT_MODES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid sort mode. Must be one of: {', '.join(VALID_SORT_MODES)}",
+            )
         # Validate aspect_ratio
         if aspect_ratio is not None and aspect_ratio not in VALID_ASPECT_RATIOS:
             raise HTTPException(
@@ -2242,6 +2267,7 @@ class SortingService:
         with self._sort_session_lock:
             self._sort_session = self._coerce_sort_session_state({
                 "active": True,
+                "mode": normalized_mode,
                 "image_ids": image_ids,
                 "current_index": 0,
                 "folders": folder_config,
@@ -2260,6 +2286,7 @@ class SortingService:
             "current": first_image,
             "skipped_unreadable": [],
             "operation_mode": operation_mode,
+            "mode": normalized_mode,
         }
 
     def get_current_sort_image(self) -> Dict[str, Any]:
@@ -2271,6 +2298,7 @@ class SortingService:
                         "active": False,
                         "done": True,
                         "message": "No active sort session",
+                        "mode": SORT_MODE_DEFAULT,
                         "image": None,
                         "tags": [],
                         "index": 0,
@@ -2285,7 +2313,11 @@ class SortingService:
 
                 image_ids = self._sort_session["image_ids"]
                 if self._sort_session["current_index"] >= len(image_ids):
-                    return {"done": True, "message": "All images sorted"}
+                    return {
+                        "done": True,
+                        "message": "All images sorted",
+                        "mode": self._sort_session.get("mode", SORT_MODE_DEFAULT),
+                    }
 
                 current_id = image_ids[self._sort_session["current_index"]]
                 current_index = self._sort_session["current_index"]
@@ -2319,6 +2351,7 @@ class SortingService:
             return {
                 "image": current,
                 "tags": tags,
+                "mode": self._sort_session.get("mode", SORT_MODE_DEFAULT),
                 "index": current_index,
                 "total": len(image_ids),
                 "remaining": len(image_ids) - current_index,

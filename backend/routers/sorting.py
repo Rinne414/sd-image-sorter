@@ -377,6 +377,7 @@ async def start_sort_session(
     folders: Optional[str] = Query(default=None, max_length=4096),
     operation_mode: str = Query(default="move", max_length=16),
     replace_existing: bool = Query(default=False),
+    mode: str = Query(default="slot", max_length=16),
     service: SortingService = Depends(get_sorting_service),
 ):
     """Start a manual sort session."""
@@ -408,6 +409,7 @@ async def start_sort_session(
             exclude_checkpoints=request.exclude_checkpoints,
             exclude_loras=request.exclude_loras,
             collection_slots=request.collection_slots,
+            mode=request.mode,
         )
 
     return service.start_sort_session(
@@ -436,6 +438,7 @@ async def start_sort_session(
         exclude_ratings=exclude_ratings,
         exclude_checkpoints=exclude_checkpoints,
         exclude_loras=exclude_loras,
+        mode=mode,
     )
 
 
