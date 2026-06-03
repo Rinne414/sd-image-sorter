@@ -49,6 +49,9 @@ const MANUAL_SORT_COOLDOWN_KEY = 'manual_sort_cooldown_ms_v1';
 // v3.3.2 WB-S3: remembers the mode chosen in the setup screen across reloads.
 const MANUAL_SORT_MODE_KEY = 'manual_sort_mode_v1';
 const MANUAL_SORT_MODES = new Set(['slot', 'bracket']);
+// v3.3.2 WB-S6: remembers the A/B Showdown winner destination ('' none,
+// 'fav' Favorites, or a collection id).
+const MANUAL_SORT_BRACKET_WINNER_KEY = 'manual_sort_bracket_winner_v1';
 
 const MANUAL_SORT_FILTER_STATE_KEY = 'manual_sort_filter_state_v1';
 const MANUAL_SORT_SCOPE_META_KEY = 'manual_sort_scope_meta_v1';
@@ -284,6 +287,34 @@ function populateManualSortCollectionSelects() {
     });
 }
 
+// v3.3.2 WB-S6: A/B Showdown winner destination selector. '' = don't save,
+// 'fav' = Favorites, otherwise a collection id. Persisted across reloads.
+function getBracketWinnerDest() {
+    try {
+        const stored = localStorage.getItem(MANUAL_SORT_BRACKET_WINNER_KEY);
+        if (stored != null) return stored;
+    } catch (_) { /* ignore */ }
+    return '';
+}
+
+function populateBracketWinnerSelect() {
+    const select = document.getElementById('bracket-winner-collection');
+    if (!select) return;
+    const none = manualSortText('manual.bracketWinnerNone', "Don't save", '不收藏');
+    const fav = manualSortText('manual.bracketWinnerFav', '♥ Favorites', '♥ 收藏');
+    const options = (ManualSortState.collectionsCache || [])
+        .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
+        .join('');
+    select.innerHTML = `<option value="">${escapeHtml(none)}</option>`
+        + `<option value="fav">${escapeHtml(fav)}</option>`
+        + options;
+    // Restore the saved choice if it still exists.
+    const saved = getBracketWinnerDest();
+    const valid = saved === '' || saved === 'fav'
+        || (ManualSortState.collectionsCache || []).some((c) => String(c.id) === String(saved));
+    select.value = valid ? saved : '';
+}
+
 async function loadManualSortCollections() {
     try {
         const result = await window.App?.API?.listCollections?.();
@@ -302,6 +333,7 @@ async function loadManualSortCollections() {
         }
     });
     populateManualSortCollectionSelects();
+    populateBracketWinnerSelect();
     MANUAL_SORT_SLOT_KEYS.forEach(refreshManualSortSlotUi);
 }
 
@@ -878,6 +910,11 @@ async function initManualSort() {
     $('#bracket-btn-undo')?.addEventListener('click', () => performBracketAction('undo'));
     $('#bracket-btn-redo')?.addEventListener('click', () => performBracketAction('redo'));
     $('#bracket-btn-exit')?.addEventListener('click', exitSorting);
+
+    // v3.3.2 WB-S6: remember the showdown winner destination.
+    $('#bracket-winner-collection')?.addEventListener('change', (e) => {
+        try { localStorage.setItem(MANUAL_SORT_BRACKET_WINNER_KEY, e.target.value || ''); } catch (_) { /* ignore */ }
+    });
 
     // v3.3.2 WB-S5: synchronized pixel-peep zoom.
     $('#bracket-btn-zoom')?.addEventListener('click', () => setBracketZoomActive(!ManualSortState.bracketZoom));
@@ -1839,7 +1876,34 @@ async function performBracketAction(action, fast = false) {
     }
 }
 
-function finishBracketSorting(result) {
+// v3.3.2 WB-S6: route the showdown winner to its chosen destination by
+// reference (non-destructive). Returns a display label for the toast, or null
+// when nothing was saved. '' = don't save, 'fav' = Favorites, else collection id.
+async function collectBracketWinner(winnerImage) {
+    const { API, showToast } = window.App;
+    const winnerId = winnerImage && winnerImage.id;
+    if (!winnerId) return null;
+    const dest = getBracketWinnerDest();
+    if (!dest) return null;
+
+    try {
+        if (dest === 'fav') {
+            await API.setFavorite(winnerId, true);
+            return manualSortText('manual.bracketWinnerFav', '♥ Favorites', '♥ 收藏');
+        }
+        const collectionId = Number(dest);
+        if (!Number.isInteger(collectionId) || collectionId <= 0) return null;
+        await API.setCollectionMembership(collectionId, winnerId, true);
+        const match = (ManualSortState.collectionsCache || []).find((c) => c.id === collectionId);
+        return match ? match.name : `#${collectionId}`;
+    } catch (error) {
+        Logger.error('Failed to save showdown winner:', error);
+        showToast(manualSortText('manual.bracketWinnerFailed', 'Failed to save the winner', '保存冠军失败'), 'error');
+        return null;
+    }
+}
+
+async function finishBracketSorting(result) {
     const { $, showToast } = window.App;
 
     ManualSortState.active = false;
@@ -1857,7 +1921,14 @@ function finishBracketSorting(result) {
     hideSortInterfaces();
     $('#sort-setup').style.display = 'block';
 
-    if (winnerName) {
+    const destLabel = await collectBracketWinner(winner);
+
+    if (winnerName && destLabel) {
+        showToast(
+            formatManualSortI18n('manual.bracketWinnerSaved', 'Winner {name} → {dest}', { name: winnerName, dest: destLabel }),
+            'success'
+        );
+    } else if (winnerName) {
         showToast(
             formatManualSortI18n('manual.bracketWinner', 'Showdown complete — winner: {name}', { name: winnerName }),
             'success'

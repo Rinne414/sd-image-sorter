@@ -1277,6 +1277,12 @@
                             <p data-i18n="manual.bracketIntro">Compare two images at a time and keep picking the winner to find the single best of a batch. Non-destructive: winners are not moved.</p>
                         </div>
 
+                        <!-- WB-S6: where the showdown winner goes (reference, non-destructive) -->
+                        <div class="bracket-winner-row sort-bracket-only" id="bracket-winner-row" style="display:none;">
+                            <label for="bracket-winner-collection" data-i18n="manual.bracketWinnerDest">Winner goes to</label>
+                            <select id="bracket-winner-collection" class="bracket-winner-select"></select>
+                        </div>
+
                         <div class="folder-config sort-slot-only">
                             <div class="folder-slot" data-key="w">
                                 <div class="folder-key">W</div>
