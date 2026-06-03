@@ -1192,6 +1192,78 @@ test('manual sort should honor search and support move, skip, and undo', async (
   await expect.poll(async () => countFiles(manualSortInbox, '.png'), { timeout: 20000 }).toBe(1)
 })
 
+test('A/B Showdown should switch modes, compare a pair, pick a winner, and save it', async ({ page, request }) => {
+  // v3.3.2 WB-S7: Sort & Cull Workbench A/B Showdown (bracket) flow. Reuses the
+  // manual-sort fixture (3 images) and drives the mode switch itself so the
+  // slot WASD path (covered by the test above) stays the default.
+  await resetManualSortFixture()
+  await page.addInitScript((search) => {
+    localStorage.setItem('manual_sort_filter_state_v1', JSON.stringify({
+      generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
+      ratings: ['general', 'sensitive', 'questionable', 'explicit'],
+      tags: [],
+      checkpoints: [],
+      loras: [],
+      prompts: [],
+      artist: null,
+      search,
+      sortBy: 'newest',
+      limit: 0,
+      minWidth: null,
+      maxWidth: null,
+      minHeight: null,
+      maxHeight: null,
+      aspectRatio: '',
+      minAesthetic: null,
+      maxAesthetic: null,
+    }))
+    // Start in slot mode so the test exercises the switch to bracket.
+    localStorage.setItem('manual_sort_mode_v1', 'slot')
+  }, 'manual_test_sort_token_20260405')
+
+  await openMainPage(page)
+
+  await setGallerySearch(page, 'manual_test_sort_token_20260405')
+  await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(3)
+
+  await openSortingSubView(page, 'manual')
+
+  // Switch to A/B Showdown: bracket button activates, intro shows, slot-only
+  // folder config hides.
+  await page.locator('.sort-mode-btn[data-sort-mode="bracket"]').click()
+  await expect(page.locator('.sort-mode-btn[data-sort-mode="bracket"]')).toHaveClass(/is-active/)
+  await expect(page.locator('#sort-bracket-intro')).toBeVisible()
+  await expect(page.locator('#view-manual .folder-config')).toBeHidden()
+
+  // Route the winner to Favorites (non-destructive) and snapshot the baseline.
+  await page.locator('#bracket-winner-collection').selectOption('fav')
+  const baselinePayload = await (await request.get('/api/collections/favorites/ids')).json()
+  const baselineFavorites = Number(baselinePayload.count ?? (baselinePayload.image_ids || []).length)
+
+  // Start the showdown — bracket has no move/copy confirmation.
+  await page.locator('#btn-start-sorting').click()
+  await expect(page.locator('#sort-bracket-interface')).toBeVisible()
+  await expect(page.locator('#bracket-progress-text')).toHaveText('0 / 2')
+  expect(await page.locator('#bracket-champion-image').getAttribute('src')).toBeTruthy()
+  expect(await page.locator('#bracket-challenger-image').getAttribute('src')).toBeTruthy()
+
+  // Keep B (challenger) → promotes + advances to the next comparison.
+  await page.keyboard.press('ArrowRight')
+  await expect(page.locator('#bracket-progress-text')).toHaveText('1 / 2')
+
+  // Keep the current champion → finishes the bracket and returns to setup.
+  await page.keyboard.press('ArrowLeft')
+  await expect(page.locator('#sort-bracket-interface')).toBeHidden()
+  await expect(page.locator('#sort-setup')).toBeVisible()
+  await expect(page.locator('#toast-container')).toContainText(/Winner|Showdown/i)
+
+  // The winner was saved to Favorites by reference.
+  await expect.poll(async () => {
+    const payload = await (await request.get('/api/collections/favorites/ids')).json()
+    return Number(payload.count ?? (payload.image_ids || []).length)
+  }, { timeout: 10000 }).toBe(baselineFavorites + 1)
+})
+
 test('censor detect and save should work through the real UI flow', async ({ page, request }) => {
   test.setTimeout(180000)
 
