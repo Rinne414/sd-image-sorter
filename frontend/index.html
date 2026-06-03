@@ -1542,13 +1542,19 @@
                                 <span class="bracket-tag">A</span>
                                 <span class="bracket-crown" aria-hidden="true">👑</span>
                                 <img id="bracket-champion-image" src="" alt="Champion image">
-                                <span class="bracket-name" id="bracket-champion-name"></span>
+                                <div class="bracket-caption">
+                                    <span class="bracket-meta" id="bracket-champion-meta"></span>
+                                    <span class="bracket-name" id="bracket-champion-name"></span>
+                                </div>
                             </button>
                             <div class="bracket-vs" aria-hidden="true"><span>VS</span></div>
                             <button type="button" class="bracket-fighter" id="bracket-challenger" data-bracket-pick="challenger" aria-label="Keep B (challenger)">
                                 <span class="bracket-tag">B</span>
                                 <img id="bracket-challenger-image" src="" alt="Challenger image">
-                                <span class="bracket-name" id="bracket-challenger-name"></span>
+                                <div class="bracket-caption">
+                                    <span class="bracket-meta" id="bracket-challenger-meta"></span>
+                                    <span class="bracket-name" id="bracket-challenger-name"></span>
+                                </div>
                             </button>
                         </div>
 
@@ -1562,6 +1568,7 @@
                             <div class="progress-bar"><div class="progress-fill" id="bracket-progress-fill"></div></div>
                             <div class="bracket-progress-info">
                                 <span id="bracket-progress-text">0 / 0</span>
+                                <span class="bracket-streak" id="bracket-streak"></span>
                                 <span class="bracket-progress-hint" data-i18n="manual.bracketProgressHint">← keep A • → keep B • ↑ skip • Z undo • ESC exit</span>
                             </div>
                         </div>

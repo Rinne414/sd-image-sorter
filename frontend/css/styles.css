@@ -8007,11 +8007,39 @@ input[type="radio"] {
     border: 1px solid var(--glass-border);
 }
 .bracket-fighter.is-champion .bracket-crown { display: grid; }
-.bracket-fighter .bracket-name {
+/* v3.3.2 WB-S4: caption overlay = metadata chips + filename */
+.bracket-fighter .bracket-caption {
     position: absolute;
-    left: 11px;
-    right: 11px;
-    bottom: 10px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 20px 11px 9px;
+    background: linear-gradient(to top, rgba(8, 10, 16, 0.85), rgba(8, 10, 16, 0));
+    pointer-events: none;
+}
+.bracket-fighter .bracket-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    justify-content: center;
+}
+.bracket-fighter .bchip {
+    font-size: 10.5px;
+    line-height: 1.4;
+    padding: 2px 7px;
+    border-radius: var(--radius-full);
+    color: #eef1f8;
+    background: rgba(8, 10, 16, 0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    white-space: nowrap;
+}
+.bracket-fighter .bchip b { color: var(--text-muted); font-weight: 600; }
+.bracket-fighter .bracket-name {
     font-size: 11px;
     color: #fff;
     text-align: center;
@@ -8019,6 +8047,16 @@ input[type="radio"] {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+.bracket-fighter.is-picked {
+    outline-color: var(--accent-secondary);
+    box-shadow: 0 0 0 3px rgba(var(--accent-secondary-rgb), 0.55), var(--shadow-modal);
+    animation: bracket-pick-pop 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes bracket-pick-pop {
+    0% { transform: scale(1); }
+    45% { transform: scale(1.025); }
+    100% { transform: scale(1); }
 }
 .bracket-vs {
     display: grid;
@@ -8060,6 +8098,11 @@ input[type="radio"] {
     color: var(--text-muted);
 }
 .bracket-progress-hint { color: var(--text-muted); }
+.bracket-streak {
+    font-weight: 700;
+    color: var(--accent-tertiary);
+    font-variant-numeric: tabular-nums;
+}
 .bracket-footer {
     display: flex;
     gap: 8px;

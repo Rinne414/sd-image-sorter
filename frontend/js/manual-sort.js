@@ -1505,6 +1505,8 @@ async function startBracketSorting() {
         ManualSortState.sortedCount = 0;
         ManualSortState.skippedCount = 0;
         ManualSortState.combo = 0;
+        ManualSortState.bracketStreak = 1;
+        ManualSortState.bracketLastChampIndex = 0;
 
         activateSortingUi('bracket');
         await loadCurrentImage();
@@ -1529,6 +1531,61 @@ function renderBracketFighterName(selector, image) {
     el.textContent = bracketImageName(image);
 }
 
+// v3.3.2 WB-S4: per-fighter generation-param chips — the SD judging context
+// Eagle/Billfish can't show. Reuses Gallery's synchronous metadata parser so
+// sampler/cfg/steps/seed come from the same source as the detail view.
+function bracketMetaChipsHtml(image) {
+    if (!image) return '';
+    let gp = {};
+    try {
+        const parsed = window.Gallery && typeof window.Gallery._extractParsedData === 'function'
+            ? window.Gallery._extractParsedData(image)
+            : null;
+        gp = (parsed && parsed.generation_params) || {};
+    } catch (_) { gp = {}; }
+
+    const chips = [];
+    const chip = (text) => { if (text != null && String(text).trim() !== '') chips.push(`<span class="bchip">${escapeHtml(String(text))}</span>`); };
+    const labeled = (label, val) => { if (val != null && String(val).trim() !== '') chips.push(`<span class="bchip"><b>${escapeHtml(label)}</b> ${escapeHtml(String(val))}</span>`); };
+
+    if (gp.sampler) chip(gp.sampler);
+    labeled('CFG', gp.cfg_scale);
+    labeled('Steps', gp.steps);
+    labeled('Seed', gp.seed);
+    if (image.checkpoint) {
+        const ckpt = String(image.checkpoint).split(/[\\/]/).pop().replace(/\.(safetensors|ckpt|pt|pth)$/i, '');
+        chip(ckpt);
+    }
+    if (image.width && image.height) chip(`${image.width}×${image.height}`);
+    if (image.aesthetic_score != null && image.aesthetic_score !== '') {
+        const score = Number(image.aesthetic_score);
+        if (Number.isFinite(score)) labeled('★', score.toFixed(1));
+    }
+    return chips.join('');
+}
+
+function renderBracketMeta(selector, image) {
+    const { $ } = window.App;
+    const el = $(selector);
+    if (!el) return;
+    el.innerHTML = bracketMetaChipsHtml(image);
+}
+
+// v3.3.2 WB-S4: brief highlight on the chosen fighter for tactile feedback.
+function flashBracketPick(action) {
+    const { $ } = window.App;
+    const id = action === 'champion' ? '#bracket-champion'
+        : action === 'challenger' ? '#bracket-challenger'
+        : null;
+    if (!id) return;
+    const el = $(id);
+    if (!el) return;
+    el.classList.remove('is-picked');
+    void el.offsetWidth; // force reflow so the animation restarts
+    el.classList.add('is-picked');
+    setTimeout(() => el.classList.remove('is-picked'), 240);
+}
+
 function updateBracketProgress(result) {
     const { $ } = window.App;
     const total = Number(result?.total ?? ManualSortState.total ?? 0);
@@ -1541,6 +1598,15 @@ function updateBracketProgress(result) {
     if (fill) fill.style.width = `${pct}%`;
     const text = $('#bracket-progress-text');
     if (text) text.textContent = `${decided} / ${comparisonsTotal}`;
+
+    // v3.3.2 WB-S4: champion win-streak (only once the champ has held ≥2 rounds).
+    const streakEl = $('#bracket-streak');
+    if (streakEl) {
+        const streak = Number(ManualSortState.bracketStreak || 0);
+        streakEl.textContent = streak >= 2
+            ? formatManualSortI18n('manual.bracketStreak', '👑 Streak ×{n}', { n: streak })
+            : '';
+    }
 }
 
 // Renders the current champion/challenger pair. Returns false when the bracket
@@ -1562,6 +1628,16 @@ function applyBracketPayload(result, options = {}) {
     ManualSortState.index = Number(result?.challenger_index ?? result?.index ?? 0);
     ManualSortState.total = Number(result?.total ?? 0);
 
+    // v3.3.2 WB-S4: champion win-streak. Same champion index across loads means
+    // the champ held the crown another round.
+    const champIdx = Number(result?.champion_index ?? 0);
+    if (ManualSortState.bracketLastChampIndex === champIdx) {
+        ManualSortState.bracketStreak = (ManualSortState.bracketStreak || 1) + 1;
+    } else {
+        ManualSortState.bracketStreak = 1;
+    }
+    ManualSortState.bracketLastChampIndex = champIdx;
+
     const cacheSuffix = options.cacheBust ? `?t=${Date.now()}` : '';
     const champImg = $('#bracket-champion-image');
     if (champImg) champImg.src = champion?.id ? API.getImageUrl(champion.id) + cacheSuffix : '';
@@ -1570,6 +1646,8 @@ function applyBracketPayload(result, options = {}) {
 
     renderBracketFighterName('#bracket-champion-name', champion);
     renderBracketFighterName('#bracket-challenger-name', challenger);
+    renderBracketMeta('#bracket-champion-meta', champion);
+    renderBracketMeta('#bracket-challenger-meta', challenger);
     updateBracketProgress(result);
 
     const undoBtn = $('#bracket-btn-undo');
@@ -1592,7 +1670,15 @@ async function performBracketAction(action, fast = false) {
     ManualSortState.isProcessing = true;
 
     try {
-        window.AudioManager?.play(action === 'skip' ? 'skip' : isHistory ? 'undo' : 'move');
+        // v3.3.2 WB-S4: directional pick sfx (left/right pitch) + brief highlight.
+        if (action === 'skip') {
+            window.AudioManager?.play('skip');
+        } else if (isHistory) {
+            window.AudioManager?.play('undo');
+        } else {
+            window.AudioManager?.play('move', action === 'champion' ? 'a' : 'd');
+        }
+        flashBracketPick(action);
 
         const result = await API.sortAction(action);
         if (result?.error) {

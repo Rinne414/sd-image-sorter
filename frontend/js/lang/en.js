@@ -519,6 +519,7 @@ window.I18nLang_en = {
     'manual.bracketActionFailed': 'Action failed',
     'manual.bracketWinner': 'Showdown complete — winner: {name}',
     'manual.bracketComplete': 'Showdown complete.',
+    'manual.bracketStreak': '👑 Streak ×{n}',
     'manual.undoLabel': 'Undo',
     'manual.redoLabel': 'Redo',
     'manual.keyboardRequired': 'Keyboard Required',

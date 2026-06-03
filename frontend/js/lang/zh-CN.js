@@ -530,6 +530,7 @@ window.I18nLang_zhCN = {
     'manual.bracketActionFailed': '操作失败',
     'manual.bracketWinner': '擂台结束 —— 冠军：{name}',
     'manual.bracketComplete': '擂台结束。',
+    'manual.bracketStreak': '👑 连胜 ×{n}',
     'manual.undoLabel': '撤销',
     'manual.redoLabel': '重做',
     'manual.keyboardRequired': '需要键盘',
