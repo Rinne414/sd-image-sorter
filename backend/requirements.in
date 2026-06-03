@@ -27,6 +27,10 @@ aiofiles>=23.0.0
 python-multipart>=0.0.27
 ultralytics>=8.4.0
 fastembed>=0.4.0
+# hnswlib: optional ANN accelerator for fast approximate top-k similarity
+# (workbench / dedup). The backend lazy-imports it and falls back to the exact
+# vector-cache matmul when it is absent, so it is not strictly required.
+hnswlib>=0.8.0
 nudenet>=3.0.0
 # SAM3 now uses transformers.Sam3Model directly. Do not install the old
 # sam3==0.1.3 stack by default; it pulled extra packages (decord/hydra/iopath)

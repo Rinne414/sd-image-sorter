@@ -76,6 +76,8 @@ h11==0.16.0
     #   uvicorn
 hf-xet==1.4.3 ; platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'
     # via huggingface-hub
+hnswlib==0.8.0
+    # via -r backend/requirements.in
 httpcore==1.0.9
     # via httpx
 httptools==0.7.1
