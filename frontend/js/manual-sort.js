@@ -866,14 +866,26 @@ async function initManualSort() {
 
     // v3.3.2 WB-S3: Workbench mode switch + A/B Showdown (bracket) controls.
     bindManualSortModeSwitch();
-    $('#bracket-champion')?.addEventListener('click', () => performBracketAction('champion'));
-    $('#bracket-challenger')?.addEventListener('click', () => performBracketAction('challenger'));
+    // Fighter-image clicks pick — unless sync-zoom is on, where a click should
+    // inspect (the dedicated 选 A/选 B buttons + keyboard still pick).
+    const championFighter = $('#bracket-champion');
+    const challengerFighter = $('#bracket-challenger');
+    championFighter?.addEventListener('click', () => { if (!ManualSortState.bracketZoom) performBracketAction('champion'); });
+    challengerFighter?.addEventListener('click', () => { if (!ManualSortState.bracketZoom) performBracketAction('challenger'); });
     $('#bracket-btn-champion')?.addEventListener('click', () => performBracketAction('champion'));
     $('#bracket-btn-challenger')?.addEventListener('click', () => performBracketAction('challenger'));
     $('#bracket-btn-skip')?.addEventListener('click', () => performBracketAction('skip'));
     $('#bracket-btn-undo')?.addEventListener('click', () => performBracketAction('undo'));
     $('#bracket-btn-redo')?.addEventListener('click', () => performBracketAction('redo'));
     $('#bracket-btn-exit')?.addEventListener('click', exitSorting);
+
+    // v3.3.2 WB-S5: synchronized pixel-peep zoom.
+    $('#bracket-btn-zoom')?.addEventListener('click', () => setBracketZoomActive(!ManualSortState.bracketZoom));
+    [championFighter, challengerFighter].forEach((fighter) => {
+        if (!fighter) return;
+        fighter.addEventListener('mousemove', handleBracketZoomMove);
+        fighter.addEventListener('mouseleave', () => { if (ManualSortState.bracketZoom) applyBracketZoom(null, null); });
+    });
 
     // Exit sorting button
     const exitBtn = $('#btn-exit-sorting');
@@ -1509,6 +1521,7 @@ async function startBracketSorting() {
         ManualSortState.bracketLastChampIndex = 0;
 
         activateSortingUi('bracket');
+        setBracketZoomActive(false);
         await loadCurrentImage();
     } catch (error) {
         rollbackSortingUi();
@@ -1569,6 +1582,124 @@ function renderBracketMeta(selector, image) {
     const el = $(selector);
     if (!el) return;
     el.innerHTML = bracketMetaChipsHtml(image);
+}
+
+// v3.3.2 WB-S5: comparable generation params for the metadata-diff strip.
+// Ordered so the strip reads the way 炼丹 users scan params.
+function bracketComparableParams(image) {
+    let gp = {};
+    try {
+        const parsed = window.Gallery && typeof window.Gallery._extractParsedData === 'function'
+            ? window.Gallery._extractParsedData(image)
+            : null;
+        gp = (parsed && parsed.generation_params) || {};
+    } catch (_) { gp = {}; }
+
+    const ckpt = image && image.checkpoint
+        ? String(image.checkpoint).split(/[\\/]/).pop().replace(/\.(safetensors|ckpt|pt|pth)$/i, '')
+        : null;
+    const norm = (v) => (v == null || String(v).trim() === '' ? null : String(v).trim());
+
+    return [
+        { key: 'Sampler', value: norm(gp.sampler) },
+        { key: 'CFG', value: norm(gp.cfg_scale) },
+        { key: 'Steps', value: norm(gp.steps) },
+        { key: 'Seed', value: norm(gp.seed) },
+        { key: 'Scheduler', value: norm(gp.scheduler) },
+        { key: 'Clip skip', value: norm(gp.clip_skip) },
+        { key: 'Denoise', value: norm(gp.denoising_strength != null ? gp.denoising_strength : gp.denoise) },
+        { key: 'Model', value: norm(ckpt) },
+        { key: 'Size', value: (image && image.width && image.height) ? `${image.width}×${image.height}` : null },
+    ];
+}
+
+// Render the only-show-differences strip between champion (A) and challenger (B).
+function renderBracketDiff(champImage, challImage) {
+    const { $ } = window.App;
+    const strip = $('#bracket-diff');
+    if (!strip) return;
+
+    if (!champImage || !challImage) {
+        strip.hidden = true;
+        strip.innerHTML = '';
+        return;
+    }
+
+    const a = bracketComparableParams(champImage);
+    const b = bracketComparableParams(challImage);
+    const bByKey = {};
+    b.forEach((p) => { bByKey[p.key] = p.value; });
+
+    const diffs = [];
+    const sames = [];
+    a.forEach((p) => {
+        const av = p.value;
+        const bv = bByKey[p.key];
+        if (av == null && bv == null) return;
+        if (av === bv) { sames.push(p.key); return; }
+        diffs.push({ key: p.key, a: av == null ? '—' : av, b: bv == null ? '—' : bv });
+    });
+
+    const parts = [`<span class="bd-label">${escapeHtml(manualSortText('manual.bracketDiffLabel', 'Differences only', '只显示差异'))}</span>`];
+    if (diffs.length === 0) {
+        parts.push(`<span class="bd-none">${escapeHtml(manualSortText('manual.bracketDiffNone', 'Same generation params', '生成参数相同'))}</span>`);
+    } else {
+        diffs.forEach((d) => {
+            parts.push(
+                `<span class="bd-chip"><b>${escapeHtml(d.key)}</b>`
+                + `<span class="bd-a">${escapeHtml(d.a)}</span>`
+                + `<span class="bd-arrow">→</span>`
+                + `<span class="bd-b">${escapeHtml(d.b)}</span></span>`
+            );
+        });
+    }
+    if (sames.length > 0) {
+        parts.push(
+            `<span class="bd-same">${escapeHtml(formatManualSortI18n('manual.bracketDiffSame', 'same: {keys}', { keys: sames.join(' · ') }))}</span>`
+        );
+    }
+
+    strip.innerHTML = parts.join('');
+    strip.hidden = false;
+}
+
+// v3.3.2 WB-S5: synchronized pixel-peep zoom. Moving over either fighter zooms
+// BOTH images to the same normalized point so fine detail compares 1:1.
+const BRACKET_ZOOM_SCALE = 2.6;
+
+function setBracketZoomActive(active) {
+    const { $ } = window.App;
+    ManualSortState.bracketZoom = !!active;
+    const btn = $('#bracket-btn-zoom');
+    if (btn) btn.setAttribute('aria-pressed', String(!!active));
+    const duel = document.querySelector('.bracket-duel');
+    if (duel) duel.classList.toggle('zooming', !!active);
+    if (!active) applyBracketZoom(null, null);
+}
+
+function applyBracketZoom(normX, normY) {
+    const { $ } = window.App;
+    const imgs = [$('#bracket-champion-image'), $('#bracket-challenger-image')];
+    imgs.forEach((img) => {
+        if (!img) return;
+        if (normX == null || normY == null) {
+            img.style.transform = '';
+            img.style.transformOrigin = '';
+        } else {
+            img.style.transformOrigin = `${(normX * 100).toFixed(2)}% ${(normY * 100).toFixed(2)}%`;
+            img.style.transform = `scale(${BRACKET_ZOOM_SCALE})`;
+        }
+    });
+}
+
+function handleBracketZoomMove(e) {
+    if (!ManualSortState.bracketZoom) return;
+    const fighter = e.currentTarget;
+    const rect = fighter.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const normX = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    const normY = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+    applyBracketZoom(normX, normY);
 }
 
 // v3.3.2 WB-S4: brief highlight on the chosen fighter for tactile feedback.
@@ -1648,6 +1779,9 @@ function applyBracketPayload(result, options = {}) {
     renderBracketFighterName('#bracket-challenger-name', challenger);
     renderBracketMeta('#bracket-champion-meta', champion);
     renderBracketMeta('#bracket-challenger-meta', challenger);
+    renderBracketDiff(champion, challenger);
+    // Each new pair starts un-zoomed; a mouse move re-applies if zoom is on.
+    applyBracketZoom(null, null);
     updateBracketProgress(result);
 
     const undoBtn = $('#bracket-btn-undo');
@@ -1715,6 +1849,7 @@ function finishBracketSorting(result) {
     updateHistoryControlState({ undo_available: false, redo_available: false });
 
     window.AudioManager?.play('finish');
+    setBracketZoomActive(false);
 
     const winner = result?.winner?.image || result?.champion?.image || null;
     const winnerName = bracketImageName(winner);

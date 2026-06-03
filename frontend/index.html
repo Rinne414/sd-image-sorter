@@ -1558,6 +1558,17 @@
                             </button>
                         </div>
 
+                        <!-- WB-S5: metadata-diff strip (only-show-differences) = the SD moat -->
+                        <div class="bracket-diff" id="bracket-diff" hidden></div>
+
+                        <!-- WB-S5: inspector — synchronized pixel-peep zoom toggle -->
+                        <div class="bracket-inspector">
+                            <button type="button" class="bracket-insp-btn" id="bracket-btn-zoom" aria-pressed="false">
+                                <span aria-hidden="true">🔍</span> <span data-i18n="manual.bracketZoom">Sync zoom</span>
+                            </button>
+                            <span class="bracket-insp-hint" data-i18n="manual.bracketZoomHint">Toggle on, then move over either image to compare detail at the same spot.</span>
+                        </div>
+
                         <div class="bracket-actions">
                             <button type="button" class="btn btn-secondary" id="bracket-btn-champion"><span class="bracket-key" aria-hidden="true">←</span> <span data-i18n="manual.bracketKeepA">Keep A</span></button>
                             <button type="button" class="btn btn-ghost" id="bracket-btn-skip"><span class="bracket-key" aria-hidden="true">↑</span> <span data-i18n="manual.bracketTie">Tie / skip</span></button>

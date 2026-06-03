@@ -8103,6 +8103,69 @@ input[type="radio"] {
     color: var(--accent-tertiary);
     font-variant-numeric: tabular-nums;
 }
+
+/* v3.3.2 WB-S5: metadata-diff strip (only-show-differences) */
+.bracket-diff {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    border-radius: var(--radius-xl);
+    background: var(--glass-bg);
+    border: 1px solid var(--border-glow);
+}
+.bracket-diff[hidden] { display: none; }
+.bracket-diff .bd-label {
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent-secondary);
+    font-weight: 700;
+}
+.bracket-diff .bd-chip {
+    font-size: 12.5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    background: rgba(8, 14, 22, 0.55);
+    border: 1px solid var(--glass-border);
+}
+.bracket-diff .bd-chip b { color: var(--text-muted); font-weight: 600; font-size: 11px; }
+.bracket-diff .bd-a { color: var(--accent-danger); }
+.bracket-diff .bd-b { color: var(--accent-success); }
+.bracket-diff .bd-arrow { color: var(--text-muted); }
+.bracket-diff .bd-same { margin-left: auto; font-size: 11.5px; color: var(--text-muted); }
+.bracket-diff .bd-none { font-size: 12.5px; color: var(--text-secondary); }
+
+/* v3.3.2 WB-S5: inspector — synchronized pixel-peep zoom */
+.bracket-inspector { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.bracket-insp-btn {
+    font: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 13px;
+    border-radius: var(--radius-full);
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    transition: color 200ms ease, background 200ms ease, border-color 200ms ease;
+}
+.bracket-insp-btn:hover { color: var(--text-primary); border-color: var(--border-glow); }
+.bracket-insp-btn[aria-pressed="true"] {
+    color: #0a0c12;
+    font-weight: 700;
+    background-image: linear-gradient(120deg, var(--accent-primary), var(--accent-secondary));
+    border-color: transparent;
+}
+.bracket-insp-hint { font-size: 11.5px; color: var(--text-muted); }
+.bracket-duel.zooming .bracket-fighter { cursor: zoom-in; }
+.bracket-duel.zooming .bracket-fighter img { will-change: transform; }
 .bracket-footer {
     display: flex;
     gap: 8px;
