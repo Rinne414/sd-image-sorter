@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="aurora">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SD Image Sorter — v3.3.2 整理工作台 Sort &amp; Cull Workbench（mockup）</title>
+<style>
+/* ============================================================
+   SD Image Sorter — v3.3.2 "Sort & Cull Workbench" mockup
+   Redesign of the Manual Sort tab into ONE culling/sorting hub.
+   Aurora Glass tokens (matches shipped v3.3.1). Throwaway artifact,
+   NOT app code. Placeholder thumbnails are gradients.
+   ============================================================ */
+:root{
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;
+  --r1:8px;--r2:12px;--r3:18px;--r4:26px;
+  --dur:200ms;--ease:cubic-bezier(.16,1,.3,1);
+  --font-ui:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,"Microsoft YaHei",sans-serif;
+  color-scheme:dark;
+  --bg:#0c1018;
+  --bg-glow-1:rgba(99,102,241,.20);--bg-glow-2:rgba(34,211,238,.14);
+  --surface:rgba(28,33,48,.55);--surface-2:rgba(40,46,66,.62);--surface-solid:#161a26;
+  --hairline:rgba(255,255,255,.10);--hairline-strong:rgba(255,255,255,.18);
+  --text:#eef1f8;--text-dim:#aeb6cc;--text-mut:#7b829c;
+  --accent:#7c8bff;--accent-2:#33d6e0;--accent-grad:linear-gradient(120deg,#7c8bff,#33d6e0);
+  --danger:#ff6b81;--warm:#ffb86b;--good:#5ee0a8;
+  --shadow:0 18px 40px -16px rgba(0,0,0,.7),0 2px 8px -2px rgba(0,0,0,.5);
+  --shadow-lift:0 30px 60px -18px rgba(0,0,0,.8),0 0 0 1px var(--hairline-strong);
+  --blur:18px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:var(--font-ui);color:var(--text);background:var(--bg);
+  background-image:
+    radial-gradient(900px 600px at 12% -8%,var(--bg-glow-1),transparent 60%),
+    radial-gradient(800px 700px at 110% 120%,var(--bg-glow-2),transparent 55%);
+  background-attachment:fixed;-webkit-font-smoothing:antialiased;line-height:1.45;
+  padding:var(--s5);
+}
+.wrap{max-width:1360px;margin:0 auto;display:flex;flex-direction:column;gap:var(--s4)}
+
+/* ---------- header ---------- */
+.wbar{display:flex;align-items:center;gap:var(--s4);padding:var(--s3) var(--s5);
+  border-radius:var(--r4);background:var(--surface);backdrop-filter:blur(var(--blur));
+  border:1px solid var(--hairline);box-shadow:var(--shadow)}
+.wbar .logo{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;
+  background-image:var(--accent-grad);font-size:17px}
+.wbar .ttl{font-weight:800;letter-spacing:-.02em;font-size:18px}
+.wbar .ttl small{font-weight:600;color:var(--text-mut);font-size:12.5px;letter-spacing:0}
+.wbar .ver{font-size:11px;color:var(--text-mut);font-weight:600;padding:3px 8px;border:1px solid var(--hairline);border-radius:999px}
+.wbar .note{margin-left:auto;font-size:12px;color:var(--text-mut);max-width:320px;text-align:right}
+
+/* ---------- mode switcher (the point of the redesign) ---------- */
+.modes{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center;padding:var(--s2);
+  border-radius:var(--r3);background:var(--surface);backdrop-filter:blur(var(--blur));
+  border:1px solid var(--hairline);box-shadow:var(--shadow)}
+.modes .mlab{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-mut);padding:0 var(--s2) 0 var(--s3)}
+.mode{font:inherit;font-size:13.5px;cursor:pointer;color:var(--text-dim);
+  padding:9px 15px;border-radius:var(--r2);border:1px solid transparent;background:transparent;
+  display:flex;align-items:center;gap:8px;transition:all var(--dur) var(--ease)}
+.mode:hover{color:var(--text);background:var(--surface-2)}
+.mode[aria-current="true"]{color:#0a0c12;background-image:var(--accent-grad);font-weight:700;box-shadow:0 6px 16px -6px rgba(124,139,255,.6)}
+.mode .kbd{font-size:10px;opacity:.7;border:1px solid currentColor;border-radius:5px;padding:0 5px;line-height:15px}
+.mode.soon{opacity:.55;cursor:default}
+.mode.soon:hover{background:transparent;color:var(--text-dim)}
+.mode .tag{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--warm);border:1px solid color-mix(in oklab,var(--warm) 50%,transparent);border-radius:999px;padding:1px 6px}
+
+/* ---------- gallery quick-compare entry banner (v3.3.2 new) ---------- */
+.entry{display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap;padding:10px var(--s5);
+  border-radius:var(--r3);background:color-mix(in oklab,var(--accent-2) 9%,var(--surface));
+  backdrop-filter:blur(var(--blur));border:1px solid var(--hairline);box-shadow:var(--shadow)}
+.entry .eb{font-weight:800;font-size:13px;letter-spacing:-.01em;display:flex;align-items:center;gap:7px}
+.entry .ei{font-size:12.5px;color:var(--text-dim);display:flex;align-items:center;gap:7px}
+.entry .ei b{color:var(--text);font-weight:700}
+.entry .ek{font-size:11px;border:1px solid var(--hairline-strong);border-radius:6px;padding:2px 8px;background:var(--surface-2);color:var(--text)}
+.entry .emo{margin-left:auto;font-size:11px;color:var(--accent-2)}
+@media(max-width:1080px){.entry .emo{margin-left:0}}
+
+/* ---------- workbench grid ---------- */
+.wb{display:grid;grid-template-columns:286px 1fr;gap:var(--s4);align-items:start}
+
+/* ---------- control rail ---------- */
+.rail{display:flex;flex-direction:column;gap:var(--s4);padding:var(--s4);
+  border-radius:var(--r4);background:var(--surface);backdrop-filter:blur(var(--blur));
+  border:1px solid var(--hairline);box-shadow:var(--shadow);position:sticky;top:var(--s4)}
+.rg h4{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-mut);font-weight:700;margin-bottom:var(--s2);display:flex;align-items:center;gap:6px}
+.rg h4 .mo{margin-left:auto;font-size:10px;color:var(--accent-2);letter-spacing:.04em;text-transform:none}
+.src{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r2);
+  background:color-mix(in oklab,var(--accent) 12%,transparent);border:1px solid var(--hairline)}
+.src .si{font-size:16px}
+.src .st{font-size:13px;color:var(--text)}
+.src .ss{font-size:11.5px;color:var(--text-mut)}
+.src .sx{margin-left:auto;font-size:13px;color:var(--text-mut);cursor:pointer}
+.toggles{display:flex;flex-direction:column;gap:7px}
+.tg{display:flex;align-items:flex-start;gap:10px;padding:9px 11px;border-radius:var(--r2);
+  border:1px solid var(--hairline);background:var(--surface-2);cursor:pointer;transition:all var(--dur) var(--ease)}
+.tg:hover{border-color:var(--hairline-strong)}
+.tg .sw{width:34px;height:20px;border-radius:999px;background:#2a3047;border:1px solid var(--hairline);position:relative;flex:none;margin-top:1px;transition:all var(--dur) var(--ease)}
+.tg .sw::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--text-mut);transition:all var(--dur) var(--ease)}
+.tg.on .sw{background-image:var(--accent-grad);border-color:transparent}
+.tg.on .sw::after{left:16px;background:#0a0c12}
+.tg .tt{font-size:12.5px;color:var(--text);line-height:1.3}
+.tg .td{font-size:11px;color:var(--text-mut)}
+.lens{display:flex;gap:5px;flex-wrap:wrap}
+.lp{font-size:12px;padding:6px 11px;border-radius:999px;border:1px solid var(--hairline);color:var(--text-dim);background:var(--surface-2);cursor:pointer;transition:all var(--dur) var(--ease)}
+.lp:hover{color:var(--text)}
+.lp[aria-current="true"]{color:#0a0c12;background-image:var(--accent-grad);border-color:transparent;font-weight:700}
+.dest{display:flex;flex-direction:column;gap:8px}
+.drow{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--text-dim)}
+.drow .dk{color:var(--text-mut)}
+.drow .pill{margin-left:auto;font-size:11.5px;padding:3px 10px;border-radius:999px;border:1px solid var(--hairline);background:var(--surface-2);color:var(--text);display:flex;align-items:center;gap:6px}
+.drow .pill.win{background-image:var(--accent-grad);color:#0a0c12;border-color:transparent;font-weight:700}
+.drow .pill.safe{color:var(--good)}
+.divider{height:1px;background:var(--hairline)}
+.prog{display:flex;flex-direction:column;gap:8px}
+.prog .pt{display:flex;justify-content:space-between;font-size:12.5px}
+.prog .pt .k{color:var(--text-mut)} .prog .pt .v{font-weight:700;font-variant-numeric:tabular-nums}
+.bar{height:7px;border-radius:999px;background:var(--surface-2);overflow:hidden;border:1px solid var(--hairline)}
+.bar>i{display:block;height:100%;width:26%;background-image:var(--accent-grad)}
+.undo{display:flex;gap:6px}
+.ub{flex:1;font:inherit;font-size:12.5px;cursor:pointer;padding:8px;border-radius:var(--r1);border:1px solid var(--hairline);background:var(--surface-2);color:var(--text-dim);display:flex;align-items:center;justify-content:center;gap:6px;transition:all var(--dur) var(--ease)}
+.ub:hover{color:var(--text);border-color:var(--hairline-strong)}
+
+/* ---------- stage ---------- */
+.stage{display:flex;flex-direction:column;gap:var(--s4);min-width:0}
+.mode-panel{display:none}
+.mode-panel.on{display:flex;flex-direction:column;gap:var(--s4)}
+
+/* placeholder thumbs */
+.ph{position:absolute;inset:0}
+.p1{background:linear-gradient(135deg,#10131f,#2a2350 60%,#7c8bff)}
+.p2{background:linear-gradient(135deg,#0f3b3a,#1f6b5c 55%,#9fce86)}
+.p3{background:linear-gradient(135deg,#2a0f1f,#6b2046 55%,#ff6b81)}
+.p4{background:linear-gradient(135deg,#1b2a4a,#3b1d52 60%,#6d2b54)}
+.p5{background:linear-gradient(135deg,#241a06,#6b5320 55%,#d8b46a)}
+.p6{background:linear-gradient(135deg,#12203a,#1d4e7e 55%,#5fb0e0)}
+
+/* === DUEL (擂台 A/B) === */
+.duel{display:grid;grid-template-columns:1fr auto 1fr;gap:var(--s3);align-items:stretch}
+.fighter{position:relative;border-radius:var(--r3);overflow:hidden;border:1px solid var(--hairline);box-shadow:var(--shadow);aspect-ratio:4/5;cursor:pointer;transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease),outline var(--dur)}
+.fighter:hover{transform:translateY(-3px);box-shadow:var(--shadow-lift)}
+.fighter.pick{outline:3px solid var(--accent-2);outline-offset:-3px}
+.fighter .tagAB{position:absolute;top:11px;left:11px;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-weight:800;font-size:15px;background:rgba(8,10,16,.55);backdrop-filter:blur(6px);border:1px solid var(--hairline-strong);color:#fff}
+.fighter .crown{position:absolute;top:11px;right:11px;font-size:16px;background:rgba(8,10,16,.5);backdrop-filter:blur(6px);border:1px solid var(--hairline);border-radius:999px;width:30px;height:30px;display:grid;place-items:center;opacity:0;transition:opacity var(--dur)}
+.fighter.champ .crown{opacity:1}
+.fighter .mini{position:absolute;left:11px;right:11px;bottom:10px;display:flex;gap:8px;font-size:11px;color:#fff;opacity:.92;flex-wrap:wrap}
+.fighter .mini b{font-weight:700}
+.vs{display:grid;place-items:center;width:54px;position:relative}
+.vs .vc{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:14px;background:var(--surface-2);border:1px solid var(--hairline-strong);color:var(--text);z-index:1}
+.vs .vl{position:absolute;width:1px;background:var(--hairline);height:38%}
+.aihint{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--text-dim);
+  padding:8px 12px;border-radius:var(--r2);background:color-mix(in oklab,var(--accent-2) 12%,transparent);border:1px solid var(--hairline)}
+.aihint .sp{margin-left:auto;color:var(--text-mut)}
+
+/* metadata diff strip — the SD moat */
+.diff{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:12px 14px;border-radius:var(--r2);
+  background:var(--surface-2);border:1px solid var(--hairline-strong)}
+.diff .dl{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-2);font-weight:700}
+.dchip{font-size:12.5px;display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:var(--bg);border:1px solid var(--hairline)}
+.dchip b{color:var(--text-mut);font-weight:600;font-size:11px}
+.dchip .a{color:var(--danger);text-decoration:none}
+.dchip .b{color:var(--good)}
+.dchip .ar{color:var(--text-mut)}
+.dsame{margin-left:auto;font-size:11.5px;color:var(--text-mut)}
+
+/* inspector pills + action bar */
+.insp{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ipill{font-size:12px;padding:6px 12px;border-radius:999px;border:1px solid var(--hairline);color:var(--text-dim);background:var(--surface-2);cursor:pointer;display:flex;align-items:center;gap:6px;transition:all var(--dur) var(--ease)}
+.ipill:hover{color:var(--text)}
+.ipill[aria-current="true"]{color:#0a0c12;background-image:var(--accent-grad);border-color:transparent;font-weight:700}
+.actbar{margin-left:auto;display:flex;gap:6px;align-items:center}
+.act{font-size:12.5px;display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:var(--r1);border:1px solid var(--hairline);background:var(--surface-2);color:var(--text-dim)}
+.act .k{font-size:10px;border:1px solid currentColor;border-radius:5px;padding:0 6px;line-height:16px}
+
+/* === N-UP === */
+.nup{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s3)}
+.ncard{position:relative;border-radius:var(--r2);overflow:hidden;border:1px solid var(--hairline);box-shadow:var(--shadow);aspect-ratio:1/1;cursor:pointer;transition:transform var(--dur) var(--ease)}
+.ncard:hover{transform:translateY(-3px)}
+.ncard .pick{position:absolute;inset:0;background:color-mix(in oklab,var(--accent) 30%,transparent);display:grid;place-items:center;opacity:0;transition:opacity var(--dur)}
+.ncard.sel .pick{opacity:1}
+.ncard .pick span{width:42px;height:42px;border-radius:50%;background:var(--accent-grad);display:grid;place-items:center;font-size:20px;color:#0a0c12;box-shadow:var(--shadow-lift)}
+.ncard .nb{position:absolute;top:8px;left:8px;font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(8,10,16,.55);backdrop-filter:blur(6px);border:1px solid var(--hairline);color:#fff}
+
+/* === SINGLE (留/汰 & 星等) === */
+.single{display:grid;grid-template-columns:1.4fr 1fr;gap:var(--s4);align-items:center}
+.bigimg{position:relative;border-radius:var(--r3);overflow:hidden;border:1px solid var(--hairline);box-shadow:var(--shadow);aspect-ratio:1/1}
+.bigimg .nb{position:absolute;top:11px;left:11px;font-size:11px;padding:3px 9px;border-radius:999px;background:rgba(8,10,16,.55);backdrop-filter:blur(6px);border:1px solid var(--hairline);color:#fff}
+.judge{display:flex;flex-direction:column;gap:var(--s4)}
+.kr{display:flex;gap:var(--s3)}
+.krb{flex:1;cursor:pointer;border-radius:var(--r3);border:1px solid var(--hairline);background:var(--surface-2);padding:var(--s5) var(--s3);display:flex;flex-direction:column;align-items:center;gap:8px;transition:all var(--dur) var(--ease)}
+.krb .ic{font-size:30px}
+.krb .lb{font-size:14px;font-weight:700}
+.krb .k{font-size:10px;border:1px solid currentColor;border-radius:5px;padding:0 6px;color:var(--text-mut)}
+.krb.keep:hover{border-color:var(--good);background:color-mix(in oklab,var(--good) 14%,transparent)}
+.krb.rej:hover{border-color:var(--danger);background:color-mix(in oklab,var(--danger) 14%,transparent)}
+.stars{display:flex;gap:6px;font-size:26px;cursor:pointer}
+.stars .s{color:var(--text-mut);transition:color var(--dur)}
+.stars .s.on{color:var(--warm)}
+.buckets{display:flex;gap:7px;flex-wrap:wrap}
+.bk{font-size:12.5px;padding:8px 13px;border-radius:var(--r1);border:1px solid var(--hairline);background:var(--surface-2);color:var(--text-dim);cursor:pointer;transition:all var(--dur) var(--ease)}
+.bk:hover{color:var(--text);border-color:var(--hairline-strong)}
+.bk.on{color:#0a0c12;background-image:var(--accent-grad);border-color:transparent;font-weight:700}
+.jhint{font-size:12px;color:var(--text-mut)}
+
+/* === SLOT (WASD) === */
+.slots{display:grid;grid-template-columns:1.3fr 1fr;gap:var(--s4);align-items:center}
+.slotgrid{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
+.slot{border-radius:var(--r2);border:1px solid var(--hairline);background:var(--surface-2);padding:var(--s4);display:flex;align-items:center;gap:12px;transition:all var(--dur) var(--ease);cursor:pointer}
+.slot:hover{border-color:var(--accent);transform:translateY(-2px)}
+.slot .key{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;font-weight:800;font-size:15px;background:var(--bg);border:1px solid var(--hairline-strong);color:var(--accent-2)}
+.slot .sn{font-size:13.5px;font-weight:600}
+.slot .sp{font-size:11px;color:var(--text-mut)}
+.keepnote{font-size:12px;color:var(--good);display:flex;align-items:center;gap:7px}
+
+/* ---------- footer: preference insight + legend ---------- */
+.foot{display:grid;grid-template-columns:1.5fr 1fr;gap:var(--s4)}
+.card{padding:var(--s4) var(--s5);border-radius:var(--r4);background:var(--surface);backdrop-filter:blur(var(--blur));border:1px solid var(--hairline);box-shadow:var(--shadow)}
+.card h4{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-mut);font-weight:700;margin-bottom:var(--s3);display:flex;align-items:center;gap:7px}
+.card h4 .moat{margin-left:auto;font-size:10px;color:var(--accent-2);text-transform:none;letter-spacing:0}
+.insight{font-size:14px;line-height:1.5;color:var(--text-dim)}
+.insight b{color:var(--text);font-weight:700}
+.ibars{display:flex;flex-direction:column;gap:9px;margin-top:var(--s3)}
+.ib{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-mut)}
+.ib .il{width:118px;color:var(--text-dim)}
+.ib .bar2{flex:1;height:8px;border-radius:999px;background:var(--surface-2);overflow:hidden;border:1px solid var(--hairline)}
+.ib .bar2>i{display:block;height:100%;background-image:var(--accent-grad)}
+.ib .iv{width:38px;text-align:right;font-variant-numeric:tabular-nums;color:var(--text-dim)}
+.legend{display:flex;flex-direction:column;gap:9px}
+.lrow{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--text-dim)}
+.lrow .k{font-size:11px;min-width:30px;text-align:center;border:1px solid var(--hairline-strong);border-radius:6px;padding:2px 0;background:var(--surface-2);color:var(--text)}
+.foot .cap{grid-column:1/-1;text-align:center;color:var(--text-mut);font-size:12px;padding-top:var(--s2)}
+
+@media(max-width:1080px){
+  .wb{grid-template-columns:1fr}.rail{position:static}
+  .single,.slots{grid-template-columns:1fr}.foot{grid-template-columns:1fr}
+  .nup{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- header -->
+  <header class="wbar">
+    <span class="logo">🗂️</span>
+    <div class="ttl">整理工作台 <small>Sort &amp; Cull Workbench</small></div>
+    <span class="ver">v3.3.2 · mockup</span>
+    <span class="note">原「整理图片(WASD)」重设计 → 一个 tab，多种挑图/整理模式。点下面切换模式看体验。</span>
+  </header>
+
+  <!-- mode switcher: the heart of the redesign -->
+  <nav class="modes" role="tablist" aria-label="整理模式">
+    <span class="mlab">模式</span>
+    <button class="mode" data-mode="duel" aria-current="true">🥊 擂台 A/B <span class="kbd">1</span></button>
+    <button class="mode" data-mode="nup" aria-current="false">▦ 多选一 <span class="kbd">2</span></button>
+    <button class="mode" data-mode="cull" aria-current="false">👍 留/汰快筛 <span class="kbd">3</span></button>
+    <button class="mode" data-mode="rate" aria-current="false">★ 星等·分桶 <span class="kbd">4</span></button>
+    <button class="mode" data-mode="slot" aria-current="false">⌨ 槽位整理 <span class="kbd">5</span></button>
+    <button class="mode soon">🏆 淘汰赛 <span class="tag">即将</span></button>
+    <button class="mode soon">📊 ELO 排名 <span class="tag">即将</span></button>
+  </nav>
+
+  <!-- gallery quick-compare entry (v3.3.2 new): how you get here from the gallery -->
+  <div class="entry">
+    <span class="eb">⚔ 从图库进来比较</span>
+    <span class="ei"><span class="ek">先筛选</span> 用图库筛选 / 相似 缩到你要的</span>
+    <span class="ei"><span class="ek">多选</span> → <b>比较选取</b> → 直接进擂台</span>
+    <span class="emo">复用现有筛选，不另设入口，UI 不杂乱</span>
+  </div>
+
+  <div class="wb">
+    <!-- ===================== control rail (shared spine) ===================== -->
+    <aside class="rail">
+      <div class="rg">
+        <h4>来源 <span class="mo">图库多选进来</span></h4>
+        <div class="src">
+          <span class="si">🖼️</span>
+          <div><div class="st">选取的 12 张</div><div class="ss">来自图库筛选 · 多选「比较选取」</div></div>
+          <span class="sx">✕</span>
+        </div>
+      </div>
+
+      <div class="rg">
+        <h4>AI 辅助 <span class="mo">Eagle 没有</span></h4>
+        <div class="toggles">
+          <div class="tg on"><span class="sw"></span><div><div class="tt">美学预排 · 只问接近的</div><div class="td">差距大的自动晋级</div></div></div>
+          <div class="tg on"><span class="sw"></span><div><div class="tt">按 seed/prompt 自动分组</div><div class="td">每个生成批次一场</div></div></div>
+          <div class="tg"><span class="sw"></span><div><div class="tt">仅比较相似的</div><div class="td">用 CLIP 避免乱配对</div></div></div>
+        </div>
+      </div>
+
+      <div class="rg">
+        <h4>评判维度</h4>
+        <div class="lens" role="tablist">
+          <span class="lp" aria-current="true">整体</span>
+          <span class="lp">手·脸</span>
+          <span class="lp">构图</span>
+          <span class="lp">贴合度</span>
+          <span class="lp">美学</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="rg">
+        <h4>去向</h4>
+        <div class="dest">
+          <div class="drow"><span class="dk">赢家 →</span><span class="pill win">♥ 合集 Keepers</span></div>
+          <div class="drow"><span class="dk">输家 →</span><span class="pill safe">默认不动 ✓</span></div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="rg prog">
+        <div class="pt"><span class="k">本场进度</span><span class="v" id="pcount">12 / 47</span></div>
+        <div class="bar"><i id="pbar"></i></div>
+        <div class="undo">
+          <button class="ub">↶ 撤销 <span style="opacity:.6">U</span></button>
+          <button class="ub">↷ 重做</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===================== stage (mode-dependent) ===================== -->
+    <section class="stage">
+
+      <!-- MODE: DUEL 擂台 A/B -->
+      <div class="mode-panel on" data-panel="duel">
+        <div class="aihint">⚡ 美学预排已替你跳过 11 张明显的，只剩 <b style="color:var(--text)">36 对</b> 需要你判 <span class="sp">越往后越接近，越值得你看</span></div>
+
+        <div class="duel">
+          <div class="fighter champ pick" data-side="A">
+            <div class="ph p1"></div>
+            <div class="tagAB">A</div><div class="crown">👑</div>
+            <div class="mini"><span><b>seed</b> 12834</span><span><b>cfg</b> 7.0</span><span><b>Euler a</b></span></div>
+          </div>
+          <div class="vs"><div class="vl"></div><div class="vc">VS</div></div>
+          <div class="fighter" data-side="B">
+            <div class="ph p4"></div>
+            <div class="tagAB">B</div><div class="crown">👑</div>
+            <div class="mini"><span><b>seed</b> 12834</span><span><b>cfg</b> 5.0</span><span><b>DPM++ 2M</b></span></div>
+          </div>
+        </div>
+
+        <!-- metadata diff strip = the moat -->
+        <div class="diff">
+          <span class="dl">只显示差异</span>
+          <span class="dchip"><b>CFG</b><span class="a">7.0</span><span class="ar">→</span><span class="b">5.0</span></span>
+          <span class="dchip"><b>Sampler</b><span class="a">Euler a</span><span class="ar">→</span><span class="b">DPM++ 2M</span></span>
+          <span class="dchip"><b>Steps</b><span class="a">30</span><span class="ar">→</span><span class="b">24</span></span>
+          <span class="dchip"><b>LoRA:hair</b><span class="a">0.80</span><span class="ar">→</span><span class="b">0.60</span></span>
+          <span class="dsame">seed · checkpoint · prompt 相同</span>
+        </div>
+
+        <div class="insp">
+          <span class="ipill" aria-current="true">▥ 并排</span>
+          <span class="ipill">⚡ Flip 闪烁</span>
+          <span class="ipill">🌡 差异热图</span>
+          <span class="ipill">🔍 同步放大 <b style="opacity:.6;margin-left:3px">Z</b></span>
+          <div class="actbar">
+            <span class="act"><span class="k">←</span> 选 A</span>
+            <span class="act"><span class="k">→</span> 选 B</span>
+            <span class="act"><span class="k">↑</span> 跳过</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODE: N-UP 多选一 -->
+      <div class="mode-panel" data-panel="nup">
+        <div class="aihint">▦ 一次看一批，点最好的 1～N 张 <b style="color:var(--text)">晋级</b>，其余淘汰。明显的 batch 比 A/B 还快。<span class="sp">点卡片试试</span></div>
+        <div class="nup">
+          <div class="ncard"><div class="ph p1"></div><span class="nb">#1 · cfg7</span><div class="pick"><span>✓</span></div></div>
+          <div class="ncard sel"><div class="ph p2"></div><span class="nb">#2 · cfg6</span><div class="pick"><span>✓</span></div></div>
+          <div class="ncard"><div class="ph p3"></div><span class="nb">#3 · cfg5</span><div class="pick"><span>✓</span></div></div>
+          <div class="ncard"><div class="ph p4"></div><span class="nb">#4 · cfg7</span><div class="pick"><span>✓</span></div></div>
+          <div class="ncard sel"><div class="ph p6"></div><span class="nb">#5 · cfg6</span><div class="pick"><span>✓</span></div></div>
+          <div class="ncard"><div class="ph p5"></div><span class="nb">#6 · cfg8</span><div class="pick"><span>✓</span></div></div>
+        </div>
+        <div class="insp"><span class="jhint">已选 2 张晋级 · 其余将进入下一轮淘汰</span><div class="actbar"><span class="act"><span class="k">空格</span> 下一批</span><span class="act"><span class="k">↵</span> 确认</span></div></div>
+      </div>
+
+      <!-- MODE: CULL 留/汰快筛 -->
+      <div class="mode-panel" data-panel="cull">
+        <div class="single">
+          <div class="bigimg"><div class="ph p3"></div><span class="nb">desert_caravan.jpg · #14 / 47</span></div>
+          <div class="judge">
+            <div class="kr">
+              <div class="krb rej"><span class="ic">👎</span><span class="lb">汰</span><span class="k">←</span></div>
+              <div class="krb keep"><span class="ic">👍</span><span class="lb">留</span><span class="k">→</span></div>
+            </div>
+            <div class="jhint">单张快速粗筛，先砍掉明显的废图，再进 A/B 细比。空格 = 跳过。留下的进「Keepers」，汰掉的默认只移出本场（不删档）。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODE: RATE 星等·分桶 -->
+      <div class="mode-panel" data-panel="rate">
+        <div class="single">
+          <div class="bigimg"><div class="ph p1"></div><span class="nb">aurora_knight_01.png · #5 / 47</span></div>
+          <div class="judge">
+            <div>
+              <div class="jhint" style="margin-bottom:8px">星等（1–5，数字键）</div>
+              <div class="stars" id="stars"><span class="s on">★</span><span class="s on">★</span><span class="s on">★</span><span class="s">★</span><span class="s">★</span></div>
+            </div>
+            <div>
+              <div class="jhint" style="margin-bottom:8px">丢进桶</div>
+              <div class="buckets">
+                <span class="bk on">精选</span><span class="bk">参考</span><span class="bk">重抽</span><span class="bk">废弃</span>
+              </div>
+            </div>
+            <div class="jhint">评分写入资料库 → 图库可「按喜好排序」。比的同时顺手分级，不只是勝負。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODE: SLOT 槽位整理 WASD (preserved existing) -->
+      <div class="mode-panel" data-panel="slot">
+        <div class="aihint">⌨ 现有的 WASD 整理 —— 完整保留，只是收进同一个工作台。每个槽指向一个文件夹或合集。</div>
+        <div class="slots">
+          <div class="bigimg"><div class="ph p6"></div><span class="nb">ocean_city.png · #4 / 47</span></div>
+          <div class="slotgrid">
+            <div class="slot"><span class="key">W</span><div><div class="sn">精选大图</div><div class="sp">L:\sorted\best</div></div></div>
+            <div class="slot"><span class="key">A</span><div><div class="sn">风景参考</div><div class="sp">L:\sorted\ref</div></div></div>
+            <div class="slot"><span class="key">S</span><div><div class="sn">重抽队列</div><div class="sp">L:\sorted\redo</div></div></div>
+            <div class="slot"><span class="key">D</span><div><div class="sn">合集：角色</div><div class="sp">→ 合集（引用）</div></div></div>
+          </div>
+        </div>
+        <div class="keepnote">✓ 移动有进度与撤销 · 原图移动前会确认 · 会话状态由后端保存（断电不丢）</div>
+      </div>
+
+    </section>
+  </div>
+
+  <!-- footer: preference insight (moat) + keyboard legend -->
+  <div class="foot">
+    <div class="card">
+      <h4>偏好洞察报告 <span class="moat">把挑图变煉丹回饋 · Eagle 做不到</span></h4>
+      <div class="insight">本场你已决定 12 张：<b>87%</b> 选了较低 CFG，<b>偏好 DPM++ 2M Karras</b>，并持续回避 <b>&gt;28 步</b> 的结果。</div>
+      <div class="ibars">
+        <div class="ib"><span class="il">较低 CFG (5–6)</span><span class="bar2"><i style="width:87%"></i></span><span class="iv">87%</span></div>
+        <div class="ib"><span class="il">DPM++ 2M</span><span class="bar2"><i style="width:74%"></i></span><span class="iv">74%</span></div>
+        <div class="ib"><span class="il">Steps ≤ 28</span><span class="bar2"><i style="width:92%"></i></span><span class="iv">92%</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <h4>键盘</h4>
+      <div class="legend">
+        <div class="lrow"><span class="k">1–5</span> 切换模式</div>
+        <div class="lrow"><span class="k">←/→</span> 选 A / 选 B（或 汰 / 留）</div>
+        <div class="lrow"><span class="k">↑</span> 跳过 / 平手</div>
+        <div class="lrow"><span class="k">Z</span> 同步放大对比（pixel-peep）</div>
+        <div class="lrow"><span class="k">U</span> 撤销上一步</div>
+      </div>
+    </div>
+    <div class="cap">SD Image Sorter · v3.3.2 「整理工作台」mockup（占位缩略图为渐变）· 数字键 1–5 或点上方切换模式 · 在擂台模式点 A/B 卡片</div>
+  </div>
+
+</div>
+
+<script>
+  // mode switching
+  const modeBtns=[...document.querySelectorAll('.mode[data-mode]')];
+  const panels=[...document.querySelectorAll('.mode-panel')];
+  function setMode(m){
+    modeBtns.forEach(b=>b.setAttribute('aria-current', b.dataset.mode===m?'true':'false'));
+    panels.forEach(p=>p.classList.toggle('on', p.dataset.panel===m));
+  }
+  modeBtns.forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
+  const order=['duel','nup','cull','rate','slot'];
+  document.addEventListener('keydown',e=>{
+    if(e.key>='1'&&e.key<='5'){setMode(order[+e.key-1]);}
+  });
+
+  // duel: pick A/B → champion flash + advance counter
+  let decided=12;
+  const fighters=[...document.querySelectorAll('.fighter')];
+  fighters.forEach(f=>f.addEventListener('click',()=>{
+    fighters.forEach(x=>{x.classList.remove('pick');x.classList.remove('champ')});
+    f.classList.add('pick');f.classList.add('champ');
+    decided=Math.min(47,decided+1);
+    document.getElementById('pcount').textContent=decided+' / 47';
+    document.getElementById('pbar').style.width=Math.round(decided/47*100)+'%';
+  }));
+
+  // inspector pills + lens + n-up + stars + buckets: simple active toggles
+  function single(group){group.forEach(el=>el.addEventListener('click',()=>{group.forEach(x=>x.setAttribute('aria-current','false'));el.setAttribute('aria-current','true')}))}
+  single([...document.querySelectorAll('.ipill')]);
+  document.querySelectorAll('.lens').forEach(g=>single([...g.querySelectorAll('.lp')]));
+  document.querySelectorAll('.ncard').forEach(c=>c.addEventListener('click',()=>c.classList.toggle('sel')));
+  const stars=[...document.querySelectorAll('#stars .s')];
+  stars.forEach((s,i)=>s.addEventListener('click',()=>stars.forEach((x,j)=>x.classList.toggle('on',j<=i))));
+  document.querySelectorAll('.buckets .bk').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.buckets .bk').forEach(x=>x.classList.remove('on'));b.classList.add('on')}));
+  document.querySelectorAll('.tg').forEach(t=>t.addEventListener('click',()=>t.classList.toggle('on')));
+</script>
+</body>
+</html>
