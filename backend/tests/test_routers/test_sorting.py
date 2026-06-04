@@ -2563,6 +2563,44 @@ class TestResolveDropSecurity:
         assert result["folder_path"] == ""
 
 
+class TestResolveDropMatching:
+    """resolve_drop maps dropped filenames back to their indexed folder so a
+    folder drag fills the scan path instead of failing with a bare folder name."""
+
+    def test_matches_indexed_folder_by_filename_and_size(self, isolated_sorting_service, test_db):
+        import database as db
+
+        db.add_image(path="/lib/26_05_29/a.png", filename="a.png", file_size=111111, metadata_json="{}")
+        db.add_image(path="/lib/26_05_29/b.png", filename="b.png", file_size=222222, metadata_json="{}")
+
+        # Read the stored parent back so the assertion survives any path
+        # normalization add_image applies on the way in.
+        conn = db.get_connection()
+        row = conn.cursor().execute(
+            "SELECT path FROM images WHERE filename = 'a.png'"
+        ).fetchone()
+        stored_path = row[0] if isinstance(row, (tuple, list)) else row["path"]
+        expected_parent = str(Path(stored_path).parent)
+
+        dropped = [
+            {"name": "a.png", "size": 111111},
+            {"name": "b.png", "size": 222222},
+        ]
+        result = isolated_sorting_service.resolve_drop("26_05_29", [], dropped_files=dropped)
+        assert result["folder_path"] == expected_parent
+
+    def test_unmatched_drop_returns_empty_path(self, isolated_sorting_service, test_db):
+        # Neither the files nor the folder name exist in the library, so the path
+        # stays empty and the frontend opens the folder browser instead of
+        # writing a bare, unscannable folder name into the path field.
+        result = isolated_sorting_service.resolve_drop(
+            "folder_not_in_library_zzz",
+            [],
+            dropped_files=[{"name": "ghost_xyz.png", "size": 7}],
+        )
+        assert result["folder_path"] == ""
+
+
 def test_scan_progress_marks_user_visible_stalled_warning(isolated_sorting_service, monkeypatch):
     monkeypatch.setattr("services.sorting_service.SCAN_UI_STALLED_SECONDS", 10.0)
     isolated_sorting_service.set_scan_progress({

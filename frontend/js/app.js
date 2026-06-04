@@ -11538,6 +11538,45 @@ function _hasFolderOrImageFiles(e) {
     return types && (types.includes('Files') || types.indexOf('Files') >= 0);
 }
 
+// Read a dropped directory's top-level image files via the FileSystemEntry API
+// (used because dataTransfer.files is typically empty for folder drops). Returns
+// [{name, size}] capped so a huge folder can't stall the resolve request.
+function _readTopLevelDroppedImageFiles(dirEntry, cap = 12) {
+    return new Promise((resolve) => {
+        if (!dirEntry || typeof dirEntry.createReader !== 'function') { resolve([]); return; }
+        const IMG = /\.(png|jpe?g|webp|bmp|gif)$/i;
+        const reader = dirEntry.createReader();
+        const fileEntries = [];
+        let settled = false;
+        const fail = () => { if (!settled) { settled = true; resolve([]); } };
+
+        const finish = () => {
+            const picked = fileEntries.slice(0, cap);
+            if (!picked.length) { if (!settled) { settled = true; resolve([]); } return; }
+            const out = [];
+            let pending = picked.length;
+            picked.forEach((fe) => {
+                fe.file(
+                    (f) => { out.push({ name: f.name, size: f.size || 0 }); if (--pending === 0 && !settled) { settled = true; resolve(out); } },
+                    () => { if (--pending === 0 && !settled) { settled = true; resolve(out); } }
+                );
+            });
+        };
+
+        // readEntries returns in batches; keep calling until it yields none.
+        const readBatch = () => {
+            reader.readEntries((entries) => {
+                if (!entries.length || fileEntries.length >= cap) { finish(); return; }
+                for (const entry of entries) {
+                    if (entry.isFile && IMG.test(entry.name)) fileEntries.push(entry);
+                }
+                readBatch();
+            }, fail);
+        };
+        readBatch();
+    });
+}
+
 async function _handleGalleryDrop(e) {
     const items = e.dataTransfer.items;
     const files = e.dataTransfer.files;
@@ -11545,6 +11584,7 @@ async function _handleGalleryDrop(e) {
 
     let isFolder = false;
     let folderName = '';
+    let dirEntry = null;
 
     if (items && items.length > 0) {
         for (let i = 0; i < items.length; i++) {
@@ -11552,13 +11592,22 @@ async function _handleGalleryDrop(e) {
             if (entry && entry.isDirectory) {
                 isFolder = true;
                 folderName = entry.name || '';
+                dirEntry = entry;
                 break;
             }
         }
     }
 
     if (isFolder) {
-        _handleFolderDrop(folderName, files);
+        // dataTransfer.files is usually empty for a folder drop in Chrome, so
+        // read the folder's own top-level image files via the entry — that gives
+        // resolve_drop real filenames to match against the library and locate the
+        // on-disk folder (the browser never exposes its absolute path directly).
+        let folderFiles = [];
+        if (dirEntry) {
+            try { folderFiles = await _readTopLevelDroppedImageFiles(dirEntry); } catch (_) { /* ignore */ }
+        }
+        _handleFolderDrop(folderName, files, folderFiles);
         return;
     }
 
@@ -11575,13 +11624,15 @@ async function _handleGalleryDrop(e) {
     showModal('scan-modal');
 }
 
-async function _handleFolderDrop(folderName, files) {
+async function _handleFolderDrop(folderName, files, folderFiles) {
     const droppedFiles = [];
-    if (files && files.length > 0) {
-        for (let i = 0; i < Math.min(files.length, 5); i++) {
-            if (files[i].name) {
-                droppedFiles.push({ name: files[i].name, size: files[i].size || 0 });
-            }
+    // Prefer the folder's own files (read via the directory entry); fall back to
+    // the flat dataTransfer.files, which is often empty for folder drops.
+    const source = (folderFiles && folderFiles.length) ? folderFiles : Array.from(files || []);
+    for (let i = 0; i < Math.min(source.length, 8); i++) {
+        const f = source[i];
+        if (f && f.name) {
+            droppedFiles.push({ name: f.name, size: f.size || 0 });
         }
     }
 
@@ -11593,17 +11644,25 @@ async function _handleFolderDrop(folderName, files) {
         }
     } catch (_) { /* fallback below */ }
 
+    // Resolution failed. Browsers never expose a dropped folder's absolute path,
+    // and we couldn't match its files to a known library folder — so do NOT put
+    // the bare folder name in the path field (it would be read as a relative path
+    // like "26_05_29" and fail with "Folder does not exist"). Open the scan modal
+    // with an empty path and launch the folder browser so the user can locate it.
     showModal('scan-modal');
     const input = document.getElementById('scan-folder-path');
-    if (input && folderName) {
-        input.value = folderName;
+    if (input) {
+        input.value = '';
         input.dispatchEvent(new Event('input', { bubbles: true }));
     }
     showToast(
-        appT('gallery.dropHintBrowse', 'Could not locate the full path for "{name}". Please browse or complete the path.')
+        appT('gallery.dropHintBrowse', "Couldn't auto-locate \"{name}\" — your browser can't share a folder's full path. Pick it with Browse to scan it.")
             .replace('{name}', folderName || (droppedFiles[0]?.name) || ''),
         'warning'
     );
+    if (input && typeof window.showFolderBrowser === 'function') {
+        try { window.showFolderBrowser(input); } catch (_) { /* ignore */ }
+    }
 }
 
 async function _handleImageFilesDrop(imageFiles) {

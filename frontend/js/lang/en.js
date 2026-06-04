@@ -158,7 +158,7 @@ window.I18nLang_en = {
     'gallery.dropToImport': 'Drop folder or images to import',
     'gallery.dropHint': 'Images will be imported from the dropped folder',
     'gallery.dropNoPath': 'Could not determine folder path. Please use the Import button to browse.',
-    'gallery.dropHintBrowse': 'Could not locate the full path for "{name}". Please browse or complete the path.',
+    'gallery.dropHintBrowse': "Couldn't auto-locate \"{name}\" — your browser can't share a folder's full path. Pick it with Browse to scan it.",
     'gallery.importingDropped': 'Importing {count} images...',
     'gallery.importedDropped': 'Imported {count} images into gallery',
     'gallery.importDroppedFailed': 'No images could be imported',

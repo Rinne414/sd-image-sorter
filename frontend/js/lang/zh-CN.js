@@ -160,7 +160,7 @@ window.I18nLang_zhCN = {
     'gallery.dropToImport': '拖入文件夹或图片来导入',
     'gallery.dropHint': '将从拖入的文件夹中导入图片',
     'gallery.dropNoPath': '无法获取文件夹路径，请使用导入按钮手动选择。',
-    'gallery.dropHintBrowse': '无法定位"{name}"的完整路径，请手动浏览或补全路径。',
+    'gallery.dropHintBrowse': '无法自动定位"{name}"——浏览器不会提供文件夹的完整路径。请点「浏览」选中它再扫描。',
     'gallery.importingDropped': '正在导入 {count} 张图片...',
     'gallery.importedDropped': '已导入 {count} 张图片到图库',
     'gallery.importDroppedFailed': '没有图片可以导入',
