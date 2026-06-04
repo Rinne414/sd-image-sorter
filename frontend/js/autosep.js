@@ -1328,11 +1328,17 @@ async function updateAutoSepPreview() {
         AutoSepState.previewImages = previewImages;
         AutoSepState.previewSignature = currentSignature;
         _resetAutoSepOverflowState(currentSignature);
-        $('#autosep-preview .stat-number').textContent = AutoSepState.matchCount;
+        // Clamp defensively: the count must never render as the backend's -1
+        // "count skipped" sentinel (the user-reported "-1 张图").
+        $('#autosep-preview .stat-number').textContent = Math.max(0, AutoSepState.matchCount);
         renderAutoSepPreviewList(AutoSepState.previewImages, AutoSepState.matchCount);
 
     } catch (error) {
         Logger.error('Failed to preview:', error);
+        // A failed preview must not leave a stale/garbage count on screen.
+        AutoSepState.matchCount = 0;
+        const statEl = document.querySelector('#autosep-preview .stat-number');
+        if (statEl) statEl.textContent = '0';
     }
 }
 
@@ -1415,6 +1421,10 @@ function showAutosepMoveProgress(total) {
     }
 
     progressEl.classList.add('visible');
+    // The progress block sits at the bottom of the preview pane and is often
+    // below the fold, so users thought there was no progress bar at all. Bring
+    // it into view when a move/copy starts.
+    try { progressEl.scrollIntoView({ block: 'nearest' }); } catch (_) { /* older browsers */ }
     autosepMoveTracker = window.App?.createProgressTracker?.() || null;
     if (autosepMoveTracker && typeof window.App?.resetProgressTracker === 'function') {
         window.App.resetProgressTracker(autosepMoveTracker);
@@ -1541,21 +1551,32 @@ async function pollAutosepMoveProgress(expectedTotal, destination = '') {
         ? _formatAutoSepI18n('autosep.destinationSuffix', ' to {path}', { path: destination })
         : '';
 
+    // The backend job may not have flipped idle->running yet on the first
+    // poll(s); tolerate a short grace window (~2s at 250ms/poll) before
+    // concluding it never started, so the progress bar doesn't flash-and-vanish.
+    const AUTOSEP_IDLE_GRACE_POLLS = 8;
+    let idlePolls = 0;
+
     try {
         while (autosepMoveController === controller && controller.active) {
             const progress = await window.App.API.get('/api/batch-move/progress');
             updateAutosepMoveProgress(progress, expectedTotal);
 
             if (progress.status === 'idle') {
-                hideAutosepMoveProgress();
-                window.App.showToast(
-                    _formatAutoSepI18n(
-                        'autosep.moveStoppedNoProgress',
-                        'Batch move stopped before any progress was reported'
-                    ),
-                    'error'
-                );
-                break;
+                idlePolls += 1;
+                if (idlePolls >= AUTOSEP_IDLE_GRACE_POLLS) {
+                    hideAutosepMoveProgress();
+                    window.App.showToast(
+                        _formatAutoSepI18n(
+                            'autosep.moveStoppedNoProgress',
+                            'Batch move stopped before any progress was reported'
+                        ),
+                        'error'
+                    );
+                    break;
+                }
+            } else {
+                idlePolls = 0;
             }
 
             if (progress.status === 'done') {

@@ -11028,6 +11028,27 @@ function searchModalPrompts(query) {
     _debouncedPromptSearch(query);
 }
 
+/**
+ * Collect checked values from a filter checkbox list, treating "every option
+ * checked" (with no active search narrowing the list) as NO restriction — an
+ * empty array. Sending the explicit full list instead pushes an IN(...) into the
+ * query that silently drops every image whose checkpoint is NULL or that used
+ * zero LoRAs, which made "select all" return far fewer images than expected
+ * (v3.3.2 bug). Mirrors how the rating/generator filters collapse "all" to none.
+ */
+function _collectAllAwareCheckboxValues(listId, searchId) {
+    const list = document.getElementById(listId);
+    if (!list) return [];
+    const boxes = [...list.querySelectorAll('input[type="checkbox"]')];
+    const checked = boxes.filter((cb) => cb.checked).map((cb) => cb.value);
+    const searchEl = searchId ? document.getElementById(searchId) : null;
+    const searchActive = Boolean(searchEl && searchEl.value.trim());
+    if (!searchActive && boxes.length > 0 && checked.length === boxes.length) {
+        return []; // every option selected == match all (no restriction)
+    }
+    return checked;
+}
+
 function applyModalFilters() {
     const filterState = getFilterModalState();
     // Get generators
@@ -11040,15 +11061,11 @@ function applyModalFilters() {
     $$('#modal-rating-filters input:checked').forEach(cb => ratings.push(cb.value));
     filterState.ratings = ratings;
 
-    // Get checkpoints
-    const checkpoints = [];
-    $$('#modal-checkpoint-list input:checked').forEach(cb => checkpoints.push(cb.value));
-    filterState.checkpoints = checkpoints;
-
-    // Get loras
-    const loras = [];
-    $$('#modal-lora-list input:checked').forEach(cb => loras.push(cb.value));
-    filterState.loras = loras;
+    // Get checkpoints / loras. "Select all" must mean NO restriction (match
+    // every image), not an explicit IN(...) list that would drop NULL-checkpoint
+    // / zero-LoRA images. See _collectAllAwareCheckboxValues.
+    filterState.checkpoints = _collectAllAwareCheckboxValues('modal-checkpoint-list', 'modal-checkpoint-search');
+    filterState.loras = _collectAllAwareCheckboxValues('modal-lora-list', 'modal-lora-search');
 
     // Prompts: don't use prompt search bar as text search — prompts array is built via Enter key
     // But read the free-text search field for filename/prompt text search
