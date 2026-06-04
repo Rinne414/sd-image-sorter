@@ -45,6 +45,7 @@ from db_query import (
     _apply_prompt_terms_filter,
     _apply_dimension_filters,
     _apply_aesthetic_filter,
+    _apply_user_rating_filter,
     _apply_color_filter,
     _apply_artist_filter,
     _apply_image_ids_filter,
@@ -142,6 +143,7 @@ def get_images(
     excluded_image_ids: Optional[List[int]] = None,
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
+    min_user_rating: Optional[int] = None,  # v3.3.2 FF-2: gallery "★≥N" filter
     include_unreadable: bool = False,
     # v3.2.1 color filters
     brightness_min: Optional[float] = None,
@@ -251,6 +253,9 @@ def get_images(
         conditions, params = _apply_aesthetic_filter(
             conditions, params, min_aesthetic, max_aesthetic
         )
+        conditions, params = _apply_user_rating_filter(
+            conditions, params, min_user_rating
+        )
 
         # Apply v3.2.1 color filters
         conditions, params = _apply_color_filter(
@@ -323,6 +328,7 @@ def get_filtered_image_count(
     excluded_image_ids: Optional[List[int]] = None,
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
+    min_user_rating: Optional[int] = None,  # v3.3.2 FF-2: gallery "★≥N" filter
     include_unreadable: bool = False,
     # v3.2.1 color filters
     brightness_min: Optional[float] = None,
@@ -415,6 +421,9 @@ def get_filtered_image_count(
         conditions, params = _apply_aesthetic_filter(
             conditions, params, min_aesthetic, max_aesthetic
         )
+        conditions, params = _apply_user_rating_filter(
+            conditions, params, min_user_rating
+        )
 
         # Apply v3.2.1 color filters
         conditions, params = _apply_color_filter(
@@ -464,6 +473,7 @@ def get_filtered_image_ids(
     excluded_image_ids: Optional[List[int]] = None,
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
+    min_user_rating: Optional[int] = None,  # v3.3.2 FF-2: gallery "★≥N" filter
     include_unreadable: bool = False,
     fetch_chunk_size: int = 5000,
     max_results: Optional[int] = None,
@@ -559,6 +569,9 @@ def get_filtered_image_ids(
         conditions, params = _apply_aesthetic_filter(
             conditions, params, min_aesthetic, max_aesthetic
         )
+        conditions, params = _apply_user_rating_filter(
+            conditions, params, min_user_rating
+        )
 
         # Apply v3.2.1 color filters
         conditions, params = _apply_color_filter(
@@ -651,6 +664,7 @@ def get_images_paginated(
     skip_count: bool = False,  # Option to skip expensive COUNT query
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
+    min_user_rating: Optional[int] = None,  # v3.3.2 FF-2: gallery "★≥N" filter
     include_unreadable: bool = False,
     # v3.2.1 color filters
     brightness_min: Optional[float] = None,
@@ -752,6 +766,9 @@ def get_images_paginated(
         # Apply aesthetic score filters
         conditions, params = _apply_aesthetic_filter(
             conditions, params, min_aesthetic, max_aesthetic
+        )
+        conditions, params = _apply_user_rating_filter(
+            conditions, params, min_user_rating
         )
 
         # Apply v3.2.1 color filters
@@ -856,6 +873,7 @@ def get_images_paginated(
                 search_query, prompt_terms, artist, min_width, max_width,
                 min_height, max_height, aspect_ratio, include_unreadable,
                 min_aesthetic, max_aesthetic,
+                min_user_rating=min_user_rating,
                 prompt_match_mode=normalized_prompt_match_mode,
                 collection_id=collection_id,
             )
@@ -893,6 +911,7 @@ def _get_filtered_count(
     include_unreadable: bool = False,
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
+    min_user_rating: Optional[int] = None,  # v3.3.2 FF-2: gallery "★≥N" filter
     prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
     collection_id: Optional[int] = None,
 ) -> int:
@@ -944,6 +963,9 @@ def _get_filtered_count(
     # Apply aesthetic score filters
     conditions, params = _apply_aesthetic_filter(
         conditions, params, min_aesthetic, max_aesthetic
+    )
+    conditions, params = _apply_user_rating_filter(
+        conditions, params, min_user_rating
     )
 
     # Apply artist filter (JOIN)

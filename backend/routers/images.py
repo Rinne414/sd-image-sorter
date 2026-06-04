@@ -363,7 +363,7 @@ async def get_images(
     ),
     sort_by: str = Query(
         default="newest",
-        description="Sort order: newest, oldest, name_asc, name_desc, generator, generator_desc, prompt_length, prompt_length_asc, tag_count, tag_count_asc, rating, rating_desc, character_count, character_count_asc, random, file_size, file_size_asc",
+        description="Sort order: newest, oldest, name_asc, name_desc, generator, generator_desc, prompt_length, prompt_length_asc, tag_count, tag_count_asc, rating, rating_desc, character_count, character_count_asc, random, file_size, file_size_asc, aesthetic, aesthetic_asc, user_rating, user_rating_asc",
         examples=["newest"],
     ),
     limit: int = Query(
@@ -444,6 +444,12 @@ async def get_images(
         ge=0,
         le=10,
         description="Maximum aesthetic score (0-10)",
+    ),
+    min_user_rating: Optional[int] = Query(
+        default=None,
+        ge=0,
+        le=5,
+        description="Minimum user star rating 0-5 (the gallery ★≥N filter); 0 or None shows all (v3.3.2).",
     ),
     # v3.2.1 color filters
     brightness_min: Optional[float] = Query(
@@ -547,6 +553,7 @@ async def get_images(
         aspect_ratio=aspect_ratio,
         min_aesthetic=min_aesthetic,
         max_aesthetic=max_aesthetic,
+        min_user_rating=min_user_rating,
         brightness_min=brightness_min,
         brightness_max=brightness_max,
         color_temperature=color_temperature,
@@ -966,6 +973,39 @@ async def reparse_image(
 ):
     """Re-parse metadata for a single image and update the database."""
     return service.reparse_image(image_id)
+
+
+class SetUserRatingRequest(BaseModel):
+    """Body for POST /api/images/{image_id}/rating (v3.3.2 FF-2)."""
+    stars: int = Field(..., ge=0, le=5, description="User star rating 0-5 (0 = unrated)")
+
+
+@router.post(
+    "/images/{image_id}/rating",
+    summary="Set an image's user star rating",
+    description=(
+        "Set the explicit user star rating (0-5; 0 = unrated) for one image (v3.3.2). "
+        "This is the Eagle-style manual rating, independent of the AI WD14 rating tags "
+        "(general/sensitive/questionable/explicit)."
+    ),
+    responses={
+        200: {"description": "Rating updated", "content": {"application/json": {"example": {"image_id": 42, "user_rating": 4, "updated": True}}}},
+        404: {"description": "Image not found", "content": {"application/json": {"example": {"detail": "Image not found"}}}},
+    },
+)
+async def set_image_user_rating(
+    image_id: int,
+    request: SetUserRatingRequest,
+    service: ImageService = Depends(get_image_service),
+):
+    """Set the user star rating (0-5) for a single image."""
+    try:
+        result = service.set_user_rating(image_id, request.stars)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not result.get("updated"):
+        raise HTTPException(status_code=404, detail="Image not found")
+    return result
 
 
 @router.post(

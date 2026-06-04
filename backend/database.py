@@ -163,6 +163,7 @@ from db_images_write import (
     copy_image_derived_state,
     add_copied_image_with_state,
     update_image_caption,
+    set_user_rating,
     update_image_colors,
     update_image_path,
     update_image_metadata,

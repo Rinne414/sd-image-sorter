@@ -220,6 +220,8 @@ VALID_SORT_OPTIONS = [
     "prompt_length", "prompt_length_asc", "tag_count", "tag_count_asc",
     "rating", "rating_desc", "character_count", "character_count_asc",
     "aesthetic", "aesthetic_asc",
+    # v3.3.2 user star rating (FF-2)
+    "user_rating", "user_rating_asc",
     "random", "file_size", "file_size_asc",
     # v3.2.1 color sorts
     "brightness", "brightness_asc",
@@ -1793,6 +1795,16 @@ class ImageService:
                 except OSError:
                     logger.debug("Failed to remove selection snapshot temp file: %s", temp_path)
 
+    def set_user_rating(self, image_id: int, stars: int) -> Dict[str, Any]:
+        """Set an image's user star rating (0-5; 0 = unrated) — v3.3.2 FF-2.
+
+        ``db.set_user_rating`` validates the range (raising ``ValueError`` for
+        out-of-range input, which the router surfaces as HTTP 400) and reports
+        whether a row matched so the router can return 404 for an unknown id.
+        """
+        updated = db.set_user_rating(image_id, stars)
+        return {"image_id": int(image_id), "user_rating": int(stars), "updated": bool(updated)}
+
     def get_images(
         self,
         generators: Optional[str] = None,
@@ -1816,6 +1828,7 @@ class ImageService:
         aspect_ratio: Optional[str] = None,
         min_aesthetic: Optional[float] = None,
         max_aesthetic: Optional[float] = None,
+        min_user_rating: Optional[int] = None,  # v3.3.2 FF-2: gallery "★≥N" filter
         excluded_image_ids: Optional[List[int]] = None,
         # v3.2.1 color filters
         brightness_min: Optional[float] = None,
@@ -1936,6 +1949,7 @@ class ImageService:
                     aspect_ratio=aspect_ratio,
                     min_aesthetic=min_aesthetic,
                     max_aesthetic=max_aesthetic,
+                    min_user_rating=min_user_rating,
                     brightness_min=brightness_min,
                     brightness_max=brightness_max,
                     color_temperature=color_temperature,
@@ -2005,6 +2019,7 @@ class ImageService:
                 aspect_ratio=aspect_ratio,
                 min_aesthetic=min_aesthetic,
                 max_aesthetic=max_aesthetic,
+                min_user_rating=min_user_rating,
                 brightness_min=brightness_min,
                 brightness_max=brightness_max,
                 color_temperature=color_temperature,
@@ -2051,6 +2066,7 @@ class ImageService:
             aspect_ratio=aspect_ratio,
             min_aesthetic=min_aesthetic,
             max_aesthetic=max_aesthetic,
+            min_user_rating=min_user_rating,
             brightness_min=brightness_min,
             brightness_max=brightness_max,
             color_temperature=color_temperature,

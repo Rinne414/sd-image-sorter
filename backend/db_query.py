@@ -34,6 +34,8 @@ VALID_SORT_OPTIONS = {
     "prompt_length", "prompt_length_asc", "tag_count", "tag_count_asc",
     "rating", "rating_desc", "character_count", "character_count_asc",
     "random", "file_size", "file_size_asc", "aesthetic", "aesthetic_asc",
+    # v3.3.2 user star rating (FF-2)
+    "user_rating", "user_rating_asc",
     # v3.2.1 color sorts
     "brightness", "brightness_asc",
     "saturation", "saturation_asc",
@@ -70,6 +72,8 @@ _IMAGE_COLUMNS_BASE_FIELDS = (
     "tagged_at",
     "ai_caption",
     "aesthetic_score",
+    # v3.3.2 user star rating (FF-2): INTEGER 0-5, NOT NULL DEFAULT 0 (0 = unrated).
+    "user_rating",
     # Color analysis (migration 010, v3.2.1). All nullable until backfill.
     "dominant_colors",
     "avg_brightness",
@@ -103,6 +107,8 @@ _IMAGE_COLUMNS_WITH_PROMPT_FIELDS = (
     "created_at",
     "tagged_at",
     "aesthetic_score",
+    # v3.3.2 user star rating (FF-2): 0-5, 0 = unrated.
+    "user_rating",
     # Color summary for gallery list (v3.2.1). Histogram/skew skipped to keep row light.
     "dominant_colors",
     "avg_brightness",
@@ -132,6 +138,8 @@ _IMAGE_COLUMNS_LIGHTWEIGHT_FIELDS = (
     "created_at",
     "tagged_at",
     "aesthetic_score",
+    # v3.3.2 user star rating (FF-2): 0-5, 0 = unrated.
+    "user_rating",
     # Color summary for gallery list (v3.2.1). Histogram/skew skipped to keep row light.
     "dominant_colors",
     "avg_brightness",
@@ -665,6 +673,20 @@ def _apply_aesthetic_filter(conditions: List[str], params: List[Any],
     return conditions, params
 
 
+def _apply_user_rating_filter(conditions: List[str], params: List[Any],
+                              min_user_rating: Optional[int]) -> tuple:
+    """Apply the gallery "★≥N" user-rating filter (v3.3.2, FF-2).
+
+    ``user_rating`` is NOT NULL DEFAULT 0, so no NULL guard is needed. A
+    ``min_user_rating`` of None or 0 is a no-op that keeps unrated images in;
+    only a value >= 1 narrows results to images rated at least that many stars.
+    """
+    if min_user_rating is not None and int(min_user_rating) > 0:
+        conditions.append("i.user_rating >= ?")
+        params.append(int(min_user_rating))
+    return conditions, params
+
+
 def _apply_color_filter(conditions: List[str], params: List[Any],
                         brightness_min: Optional[float] = None,
                         brightness_max: Optional[float] = None,
@@ -831,6 +853,9 @@ def _get_order_clause(sort_by: str) -> str:
         "file_size_asc": "i.file_size ASC, i.id ASC",
         "aesthetic": "COALESCE(i.aesthetic_score, 0) DESC, i.id DESC",
         "aesthetic_asc": "COALESCE(i.aesthetic_score, 0) ASC, i.id ASC",
+        # v3.3.2 user star rating (FF-2). user_rating is NOT NULL DEFAULT 0.
+        "user_rating": "i.user_rating DESC, i.id DESC",
+        "user_rating_asc": "i.user_rating ASC, i.id ASC",
         # v3.2.1 color sorts
         "brightness": "COALESCE(i.avg_brightness, -1) DESC, i.id DESC",
         "brightness_asc": "COALESCE(i.avg_brightness, 999) ASC, i.id ASC",

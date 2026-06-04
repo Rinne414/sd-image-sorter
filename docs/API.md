@@ -188,6 +188,9 @@ Remove old cached thumbnails, then enforce the configured thumbnail cache size l
 #### POST /api/images/{image_id}/reparse
 Re-parse metadata for one image.
 
+#### POST /api/images/{image_id}/rating
+Set an image's explicit user star rating (v3.3.2). Body `{ "stars": 0-5 }` where `0` clears the rating (unrated). This Eagle-style manual rating is stored on `images.user_rating` and is independent of the AI WD14 rating tags. The gallery can then filter with `min_user_rating` and sort by `user_rating` / `user_rating_asc`. Returns `404` for an unknown image id and `400`/`422` for an out-of-range value.
+
 #### POST /api/images/selection-ids
 Resolve the full ordered ID set for the current filtered result set.
 

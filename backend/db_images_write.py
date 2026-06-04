@@ -581,6 +581,26 @@ def update_image_caption(image_id: int, caption: str) -> None:
             (caption, image_id),
         )
 
+def set_user_rating(image_id: int, stars: int) -> bool:
+    """Set the user-assigned star rating (0-5; 0 = unrated) for one image.
+
+    Returns True when a row was updated, False when no image has ``image_id``.
+    Raises ``ValueError`` when ``stars`` is outside 0-5 so a bad client value
+    fails loudly at the boundary instead of writing garbage.
+    """
+    try:
+        stars_int = int(stars)
+    except (TypeError, ValueError):
+        raise ValueError(f"user_rating must be an integer 0-5, got {stars!r}")
+    if not 0 <= stars_int <= 5:
+        raise ValueError(f"user_rating must be between 0 and 5, got {stars_int}")
+    with get_db() as conn:
+        cursor = conn.execute(
+            "UPDATE images SET user_rating = ? WHERE id = ?",
+            (stars_int, image_id),
+        )
+        return int(cursor.rowcount or 0) > 0
+
 def update_image_colors(image_id: int, color_data: Dict[str, Any]) -> None:
     """Update color analysis columns for an image (v3.2.1).
 
