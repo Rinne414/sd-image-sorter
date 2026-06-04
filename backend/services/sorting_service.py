@@ -62,11 +62,19 @@ SORT_MODE_SLOT = "slot"
 # later slice). Reuses the session's current_index as the challenger pointer and
 # adds champion_index.
 SORT_MODE_BRACKET = "bracket"
+# v3.3.2 FF-1: 留/汰 Keep-Reject rapid cull. One image at a time; keep or reject
+# (or skip), with undo/redo. Non-destructive — decisions are recorded in the
+# session history and the frontend routes kept→Collection / rejected→opt-in
+# target at finish (mirrors the bracket winner routing). Reuses current_index as
+# the single cursor; no champion pointer, no file moves.
+SORT_MODE_CULL = "cull"
 SORT_MODE_DEFAULT = SORT_MODE_SLOT
-VALID_SORT_MODES = [SORT_MODE_SLOT, SORT_MODE_BRACKET]
+VALID_SORT_MODES = [SORT_MODE_SLOT, SORT_MODE_BRACKET, SORT_MODE_CULL]
 # Bracket actions: pick the champion (A keeps the crown), promote the challenger
 # (B wins), skip (no preference — champion stays), plus undo/redo.
 VALID_BRACKET_ACTIONS = ["champion", "challenger", "skip", "undo", "redo"]
+# Cull actions: keep (loved), reject (cut), skip (decide later), plus undo/redo.
+VALID_CULL_ACTIONS = ["keep", "reject", "skip", "undo", "redo"]
 VALID_FILE_OPERATIONS = ["move", "copy"]
 VALID_PROMPT_MATCH_MODES = {"exact", "contains"}
 SCAN_LOG_HEARTBEAT_SECONDS = max(
@@ -2481,6 +2489,160 @@ class SortingService:
                 **self._get_sort_session_flags(history, self._sort_session["redo_stack"]),
             }
 
+    def _get_current_cull_image(self) -> Dict[str, Any]:
+        """Return the current single image for 留/汰 Keep-Reject (cull) mode.
+
+        Walks past unreadable images (marking them) so the user never lands on a
+        broken file — mirroring the slot/bracket lazy readability handling. Keep
+        and reject decisions live in the session history (non-destructive: the
+        frontend routes kept→Collection / rejected→opt-in target at finish), so
+        the kept/rejected tallies are derived from history.
+        """
+        while True:
+            with self._sort_session_lock:
+                if not self._sort_session.get("active"):
+                    return {
+                        "active": False,
+                        "done": True,
+                        "mode": SORT_MODE_CULL,
+                        "message": "No active sort session",
+                        "image": None,
+                        "index": 0,
+                        "total": 0,
+                        "remaining": 0,
+                        "kept": 0,
+                        "rejected": 0,
+                        **self._get_sort_session_flags([], []),
+                    }
+                image_ids = self._sort_session["image_ids"]
+                total = len(image_ids)
+                current_index = int(self._sort_session.get("current_index", 0) or 0)
+                history_snapshot = list(self._sort_session.get("history", []))
+                redo_snapshot = list(self._sort_session.get("redo_stack", []))
+
+            kept = sum(1 for h in history_snapshot if h.get("action") == "keep")
+            rejected = sum(1 for h in history_snapshot if h.get("action") == "reject")
+
+            if total == 0 or current_index >= total:
+                return {
+                    "active": True,
+                    "done": True,
+                    "mode": SORT_MODE_CULL,
+                    "image": None,
+                    "index": min(current_index, total),
+                    "total": total,
+                    "remaining": 0,
+                    "kept": kept,
+                    "rejected": rejected,
+                    "message": "Cull complete" if total else "No images to cull",
+                    **self._get_sort_session_flags(history_snapshot, redo_snapshot),
+                }
+
+            current = self._resolve_readable_sort_image(image_ids[current_index])
+            if current is None:
+                with self._sort_session_lock:
+                    self._sort_session["current_index"] = current_index + 1
+                    self._save_session_to_disk()
+                continue
+
+            return {
+                "active": True,
+                "done": False,
+                "mode": SORT_MODE_CULL,
+                "image": current,
+                "index": current_index,
+                "total": total,
+                "remaining": total - current_index,
+                "kept": kept,
+                "rejected": rejected,
+                "image_ids": list(image_ids),
+                **self._get_sort_session_flags(history_snapshot, redo_snapshot),
+            }
+
+    def _cull_action(self, action: str) -> Dict[str, Any]:
+        """Apply a 留/汰 cull action (keep/reject/skip/undo/redo).
+
+        Non-destructive: keep/reject only record the decision + advance the
+        cursor; routing kept→Collection / rejected→opt-in target happens
+        client-side at finish (mirrors the bracket winner routing). Decisions
+        live in history so undo/redo restore both the cursor and the tally.
+        """
+        if action not in VALID_CULL_ACTIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid cull action. Must be one of: {', '.join(VALID_CULL_ACTIONS)}",
+            )
+
+        with self._sort_session_lock:
+            if not self._sort_session.get("active"):
+                raise HTTPException(status_code=400, detail="No active sort session")
+
+            image_ids = self._sort_session["image_ids"]
+            total = len(image_ids)
+            current_index = int(self._sort_session.get("current_index", 0) or 0)
+            history = self._sort_session.setdefault("history", [])
+            redo_stack = self._sort_session.setdefault("redo_stack", [])
+
+            if action == "undo":
+                if not history:
+                    return {"status": "nothing_to_undo", **self._get_sort_session_flags(history, redo_stack)}
+                last = history.pop()
+                redo_stack.append(last)
+                self._sort_session["current_index"] = int(last.get("prev_index", 0))
+                self._save_session_to_disk()
+                return {
+                    "status": "undone",
+                    "decision": last.get("action"),
+                    "image_id": last.get("image_id"),
+                    **self._get_sort_session_flags(history, redo_stack),
+                }
+
+            if action == "redo":
+                if not redo_stack:
+                    return {"status": "nothing_to_redo", **self._get_sort_session_flags(history, redo_stack)}
+                entry = redo_stack.pop()
+                self._sort_session["current_index"] = int(entry.get("prev_index", 0)) + 1
+                history.append(entry)
+                self._save_session_to_disk()
+                return {
+                    "status": "redone",
+                    "decision": entry.get("action"),
+                    "image_id": entry.get("image_id"),
+                    **self._get_sort_session_flags(history, redo_stack),
+                }
+
+            # Forward action (keep / reject / skip).
+            if current_index >= total:
+                raise HTTPException(status_code=400, detail="Cull already complete")
+            image_id = image_ids[current_index]
+            entry = {
+                "action": action,
+                "mode": SORT_MODE_CULL,
+                "image_id": image_id,
+                "prev_index": current_index,
+            }
+            self._sort_session["current_index"] = current_index + 1
+            history.append(entry)
+            # A fresh forward choice invalidates any redo branch.
+            self._sort_session["redo_stack"] = []
+            self._save_session_to_disk()
+
+            new_index = self._sort_session["current_index"]
+            kept = sum(1 for h in history if h.get("action") == "keep")
+            rejected = sum(1 for h in history if h.get("action") == "reject")
+            return {
+                "status": "ok",
+                "done": new_index >= total,
+                "mode": SORT_MODE_CULL,
+                "decision": action,
+                "image_id": image_id,
+                "index": new_index,
+                "total": total,
+                "kept": kept,
+                "rejected": rejected,
+                **self._get_sort_session_flags(history, self._sort_session["redo_stack"]),
+            }
+
     def get_current_sort_image(self) -> Dict[str, Any]:
         """Get the current image in the sort session."""
         with self._sort_session_lock:
@@ -2490,6 +2652,13 @@ class SortingService:
             )
         if is_bracket:
             return self._get_current_bracket_image()
+        with self._sort_session_lock:
+            is_cull = (
+                bool(self._sort_session.get("active"))
+                and self._sort_session.get("mode") == SORT_MODE_CULL
+            )
+        if is_cull:
+            return self._get_current_cull_image()
         while True:
             with self._sort_session_lock:
                 if not self._sort_session["active"]:
@@ -2578,6 +2747,14 @@ class SortingService:
             )
         if is_bracket:
             return self._bracket_action(action)
+
+        with self._sort_session_lock:
+            is_cull = (
+                bool(self._sort_session.get("active"))
+                and self._sort_session.get("mode") == SORT_MODE_CULL
+            )
+        if is_cull:
+            return self._cull_action(action)
 
         if action not in VALID_SORT_ACTIONS:
             raise HTTPException(

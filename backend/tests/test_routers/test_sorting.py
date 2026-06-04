@@ -2943,3 +2943,149 @@ def test_bracket_start_and_action_via_api(test_client, tmp_path):
     action = test_client.post("/api/sort/action?action=champion")
     assert action.status_code == 200
     assert action.json()["mode"] == "bracket"
+
+
+# ---------------------------------------------------------------------------
+# v3.3.2 Sort & Cull Workbench — FF-1: 留/汰 Keep-Reject rapid cull mode.
+# One image at a time; keep/reject/skip with undo/redo. Non-destructive — keep
+# and reject only record the decision + advance the cursor (the frontend routes
+# kept→Collection / rejected→opt-in target at finish). Tests drive the service
+# directly with real on-disk images (cull get_current verifies readability),
+# reading image order from the session so they don't depend on DB id ordering.
+# Reuses _make_bracket_images / _bracket_service (generic image+service helpers).
+# ---------------------------------------------------------------------------
+
+def test_cull_start_initializes_first_image(test_db, tmp_path, monkeypatch):
+    _make_bracket_images(test_db, tmp_path, 3)
+    service = _bracket_service(tmp_path, monkeypatch)
+
+    result = service.start_sort_session(mode="cull")
+    assert result["mode"] == "cull"
+
+    cur = service.get_current_sort_image()
+    order = cur["image_ids"]
+    assert cur["mode"] == "cull"
+    assert cur["done"] is False
+    assert cur["total"] == 3
+    assert cur["index"] == 0
+    assert cur["image"]["image"]["id"] == order[0]
+    assert cur["kept"] == 0 and cur["rejected"] == 0
+
+
+def test_cull_keep_advances_and_counts(test_db, tmp_path, monkeypatch):
+    _make_bracket_images(test_db, tmp_path, 3)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="cull")
+    order = service.get_current_sort_image()["image_ids"]
+
+    res = service.sort_action("keep")
+    assert res["decision"] == "keep" and res["image_id"] == order[0]
+    cur = service.get_current_sort_image()
+    assert cur["index"] == 1
+    assert cur["image"]["image"]["id"] == order[1]
+    assert cur["kept"] == 1 and cur["rejected"] == 0
+
+
+def test_cull_reject_advances_and_counts(test_db, tmp_path, monkeypatch):
+    _make_bracket_images(test_db, tmp_path, 3)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="cull")
+    order = service.get_current_sort_image()["image_ids"]
+
+    res = service.sort_action("reject")
+    assert res["decision"] == "reject" and res["image_id"] == order[0]
+    cur = service.get_current_sort_image()
+    assert cur["index"] == 1 and cur["rejected"] == 1 and cur["kept"] == 0
+
+
+def test_cull_skip_advances_without_counting(test_db, tmp_path, monkeypatch):
+    _make_bracket_images(test_db, tmp_path, 3)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="cull")
+
+    service.sort_action("skip")
+    cur = service.get_current_sort_image()
+    assert cur["index"] == 1 and cur["kept"] == 0 and cur["rejected"] == 0
+
+
+def test_cull_completes_after_last_image(test_db, tmp_path, monkeypatch):
+    _make_bracket_images(test_db, tmp_path, 2)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="cull")
+
+    service.sort_action("keep")
+    service.sort_action("reject")
+    done = service.get_current_sort_image()
+    assert done["done"] is True
+    assert done["image"] is None
+    assert done["kept"] == 1 and done["rejected"] == 1
+
+
+def test_cull_undo_restores_cursor_and_tally(test_db, tmp_path, monkeypatch):
+    _make_bracket_images(test_db, tmp_path, 3)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="cull")
+    order = service.get_current_sort_image()["image_ids"]
+
+    service.sort_action("keep")
+    service.sort_action("undo")
+    cur = service.get_current_sort_image()
+    assert cur["index"] == 0
+    assert cur["image"]["image"]["id"] == order[0]
+    assert cur["kept"] == 0
+
+
+def test_cull_redo_reapplies_decision(test_db, tmp_path, monkeypatch):
+    _make_bracket_images(test_db, tmp_path, 3)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="cull")
+    order = service.get_current_sort_image()["image_ids"]
+
+    service.sort_action("keep")
+    service.sort_action("undo")
+    service.sort_action("redo")
+    cur = service.get_current_sort_image()
+    assert cur["index"] == 1
+    assert cur["image"]["image"]["id"] == order[1]
+    assert cur["kept"] == 1
+
+
+def test_cull_rejects_invalid_action(test_db, tmp_path, monkeypatch):
+    from fastapi import HTTPException
+
+    _make_bracket_images(test_db, tmp_path, 2)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="cull")
+
+    with pytest.raises(HTTPException) as exc_info:
+        service.sort_action("champion")  # a bracket action is invalid in cull mode
+    assert exc_info.value.status_code == 400
+
+
+def test_cull_start_and_action_via_api(test_client, tmp_path):
+    from PIL import Image
+
+    db = test_client.test_db
+    for i in range(3):
+        path = tmp_path / f"wb_cull_api_{i}.png"
+        Image.new("RGB", (16, 16), color=(i * 30 % 255, 10, 20)).save(path)
+        db.add_image(
+            path=str(path), filename=path.name, generator="unknown", prompt=None,
+            negative_prompt=None, checkpoint=None, loras=[], width=16, height=16,
+            file_size=1, metadata_json="{}",
+        )
+
+    start = test_client.post("/api/sort/start?mode=cull")
+    assert start.status_code == 200
+    assert start.json()["mode"] == "cull"
+
+    current = test_client.get("/api/sort/current")
+    assert current.status_code == 200
+    body = current.json()
+    assert body["mode"] == "cull"
+    assert body["image"] is not None and body["kept"] == 0
+
+    action = test_client.post("/api/sort/action?action=keep")
+    assert action.status_code == 200
+    payload = action.json()
+    assert payload["mode"] == "cull" and payload["decision"] == "keep"
