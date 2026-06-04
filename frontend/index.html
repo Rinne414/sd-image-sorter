@@ -1272,6 +1272,9 @@
                             <button type="button" class="sort-mode-btn" data-sort-mode="bracket" role="tab" aria-selected="false">
                                 <span aria-hidden="true">🥊</span> <span data-i18n="manual.modeBracket">A/B Showdown</span>
                             </button>
+                            <button type="button" class="sort-mode-btn" data-sort-mode="cull" role="tab" aria-selected="false">
+                                <span aria-hidden="true">⚖</span> <span data-i18n="manual.modeCull">Keep / Reject</span>
+                            </button>
                             <span class="sort-mode-soon" title="Coming soon"><span aria-hidden="true">▦</span> <span data-i18n="manual.modeMoreSoon">More modes soon</span></span>
                         </div>
 
@@ -1284,6 +1287,21 @@
                         <div class="bracket-winner-row sort-bracket-only" id="bracket-winner-row" style="display:none;">
                             <label for="bracket-winner-collection" data-i18n="manual.bracketWinnerDest">Winner goes to</label>
                             <select id="bracket-winner-collection" class="bracket-winner-select"></select>
+                        </div>
+
+                        <!-- FF-1: shown only in 留/汰 Keep-Reject (cull) mode -->
+                        <div class="sort-cull-intro sort-cull-only" id="sort-cull-intro" style="display:none;">
+                            <p data-i18n="manual.cullIntro">Go through one image at a time and keep or reject it. Non-destructive — kept and rejected images are routed to the collections you choose below.</p>
+                        </div>
+                        <div class="cull-dest-row sort-cull-only" id="cull-dest-row" style="display:none;">
+                            <div class="cull-dest">
+                                <label for="cull-keep-collection" data-i18n="manual.cullKeepDest">Keep goes to</label>
+                                <select id="cull-keep-collection" class="bracket-winner-select"></select>
+                            </div>
+                            <div class="cull-dest">
+                                <label for="cull-reject-collection" data-i18n="manual.cullRejectDest">Reject goes to</label>
+                                <select id="cull-reject-collection" class="bracket-winner-select"></select>
+                            </div>
                         </div>
 
                         <div class="folder-config sort-slot-only">
@@ -1597,6 +1615,48 @@
                             <button type="button" class="btn btn-ghost btn-small" id="bracket-btn-undo" disabled>↶ <span data-i18n="manual.undoLabel">Undo</span></button>
                             <button type="button" class="btn btn-ghost btn-small" id="bracket-btn-redo" disabled>↷ <span data-i18n="manual.redoLabel">Redo</span></button>
                             <button type="button" class="btn btn-ghost btn-small" id="bracket-btn-exit">✕ <span data-i18n="manual.exit">Exit</span></button>
+                        </div>
+                    </div>
+
+                    <!-- FF-1: 留/汰 Keep-Reject cull interface (single image at a time) -->
+                    <div class="sort-cull-interface" id="sort-cull-interface" style="display: none;">
+                        <div class="cull-hint" data-i18n="manual.cullHint">Keep the ones you love, reject the rest. One image at a time.</div>
+
+                        <div class="cull-stage">
+                            <div class="cull-card" id="cull-card">
+                                <img id="cull-image" src="" alt="Image to judge">
+                                <div class="cull-caption">
+                                    <span class="bracket-meta" id="cull-meta"></span>
+                                    <span class="bracket-name" id="cull-name"></span>
+                                </div>
+                                <span class="cull-stamp cull-stamp-keep" id="cull-stamp-keep" aria-hidden="true" data-i18n="manual.cullKeep">Keep</span>
+                                <span class="cull-stamp cull-stamp-reject" id="cull-stamp-reject" aria-hidden="true" data-i18n="manual.cullReject">Reject</span>
+                            </div>
+                        </div>
+
+                        <div class="cull-tally" id="cull-tally">
+                            <span class="cull-tally-keep" id="cull-tally-keep">♥ 0</span>
+                            <span class="cull-tally-reject" id="cull-tally-reject">✕ 0</span>
+                        </div>
+
+                        <div class="bracket-actions cull-actions">
+                            <button type="button" class="btn btn-secondary" id="cull-btn-reject"><span class="bracket-key" aria-hidden="true">←</span> <span data-i18n="manual.cullReject">Reject</span></button>
+                            <button type="button" class="btn btn-ghost" id="cull-btn-skip"><span class="bracket-key" aria-hidden="true">↑</span> <span data-i18n="manual.cullSkip">Skip</span></button>
+                            <button type="button" class="btn btn-secondary" id="cull-btn-keep"><span class="bracket-key" aria-hidden="true">→</span> <span data-i18n="manual.cullKeep">Keep</span></button>
+                        </div>
+
+                        <div class="bracket-progress">
+                            <div class="progress-bar"><div class="progress-fill" id="cull-progress-fill"></div></div>
+                            <div class="bracket-progress-info">
+                                <span id="cull-progress-text">0 / 0</span>
+                                <span class="bracket-progress-hint" data-i18n="manual.cullProgressHint">← reject • → keep • ↑ skip • Z undo • ESC exit</span>
+                            </div>
+                        </div>
+
+                        <div class="bracket-footer">
+                            <button type="button" class="btn btn-ghost btn-small" id="cull-btn-undo" disabled>↶ <span data-i18n="manual.undoLabel">Undo</span></button>
+                            <button type="button" class="btn btn-ghost btn-small" id="cull-btn-redo" disabled>↷ <span data-i18n="manual.redoLabel">Redo</span></button>
+                            <button type="button" class="btn btn-ghost btn-small" id="cull-btn-exit">✕ <span data-i18n="manual.exit">Exit</span></button>
                         </div>
                     </div>
                 </div>

@@ -48,10 +48,14 @@ const ManualSortState = {
 const MANUAL_SORT_COOLDOWN_KEY = 'manual_sort_cooldown_ms_v1';
 // v3.3.2 WB-S3: remembers the mode chosen in the setup screen across reloads.
 const MANUAL_SORT_MODE_KEY = 'manual_sort_mode_v1';
-const MANUAL_SORT_MODES = new Set(['slot', 'bracket']);
+const MANUAL_SORT_MODES = new Set(['slot', 'bracket', 'cull']);
 // v3.3.2 WB-S6: remembers the A/B Showdown winner destination ('' none,
 // 'fav' Favorites, or a collection id).
 const MANUAL_SORT_BRACKET_WINNER_KEY = 'manual_sort_bracket_winner_v1';
+// v3.3.2 FF-1: remembers the 留/汰 cull keep/reject destinations (same value
+// space as the bracket winner: '' none, 'fav' Favorites, or a collection id).
+const MANUAL_SORT_CULL_KEEP_KEY = 'manual_sort_cull_keep_v1';
+const MANUAL_SORT_CULL_REJECT_KEY = 'manual_sort_cull_reject_v1';
 
 const MANUAL_SORT_FILTER_STATE_KEY = 'manual_sort_filter_state_v1';
 const MANUAL_SORT_SCOPE_META_KEY = 'manual_sort_scope_meta_v1';
@@ -93,9 +97,18 @@ function getManualSortSelectedMode() {
     return 'slot';
 }
 
+// The start-button label depends on the chosen mode. Shares its shape with
+// ui-refresh.js (whose MutationObserver re-applies the label after rebuilding
+// the button), so both must agree on the per-mode text.
+function getManualSortStartLabel(mode) {
+    if (mode === 'bracket') return manualSortText('manual.startShowdown', 'Start Showdown', '开始擂台');
+    if (mode === 'cull') return manualSortText('manual.startCulling', 'Start Culling', '开始留汰');
+    return manualSortText('manual.startSorting', 'Start Sorting', '开始排序');
+}
+
 // Reflect the chosen mode in the setup UI: highlight the button, toggle the
-// slot-only vs bracket-only blocks, and relabel the start button. Never touches
-// an active session (mode is locked once sorting starts).
+// slot-only vs bracket-only vs cull-only blocks, and relabel the start button.
+// Never touches an active session (mode is locked once sorting starts).
 function setManualSortSelectedMode(mode, { persist = true } = {}) {
     const normalized = MANUAL_SORT_MODES.has(mode) ? mode : 'slot';
     if (persist) {
@@ -114,6 +127,9 @@ function setManualSortSelectedMode(mode, { persist = true } = {}) {
     document.querySelectorAll('.sort-bracket-only').forEach((el) => {
         el.style.display = normalized === 'bracket' ? '' : 'none';
     });
+    document.querySelectorAll('.sort-cull-only').forEach((el) => {
+        el.style.display = normalized === 'cull' ? '' : 'none';
+    });
 
     // ui-refresh.js may rebuild the start button into
     // <span>🎮</span><span class="ui-label">…</span>, stripping the original
@@ -122,9 +138,7 @@ function setManualSortSelectedMode(mode, { persist = true } = {}) {
     const startLabel = document.getElementById('sort-start-label')
         || (startBtn && (startBtn.querySelector('.ui-label') || startBtn.querySelector('[data-i18n]')));
     if (startLabel) {
-        startLabel.textContent = normalized === 'bracket'
-            ? manualSortText('manual.startShowdown', 'Start Showdown', '开始擂台')
-            : manualSortText('manual.startSorting', 'Start Sorting', '开始排序');
+        startLabel.textContent = getManualSortStartLabel(normalized);
     }
 }
 
@@ -315,6 +329,40 @@ function populateBracketWinnerSelect() {
     select.value = valid ? saved : '';
 }
 
+// v3.3.2 FF-1: 留/汰 cull keep/reject destination selectors. Same value space
+// as the bracket winner ('' = don't save, 'fav' = Favorites, else collection
+// id). Keep defaults to Favorites; reject defaults to don't-save.
+function getCullDest(which) {
+    const key = which === 'reject' ? MANUAL_SORT_CULL_REJECT_KEY : MANUAL_SORT_CULL_KEEP_KEY;
+    try {
+        const stored = localStorage.getItem(key);
+        if (stored != null) return stored;
+    } catch (_) { /* ignore */ }
+    return which === 'keep' ? 'fav' : '';
+}
+
+function populateCullDestSelect(which) {
+    const select = document.getElementById(which === 'reject' ? 'cull-reject-collection' : 'cull-keep-collection');
+    if (!select) return;
+    const none = manualSortText('manual.bracketWinnerNone', "Don't save", '不收藏');
+    const fav = manualSortText('manual.bracketWinnerFav', '♥ Favorites', '♥ 收藏');
+    const options = (ManualSortState.collectionsCache || [])
+        .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
+        .join('');
+    select.innerHTML = `<option value="">${escapeHtml(none)}</option>`
+        + `<option value="fav">${escapeHtml(fav)}</option>`
+        + options;
+    const saved = getCullDest(which);
+    const valid = saved === '' || saved === 'fav'
+        || (ManualSortState.collectionsCache || []).some((c) => String(c.id) === String(saved));
+    select.value = valid ? saved : (which === 'keep' ? 'fav' : '');
+}
+
+function populateCullDestSelects() {
+    populateCullDestSelect('keep');
+    populateCullDestSelect('reject');
+}
+
 async function loadManualSortCollections() {
     try {
         const result = await window.App?.API?.listCollections?.();
@@ -334,6 +382,7 @@ async function loadManualSortCollections() {
     });
     populateManualSortCollectionSelects();
     populateBracketWinnerSelect();
+    populateCullDestSelects();
     MANUAL_SORT_SLOT_KEYS.forEach(refreshManualSortSlotUi);
 }
 
@@ -924,6 +973,20 @@ async function initManualSort() {
         fighter.addEventListener('mouseleave', () => { if (ManualSortState.bracketZoom) applyBracketZoom(null, null); });
     });
 
+    // v3.3.2 FF-1: 留/汰 Keep-Reject cull controls.
+    $('#cull-btn-keep')?.addEventListener('click', () => performCullAction('keep'));
+    $('#cull-btn-reject')?.addEventListener('click', () => performCullAction('reject'));
+    $('#cull-btn-skip')?.addEventListener('click', () => performCullAction('skip'));
+    $('#cull-btn-undo')?.addEventListener('click', () => performCullAction('undo'));
+    $('#cull-btn-redo')?.addEventListener('click', () => performCullAction('redo'));
+    $('#cull-btn-exit')?.addEventListener('click', exitSorting);
+    $('#cull-keep-collection')?.addEventListener('change', (e) => {
+        try { localStorage.setItem(MANUAL_SORT_CULL_KEEP_KEY, e.target.value || ''); } catch (_) { /* ignore */ }
+    });
+    $('#cull-reject-collection')?.addEventListener('change', (e) => {
+        try { localStorage.setItem(MANUAL_SORT_CULL_REJECT_KEY, e.target.value || ''); } catch (_) { /* ignore */ }
+    });
+
     // Exit sorting button
     const exitBtn = $('#btn-exit-sorting');
     if (exitBtn) {
@@ -1039,6 +1102,10 @@ async function startSorting() {
     // slot (WASD) flow below stays exactly as it was.
     if (getManualSortSelectedMode() === 'bracket') {
         return startBracketSorting();
+    }
+    // v3.3.2 FF-1: 留/汰 cull is also folder-free and non-destructive.
+    if (getManualSortSelectedMode() === 'cull') {
+        return startCullSorting();
     }
 
     const { $, $$, API, showToast } = window.App;
@@ -1351,6 +1418,8 @@ function hideSortInterfaces() {
     if (slot) slot.style.display = 'none';
     const bracket = $('#sort-bracket-interface');
     if (bracket) bracket.style.display = 'none';
+    const cull = $('#sort-cull-interface');
+    if (cull) cull.style.display = 'none';
 }
 
 function activateSortingUi(mode = 'slot') {
@@ -1360,11 +1429,12 @@ function activateSortingUi(mode = 'slot') {
     document.removeEventListener('keydown', handleSortKeypress);
     document.addEventListener('keydown', handleSortKeypress);
     $('#sort-setup').style.display = 'none';
+    hideSortInterfaces();
     if (ManualSortState.mode === 'bracket') {
-        $('#sort-interface').style.display = 'none';
         $('#sort-bracket-interface').style.display = 'flex';
+    } else if (ManualSortState.mode === 'cull') {
+        $('#sort-cull-interface').style.display = 'flex';
     } else {
-        $('#sort-bracket-interface').style.display = 'none';
         $('#sort-interface').style.display = 'flex';
     }
     updateHistoryControlState();
@@ -1384,6 +1454,9 @@ function applyCurrentSortPayload(result, options = {}) {
     // single-image slot view. Keeps the slot path below byte-identical.
     if (result?.mode === 'bracket') {
         return applyBracketPayload(result, options);
+    }
+    if (result?.mode === 'cull') {
+        return applyCullPayload(result, options);
     }
 
     const { $, API } = window.App;
@@ -1961,6 +2034,312 @@ function handleBracketKeypress(e) {
     performBracketAction(action, Boolean(e.repeat));
 }
 
+// ============== 留/汰 Keep-Reject cull — v3.3.2 FF-1 ==============
+
+// Folder-free, non-destructive start path (mirrors startBracketSorting). One
+// image at a time; keep/reject decisions are tracked client-side and routed to
+// the chosen collections at finish.
+async function startCullSorting() {
+    const { API, showToast } = window.App;
+
+    try {
+        const existing = await API.getCurrentSortImage();
+        const hasActive = existing && !existing.done && (existing.image || existing.champion);
+        if (hasActive) {
+            if (existing.mode === 'cull') {
+                ManualSortState.startTime = Date.now();
+                ManualSortState.history = [];
+                ManualSortState.actionTimestamps = [];
+                ManualSortState.cullDecisions = new Map();
+                activateSortingUi('cull');
+                applyCurrentSortPayload(existing);
+                showToast(manualSortText('manual.cullResumed', 'Resumed your Keep/Reject session.', '已恢复留/汰整理。'), 'info');
+            } else {
+                await resumeSavedSession(existing);
+            }
+            return;
+        }
+    } catch (error) {
+        if (window.Logger) Logger.warn('Failed to check existing session before cull start:', error);
+    }
+
+    const f = buildManualSortFilterContract(getManualSortFilters());
+    const generators = f.generators?.length > 0 ? f.generators : null;
+    const ratings = f.ratings?.length > 0 ? f.ratings : null;
+    const tags = f.tags?.length > 0 ? f.tags : null;
+    const checkpoints = f.checkpoints?.length > 0 ? f.checkpoints : null;
+    const loras = f.loras?.length > 0 ? f.loras : null;
+    const prompts = f.prompts?.length > 0 ? f.prompts : null;
+    const search = f.search?.trim() || null;
+    const dimensions = {
+        minWidth: f.minWidth,
+        maxWidth: f.maxWidth,
+        minHeight: f.minHeight,
+        maxHeight: f.maxHeight,
+        aspectRatio: f.aspectRatio,
+    };
+
+    try {
+        const result = await API.startSortSession(
+            generators, tags, ratings,
+            {}, // no destination folders for cull
+            checkpoints, loras, prompts, dimensions, search,
+            { min: f.minAesthetic, max: f.maxAesthetic },
+            'copy', // operation mode irrelevant; cull does not move files
+            f.artist, false, f.promptMatchMode, f.tagMode,
+            {
+                tags: f.excludeTags?.length > 0 ? f.excludeTags : null,
+                generators: f.excludeGenerators?.length > 0 ? f.excludeGenerators : null,
+                ratings: f.excludeRatings?.length > 0 ? f.excludeRatings : null,
+                checkpoints: f.excludeCheckpoints?.length > 0 ? f.excludeCheckpoints : null,
+                loras: f.excludeLoras?.length > 0 ? f.excludeLoras : null,
+            },
+            null, // collection slots
+            'cull',
+        );
+
+        const totalImages = Number(result?.total_images ?? 0);
+        if (totalImages === 0) {
+            showToast(manualSortText('manual.noImages', 'No images match Manual Sort filters', '没有图片匹配手动分类筛选'), 'error');
+            return;
+        }
+
+        ManualSortState.startTime = Date.now();
+        ManualSortState.history = [];
+        ManualSortState.images = [];
+        ManualSortState.currentImage = null;
+        ManualSortState.currentTags = [];
+        ManualSortState.actionTimestamps = [];
+        ManualSortState.sortedCount = 0;
+        ManualSortState.skippedCount = 0;
+        ManualSortState.combo = 0;
+        ManualSortState.cullDecisions = new Map();
+
+        activateSortingUi('cull');
+        await loadCurrentImage();
+    } catch (error) {
+        rollbackSortingUi();
+        Logger.error('Failed to start Keep/Reject cull:', error);
+        showToast(formatUserError(error, manualSortText('manual.cullStartFailed', 'Failed to start Keep/Reject', '开始留/汰失败')), 'error');
+    }
+}
+
+// Render the single judged image. Returns false when the session finished (so
+// callers mirror applyCurrentSortPayload's contract).
+function applyCullPayload(result, options = {}) {
+    const { $, API } = window.App;
+    ManualSortState.mode = 'cull';
+
+    updateHistoryControlState(result || {});
+
+    if (result?.done) {
+        finishCullSorting(result);
+        return false;
+    }
+
+    const image = result?.image?.image || null;
+    ManualSortState.currentImage = image;
+    ManualSortState.currentTags = result?.image?.tags || [];
+    ManualSortState.index = Number(result?.index ?? 0);
+    ManualSortState.total = Number(result?.total ?? 0);
+
+    const cacheSuffix = options.cacheBust ? `?t=${Date.now()}` : '';
+    const img = $('#cull-image');
+    if (img) img.src = image?.id ? API.getImageUrl(image.id) + cacheSuffix : '';
+
+    renderBracketFighterName('#cull-name', image);
+    renderBracketMeta('#cull-meta', image);
+    updateCullProgress(result);
+
+    const undoBtn = $('#cull-btn-undo');
+    if (undoBtn) undoBtn.disabled = !result?.undo_available;
+    const redoBtn = $('#cull-btn-redo');
+    if (redoBtn) redoBtn.disabled = !result?.redo_available;
+
+    return true;
+}
+
+function updateCullProgress(result) {
+    const { $ } = window.App;
+    const total = Number(result?.total ?? ManualSortState.total ?? 0);
+    const index = Number(result?.index ?? ManualSortState.index ?? 0);
+    const kept = Number(result?.kept ?? 0);
+    const rejected = Number(result?.rejected ?? 0);
+
+    const fill = $('#cull-progress-fill');
+    if (fill) fill.style.width = total ? `${Math.min(100, (index / total) * 100)}%` : '0%';
+    const text = $('#cull-progress-text');
+    if (text) text.textContent = `${Math.min(index + 1, total)} / ${total}`;
+    const keepTally = $('#cull-tally-keep');
+    if (keepTally) keepTally.textContent = `♥ ${kept}`;
+    const rejTally = $('#cull-tally-reject');
+    if (rejTally) rejTally.textContent = `✕ ${rejected}`;
+}
+
+// Brief keep/reject/skip stamp animation on the card.
+function flashCullStamp(action) {
+    const { $ } = window.App;
+    const card = $('#cull-card');
+    if (!card) return;
+    card.classList.remove('cull-flash-keep', 'cull-flash-reject', 'cull-flash-skip');
+    const cls = action === 'keep' ? 'cull-flash-keep'
+        : action === 'reject' ? 'cull-flash-reject'
+        : action === 'skip' ? 'cull-flash-skip' : null;
+    if (!cls) return;
+    void card.offsetWidth; // reflow so the animation restarts each time
+    card.classList.add(cls);
+    setTimeout(() => card.classList.remove(cls), 360);
+}
+
+// Maintain the client-side decision map from the server's action response so
+// finish can route kept→keep dest / rejected→reject dest. Forward keep/reject
+// set the decision; skip clears it; undo reverts the affected image; redo
+// re-applies the entry's decision. (image_id + decision come back per action.)
+function applyCullDecisionFromResult(action, result) {
+    if (!ManualSortState.cullDecisions) ManualSortState.cullDecisions = new Map();
+    const map = ManualSortState.cullDecisions;
+    const id = Number(result?.image_id);
+    if (!Number.isInteger(id) || id <= 0) return;
+    if (action === 'keep' || action === 'reject') {
+        map.set(id, action);
+    } else if (action === 'skip' || action === 'undo') {
+        map.delete(id);
+    } else if (action === 'redo') {
+        const decision = result?.decision;
+        if (decision === 'keep' || decision === 'reject') map.set(id, decision);
+        else map.delete(id);
+    }
+}
+
+async function performCullAction(action, fast = false) {
+    const { API, showToast } = window.App;
+    if (!ManualSortState.active || ManualSortState.mode !== 'cull') return;
+
+    const isHistory = action === 'undo' || action === 'redo';
+    if (!isHistory) {
+        if (ManualSortState.isProcessing) { flashManualSortBusy(); return; }
+        if (isManualSortInCooldown()) { flashManualSortBusy(); return; }
+    }
+    ManualSortState.isProcessing = true;
+
+    try {
+        if (action === 'keep') window.AudioManager?.play('move', 'd');
+        else if (action === 'reject') window.AudioManager?.play('move', 'a');
+        else if (action === 'skip') window.AudioManager?.play('skip');
+        else window.AudioManager?.play('undo');
+        flashCullStamp(action);
+
+        const result = await API.sortAction(action);
+        if (result?.error) {
+            updateHistoryControlState(result);
+            showToast(result.error, 'error');
+            return;
+        }
+
+        applyCullDecisionFromResult(action, result);
+
+        if (!isHistory) {
+            ManualSortState.actionTimestamps.push(Date.now());
+            const cutoff = Date.now() - 30000;
+            ManualSortState.actionTimestamps = ManualSortState.actionTimestamps.filter(t => t > cutoff);
+        }
+
+        // A cull action returns only status flags — reload fresh so the next
+        // image (and tally) render.
+        await loadCurrentImage();
+    } catch (error) {
+        Logger.error('Cull action failed:', error);
+        showToast(manualSortText('manual.cullActionFailed', 'Action failed', '操作失败'), 'error');
+    } finally {
+        ManualSortState.isProcessing = false;
+        ManualSortState.lastActionCompletedAt = Date.now();
+    }
+}
+
+// Route the tracked decisions to their destinations by reference (non-destructive).
+async function collectCullDecisions() {
+    const { API } = window.App;
+    const map = ManualSortState.cullDecisions || new Map();
+    const keepDest = getCullDest('keep');
+    const rejectDest = getCullDest('reject');
+
+    const route = async (id, dest) => {
+        if (!dest) return;
+        try {
+            if (dest === 'fav') { await API.setFavorite(id, true); return; }
+            const cid = Number(dest);
+            if (!Number.isInteger(cid) || cid <= 0) return;
+            await API.setCollectionMembership(cid, id, true);
+        } catch (e) {
+            if (window.Logger) Logger.error('Failed to route cull decision:', e);
+        }
+    };
+
+    for (const [id, decision] of map.entries()) {
+        if (decision === 'keep') await route(id, keepDest);
+        else if (decision === 'reject') await route(id, rejectDest);
+    }
+}
+
+async function finishCullSorting(result) {
+    const { $, showToast } = window.App;
+
+    ManualSortState.active = false;
+    ManualSortState.undoAvailable = false;
+    ManualSortState.redoAvailable = false;
+    document.removeEventListener('keydown', handleSortKeypress);
+    updateHistoryControlState({ undo_available: false, redo_available: false });
+
+    window.AudioManager?.play('finish');
+
+    hideSortInterfaces();
+    $('#sort-setup').style.display = 'block';
+
+    const map = ManualSortState.cullDecisions || new Map();
+    let keptCount = 0;
+    let rejectedCount = 0;
+    for (const decision of map.values()) {
+        if (decision === 'keep') keptCount += 1;
+        else if (decision === 'reject') rejectedCount += 1;
+    }
+
+    await collectCullDecisions();
+
+    showToast(
+        formatManualSortI18n(
+            'manual.cullComplete',
+            'Cull complete — kept {kept}, rejected {rejected}.',
+            { kept: keptCount, rejected: rejectedCount }
+        ),
+        'success'
+    );
+
+    window.App.API.delete('/api/sort/session').catch(e => {
+        if (window.Logger) Logger.warn('Failed to clean up cull session:', e);
+    });
+
+    ManualSortState.cullDecisions = new Map();
+
+    if (window.App && window.App.loadImages) {
+        window.App.loadImages();
+    }
+}
+
+function handleCullKeypress(e) {
+    const key = e.key;
+    let action = null;
+    if (key === 'ArrowRight' || key === 'd' || key === 'D' || key === 'k' || key === 'K') action = 'keep';
+    else if (key === 'ArrowLeft' || key === 'a' || key === 'A' || key === 'x' || key === 'X') action = 'reject';
+    else if (key === ' ' || key === 'ArrowUp' || key === 'w' || key === 'W' || key === 'ArrowDown' || key === 's' || key === 'S') action = 'skip';
+    else if (key === 'z' || key === 'Z') action = 'undo';
+    else if (key === 'y' || key === 'Y') action = 'redo';
+    else if (key === 'Escape') { e.preventDefault(); exitSorting(); return; }
+
+    if (!action) return;
+    e.preventDefault();
+    performCullAction(action, Boolean(e.repeat));
+}
+
 async function resumeSavedSession(prefetchedSession = null) {
     const { $, API, showToast } = window.App;
     const previousResumeSnapshot = ManualSortState.resumeBannerSessionSnapshot
@@ -2001,7 +2380,11 @@ async function resumeSavedSession(prefetchedSession = null) {
         }
 
         restoreFolderInputs();
-        activateSortingUi(session.mode === 'bracket' ? 'bracket' : 'slot');
+        const resumeMode = MANUAL_SORT_MODES.has(session.mode) ? session.mode : 'slot';
+        // A resumed cull session starts its decision map fresh (decisions made
+        // before the reload aren't re-routed; the session itself is intact).
+        if (resumeMode === 'cull') ManualSortState.cullDecisions = new Map();
+        activateSortingUi(resumeMode);
         applyCurrentSortPayload(session);
 
         renderManualSortResumeBanner(null, { visible: false });
@@ -2126,6 +2509,7 @@ function handleSortKeypress(e) {
     if (!ManualSortState.active) return;
 
     const isBracket = ManualSortState.mode === 'bracket';
+    const isCull = ManualSortState.mode === 'cull';
 
     // Handle Ctrl+Z (undo) and Ctrl+Y / Ctrl+Shift+Z (redo) explicitly
     if (e.ctrlKey || e.metaKey) {
@@ -2133,6 +2517,8 @@ function handleSortKeypress(e) {
             e.preventDefault();
             if (isBracket) {
                 performBracketAction(e.shiftKey ? 'redo' : 'undo');
+            } else if (isCull) {
+                performCullAction(e.shiftKey ? 'redo' : 'undo');
             } else if (e.shiftKey) {
                 redoLastAction();
             } else {
@@ -2143,6 +2529,7 @@ function handleSortKeypress(e) {
         if (e.key === 'y' || e.key === 'Y') {
             e.preventDefault();
             if (isBracket) performBracketAction('redo');
+            else if (isCull) performCullAction('redo');
             else redoLastAction();
             return;
         }
@@ -2152,6 +2539,11 @@ function handleSortKeypress(e) {
     // v3.3.2 WB-S3: A/B Showdown has its own key map (←/→ pick, ↑ skip).
     if (isBracket) {
         handleBracketKeypress(e);
+        return;
+    }
+    // v3.3.2 FF-1: 留/汰 cull has its own key map (←reject / →keep / ↑skip).
+    if (isCull) {
+        handleCullKeypress(e);
         return;
     }
 

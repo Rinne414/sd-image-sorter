@@ -241,9 +241,9 @@
             // MutationObserver-driven re-apply keeps the right label.
             var startSortKey = 'manual.startSorting';
             try {
-                if (localStorage.getItem('manual_sort_mode_v1') === 'bracket') {
-                    startSortKey = 'manual.startShowdown';
-                }
+                var sortMode = localStorage.getItem('manual_sort_mode_v1');
+                if (sortMode === 'bracket') startSortKey = 'manual.startShowdown';
+                else if (sortMode === 'cull') startSortKey = 'manual.startCulling';
             } catch (e) { /* localStorage may be unavailable */ }
             this._setButton('#btn-start-sorting', startSortKey, '🎮', startSortKey);
             this._setText('#gallery-preview-bar .minimap-label', 'manual.minimap');
