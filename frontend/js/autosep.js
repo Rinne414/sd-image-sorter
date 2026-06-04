@@ -1046,19 +1046,40 @@ function _formatAutoSepI18n(key, fallback, replacements = {}) {
 }
 
 function _computeAutoSepPreviewCap(container) {
-    // Two rows worth of thumbnails: matches what the user can see without
-    // scrolling and keeps the preview panel compact no matter how large the
-    // match count grows. Column count is derived from the container width
-    // because the grid uses auto-fill minmax(128px, 1fr).
+    // Fill the preview pane: derive columns from the container width AND rows
+    // from its available height, so the grid uses the space instead of showing
+    // a fixed two rows under a tall, mostly-empty pane (the "too much spacing,
+    // could fit more images" complaint). Falls back to two rows when the
+    // container has not been laid out yet. The grid uses auto-fill
+    // minmax(128px, 1fr); each row is a square thumbnail + a one-line name.
     if (!container) return 8;
     const style = window.getComputedStyle(container);
     const gap = parseFloat(style.columnGap || style.gap || '12') || 12;
+    const rowGap = parseFloat(style.rowGap || style.gap || '12') || gap;
     const paddingX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+    const paddingY = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
     const minColumn = 128;
     const width = Math.max(0, (container.clientWidth || 0) - paddingX);
     if (width <= 0) return 8;
     const cols = Math.max(1, Math.floor((width + gap) / (minColumn + gap)));
-    return cols * 2;
+
+    // Estimated natural row height: square thumb (aspect-ratio:1, fills the
+    // column width) + the single-line name label + row gap. The name never
+    // wraps (white-space:nowrap + ellipsis); measured at ~28px (8px*2 padding +
+    // ~12px line at font-size 11). The item's 1px top/bottom border offsets the
+    // thumb's border-inset, so 30px (name + ~2px sub-pixel margin) keeps the
+    // estimate at or above the real natural height. This MUST NOT under-count:
+    // the grid stretches rows to fill the pane height, but the square thumb
+    // can't shrink, so one row too many overflows the pane into a scrollbar.
+    const colWidth = (width - (cols - 1) * gap) / cols;
+    const NAME_LABEL_HEIGHT = 30;
+    const rowHeight = colWidth + NAME_LABEL_HEIGHT + rowGap;
+    const height = Math.max(0, (container.clientHeight || 0) - paddingY);
+    const rowsThatFit = (height > 0 && rowHeight > 0)
+        ? Math.floor((height + rowGap) / rowHeight)
+        : 0;
+    const rows = Math.max(2, rowsThatFit); // always show at least two rows
+    return cols * rows;
 }
 
 function _buildAutoSepPreviewItem(image) {
@@ -1245,8 +1266,9 @@ function renderAutoSepPreviewList(images = [], totalCount = 0, reason = null) {
 
     const cap = _computeAutoSepPreviewCap(container);
     // Reserve the last visible slot for the +N button when the match set is
-    // bigger than the cap — this keeps the visible row count consistent with
-    // the 2-row budget computed above, instead of spilling into row 3.
+    // bigger than the cap — this keeps the visible item count consistent with
+    // the height-derived budget computed above, instead of spilling past the
+    // visible rows.
     const willOverflow = totalCount > cap;
     const visibleCount = willOverflow ? Math.max(0, Math.min(images.length, cap - 1)) : images.length;
     const visibleImages = images.slice(0, visibleCount);
