@@ -327,9 +327,10 @@ echo   Press Ctrl+C to stop the server.
 echo ==========================================
 echo.
 
-REM -- Open browser after server is ready (background probe)
-start /b "" powershell -NoProfile -WindowStyle Hidden -Command ^
-    "$url='!APP_URL!'; for($i=0;$i -lt 30;$i++){try{Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop|Out-Null;Start-Process $url;exit}catch{Start-Sleep -Milliseconds 500}}" >nul 2>&1
+REM -- Ask the backend to open the browser once it is ready (in-process).
+REM -- The launcher no longer spawns a hidden helper that makes HTTP calls in a
+REM -- loop, which some antivirus engines flag as suspicious behavior.
+set "SD_IMAGE_SORTER_OPEN_BROWSER=1"
 
 cd backend
 call venv\Scripts\activate.bat 2>nul

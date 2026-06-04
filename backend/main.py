@@ -793,6 +793,45 @@ def _install_windows_loop_exception_handler() -> None:
     loop.set_exception_handler(handler)
 
 
+def _maybe_open_browser_when_ready(host: str, port: int) -> None:
+    """Open the app in the default browser once the server accepts connections.
+
+    Only runs when a launcher opted in via ``SD_IMAGE_SORTER_OPEN_BROWSER=1``.
+    Done in-process with Python's ``webbrowser`` instead of from the launcher's
+    shell, so the portable package never spawns a hidden PowerShell process —
+    some antivirus engines (e.g. Huorong / 火绒) flag a hidden-window PowerShell
+    that makes HTTP requests in a loop as trojan-like behavior.
+    """
+    flag = os.environ.get("SD_IMAGE_SORTER_OPEN_BROWSER", "").strip().lower()
+    if flag not in ("1", "true", "yes", "on"):
+        return
+
+    # Wildcard binds aren't connectable targets; use loopback for the browser.
+    browser_host = "127.0.0.1" if host in ("", "0.0.0.0", "::", "[::]") else host
+    url = f"http://{browser_host}:{port}"
+
+    def _wait_and_open() -> None:
+        import socket
+        import webbrowser
+
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
+            try:
+                with socket.create_connection((browser_host, port), timeout=1.0):
+                    break
+            except OSError:
+                time.sleep(0.4)
+        else:
+            # Never became ready — don't pop a browser onto a connection error.
+            return
+        try:
+            webbrowser.open(url)
+        except Exception:
+            logger.debug("Could not open browser at %s", url)
+
+    threading.Thread(target=_wait_and_open, name="open-browser", daemon=True).start()
+
+
 if __name__ == "__main__":
     import argparse
     import uvicorn
@@ -814,6 +853,7 @@ if __name__ == "__main__":
         LOG_LEVEL.upper(),
         LOG_FILE_PATH if LOG_FILE_ENABLED else "off",
     )
+    _maybe_open_browser_when_ready(args.host, args.port)
     uvicorn.run(
         app,
         host=args.host,

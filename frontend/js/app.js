@@ -7857,7 +7857,13 @@ async function loadImages(appendMode = false, options = {}) {
         // Update pagination
         AppState.pagination.cursor = result.next_cursor;
         AppState.pagination.hasMore = result.has_more;
-        AppState.pagination.total = result.total;
+        // The backend returns total = -1 when it skips the expensive COUNT
+        // (cursor pagination / skip_count). Don't clobber a previously-known
+        // total with that sentinel while appending more pages — only update on
+        // a fresh load or when a real, non-negative count comes back.
+        if (!appendMode || (typeof result.total === 'number' && result.total >= 0)) {
+            AppState.pagination.total = result.total;
+        }
 
         if (appendMode) {
             AppState.images = [...AppState.images, ...result.images];
@@ -7872,7 +7878,7 @@ async function loadImages(appendMode = false, options = {}) {
 
         if (imageCount) {
             imageCount.textContent = appT('gallery.imageCount', '{count} images')
-                .replace('{count}', String(AppState.pagination.total || AppState.images.length));
+                .replace('{count}', _galleryCountText());
         }
 
         // Clean stale selections on fresh load, but do not corrupt true filtered-result selection.
@@ -11431,6 +11437,18 @@ function updateFilterSummary() {
     document.dispatchEvent(new CustomEvent('gallery-filters-changed', { detail }));
 }
 
+/**
+ * Format the gallery image-count label. Hides the backend's -1 "count skipped"
+ * sentinel (returned when the expensive COUNT is bypassed for cursor pagination)
+ * behind the number of images actually loaded, with a trailing "+" when more
+ * pages remain — so the label never reads "-1".
+ */
+function _galleryCountText() {
+    const total = AppState.pagination.total;
+    if (typeof total === 'number' && total >= 0) return String(total);
+    return String(AppState.images.length) + (AppState.pagination.hasMore ? '+' : '');
+}
+
 function refreshLocalizedImageCount() {
     const imageCount = $('#image-count');
     if (!imageCount) return;
@@ -11440,9 +11458,8 @@ function refreshLocalizedImageCount() {
         return;
     }
 
-    const total = AppState.pagination.total || AppState.images.length || 0;
     imageCount.textContent = appT('gallery.imageCount', '{count} images')
-        .replace('{count}', String(total));
+        .replace('{count}', _galleryCountText());
 }
 
 function refreshLocalizedDynamicUi() {
