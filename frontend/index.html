@@ -25,6 +25,9 @@
     <link rel="stylesheet" href="/static/css/tag-stats-modal.css">
     <link rel="stylesheet" href="/static/css/caption-autocomplete.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Adaptive UI scaling for large/high-res desktops. Loaded synchronously
+         (pre-paint) so the root zoom is set before first render. -->
+    <script src="/static/js/ui-scale.js"></script>
     <style>
         /* Folder Browser Widget */
         .folder-path-row { display: flex; gap: 8px; align-items: stretch; }
