@@ -237,6 +237,16 @@ async function resetSaveOutputs() {
   }
 }
 
+// The e2e DB persists across runs (per-port file), so favorites left by a prior
+// workbench run would make a baseline+N count assertion non-deterministic
+// (re-favoriting the same image is idempotent). Clear them for a clean baseline.
+async function clearFavorites(request) {
+  const payload = await (await request.get('/api/collections/favorites/ids')).json()
+  for (const id of (payload.image_ids || [])) {
+    await request.post('/api/collections/favorites', { data: { image_id: id, favorited: false } })
+  }
+}
+
 function resetScanBrowserFixture() {
   const script = `
 from pathlib import Path
@@ -1237,6 +1247,7 @@ test('A/B Showdown should switch modes, compare a pair, pick a winner, and save 
 
   // Route the winner to Favorites (non-destructive) and snapshot the baseline.
   await page.locator('#bracket-winner-collection').selectOption('fav')
+  await clearFavorites(request)
   const baselinePayload = await (await request.get('/api/collections/favorites/ids')).json()
   const baselineFavorites = Number(baselinePayload.count ?? (baselinePayload.image_ids || []).length)
 
@@ -1262,6 +1273,84 @@ test('A/B Showdown should switch modes, compare a pair, pick a winner, and save 
     const payload = await (await request.get('/api/collections/favorites/ids')).json()
     return Number(payload.count ?? (payload.image_ids || []).length)
   }, { timeout: 10000 }).toBe(baselineFavorites + 1)
+})
+
+test('Keep/Reject cull should switch modes, keep/reject/skip, and route kept images', async ({ page, request }) => {
+  // v3.3.2 FF-1: 留/汰 Keep-Reject cull flow. Reuses the manual-sort fixture
+  // (3 images) and drives the mode switch itself so the slot WASD path (covered
+  // above) stays the default. Non-destructive: kept images route to Favorites.
+  await resetManualSortFixture()
+  await page.addInitScript((search) => {
+    localStorage.setItem('manual_sort_filter_state_v1', JSON.stringify({
+      generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
+      ratings: ['general', 'sensitive', 'questionable', 'explicit'],
+      tags: [],
+      checkpoints: [],
+      loras: [],
+      prompts: [],
+      artist: null,
+      search,
+      sortBy: 'newest',
+      limit: 0,
+      minWidth: null,
+      maxWidth: null,
+      minHeight: null,
+      maxHeight: null,
+      aspectRatio: '',
+      minAesthetic: null,
+      maxAesthetic: null,
+    }))
+    // Start in slot mode so the test exercises the switch to cull.
+    localStorage.setItem('manual_sort_mode_v1', 'slot')
+  }, 'manual_test_sort_token_20260405')
+
+  await openMainPage(page)
+
+  await setGallerySearch(page, 'manual_test_sort_token_20260405')
+  await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(3)
+
+  await openSortingSubView(page, 'manual')
+
+  // Switch to Keep/Reject: cull button activates, intro shows, slot-only folder
+  // config hides.
+  await page.locator('.sort-mode-btn[data-sort-mode="cull"]').click()
+  await expect(page.locator('.sort-mode-btn[data-sort-mode="cull"]')).toHaveClass(/is-active/)
+  await expect(page.locator('#sort-cull-intro')).toBeVisible()
+  await expect(page.locator('#view-manual .folder-config')).toBeHidden()
+
+  // Route kept images to Favorites (non-destructive) and snapshot the baseline.
+  await page.locator('#cull-keep-collection').selectOption('fav')
+  await clearFavorites(request)
+  const baselinePayload = await (await request.get('/api/collections/favorites/ids')).json()
+  const baselineFavorites = Number(baselinePayload.count ?? (baselinePayload.image_ids || []).length)
+
+  // Start culling — cull has no move/copy confirmation.
+  await page.locator('#btn-start-sorting').click()
+  await expect(page.locator('#sort-cull-interface')).toBeVisible()
+  await expect(page.locator('#cull-progress-text')).toHaveText('1 / 3')
+  expect(await page.locator('#cull-image').getAttribute('src')).toBeTruthy()
+
+  // Keep (→) the first image → advances; tally increments.
+  await page.keyboard.press('ArrowRight')
+  await expect(page.locator('#cull-progress-text')).toHaveText('2 / 3')
+  await expect(page.locator('#cull-tally-keep')).toHaveText('♥ 1')
+
+  // Reject (←) the second → advances; reject tally increments.
+  await page.keyboard.press('ArrowLeft')
+  await expect(page.locator('#cull-progress-text')).toHaveText('3 / 3')
+  await expect(page.locator('#cull-tally-reject')).toHaveText('✕ 1')
+
+  // Keep (→) the last → finishes the cull and returns to setup.
+  await page.keyboard.press('ArrowRight')
+  await expect(page.locator('#sort-cull-interface')).toBeHidden()
+  await expect(page.locator('#sort-setup')).toBeVisible()
+  await expect(page.locator('#toast-container')).toContainText(/Cull|kept|留汰/i)
+
+  // The two kept images were saved to Favorites by reference.
+  await expect.poll(async () => {
+    const payload = await (await request.get('/api/collections/favorites/ids')).json()
+    return Number(payload.count ?? (payload.image_ids || []).length)
+  }, { timeout: 10000 }).toBe(baselineFavorites + 2)
 })
 
 test('censor detect and save should work through the real UI flow', async ({ page, request }) => {
