@@ -147,6 +147,18 @@
     max-height: calc(100vh - var(--nav-height)) !important;
 }
 
+/* v3.3.2 UX: empty editor (no image loaded) — hide the editing chrome so the
+   "select an image" card centers in the full canvas area instead of being
+   sandwiched between a wall of disabled tools (the toolbar wraps to 146-253px)
+   and a status/zoom bar. Width-agnostic; mirrors the Reader empty-state. The
+   loaded state (.censor-has-image present) renders exactly as before, and the
+   sidebars are untouched (the right detection panel must stay measurable for
+   the censor-workspace e2e test that runs without loading an image). */
+.censor-main-v2:not(.censor-has-image) > .censor-toolbar-v2,
+.censor-main-v2:not(.censor-has-image) > .censor-footer-bars {
+    display: none !important;
+}
+
 /* Canvas Wrapper - The Container */
 .censor-canvas-wrapper-v2 {
     flex: 1 !important;

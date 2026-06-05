@@ -2685,6 +2685,7 @@ async function loadCanvasImage(id) {
 
             // Finalize
             noImageEl.style.display = 'none';
+            setCensorEditorHasImage(true);
             showLoading(false);
             if (filenameEl) filenameEl.textContent = item.outputFilename;
 
@@ -3697,6 +3698,18 @@ async function restoreFilterActionEntry(entry, direction = 'undo') {
     updateUndoRedoButtons();
 }
 
+// v3.3.2 UX: while the editor has no image loaded, hide the editing chrome
+// (toolbar + footer status/zoom bars) via a class on .censor-main-v2 so the
+// "select an image" card is the clear focus instead of a wall of disabled
+// tools — same idea as the Reader empty-state. The loaded layout is unchanged
+// (class present => all chrome shows exactly as before). The sidebars are left
+// alone: the left queue is how images arrive, and an e2e test asserts the
+// right detection panel stays measurable in the empty state.
+function setCensorEditorHasImage(hasImage) {
+    const main = document.querySelector('.censor-main-v2');
+    if (main) main.classList.toggle('censor-has-image', !!hasImage);
+}
+
 function clearCanvas() {
     // Clear the ACTIVE canvas, not always the default one
     const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
@@ -3710,6 +3723,7 @@ function clearCanvas() {
         bufCtx.clearRect(0, 0, bufferCanvas.width, bufferCanvas.height);
     }
     document.getElementById('censor-no-image').style.display = 'flex';
+    setCensorEditorHasImage(false);
     document.getElementById('censor-filename').textContent = '-';
 }
 
