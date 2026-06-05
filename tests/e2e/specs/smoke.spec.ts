@@ -2219,10 +2219,18 @@ test.describe('Smoke Tests', () => {
     const removePayloads: any[] = []
     const deletePayloads: any[] = []
 
-    await page.route('**/api/images/remove-selected', async (route) => {
+    // v3.3.2 Phase-1 (commit 8360d17): both bulk actions run as background jobs
+    // now — the UI POSTs to `/start` then polls `/progress` until a terminal
+    // status. Mock both halves; capture the start payloads for the assertions.
+    await page.route('**/api/images/remove-selected/start', async (route) => {
       removePayloads.push(route.request().postDataJSON())
+      await route.fulfill({ json: { status: 'starting' } })
+    })
+
+    await page.route('**/api/images/remove-selected/progress', async (route) => {
       await route.fulfill({
         json: {
+          status: 'done',
           removed: 1,
           missing_ids: [],
           permanent_delete: false,
@@ -2230,10 +2238,15 @@ test.describe('Smoke Tests', () => {
       })
     })
 
-    await page.route('**/api/images/delete-selected', async (route) => {
+    await page.route('**/api/images/delete-selected/start', async (route) => {
       deletePayloads.push(route.request().postDataJSON())
+      await route.fulfill({ json: { status: 'starting' } })
+    })
+
+    await page.route('**/api/images/delete-selected/progress', async (route) => {
       await route.fulfill({
         json: {
+          status: 'done',
           deleted: 1,
           failed: [],
           permanent_delete: true,
@@ -2581,14 +2594,25 @@ test.describe('Smoke Tests', () => {
       })
     })
 
-    await page.route('**/api/tags/export-batch', async (route) => {
+    // v3.3.2 Phase-1 (commit 8360d17): batch sidecar export is a background job —
+    // POST `/start` then poll `/progress`. The terminal payload embeds the export
+    // result under `result`. Capture the start payload for the assertion.
+    await page.route('**/api/tags/export-batch/start', async (route) => {
       exportPayload = route.request().postDataJSON()
+      await route.fulfill({ json: { status: 'starting' } })
+    })
+
+    await page.route('**/api/tags/export-batch/progress', async (route) => {
       await route.fulfill({
         json: {
-          status: 'ok',
-          exported: 2,
-          total: 2,
-          errors: null,
+          status: 'done',
+          result: {
+            status: 'ok',
+            exported: 2,
+            skipped: 0,
+            total: 2,
+            error_count: 0,
+          },
         },
       })
     })
