@@ -1,6 +1,6 @@
 # SD Image Sorter API Documentation
 
-**Version:** 3.3.1
+**Version:** 3.3.2
 **Base URL:** `http://127.0.0.1:8487` (default; configurable via `SD_IMAGE_SORTER_PORT`)
 **Interactive Docs:** `http://127.0.0.1:8487/docs` (Swagger UI, same port as runtime)
 
@@ -118,7 +118,7 @@ Retrieve images with filters and cursor pagination.
 | `loras` | string | - | Comma-separated LoRA names |
 | `search` | string | - | Free-text prompt / filename search |
 | `artist` | string | - | Artist name filter |
-| `sort_by` | string | `newest` | `newest`, `oldest`, `name_asc`, `name_desc`, `generator`, `generator_desc`, `prompt_length`, `prompt_length_asc`, `tag_count`, `tag_count_asc`, `rating`, `rating_desc`, `character_count`, `character_count_asc`, `random`, `file_size`, `file_size_asc`, `aesthetic`, `aesthetic_asc`, `brightness`, `brightness_asc`, `saturation`, `saturation_asc`, `brightness_skew`, `brightness_skew_asc` |
+| `sort_by` | string | `newest` | `newest`, `oldest`, `name_asc`, `name_desc`, `generator`, `generator_desc`, `prompt_length`, `prompt_length_asc`, `tag_count`, `tag_count_asc`, `rating`, `rating_desc`, `character_count`, `character_count_asc`, `random`, `file_size`, `file_size_asc`, `aesthetic`, `aesthetic_asc`, `brightness`, `brightness_asc`, `saturation`, `saturation_asc`, `brightness_skew`, `brightness_skew_asc`, `user_rating`, `user_rating_asc` |
 | `limit` | int | 100 | Max images per page |
 | `cursor` | string | - | Opaque cursor token from the previous page; pass it back unchanged |
 | `min_width` | int | - | Minimum width in pixels |

@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file=backend/requirements-dev.txt backend/requirements-dev.in
 #
-# lock-input-sha256: dc3a68db7ef37e1f0ca898440a0786284e18f412c3a1319dbc75e4ca1d9f7610
+# lock-input-sha256: c4eacb1f52d592ceceaf2c72ada065409328d47f916a6016e6d5d96804d621ae
 #
 aiofiles==25.1.0
     # via -r backend/requirements.txt
@@ -121,6 +121,8 @@ hf-xet==1.4.3
     # via
     #   -r backend/requirements.txt
     #   huggingface-hub
+hnswlib==0.8.0
+    # via -r backend/requirements.txt
 httpcore==1.0.9
     # via
     #   -r backend/requirements.txt
