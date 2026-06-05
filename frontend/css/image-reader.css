@@ -52,6 +52,26 @@
     padding: 14px;
 }
 
+/* Empty state (no image loaded yet): the metadata column is empty, so the
+   two-column grid leaves a large blank void on the right. Collapse to a single
+   centred drop zone instead — a clear focal point rather than wasted space.
+   The .reader-has-image class is added by image-reader.js once an image loads
+   and these rules switch off, restoring the full two-column layout. */
+.reader-container:not(.reader-has-image) {
+    grid-template-columns: min(720px, 100%);
+    justify-content: center;
+    align-content: center;
+}
+
+.reader-container:not(.reader-has-image) .reader-right {
+    display: none;
+}
+
+.reader-container:not(.reader-has-image) .reader-left {
+    position: static;
+    width: 100%;
+}
+
 /* Drop zone */
 .reader-drop-zone {
     width: 100%;

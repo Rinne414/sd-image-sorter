@@ -2666,7 +2666,7 @@ window.I18nLang_en = {
     'promptlab.summaryTitle': 'How to use it next',
     'promptlab.summaryDescription': 'Compare for shared patterns, Build for drafts, Random for variation.',
     'promptlab.notEnoughScoredData': 'Not enough scored data yet',
-    'promptlab.noTopTagsYet': 'Import more images to see your strongest recurring tags here.',
+    'promptlab.noTopTagsYet': 'Run AI tagging (WD14) on your images to see your most-used tags here.',
     'promptlab.noCheckpointsYet': 'Checkpoint patterns will appear here after you import more prompt metadata.',
     'promptlab.noScoredExamples': 'No scored examples yet',
     'promptlab.noRecipeSuggestions': 'No recipe suggestions yet',

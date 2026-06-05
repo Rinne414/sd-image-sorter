@@ -910,6 +910,11 @@
                 preview.style.display = 'block';
             }
             if (dropZone) dropZone.style.display = 'none';
+            // Switch the layout out of its empty state so the metadata column
+            // (which is empty/zero-width until now) gets its space instead of
+            // leaving a large blank void next to a lone drop zone.
+            const containerLoad = (dropZone || preview)?.closest('.reader-container');
+            if (containerLoad) containerLoad.classList.add('reader-has-image');
 
             // Show loading
             const statusEl = document.getElementById('reader-status');
@@ -1405,6 +1410,10 @@
             }
             if (dropZone) dropZone.style.display = '';
             if (resultPanel) resultPanel.style.display = 'none';
+            // Back to the empty state: drop the has-image flag so the drop zone
+            // re-centres and the (now empty) metadata column stops reserving space.
+            const containerClear = (dropZone || preview)?.closest('.reader-container');
+            if (containerClear) containerClear.classList.remove('reader-has-image');
             if (statusEl) {
                 statusEl.textContent = '';
                 statusEl.style.display = 'none';

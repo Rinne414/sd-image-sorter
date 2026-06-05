@@ -1107,7 +1107,7 @@ window.I18nLang_zhCN = {
     'promptlab.summaryTitle': '下一步怎么用',
     'promptlab.summaryDescription': '用对比看共同点，用构建整理草稿，用随机做变化。',
     'promptlab.notEnoughScoredData': '当前还没有足够的评分数据',
-    'promptlab.noTopTagsYet': '再多导入一些图片，这里才会看出你最常用的标签。',
+    'promptlab.noTopTagsYet': '先用 AI 打标（WD14）给图片打上标签，这里才会显示你最常用的标签。',
     'promptlab.noCheckpointsYet': '导入更多带提示词信息的图片后，这里才会看出常见模型规律。',
     'promptlab.noScoredExamples': '当前还没有高分样例',
     'promptlab.noRecipeSuggestions': '当前还没有配方建议',

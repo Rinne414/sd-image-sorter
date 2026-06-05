@@ -2433,6 +2433,12 @@ textarea:focus,
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 16px;
+    /* Size each stat column to its own content (down to the .promptlab-stats-col
+       min-height) instead of stretching every column to match the tallest one.
+       The tag/score lists are often empty (before AI tagging / rating) while the
+       model list is long, and stretch was ballooning the empty ones into large
+       blank cards. */
+    align-items: start;
 }
 
 .promptlab-summary-card,
