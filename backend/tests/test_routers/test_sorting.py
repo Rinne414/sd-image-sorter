@@ -3100,6 +3100,42 @@ def test_cull_rejects_invalid_action(test_db, tmp_path, monkeypatch):
     assert exc_info.value.status_code == 400
 
 
+def test_cull_get_current_exposes_decisions_for_resume(test_db, tmp_path, monkeypatch):
+    # The cull payload must expose a per-image keep/reject decision map so a
+    # browser reload can rebuild its client-side decisions and still route them
+    # at finish. Regression: decisions made before a reload were silently dropped.
+    _make_bracket_images(test_db, tmp_path, 3)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="cull")
+    order = service.get_current_sort_image()["image_ids"]
+
+    service.sort_action("keep")    # order[0] -> keep
+    service.sort_action("reject")  # order[1] -> reject
+
+    cur = service.get_current_sort_image()
+    assert cur["decisions"] == {str(order[0]): "keep", str(order[1]): "reject"}
+
+    # Skip is not a decision and must not appear; the done payload keeps the map.
+    service.sort_action("skip")    # order[2] -> skip
+    done = service.get_current_sort_image()
+    assert done["done"] is True
+    assert done["decisions"] == {str(order[0]): "keep", str(order[1]): "reject"}
+
+
+def test_cull_decisions_reflect_undo(test_db, tmp_path, monkeypatch):
+    # Undo removes the decision from the map so a resumed session doesn't
+    # re-route a reverted keep/reject.
+    _make_bracket_images(test_db, tmp_path, 3)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="cull")
+    order = service.get_current_sort_image()["image_ids"]
+
+    service.sort_action("keep")
+    assert service.get_current_sort_image()["decisions"] == {str(order[0]): "keep"}
+    service.sort_action("undo")
+    assert service.get_current_sort_image()["decisions"] == {}
+
+
 def test_cull_start_and_action_via_api(test_client, tmp_path):
     from PIL import Image
 

@@ -1,8 +1,8 @@
 ## v3.3.2 — Sort & Cull 工作台 + 大图库更顺 / Sort & Cull Workbench + Faster Large Libraries
 
-把手动分拣页升级成多模式 Sort & Cull 工作台：保留 WASD 槽位分拣，新增 A/B 擂台（擂主守擂）与 留/汰 快筛，都带 SD 专属的「只看差异」元数据对比条与同步像素级放大——通用素材管理器做不到。大图库更顺：批量删除 / 移除 / 导出改后台任务、缩略图扫描时让路、AI 运行调度加优先级与显存感知、相似度缓存可跨重启。另含高分屏自适应缩放与一批 UI/UX 与 bug 修复。未新增任何功能上限。
+把手动分拣页升级成多模式 Sort & Cull 工作台：保留 WASD 槽位分拣，新增 A/B 擂台（擂主守擂）与 留/汰 快筛，都带 SD 专属的「只看差异」元数据对比条与同步像素级放大——通用素材管理器做不到。大图库更顺：批量删除 / 移除改后台任务（导出也在后台）、缩略图扫描时让路、相似度向量缓存可跨重启，AI 运行守卫为并发打底（默认仍串行）。另含高分屏自适应缩放与一批 UI/UX 与 bug 修复。未新增任何功能上限。
 
-The Manual Sort tab becomes a multi-mode Sort & Cull Workbench: keep the fast WASD slot-sort, add an A/B 擂台 King-of-Hill showdown and a 留/汰 Keep-Reject quick-cull, both with SD-aware metadata-diff tooling and synchronized pixel-peep zoom. Large libraries feel faster — background bulk delete / remove / export, scan-aware thumbnail backpressure, a priority + VRAM-aware AI runtime scheduler, and a persistent similarity cache. Plus adaptive UI scaling for high-res desktops and a batch of UI/UX and bug fixes.
+The Manual Sort tab becomes a multi-mode Sort & Cull Workbench: keep the fast WASD slot-sort, add an A/B 擂台 King-of-Hill showdown and a 留/汰 Keep-Reject quick-cull, both with SD-aware metadata-diff tooling and synchronized pixel-peep zoom. Large libraries feel faster — background bulk delete / remove (export runs in the background too), scan-aware thumbnail backpressure, a persistent similarity vector cache, and AI-runtime-guard groundwork for future concurrency (still serialized by default). Plus adaptive UI scaling for high-res desktops and a batch of UI/UX and bug fixes.
 
 ---
 
@@ -23,14 +23,14 @@ The Manual Sort tab becomes a multi-mode Sort & Cull Workbench: keep the fast WA
 
 ## 🚀 Performance / 性能
 
-- **Background bulk delete / remove / export** — deleting files from disk, removing from the gallery, and batch tag export now run as cancelable background jobs with progress bars, so large selections no longer freeze the browser (file move was already a background job in v3.3.0).
-  - **批量删除 / 移除 / 导出改为后台任务** —— 从磁盘删除、从图库移除、批量标签导出现在都是可取消、带进度条的后台任务，大量选择不再卡死浏览器（移动文件在 v3.3.0 已是后台任务）。
+- **Background bulk delete / remove (+ background export)** — deleting files from disk and removing from the gallery now run as cancelable background jobs with progress bars; batch tag export also runs in the background (coarse progress, not cancelable mid-run). Large selections no longer freeze the browser (file move was already a background job in v3.3.0).
+  - **批量删除 / 移除改为后台任务（导出也在后台）** —— 从磁盘删除、从图库移除现在是可取消、带进度条的后台任务；批量标签导出也在后台运行（粗粒度进度，运行中不可取消）。大量选择不再卡死浏览器（移动文件在 v3.3.0 已是后台任务）。
 - **Scan-aware thumbnail backpressure** — while a scan is running, thumbnail generation throttles to a small bounded pool so it stops competing with metadata parsing; scans feel faster, and idle throughput is unchanged.
   - **扫描感知的缩略图背压** —— 扫描进行时，缩略图生成会限制在一个有界小线程池，避免与元数据解析抢资源；扫描更快，空闲时吞吐不变。
-- **AI runtime scheduler — priority + VRAM + timeout** — the AI runtime guard gained fair priority ordering (interactive vs batch), a per-job VRAM estimate, and an opt-in acquire timeout, so concurrent AI jobs (tag + censor + similarity + aesthetic) stop fighting. Defaults match the prior fully-serialized behavior byte-for-byte.
-  - **AI 运行调度器——优先级 + 显存 + 超时** —— AI 运行守卫新增公平优先级排序（交互 vs 批处理）、每任务显存估算与可选获取超时，让并发 AI 任务（打标 + 打码 + 相似度 + 美学）不再互抢；默认行为与此前完全串行化逐字节一致。
-- **Persistent similarity cache + optional ANN** — the similarity vector matrix now persists to disk so cold-start search skips re-reading every embedding from SQLite, and an optional `hnswlib` ANN top-k path is available (exact re-rank preserves results; opt out with `SD_SIMILARITY_DISABLE_ANN=1`).
-  - **相似度缓存持久化 + 可选 ANN** —— 相似度向量矩阵现在会持久化到磁盘，冷启动搜索不必再从 SQLite 重读全部 embedding；并提供可选的 `hnswlib` ANN top-k 路径（精确重排保证结果一致；用 `SD_SIMILARITY_DISABLE_ANN=1` 可关闭）。
+- **AI runtime guard — concurrency groundwork** — the AI runtime guard gained the plumbing for fair priority ordering, per-job VRAM estimates, and an opt-in acquire timeout. This ships as foundation for future concurrency; the shipped default is unchanged, so all AI work (tag + censor + similarity + aesthetic) still runs fully serialized and there is no new OOM risk.
+  - **AI 运行守卫——并发打底** —— AI 运行守卫新增了公平优先级排序、每任务显存估算与可选获取超时的底层管线。这是为后续并发预留的基础；默认行为不变，所有 AI 工作（打标 + 打码 + 相似度 + 美学）仍完全串行，因此不引入新的显存风险。
+- **Persistent similarity vector cache** — the similarity vector matrix now persists to disk, so cold-start search skips re-reading every embedding from SQLite (verified identical to the streaming path). An experimental `hnswlib` ANN top-k index also ships (`SimilarityIndex.top_k_similar`, with exact re-rank) but is **not yet wired into the default paginated search** — opt-in groundwork for very large libraries (disable with `SD_SIMILARITY_DISABLE_ANN=1`).
+  - **相似度向量缓存持久化** —— 相似度向量矩阵现在会持久化到磁盘，冷启动搜索不必再从 SQLite 重读全部 embedding（已验证与流式路径结果一致）。另附实验性 `hnswlib` ANN top-k 索引（`SimilarityIndex.top_k_similar`，带精确重排），但**尚未接入默认的分页搜索路径**——为超大图库预留的可选打底（用 `SD_SIMILARITY_DISABLE_ANN=1` 关闭）。
 
 ---
 
@@ -50,6 +50,12 @@ The Manual Sort tab becomes a multi-mode Sort & Cull Workbench: keep the fast WA
   - **空状态的空白浪费** —— 读图与 Prompt Lab 在内容加载前不再预留大片空列；Prompt Lab 统计在尚无标签时改为提示先做 AI 打标。
 - **Censor editor layout** — fixed the 769–960px range where the toolbar went off-screen (it now stacks), and hid the editing chrome (toolbar + footer bars) in the empty no-image state so only the "select an image" card shows.
   - **打码编辑器布局** —— 修复 769–960px 区间工具栏跑出屏幕的问题（现在改为堆叠），并在无图的空状态下隐藏编辑外壳（工具栏 + 底栏），只显示「选择一张图片」卡片。
+- **Workbench resume (A/B 擂台 + 留/汰)** — a paused A/B Showdown now shows a resume banner and resumes correctly instead of failing with a 409; 留/汰 keep/reject decisions made before a reload are no longer dropped (they are rebuilt from the saved session and still route at finish); the resume banner shows mode-appropriate info (comparisons / images left) for bracket and cull instead of slot-only folder text.
+  - **工作台恢复（A/B 擂台 + 留/汰）** —— 暂停的 A/B 擂台现在会显示恢复横幅并正确续做，而不再以 409 失败；留/汰 在刷新前做出的留/汰决定不再丢失（从已保存会话重建，结束时仍会归位）；恢复横幅会按模式显示对应信息（剩余对决 / 待筛图片），而非只适用槽位分拣的文件夹文案。
+- **Metadata-diff accuracy (showdown inspector)** — the differences-only strip now reads the scheduler under each generator's key (ComfyUI `scheduler` / A1111 `schedule_type` / NovelAI `noise_schedule`) instead of only ComfyUI's, normalizes sampler names so the same sampler across generators isn't flagged as different, and shows "No SD generation metadata to compare" instead of a misleading "Same generation params" when neither image carries generation params.
+  - **元数据差异更准（擂台检视器）** —— 只显示差异的对比条现在能读取各生成器各自的调度器键（ComfyUI `scheduler` / A1111 `schedule_type` / NovelAI `noise_schedule`），不再只认 ComfyUI；对采样器名称做归一化（同一采样器跨生成器不再误报不同）；当两张图都没有生成参数时显示「没有可对比的 SD 生成参数」，而非误导性的「生成参数相同」。
+- **Synchronized pixel-peep zoom** — the A/B zoom now maps to the same picture point on both images even when they have different aspect ratios (it corrects for object-fit letterboxing) instead of drifting to a different spot on each.
+  - **同步像素级放大** —— A/B 缩放现在即便两图长宽比不同也会对准同一画面位置（已校正 object-fit 留白），不再各自偏到不同位置。
 
 ---
 
@@ -57,6 +63,8 @@ The Manual Sort tab becomes a multi-mode Sort & Cull Workbench: keep the fast WA
 
 - **E2E coverage for the Workbench** — added Playwright coverage for the A/B Showdown flow and the Keep-Reject cull flow, plus a WASD slot-sort regression; the batch remove / delete / export smoke mocks were repointed at the new background-job `/start` + `/progress` endpoints.
   - **工作台 E2E 覆盖** —— 新增 A/B 擂台流程与留/汰快筛流程的 Playwright 覆盖，以及 WASD 槽位分拣回归；批量移除 / 删除 / 导出的 smoke mock 已改指向新的后台任务 `/start` + `/progress` 接口。
+- **Cull decision-map regression tests** — backend tests assert the cull payload exposes the per-image keep/reject decision map (and clears it on undo) so resume routing stays correct.
+  - **留/汰 决定映射回归测试** —— 后端测试断言 cull 负载会暴露每图留/汰决定映射（撤销时清除），确保恢复后的归位正确。
 
 ---
 
@@ -69,7 +77,7 @@ The Manual Sort tab becomes a multi-mode Sort & Cull Workbench: keep the fast WA
 
 ## ✅ Validation / 验证
 
-- Backend: full pytest suite green on Python 3.12 (1809 passed / 6 skipped), including the new A/B bracket + Keep-Reject cull session tests. `ruff check backend`: clean. Lock freshness + dependency security audit + frontend JS syntax: green.
+- Backend: full pytest suite green on Python 3.12 (1812 passed / 6 skipped), including the A/B bracket + Keep-Reject cull session tests and the new cull decision-map resume regression. `ruff check backend`: clean. Lock freshness + dependency security audit + frontend JS syntax: green.
 - Playwright E2E: 124 passed / 5 skipped — critical gallery / scan / move / filter flows plus the new **A/B Showdown** and **Keep/Reject cull** specs and the WASD slot-sort regression.
 - Workbench verified live against a 43k-image library: mode switch, A/B pick → champion advance with the metadata-diff strip, and cull keep/reject, with 0 console errors.
 

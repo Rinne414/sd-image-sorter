@@ -513,7 +513,7 @@ window.I18nLang_en = {
     'manual.bracketHint': 'Pick the better image. The winner stays champion and faces the next challenger.',
     'manual.bracketKeepA': 'Keep A',
     'manual.bracketKeepB': 'Keep B',
-    'manual.bracketTie': 'Tie / skip',
+    'manual.bracketTie': 'Skip',
     'manual.bracketProgressHint': '← keep A • → keep B • ↑ skip • Z undo • ESC exit',
     'manual.bracketResumed': 'Resumed your A/B Showdown.',
     'manual.bracketNeedTwo': 'A/B Showdown needs at least 2 images to compare.',

@@ -185,6 +185,15 @@ function formatManualSortI18n(key, fallback, replacements = {}) {
     );
 }
 
+// Like formatManualSortI18n but with an explicit zh fallback, so a key that is
+// not yet in the lang files still localizes correctly before token replacement.
+function formatManualSortText(key, enText, zhText, replacements = {}) {
+    return Object.entries(replacements).reduce(
+        (out, [token, value]) => out.replaceAll(`{${token}}`, String(value)),
+        manualSortText(key, enText, zhText)
+    );
+}
+
 function normalizeManualSortOperationMode(mode) {
     // Default to 'copy' when the stored value is unrecognized so a corrupt
     // localStorage entry can never flip a brand-new user into the
@@ -772,8 +781,11 @@ function renderManualSortResumeBanner(session, { visible = true } = {}) {
     }
 
     banner.style.display = 'flex';
+    const mode = MANUAL_SORT_MODES.has(session?.mode) ? session.mode : 'slot';
+    const remaining = Number(session?.remaining || 0);
     ManualSortState.resumeBannerSessionSnapshot = {
-        remaining: Number(session?.remaining || 0),
+        mode,
+        remaining,
         // Resumed sessions keep whatever mode they were started with;
         // default for a brand-new session is 'copy' (Principle #11).
         operation_mode: session?.operation_mode || 'copy',
@@ -782,28 +794,42 @@ function renderManualSortResumeBanner(session, { visible = true } = {}) {
 
     const countEl = banner.querySelector('.resume-count');
     if (countEl) {
-        countEl.textContent = formatManualSortI18n('manual.imagesRemaining', '{count} images remaining', {
-            count: Number(session?.remaining || 0),
-        });
+        if (mode === 'bracket') {
+            countEl.textContent = formatManualSortText('manual.resumeBracketRemaining', '{count} comparisons left', '还剩 {count} 场对决', { count: remaining });
+        } else if (mode === 'cull') {
+            countEl.textContent = formatManualSortText('manual.resumeCullRemaining', '{count} images left to judge', '还有 {count} 张待筛选', { count: remaining });
+        } else {
+            countEl.textContent = formatManualSortI18n('manual.imagesRemaining', '{count} images remaining', { count: remaining });
+        }
     }
 
+    // Action mode + destination folders only apply to the slot (WASD) flow.
+    // Bracket and cull are folder-free and non-destructive, so hide those lines
+    // instead of showing meaningless "folders: none" / copy-mode text.
+    const slotOnly = mode === 'slot';
     const operationEl = banner.querySelector('.resume-operation');
     if (operationEl) {
-        const modeLabel = getManualSortOperationLabel(session?.operation_mode || 'copy');
-        operationEl.textContent = formatManualSortI18n(
-            'manual.resumeOperationMode',
-            'Saved session action mode: {mode}',
-            { mode: modeLabel }
-        );
+        operationEl.style.display = slotOnly ? '' : 'none';
+        if (slotOnly) {
+            const modeLabel = getManualSortOperationLabel(session?.operation_mode || 'copy');
+            operationEl.textContent = formatManualSortI18n(
+                'manual.resumeOperationMode',
+                'Saved session action mode: {mode}',
+                { mode: modeLabel }
+            );
+        }
     }
 
     const foldersEl = banner.querySelector('.resume-folders');
     if (foldersEl) {
-        foldersEl.textContent = formatManualSortI18n(
-            'manual.resumeFolderSummary',
-            'Saved session folders: {summary}',
-            { summary: summarizeManualSortFolders(session?.folders || {}) }
-        );
+        foldersEl.style.display = slotOnly ? '' : 'none';
+        if (slotOnly) {
+            foldersEl.textContent = formatManualSortI18n(
+                'manual.resumeFolderSummary',
+                'Saved session folders: {summary}',
+                { summary: summarizeManualSortFolders(session?.folders || {}) }
+            );
+        }
     }
 }
 
@@ -1060,7 +1086,7 @@ async function initManualSort() {
             console.warn('Operation failed:', e);
             return null;
         });
-        if (session && !session.done && session.image) {
+        if (session && !session.done && (session.image || session.champion)) {
             renderManualSortResumeBanner(session, { visible: true });
         }
     } catch(e) {
@@ -1075,7 +1101,7 @@ async function confirmResumeSavedSessionFromStart(savedSession) {
         'manual.resumeInsteadBody',
         'An unfinished Manual Sort session is saved at image {index}/{total} with {remaining} remaining. Resume it instead of starting over. To start from the first matching image, discard the saved session first.',
         {
-            index: Number(savedSession.index || 0) + 1,
+            index: Number(savedSession.index ?? savedSession.challenger_index ?? 0) + 1,
             total: Number(savedSession.total || 0),
             remaining: Number(savedSession.remaining || 0),
         }
@@ -1114,7 +1140,7 @@ async function startSorting() {
 
     try {
         const savedSession = await API.getCurrentSortImage();
-        if (savedSession && !savedSession.done && savedSession.image) {
+        if (savedSession && !savedSession.done && (savedSession.image || savedSession.champion)) {
             await confirmResumeSavedSessionFromStart(savedSession);
             return;
         }
@@ -1694,6 +1720,22 @@ function renderBracketMeta(selector, image) {
     el.innerHTML = bracketMetaChipsHtml(image);
 }
 
+// Normalize a sampler/scheduler label so the SAME choice from different
+// generators isn't reported as a difference: A1111 "DPM++ 2M" vs ComfyUI
+// "dpmpp_2m" vs NAI "k_euler_ancestral". Display still uses the raw value;
+// only the same/diff decision is normalized. (Some A1111 versions fold the
+// scheduler into the sampler name, so cross-generator matching is best-effort.)
+function normalizeSamplerForCompare(value) {
+    if (value == null) return null;
+    let s = String(value).toLowerCase().trim();
+    if (!s) return null;
+    s = s.replace(/\+\+/g, 'pp');        // dpm++ -> dpmpp
+    s = s.replace(/ancestral/g, 'a');    // "euler ancestral" -> "euler a"
+    s = s.replace(/[\s_]+/g, '');         // collapse spaces / underscores
+    s = s.replace(/^k(?=euler|dpmpp|dpm|heun|lms)/, ''); // NAI "k_euler" -> "euler"
+    return s || null;
+}
+
 // v3.3.2 WB-S5: comparable generation params for the metadata-diff strip.
 // Ordered so the strip reads the way 炼丹 users scan params.
 function bracketComparableParams(image) {
@@ -1710,16 +1752,23 @@ function bracketComparableParams(image) {
         : null;
     const norm = (v) => (v == null || String(v).trim() === '' ? null : String(v).trim());
 
+    // Scheduler is stored under a different key per generator: ComfyUI
+    // "scheduler", A1111/WebUI "schedule_type", NovelAI "noise_schedule".
+    const sched = norm(gp.scheduler != null ? gp.scheduler
+        : (gp.schedule_type != null ? gp.schedule_type : gp.noise_schedule));
+    const sampler = norm(gp.sampler);
+    // genParam flags the true SD generation params (vs structural model/size) so
+    // the strip can tell "params match" apart from "no SD metadata at all".
     return [
-        { key: 'Sampler', value: norm(gp.sampler) },
-        { key: 'CFG', value: norm(gp.cfg_scale) },
-        { key: 'Steps', value: norm(gp.steps) },
-        { key: 'Seed', value: norm(gp.seed) },
-        { key: 'Scheduler', value: norm(gp.scheduler) },
-        { key: 'Clip skip', value: norm(gp.clip_skip) },
-        { key: 'Denoise', value: norm(gp.denoising_strength != null ? gp.denoising_strength : gp.denoise) },
-        { key: 'Model', value: norm(ckpt) },
-        { key: 'Size', value: (image && image.width && image.height) ? `${image.width}×${image.height}` : null },
+        { key: 'Sampler', value: sampler, cmp: normalizeSamplerForCompare(sampler), genParam: true },
+        { key: 'CFG', value: norm(gp.cfg_scale), genParam: true },
+        { key: 'Steps', value: norm(gp.steps), genParam: true },
+        { key: 'Seed', value: norm(gp.seed), genParam: true },
+        { key: 'Scheduler', value: sched, cmp: normalizeSamplerForCompare(sched), genParam: true },
+        { key: 'Clip skip', value: norm(gp.clip_skip), genParam: true },
+        { key: 'Denoise', value: norm(gp.denoising_strength != null ? gp.denoising_strength : gp.denoise), genParam: true },
+        { key: 'Model', value: norm(ckpt), genParam: false },
+        { key: 'Size', value: (image && image.width && image.height) ? `${image.width}×${image.height}` : null, genParam: false },
     ];
 }
 
@@ -1738,22 +1787,25 @@ function renderBracketDiff(champImage, challImage) {
     const a = bracketComparableParams(champImage);
     const b = bracketComparableParams(challImage);
     const bByKey = {};
-    b.forEach((p) => { bByKey[p.key] = p.value; });
+    b.forEach((p) => { bByKey[p.key] = p; });
 
     const diffs = [];
     const sames = [];
+    let comparableGenParams = 0; // SD generation params present on either side
     a.forEach((p) => {
+        const bp = bByKey[p.key] || {};
         const av = p.value;
-        const bv = bByKey[p.key];
-        if (av == null && bv == null) return;
-        if (av === bv) { sames.push(p.key); return; }
+        const bv = bp.value;
+        if (av == null && bv == null) return;        // neither side has this field
+        if (p.genParam) comparableGenParams += 1;
+        const ac = p.cmp != null ? p.cmp : av;       // normalized compare key (sampler/scheduler)
+        const bc = bp.cmp != null ? bp.cmp : bv;
+        if (ac === bc) { sames.push(p.key); return; }
         diffs.push({ key: p.key, a: av == null ? '—' : av, b: bv == null ? '—' : bv });
     });
 
     const parts = [`<span class="bd-label">${escapeHtml(manualSortText('manual.bracketDiffLabel', 'Differences only', '只显示差异'))}</span>`];
-    if (diffs.length === 0) {
-        parts.push(`<span class="bd-none">${escapeHtml(manualSortText('manual.bracketDiffNone', 'Same generation params', '生成参数相同'))}</span>`);
-    } else {
+    if (diffs.length > 0) {
         diffs.forEach((d) => {
             parts.push(
                 `<span class="bd-chip"><b>${escapeHtml(d.key)}</b>`
@@ -1762,10 +1814,16 @@ function renderBracketDiff(champImage, challImage) {
                 + `<span class="bd-b">${escapeHtml(d.b)}</span></span>`
             );
         });
+    } else if (comparableGenParams === 0) {
+        // Neither image carries SD generation metadata (e.g. un-parsed images);
+        // claiming "same params" would be misleading, so be honest instead.
+        parts.push(`<span class="bd-none">${escapeHtml(manualSortText('manual.bracketDiffNoMeta', 'No SD generation metadata to compare', '没有可对比的 SD 生成参数'))}</span>`);
+    } else {
+        parts.push(`<span class="bd-none">${escapeHtml(manualSortText('manual.bracketDiffNone', 'Same generation params', '生成参数相同'))}</span>`);
     }
     if (sames.length > 0) {
         parts.push(
-            `<span class="bd-same">${escapeHtml(formatManualSortI18n('manual.bracketDiffSame', 'same: {keys}', { keys: sames.join(' · ') }))}</span>`
+            `<span class="bd-same">${escapeHtml(formatManualSortText('manual.bracketDiffSame', 'same: {keys}', '相同: {keys}', { keys: sames.join(' · ') }))}</span>`
         );
     }
 
@@ -1774,8 +1832,19 @@ function renderBracketDiff(champImage, challImage) {
 }
 
 // v3.3.2 WB-S5: synchronized pixel-peep zoom. Moving over either fighter zooms
-// BOTH images to the same normalized point so fine detail compares 1:1.
+// BOTH images to the same PICTURE point (corrected for object-fit letterboxing)
+// so fine detail compares 1:1 even when the two images differ in aspect ratio.
 const BRACKET_ZOOM_SCALE = 2.6;
+
+// The rendered (letterboxed) rect of an object-fit:contain image inside a box
+// of bw×bh — used to map between cursor/box space and picture space.
+function containedImageRect(naturalW, naturalH, bw, bh) {
+    if (!naturalW || !naturalH || !bw || !bh) return null;
+    const scale = Math.min(bw / naturalW, bh / naturalH);
+    const w = naturalW * scale;
+    const h = naturalH * scale;
+    return { left: (bw - w) / 2, top: (bh - h) / 2, width: w, height: h };
+}
 
 function setBracketZoomActive(active) {
     const { $ } = window.App;
@@ -1787,6 +1856,10 @@ function setBracketZoomActive(active) {
     if (!active) applyBracketZoom(null, null);
 }
 
+// normX/normY are PICTURE-space coordinates in [0,1] (where in the actual image
+// content the cursor points). Each fighter maps that picture point back to its
+// OWN box-relative transform-origin, correcting for object-fit:contain
+// letterboxing, so both images zoom to the same picture coordinate.
 function applyBracketZoom(normX, normY) {
     const { $ } = window.App;
     const imgs = [$('#bracket-champion-image'), $('#bracket-challenger-image')];
@@ -1795,20 +1868,42 @@ function applyBracketZoom(normX, normY) {
         if (normX == null || normY == null) {
             img.style.transform = '';
             img.style.transformOrigin = '';
-        } else {
-            img.style.transformOrigin = `${(normX * 100).toFixed(2)}% ${(normY * 100).toFixed(2)}%`;
-            img.style.transform = `scale(${BRACKET_ZOOM_SCALE})`;
+            return;
         }
+        const rect = img.getBoundingClientRect();
+        const r = containedImageRect(img.naturalWidth, img.naturalHeight, rect.width, rect.height);
+        let oxPct = normX * 100;
+        let oyPct = normY * 100;
+        if (r && rect.width && rect.height) {
+            oxPct = ((r.left + normX * r.width) / rect.width) * 100;
+            oyPct = ((r.top + normY * r.height) / rect.height) * 100;
+        }
+        img.style.transformOrigin = `${oxPct.toFixed(2)}% ${oyPct.toFixed(2)}%`;
+        img.style.transform = `scale(${BRACKET_ZOOM_SCALE})`;
     });
 }
 
 function handleBracketZoomMove(e) {
     if (!ManualSortState.bracketZoom) return;
     const fighter = e.currentTarget;
-    const rect = fighter.getBoundingClientRect();
+    const img = fighter.tagName === 'IMG' ? fighter : fighter.querySelector('img');
+    const rect = (img || fighter).getBoundingClientRect();
     if (!rect.width || !rect.height) return;
-    const normX = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-    const normY = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+    // Cursor position within the image element box.
+    const bx = e.clientX - rect.left;
+    const by = e.clientY - rect.top;
+    // Convert to picture-space via the hovered image's letterboxed rect, so the
+    // focal point is "where in the picture" rather than "where in the box".
+    const r = img ? containedImageRect(img.naturalWidth, img.naturalHeight, rect.width, rect.height) : null;
+    let normX;
+    let normY;
+    if (r && r.width && r.height) {
+        normX = Math.min(1, Math.max(0, (bx - r.left) / r.width));
+        normY = Math.min(1, Math.max(0, (by - r.top) / r.height));
+    } else {
+        normX = Math.min(1, Math.max(0, bx / rect.width));
+        normY = Math.min(1, Math.max(0, by / rect.height));
+    }
     applyBracketZoom(normX, normY);
 }
 
@@ -2132,6 +2227,20 @@ function applyCullPayload(result, options = {}) {
 
     updateHistoryControlState(result || {});
 
+    // v3.3.2 fix: rebuild the decision map from the server payload (history is
+    // the source of truth) so a resumed session re-routes keep/reject choices
+    // made before a reload — not just those made in the current page load.
+    if (result && result.decisions && typeof result.decisions === 'object') {
+        const rebuilt = new Map();
+        for (const [id, decision] of Object.entries(result.decisions)) {
+            const n = Number(id);
+            if (Number.isInteger(n) && n > 0 && (decision === 'keep' || decision === 'reject')) {
+                rebuilt.set(n, decision);
+            }
+        }
+        ManualSortState.cullDecisions = rebuilt;
+    }
+
     if (result?.done) {
         finishCullSorting(result);
         return false;
@@ -2353,7 +2462,7 @@ async function resumeSavedSession(prefetchedSession = null) {
     try {
         const session = prefetchedSession || await API.getCurrentSortImage();
 
-        if (!session || session.done || !session.image) {
+        if (!session || session.done || !(session.image || session.champion)) {
             renderManualSortResumeBanner(null, { visible: false });
             showToast(manualSortText('manual.noSavedSession', 'No saved sorting session to resume', '没有可恢复的已保存排序会话'), 'info');
             return;
@@ -2381,9 +2490,13 @@ async function resumeSavedSession(prefetchedSession = null) {
 
         restoreFolderInputs();
         const resumeMode = MANUAL_SORT_MODES.has(session.mode) ? session.mode : 'slot';
-        // A resumed cull session starts its decision map fresh (decisions made
-        // before the reload aren't re-routed; the session itself is intact).
-        if (resumeMode === 'cull') ManualSortState.cullDecisions = new Map();
+        // Cull decisions are rebuilt from the server payload in applyCullPayload
+        // (server history is the source of truth), so keep/reject choices made
+        // before the reload are still routed at finish. Reset the bracket streak
+        // so a resumed showdown counts the champion's run from this load.
+        ManualSortState.cullDecisions = new Map();
+        ManualSortState.bracketStreak = 1;
+        ManualSortState.bracketLastChampIndex = null;
         activateSortingUi(resumeMode);
         applyCurrentSortPayload(session);
 

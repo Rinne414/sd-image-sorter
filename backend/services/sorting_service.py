@@ -2489,6 +2489,24 @@ class SortingService:
                 **self._get_sort_session_flags(history, self._sort_session["redo_stack"]),
             }
 
+    @staticmethod
+    def _cull_decisions_from_history(history: List[Dict[str, Any]]) -> Dict[str, str]:
+        """Map image_id → final keep/reject decision from cull history.
+
+        Lets a resumed cull session rebuild its client-side decision map so the
+        keep/reject routing at finish covers decisions made before a reload
+        (history is the server-side source of truth). Later entries win; skips
+        are not decisions, so they are omitted.
+        """
+        decisions: Dict[str, str] = {}
+        for entry in history or []:
+            action = entry.get("action")
+            image_id = entry.get("image_id")
+            if image_id is None or action not in ("keep", "reject"):
+                continue
+            decisions[str(image_id)] = action
+        return decisions
+
     def _get_current_cull_image(self) -> Dict[str, Any]:
         """Return the current single image for 留/汰 Keep-Reject (cull) mode.
 
@@ -2512,6 +2530,7 @@ class SortingService:
                         "remaining": 0,
                         "kept": 0,
                         "rejected": 0,
+                        "decisions": {},
                         **self._get_sort_session_flags([], []),
                     }
                 image_ids = self._sort_session["image_ids"]
@@ -2522,6 +2541,7 @@ class SortingService:
 
             kept = sum(1 for h in history_snapshot if h.get("action") == "keep")
             rejected = sum(1 for h in history_snapshot if h.get("action") == "reject")
+            decisions = self._cull_decisions_from_history(history_snapshot)
 
             if total == 0 or current_index >= total:
                 return {
@@ -2535,6 +2555,7 @@ class SortingService:
                     "kept": kept,
                     "rejected": rejected,
                     "message": "Cull complete" if total else "No images to cull",
+                    "decisions": decisions,
                     **self._get_sort_session_flags(history_snapshot, redo_snapshot),
                 }
 
@@ -2556,6 +2577,7 @@ class SortingService:
                 "kept": kept,
                 "rejected": rejected,
                 "image_ids": list(image_ids),
+                "decisions": decisions,
                 **self._get_sort_session_flags(history_snapshot, redo_snapshot),
             }
 

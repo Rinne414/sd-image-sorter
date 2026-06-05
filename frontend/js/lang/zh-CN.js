@@ -524,7 +524,7 @@ window.I18nLang_zhCN = {
     'manual.bracketHint': '选出更好的那张。赢家留任擂主，迎战下一位挑战者。',
     'manual.bracketKeepA': '选 A',
     'manual.bracketKeepB': '选 B',
-    'manual.bracketTie': '平手 / 跳过',
+    'manual.bracketTie': '跳过',
     'manual.bracketProgressHint': '← 选 A • → 选 B • ↑ 跳过 • Z 撤销 • ESC 退出',
     'manual.bracketResumed': '已恢复你的 A/B 擂台。',
     'manual.bracketNeedTwo': 'A/B 擂台至少需要 2 张图片才能比较。',
