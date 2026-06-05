@@ -1829,6 +1829,46 @@
     }
 }
 
+/* 769-960px: in this range ui-refresh.css already forces both censor sidebars
+   to width:100%, but the workspace was still flex-direction:row — so the two
+   full-width sidebars overlapped and squeezed the canvas/toolbar to ~0px,
+   pushing the toolbar off-screen. Stack the workspace here (the canvas gets the
+   full width) with the queue and settings as capped panels above/below. Scoped
+   with min-width:769 so it never touches the ≤768 mobile drawer layout. */
+@media (min-width: 769px) and (max-width: 960px) {
+    #view-censor .censor-workspace-v2 {
+        flex-direction: column !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow-y: auto !important;
+    }
+
+    #view-censor .censor-sidebar-v2.left {
+        height: auto !important;
+        max-height: 200px !important;
+        border-right: none !important;
+        border-bottom: 1px solid rgba(var(--censor-accent-rgb), 0.15) !important;
+    }
+
+    #view-censor .censor-sidebar-v2.right {
+        height: auto !important;
+        max-height: 320px !important;
+        border-left: none !important;
+        border-top: 1px solid rgba(var(--censor-accent-rgb), 0.15) !important;
+    }
+
+    .censor-main-v2 {
+        height: auto !important;
+        max-height: none !important;
+        min-height: 60vh !important;
+    }
+
+    .censor-toolbar-v2 {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+}
+
 /* Tablets (max-width: 768px) */
 @media (max-width: 768px) {
     /* Hide right sidebar by default on mobile */
