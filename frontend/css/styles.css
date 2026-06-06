@@ -1220,10 +1220,12 @@ body::before {
     .gallery-item-fav {
         position: absolute;
         top: 6px;
-        left: 6px;
+        right: 6px; /* top-right: clear of the selection circle + order badge (both top-left) */
         z-index: 3;
         width: 30px;
         height: 30px;
+        min-width: 30px;  /* hold size against the global touch-target min */
+        min-height: 30px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -6531,12 +6533,16 @@ textarea:focus-visible {
     outline-offset: 2px;
 }
 
-/* Ensure interactive elements have proper touch targets */
-.btn,
-button,
-.checkbox-label {
-    min-height: 44px;
-    min-width: 44px;
+/* Touch-target minimums — touch devices only. This is desktop/laptop software;
+   with a mouse pointer, controls use their own (smaller) sizing, so this 44px
+   floor must not inflate compact desktop buttons (e.g. gallery card icons). */
+@media (hover: none) and (pointer: coarse) {
+    .btn,
+    button,
+    .checkbox-label {
+        min-height: 44px;
+        min-width: 44px;
+    }
 }
 
 input[type="checkbox"],

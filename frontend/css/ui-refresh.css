@@ -6873,6 +6873,9 @@ html.lang-zh #view-censor .queue-action-btn span {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    max-height: 260px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 .collections-empty {
     color: var(--text-muted);
