@@ -132,6 +132,8 @@ Retrieve images with filters and cursor pagination.
 | `brightness_max` | float | - | Maximum average brightness, `0..255`; requires color analysis data |
 | `color_temperature` | string | - | `warm`, `cool`, `neutral`; requires color analysis data |
 | `brightness_distribution` | string | - | `left_heavy`, `right_heavy`, `middle_heavy`, `edge_heavy`, `balanced`; requires color analysis data |
+| `folder` | string | - | v3.3.2: absolute directory path; restricts results to that folder **and all subfolders** (recursive, case-insensitive). Forward- or back-slashes accepted. Composes with every other filter. |
+| `has_metadata` | bool | - | v3.3.2: tri-state "has SD generation parameters" filter. Omit for all images; `true` keeps only images with a known generator **or** a non-empty prompt; `false` keeps only images with neither (e.g. plain PNGs). Distinct from `metadata_status` (parse-pipeline state). Composes with every other filter. |
 
 Example response:
 
@@ -158,6 +160,51 @@ Example response:
   "total": 500
 }
 ```
+
+#### GET /api/folders
+List the distinct directories that contain indexed images, forward-slash normalized and sorted (v3.3.2 Library Navigation). The frontend builds a collapsible folder tree by splitting each path on `/`; clicking a node scopes the gallery via the `folder` parameter documented under `GET /api/images` (recursive subtree). Recomputed per call from the live index, so it always reflects the current library.
+
+Example response:
+
+```json
+{
+  "folders": [
+    "L:/Pictures/AAA Reference/AAAwith prompt",
+    "L:/Pictures/AAA Reference/AAAwith prompt/NSFW",
+    "L:/Pictures/AAA Reference/AAAwith prompt/SFW"
+  ]
+}
+```
+
+#### GET /api/library-roots
+List registered library roots — folders the user added as image sources — each with a live recursive indexed-image count (v3.3.2 Library Navigation). Roots are auto-registered when a folder is scanned and persist independently of the images currently under them, providing the target list for multi-root management and idle auto-refresh.
+
+Example response:
+
+```json
+{
+  "roots": [
+    {
+      "id": 1,
+      "path": "L:/Pictures/AAA Reference",
+      "label": null,
+      "enabled": 1,
+      "added_at": "2026-06-06T12:00:00",
+      "last_scanned_at": "2026-06-06T12:05:00",
+      "image_count": 43483
+    }
+  ]
+}
+```
+
+#### DELETE /api/library-roots/{root_id}
+Unregister a library root (v3.3.2 Library Navigation). The folder's already-indexed images stay in the gallery — only the source registration is removed. Returns `404` if the root id is unknown.
+
+#### POST /api/library-roots/{root_id}/rescan
+Quick-import re-scan of a registered root to pick up new or changed files (v3.3.2 Library Navigation). Runs in the background; poll `GET /api/scan/progress`. Returns `404` for an unknown root and `409` if a scan is already running.
+
+#### POST /api/library/auto-refresh
+Idle-triggered quick-import re-scan of the stalest enabled root (v3.3.2 Library Navigation), so newly added files surface without a manual scan. Returns `{"status": "started", "root": ...}` when it kicks off, `{"status": "skipped", ...}` while a scan is running, or `{"status": "idle", ...}` when no roots are enabled. Never runs AI tagging (GPU safety).
 
 #### GET /api/images/{image_id}
 Get one image with its tags.
@@ -741,6 +788,8 @@ Refine multiple masks with SAM3.
 
 #### POST /api/censor/segment-text
 Segment via text prompt with SAM3.
+
+Body: `image_id` (int), `text_prompt` (string), optional `presence_threshold` (float 0.0–1.0). The presence gate defaults to a looser explicit-text value, decoupled from the stricter 0.5 auto-detect gate, so deliberately-typed prompts are not silently rejected; pass `presence_threshold` to override (higher = stricter recall).
 
 #### GET /api/censor/mask-cache/{mask_ref}
 Retrieve a cached mask image by reference.

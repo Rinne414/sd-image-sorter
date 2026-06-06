@@ -233,6 +233,8 @@ function createDefaultFilterState() {
         excludeLoras: [],
         excludePrompts: [],
         excludeColors: [],
+        folder: null,
+        hasMetadata: null,
     };
 }
 
@@ -276,6 +278,8 @@ function cloneFilterState(filters) {
         excludeLoras: [...(source.excludeLoras || [])],
         excludePrompts: [...(source.excludePrompts || [])],
         excludeColors: [...(source.excludeColors || [])],
+        folder: source.folder ? String(source.folder).trim() : null,
+        hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
     };
 }
 
@@ -353,6 +357,8 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
         excludeLoras: [...(source.excludeLoras || [])],
         excludePrompts: [...(source.excludePrompts || [])],
         excludeColors: [...(source.excludeColors || [])],
+        folder: source.folder ? String(source.folder).trim() : null,
+        hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
     };
 }
 
@@ -562,6 +568,8 @@ window.AppFilterAccess = {
         if (filters.excludeLoras?.length) params.set('exclude_loras', filters.excludeLoras.join(','));
         if (filters.excludePrompts?.length) params.set('exclude_prompts', filters.excludePrompts.join(','));
         if (filters.excludeColors?.length) params.set('exclude_colors', filters.excludeColors.join(','));
+        if (filters.folder) params.set('folder', filters.folder);
+        if (filters.hasMetadata != null) params.set('has_metadata', String(filters.hasMetadata));
         return params;
     },
 };
@@ -727,6 +735,8 @@ function _galleryHasActiveFilter() {
     if (f.prompts && f.prompts.length > 0) return true;
     if (f.search && String(f.search).trim().length > 0) return true;
     if (f.artist) return true;
+    if (f.folder) return true;
+    if (f.hasMetadata != null) return true;
     if (f.minWidth != null || f.maxWidth != null) return true;
     if (f.minHeight != null || f.maxHeight != null) return true;
     if (f.aspectRatio) return true;
@@ -1183,6 +1193,9 @@ const API = {
         if (filters.excludeColors?.length) params.set('exclude_colors', filters.excludeColors.join(','));
         // v3.3.1: restrict to a collection (Favorites view / browse a collection).
         if (filters.collectionId) params.set('collection_id', filters.collectionId);
+        // v3.3.2 Library Navigation: recursive folder-subtree scope
+        if (filters.folder) params.set('folder', filters.folder);
+        if (filters.hasMetadata != null) params.set('has_metadata', String(filters.hasMetadata));
 
         return this.get(`/api/images?${params}`, options);
     },
@@ -1587,6 +1600,11 @@ const API = {
 
     async listCollections() {
         return this.get('/api/collections');
+    },
+
+    // v3.3.2 Library Navigation: distinct directories that contain indexed images.
+    async listLibraryFolders() {
+        return this.get('/api/folders');
     },
 
     async createCollection(name, folderPath = null) {
@@ -9454,6 +9472,12 @@ async function openFilterModal(options = {}) {
     $$('input[name="aspect-ratio"]').forEach(radio => {
         radio.checked = radio.value === (filterState.aspectRatio || '');
     });
+    // v3.3.2 small-opt: "has SD generation parameters" tri-state radios
+    $$('input[name="has-metadata"]').forEach(radio => {
+        const cur = filterState.hasMetadata;
+        const curValue = cur === true ? 'true' : (cur === false ? 'false' : '');
+        radio.checked = radio.value === curValue;
+    });
     // Aesthetic score filter
     const minAestheticInput = $('#filter-aesthetic-min');
     const maxAestheticInput = $('#filter-aesthetic-max');
@@ -10815,7 +10839,8 @@ function updateFilterModalSummary() {
     const minHeight = parseInt($('#filter-min-height')?.value, 10) || null;
     const maxHeight = parseInt($('#filter-max-height')?.value, 10) || null;
     const aspectRatio = $('input[name="aspect-ratio"]:checked')?.value || '';
-    const dimensionCount = [minWidth, maxWidth, minHeight, maxHeight].filter(Boolean).length + (aspectRatio ? 1 : 0);
+    const hasMetadataChoice = $('input[name="has-metadata"]:checked')?.value || '';
+    const dimensionCount = [minWidth, maxWidth, minHeight, maxHeight].filter(Boolean).length + (aspectRatio ? 1 : 0) + (hasMetadataChoice ? 1 : 0);
     const brightnessMin = parseFloat($('#filter-brightness-min')?.value) || null;
     const brightnessMax = parseFloat($('#filter-brightness-max')?.value) || null;
     const colorTemperature = $('input[name="color-temperature"]:checked')?.value || '';
@@ -11091,6 +11116,11 @@ function applyModalFilters() {
     // Get aspect ratio
     const aspectRadio = $('input[name="aspect-ratio"]:checked');
     filterState.aspectRatio = aspectRadio ? aspectRadio.value : '';
+
+    // v3.3.2 small-opt: "has SD generation parameters" tri-state ('' = all)
+    const hasMetaRadio = $('input[name="has-metadata"]:checked');
+    const hasMetaValue = hasMetaRadio ? hasMetaRadio.value : '';
+    filterState.hasMetadata = hasMetaValue === 'true' ? true : (hasMetaValue === 'false' ? false : null);
 
     // Get aesthetic score range
     const minAesthetic = parseFloat($('#filter-aesthetic-min')?.value) || null;
@@ -11840,6 +11870,10 @@ document.addEventListener('DOMContentLoaded', () => {
     window.Gallery?.hydrateFavorites?.();
     // v3.3.1 FEAT-COLLECTIONS: render the sidebar Collections section.
     window.CollectionsUI?.init?.();
+    // v3.3.2 Library Navigation: render the sidebar Folders tree.
+    window.FolderTreeUI?.init?.();
+    // v3.3.2 Library Navigation: wire the library-roots management modal (Phase D).
+    window.LibraryRootsUI?.init?.();
     _initBgTagProgressButtons();
     _initBgScanProgressButtons();
     _initBgReconnectProgressButtons();

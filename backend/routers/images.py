@@ -100,6 +100,8 @@ class SelectionIdsRequest(BaseModel):
     promptMatchMode: str = PROMPT_MATCH_MODE_EXACT
     artist: Optional[str] = None
     search: str = ""
+    folder: Optional[str] = Field(default=None, max_length=4096)
+    hasMetadata: Optional[bool] = Field(default=None)
     sortBy: str = "newest"
     minWidth: Optional[int] = Field(default=None, ge=1, le=100000)
     maxWidth: Optional[int] = Field(default=None, ge=1, le=100000)
@@ -506,6 +508,15 @@ async def get_images(
         ge=1,
         description="Restrict results to images in this collection (v3.3.1). Composes with all other filters.",
     ),
+    folder: Optional[str] = Query(
+        default=None,
+        max_length=4096,
+        description="Restrict results to images whose indexed path is within this folder subtree (recursive). v3.3.2 Library Navigation.",
+    ),
+    has_metadata: Optional[bool] = Query(
+        default=None,
+        description="Restrict to images that carry SD generation parameters (true) or carry none (false). Omit for all. v3.3.2 small-opt.",
+    ),
     service: ImageService = Depends(get_image_service),
 ):
     """Retrieve images with optional filtering using cursor-based pagination."""
@@ -566,7 +577,33 @@ async def get_images(
         exclude_prompts=exclude_prompts,
         exclude_colors=exclude_colors,
         collection_id=collection_id,
+        folder=folder,
+        has_metadata=has_metadata,
     )
+
+
+@router.get(
+    "/folders",
+    summary="List image directories for the gallery folder tree",
+    description="v3.3.2 Library Navigation: distinct directories that contain images, forward-slash normalized and sorted. The frontend builds a nested tree by splitting on '/'.",
+)
+async def list_library_folders(
+    service: ImageService = Depends(get_image_service),
+):
+    """Return distinct image directories for the gallery folder tree."""
+    return service.get_library_folders()
+
+
+@router.get(
+    "/library-roots",
+    summary="List registered library roots",
+    description="v3.3.2 Library Navigation: folders the user added as image sources, each with a live indexed-image count. Roots are auto-registered when a folder is scanned and persist independently of the images currently under them.",
+)
+async def list_library_roots(
+    service: ImageService = Depends(get_image_service),
+):
+    """Return registered library roots with per-root image counts."""
+    return service.get_library_roots()
 
 
 @router.post(
@@ -616,6 +653,8 @@ async def create_selection_token(
         exclude_ratings=request.excludeRatings,
         exclude_checkpoints=request.excludeCheckpoints,
         exclude_loras=request.excludeLoras,
+        folder=request.folder,
+        has_metadata=request.hasMetadata,
         chunk_size=request.chunkSize,
     )
 

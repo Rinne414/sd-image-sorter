@@ -61,28 +61,43 @@ _SAM3_REQUIRED_FILES = (
 
 
 def _check_sam3_available() -> bool:
-    """Check whether transformers' SAM3 image variant + CUDA are usable."""
+    """Whether transformers' SAM3 image variant + CUDA are usable *right now*.
+
+    The transformers-import result is cached in ``_sam3_available`` because it
+    cannot change within a process, but ``torch.cuda.is_available()`` is
+    re-evaluated on EVERY call. A transient CUDA outage (e.g. GPU contention at
+    the moment this process happened to start) must NOT permanently disable
+    SAM3 for the whole process lifetime -- that previously turned a momentary
+    blip into a hard "SAM3 not installed" failure for every later request.
+    """
     global _sam3_available
     if _sam3_available is None:
         try:
-            import torch
             from transformers.models.sam3.modeling_sam3 import Sam3Config, Sam3Model  # noqa: F401
             from transformers.models.sam3.image_processing_sam3 import Sam3ImageProcessor  # noqa: F401
             from transformers.models.sam3.processing_sam3 import Sam3Processor  # noqa: F401
-            _sam3_available = bool(torch.cuda.is_available())
-            if not _sam3_available:
-                if getattr(getattr(torch, "version", None), "cuda", None) is None:
-                    logger.warning(
-                        "SAM3 runtime is installed, but this Python environment is using CPU-only PyTorch."
-                    )
-                else:
-                    logger.warning(
-                        "SAM3 runtime is installed, but this Python environment cannot access CUDA right now."
-                    )
+            _sam3_available = True
         except ImportError as exc:
             _sam3_available = False
             logger.warning("SAM3 runtime is unavailable: %s", exc)
-    return bool(_sam3_available)
+    if not _sam3_available:
+        return False
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return True
+        if getattr(getattr(torch, "version", None), "cuda", None) is None:
+            logger.warning(
+                "SAM3 runtime is installed, but this Python environment is using CPU-only PyTorch."
+            )
+        else:
+            logger.warning(
+                "SAM3 runtime is installed, but CUDA is not accessible right now."
+            )
+        return False
+    except Exception as exc:  # torch import / CUDA probe failure must not be cached
+        logger.warning("SAM3 CUDA probe failed: %s", exc)
+        return False
 
 
 def _resolve_checkpoint_dir(checkpoint_path: Optional[str] = None) -> Optional[str]:
@@ -244,6 +259,13 @@ _DEFAULT_SCORE_FLOOR = 0.05
 # silhouette for an absent concept it covers > 30 % of the image. Real
 # privacy regions are tiny relative to the canvas.
 _DEFAULT_MAX_AREA_RATIO = 0.30
+# Explicit user text prompts are high-intent: the user is asking for THIS
+# concept by name, so the presence gate is loosened well below the 0.5
+# auto-detect default. It stays ~5x above the absent-prompt noise ceiling
+# (sigmoid in [0.001, 0.030]) so clear-absence still returns no_match, but
+# moderately-present concepts (common on anime/illustration, where presence
+# logits run lower than on photoreal) are no longer silently rejected.
+_DEFAULT_TEXT_PRESENCE_THRESHOLD = 0.15
 
 
 def _best_mask(processed_results, score_threshold: float = 0.0) -> Optional[np.ndarray]:
@@ -398,9 +420,27 @@ class SAM3Refiner:
             refined.append(refined_det)
         return refined
 
-    def segment_by_text(self, image: Image.Image, text_prompt: str) -> Optional[np.ndarray]:
+    def segment_by_text(
+        self,
+        image: Image.Image,
+        text_prompt: str,
+        presence_threshold: Optional[float] = None,
+    ) -> Optional[np.ndarray]:
+        """Segment an explicit, user-supplied text prompt.
+
+        Unlike :meth:`detect_privacy_regions` (which sweeps canned NSFW prompts
+        blindly across every image and needs the strict 0.5 presence gate to
+        avoid false positives on SFW content), this path is driven by an
+        explicit user request, so it defaults to the looser
+        ``_DEFAULT_TEXT_PRESENCE_THRESHOLD``. Callers may override per request.
+        """
+        gate = (
+            _DEFAULT_TEXT_PRESENCE_THRESHOLD
+            if presence_threshold is None
+            else max(0.0, min(1.0, presence_threshold))
+        )
         try:
-            return self._run_segmentation(image, text=text_prompt)
+            return self._run_segmentation(image, text=text_prompt, presence_threshold=gate)
         except Exception as exc:
             logger.error("SAM3 text segmentation failed: %s", exc)
             return None

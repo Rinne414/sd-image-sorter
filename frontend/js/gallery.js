@@ -171,13 +171,13 @@ const Gallery = {
     // the user toggles hearts so re-renders show the correct state.
     favoriteIds: new Set(),
     modalSectionState: {
-        prompt: false,
+        prompt: true,
         negative: false,
         params: false,
         modelAssets: false,
         loras: false,
         nodes: false,
-        color: true,
+        color: false,
     },
     _histogramMode: 'rgb',
 

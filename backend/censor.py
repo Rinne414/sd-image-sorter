@@ -80,6 +80,22 @@ def _ensure_ort():
                 logger.debug("onnxruntime.preload_dlls() was not usable: %s", exc)
 
 
+_cv2 = None
+
+
+def _try_import_cv2():
+    """Lazily import OpenCV (Apache-2.0). Used only to turn decoded YOLOv8-seg
+    masks into polygon contours; absence degrades gracefully to box geometry."""
+    global _cv2
+    if _cv2 is None:
+        try:
+            import cv2 as _cv2_module  # type: ignore
+            _cv2 = _cv2_module
+        except Exception:
+            _cv2 = False
+    return _cv2 or None
+
+
 class CensorDetector:
     """YOLOv8 ONNX detector for sensitive body parts."""
 
@@ -89,6 +105,7 @@ class CensorDetector:
         self.runtime = None
         self.runtime_backend = None
         self.supports_masks = False
+        self._onnx_segmentation = False
         self.requested_classes = list(classes) if classes else None
         self.raw_classes = list(classes) if classes else list(CENSOR_DEFAULT_CLASSES)
         self.classes = list(classes) if classes else list(CENSOR_DEFAULT_CLASSES)
@@ -300,42 +317,57 @@ class CensorDetector:
 
             self._load_onnx_metadata(session)
 
-            if self._onnx_has_segmentation_outputs(session):
+            has_seg = self._onnx_has_segmentation_outputs(session)
+            lightweight_ok = self._supports_lightweight_onnx(session)
+            # Native seg-mask decoding needs OpenCV (Apache-2.0) to trace contours.
+            native_seg_ok = has_seg and lightweight_ok and _try_import_cv2() is not None
+
+            # Only reach for Ultralytics (AGPL) when we genuinely cannot parse the
+            # model ourselves: a seg model whose masks we can't decode natively, or
+            # any output layout the lightweight parser does not understand. When we
+            # CAN decode seg masks natively we stay on ONNX Runtime (lighter, faster,
+            # no AGPL dependency) and still emit pixel-accurate polygons.
+            needs_ultralytics = (has_seg and not native_seg_ok) or (not lightweight_ok)
+            if needs_ultralytics:
+                reason = (
+                    "exposes segmentation outputs we cannot decode natively"
+                    if (has_seg and not native_seg_ok)
+                    else "uses an output layout the lightweight parser does not support"
+                )
                 try:
                     logger.info(
-                        "Model %s exposes segmentation outputs. Switching to Ultralytics runtime so masks are preserved.",
-                        os.path.basename(self.model_path),
+                        "Model %s %s. Trying Ultralytics runtime so masks are preserved.",
+                        os.path.basename(self.model_path), reason,
                     )
                     self._load_with_ultralytics(self.model_path)
-                    logger.info("Censor detector loaded via Ultralytics mask-preserving path: %s", os.path.basename(self.model_path))
+                    logger.info("Censor detector loaded via Ultralytics: %s", os.path.basename(self.model_path))
                     logger.info("Classes: %d", len(self.classes))
                     return
                 except ImportError:
+                    if not lightweight_ok:
+                        raise
                     logger.warning(
-                        "Ultralytics is unavailable, continuing with lightweight ONNX parser. Segmentation masks will not be preserved."
+                        "Ultralytics is unavailable; continuing with the lightweight ONNX parser "
+                        "(box geometry only, segmentation masks not preserved)."
                     )
                 except Exception as exc:
+                    if not lightweight_ok:
+                        raise
                     logger.warning(
-                        "Could not switch %s to Ultralytics runtime (%s). Continuing with lightweight ONNX parser.",
-                        os.path.basename(self.model_path),
-                        exc,
+                        "Could not switch %s to Ultralytics runtime (%s). Continuing with the lightweight ONNX parser.",
+                        os.path.basename(self.model_path), exc,
                     )
 
-            if not self._supports_lightweight_onnx(session):
-                logger.info(
-                    "ONNX output layout for %s is not supported by the lightweight parser. Falling back to Ultralytics runtime.",
-                    self.model_path,
-                )
-                self._load_with_ultralytics(self.model_path)
-                logger.info("Censor detector loaded via Ultralytics fallback: %s", os.path.basename(self.model_path))
-                logger.info("Classes: %d", len(self.classes))
-                return
-            
             self.session = session
             self.runtime = None
             self.runtime_backend = "onnxruntime"
-            self.supports_masks = False
-            logger.info("Censor detector loaded: %s", os.path.basename(self.model_path))
+            self._onnx_segmentation = native_seg_ok
+            self.supports_masks = native_seg_ok
+            logger.info(
+                "Censor detector loaded (ONNX%s): %s",
+                ", native segmentation" if native_seg_ok else "",
+                os.path.basename(self.model_path),
+            )
             logger.info("Input size: %s, Classes: %d", self.input_size, len(self.classes))
             
         except Exception as e:
@@ -397,9 +429,15 @@ class CensorDetector:
         scale_info: Tuple[float, float],
         pad_info: Tuple[int, int],
         conf_threshold: float = CENSOR_CONFIDENCE_THRESHOLD,
-        iou_threshold: float = CENSOR_IOU_THRESHOLD
+        iou_threshold: float = CENSOR_IOU_THRESHOLD,
+        proto: Optional[np.ndarray] = None,
     ) -> List[Dict]:
-        """Postprocess YOLOv8 outputs to detection boxes."""
+        """Postprocess YOLOv8 outputs to detection boxes.
+
+        When ``proto`` (the YOLOv8-seg mask-prototype output) is provided, each
+        kept detection also gets a pixel-accurate ``polygon`` traced from its
+        instance mask, so censoring follows the actual shape instead of a box.
+        """
         predictions = np.squeeze(outputs).T
         
         # Extract boxes (x_center, y_center, width, height)
@@ -423,7 +461,13 @@ class CensorDetector:
         boxes = boxes[mask]
         confidences = confidences[mask]
         class_ids = class_ids[mask]
-        
+
+        # Capture the 32 mask coefficients (seg models) for the surviving boxes,
+        # aligned with ``boxes`` so NMS-kept indices line up with their masks.
+        seg_coeffs = None
+        if proto is not None and predictions.shape[1] > 4 + num_classes:
+            seg_coeffs = predictions[:, 4 + num_classes:][mask]
+
         if len(boxes) == 0:
             return []
         
@@ -433,7 +477,11 @@ class CensorDetector:
         y1 = y_center - height / 2
         x2 = x_center + width / 2
         y2 = y_center + height / 2
-        
+
+        # Keep a copy in model-input (letterboxed) coordinates for seg-mask cropping,
+        # before we unscale the display boxes back to original-image coordinates.
+        x1_in, y1_in, x2_in, y2_in = x1.copy(), y1.copy(), x2.copy(), y2.copy()
+
         # Unscale
         scale_x, scale_y = scale_info
         pad_x, pad_y = pad_info
@@ -458,15 +506,90 @@ class CensorDetector:
         for i in indices:
             class_id = int(class_ids[i])
             class_name = self.classes[class_id] if class_id < len(self.classes) else f"class_{class_id}"
-            
-            detections.append({
+
+            detection = {
                 "class": class_name,
                 "class_id": class_id,
                 "confidence": float(confidences[i]),
-                "box": [int(x1[i]), int(y1[i]), int(x2[i]), int(y2[i])]
-            })
-        
+                "box": [int(x1[i]), int(y1[i]), int(x2[i]), int(y2[i])],
+            }
+
+            if seg_coeffs is not None:
+                polygon = self._decode_seg_polygon(
+                    seg_coeffs[i],
+                    proto,
+                    (x1_in[i], y1_in[i], x2_in[i], y2_in[i]),
+                    scale_info,
+                    pad_info,
+                    original_size,
+                )
+                if polygon:
+                    detection["polygon"] = polygon
+
+            detections.append(detection)
+
         return detections
+
+    def _decode_seg_polygon(self, coeff, proto, box_input_xyxy, scale_info, pad_info, original_size):
+        """Assemble one YOLOv8-seg instance mask (prototype masks · coefficients),
+        then trace it to a polygon in ORIGINAL-image coordinates.
+
+        ``proto``  : ndarray [num_proto, ph, pw] mask prototypes (model-input space).
+        ``coeff``  : ndarray [num_proto] mask coefficients for this detection.
+        ``box_input_xyxy`` : detection box in model-input (letterboxed) coordinates,
+                     used to crop the mask so neighbouring instances don't bleed in.
+        Returns a list of [x, y] points, or None (no contour / OpenCV unavailable).
+        """
+        cv2 = _try_import_cv2()
+        if cv2 is None or proto is None:
+            return None
+        try:
+            proto_arr = np.asarray(proto, dtype=np.float32)
+            if proto_arr.ndim == 4:
+                proto_arr = proto_arr[0]
+            num_proto, ph, pw = proto_arr.shape
+            sigmoid = 1.0 / (1.0 + np.exp(-(coeff.astype(np.float32) @ proto_arr.reshape(num_proto, -1))))
+            mask = sigmoid.reshape(ph, pw)
+
+            in_w, in_h = self.input_size
+            sx, sy = pw / float(in_w), ph / float(in_h)
+            bx1, by1, bx2, by2 = box_input_xyxy
+            cx1 = int(np.clip(np.floor(bx1 * sx), 0, pw))
+            cx2 = int(np.clip(np.ceil(bx2 * sx), 0, pw))
+            cy1 = int(np.clip(np.floor(by1 * sy), 0, ph))
+            cy2 = int(np.clip(np.ceil(by2 * sy), 0, ph))
+            if cx2 <= cx1 or cy2 <= cy1:
+                return None
+            cropped = np.zeros_like(mask)
+            cropped[cy1:cy2, cx1:cx2] = mask[cy1:cy2, cx1:cx2]
+
+            binary = (cropped >= 0.5).astype(np.uint8)
+            if int(binary.sum()) == 0:
+                return None
+            contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if not contours:
+                return None
+            contour = max(contours, key=cv2.contourArea)
+            epsilon = 0.01 * cv2.arcLength(contour, True)
+            approx = cv2.approxPolyDP(contour, epsilon, True).reshape(-1, 2)
+            if len(approx) < 3:
+                return None
+
+            # Map proto-space -> model-input space -> original image (reverse letterbox).
+            up_x, up_y = in_w / float(pw), in_h / float(ph)
+            scale_x, scale_y = scale_info
+            pad_x, pad_y = pad_info
+            orig_w, orig_h = original_size
+            polygon = []
+            for px, py in approx:
+                ix, iy = float(px) * up_x, float(py) * up_y
+                ox = float(np.clip((ix - pad_x) / scale_x, 0, orig_w))
+                oy = float(np.clip((iy - pad_y) / scale_y, 0, orig_h))
+                polygon.append([ox, oy])
+            return polygon if len(polygon) >= 3 else None
+        except Exception as exc:
+            logger.debug("Seg-mask polygon decode failed: %s", exc)
+            return None
     
     def _nms(self, boxes: np.ndarray, scores: np.ndarray, iou_threshold: float) -> List[int]:
         """Non-maximum suppression."""
@@ -521,12 +644,14 @@ class CensorDetector:
             outputs = self.session.run(None, {self.input_name: img_array})
 
         # Postprocess
+        proto = outputs[1] if (self._onnx_segmentation and len(outputs) > 1) else None
         detections = self.postprocess(
             outputs[0],
             original_size,
             scale_info,
             pad_info,
-            conf_threshold
+            conf_threshold,
+            proto=proto,
         )
 
         return detections
@@ -545,12 +670,14 @@ class CensorDetector:
         with exclusive_ai_runtime("censor-onnx-inference"):
             outputs = self.session.run(None, {self.input_name: img_array})
         
+        proto = outputs[1] if (self._onnx_segmentation and len(outputs) > 1) else None
         detections = self.postprocess(
             outputs[0],
             original_size,
             scale_info,
             pad_info,
-            conf_threshold
+            conf_threshold,
+            proto=proto,
         )
         
         return detections

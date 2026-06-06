@@ -1960,6 +1960,181 @@ class TestImageMetadataEditor:
         assert response.status_code == 400
 
 
+class TestFolderFilter:
+    """v3.3.2 Library Navigation: GET /api/images?folder= scopes the gallery to a folder subtree.
+
+    Files must exist on disk because ImageService._filter_and_mark_missing_images
+    drops rows whose paths no longer resolve, so each test builds a real nested
+    folder tree under tmp_path.
+    """
+
+    def _seed_nested_library(self, tmp_path):
+        from PIL import Image
+        import database as db
+
+        layout = {
+            "alpha_root": tmp_path / "alpha" / "a1.png",
+            "alpha_sub": tmp_path / "alpha" / "sub" / "a2.png",
+            "beta_root": tmp_path / "beta" / "b1.png",
+        }
+        ids = {}
+        for key, path in layout.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (16, 16), "white").save(path)
+            ids[key] = db.add_image(path=str(path), filename=path.name, metadata_json="{}")
+        return ids, layout
+
+    def test_folder_filter_returns_recursive_subtree(self, test_client, tmp_path):
+        _ids, layout = self._seed_nested_library(tmp_path)
+
+        response = test_client.get("/api/images", params={"folder": str(tmp_path / "alpha")})
+
+        assert response.status_code == 200
+        data = response.json()
+        returned = {img["path"] for img in data["images"]}
+        assert returned == {str(layout["alpha_root"]), str(layout["alpha_sub"])}
+        assert data["total"] == 2
+
+    def test_folder_filter_scopes_to_sibling(self, test_client, tmp_path):
+        _ids, layout = self._seed_nested_library(tmp_path)
+
+        response = test_client.get("/api/images", params={"folder": str(tmp_path / "beta")})
+
+        assert response.status_code == 200
+        data = response.json()
+        returned = {img["path"] for img in data["images"]}
+        assert returned == {str(layout["beta_root"])}
+        assert data["total"] == 1
+
+    def test_no_folder_returns_all(self, test_client, tmp_path):
+        self._seed_nested_library(tmp_path)
+
+        response = test_client.get("/api/images")
+
+        assert response.status_code == 200
+        assert response.json()["total"] == 3
+
+    def test_folder_filter_composes_with_generator(self, test_client, tmp_path):
+        from PIL import Image
+        import database as db
+
+        alpha = tmp_path / "alpha"
+        alpha.mkdir(parents=True, exist_ok=True)
+        comfy_path = alpha / "comfy.png"
+        nai_path = alpha / "nai.png"
+        Image.new("RGB", (16, 16), "white").save(comfy_path)
+        Image.new("RGB", (16, 16), "white").save(nai_path)
+        db.add_image(path=str(comfy_path), filename="comfy.png", generator="comfyui", metadata_json="{}")
+        db.add_image(path=str(nai_path), filename="nai.png", generator="nai", metadata_json="{}")
+
+        response = test_client.get(
+            "/api/images", params={"folder": str(alpha), "generators": "comfyui"}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert {img["path"] for img in data["images"]} == {str(comfy_path)}
+        assert data["total"] == 1
+
+
+class TestLibraryFolders:
+    """v3.3.2 Library Navigation: GET /api/folders lists distinct image directories for the tree."""
+
+    def test_lists_distinct_image_directories(self, test_client, tmp_path):
+        from PIL import Image
+        import database as db
+
+        paths = [
+            tmp_path / "alpha" / "a1.png",
+            tmp_path / "alpha" / "sub" / "a2.png",
+            tmp_path / "beta" / "b1.png",
+        ]
+        for p in paths:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (16, 16), "white").save(p)
+            db.add_image(path=str(p), filename=p.name, metadata_json="{}")
+
+        response = test_client.get("/api/folders")
+
+        assert response.status_code == 200
+        folders = set(response.json()["folders"])
+
+        def norm(path):
+            return str(path).replace("\\", "/")
+
+        assert folders == {
+            norm(tmp_path / "alpha"),
+            norm(tmp_path / "alpha" / "sub"),
+            norm(tmp_path / "beta"),
+        }
+
+    def test_folders_empty_when_no_images(self, test_client, test_db):
+        response = test_client.get("/api/folders")
+        assert response.status_code == 200
+        assert response.json()["folders"] == []
+
+
+class TestLibraryRootsEndpoint:
+    """v3.3.2 Library Navigation: GET /api/library-roots lists registered roots with counts."""
+
+    def test_lists_roots_with_recursive_image_counts(self, test_client, tmp_path):
+        from PIL import Image
+        import database as db
+
+        root = tmp_path / "lib"
+        sub = root / "sub"
+        sub.mkdir(parents=True, exist_ok=True)
+        for p in [root / "a.png", sub / "b.png"]:
+            Image.new("RGB", (16, 16), "white").save(p)
+            db.add_image(path=str(p), filename=p.name, metadata_json="{}")
+        db.add_library_root(str(root), label="Lib")
+
+        resp = test_client.get("/api/library-roots")
+        assert resp.status_code == 200
+        roots = resp.json()["roots"]
+        assert len(roots) == 1
+        assert roots[0]["label"] == "Lib"
+        assert roots[0]["image_count"] == 2  # recursive: a.png + sub/b.png
+
+    def test_empty_when_no_roots(self, test_client, test_db):
+        resp = test_client.get("/api/library-roots")
+        assert resp.status_code == 200
+        assert resp.json()["roots"] == []
+
+
+class TestSelectionFolderScope:
+    """v3.3.2 Library Navigation: selection tokens (select-all) must respect the folder scope."""
+
+    def test_selection_token_respects_folder(self, test_client, tmp_path):
+        from PIL import Image
+        import database as db
+
+        layout = {
+            "a1": tmp_path / "alpha" / "a1.png",
+            "a2": tmp_path / "alpha" / "sub" / "a2.png",
+            "b1": tmp_path / "beta" / "b1.png",
+        }
+        ids = {}
+        for key, p in layout.items():
+            p.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (16, 16), "white").save(p)
+            ids[key] = db.add_image(path=str(p), filename=p.name, metadata_json="{}")
+
+        token_resp = test_client.post(
+            "/api/images/selection-token", json={"folder": str(tmp_path / "alpha")}
+        )
+        assert token_resp.status_code == 200
+        token_data = token_resp.json()
+        assert token_data["total_estimate"] == 2
+
+        chunk_resp = test_client.get(
+            "/api/images/selection-chunk",
+            params={"selection_token": token_data["selection_token"], "limit": 100},
+        )
+        assert chunk_resp.status_code == 200
+        assert set(chunk_resp.json()["image_ids"]) == {ids["a1"], ids["a2"]}
+
+
 class TestEdgeCases:
     """Edge case tests for image endpoints."""
 

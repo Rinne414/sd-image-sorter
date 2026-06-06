@@ -87,6 +87,7 @@ const CensorState = {
     metadataOption: 'keep', // 'keep', 'minimal', or 'strip'
     outputFormat: 'png', // 'png', 'jpg', or 'webp'
     sam3Confidence: 0.5, // SAM3 confidence threshold
+    maskShape: localStorage.getItem('censor_mask_shape') === 'box' ? 'box' : 'precise', // 'precise': use YOLO-seg/SAM3 polygon masks; 'box': censor rectangles
 
     // Queue Manager
     queueManagerSearch: '',
@@ -918,6 +919,22 @@ function bindEvents() {
         closeCensorModal('detect-modal');
         await runSam3BatchRefine();
     });
+
+    // Surfaced "Refine all with SAM3" in the Auto Detect sidebar card
+    $('#btn-sam3-refine-all-sidebar')?.addEventListener('click', async () => {
+        await runSam3BatchRefine();
+    });
+
+    // Mask shape: precise pixel mask (YOLO-seg / SAM3 polygon) vs box rectangle.
+    // Stored choice applies on the next detect (mirrors the confidence control).
+    const maskShapeSelect = $('#censor-mask-shape');
+    if (maskShapeSelect) {
+        maskShapeSelect.value = CensorState.maskShape;
+        maskShapeSelect.addEventListener('change', (e) => {
+            CensorState.maskShape = e.target.value === 'box' ? 'box' : 'precise';
+            try { localStorage.setItem('censor_mask_shape', CensorState.maskShape); } catch (_) {}
+        });
+    }
 
     // SAM3 confidence sliders (sync sidebar and modal)
     $('#sam3-confidence')?.addEventListener('input', (e) => {
@@ -4079,13 +4096,34 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
         }
         const data = await window.App.API.post('/api/censor/detect', detectBody);
 
-        const regions = [...(data.detections || [])].sort((a, b) => b.confidence - a.confidence);
+        const useBoxShape = CensorState.maskShape === 'box';
+        const rawRegions = [...(data.detections || [])].sort((a, b) => b.confidence - a.confidence);
+        // "Box" shape mode: drop the model's polygon/mask geometry so censoring
+        // follows rectangles instead of the precise pixel outline.
+        const regions = useBoxShape
+            ? rawRegions.map((r) => {
+                const { polygon, mask, ...rest } = r;
+                return rest;
+            })
+            : rawRegions;
         item.regions = regions;
+
+        // Precise was requested but a seg-capable model returned only boxes
+        // (e.g. a plain detect-only YOLO file): nudge the user toward a -seg model.
+        const anyPolygon = regions.some((r) => Array.isArray(r.polygon) && r.polygon.length >= 3);
+        const segCapableModel = plan.modelType === 'legacy' || plan.modelType === 'both';
+        if (!silent && !useBoxShape && segCapableModel && regions.length > 0 && !anyPolygon) {
+            window.App.showToast(
+                censorT('censor.maskShapeBoxOnly', null, 'This YOLO model returns boxes only (not a segmentation model). Use a -seg model like Wenaka for precise shapes.'),
+                'info'
+            );
+        }
+
         const { maskRegions, boxRegions } = splitDetectionGeometry(regions);
         const combinedMaskSource = {
-            mask: data.combined_mask || null,
-            mask_ref: data.combined_mask_ref || null,
-            mask_bounds: Array.isArray(data.combined_mask_bounds) ? cloneNumberArray(data.combined_mask_bounds) : null,
+            mask: useBoxShape ? null : (data.combined_mask || null),
+            mask_ref: useBoxShape ? null : (data.combined_mask_ref || null),
+            mask_bounds: (!useBoxShape && Array.isArray(data.combined_mask_bounds)) ? cloneNumberArray(data.combined_mask_bounds) : null,
             image_width: data.image_width,
             image_height: data.image_height,
         };

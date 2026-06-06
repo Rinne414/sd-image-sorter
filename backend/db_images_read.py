@@ -51,6 +51,8 @@ from db_query import (
     _apply_image_ids_filter,
     _apply_excluded_image_ids_filter,
     _apply_collection_filter,
+    _apply_folder_filter,
+    _apply_metadata_presence_filter,
     _apply_readable_filter,
     _get_order_clause,
     _supports_cursor_sort,
@@ -90,6 +92,29 @@ def get_images_in_folder_scope(folder_path: str, recursive: bool = True) -> List
         row for row in rows
         if is_indexed_image_path_in_folder_scope(row["path"], folder_path, recursive=False)
     ]
+
+
+def get_library_folders() -> List[str]:
+    """Return the distinct directories that contain (readable) indexed images.
+
+    v3.3.2 Library Navigation. Paths are normalized to forward slashes so the
+    frontend can build a folder tree by splitting on "/". Each entry is the
+    immediate parent directory of one or more images; intermediate ancestor
+    folders are synthesized client-side. Recomputed per call (cheap dirname
+    derivation) so the tree stays fresh right after a scan.
+    """
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT path FROM images WHERE COALESCE(is_readable, 1) != 0"
+        ).fetchall()
+
+    folders: set[str] = set()
+    for row in rows:
+        normalized = str(row["path"] or "").replace("\\", "/")
+        slash = normalized.rfind("/")
+        if slash > 0:
+            folders.add(normalized[:slash])
+    return sorted(folders)
 
 
 def get_missing_image_reconnect_candidates(limit: Optional[int] = None) -> List[Dict[str, Any]]:
@@ -159,6 +184,8 @@ def get_images(
     exclude_prompts: Optional[List[str]] = None,
     exclude_colors: Optional[List[str]] = None,
     collection_id: Optional[int] = None,
+    folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
+    has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
 ) ->List[Dict[str, Any]]:
     """
     Get images with optional filters.
@@ -276,6 +303,11 @@ def get_images(
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
 
+        # Apply folder-subtree scope (v3.3.2 Library Navigation)
+        conditions, params = _apply_folder_filter(conditions, params, folder)
+        # Apply "has SD generation parameters" scope (v3.3.2 small-opt)
+        conditions, params = _apply_metadata_presence_filter(conditions, params, has_metadata)
+
         # Build WHERE clause
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
@@ -344,6 +376,8 @@ def get_filtered_image_count(
     exclude_prompts: Optional[List[str]] = None,
     exclude_colors: Optional[List[str]] = None,
     collection_id: Optional[int] = None,
+    folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
+    has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
 ) ->int:
     """Get count of images matching filters without loading image data.
 
@@ -444,6 +478,11 @@ def get_filtered_image_count(
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
 
+        # Apply folder-subtree scope (v3.3.2 Library Navigation)
+        conditions, params = _apply_folder_filter(conditions, params, folder)
+        # Apply "has SD generation parameters" scope (v3.3.2 small-opt)
+        conditions, params = _apply_metadata_presence_filter(conditions, params, has_metadata)
+
         # Build WHERE clause
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
@@ -493,6 +532,8 @@ def get_filtered_image_ids(
     exclude_prompts: Optional[List[str]] = None,
     exclude_colors: Optional[List[str]] = None,
     collection_id: Optional[int] = None,
+    folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
+    has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
 ) ->List[int]:
     """Get list of image IDs matching filters without loading full image data.
 
@@ -592,6 +633,11 @@ def get_filtered_image_ids(
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
 
+        # Apply folder-subtree scope (v3.3.2 Library Navigation)
+        conditions, params = _apply_folder_filter(conditions, params, folder)
+        # Apply "has SD generation parameters" scope (v3.3.2 small-opt)
+        conditions, params = _apply_metadata_presence_filter(conditions, params, has_metadata)
+
         # Build WHERE clause
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
@@ -680,6 +726,8 @@ def get_images_paginated(
     exclude_prompts: Optional[List[str]] = None,
     exclude_colors: Optional[List[str]] = None,
     collection_id: Optional[int] = None,
+    folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
+    has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
 ) ->Dict[str, Any]:
     """
     Get images with cursor-based pagination for efficient handling of large datasets.
@@ -790,6 +838,11 @@ def get_images_paginated(
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
 
+        # Apply folder-subtree scope (v3.3.2 Library Navigation)
+        conditions, params = _apply_folder_filter(conditions, params, folder)
+        # Apply "has SD generation parameters" scope (v3.3.2 small-opt)
+        conditions, params = _apply_metadata_presence_filter(conditions, params, has_metadata)
+
         # Apply cursor condition for pagination
         # Note: Random sort cannot use cursor pagination effectively (each page is truly random)
         # For random sort, we ignore the cursor and return fresh random results
@@ -876,6 +929,8 @@ def get_images_paginated(
                 min_user_rating=min_user_rating,
                 prompt_match_mode=normalized_prompt_match_mode,
                 collection_id=collection_id,
+                folder=folder,
+                has_metadata=has_metadata,
             )
 
         # Determine next cursor from the last row returned in this page
@@ -914,6 +969,8 @@ def _get_filtered_count(
     min_user_rating: Optional[int] = None,  # v3.3.2 FF-2: gallery "★≥N" filter
     prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
     collection_id: Optional[int] = None,
+    folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
+    has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
 ) -> int:
     """Get total count for filtered images.
 
@@ -974,6 +1031,11 @@ def _get_filtered_count(
     # v3.3.1: restrict the count to a collection's members so the gallery's
     # "total" matches the collection-scoped page query (mirrors get_images_paginated).
     conditions, params = _apply_collection_filter(conditions, params, collection_id)
+
+    # Apply folder-subtree scope (v3.3.2 Library Navigation)
+    conditions, params = _apply_folder_filter(conditions, params, folder)
+    # Apply "has SD generation parameters" scope (v3.3.2 small-opt)
+    conditions, params = _apply_metadata_presence_filter(conditions, params, has_metadata)
 
     if conditions:
         query += " WHERE " + " AND ".join(conditions)

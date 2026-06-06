@@ -353,72 +353,107 @@
             <!-- Gallery View -->
             <section id="view-gallery" class="view active" role="tabpanel" aria-labelledby="nav-tab-gallery">
                 <aside class="filter-sidebar compact" aria-label="Image filters">
-                    <div class="filter-header" style="display: flex; gap: 8px;">
-                        <button id="btn-collapse-desktop-sidebar" class="btn btn-ghost btn-small" title="Collapse Sidebar" style="padding: 4px 8px; margin-left: -8px;">
-                            <span aria-hidden="true">◀</span>
-                        </button>
-                        <h3 class="sidebar-title" id="filter-sidebar-title" data-i18n="filter.title" style="flex: 1; margin: 0;">Filters</h3>
-                        <button id="btn-open-filters" class="btn btn-primary btn-small btn-icon-only" title="Open filter editor" aria-label="Open filter editor" data-i18n-title="gallery.editFiltersTooltip">
-                            <span aria-hidden="true">🔍</span>
-                        </button>
-                    </div>
-
-                    <!-- Active Filter Summary -->
-                    <div class="filter-summary" id="filter-summary">
-                        <div class="summary-row">
-                            <span class="summary-label" data-i18n="summary.generators">Generators:</span>
-                            <span class="summary-value" id="summary-generators" data-i18n="common.all">All</span>
-                        </div>
-                        <div class="summary-row">
-                            <span class="summary-label" data-i18n="summary.ratings">Ratings:</span>
-                            <span class="summary-value" id="summary-ratings" data-i18n="common.all">All</span>
-                        </div>
-                        <div class="summary-row">
-                            <span class="summary-label" data-i18n="summary.tags">Tags:</span>
-                            <span class="summary-value" id="summary-tags" data-i18n="common.none">None</span>
-                        </div>
-                        <div class="summary-row">
-                            <span class="summary-label" data-i18n="summary.checkpoints">Checkpoints:</span>
-                            <span class="summary-value" id="summary-checkpoints" data-i18n="common.none">None</span>
-                        </div>
-                        <div class="summary-row">
-                            <span class="summary-label" data-i18n="summary.loras">Loras:</span>
-                            <span class="summary-value" id="summary-loras" data-i18n="common.none">None</span>
-                        </div>
-                        <div class="summary-row">
-                            <span class="summary-label" data-i18n="summary.prompt">Prompt:</span>
-                            <span class="summary-value" id="summary-prompt">-</span>
-                        </div>
-                        <div class="summary-row">
-                            <span class="summary-label" data-i18n="summary.search">Search:</span>
-                            <span class="summary-value" id="summary-search" data-i18n="common.none">None</span>
-                        </div>
-                        <div class="summary-row">
-                            <span class="summary-label" data-i18n="filter.colors">Colors:</span>
-                            <span class="summary-value" id="summary-colors" data-i18n="filter.any">Any</span>
-                        </div>
-                        <div class="summary-row" id="artist-filter-row" style="display: none;">
-                            <span class="summary-label" data-i18n="summary.artist">Artist:</span>
-                            <span class="summary-value" id="summary-artist">-</span>
-                            <button class="btn-clear-filter" id="btn-clear-artist" title="Clear artist filter" aria-label="Clear artist filter">
-                                <span aria-hidden="true">✕</span>
+                    <div class="sidebar-section" data-sidebar-section="filters">
+                        <div class="sidebar-section-head">
+                            <button id="btn-collapse-desktop-sidebar" class="btn btn-ghost btn-small btn-icon-only" title="Collapse Sidebar" aria-label="Collapse sidebar">
+                                <span aria-hidden="true">◀</span>
                             </button>
+                            <button type="button" class="sidebar-section-toggle" aria-expanded="true" aria-controls="sidebar-body-filters">
+                                <span class="sidebar-section-caret" aria-hidden="true">▾</span>
+                                <span class="sidebar-section-title" id="filter-sidebar-title" data-i18n="filter.title">Filters</span>
+                            </button>
+                            <div class="sidebar-section-actions">
+                                <button id="btn-open-filters" class="btn btn-primary btn-small btn-icon-only" title="Open filter editor" aria-label="Open filter editor" data-i18n-title="gallery.editFiltersTooltip">
+                                    <span aria-hidden="true">🔍</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="sidebar-section-body" id="sidebar-body-filters">
+                            <!-- Active Filter Summary -->
+                            <div class="filter-summary" id="filter-summary">
+                                <div class="summary-row">
+                                    <span class="summary-label" data-i18n="summary.generators">Generators:</span>
+                                    <span class="summary-value" id="summary-generators" data-i18n="common.all">All</span>
+                                </div>
+                                <div class="summary-row">
+                                    <span class="summary-label" data-i18n="summary.ratings">Ratings:</span>
+                                    <span class="summary-value" id="summary-ratings" data-i18n="common.all">All</span>
+                                </div>
+                                <div class="summary-row">
+                                    <span class="summary-label" data-i18n="summary.tags">Tags:</span>
+                                    <span class="summary-value" id="summary-tags" data-i18n="common.none">None</span>
+                                </div>
+                                <div class="summary-row">
+                                    <span class="summary-label" data-i18n="summary.checkpoints">Checkpoints:</span>
+                                    <span class="summary-value" id="summary-checkpoints" data-i18n="common.none">None</span>
+                                </div>
+                                <div class="summary-row">
+                                    <span class="summary-label" data-i18n="summary.loras">Loras:</span>
+                                    <span class="summary-value" id="summary-loras" data-i18n="common.none">None</span>
+                                </div>
+                                <div class="summary-row">
+                                    <span class="summary-label" data-i18n="summary.prompt">Prompt:</span>
+                                    <span class="summary-value" id="summary-prompt">-</span>
+                                </div>
+                                <div class="summary-row">
+                                    <span class="summary-label" data-i18n="summary.search">Search:</span>
+                                    <span class="summary-value" id="summary-search" data-i18n="common.none">None</span>
+                                </div>
+                                <div class="summary-row">
+                                    <span class="summary-label" data-i18n="filter.colors">Colors:</span>
+                                    <span class="summary-value" id="summary-colors" data-i18n="filter.any">Any</span>
+                                </div>
+                                <div class="summary-row" id="artist-filter-row" style="display: none;">
+                                    <span class="summary-label" data-i18n="summary.artist">Artist:</span>
+                                    <span class="summary-value" id="summary-artist">-</span>
+                                    <button class="btn-clear-filter" id="btn-clear-artist" title="Clear artist filter" aria-label="Clear artist filter">
+                                        <span aria-hidden="true">✕</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <button id="btn-clear-filters" class="btn btn-ghost full-width" aria-label="Clear all active filters" data-i18n="filter.clearAll">Clear All Filters</button>
                         </div>
                     </div>
 
-                    <button id="btn-clear-filters" class="btn btn-ghost full-width" aria-label="Clear all active filters" data-i18n="filter.clearAll">Clear All Filters</button>
-
-                    <div class="divider-h" aria-hidden="true"></div>
+                    <!-- v3.3.2 Library Navigation: folder-tree subset filter -->
+                    <div class="sidebar-section" data-sidebar-section="folders" aria-label="Folders">
+                        <div class="sidebar-section-head">
+                            <button type="button" class="sidebar-section-toggle" aria-expanded="true" aria-controls="sidebar-body-folders">
+                                <span class="sidebar-section-caret" aria-hidden="true">▾</span>
+                                <span class="sidebar-section-title" data-i18n="folders.title">Folders</span>
+                            </button>
+                            <div class="sidebar-section-actions">
+                                <button id="btn-manage-roots" class="btn btn-ghost btn-small btn-icon-only" title="Manage library folders" aria-label="Manage library folders" data-i18n-title="libraryRoots.manage" data-i18n-aria="libraryRoots.manage">
+                                    <span aria-hidden="true">🗂</span>
+                                </button>
+                                <button id="btn-refresh-folders" class="btn btn-ghost btn-small btn-icon-only" title="Refresh folder list" aria-label="Refresh folder list" data-i18n-title="folders.refresh" data-i18n-aria="folders.refresh">
+                                    <span aria-hidden="true">⟳</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="sidebar-section-body" id="sidebar-body-folders">
+                            <div id="folder-tree" class="folder-tree" role="group" aria-label="Library folders"></div>
+                        </div>
+                    </div>
 
                     <!-- v3.3.1 FEAT-COLLECTIONS: Collections / Favorites browser -->
-                    <div class="collections-section" aria-label="Collections">
-                        <div class="collections-section-header">
-                            <h4 class="collections-section-title" data-i18n="collections.title">Collections</h4>
-                            <button id="btn-new-collection" class="btn btn-ghost btn-small btn-icon-only" title="New collection" aria-label="New collection" data-i18n-title="collections.new">
-                                <span aria-hidden="true">＋</span>
+                    <div class="sidebar-section" data-sidebar-section="collections" aria-label="Collections">
+                        <div class="sidebar-section-head">
+                            <button type="button" class="sidebar-section-toggle" aria-expanded="true" aria-controls="sidebar-body-collections">
+                                <span class="sidebar-section-caret" aria-hidden="true">▾</span>
+                                <span class="sidebar-section-title" data-i18n="collections.title">Collections</span>
                             </button>
+                            <div class="sidebar-section-actions">
+                                <button id="btn-new-collection" class="btn btn-ghost btn-small btn-icon-only" title="New collection" aria-label="New collection" data-i18n-title="collections.new">
+                                    <span aria-hidden="true">＋</span>
+                                </button>
+                            </div>
                         </div>
-                        <div id="collections-list" class="collections-list"></div>
+                        <div class="sidebar-section-body" id="sidebar-body-collections">
+                            <div id="collections-list" class="collections-list"></div>
+                        </div>
                     </div>
 
                     <div class="divider-h" aria-hidden="true"></div>
@@ -2019,6 +2054,18 @@
                                 <label class="censor-side-inline-label"><span data-i18n="censor.confidenceThreshold">Conf</span>: <span class="censor-side-value" id="censor-confidence-value-sidebar">0.50</span></label>
                                 <input type="range" id="censor-confidence-sidebar" class="slider-v2" min="0.0" max="1.0" step="0.05" value="0.5">
                             </div>
+                            <div class="censor-side-row" id="censor-mask-shape-row">
+                                <label class="censor-side-inline-label" data-i18n="censor.maskShape">Shape</label>
+                                <select id="censor-mask-shape" class="toolbar-select censor-detect-select" style="flex:1;">
+                                    <option value="precise" data-i18n="censor.maskShapePrecise">Precise (pixel)</option>
+                                    <option value="box" data-i18n="censor.maskShapeBox">Box</option>
+                                </select>
+                            </div>
+                            <small class="helper-text" id="censor-mask-shape-help" data-i18n="censor.maskShapeHelp">Precise traces the exact shape from the model mask (YOLO-seg / SAM3). Box censors a rectangle. Applies on the next detect.</small>
+                            <div class="censor-side-row" id="censor-sam3-refine-row">
+                                <button class="btn btn-secondary btn-small" id="btn-sam3-refine-all-sidebar" style="flex:1;">✨ <span data-i18n="censor.sam3RefineAllSidebar">Refine all with SAM3</span></button>
+                            </div>
+                            <small class="helper-text" id="censor-sam3-refine-help" data-i18n="censor.sam3RefineAllHelp">Optional, after detecting: re-segments every detected box with SAM3. Slower &amp; GPU-heavy (one run per box) and not always sharper than YOLO — use only when a shape needs cleanup.</small>
                             <div class="censor-side-row" id="sam3-confidence-group" style="display:none;">
                                 <label class="censor-side-inline-label">SAM3: <span class="censor-side-value" id="sam3-confidence-value">0.50</span></label>
                                 <input type="range" id="sam3-confidence" class="slider-v2" min="0.0" max="1.0" step="0.05" value="0.5">
@@ -3728,22 +3775,6 @@
                         <span class="modal-ai-provider-text" id="modal-ai-provider-text" data-i18n="modal.aiProviderNote.gemini">Identified via Content Credentials / EXIF metadata. Google's invisible SynthID watermark embedded in the pixels themselves is not yet checked by this app — planned for a future opt-in detector.</span>
                     </div>
 
-                    <div class="modal-color-distribution modal-section" id="modal-color-distribution" style="display:none">
-                        <h4 class="section-toggle" data-target="modal-color-content" data-collapse-key="color">Color Distribution <span class="collapse-icon">▼</span></h4>
-                        <div id="modal-color-content">
-                            <div class="modal-color-toolbar">
-                                <div class="modal-color-mode-group" role="group" aria-label="Histogram mode">
-                                    <button type="button" class="modal-color-mode-btn active" data-histogram-mode="rgb">RGB</button>
-                                    <button type="button" class="modal-color-mode-btn" data-histogram-mode="split">Split</button>
-                                    <button type="button" class="modal-color-mode-btn" data-histogram-mode="luma">Luma</button>
-                                </div>
-                                <div class="modal-color-note" data-i18n="modal.colorHint">Palette can be used for visual analysis now. Filtering support comes next.</div>
-                            </div>
-                            <div class="modal-color-histogram"><canvas id="modal-color-histogram-canvas"></canvas></div>
-                            <div id="modal-color-palette" class="modal-color-palette"></div>
-                        </div>
-                    </div>
-
                     <div class="modal-loading-state" id="modal-loading-state">Loading details…</div>
 
                     <div class="modal-key-params" id="modal-key-params" style="display:none">
@@ -3794,6 +3825,22 @@
                         <div id="modal-nodes-list"></div>
                     </div>
 
+                    <div class="modal-color-distribution modal-section" id="modal-color-distribution" style="display:none">
+                        <h4 class="section-toggle" data-target="modal-color-content" data-collapse-key="color">Color Distribution <span class="collapse-icon">▼</span></h4>
+                        <div id="modal-color-content">
+                            <div class="modal-color-toolbar">
+                                <div class="modal-color-mode-group" role="group" aria-label="Histogram mode">
+                                    <button type="button" class="modal-color-mode-btn active" data-histogram-mode="rgb">RGB</button>
+                                    <button type="button" class="modal-color-mode-btn" data-histogram-mode="split">Split</button>
+                                    <button type="button" class="modal-color-mode-btn" data-histogram-mode="luma">Luma</button>
+                                </div>
+                                <div class="modal-color-note" data-i18n="modal.colorHint">Palette can be used for visual analysis now. Filtering support comes next.</div>
+                            </div>
+                            <div class="modal-color-histogram"><canvas id="modal-color-histogram-canvas"></canvas></div>
+                            <div id="modal-color-palette" class="modal-color-palette"></div>
+                        </div>
+                    </div>
+
                     <div class="modal-tags">
                         <div class="modal-tags-header">
                             <h4>Tags</h4>
@@ -3813,6 +3860,28 @@
         </div>
 
         <!-- Scan Modal -->
+        <!-- v3.3.2 Library Navigation: multi-root management + idle auto-refresh toggle -->
+        <div class="modal" id="library-roots-modal" role="dialog" aria-modal="true" aria-labelledby="library-roots-modal-title">
+            <div class="modal-backdrop" aria-hidden="true"></div>
+            <div class="modal-content modal-medium">
+                <h3 id="library-roots-modal-title" data-i18n="libraryRoots.title">Library Folders</h3>
+                <p class="modal-description" data-i18n="libraryRoots.description">Folders you've scanned as image sources. Remove a source (the image files stay on disk) or rescan it to pick up newly added images.</p>
+
+                <label class="checkbox-label library-roots-autorefresh">
+                    <input type="checkbox" id="library-roots-autorefresh-toggle">
+                    <span class="checkbox-custom" aria-hidden="true"></span>
+                    <span class="checkbox-text" data-i18n="libraryRoots.autoRefresh">Auto-refresh these folders when idle (quick import, no AI tagging)</span>
+                </label>
+
+                <div id="library-roots-list" class="library-roots-list" aria-live="polite"></div>
+
+                <div class="modal-actions">
+                    <button class="btn btn-primary" id="btn-library-roots-add" data-i18n="libraryRoots.add">Add Folder…</button>
+                    <button class="btn btn-ghost" id="btn-library-roots-close" data-i18n="common.close">Close</button>
+                </div>
+            </div>
+        </div>
+
         <div class="modal" id="scan-modal" role="dialog" aria-modal="true" aria-labelledby="scan-modal-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-medium">
@@ -4800,6 +4869,32 @@
                                     </span>
                                 </label>
                             </div>
+
+                            <!-- v3.3.2 small-opt: filter by presence of SD generation parameters -->
+                            <h5 id="metadata-presence-heading" data-i18n="filter.metadataPresence">Generation Metadata</h5>
+                            <div class="aspect-choice-grid" role="group" aria-labelledby="metadata-presence-heading">
+                                <label class="filter-choice">
+                                    <input type="radio" name="has-metadata" value="" checked>
+                                    <span class="filter-choice-card">
+                                        <span class="filter-choice-icon">◻</span>
+                                        <span data-i18n="filter.any">Any</span>
+                                    </span>
+                                </label>
+                                <label class="filter-choice">
+                                    <input type="radio" name="has-metadata" value="true">
+                                    <span class="filter-choice-card">
+                                        <span class="filter-choice-icon">✦</span>
+                                        <span data-i18n="filter.metadataWith">Has parameters</span>
+                                    </span>
+                                </label>
+                                <label class="filter-choice">
+                                    <input type="radio" name="has-metadata" value="false">
+                                    <span class="filter-choice-card">
+                                        <span class="filter-choice-icon">∅</span>
+                                        <span data-i18n="filter.metadataWithout">No parameters</span>
+                                    </span>
+                                </label>
+                            </div>
                         </section>
 
                         <section class="filter-panel">
@@ -5289,6 +5384,10 @@
     <script src="/static/js/folder-browser.js"></script>
     <script src="/static/js/gallery.js"></script>
     <script src="/static/js/collections-ui.js"></script>
+    <script src="/static/js/folder-tree.js"></script>
+    <script src="/static/js/sidebar-sections.js"></script>
+    <script src="/static/js/library-roots-ui.js"></script>
+    <script src="/static/js/auto-refresh.js"></script>
     <script src="/static/js/autosep.js"></script>
     <script src="/static/js/manual-sort.js"></script>
     <script src="/static/js/audio.js"></script>

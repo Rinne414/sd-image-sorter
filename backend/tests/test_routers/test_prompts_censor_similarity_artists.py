@@ -1001,9 +1001,10 @@ class TestCensorRouterValidation:
         )
 
         class FakeRefiner:
-            def segment_by_text(self, image, text_prompt):
+            def segment_by_text(self, image, text_prompt, presence_threshold=None):
                 assert image.size == (64, 64)
                 assert text_prompt == "face"
+                assert presence_threshold is None
                 mask = np.zeros((64, 64), dtype=np.uint8)
                 mask[12:48, 20:44] = 1
                 return mask
@@ -1051,9 +1052,10 @@ class TestCensorRouterValidation:
         )
 
         class FakeRefiner:
-            def segment_by_text(self, image, text_prompt):
+            def segment_by_text(self, image, text_prompt, presence_threshold=None):
                 assert image.size == (64, 64)
                 assert text_prompt == "face"
+                assert presence_threshold is None
                 mask = np.zeros((64, 64), dtype=np.uint8)
                 mask[12:48, 20:44] = 1
                 return mask

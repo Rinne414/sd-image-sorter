@@ -91,7 +91,7 @@ def _default_get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA busy_timeout=30000")  # v3.3.2: wait up to 30s on lock (large-library scan/tag vs browse contention)
     # WAL mode and other persistent PRAGMAs only need to be set once per database path
     db_path = os.path.abspath(DATABASE_PATH)
     if db_path not in _pragmas_initialized:

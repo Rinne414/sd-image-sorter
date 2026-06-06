@@ -3700,10 +3700,19 @@ textarea:focus,
 
 .filter-choice {
     cursor: pointer;
+    position: relative;
 }
 
 .filter-choice input {
-    display: none;
+    /* Visually hidden but still focusable and in the tab order. `display:none`
+       removes the radio from keyboard navigation entirely (WCAG 2.1.1 fail);
+       the styled card is the visible affordance and reflects :checked/:focus. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    margin: 0;
+    pointer-events: none;
 }
 
 .filter-choice-card {
@@ -3727,6 +3736,11 @@ textarea:focus,
     background: linear-gradient(135deg, rgba(124, 139, 255, 0.18), rgba(51, 214, 224, 0.16));
     border-color: rgba(124, 139, 255, 0.36);
     box-shadow: 0 12px 24px rgba(2, 6, 23, 0.18);
+}
+
+.filter-choice input:focus-visible + .filter-choice-card {
+    outline: 2px solid var(--accent-primary, #7c8bff);
+    outline-offset: 2px;
 }
 
 .filter-choice-icon {
@@ -7001,11 +7015,257 @@ html.lang-zh #view-censor .queue-action-btn span {
     padding: 4px 6px;
     transition: background 0.15s ease, color 0.15s ease;
 }
-.collections-browsing-clear:hover,
+.collections-browsing-clear:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-primary);
+}
 .collections-browsing-clear:focus-visible {
     background: rgba(255, 255, 255, 0.12);
     color: var(--text-primary);
-    outline: none;
+    outline: 2px solid var(--accent-primary, #7c8bff);
+    outline-offset: 1px;
+}
+
+/* v3.3.2 UI: collapsible gallery sidebar sections (accordion) */
+.filter-sidebar .sidebar-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.filter-sidebar .sidebar-section + .sidebar-section {
+    border-top: 1px solid var(--glass-border, rgba(191, 219, 254, 0.1));
+    margin-top: 12px;
+    padding-top: 12px;
+}
+.sidebar-section-head {
+    align-items: center;
+    display: flex;
+    gap: 6px;
+    justify-content: space-between;
+    min-width: 0;
+}
+.sidebar-section-toggle {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    flex: 1 1 auto;
+    font: inherit;
+    gap: 6px;
+    min-width: 0;
+    padding: 2px 0;
+    text-align: left;
+}
+.sidebar-section-toggle:hover {
+    color: var(--text-primary);
+}
+.sidebar-section-toggle:focus-visible {
+    border-radius: 6px;
+    outline: 2px solid var(--accent-primary, #7c8bff);
+    outline-offset: 2px;
+}
+.sidebar-section-caret {
+    flex: 0 0 auto;
+    font-size: 0.7rem;
+    transition: transform 0.15s ease;
+}
+.sidebar-section.is-collapsed .sidebar-section-caret {
+    transform: rotate(-90deg);
+}
+.sidebar-section-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.sidebar-section-actions {
+    align-items: center;
+    display: flex;
+    flex: 0 0 auto;
+    gap: 4px;
+}
+.sidebar-section-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.sidebar-section.is-collapsed .sidebar-section-body {
+    display: none;
+}
+
+/* v3.3.2 Library Navigation: sidebar folder tree */
+.folder-tree {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    max-height: 240px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.folder-tree-empty {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    margin: 2px 0;
+}
+.folder-row {
+    align-items: center;
+    border-radius: 8px;
+    display: flex;
+    gap: 2px;
+    padding: 1px 2px;
+    transition: background 0.15s ease;
+}
+.folder-row:hover {
+    background: var(--bg-hover, rgba(23, 38, 63, 0.6));
+}
+.folder-row.is-active {
+    background: rgba(124, 139, 255, 0.16);
+}
+.folder-row-toggle {
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex: 0 0 18px;
+    font-size: 0.7rem;
+    line-height: 1;
+    padding: 4px 2px;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.folder-row-toggle:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+.folder-row-toggle:focus-visible {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    outline: 2px solid var(--accent-primary, #7c8bff);
+    outline-offset: 1px;
+}
+.folder-row-toggle-empty {
+    cursor: default;
+    visibility: hidden;
+}
+.folder-row-open {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    flex: 1 1 auto;
+    font: inherit;
+    gap: 6px;
+    min-width: 0;
+    padding: 4px 4px;
+    text-align: left;
+}
+.folder-row-open:focus-visible {
+    border-radius: 8px;
+    outline: 2px solid var(--accent-primary, #7c8bff);
+    outline-offset: 1px;
+}
+.folder-row-icon {
+    flex: 0 0 16px;
+    font-size: 0.85rem;
+    text-align: center;
+}
+.folder-row-name {
+    flex: 1 1 auto;
+    font-size: 0.82rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.folder-row.is-active .folder-row-name {
+    color: var(--accent-primary, #7c8bff);
+    font-weight: 600;
+}
+/* v3.3.2: folder scope indicator shows the FULL path (wraps, no ellipsis) */
+.folder-tree-browsing {
+    align-items: flex-start;
+}
+.folder-tree-browsing-label {
+    color: var(--text-primary);
+    font-size: 0.76rem;
+    line-height: 1.35;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+}
+
+/* v3.3.2 Library Navigation: multi-root management modal (library-roots-ui) */
+.library-roots-autorefresh {
+    margin: 4px 0 14px;
+}
+.library-roots-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 52vh;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+.library-root-row {
+    align-items: center;
+    background: var(--surface-2, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+    border-radius: 10px;
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    padding: 10px 12px;
+}
+.library-root-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+.library-root-path {
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+}
+.library-root-meta {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+.library-root-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 6px;
+}
+.library-root-actions .btn.danger {
+    color: var(--danger, #ff6b6b);
+}
+.library-roots-empty {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    padding: 18px 4px;
+    text-align: center;
+}
+/* Dead root: the folder no longer exists on disk (v3.3.2 audit fix) */
+.library-root-row.is-missing {
+    border-color: var(--danger, #ff6b6b);
+    background: rgba(255, 107, 107, 0.07);
+}
+.library-root-row.is-missing .library-root-path {
+    opacity: 0.7;
+}
+.library-root-missing {
+    color: var(--danger, #ff6b6b);
+    font-weight: 600;
 }
 
 /* Add-to-collection picker (reuses .gallery-context-menu base look) */

@@ -209,3 +209,80 @@ def test_detect_privacy_regions_drops_undersized_pixel_area(fake_refiner):
     )
 
     assert detections == []
+
+
+# ---------- _check_sam3_available CUDA re-probe (transient-outage recovery) ---
+
+
+def test_check_sam3_available_reprobes_cuda_each_call(monkeypatch):
+    """A transient CUDA outage must NOT be cached permanently.
+
+    Regression guard: previously a single ``torch.cuda.is_available() == False``
+    at process start (GPU contention) was cached forever, hard-disabling SAM3
+    for every later request. Now the import result is cached but CUDA is
+    re-evaluated on every call.
+    """
+    # Simulate "transformers SAM3 import already succeeded" -> cached True.
+    monkeypatch.setattr(sam3_refiner, "_sam3_available", True, raising=False)
+
+    calls = {"n": 0}
+
+    def flaky_cuda():
+        calls["n"] += 1
+        return calls["n"] > 1  # unavailable on the first call, available after
+
+    monkeypatch.setattr(torch.cuda, "is_available", flaky_cuda)
+
+    assert sam3_refiner._check_sam3_available() is False  # transient outage
+    assert sam3_refiner._check_sam3_available() is True   # recovered, not sticky
+    assert sam3_refiner._check_sam3_available() is True
+
+
+def test_check_sam3_available_caches_import_failure(monkeypatch):
+    """A real ImportError (SAM3 truly not installed) stays cached and never
+    even probes CUDA -- the import cannot start succeeding mid-process."""
+    monkeypatch.setattr(sam3_refiner, "_sam3_available", False, raising=False)
+
+    def explode():
+        raise AssertionError("CUDA must not be probed when the import failed")
+
+    monkeypatch.setattr(torch.cuda, "is_available", explode)
+
+    assert sam3_refiner._check_sam3_available() is False
+
+
+# ---------- segment_by_text decoupled presence threshold ---------------------
+
+
+def test_segment_by_text_uses_decoupled_default_threshold(fake_refiner, monkeypatch):
+    """Explicit user text defaults to the looser text gate, NOT the strict 0.5
+    auto-detect gate, so deliberately-typed prompts aren't silently rejected."""
+    captured = {}
+
+    def spy(image, text=None, box=None, presence_threshold=None, **_kw):
+        captured["presence_threshold"] = presence_threshold
+        return None
+
+    monkeypatch.setattr(fake_refiner, "_run_segmentation", spy)
+
+    fake_refiner.segment_by_text(Image.new("RGB", (8, 8)), "exposed female breast")
+
+    assert captured["presence_threshold"] == sam3_refiner._DEFAULT_TEXT_PRESENCE_THRESHOLD
+    assert captured["presence_threshold"] < _DEFAULT_PRESENCE_THRESHOLD
+
+
+def test_segment_by_text_respects_explicit_threshold_override(fake_refiner, monkeypatch):
+    """A caller-supplied threshold overrides the default and is clamped to [0, 1]."""
+    captured = {}
+
+    def spy(image, text=None, box=None, presence_threshold=None, **_kw):
+        captured["presence_threshold"] = presence_threshold
+        return None
+
+    monkeypatch.setattr(fake_refiner, "_run_segmentation", spy)
+
+    fake_refiner.segment_by_text(Image.new("RGB", (8, 8)), "x", presence_threshold=0.8)
+    assert captured["presence_threshold"] == 0.8
+
+    fake_refiner.segment_by_text(Image.new("RGB", (8, 8)), "x", presence_threshold=5.0)
+    assert captured["presence_threshold"] == 1.0

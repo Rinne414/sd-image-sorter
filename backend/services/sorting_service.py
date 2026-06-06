@@ -1190,6 +1190,60 @@ class SortingService:
             "normalized_path": normalized_path if is_valid else None,
         }
 
+    def remove_library_root(self, root_id: int) -> Dict[str, Any]:
+        """Unregister a library root. Indexed images are NOT deleted (v3.3.2)."""
+        if not db.remove_library_root(int(root_id)):
+            raise HTTPException(status_code=404, detail="Library root not found")
+        return {"status": "removed", "id": int(root_id)}
+
+    def rescan_library_root(self, root_id: int, background_tasks: BackgroundTasks) -> Dict[str, str]:
+        """Re-scan a registered root to pick up new/changed files (quick import)."""
+        root = db.get_library_root(int(root_id))
+        if not root:
+            raise HTTPException(status_code=404, detail="Library root not found")
+        request = ScanRequest(
+            folder_path=root["path"],
+            recursive=True,
+            quick_import=True,
+            cleanup_missing=False,
+            force_reparse=False,
+        )
+        return self.start_scan(request, background_tasks)
+
+    def auto_refresh_library(self, background_tasks: BackgroundTasks) -> Dict[str, Any]:
+        """Idle-triggered quick-scan of the stalest enabled root (v3.3.2 Library Navigation).
+
+        Safe by construction: a no-op while any scan is running (single-scan
+        model) or when there are no enabled roots, and it always quick-imports —
+        it NEVER runs AI tagging (GPU safety). Successive idle ticks cycle
+        through roots oldest-first via ``last_scanned_at``.
+        """
+        with self._scan_lock:
+            status = self._scan_progress.get("status")
+        if status in {"running", "cancelling", "starting"}:
+            return {"status": "skipped", "reason": "scan_in_progress"}
+
+        roots = [r for r in db.list_library_roots() if r.get("enabled")]
+        if not roots:
+            return {"status": "idle", "reason": "no_enabled_roots"}
+
+        # Oldest last_scanned_at first; never-scanned (None -> "") sorts first.
+        target = min(roots, key=lambda r: r.get("last_scanned_at") or "")
+        request = ScanRequest(
+            folder_path=target["path"],
+            recursive=True,
+            quick_import=True,
+            cleanup_missing=False,
+            force_reparse=False,
+        )
+        try:
+            scan = self.start_scan(request, background_tasks)
+        except HTTPException as exc:
+            # Lost a race with a manual scan, or the folder is gone/unplugged —
+            # auto-refresh degrades quietly and never surfaces an error.
+            return {"status": "skipped", "reason": str(exc.detail)}
+        return {"status": "started", "root": target["path"], "scan": scan}
+
     def start_scan(
         self,
         request: ScanRequest,
@@ -1464,6 +1518,20 @@ class SortingService:
                     errors,
                     duration_seconds,
                 )
+
+                # v3.3.2 Library Navigation: remember the scanned folder as a
+                # library root (multi-root management + idle auto-refresh target
+                # list). Bookkeeping must never fail an otherwise-complete scan.
+                try:
+                    db.add_library_root(normalized_folder_path)
+                    db.touch_library_root_scanned(normalized_folder_path)
+                except Exception as exc:  # pragma: no cover - defensive
+                    logger.warning(
+                        "Could not register library root %s: %s",
+                        normalized_folder_path,
+                        exc,
+                    )
+
                 if recent_errors:
                     samples = "; ".join(
                         f"{item.get('filename', 'unknown')}: {item.get('error', 'Unreadable image')}"

@@ -269,6 +269,46 @@ async def reset_scan_progress(
     return service.reset_scan_progress()
 
 
+@router.delete(
+    "/library-roots/{root_id}",
+    summary="Unregister a library root",
+    description="v3.3.2 Library Navigation: remove a registered library root. Indexed images stay in the gallery — only the source registration is removed.",
+)
+async def remove_library_root(
+    root_id: int,
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Unregister a library root (does not delete its images)."""
+    return service.remove_library_root(root_id)
+
+
+@router.post(
+    "/library-roots/{root_id}/rescan",
+    summary="Rescan a library root",
+    description="v3.3.2 Library Navigation: quick-import re-scan of a registered root to pick up new or changed files. Runs in the background; poll /api/scan/progress.",
+)
+async def rescan_library_root(
+    root_id: int,
+    background_tasks: BackgroundTasks,
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Re-scan a registered library root for new files."""
+    return service.rescan_library_root(root_id, background_tasks)
+
+
+@router.post(
+    "/library/auto-refresh",
+    summary="Idle auto-refresh of library roots",
+    description="v3.3.2 Library Navigation: quick-import re-scan of the stalest enabled root to surface newly added files. No-op while a scan is running or when no roots are enabled; never runs AI tagging (GPU safety).",
+)
+async def auto_refresh_library(
+    background_tasks: BackgroundTasks,
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Idle-triggered background refresh of enabled library roots."""
+    return service.auto_refresh_library(background_tasks)
+
+
 @router.post("/move")
 def move_images(
     request: MoveRequest,

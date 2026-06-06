@@ -191,6 +191,14 @@ from db_collections import (
     set_collection_membership,
     get_collection_image_ids,
 )
+from db_library_roots import (
+    add_library_root,
+    list_library_roots,
+    get_library_root,
+    remove_library_root,
+    set_library_root_enabled,
+    touch_library_root_scanned,
+)
 from db_tags import (
     add_tags,
     add_tags_batch,
@@ -215,6 +223,7 @@ from db_facets import (
 )
 from db_images_read import (
     get_images_in_folder_scope,
+    get_library_folders,
     get_missing_image_reconnect_candidates,
     get_images,
     get_filtered_image_count,
@@ -254,7 +263,7 @@ def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA busy_timeout=30000")  # v3.3.2: wait up to 30s on lock (large-library scan/tag vs browse contention)
     # WAL mode and other persistent PRAGMAs only need to be set once per database path
     db_path = os.path.abspath(DATABASE_PATH)
     if db_path not in _pragmas_initialized:

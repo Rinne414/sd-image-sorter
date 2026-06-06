@@ -68,6 +68,9 @@ class TextSegmentRequest(BaseModel):
     """Request model for text segmentation."""
     image_id: int = Field(..., ge=1)
     text_prompt: str = Field(..., min_length=1)
+    # Optional override for SAM3's presence gate. Omitted -> the looser
+    # explicit-text default (decoupled from the 0.5 auto-detect gate).
+    presence_threshold: Optional[float] = Field(None, ge=0.0, le=1.0)
 
 
 class BatchMaskRefineRequest(BaseModel):
@@ -655,12 +658,17 @@ class CensorService:
                         {"prompt": p.strip(), "class": p.strip()}
                         for p in request.text_prompts if p.strip()
                     ]
-                with Image.open(image_path) as img:
-                    detections = refiner.detect_privacy_regions(
-                        img,
-                        conf_threshold=request.confidence_threshold,
-                        prompts=custom_prompts,
-                    )
+                try:
+                    with Image.open(image_path) as img:
+                        detections = refiner.detect_privacy_regions(
+                            img,
+                            conf_threshold=request.confidence_threshold,
+                            prompts=custom_prompts,
+                        )
+                except RuntimeError as exc:
+                    # SAM3 load / CUDA failures surface the real reason (503),
+                    # rather than being masked as a generic 500 "Detection failed".
+                    raise HTTPException(status_code=503, detail=str(exc)) from exc
 
             elif model_type == "nudenet":
                 from nudenet_detector import get_nudenet_detector
@@ -1709,7 +1717,11 @@ class CensorService:
             with Image.open(image_path) as src:
                 image = src.convert("RGB")
             refiner = get_sam3_refiner()
-            mask = refiner.segment_by_text(image, request.text_prompt)
+            mask = refiner.segment_by_text(
+                image,
+                request.text_prompt,
+                presence_threshold=request.presence_threshold,
+            )
 
             if mask is None:
                 return {

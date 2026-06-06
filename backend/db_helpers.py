@@ -77,8 +77,15 @@ def _path_query_match_clause(paths: List[str]) -> Tuple[str, List[str]]:
     return " OR ".join(clauses), params
 
 
-def _folder_scope_query_match_clause(folder_path: str) -> Tuple[str, List[str]]:
-    """Build a SQL clause plus patterns for equivalent indexed folder scopes."""
+def _folder_scope_query_match_clause(
+    folder_path: str, column: str = "path"
+) -> Tuple[str, List[str]]:
+    """Build a SQL clause plus patterns for equivalent indexed folder scopes.
+
+    ``column`` lets callers qualify the path column (e.g. ``i.path`` for the
+    aliased gallery list/count queries); it defaults to a bare ``path`` so the
+    existing reconnect-missing-files callers are unchanged.
+    """
     patterns = build_indexed_folder_scope_query_patterns(folder_path)
     if not patterns:
         return "", []
@@ -114,18 +121,18 @@ def _folder_scope_query_match_clause(folder_path: str) -> Tuple[str, List[str]]:
     params: List[str] = []
     if exact_candidates:
         placeholders = ",".join("?" * len(exact_candidates))
-        clauses.append(f"path IN ({placeholders})")
+        clauses.append(f"{column} IN ({placeholders})")
         params.extend(exact_candidates)
     if prefix_candidates:
-        like_clause = " OR ".join("path LIKE ?" for _ in prefix_candidates)
+        like_clause = " OR ".join(f"{column} LIKE ?" for _ in prefix_candidates)
         clauses.append(f"({like_clause})")
         params.extend(prefix_candidates)
     if exact_casefold_candidates:
         placeholders = ",".join("?" * len(exact_casefold_candidates))
-        clauses.append(f"LOWER(path) IN ({placeholders})")
+        clauses.append(f"LOWER({column}) IN ({placeholders})")
         params.extend(exact_casefold_candidates)
     if prefix_casefold_candidates:
-        like_clause = " OR ".join("LOWER(path) LIKE ?" for _ in prefix_casefold_candidates)
+        like_clause = " OR ".join(f"LOWER({column}) LIKE ?" for _ in prefix_casefold_candidates)
         clauses.append(f"({like_clause})")
         params.extend(prefix_casefold_candidates)
 

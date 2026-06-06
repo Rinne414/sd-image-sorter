@@ -25,6 +25,7 @@ from db_helpers import (
     normalize_checkpoint_name,
     extract_prompt_tokens,
     extract_lora_names,
+    _folder_scope_query_match_clause,
     _rows_to_dicts,
 )
 
@@ -583,6 +584,34 @@ def _apply_search_filter(conditions: List[str], params: List[Any],
     return conditions, params
 
 
+def _apply_folder_filter(conditions: List[str], params: List[Any],
+                         folder: Optional[str]) -> tuple:
+    """Scope results to images whose indexed path is within a folder subtree.
+
+    v3.3.2 Library Navigation. Reuses the casefold/path-normalization-aware
+    folder-scope clause used by the reconnect-missing-files reads, qualified to
+    the ``i`` alias used by the gallery list/count queries. Matching is
+    recursive (the folder itself and everything beneath it).
+
+    Args:
+        conditions: Current WHERE conditions list
+        params: Current parameter list
+        folder: Folder path to scope to (None/blank is a no-op)
+
+    Returns:
+        Tuple of (modified conditions, modified params)
+    """
+    if not folder or not str(folder).strip():
+        return conditions, params
+
+    clause, clause_params = _folder_scope_query_match_clause(str(folder), column="i.path")
+    if clause:
+        conditions.append(f"({clause})")
+        params.extend(clause_params)
+
+    return conditions, params
+
+
 def _apply_prompt_terms_filter(conditions: List[str], params: List[Any],
                                prompt_terms: Optional[List[str]],
                                prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT) -> tuple:
@@ -684,6 +713,36 @@ def _apply_user_rating_filter(conditions: List[str], params: List[Any],
     if min_user_rating is not None and int(min_user_rating) > 0:
         conditions.append("i.user_rating >= ?")
         params.append(int(min_user_rating))
+    return conditions, params
+
+
+# An image "has SD metadata" when it was recognized as a generation with
+# readable parameters: either a known generator (not unknown/blank) OR a
+# non-empty positive prompt. metadata_status is NOT used — it tracks the parse
+# *pipeline* state (complete/pending/error), which is uniformly "complete" for
+# already-scanned libraries and so makes a useless gallery filter.
+_HAS_METADATA_CLAUSE = (
+    "((LOWER(COALESCE(i.generator, '')) NOT IN ('', 'unknown')) "
+    "OR (COALESCE(TRIM(i.prompt), '') <> ''))"
+)
+
+
+def _apply_metadata_presence_filter(conditions: List[str], params: List[Any],
+                                    has_metadata: Optional[bool]) -> tuple:
+    """Apply the gallery "has SD generation parameters" filter (v3.3.2 small-opt).
+
+    ``has_metadata`` of None is a no-op (show everything). True narrows to images
+    that carry SD metadata; False narrows to images that carry none (e.g. plain
+    PNGs scanned into the library). No parameters are bound — the predicate is a
+    pure column expression — so this composes with every other filter and both
+    pagination strategies.
+    """
+    if has_metadata is None:
+        return conditions, params
+    if has_metadata:
+        conditions.append(_HAS_METADATA_CLAUSE)
+    else:
+        conditions.append(f"NOT {_HAS_METADATA_CLAUSE}")
     return conditions, params
 
 

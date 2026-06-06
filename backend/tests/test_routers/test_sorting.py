@@ -34,15 +34,36 @@ def _create_sort_image(tmp_path: Path, filename: str) -> Path:
 
 
 @pytest.fixture
-def isolated_sorting_service():
-    """Use a fresh sorting service instance so progress state does not leak across tests."""
+def isolated_sorting_service(tmp_path):
+    """Use a fresh sorting service instance so progress state does not leak across tests.
+
+    Also redirects ``db.DATABASE_PATH`` to a throwaway DB **unless** a DB-isolating
+    fixture (e.g. ``test_db``) has already pointed it at a test path. This keeps
+    scan side-effects — notably the v3.3.2 auto-register-library-root hook, which
+    calls ``db.add_library_root`` on scan completion — from leaking rows into the
+    real ``data/images.db``. Uses the same ``test_``/``tmp`` path heuristic as
+    ``test_tagging_service``'s production-DB guard.
+    """
+    import database as db
     from routers.sorting import set_sorting_service
     from services.sorting_service import SortingService
 
+    original_path = db.DATABASE_PATH
+    patched = False
+    lowered = str(original_path).lower()
+    if "test_" not in lowered and "tmp" not in lowered:
+        db.DATABASE_PATH = str(tmp_path / "isolated_sorting.db")
+        db.init_db()
+        patched = True
+
     service = SortingService()
     set_sorting_service(service)
-    yield service
-    set_sorting_service(SortingService())
+    try:
+        yield service
+    finally:
+        set_sorting_service(SortingService())
+        if patched:
+            db.DATABASE_PATH = original_path
 
 
 class TestRouterCompatibilityState:

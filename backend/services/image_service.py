@@ -122,6 +122,28 @@ def _coerce_optional_string_filter(value: Any, field_name: str) -> Optional[str]
     return text or None
 
 
+def _coerce_optional_bool_filter(value: Any, field_name: str) -> Optional[bool]:
+    """Coerce a tri-state boolean filter for the selection contract.
+
+    None stays None (no-op filter). Real bools pass through. Strings/ints that
+    look boolean ("true"/"1"/"false"/"0") are accepted so a JSON-decoded token
+    round-trips cleanly; anything else is a malformed token.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in ("true", "1", "yes", "on"):
+            return True
+        if text in ("false", "0", "no", "off"):
+            return False
+    raise _invalid_selection_token()
+
+
 def _coerce_prompt_match_mode(value: Any) -> str:
     mode = _coerce_optional_string_filter(value, "promptMatchMode") or PROMPT_MATCH_MODE_EXACT
     mode = mode.lower()
@@ -1845,6 +1867,8 @@ class ImageService:
         exclude_prompts: Optional[str] = None,
         exclude_colors: Optional[str] = None,
         collection_id: Optional[int] = None,
+        folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
+        has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
     ) -> Dict[str, Any]:
         """
         Retrieve images with optional filtering using cursor-based pagination.
@@ -1927,6 +1951,8 @@ class ImageService:
 
             while len(collected) < limit + 1:
                 result = db.get_images_paginated(
+                    folder=folder,
+                    has_metadata=has_metadata,
                     generators=gen_list,
                     tags=tag_list,
                     tag_mode=tag_mode,
@@ -1999,6 +2025,8 @@ class ImageService:
 
         while len(images) < limit + 1:
             batch = db.get_images(
+                folder=folder,
+                has_metadata=has_metadata,
                 generators=gen_list,
                 tags=tag_list,
                 tag_mode=tag_mode,
@@ -2049,6 +2077,8 @@ class ImageService:
             images = images[:limit]
 
         total = db.get_filtered_image_count(
+            folder=folder,
+            has_metadata=has_metadata,
             generators=gen_list,
             tags=tag_list,
             tag_mode=tag_mode,
@@ -2089,6 +2119,28 @@ class ImageService:
             "total": total,
         }
 
+    def get_library_folders(self) -> Dict[str, Any]:
+        """List distinct image directories for the gallery folder tree (v3.3.2 Library Navigation)."""
+        return {"folders": db.get_library_folders()}
+
+    def get_library_roots(self) -> Dict[str, Any]:
+        """List registered library roots, each with a live indexed-image count (v3.3.2).
+
+        Counts reuse the recursive folder filter so a root reports every image in
+        its subtree. Count failures degrade to 0 rather than failing the list.
+        """
+        roots = db.list_library_roots()
+        enriched = []
+        for root in roots:
+            try:
+                count = db.get_filtered_image_count(folder=root.get("path"))
+            except Exception:
+                count = 0
+            path = root.get("path") or ""
+            exists = bool(path) and os.path.isdir(path)
+            enriched.append({**root, "image_count": count, "exists": exists})
+        return {"roots": enriched}
+
     def _build_selection_filter_contract(
         self,
         *,
@@ -2122,6 +2174,8 @@ class ImageService:
         exclude_ratings: Optional[List[str]] = None,
         exclude_checkpoints: Optional[List[str]] = None,
         exclude_loras: Optional[List[str]] = None,
+        folder: Optional[str] = None,  # v3.3.2 Library Navigation
+        has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
     ) -> Dict[str, Any]:
         """Build the canonical filter contract encoded into selection tokens."""
         sort_by = _coerce_optional_string_filter(sort_by, "sortBy") or "newest"
@@ -2189,6 +2243,8 @@ class ImageService:
             "excludeRatings": _sanitize_filter_values(exclude_ratings) or [],
             "excludeCheckpoints": _sanitize_filter_values(exclude_checkpoints) or [],
             "excludeLoras": _sanitize_filter_values(exclude_loras) or [],
+            "folder": _coerce_optional_string_filter(folder, "folder"),
+            "hasMetadata": _coerce_optional_bool_filter(has_metadata, "hasMetadata"),
         }
 
     def _selection_ids_from_contract(
@@ -2227,6 +2283,8 @@ class ImageService:
             exclude_ratings=contract.get("excludeRatings"),
             exclude_checkpoints=contract.get("excludeCheckpoints"),
             exclude_loras=contract.get("excludeLoras"),
+            folder=contract.get("folder"),
+            has_metadata=contract.get("hasMetadata"),
             fetch_chunk_size=SELECTION_IDS_FETCH_CHUNK,
             offset=offset,
             limit=limit,
@@ -2261,6 +2319,8 @@ class ImageService:
             exclude_ratings=contract.get("excludeRatings"),
             exclude_checkpoints=contract.get("excludeCheckpoints"),
             exclude_loras=contract.get("excludeLoras"),
+            folder=contract.get("folder"),
+            has_metadata=contract.get("hasMetadata"),
         )
 
     def _encode_selection_token(self, contract: Dict[str, Any]) -> str:
@@ -2319,6 +2379,8 @@ class ImageService:
                 exclude_ratings=filters.get("excludeRatings"),
                 exclude_checkpoints=filters.get("excludeCheckpoints"),
                 exclude_loras=filters.get("excludeLoras"),
+                folder=filters.get("folder"),
+                has_metadata=filters.get("hasMetadata"),
             )
         except HTTPException:
             raise
