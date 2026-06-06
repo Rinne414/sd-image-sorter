@@ -75,7 +75,9 @@ class TextSegmentRequest(BaseModel):
 
 class BatchMaskRefineRequest(BaseModel):
     """Request model for batch mask refinement via SAM3."""
-    items: List[MaskRefineRequest] = Field(..., min_length=1, max_length=500)
+    # No hard cap: batch_refine_mask runs sequentially and GC/empty_cache()s
+    # every 4 items, so a large batch is slow but not a crash risk.
+    items: List[MaskRefineRequest] = Field(..., min_length=1)
     sam3_confidence: float = Field(0.5, ge=0.0, le=1.0)
 
 
@@ -1816,10 +1818,15 @@ class CensorService:
                     except Exception:
                         pass
 
+        refined = sum(1 for r in results if r.get("status") == "ok")
         return {
             "status": "ok",
             "total": len(request.items),
             "completed": len(results),
+            # `completed` = boxes that ran (ok + fallback). Split it out so the UI
+            # doesn't report SAM3-could-not-refine fallbacks as real refinements.
+            "refined": refined,
+            "fallback": len(results) - refined,
             "failed": len(errors),
             "results": results,
             "errors": errors,

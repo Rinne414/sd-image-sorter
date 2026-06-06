@@ -5537,13 +5537,16 @@ async function runSam3BatchRefine() {
         renderQueue();
         if (CensorState.activeId) loadCanvasImage(CensorState.activeId);
 
+        const refinedCount = result.refined ?? result.completed;
+        const fallbackCount = result.fallback ?? 0;
         showToast(
             censorT('censor.sam3BatchComplete', {
-                completed: result.completed,
+                refined: refinedCount,
+                fallback: fallbackCount,
                 failed: result.failed,
                 total: result.total,
-            }, 'SAM3 Batch Refine complete: {completed} refined, {failed} failed out of {total} boxes'),
-            result.failed > 0 ? 'warning' : 'success'
+            }, 'SAM3 Batch Refine: {refined} refined, {fallback} kept as box, {failed} failed (of {total} boxes)'),
+            (result.failed > 0 || fallbackCount > 0) ? 'warning' : 'success'
         );
     } catch (e) {
         showLoading(false);

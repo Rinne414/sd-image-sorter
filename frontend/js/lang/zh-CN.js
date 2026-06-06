@@ -946,7 +946,7 @@ window.I18nLang_zhCN = {
     'censor.maskRefineNoResult': 'Mask 精化没有返回结果',
     'censor.maskApplyFailed': 'Mask 应用失败',
     'censor.sam3RefineFailed': 'SAM3 精化失败',
-    'censor.sam3BatchComplete': 'SAM3 批量精化完成：{completed} 成功，{failed} 失败，共 {total} 个框',
+    'censor.sam3BatchComplete': 'SAM3 批量精修：{refined} 个精修，{fallback} 个保留方框，{failed} 个失败（共 {total} 个框）',
     'censor.sam3BatchAborted': 'SAM3 批量中止',
     'censor.renameWholeQueueHelp': '当前没有选中队列项目，所以会对整个队列重命名。',
     'censor.renameSelectedOnlyHelp': '只会重命名当前选中的 {count} 个队列项目，其余项目保持不变。',

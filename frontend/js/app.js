@@ -11230,6 +11230,7 @@ function resetAllFilters() {
     if (filterMinHeight) filterMinHeight.value = '';
     if (filterMaxHeight) filterMaxHeight.value = '';
     $$('input[name="aspect-ratio"]').forEach(r => r.checked = r.value === '');
+    $$('input[name="has-metadata"]').forEach(r => r.checked = r.value === '');
     updateSortReverseButton();
     updateFilterModalSummary();
 
@@ -11239,6 +11240,10 @@ function resetAllFilters() {
 
     const committedFilters = commitFilterModalState(filterState);
     hideModal('filter-modal');
+
+    // Clearing all filters also drops any folder scope — re-sync the folder tree
+    // so its highlight and "Folder: …" chip don't linger after a reset.
+    if (window.FolderTreeUI?.isScoped?.()) window.FolderTreeUI.refresh();
 
     if (FilterModalController.onReset) {
         FilterModalController.onReset(cloneFilterState(committedFilters));

@@ -935,7 +935,7 @@ window.I18nLang_en = {
     'censor.maskRefineNoResult': 'Mask refine returned no result',
     'censor.maskApplyFailed': 'Mask apply failed',
     'censor.sam3RefineFailed': 'SAM3 refine failed',
-    'censor.sam3BatchComplete': 'SAM3 Batch Refine complete: {completed} refined, {failed} failed out of {total} boxes',
+    'censor.sam3BatchComplete': 'SAM3 Batch Refine: {refined} refined, {fallback} kept as box, {failed} failed (of {total} boxes)',
     'censor.sam3BatchAborted': 'SAM3 batch aborted',
     'censor.renameWholeQueueHelp': 'Nothing is selected right now, so the whole queue will be renamed.',
     'censor.renameSelectedOnlyHelp': 'Only the {count} selected queue item(s) will be renamed. The rest stay untouched.',
