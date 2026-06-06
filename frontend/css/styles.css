@@ -6533,9 +6533,9 @@ textarea:focus-visible {
     outline-offset: 2px;
 }
 
-/* Touch-target minimums — touch devices only. This is desktop/laptop software;
-   with a mouse pointer, controls use their own (smaller) sizing, so this 44px
-   floor must not inflate compact desktop buttons (e.g. gallery card icons). */
+/* Ensure interactive elements have proper touch targets */
+/* Touch devices only — desktop/laptop uses each control's own (smaller) size, so
+   this 44px floor must not inflate compact desktop buttons (e.g. card icons). */
 @media (hover: none) and (pointer: coarse) {
     .btn,
     button,

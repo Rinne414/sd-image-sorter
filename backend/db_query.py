@@ -863,10 +863,19 @@ def _apply_collection_filter(conditions: List[str], params: List[Any],
         return conditions, params
     if cid <= 0:
         return conditions, params
+    # Regular collections resolve via their collection_items snapshot. Favorites
+    # are path-anchored (rescan-proof) in favorite_paths, so the second branch
+    # only yields rows when `cid` is the Favorites collection (gated by its slug).
     conditions.append(
-        "i.id IN (SELECT ci.source_image_id FROM collection_items ci "
-        "WHERE ci.collection_id = ?)"
+        "i.id IN ("
+        "SELECT ci.source_image_id FROM collection_items ci WHERE ci.collection_id = ? "
+        "UNION "
+        "SELECT i2.id FROM images i2 "
+        "JOIN favorite_paths f ON lower(i2.path) = f.path_key "
+        "JOIN collections c ON c.id = ? AND c.slug = 'favorites'"
+        ")"
     )
+    params.append(cid)
     params.append(cid)
     return conditions, params
 

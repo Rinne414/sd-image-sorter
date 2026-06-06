@@ -103,33 +103,35 @@ def remove_collection_item(collection_id: int, source_image_id: int):
 
 
 def get_favorite_source_ids() -> List[int]:
-    """Get all source image IDs currently in Favorites."""
+    """Current image ids whose file path is favorited (newest-favorited first).
+
+    Favorites are anchored by PATH in ``favorite_paths`` (not by the volatile
+    image row id), so a library Clear/rescan that re-IDs images keeps them: a
+    re-scanned file with the same path resolves back to a favorite automatically.
+    """
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT ci.source_image_id
-            FROM collection_items ci
-            INNER JOIN collections c ON c.id = ci.collection_id
-            WHERE c.slug = ?
-            """,
-            (FAVORITES_COLLECTION_SLUG,)
+            SELECT i.id
+            FROM images i
+            INNER JOIN favorite_paths f ON lower(i.path) = f.path_key
+            ORDER BY f.added_at DESC, i.id DESC
+            """
         )
         return [row[0] for row in cursor.fetchall()]
 
 
 def get_favorites_count() -> int:
-    """Get Favorites item count."""
+    """Count of favorited paths that resolve to a currently-indexed image."""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
             """
             SELECT COUNT(*)
-            FROM collection_items ci
-            INNER JOIN collections c ON c.id = ci.collection_id
-            WHERE c.slug = ?
-            """,
-            (FAVORITES_COLLECTION_SLUG,)
+            FROM images i
+            INNER JOIN favorite_paths f ON lower(i.path) = f.path_key
+            """
         )
         return cursor.fetchone()[0]
 
@@ -151,55 +153,50 @@ def get_favorites_collection_id() -> Optional[int]:
 
 
 def is_favorited(source_image_id: int) -> bool:
-    """True when the source image is in the Favorites collection."""
-    fav_id = get_favorites_collection_id()
-    if fav_id is None:
-        return False
-    return get_collection_item(fav_id, source_image_id) is not None
-
-
-def set_favorite(source_image_id: int, favorited: bool) -> bool:
-    """Toggle Favorites membership for a source image (reference, no file copy).
-
-    Returns the resulting favorited state. Raises ValueError if the image row
-    does not exist (the caller maps that to a 404).
-    """
-    fav_id = get_favorites_collection_id()
-    if fav_id is None:
-        raise ValueError("Favorites collection is not initialised")
-
+    """True when the image's file path is favorited (path-anchored)."""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT path, prompt, negative_prompt, checkpoint, loras, metadata_json, "
-            "created_at, width, height, file_size FROM images WHERE id = ?",
+            """
+            SELECT 1
+            FROM images i
+            INNER JOIN favorite_paths f ON lower(i.path) = f.path_key
+            WHERE i.id = ?
+            """,
             (source_image_id,),
         )
+        return cursor.fetchone() is not None
+
+
+def set_favorite(source_image_id: int, favorited: bool) -> bool:
+    """Toggle Favorites for a source image, anchored by file PATH.
+
+    Storing the favorite by path (in ``favorite_paths``) instead of the image
+    row id means it survives a library Clear/rescan that re-IDs images. Returns
+    the resulting favorited state. Raises ValueError if the image row does not
+    exist (the caller maps that to a 404).
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT path FROM images WHERE id = ?", (source_image_id,))
         row = cursor.fetchone()
-    if row is None:
-        raise ValueError(f"Image {source_image_id} not found")
+        if row is None:
+            raise ValueError(f"Image {source_image_id} not found")
+        path_key = (row[0] or "").lower()
+        if favorited:
+            cursor.execute(
+                "INSERT OR IGNORE INTO favorite_paths (path_key) VALUES (?)", (path_key,)
+            )
+        else:
+            cursor.execute("DELETE FROM favorite_paths WHERE path_key = ?", (path_key,))
 
     if not favorited:
-        remove_collection_item(fav_id, source_image_id)
-        return False
-
-    image = _row_to_dict(row)
-    add_collection_item(
-        collection_id=fav_id,
-        source_image_id=source_image_id,
-        # Reference the source path itself — no physical copy for favorites.
-        copied_path=image.get("path") or "",
-        prompt=image.get("prompt"),
-        negative_prompt=image.get("negative_prompt"),
-        checkpoint=image.get("checkpoint"),
-        loras=image.get("loras"),
-        metadata_json=image.get("metadata_json"),
-        created_at=image.get("created_at"),
-        width=image.get("width"),
-        height=image.get("height"),
-        file_size=image.get("file_size"),
-    )
-    return True
+        # Clean up any pre-migration collection_items favorite row (now vestigial,
+        # since reads go through favorite_paths). Best-effort.
+        fav_id = get_favorites_collection_id()
+        if fav_id is not None:
+            remove_collection_item(fav_id, source_image_id)
+    return favorited
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +226,14 @@ def list_collections() -> List[Dict[str, Any]]:
             ORDER BY c.created_at DESC, c.id DESC
             """
         )
-        return [_row_to_dict(row) for row in cursor.fetchall()]
+        collections = [_row_to_dict(row) for row in cursor.fetchall()]
+    # Favorites is path-anchored (not a collection_items snapshot), so report its
+    # live, rescan-proof count instead of the stale collection_items count.
+    fav_count = get_favorites_count()
+    for collection in collections:
+        if collection.get("slug") == FAVORITES_COLLECTION_SLUG:
+            collection["item_count"] = fav_count
+    return collections
 
 
 def create_collection(name: str, folder_path: Optional[str] = None) -> Dict[str, Any]:
@@ -340,6 +344,11 @@ def set_collection_membership(collection_id: int, source_image_id: int, member: 
 
 def get_collection_image_ids(collection_id: int) -> List[int]:
     """Return the source image ids in a collection (newest-added first)."""
+    # Favorites is path-anchored (rescan-proof), resolved live from favorite_paths
+    # rather than the cascade-deletable collection_items snapshot.
+    fav_id = get_favorites_collection_id()
+    if fav_id is not None and collection_id == fav_id:
+        return get_favorite_source_ids()
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(

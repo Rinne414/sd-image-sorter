@@ -730,7 +730,7 @@ class TestImageCRUD:
 
         assert rescanned_id == image_id
         assert {tag["tag"] for tag in db.get_image_tags(image_id)} == {"cat", "indoors"}
-        assert image_id in db.get_favorite_source_ids()
+        assert db.get_collection_item(favorites["id"], image_id) is not None
 
         with db.get_db() as conn:
             cursor = conn.cursor()
@@ -2051,22 +2051,8 @@ class TestCollectionOperations:
     def test_get_favorite_source_ids(self, test_db):
         """Getting favorite source IDs should work."""
         image_id = db.add_image(path="/test/fav2.png", filename="fav2.png")
-        collection = db.get_collection_by_slug("favorites")
 
-        db.add_collection_item(
-            collection_id=collection["id"],
-            source_image_id=image_id,
-            copied_path="/favorites/fav2.png",
-            prompt=None,
-            negative_prompt=None,
-            checkpoint=None,
-            loras=None,
-            metadata_json=None,
-            created_at=None,
-            width=512,
-            height=512,
-            file_size=1000,
-        )
+        db.set_favorite(image_id, True)
 
         ids = db.get_favorite_source_ids()
 
@@ -2094,8 +2080,7 @@ class TestCollectionOperations:
 
         db.remove_collection_item(collection["id"], image_id)
 
-        ids = db.get_favorite_source_ids()
-        assert image_id not in ids
+        assert db.get_collection_item(collection["id"], image_id) is None
 
 
 class TestUtilityFunctions:
