@@ -5177,10 +5177,17 @@ html.lang-zh #view-censor .queue-action-btn span {
     white-space: normal;
 }
 
-.selection-panel-pick-actions,
 .selection-panel-primary-actions,
 .selection-panel-danger-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Primary select/invert actions stack full-width (single column) so the longer
+   zh label "选择当前筛选全部" (8 glyphs + ✓✓ icon) is never clipped to
+   "选择当前筛选…". In a 2-col grid the label got only ~92px but needs ~104px.
+   Selection mode now hides the browse/filter sections, so there is room. */
+.selection-panel-pick-actions {
+    grid-template-columns: 1fr;
 }
 
 .selection-panel-pick-actions .btn,
@@ -5189,6 +5196,14 @@ html.lang-zh #view-censor .queue-action-btn span {
     min-height: 38px;
     padding: 8px 8px;
     min-width: 0;
+}
+
+/* The 2-col danger labels (esp. zh "移到回收站...", ~78px) just overflow the
+   ~76px label area in the ~119px cell and clip to "移到回收…". A 1px smaller
+   label keeps these destructive actions compact/less-prominent (deliberately
+   not full-width like the primary select row) while showing the full text. */
+.selection-panel-danger-actions .btn span:last-child {
+    font-size: 12px;
 }
 
 .selection-panel-pick-actions .btn span:last-child,
