@@ -39,6 +39,9 @@ ARTIST_BATCH_IMAGE_LIMIT = 5_000_000
 class ArtistModelConfig(BaseModel):
     model_source: str = Field("huggingface", pattern="^(huggingface|modelscope|local)$")
     model_path: Optional[str] = None
+    # None -> use the ARTIST_USE_GPU config default. False forces CPU for users
+    # whose GPU stack freezes under CUDA load (e.g. NVIDIA + Wayland).
+    use_gpu: Optional[bool] = None
 
     @field_validator("model_path", mode="before")
     @classmethod
@@ -227,6 +230,7 @@ async def identify_artist(
             top_k=request.top_k,
             model_source=request.model_source,
             model_path=request.model_path,
+            use_gpu=request.use_gpu,
         )
     except ImageNotFoundError as exc:
         raise HTTPException(status_code=404, detail=exc.message)
@@ -298,6 +302,7 @@ async def identify_batch(
         request.top_k,
         request.model_source,
         request.model_path,
+        request.use_gpu,
     )
 
     return {
@@ -312,6 +317,7 @@ def _run_batch_identification(
     top_k: int,
     model_source: str = "huggingface",
     model_path: Optional[str] = None,
+    use_gpu: Optional[bool] = None,
 ):
     """Background task for batch identification with optimized batch operations."""
     service = get_artist_service()
@@ -322,6 +328,7 @@ def _run_batch_identification(
             top_k=top_k,
             model_source=model_source,
             model_path=model_path,
+            use_gpu=use_gpu,
             progress_callback=service.apply_batch_progress_update,
         )
         service.finish_batch_progress_done(result)

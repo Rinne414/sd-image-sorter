@@ -1141,6 +1141,8 @@ window.I18nLang_en = {
     'artist.localModelPath': 'Local Checkpoint Path',
     'artist.confidenceThreshold': 'Confidence Threshold',
     'artist.belowThreshold': 'Below this = "undefined". Start around 0.02-0.08.',
+    'artist.useGpu': 'Use GPU if available',
+    'artist.useGpuHelp': 'Turn off to run on CPU (~2x slower but stable). Try this if your GPU driver freezes the desktop while identifying (e.g. NVIDIA on Wayland).',
     'artist.identification': 'Identification',
     'artist.identifyAll': 'Identify All',
     'artist.identifySelected': 'Identify Selected',

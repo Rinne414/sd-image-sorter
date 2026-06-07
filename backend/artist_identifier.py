@@ -44,11 +44,35 @@ from config import (
     ARTIST_LSNET_CODE_PATH,
     ARTIST_KALOSCOPE_CHECKPOINT,
     ARTIST_KALOSCOPE_CLASS_MAPPING,
+    ARTIST_USE_GPU,
     get_artist_model_dir,
 )
 from model_download_sources import endpoint_label, get_hf_endpoint_order
 
 logger = logging.getLogger("sd-image-sorter.artist")
+
+
+def _resolve_artist_device(*, use_gpu: bool = True, cuda_available: Optional[bool] = None) -> str:
+    """Pick the torch device for Kaloscope, honoring the use_gpu opt-out.
+
+    Returns ``"cuda"`` only when GPU use is requested AND CUDA is actually
+    available; otherwise ``"cpu"``. Mirrors the WD14 tagger's use_gpu toggle so
+    users whose GPU stack freezes under CUDA load (e.g. NVIDIA + Wayland) can run
+    artist identification on CPU instead of having no escape from the hardcoded
+    ``cuda`` path. ``cuda_available`` is injectable for tests; left None it is
+    probed via ``torch.cuda.is_available()``.
+    """
+    if not use_gpu:
+        return "cpu"
+    if cuda_available is None:
+        try:
+            import torch
+
+            cuda_available = bool(torch.cuda.is_available())
+        except Exception as exc:  # torch import / CUDA probe failure -> CPU
+            logger.debug("CUDA probe failed; using CPU for artist ID: %s", exc)
+            cuda_available = False
+    return "cuda" if cuda_available else "cpu"
 
 
 # Lazy-loaded model
@@ -1183,6 +1207,7 @@ class ArtistIdentifier:
         model_source: str = ARTIST_MODEL_SOURCE_DEFAULT,
         threshold: float = ARTIST_THRESHOLD_DEFAULT,
         artists_list: Optional[List[str]] = None,
+        use_gpu: Optional[bool] = None,
     ):
         """
         Initialize the artist identifier.
@@ -1194,10 +1219,15 @@ class ArtistIdentifier:
                 usually quite low, so values around 0.02-0.08 are more
                 realistic than the old 0.35 default.
             artists_list: Custom list of artist names (optional)
+            use_gpu: Use CUDA when available. None falls back to the
+                ARTIST_USE_GPU config default. Set False (or
+                SD_IMAGE_SORTER_ARTIST_USE_GPU=0) to force CPU on GPU stacks
+                that freeze under CUDA load (e.g. NVIDIA + Wayland).
         """
         self.model_path = model_path
         self.model_source = model_source
         self.threshold = threshold
+        self.use_gpu = ARTIST_USE_GPU if use_gpu is None else bool(use_gpu)
         self.artists = artists_list or DEFAULT_ARTISTS
         self._model: Any = None
         self._session: Any = None
@@ -1290,8 +1320,6 @@ class ArtistIdentifier:
         return create_model, resolve_data_config, create_transform
 
     def _initialize_kaloscope(self, checkpoint_path: str, class_mapping_path: str):
-        import torch
-
         create_model, resolve_data_config, create_transform = self._load_kaloscope_runtime_modules()
         with exclusive_ai_runtime("artist-kaloscope-load"):
             checkpoint = self._load_kaloscope_checkpoint_blob(checkpoint_path)
@@ -1320,7 +1348,9 @@ class ArtistIdentifier:
         if load_result.missing_keys:
             logger.warning("Kaloscope missing keys during load: %s", load_result.missing_keys[:10])
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+        device = _resolve_artist_device(use_gpu=self.use_gpu)
+        if not self.use_gpu:
+            logger.info("Artist ID running on CPU (use_gpu disabled).")
         with exclusive_ai_runtime("artist-kaloscope-load"):
             model.to(device)
         model.eval()
@@ -1639,20 +1669,29 @@ def get_artist_identifier(
     model_path: Optional[str] = None,
     model_source: str = ARTIST_MODEL_SOURCE_DEFAULT,
     threshold: float = ARTIST_THRESHOLD_DEFAULT,
+    use_gpu: Optional[bool] = None,
 ) -> ArtistIdentifier:
-    """Get the singleton artist identifier."""
+    """Get the singleton artist identifier.
+
+    ``use_gpu`` None means "use the ARTIST_USE_GPU config default". A changed
+    use_gpu rebuilds the singleton so a GPU-loaded model is not silently reused
+    after the user switches to CPU (and vice versa).
+    """
     global _identifier
     normalized_path = str(model_path).strip() if model_path else None
+    resolved_use_gpu = ARTIST_USE_GPU if use_gpu is None else bool(use_gpu)
 
     if (
         _identifier is None
         or _identifier.model_source != model_source
         or _identifier.model_path != normalized_path
+        or _identifier.use_gpu != resolved_use_gpu
     ):
         _identifier = ArtistIdentifier(
             model_path=normalized_path,
             model_source=model_source,
             threshold=threshold,
+            use_gpu=resolved_use_gpu,
         )
     else:
         _identifier.set_threshold(threshold)

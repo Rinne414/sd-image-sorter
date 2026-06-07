@@ -442,6 +442,15 @@ TAGGER_USE_GPU: bool = os.environ.get(
     "true"
 ).lower() in ("true", "1", "yes")
 
+# Artist (Kaloscope) GPU usage. Same opt-out shape as TAGGER_USE_GPU so users on
+# GPU stacks that freeze under CUDA load (e.g. NVIDIA proprietary driver on
+# Wayland, where a GPU hang can lock the whole desktop) can run artist ID on CPU.
+# CPU is ~2x slower than GPU for Kaloscope (benchmarked) but stable.
+ARTIST_USE_GPU: bool = os.environ.get(
+    "SD_IMAGE_SORTER_ARTIST_USE_GPU",
+    "true"
+).lower() in ("true", "1", "yes")
+
 # Available tagger models
 TAGGER_MODELS: dict = {
     "wd-eva02-large-tagger-v3": {

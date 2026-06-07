@@ -1316,6 +1316,8 @@ window.I18nLang_zhCN = {
     'artist.localModelPath': '本地模型路径',
     'artist.confidenceThreshold': '置信度阈值',
     'artist.belowThreshold': '低于此值记为“未定义”；先试 0.02-0.08。',
+    'artist.useGpu': '可用时使用 GPU',
+    'artist.useGpuHelp': '关闭后改用 CPU（约慢 2 倍但稳定）。如果识别时 GPU 驱动会冻结桌面（例如 NVIDIA + Wayland），请关掉此项。',
     'artist.identification': '识别',
     'artist.identifyAll': '识别全部',
     'artist.identifySelected': '识别已选',

@@ -175,11 +175,12 @@ class ArtistService:
     def set_identifier_getter(self, identifier_getter: Callable[..., Any]) -> None:
         self._identifier_getter = identifier_getter
 
-    def _identifier(self, *, model_path: Optional[str], model_source: str, threshold: float) -> Any:
+    def _identifier(self, *, model_path: Optional[str], model_source: str, threshold: float, use_gpu: Optional[bool] = None) -> Any:
         return self._identifier_getter(
             model_path=model_path,
             model_source=model_source,
             threshold=threshold,
+            use_gpu=use_gpu,
         )
 
     def _get_image_path(self, image_id: int) -> str:
@@ -237,6 +238,7 @@ class ArtistService:
         top_k: int,
         model_source: str = "huggingface",
         model_path: Optional[str] = None,
+        use_gpu: Optional[bool] = None,
     ) -> Dict[str, Any]:
         image_path = self._get_image_path(image_id)
 
@@ -244,6 +246,7 @@ class ArtistService:
             model_path=model_path,
             model_source=model_source,
             threshold=threshold,
+            use_gpu=use_gpu,
         )
         result = identifier.identify(image_path, top_k=top_k)
         if result.get("error"):
@@ -274,6 +277,7 @@ class ArtistService:
         top_k: int,
         model_source: str = "huggingface",
         model_path: Optional[str] = None,
+        use_gpu: Optional[bool] = None,
         progress_callback: Optional[ProgressCallback] = None,
     ) -> Dict[str, Any]:
         def emit(update: Dict[str, Any]) -> None:
@@ -289,6 +293,7 @@ class ArtistService:
             model_path=model_path,
             model_source=model_source,
             threshold=threshold,
+            use_gpu=use_gpu,
         )
 
         with db.get_db() as conn:

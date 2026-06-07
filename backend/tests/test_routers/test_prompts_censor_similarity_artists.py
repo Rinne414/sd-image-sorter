@@ -1669,6 +1669,7 @@ class TestArtistsRouterValidation:
             "top_k": 3,
             "model_source": "huggingface",
             "model_path": None,
+            "use_gpu": None,
         }
         assert captured["inline_thread_id"] == event_loop_thread_id
 
@@ -1731,12 +1732,13 @@ class TestArtistsRouterValidation:
             "updated_at": None,
         })
 
-        def fake_run_batch(image_ids, threshold, top_k, model_source, model_path):
+        def fake_run_batch(image_ids, threshold, top_k, model_source, model_path, use_gpu=None):
             captured["image_ids"] = image_ids
             captured["threshold"] = threshold
             captured["top_k"] = top_k
             captured["model_source"] = model_source
             captured["model_path"] = model_path
+            captured["use_gpu"] = use_gpu
             service.set_batch_progress_state({
                 "running": False,
                 "total": len(image_ids),
@@ -1760,6 +1762,7 @@ class TestArtistsRouterValidation:
                 "top_k": 7,
                 "model_source": "local",
                 "model_path": str(model_path),
+                "use_gpu": False,
             },
         )
 
@@ -1770,6 +1773,7 @@ class TestArtistsRouterValidation:
             "top_k": 7,
             "model_source": "local",
             "model_path": str(model_path.resolve()),
+            "use_gpu": False,
         }
 
     def test_identify_batch_uses_low_default_threshold(self, test_client, monkeypatch):
@@ -1791,7 +1795,7 @@ class TestArtistsRouterValidation:
             "updated_at": None,
         })
 
-        def fake_run_batch(image_ids, threshold, top_k, model_source, model_path):
+        def fake_run_batch(image_ids, threshold, top_k, model_source, model_path, use_gpu=None):
             captured["image_ids"] = image_ids
             captured["threshold"] = threshold
             captured["top_k"] = top_k

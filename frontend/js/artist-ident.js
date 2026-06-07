@@ -437,6 +437,7 @@ const ArtistIdent = {
     _getIdentifyModelConfig() {
         const modelSourceEl = document.getElementById('artist-model-source');
         const modelPathEl = document.getElementById('artist-model-path');
+        const useGpuEl = document.getElementById('artist-use-gpu');
         const modelSource = String(modelSourceEl?.value || 'huggingface').trim() || 'huggingface';
         const modelPath = String(modelPathEl?.value || '').trim();
 
@@ -447,6 +448,9 @@ const ArtistIdent = {
         return {
             model_source: modelSource,
             model_path: modelSource === 'local' ? modelPath : null,
+            // Default checked = use GPU (matches backend ARTIST_USE_GPU default).
+            // Unchecked forces CPU for GPU stacks that freeze under CUDA load.
+            use_gpu: useGpuEl ? !!useGpuEl.checked : null,
         };
     },
 
