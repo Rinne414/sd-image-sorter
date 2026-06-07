@@ -1423,6 +1423,73 @@
     border-color: rgba(239, 68, 68, 0.48);
     color: #fecaca;
 }
+/* 14-category danbooru palette (mirrors backend tag_rules.categorize_tag).
+   'quality' reuses the blue rule above; the rest are added here. */
+#view-dataset .dataset-tag-pill-category-meta {
+    background: rgba(100, 116, 139, 0.18);
+    border-color: rgba(100, 116, 139, 0.5);
+    color: #e2e8f0;
+}
+#view-dataset .dataset-tag-pill-category-rating {
+    background: rgba(239, 68, 68, 0.16);
+    border-color: rgba(239, 68, 68, 0.48);
+    color: #fecaca;
+}
+#view-dataset .dataset-tag-pill-category-character {
+    background: rgba(244, 114, 182, 0.16);
+    border-color: rgba(244, 114, 182, 0.5);
+    color: #fbcfe8;
+}
+#view-dataset .dataset-tag-pill-category-body {
+    background: rgba(251, 113, 133, 0.16);
+    border-color: rgba(251, 113, 133, 0.48);
+    color: #fecdd3;
+}
+#view-dataset .dataset-tag-pill-category-outfit {
+    background: rgba(167, 139, 250, 0.16);
+    border-color: rgba(167, 139, 250, 0.48);
+    color: #ddd6fe;
+}
+#view-dataset .dataset-tag-pill-category-expression {
+    background: rgba(245, 158, 11, 0.16);
+    border-color: rgba(245, 158, 11, 0.48);
+    color: #fde68a;
+}
+#view-dataset .dataset-tag-pill-category-pose {
+    background: rgba(234, 179, 8, 0.16);
+    border-color: rgba(234, 179, 8, 0.45);
+    color: #fef3c7;
+}
+#view-dataset .dataset-tag-pill-category-action {
+    background: rgba(249, 115, 22, 0.16);
+    border-color: rgba(249, 115, 22, 0.48);
+    color: #fed7aa;
+}
+#view-dataset .dataset-tag-pill-category-angle {
+    background: rgba(34, 211, 238, 0.15);
+    border-color: rgba(34, 211, 238, 0.46);
+    color: #a5f3fc;
+}
+#view-dataset .dataset-tag-pill-category-background {
+    background: rgba(45, 212, 191, 0.15);
+    border-color: rgba(45, 212, 191, 0.46);
+    color: #99f6e4;
+}
+#view-dataset .dataset-tag-pill-category-style {
+    background: rgba(129, 140, 248, 0.16);
+    border-color: rgba(129, 140, 248, 0.48);
+    color: #c7d2fe;
+}
+#view-dataset .dataset-tag-pill-category-artist {
+    background: rgba(217, 70, 239, 0.16);
+    border-color: rgba(217, 70, 239, 0.48);
+    color: #f5d0fe;
+}
+#view-dataset .dataset-tag-pill-category-unknown {
+    background: rgba(255,255,255,0.07);
+    border-color: rgba(255,255,255,0.24);
+    color: var(--text-primary, #f8fafc);
+}
 #view-dataset .dataset-tag-pill:hover {
     background: rgba(239, 68, 68, 0.15);
     border-color: rgba(239, 68, 68, 0.4);

@@ -3281,7 +3281,7 @@ window.I18nLang_zhCN = {
     'dataset.scopeActiveImage': '当前图片',
     'dataset.captionNamingLegend': '导出到文件夹时的文件名规则',
     'dataset.tagCategoryOrderLabel': '标签分类顺序',
-    'dataset.tagCategoryOrderTooltip': '用英文逗号分隔：quality, identity, appearance, poses, copyright, natural',
+    'dataset.tagCategoryOrderTooltip': '用英文逗号分隔分类顺序（保留英文）：quality, meta, rating, character, body, outfit, expression, pose, action, angle, background, style, artist, unknown',
     'dataset.applyTagCategoryOrder': '按分类顺序重排 caption 标签',
     'dataset.tagCategoryOrderApplied': '已重排 {count} 条 caption 的标签。',
     'dataset.noActiveImage': '请先选择一张图片。',

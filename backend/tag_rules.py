@@ -368,6 +368,15 @@ def categorize_tag(tag: str) -> str:
     # Exact set lookups first (fast)
     if tag_lower in RATING_TAGS:
         return "rating"
+    # Danbooru colon metatags survive the space->underscore normalization with the
+    # colon intact, so the set lookups above miss them. They are unambiguous:
+    # "rating:safe"/"rating:explicit" are ratings; "score:8" and Pony-style
+    # "score_9"/"score_8_up" are quality boosters. (Can't misclassify: a real tag
+    # like "scoreboard" has no underscore/colon right after "score".)
+    if tag_lower.startswith("rating:"):
+        return "rating"
+    if tag_lower.startswith("score:") or tag_lower.startswith("score_"):
+        return "quality"
     if tag_lower in QUALITY_TAGS:
         return "quality"
     if tag_lower in META_TAGS:

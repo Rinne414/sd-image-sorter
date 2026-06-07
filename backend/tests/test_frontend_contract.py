@@ -606,7 +606,16 @@ def test_dataset_global_caption_scope_and_tag_categories_are_available():
     assert "dataset-dedupe-scope" not in part3
     assert "_classifyTagCategory" in part2
     assert "dataset-tag-pill-category-" in part2
-    for category in ["quality", "identity", "appearance", "poses", "copyright", "natural"]:
+    # Every tag must resolve to a real danbooru group + color: the frontend pulls
+    # authoritative categories from the backend 14-class classifier and caches them
+    # so pills recolor away from the local first-paint guess.
+    assert "_ensureTagCategories" in part2
+    assert "/api/prompts/categorize" in part2
+    # The 14 backend categories (tag_rules.categorize_tag) each need a pill color.
+    for category in [
+        "quality", "meta", "rating", "character", "body", "outfit", "expression",
+        "pose", "action", "angle", "background", "style", "artist", "unknown",
+    ]:
         assert f"dataset-tag-pill-category-{category}" in css
 
 

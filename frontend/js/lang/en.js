@@ -3281,7 +3281,7 @@ window.I18nLang_en = {
     'dataset.scopeActiveImage': 'Current image',
     'dataset.captionNamingLegend': 'Filename pattern for folder export',
     'dataset.tagCategoryOrderLabel': 'Tag category order',
-    'dataset.tagCategoryOrderTooltip': 'Comma-separated categories: quality, identity, appearance, poses, copyright, natural',
+    'dataset.tagCategoryOrderTooltip': 'Comma-separated category order (keep English tokens): quality, meta, rating, character, body, outfit, expression, pose, action, angle, background, style, artist, unknown',
     'dataset.applyTagCategoryOrder': 'Apply order to caption tags',
     'dataset.tagCategoryOrderApplied': 'Reordered tags in {count} captions.',
     'dataset.noActiveImage': 'Select an image first.',
