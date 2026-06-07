@@ -133,3 +133,126 @@ def test_startup_readiness_report_mentions_conflict_warning_when_onnxruntime_con
 
     assert "ONNX Runtime packages are conflicting" in report
     assert "WD14 tagging: CPU fallback" in report
+
+
+# --- Manual-placement detection robustness (Linux user bug reports) ----------
+#
+# A user who manually downloads or git-clones model files hits two real traps:
+#   * HuggingFace hub caches under models--Org--Repo/snapshots/HASH/ (double
+#     dash, 3 levels deep), which the old 2-level CLIP glob never reached.
+#   * git clone of the Kaloscope repo creates a mixed-case "Kaloscope2.0/"
+#     directory; the hardcoded lowercase "kaloscope2.0" path misses it on
+#     case-sensitive Linux filesystems.
+
+
+def test_clip_detection_finds_huggingface_hub_cache_layout(tmp_path, monkeypatch):
+    import model_health
+
+    clip_root = tmp_path / "clip"
+    # huggingface_hub cache layout: models--{org}--{repo}/snapshots/{hash}/model.onnx
+    snapshot = clip_root / "models--Qdrant--clip-ViT-B-32-vision" / "snapshots" / "e0c24abcdeadbeef"
+    snapshot.mkdir(parents=True)
+    (snapshot / "model.onnx").write_bytes(b"onnx")
+    (snapshot / "config.json").write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(model_health, "get_clip_model_dir", lambda: str(clip_root))
+
+    found = model_health.get_clip_local_model_path()
+    assert found is not None
+    assert Path(found, "model.onnx").exists()
+
+
+def test_clip_detection_still_finds_canonical_slug_layout(tmp_path, monkeypatch):
+    import model_health
+    from config import CLIP_MODEL_NAME
+
+    clip_root = tmp_path / "clip"
+    slug = CLIP_MODEL_NAME.replace("/", "-").replace("\\", "-")
+    canonical = clip_root / slug
+    canonical.mkdir(parents=True)
+    (canonical / "model.onnx").write_bytes(b"onnx")
+
+    monkeypatch.setattr(model_health, "get_clip_model_dir", lambda: str(clip_root))
+
+    found = model_health.get_clip_local_model_path()
+    assert found is not None
+    assert Path(found).resolve() == canonical.resolve()
+
+
+def test_artist_checkpoint_detected_in_mixed_case_git_clone_dir(tmp_path, monkeypatch):
+    import model_health
+    from config import ARTIST_KALOSCOPE_CHECKPOINT, ARTIST_KALOSCOPE_CLASS_MAPPING
+
+    artist_root = tmp_path / "artist"
+    # git clone of the model repo creates "Kaloscope2.0" (capital K).
+    clone_dir = artist_root / "Kaloscope2.0"
+    checkpoint = clone_dir / ARTIST_KALOSCOPE_CHECKPOINT
+    checkpoint.parent.mkdir(parents=True)
+    checkpoint.write_bytes(b"ckpt")
+    (clone_dir / ARTIST_KALOSCOPE_CLASS_MAPPING).write_text("class_id,class_name\n", encoding="utf-8")
+
+    monkeypatch.setattr(model_health, "get_artist_model_dir", lambda: str(artist_root))
+
+    assert model_health.get_artist_checkpoint_path() is not None
+    assert model_health.get_artist_class_mapping_path() is not None
+
+
+def test_artist_checkpoint_detected_when_placed_at_arbitrary_depth(tmp_path, monkeypatch):
+    import model_health
+    from config import ARTIST_KALOSCOPE_CHECKPOINT, ARTIST_KALOSCOPE_CLASS_MAPPING
+
+    artist_root = tmp_path / "artist"
+    nested = artist_root / "whatever" / "deep"
+    checkpoint = nested / ARTIST_KALOSCOPE_CHECKPOINT
+    checkpoint.parent.mkdir(parents=True)
+    checkpoint.write_bytes(b"ckpt")
+    (nested / ARTIST_KALOSCOPE_CLASS_MAPPING).write_text("class_id,class_name\n", encoding="utf-8")
+
+    monkeypatch.setattr(model_health, "get_artist_model_dir", lambda: str(artist_root))
+
+    assert model_health.get_artist_checkpoint_path() is not None
+    assert model_health.get_artist_class_mapping_path() is not None
+
+
+def test_artist_checkpoint_canonical_lowercase_still_preferred(tmp_path, monkeypatch):
+    import model_health
+    from config import ARTIST_KALOSCOPE_CHECKPOINT
+
+    artist_root = tmp_path / "artist"
+    canonical = artist_root / "kaloscope2.0" / ARTIST_KALOSCOPE_CHECKPOINT
+    canonical.parent.mkdir(parents=True)
+    canonical.write_bytes(b"ckpt")
+
+    monkeypatch.setattr(model_health, "get_artist_model_dir", lambda: str(artist_root))
+
+    found = model_health.get_artist_checkpoint_path()
+    assert found is not None
+    assert Path(found).resolve() == canonical.resolve()
+
+
+def test_artist_checkpoint_absent_returns_none(tmp_path, monkeypatch):
+    import model_health
+
+    artist_root = tmp_path / "artist"
+    artist_root.mkdir(parents=True)
+    monkeypatch.setattr(model_health, "get_artist_model_dir", lambda: str(artist_root))
+
+    assert model_health.get_artist_checkpoint_path() is None
+
+
+def test_sam3_checkpoint_detected_in_huggingface_hub_cache_layout(tmp_path, monkeypatch):
+    import model_health
+
+    sam3_root = tmp_path / "sam3"
+    # HF-hub style nested snapshot dir holding the transformers SAM3 files.
+    snapshot = sam3_root / "models--facebook--sam3" / "snapshots" / "abc123"
+    snapshot.mkdir(parents=True)
+    (snapshot / "config.json").write_text("{}", encoding="utf-8")
+    (snapshot / "model.safetensors").write_bytes(b"weights")
+
+    monkeypatch.setattr(model_health, "get_sam3_model_dir", lambda: str(sam3_root))
+
+    found = model_health.get_sam3_checkpoint_path()
+    assert found is not None
+    assert Path(found, "config.json").exists()
+    assert Path(found, "model.safetensors").exists()

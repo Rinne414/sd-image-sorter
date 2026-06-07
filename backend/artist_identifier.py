@@ -162,9 +162,26 @@ def _candidate_hf_endpoints() -> List[str]:
 # the NEW filename+digest; a stale entry simply stops applying once the version
 # in the filename changes, so a legitimate version bump never causes a false
 # mismatch (it just falls back to unverified until you pin the new digest).
-_EXPECTED_ARTIST_FILE_SHA256: Dict[str, str] = {
-    "448-90.13/best_checkpoint.pth": "a86ba2fcf430cbb653ac995f7ab9cce34667434ee084973e19edf431808a32ae",
-    "class_mapping.csv": "45aa78dacd9751de1c7a7293237845072c093dc915b72f1d4b5597ea2ff92cd4",
+#
+# Each value is a TUPLE of acceptable digests. Some files are served with
+# byte-level differences across mirrors even though the content is identical:
+# HuggingFace serves class_mapping.csv with CRLF line endings while ModelScope
+# serves the same 39,262 rows with LF endings, so both digests are legitimate
+# and both must be accepted (a single-digest pin would reject the real
+# ModelScope download). The checkpoint is byte-identical across both mirrors.
+_EXPECTED_ARTIST_FILE_SHA256: Dict[str, Tuple[str, ...]] = {
+    "448-90.13/best_checkpoint.pth": (
+        "a86ba2fcf430cbb653ac995f7ab9cce34667434ee084973e19edf431808a32ae",
+    ),
+    "best_checkpoint.pth": (
+        # ModelScope serves the checkpoint at the repo root (flat layout); the
+        # bytes are identical to the HuggingFace 448-90.13/ copy.
+        "a86ba2fcf430cbb653ac995f7ab9cce34667434ee084973e19edf431808a32ae",
+    ),
+    "class_mapping.csv": (
+        "45aa78dacd9751de1c7a7293237845072c093dc915b72f1d4b5597ea2ff92cd4",  # HuggingFace (CRLF)
+        "04cf5686e0802a9d8214090e2285ea6e2722e310fa29ee2789a1acc989f8ca8c",  # ModelScope (LF)
+    ),
 }
 
 
@@ -180,6 +197,7 @@ def _verify_artist_file_digest(filename: str, file_path: Path) -> None:
     """Reject a freshly-downloaded artist file if its SHA-256 is pinned and wrong.
 
     No-op for files without a pinned digest (see _EXPECTED_ARTIST_FILE_SHA256).
+    A file matching ANY of the pinned digest variants for its name is accepted.
 
     The end-to-end suite stages tiny fixture checkpoints whose digests cannot
     match the pinned production artifacts, so the same explicit test-only flag
@@ -192,11 +210,37 @@ def _verify_artist_file_digest(filename: str, file_path: Path) -> None:
     if not expected:
         return
     actual = _sha256_file(file_path)
-    if actual.lower() != expected.lower():
+    accepted = {digest.lower() for digest in expected}
+    if actual.lower() not in accepted:
         raise RuntimeError(
             f"SHA-256 mismatch for downloaded artist file '{filename}': expected "
-            f"{expected}, got {actual}. Refusing to use a tampered or "
-            f"version-mismatched artifact."
+            f"one of {sorted(accepted)}, got {actual}. Refusing to use a tampered "
+            f"or version-mismatched artifact."
+        )
+
+
+def _assert_http_download_url(url: str) -> None:
+    """Reject non-http(s) artist download URLs (defense in depth).
+
+    Artist file URLs come from app-controlled constants, but three are
+    env-var-overridable for tests/self-hosted mirrors
+    (SD_IMAGE_SORTER_ARTIST_MODELSCOPE_BASE_URL,
+    SD_IMAGE_SORTER_ARTIST_CHECKPOINT_URL / _CLASS_MAPPING_URL). Without a
+    scheme guard a stray ``file://`` override would coerce urllib into reading
+    local files. Only ``https``/``http`` are accepted — plus ``file`` when the
+    explicit test flag opts in (the E2E suite stages fixtures as ``file://``
+    URLs), mirroring ``model_service.urlopen_with_ua``. Production never sets
+    that flag, so real downloads stay http(s)-only.
+    """
+    from urllib.parse import urlparse
+
+    allowed = {"https", "http"}
+    if os.environ.get("SD_IMAGE_SORTER_TEST_ALLOW_FILE_DOWNLOADS", "").strip().lower() in {"1", "true", "yes", "on"}:
+        allowed.add("file")
+    scheme = (urlparse(url).scheme or "").lower()
+    if scheme not in allowed:
+        raise ValueError(
+            f"Refusing to download artist file from scheme {scheme!r}; only {sorted(allowed)} are allowed."
         )
 
 
@@ -207,6 +251,7 @@ def _hf_download_with_fallback(repo_id: str, filename: str, local_dir: str) -> s
     # zip is not yet — add its digest to that table to make it tamper-evident.
     override_url = _artist_override_url(filename)
     if override_url:
+        _assert_http_download_url(override_url)
         destination = Path(local_dir) / filename
         destination.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = destination.with_suffix(destination.suffix + ".tmp")
@@ -322,7 +367,77 @@ def _ensure_comfyui_lsnet_runtime() -> str:
     return str(target_dir)
 
 
+def _locate_existing_kaloscope_files() -> Optional[Tuple[str, str]]:
+    """Find an already-present Kaloscope checkpoint + class mapping, tolerantly.
+
+    A user may have the files from a one-click Prepare (canonical
+    ``kaloscope2.0/448-90.13/`` layout), a manual download, or a ``git clone``
+    of the model repo (which creates a mixed-case ``Kaloscope2.0/`` directory
+    that the hardcoded lowercase path misses on case-sensitive Linux
+    filesystems). This probes:
+
+      1. the canonical lowercase path (fast path, Windows/macOS),
+      2. any direct child of the artist root whose name case-insensitively
+         matches ``kaloscope2.0`` / ``kaloscope-2.0``,
+      3. a recursive ``best_checkpoint.pth`` search anywhere under the artist
+         root, pairing it with the nearest ``class_mapping.csv``.
+
+    Returns ``(checkpoint_path, class_mapping_path)`` or ``None``.
+    """
+    artist_root = _get_artist_model_root()
+    checkpoint_basename = PurePosixPath(ARTIST_KALOSCOPE_CHECKPOINT.replace("\\", "/")).name
+    mapping_basename = PurePosixPath(ARTIST_KALOSCOPE_CLASS_MAPPING.replace("\\", "/")).name
+
+    def _pair(checkpoint: Path) -> Optional[Tuple[str, str]]:
+        # Prefer a class mapping next to the checkpoint, then one in the
+        # kaloscope dir root (HF ships the mapping one level up from 448-90.13/).
+        for mapping_candidate in (
+            checkpoint.with_name(mapping_basename),
+            checkpoint.parent.parent / mapping_basename,
+        ):
+            if mapping_candidate.is_file():
+                return str(checkpoint.resolve()), str(mapping_candidate.resolve())
+        return None
+
+    # 1) Canonical lowercase path.
+    canonical = artist_root / "kaloscope2.0" / ARTIST_KALOSCOPE_CHECKPOINT
+    paired = _pair(canonical) if canonical.is_file() else None
+    if paired:
+        return paired
+
+    if not artist_root.exists():
+        return None
+
+    # 2) Case-insensitive kaloscope-dir match.
+    for child in sorted(artist_root.iterdir()):
+        if not child.is_dir():
+            continue
+        normalized = child.name.lower().replace("-", "").replace("_", "").replace(".", "")
+        if normalized.startswith("kaloscope"):
+            checkpoint = child / ARTIST_KALOSCOPE_CHECKPOINT
+            paired = _pair(checkpoint) if checkpoint.is_file() else None
+            if paired:
+                return paired
+
+    # 3) Recursive search by basename (covers any layout the user placed).
+    for checkpoint in sorted(artist_root.rglob(checkpoint_basename)):
+        if not checkpoint.is_file():
+            continue
+        paired = _pair(checkpoint)
+        if paired:
+            return paired
+        # Mapping not adjacent — fall back to the closest one under the root.
+        mapping_matches = sorted(p for p in artist_root.rglob(mapping_basename) if p.is_file())
+        if mapping_matches:
+            return str(checkpoint.resolve()), str(mapping_matches[0].resolve())
+    return None
+
+
 def _ensure_kaloscope_hf_files() -> Tuple[str, str]:
+    existing = _locate_existing_kaloscope_files()
+    if existing:
+        return existing
+
     local_dir = _get_artist_model_root() / "kaloscope2.0"
     local_checkpoint = local_dir / ARTIST_KALOSCOPE_CHECKPOINT
     local_mapping = local_dir / ARTIST_KALOSCOPE_CLASS_MAPPING
@@ -352,23 +467,101 @@ def _ensure_kaloscope_hf_files() -> Tuple[str, str]:
     return str(local_checkpoint.resolve()), str(local_mapping.resolve())
 
 
-def _ensure_kaloscope_modelscope_files() -> Tuple[str, str]:
-    from modelscope import snapshot_download  # type: ignore
+ARTIST_MODELSCOPE_REVISION = "master"
+_ARTIST_USER_AGENT = "sd-image-sorter/3.3"
 
+
+def _modelscope_resolve_url(repo_id: str, filename: str, *, revision: str = ARTIST_MODELSCOPE_REVISION) -> str:
+    """Build a direct ModelScope resolve URL for a repo-relative file.
+
+    ``SD_IMAGE_SORTER_ARTIST_MODELSCOPE_BASE_URL`` overrides the base so the
+    E2E suite (and self-hosted mirrors) can point at a local/alternate host.
+    """
+    base = os.environ.get("SD_IMAGE_SORTER_ARTIST_MODELSCOPE_BASE_URL", "").strip().rstrip("/")
+    if base:
+        return f"{base}/{filename}"
+    return f"https://modelscope.cn/models/{repo_id}/resolve/{revision}/{filename}"
+
+
+def _fetch_artist_file(url: str, destination: Path, filename: str) -> str:
+    """Download one artist file to ``destination`` with pinned-digest verification.
+
+    Mirrors ``_hf_download_with_fallback``'s integrity guarantees: validates the
+    URL scheme, follows redirects (ModelScope LFS blobs 302 to a CDN), writes
+    atomically through a ``.tmp`` sibling, and verifies the bytes against the
+    pinned digest for ``filename`` (the *remote* name, which is how the digest
+    table is keyed) before moving them into place.
+    """
+    _assert_http_download_url(url)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = destination.with_suffix(destination.suffix + ".tmp")
+    logger.info("Downloading %s from %s", filename, url)
+    request = urllib.request.Request(url, headers={"User-Agent": _ARTIST_USER_AGENT})
+    try:
+        with urllib.request.urlopen(request, timeout=600) as src, tmp_path.open("wb") as dst:
+            shutil.copyfileobj(src, dst)
+        _verify_artist_file_digest(filename, tmp_path)
+        tmp_path.replace(destination)
+        return str(destination.resolve())
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def _ensure_kaloscope_modelscope_files() -> Tuple[str, str]:
+    """Download the Kaloscope checkpoint + class mapping from ModelScope.
+
+    Uses direct ``modelscope.cn`` resolve URLs rather than the heavyweight
+    ``modelscope`` SDK, which is NOT a project dependency and is absent from
+    real user installs (mirroring how SAM3 fetches from ModelScope). The files
+    are written into the canonical ``kaloscope2.0/448-90.13/`` layout that
+    model-health detection expects, so a ModelScope-sourced checkpoint is
+    recognized exactly like a HuggingFace one.
+    """
     if not ARTIST_MODELSCOPE_MODEL_ID:
         raise RuntimeError(
             "No compatible ModelScope artist model is configured. "
             "Use HuggingFace/hf-mirror or set SD_IMAGE_SORTER_ARTIST_MODELSCOPE_MODEL."
         )
 
-    cache_dir = _get_artist_model_root() / "kaloscope2.0-modelscope"
-    model_dir = snapshot_download(ARTIST_MODELSCOPE_MODEL_ID, cache_dir=str(cache_dir))
+    existing = _locate_existing_kaloscope_files()
+    if existing:
+        return existing
 
-    checkpoint_path = os.path.join(model_dir, ARTIST_KALOSCOPE_CHECKPOINT)
-    class_mapping_path = os.path.join(model_dir, ARTIST_KALOSCOPE_CLASS_MAPPING)
-    if not os.path.exists(checkpoint_path) or not os.path.exists(class_mapping_path):
-        raise RuntimeError("Configured ModelScope artist model does not match the expected Kaloscope file layout.")
-    return checkpoint_path, class_mapping_path
+    local_dir = _get_artist_model_root() / "kaloscope2.0"
+    local_checkpoint = local_dir / ARTIST_KALOSCOPE_CHECKPOINT
+    local_mapping = local_dir / ARTIST_KALOSCOPE_CLASS_MAPPING
+
+    if local_checkpoint.exists() and local_mapping.exists():
+        return str(local_checkpoint.resolve()), str(local_mapping.resolve())
+
+    # ModelScope hosts the checkpoint at the repo root (flat layout); fall back
+    # to the HuggingFace-style versioned subpath in case a mirror reproduces it.
+    checkpoint_basename = PurePosixPath(ARTIST_KALOSCOPE_CHECKPOINT.replace("\\", "/")).name
+    checkpoint_remote_candidates = [checkpoint_basename, ARTIST_KALOSCOPE_CHECKPOINT]
+
+    if not local_checkpoint.exists():
+        last_error: Optional[Exception] = None
+        for remote_name in checkpoint_remote_candidates:
+            try:
+                url = _modelscope_resolve_url(ARTIST_MODELSCOPE_MODEL_ID, remote_name)
+                _fetch_artist_file(url, local_checkpoint, remote_name)
+                last_error = None
+                break
+            except Exception as exc:  # try the next layout candidate
+                last_error = exc
+                logger.warning("ModelScope checkpoint fetch failed for %s: %s", remote_name, exc)
+        if last_error is not None:
+            raise RuntimeError(
+                f"Could not download the Kaloscope checkpoint from ModelScope "
+                f"'{ARTIST_MODELSCOPE_MODEL_ID}': {last_error}"
+            )
+
+    if not local_mapping.exists():
+        url = _modelscope_resolve_url(ARTIST_MODELSCOPE_MODEL_ID, ARTIST_KALOSCOPE_CLASS_MAPPING)
+        _fetch_artist_file(url, local_mapping, ARTIST_KALOSCOPE_CLASS_MAPPING)
+
+    return str(local_checkpoint.resolve()), str(local_mapping.resolve())
 
 
 def _has_lsnet_runtime() -> bool:

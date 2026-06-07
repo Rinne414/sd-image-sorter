@@ -149,3 +149,122 @@ def test_verify_artist_file_digest_skips_unpinned_file(tmp_path: Path):
     target.write_bytes(b"anything goes when no digest is pinned")
     # No pinned digest for this name -> no-op, must not raise.
     artist_identifier._verify_artist_file_digest("unpinned.bin", target)
+
+
+def test_class_mapping_pin_lists_both_hf_and_modelscope_digests():
+    """HuggingFace serves class_mapping.csv with CRLF, ModelScope with LF.
+
+    The rows are byte-identical apart from line endings, so both digests are
+    legitimate and must be pinned (a single-digest pin would reject the real
+    ModelScope download).
+    """
+    digests = artist_identifier._EXPECTED_ARTIST_FILE_SHA256["class_mapping.csv"]
+    assert isinstance(digests, tuple)
+    assert len(digests) >= 2
+
+
+def test_verify_artist_file_digest_accepts_any_pinned_variant(monkeypatch, tmp_path: Path):
+    target = tmp_path / "class_mapping.csv"
+    target.write_bytes(b"class_id,class_name\n0,a\n")
+    real_digest = artist_identifier._sha256_file(target)
+    # Pin two acceptable digests; the file matches the second one.
+    monkeypatch.setitem(
+        artist_identifier._EXPECTED_ARTIST_FILE_SHA256,
+        "class_mapping.csv",
+        ("de" * 32, real_digest),
+    )
+    # Matches one of the accepted digests -> must not raise.
+    artist_identifier._verify_artist_file_digest("class_mapping.csv", target)
+
+    # Matches neither -> rejected.
+    target.write_bytes(b"tampered")
+    with pytest.raises(RuntimeError, match="SHA-256 mismatch"):
+        artist_identifier._verify_artist_file_digest("class_mapping.csv", target)
+
+
+def test_ensure_kaloscope_modelscope_files_uses_direct_url_not_sdk(monkeypatch, tmp_path: Path):
+    """The ModelScope route must download via direct resolve URLs and must NOT
+    require the modelscope SDK (real users don't have it installed)."""
+    import sys
+
+    artist_root = tmp_path / "artist"
+    monkeypatch.setattr(artist_identifier, "_get_artist_model_root", lambda: artist_root)
+    monkeypatch.setattr(artist_identifier, "ARTIST_MODELSCOPE_MODEL_ID", "Owner/Kaloscope-2.0")
+    monkeypatch.setenv("SD_IMAGE_SORTER_TEST_ALLOW_FILE_DOWNLOADS", "1")
+    # Simulate modelscope SDK being absent: importing it would fail.
+    monkeypatch.setitem(sys.modules, "modelscope", None)
+
+    fetched: list[str] = []
+
+    def fake_fetch(url: str, destination: Path, filename: str) -> str:
+        fetched.append(url)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"x")
+        return str(destination.resolve())
+
+    monkeypatch.setattr(artist_identifier, "_fetch_artist_file", fake_fetch)
+
+    checkpoint_path, mapping_path = artist_identifier._ensure_kaloscope_modelscope_files()
+
+    # Files land in the canonical kaloscope2.0 layout that health detection expects.
+    assert checkpoint_path.endswith(
+        str(Path("kaloscope2.0") / "448-90.13" / "best_checkpoint.pth")
+    )
+    assert mapping_path.endswith(str(Path("kaloscope2.0") / "class_mapping.csv"))
+    # Direct modelscope.cn URLs; the flat basename is tried for the checkpoint.
+    assert fetched, "expected at least one direct download URL"
+    assert all("modelscope.cn" in url for url in fetched)
+    assert any(url.endswith("/resolve/master/best_checkpoint.pth") for url in fetched)
+
+
+def test_ensure_kaloscope_modelscope_files_requires_repo_id(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(artist_identifier, "_get_artist_model_root", lambda: tmp_path)
+    monkeypatch.setattr(artist_identifier, "ARTIST_MODELSCOPE_MODEL_ID", "")
+    with pytest.raises(RuntimeError, match="No compatible ModelScope"):
+        artist_identifier._ensure_kaloscope_modelscope_files()
+
+
+def test_assert_http_download_url_rejects_file_scheme_by_default(monkeypatch):
+    monkeypatch.delenv("SD_IMAGE_SORTER_TEST_ALLOW_FILE_DOWNLOADS", raising=False)
+    with pytest.raises(ValueError, match="Refusing to download"):
+        artist_identifier._assert_http_download_url("file:///etc/passwd")
+    # http(s) always allowed.
+    artist_identifier._assert_http_download_url("https://modelscope.cn/x")
+    artist_identifier._assert_http_download_url("http://localhost:8000/x")
+
+
+def test_assert_http_download_url_allows_file_scheme_only_with_test_flag(monkeypatch):
+    monkeypatch.setenv("SD_IMAGE_SORTER_TEST_ALLOW_FILE_DOWNLOADS", "1")
+    # With the explicit E2E fixture flag, file:// is permitted.
+    artist_identifier._assert_http_download_url("file:///tmp/fixture.pth")
+
+
+def test_modelscope_base_url_override_blocks_file_scheme(monkeypatch, tmp_path: Path):
+    """A stray file:// base-URL override must not coerce urllib into local reads."""
+    monkeypatch.delenv("SD_IMAGE_SORTER_TEST_ALLOW_FILE_DOWNLOADS", raising=False)
+    monkeypatch.setattr(artist_identifier, "_get_artist_model_root", lambda: tmp_path / "artist")
+    monkeypatch.setattr(artist_identifier, "ARTIST_MODELSCOPE_MODEL_ID", "Owner/Kaloscope-2.0")
+    monkeypatch.setenv("SD_IMAGE_SORTER_ARTIST_MODELSCOPE_BASE_URL", "file:///C:/Windows/secret")
+    with pytest.raises(RuntimeError, match="Could not download the Kaloscope checkpoint"):
+        artist_identifier._ensure_kaloscope_modelscope_files()
+
+
+def test_ensure_kaloscope_modelscope_files_short_circuits_when_present(monkeypatch, tmp_path: Path):
+    """Already-downloaded files are returned without any network fetch."""
+    artist_root = tmp_path / "artist"
+    local_dir = artist_root / "kaloscope2.0"
+    (local_dir / "448-90.13").mkdir(parents=True)
+    (local_dir / "448-90.13" / "best_checkpoint.pth").write_bytes(b"ckpt")
+    (local_dir / "class_mapping.csv").write_text("class_id,class_name\n", encoding="utf-8")
+
+    monkeypatch.setattr(artist_identifier, "_get_artist_model_root", lambda: artist_root)
+    monkeypatch.setattr(artist_identifier, "ARTIST_MODELSCOPE_MODEL_ID", "Owner/Kaloscope-2.0")
+
+    def boom(*args, **kwargs):
+        raise AssertionError("must not download when files already exist")
+
+    monkeypatch.setattr(artist_identifier, "_fetch_artist_file", boom)
+
+    checkpoint_path, mapping_path = artist_identifier._ensure_kaloscope_modelscope_files()
+    assert Path(checkpoint_path).exists()
+    assert Path(mapping_path).exists()

@@ -678,10 +678,16 @@ ARTIST_HF_MODEL_ID: str = os.environ.get(
     "heathcliff01/Kaloscope2.0"
 )
 
-# Optional ModelScope mirror id. Leave empty if you do not have a compatible mirror.
+# ModelScope mirror id for the artist model. Defaults to the community Kaloscope
+# 2.0 mirror so that selecting "ModelScope" as the download source actually routes
+# to modelscope.cn instead of silently falling back to HuggingFace. Set to "" (or
+# override) via SD_IMAGE_SORTER_ARTIST_MODELSCOPE_MODEL. Files are fetched via
+# direct modelscope.cn resolve URLs (no modelscope SDK dependency) and verified
+# against pinned SHA-256 digests; the checkpoint is tried at the repo root first
+# (ModelScope's flat layout) then the HuggingFace-style versioned subpath.
 ARTIST_MODELSCOPE_MODEL_ID: str = os.environ.get(
     "SD_IMAGE_SORTER_ARTIST_MODELSCOPE_MODEL",
-    ""
+    "Heathcliff02/Kaloscope-2.0",
 )
 
 # Optional external LSNet runtime checkout path. This can point to either the

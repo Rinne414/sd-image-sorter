@@ -428,21 +428,33 @@ def _list_yolo_model_files(directory: Path) -> List[Dict[str, Any]]:
 def get_clip_local_model_path() -> Optional[str]:
     """Return the local FastEmbed-compatible CLIP model directory if present.
 
-    Checks the canonical slug path first, then falls back to scanning
-    subdirectories of the clip model dir for any ``model.onnx`` file
-    (covers FastEmbed cache layout differences across versions).
+    Checks the canonical slug path first, then the huggingface_hub cache
+    layout, then falls back to a deeper recursive scan. FastEmbed delegates
+    downloads to huggingface_hub, which stores models as
+    ``models--{org}--{repo}/snapshots/{hash}/model.onnx`` (double dash, three
+    levels deep) — a layout the old two-level glob never reached, so a user
+    who let the first-run download complete still saw "CLIP missing".
     """
     clip_root = Path(get_clip_model_dir())
 
-    # 1) Canonical slug path (most common)
+    # 1) Canonical slug path (most common when we stage the model ourselves).
     repo_slug = CLIP_MODEL_NAME.replace("/", "-").replace("\\", "-")
     candidate = clip_root / repo_slug
     if (candidate / "model.onnx").exists():
         return str(candidate.resolve())
 
-    # 2) Scan one or two levels deep for model.onnx inside clip_root
-    #    FastEmbed may use slightly different directory naming across versions.
-    for depth_pattern in ("*/model.onnx", "*/*/model.onnx"):
+    # 2) huggingface_hub cache layout: models--{org}--{repo}/snapshots/{hash}/.
+    #    Prefer the snapshot dir that actually contains model.onnx.
+    hub_dir_name = "models--" + CLIP_MODEL_NAME.replace("/", "--").replace("\\", "--")
+    hub_snapshots = clip_root / hub_dir_name / "snapshots"
+    if hub_snapshots.is_dir():
+        for snapshot in sorted(hub_snapshots.iterdir(), reverse=True):
+            if (snapshot / "model.onnx").exists():
+                return str(snapshot.resolve())
+
+    # 3) Recursive fallback for any other FastEmbed/HF cache nesting. Bounded to
+    #    a few levels so a huge clip_root can't trigger an unbounded walk.
+    for depth_pattern in ("*/model.onnx", "*/*/model.onnx", "*/*/*/model.onnx", "*/*/*/*/model.onnx"):
         matches = sorted(clip_root.glob(depth_pattern))
         for match in matches:
             model_dir = match.parent
@@ -484,6 +496,11 @@ def get_sam3_checkpoint_path() -> Optional[str]:
     The transformers ``Sam3Model.from_pretrained`` loader needs a directory
     holding ``config.json`` + ``model.safetensors`` + tokenizer files, so
     this returns the directory path (not a single weight file path).
+
+    Covers the canonical download dirs, then the huggingface_hub cache layout
+    (``models--facebook--sam3/snapshots/{hash}/``) and any nested placement, so
+    a user who downloaded SAM3 via transformers/HF tooling — not just our
+    direct ModelScope fetch — is still detected.
     """
     sam3_root = Path(get_sam3_model_dir())
     candidate_dirs = [
@@ -494,6 +511,60 @@ def get_sam3_checkpoint_path() -> Optional[str]:
     for candidate in candidate_dirs:
         if (candidate / "config.json").exists() and (candidate / "model.safetensors").exists():
             return str(candidate.resolve())
+
+    # huggingface_hub cache layout: models--facebook--sam3/snapshots/{hash}/.
+    for hub_dir in sorted(sam3_root.glob("models--*--*")):
+        snapshots = hub_dir / "snapshots"
+        if not snapshots.is_dir():
+            continue
+        for snapshot in sorted(snapshots.iterdir(), reverse=True):
+            if (snapshot / "config.json").exists() and (snapshot / "model.safetensors").exists():
+                return str(snapshot.resolve())
+
+    # Recursive fallback: any dir under sam3_root holding both required files.
+    if sam3_root.is_dir():
+        for config_file in sorted(sam3_root.rglob("config.json")):
+            checkpoint_dir = config_file.parent
+            if (checkpoint_dir / "model.safetensors").exists():
+                return str(checkpoint_dir.resolve())
+    return None
+
+
+def _find_kaloscope_dir(artist_root: Path) -> Optional[Path]:
+    """Find the directory holding the Kaloscope checkpoint, case-insensitively.
+
+    A ``git clone`` of the model repo creates a mixed-case ``Kaloscope2.0/``
+    directory; the hardcoded lowercase ``kaloscope2.0`` path misses it on
+    case-sensitive Linux filesystems. Prefer the canonical lowercase dir
+    (fast path on Windows/macOS), then any case-insensitive kaloscope* match,
+    then any directory anywhere under the artist root that actually contains
+    the checkpoint basename. Returns the directory that directly contains the
+    checkpoint (i.e. the ``.../448-90.13`` level) or ``None``.
+    """
+    if not artist_root.exists():
+        return None
+
+    checkpoint_basename = Path(ARTIST_KALOSCOPE_CHECKPOINT.replace("\\", "/")).name
+
+    # 1) Canonical lowercase layout.
+    canonical = artist_root / "kaloscope2.0" / ARTIST_KALOSCOPE_CHECKPOINT
+    if canonical.is_file():
+        return canonical.parent
+
+    # 2) Case-insensitive kaloscope* directory, checkpoint at the HF subpath.
+    for child in sorted(artist_root.iterdir()):
+        if not child.is_dir():
+            continue
+        normalized = child.name.lower().replace("-", "").replace("_", "").replace(".", "")
+        if normalized.startswith("kaloscope"):
+            checkpoint = child / ARTIST_KALOSCOPE_CHECKPOINT
+            if checkpoint.is_file():
+                return checkpoint.parent
+
+    # 3) Recursive search by basename (any manual placement depth).
+    for checkpoint in sorted(artist_root.rglob(checkpoint_basename)):
+        if checkpoint.is_file():
+            return checkpoint.parent
     return None
 
 
@@ -550,7 +621,11 @@ def _resolve_artist_runtime_path() -> Optional[str]:
 
 def get_artist_checkpoint_path() -> Optional[str]:
     artist_root = Path(get_artist_model_dir())
-    candidate = artist_root / "kaloscope2.0" / ARTIST_KALOSCOPE_CHECKPOINT
+    checkpoint_basename = Path(ARTIST_KALOSCOPE_CHECKPOINT.replace("\\", "/")).name
+    checkpoint_dir = _find_kaloscope_dir(artist_root)
+    if checkpoint_dir is None:
+        return None
+    candidate = checkpoint_dir / checkpoint_basename
     if candidate.exists():
         return str(candidate.resolve())
     return None
@@ -558,9 +633,22 @@ def get_artist_checkpoint_path() -> Optional[str]:
 
 def get_artist_class_mapping_path() -> Optional[str]:
     artist_root = Path(get_artist_model_dir())
-    candidate = artist_root / "kaloscope2.0" / ARTIST_KALOSCOPE_CLASS_MAPPING
-    if candidate.exists():
-        return str(candidate.resolve())
+    mapping_basename = Path(ARTIST_KALOSCOPE_CLASS_MAPPING.replace("\\", "/")).name
+    checkpoint_dir = _find_kaloscope_dir(artist_root)
+    if checkpoint_dir is not None:
+        # The mapping sits next to the checkpoint, or one level up (HF ships it
+        # at the kaloscope dir root, with the checkpoint under 448-90.13/).
+        for mapping_candidate in (
+            checkpoint_dir / mapping_basename,
+            checkpoint_dir.parent / mapping_basename,
+        ):
+            if mapping_candidate.is_file():
+                return str(mapping_candidate.resolve())
+    # Last resort: any class_mapping.csv under the artist root.
+    if artist_root.is_dir():
+        for match in sorted(artist_root.rglob(mapping_basename)):
+            if match.is_file():
+                return str(match.resolve())
     return None
 
 

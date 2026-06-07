@@ -10145,20 +10145,34 @@ function renderModelManager(models = []) {
 
     API.getMirror().then((mirrorData) => {
         const current = mirrorData?.mirror || 'auto';
-        const labels = { auto: 'Auto (HuggingFace → hf-mirror fallback)', 'hf-mirror': 'hf-mirror.com (HF mirror)', modelscope: 'ModelScope' };
+        // Labels are i18n-driven so the dropdown is not English-only in the
+        // zh-CN UI. The ModelScope label is deliberately honest: only the
+        // Artist/Kaloscope and SAM3 downloaders actually reach modelscope.cn;
+        // every other model (WD14, ToriiGate, OppaiOracle, CLIP, Aesthetic)
+        // is HuggingFace-only and uses hf-mirror under this setting.
+        const labels = {
+            auto: appT('models.mirror.auto', 'Auto (HuggingFace → hf-mirror fallback)'),
+            'hf-mirror': appT('models.mirror.hfMirror', 'hf-mirror.com (HF mirror)'),
+            modelscope: appT('models.mirror.modelscope', 'ModelScope (Artist & SAM3 only; others use hf-mirror)'),
+        };
         let mirrorRow = document.getElementById('model-mirror-row');
         if (!mirrorRow) {
             mirrorRow = document.createElement('div');
             mirrorRow.id = 'model-mirror-row';
-            mirrorRow.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(191,219,254,0.08);border-radius:12px;';
+            mirrorRow.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:10px 14px;margin-bottom:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(191,219,254,0.08);border-radius:12px;';
             gridEl.parentElement.insertBefore(mirrorRow, gridEl);
         }
         const opts = (mirrorData?.options || ['auto', 'hf-mirror', 'modelscope']).map(
             o => `<option value="${escapeHtml(o)}"${o === current ? ' selected' : ''}>${escapeHtml(labels[o] || o)}</option>`
         ).join('');
+        const mirrorHint = appT(
+            'models.mirror.hint',
+            'ModelScope (modelscope.cn) is only used for Artist / Kaloscope and SAM 3. Other models always download from HuggingFace or its hf-mirror.'
+        );
         mirrorRow.innerHTML = `
             <label style="font-size:13px;font-weight:600;color:var(--text-secondary);white-space:nowrap;">${escapeHtml(appT('models.mirrorLabel', 'Download Source'))}</label>
-            <select class="input-field" id="model-mirror-select" style="flex:1;font-size:12px;padding:6px 8px;">${opts}</select>
+            <select class="input-field" id="model-mirror-select" style="flex:1;min-width:220px;font-size:12px;padding:6px 8px;">${opts}</select>
+            <div style="flex-basis:100%;font-size:11px;line-height:1.5;color:var(--text-tertiary,#8a94a6);">${escapeHtml(mirrorHint)}</div>
         `;
         document.getElementById('model-mirror-select')?.addEventListener('change', async (e) => {
             try {

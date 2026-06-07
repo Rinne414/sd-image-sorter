@@ -1997,6 +1997,10 @@ window.I18nLang_zhCN = {
     'models.noAutoDownload': '无法自动下载 — 请按照上方手动步骤操作',
     'models.mirrorLabel': '下载源',
     'models.mirrorSaved': '下载源已保存：{mirror}',
+    'models.mirror.auto': '自动（HuggingFace → hf-mirror 备用）',
+    'models.mirror.hfMirror': 'hf-mirror.com（HF 镜像）',
+    'models.mirror.modelscope': 'ModelScope（仅画师识别和 SAM3；其余仍走 hf-mirror）',
+    'models.mirror.hint': 'ModelScope（modelscope.cn）目前仅用于画师识别 / Kaloscope 和 SAM 3。其他模型（WD14、ToriiGate、OppaiOracle、CLIP、美学评分）始终从 HuggingFace 或其 hf-mirror 镜像下载。',
 
     // Privacy YOLO messages
     'models.censorLegacy.readyPrivacy': '隐私检测 YOLO 模型已就绪。',

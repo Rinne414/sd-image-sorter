@@ -1,48 +1,59 @@
 # Artist Runtime Guide
 
-SD Image Sorter now uses **Kaloscope2.0** for the experimental Artist ID feature.
+SD Image Sorter uses **Kaloscope2.0** for the experimental Artist ID feature.
+
+> The live model cache is `data/models/artist/`. Paths under `models/artist/` are
+> still detected for backward compatibility, but new downloads land in `data/models/artist/`.
 
 ## What The Feature Needs
 
 The artist feature is only considered ready when all of these exist:
 
-1. `models/artist/comfyui-lsnet-runtime/`
-2. `models/artist/kaloscope2.0/448-90.13/best_checkpoint.pth`
-3. `models/artist/kaloscope2.0/class_mapping.csv`
+1. `data/models/artist/comfyui-lsnet-runtime/lsnet_model/`
+2. `data/models/artist/kaloscope2.0/448-90.13/best_checkpoint.pth`
+3. `data/models/artist/kaloscope2.0/class_mapping.csv`
 4. Python dependencies including `torch`, `timm`
 5. On Windows: `triton-windows`
 
-## Recommended Windows Route
+## Easiest Route: Prepare / Download
 
-This project prefers the `comfyui-lsnet` runtime layout because it is the most reliable path we verified on Windows.
+1. Open **Feature Setup / Model Manager** in the UI.
+2. Click **Prepare / Download** on the *Artist ID / Kaloscope* card.
+3. If it says Python packages were installed, **restart the app**, then click Prepare again.
+4. Pick the **Download Source** (top of the Model Manager) before preparing:
+   - `Auto` / `hf-mirror` → HuggingFace `heathcliff01/Kaloscope2.0`
+   - `ModelScope` → ModelScope `Heathcliff02/Kaloscope-2.0` (downloaded via direct
+     `modelscope.cn` URLs — no extra SDK required)
 
-The launcher already installs:
+The launcher already installs `timm` and, on Windows, `triton-windows`.
 
-- `timm`
-- `triton-windows` on Windows
+## Manual Placement (only if auto-download fails)
 
-So the normal user only needs the runtime folder and Kaloscope files in the right place.
+Detection is tolerant (case-insensitive folder names, nested sub-folders, and the
+HuggingFace hub cache layout are all recognized), but the canonical layout is:
 
-## Release Asset Extraction
+- `data/models/artist/kaloscope2.0/448-90.13/best_checkpoint.pth`
+- `data/models/artist/kaloscope2.0/class_mapping.csv`
+- `data/models/artist/comfyui-lsnet-runtime/lsnet_model/`
 
-For the release assets:
+Download sources for the two Kaloscope files:
 
-1. Extract `sd-image-sorter-v2.1.0-artist-runtime.zip` into the project root.
-2. Download all `sd-image-sorter-v2.1.0-kaloscope-checkpoint.zip.00x` parts into the same folder.
-3. Use 7-Zip to extract the `.zip.001` file.
-4. Confirm this final file exists:
-   `models/artist/kaloscope2.0/448-90.13/best_checkpoint.pth`
-5. Launch the app and open the `Artist ID` tab.
-6. If the banner says `Kaloscope runtime is ready`, you are done.
+- HuggingFace: <https://huggingface.co/heathcliff01/Kaloscope2.0> (checkpoint lives under `448-90.13/`)
+- ModelScope: <https://modelscope.cn/models/Heathcliff02/Kaloscope-2.0> (checkpoint at repo root)
+
+Both mirrors serve a byte-identical checkpoint; `class_mapping.csv` is identical apart
+from line endings (HuggingFace CRLF, ModelScope LF) and both are accepted.
+
+After copying the files, reopen the Model Manager (or restart) so the banner re-checks.
 
 ## If The Banner Is Not Ready
 
-- Missing runtime: extract the artist runtime package again
-- Missing checkpoint: re-extract the split Kaloscope package
-- Missing `triton` on Windows: relaunch `run.bat` and let dependencies finish installing
-- Still seeing `undefined`: the runtime may be fine, but the prediction confidence is low for that image
+- Missing runtime: re-run Prepare, or place a `comfyui-lsnet` checkout with a `lsnet_model/` folder.
+- Missing checkpoint: confirm `best_checkpoint.pth` is under `kaloscope2.0/448-90.13/`.
+- Missing `triton` on Windows: relaunch `run.bat` and let dependencies finish installing.
+- Still seeing `undefined`: the runtime may be fine, but the prediction confidence is low for that image.
 
 ## Honest Limitation
 
 The Artist ID feature is still experimental.
-Working runtime does **not** guarantee high-confidence artist labels for every picture.
+A working runtime does **not** guarantee high-confidence artist labels for every picture.

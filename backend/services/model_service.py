@@ -691,7 +691,10 @@ class ModelService:
                 "setup_steps": [
                     "Click Prepare to install torch/transformers/timm Python packages (restart required).",
                     "Click Prepare again after restart to download Kaloscope 2.0 model (~2.8 GB).",
-                    "Manual: download from HuggingFace (Heathcliff02/Kaloscope-2.0) or ModelScope, place files in " + str(Path(get_artist_model_dir())),
+                    "Source: HuggingFace (heathcliff01/Kaloscope2.0) or ModelScope (Heathcliff02/Kaloscope-2.0) — pick via the Download Source selector above.",
+                    "Manual: put best_checkpoint.pth in " + str(Path(get_artist_model_dir()) / "kaloscope2.0" / "448-90.13"),
+                    "Manual: put class_mapping.csv in " + str(Path(get_artist_model_dir()) / "kaloscope2.0"),
+                    "Manual: the LSNet runtime (lsnet_model/) goes in " + str(Path(get_artist_model_dir()) / "comfyui-lsnet-runtime"),
                 ],
             },
             {
