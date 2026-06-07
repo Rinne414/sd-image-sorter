@@ -3393,4 +3393,31 @@ window.I18nLang_en = {
     'dataset.filterUntagged': 'No caption',
     'dataset.filterTagged': 'Has caption',
 
+    // i18n keys referenced via appT(key, '<inline fallback>') but previously
+    // never defined in the dicts — so they rendered the English fallback even in
+    // zh-CN. Added 2026-06-07 (UI audit: found by seeing every window).
+    'library.tagsEmpty': 'No tags found. Scan a folder and run Tag Images first.',
+    'models.bulkItemDone': '✓ {name} ({index}/{total})',
+    'models.bulkNeedsRestart': '⚠️ Restart required — close and reopen the app, then click Download again.',
+    'models.bulkRestartExplain': 'Some features installed Python packages. Close and restart the app, then click "Download all" again to finish downloading model files.',
+    'models.cancelDownload': 'Cancel',
+    'models.downloadCancelled': 'Download cancelled.',
+    'reconnect.conflictHelp': 'The new file path is already another gallery item. If the old missing record is only a duplicate, remove the old record from the gallery.',
+    'reconnect.existingPathLabel': 'Already indexed',
+    'reconnect.foundPathLabel': 'Found',
+    'reconnect.needsReviewHelp': 'Several old records could match this file. Choose a smaller folder and run Find Moved Images again, or review the paths manually.',
+    'reconnect.newPathLabel': 'New',
+    'reconnect.oldPathLabel': 'Old',
+    'reconnect.possibleOldPathLabel': 'Possible old',
+    'reconnect.removeOldRecord': 'Remove old gallery record',
+    'reconnect.resultConflicts': 'Already in gallery',
+    'reconnect.resultEmpty': 'Nothing to show here.',
+    'reconnect.resultErrors': 'Errors',
+    'reconnect.resultNeedsReview': 'Need your choice',
+    'reconnect.resultStillMissing': 'Still missing',
+    'reconnect.resultTitle': 'Search result',
+    'reconnect.resultUpdated': 'Reconnected',
+    'reconnect.stillMissingHelp': 'The file was not found in the folder you chose. Try a wider folder or reconnect the drive.',
+    'selection.filteredExamples': 'current filtered selection',
+
 };
