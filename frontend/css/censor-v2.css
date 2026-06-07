@@ -53,7 +53,13 @@
     flex: 1 1 auto !important;
     min-width: 0 !important;
     height: calc(100vh - var(--nav-height)) !important;
-    /* Account for navbar height */
+    /* Account for navbar height: size below the fixed 72px nav AND offset down
+       by it. Without the margin the workspace sized to (100vh - nav) but still
+       started at y0, so once an image loaded its top toolbar rendered behind the
+       fixed nav (toolbar buttons clipped under the tabs) with a matching gap at
+       the bottom. The workspace is a flex item, so the margin reserves space
+       (no margin-collapse) and the area fills the viewport below the nav. */
+    margin-top: var(--nav-height) !important;
     background: radial-gradient(circle at 50% 50%, #1a0b2e 0%, #0a0a0f 100%) !important;
     position: relative;
     overflow: hidden !important;
