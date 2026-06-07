@@ -4587,7 +4587,7 @@
                 <!-- v3.2.1: LoRA template + Live preview, shown only when content_mode='template' -->
                 <div class="batch-export-grid" id="batch-export-grid" style="display:none">
                     <details class="lora-template-section" id="lora-template-section" open>
-                    <summary>LoRA Training Preset</summary>
+                    <summary data-i18n="batchExport.loraPreset">LoRA Training Preset</summary>
                     <div class="form-group">
                         <label data-i18n="batchExport.loraPreset">LoRA Training Preset</label>
                         <div class="lora-preset-grid" id="lora-preset-grid"></div>
@@ -5253,8 +5253,8 @@
                     <button class="btn btn-ghost btn-small" id="btn-queue-manager-move-down" title="Move Down">↓</button>
                     <button class="btn btn-ghost btn-small" id="btn-queue-manager-move-bottom" title="Move to Bottom">⤓</button>
                     <div class="queue-manager-separator"></div>
-                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-batch-rename" title="Batch rename selected">📝 Rename</button>
-                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-remove-selected" title="Remove selected from queue" style="color:#ef4444">✕ Remove</button>
+                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-batch-rename" title="Batch rename selected">📝 <span data-i18n="common.rename">Rename</span></button>
+                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-remove-selected" title="Remove selected from queue" style="color:#ef4444">✕ <span data-i18n="common.remove">Remove</span></button>
                     <div class="queue-manager-position-inline">
                         <input type="number" id="queue-manager-position" class="input-field" min="1" value="1" style="width: 60px; min-height: 36px; padding: 6px 8px;">
                         <button class="btn btn-primary btn-small" id="btn-queue-manager-move-position" data-i18n="common.move">Go</button>
@@ -5833,14 +5833,14 @@
                         <input type="radio" name="mass-tag-scope" value="selection" checked>
                         <span class="mass-tag-scope-card-body">
                             <strong data-i18n="massTag.scopeSelection">Current selection</strong>
-                            <small id="mass-tag-scope-selection-count">— 0 images</small>
+                            <small id="mass-tag-scope-selection-count">—</small>
                         </span>
                     </label>
                     <label class="mass-tag-scope-card">
                         <input type="radio" name="mass-tag-scope" value="filter">
                         <span class="mass-tag-scope-card-body">
                             <strong data-i18n="massTag.scopeFilter">Current filter</strong>
-                            <small id="mass-tag-scope-filter-count">— check size</small>
+                            <small id="mass-tag-scope-filter-count">—</small>
                         </span>
                     </label>
                 </div>

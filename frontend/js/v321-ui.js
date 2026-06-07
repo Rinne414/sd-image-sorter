@@ -1295,20 +1295,21 @@ const V321Integration = {
         const targetId = editorOpen ? 'caption-editor-list' : 'export-preview-list';
         const list = document.getElementById(targetId);
         if (!list) return;
+        const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
 
         const contentMode = document.getElementById('batch-export-content-mode')?.value;
         const source = await this._loadQueueSource();
         const ids = source.firstIds || source.ids || [];
         if (!ids.length) {
             list.style.display = 'block';
-            list.innerHTML = '<p style="padding:12px;text-align:center;color:var(--text-muted)">No images selected. Select images in Gallery first.</p>';
+            list.innerHTML = `<p style="padding:12px;text-align:center;color:var(--text-muted)">${i18n('batchExport.previewNoSelection', 'No images selected. Select images in Gallery first.')}</p>`;
             return;
         }
 
         const opts = this._previewOptionsForContentMode(contentMode);
 
         list.style.display = 'block';
-        list.innerHTML = '<p style="padding:8px;color:var(--text-muted)">Rendering preview…</p>';
+        list.innerHTML = `<p style="padding:8px;color:var(--text-muted)">${i18n('batchExport.previewRendering', 'Rendering preview…')}</p>`;
 
         // Set active image if not already in queue
         if (!this.activePreviewImageId || !this.queueIndexById.has(Number(this.activePreviewImageId))) {
