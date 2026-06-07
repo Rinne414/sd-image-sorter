@@ -922,15 +922,10 @@ def test_run_pipeline_streams_selection_token_id_chunks(monkeypatch) -> None:
         return {int(image_id): f"/tmp/image-{image_id}.png" for image_id in ids}
 
     monkeypatch.setattr(smart_tag_service, "_resolve_image_paths", fake_resolve)
-    monkeypatch.setattr(
-        smart_tag_service,
-        "_process_one_image",
-        lambda **kwargs: {
-            "caption": f"caption {kwargs['image_id']}",
-            "general_tags": [],
-            "character_tags": [],
-        },
-    )
+    # No _process_one_image mock needed: with enable_wd14/enable_vlm both off,
+    # the windowed pipeline assembles an empty caption and persists via the
+    # mocked _persist_result below. This test only asserts chunk streaming +
+    # persist order, not caption content.
     monkeypatch.setattr(
         smart_tag_service,
         "_persist_result",
@@ -956,15 +951,9 @@ def test_run_pipeline_streams_selection_token_id_chunks(monkeypatch) -> None:
 
 def test_path_caption_results_are_paged_from_file_not_kept_in_memory(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(smart_tag_service, "_get_caption_results_dir", lambda: tmp_path)
-    monkeypatch.setattr(
-        smart_tag_service,
-        "_process_one_image",
-        lambda **kwargs: {
-            "caption": f"caption for {kwargs['image_path']}",
-            "general_tags": [],
-            "character_tags": [],
-        },
-    )
+    # No _process_one_image mock: the windowed pipeline assembles the caption and
+    # appends each path-source result to the on-disk JSONL itself. We assert the
+    # results are paged from that file (not held in memory), keyed by path.
 
     job = SmartTagJobState(job_id="path-job")
     req = SmartTagRequest(
@@ -993,11 +982,14 @@ def test_path_caption_results_are_paged_from_file_not_kept_in_memory(monkeypatch
 
 
 def test_run_pipeline_keeps_only_bounded_recent_errors(monkeypatch) -> None:
-    monkeypatch.setattr(
-        smart_tag_service,
-        "_process_one_image",
-        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
-    )
+    # The single-tagger path no longer routes through _process_one_image; it
+    # assembles + persists each image via _append_caption_result (path sources).
+    # Throw from that per-image persist seam so the error-cap behaviour is still
+    # exercised end-to-end through _run_pipeline.
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(smart_tag_service, "_append_caption_result", _boom)
 
     count = SMART_TAG_MAX_ERRORS + 5
     job = SmartTagJobState(job_id="error-job")
@@ -1217,3 +1209,307 @@ def test_coerce_request_allows_valid_trigger_words(trigger) -> None:
     })
     # Outer whitespace must be stripped, but the inner content stays intact.
     assert req.trigger_word == trigger.strip()
+
+
+# ---------------------------------------------------------------------------
+# Windowed pipeline: GPU-batched booru + concurrent VLM
+# (regression cover for the "batch size too small / GPU underused / serial VLM"
+# fix — tag_batch instead of one image per GPU call; config.concurrent_requests
+# instead of asyncio.run per image)
+# ---------------------------------------------------------------------------
+
+
+class _FakeBatchTagger:
+    """Fake tagger exposing tag_batch (GPU batch) + tag (per-image fallback)."""
+
+    def __init__(self) -> None:
+        self.batch_calls = []
+        self.single_calls = 0
+
+    def tag_batch(self, image_paths, *, preferred_batch_size=None, threshold=None,
+                  character_threshold=None, copyright_threshold=None, **_kw):
+        self.batch_calls.append(list(image_paths))
+        return [
+            {
+                "general_tags": [{"tag": "1girl", "confidence": 0.95}],
+                "copyright_tags": [],
+                "character_tags": [],
+                "rating": "general",
+            }
+            for _ in image_paths
+        ]
+
+    def tag(self, image_path, *, threshold=None, character_threshold=None,
+            copyright_threshold=None):
+        self.single_calls += 1
+        return {
+            "general_tags": [{"tag": "solo", "confidence": 0.9}],
+            "copyright_tags": [],
+            "character_tags": [],
+            "rating": "general",
+        }
+
+
+class _ConcurrencyTrackingVlm:
+    """Fake VLM provider that records the peak number of in-flight captions."""
+
+    def __init__(self, concurrent_requests: int) -> None:
+        self.config = SimpleNamespace(
+            concurrent_requests=concurrent_requests,
+            include_tags_as_context=True,
+            user_prompt="",
+            user_prompt_with_tags="",
+        )
+        self._in_flight = 0
+        self.max_in_flight = 0
+
+    async def caption_image(self, image_path, *, tags=None):
+        import asyncio
+
+        self._in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self._in_flight)
+        await asyncio.sleep(0.02)
+        self._in_flight -= 1
+        return SimpleNamespace(caption="a caption")
+
+
+def test_windowed_pipeline_batches_booru_on_gpu(monkeypatch) -> None:
+    """Single-tagger booru phase must call tag_batch with the whole window in one
+    GPU call (not tag() once per image)."""
+    persisted = []
+    monkeypatch.setattr(
+        smart_tag_service, "_append_caption_result",
+        lambda job, path, caption: persisted.append((path, caption)),
+    )
+
+    tagger = _FakeBatchTagger()
+    job = SmartTagJobState(job_id="batch-job")
+    job.total = 5
+    req = SmartTagRequest(
+        image_paths=[f"/tmp/img-{i}.png" for i in range(5)],
+        enable_wd14=True,
+        enable_vlm=False,
+    )
+
+    smart_tag_service._run_windowed_pipeline(
+        job, req, tagger=tagger, vlm_provider=None, nl_tagger=None,
+    )
+
+    assert tagger.batch_calls == [[f"/tmp/img-{i}.png" for i in range(5)]]
+    assert tagger.single_calls == 0
+    assert job.succeeded == 5
+    assert all("1girl" in caption for _path, caption in persisted)
+
+
+def test_tag_batch_with_thresholds_falls_back_to_per_image() -> None:
+    """A tagger without tag_batch degrades to per-image tag() with the same shape."""
+    class _NoBatchTagger:
+        def __init__(self):
+            self.calls = []
+
+        def tag(self, image_path, *, threshold=None, character_threshold=None,
+                copyright_threshold=None):
+            self.calls.append(image_path)
+            return {"general_tags": [{"tag": "x", "confidence": 1.0}],
+                    "copyright_tags": [], "character_tags": [], "rating": "general"}
+
+    tagger = _NoBatchTagger()
+    out = smart_tag_service._tag_batch_with_thresholds(
+        tagger, ["/a.png", "/b.png"],
+        general_threshold=0.35, character_threshold=0.85, copyright_threshold=0.35,
+    )
+    assert tagger.calls == ["/a.png", "/b.png"]
+    assert len(out) == 2
+    assert out[0]["general_tags"][0]["tag"] == "x"
+
+
+def test_windowed_pipeline_runs_vlm_concurrently(monkeypatch) -> None:
+    """VLM captions must run up to config.concurrent_requests at a time, not
+    serially (the bug: asyncio.run per image never used concurrent_requests)."""
+    monkeypatch.setattr(
+        smart_tag_service, "_append_caption_result",
+        lambda job, path, caption: None,
+    )
+
+    tagger = _FakeBatchTagger()
+    vlm = _ConcurrencyTrackingVlm(concurrent_requests=4)
+    job = SmartTagJobState(job_id="concurrent-job")
+    job.total = 8
+    req = SmartTagRequest(
+        image_paths=[f"/tmp/img-{i}.png" for i in range(8)],
+        enable_wd14=True,
+        enable_vlm=True,
+        natural_language_mode="vlm",
+    )
+
+    smart_tag_service._run_windowed_pipeline(
+        job, req, tagger=tagger, vlm_provider=vlm, nl_tagger=None,
+    )
+
+    assert job.succeeded == 8
+    assert vlm.max_in_flight >= 2, "VLM captions did not run concurrently"
+    assert vlm.max_in_flight <= 4
+
+
+def test_windowed_pipeline_vlm_failure_keeps_booru_caption(monkeypatch) -> None:
+    """A VLM error on an image must not fail it — it still gets a booru caption."""
+    persisted = []
+    monkeypatch.setattr(
+        smart_tag_service, "_append_caption_result",
+        lambda job, path, caption: persisted.append(caption),
+    )
+
+    class _FailingVlm:
+        def __init__(self):
+            self.config = SimpleNamespace(
+                concurrent_requests=2, include_tags_as_context=True,
+                user_prompt="", user_prompt_with_tags="",
+            )
+
+        async def caption_image(self, image_path, *, tags=None):
+            raise RuntimeError("API down")
+
+    job = SmartTagJobState(job_id="vlm-fail-job")
+    job.total = 2
+    req = SmartTagRequest(
+        image_paths=["/tmp/img-0.png", "/tmp/img-1.png"],
+        enable_wd14=True, enable_vlm=True, natural_language_mode="vlm",
+    )
+
+    smart_tag_service._run_windowed_pipeline(
+        job, req, tagger=_FakeBatchTagger(), vlm_provider=_FailingVlm(), nl_tagger=None,
+    )
+
+    assert job.succeeded == 2  # VLM failure is not an image failure
+    assert job.failed == 0
+    assert all("1girl" in c for c in persisted)  # booru tag survived
+
+
+def test_windowed_pipeline_vlm_prompt_matches_legacy_build_vlm_prompt() -> None:
+    """The concurrent path sets the purpose template once + passes per-image tags;
+    the provider's build_user_message must produce the SAME prompt the old
+    build_vlm_prompt path produced (incl. the always-on noise filter)."""
+    from vlm_providers.base import VLMConfig, VLMProvider
+
+    purpose = "character"
+    raw_tags = ["1girl", "masterpiece", "solo"]  # masterpiece is noise
+    partial = {
+        "general_names": list(raw_tags),
+        "copyright_names": [],
+        "character_names": [],
+    }
+    template = smart_tag_service.PROMPT_PRESETS[purpose]
+
+    cfg = VLMConfig(
+        user_prompt=template, user_prompt_with_tags=template,
+        include_tags_as_context=True,
+    )
+    provider = VLMProvider(cfg)
+    ctx_tags = smart_tag_service._vlm_context_tags_for(partial, True)
+    built = provider.build_user_message(ctx_tags)
+    # Both the old and new paths run the prompt through build_user_message (which
+    # .strip()s); compare against that effective form, not the raw build_vlm_prompt.
+    expected = smart_tag_service.build_vlm_prompt(purpose, raw_tags, include_tags=True).strip()
+    assert built == expected
+    assert "masterpiece" not in built  # noise filtered out
+
+    cfg_off = VLMConfig(
+        user_prompt=template, user_prompt_with_tags=template,
+        include_tags_as_context=False,
+    )
+    provider_off = VLMProvider(cfg_off)
+    ctx_tags_off = smart_tag_service._vlm_context_tags_for(partial, False)
+    built_off = provider_off.build_user_message(ctx_tags_off)
+    expected_off = smart_tag_service.build_vlm_prompt(purpose, raw_tags, include_tags=False).strip()
+    assert built_off == expected_off
+
+
+def test_windowed_pipeline_cancel_preserves_completed(monkeypatch) -> None:
+    """Cancelling mid-run keeps already-captioned images and stops the rest."""
+    persisted = []
+    monkeypatch.setattr(
+        smart_tag_service, "_append_caption_result",
+        lambda job, path, caption: persisted.append(path),
+    )
+
+    job = SmartTagJobState(job_id="cancel-job")
+    job.total = 5
+
+    class _CancelAfterTwoVlm:
+        def __init__(self):
+            # concurrent_requests=1 makes the cancel point deterministic.
+            self.config = SimpleNamespace(
+                concurrent_requests=1, include_tags_as_context=True,
+                user_prompt="", user_prompt_with_tags="",
+            )
+            self.calls = 0
+
+        async def caption_image(self, image_path, *, tags=None):
+            self.calls += 1
+            if self.calls >= 2:
+                job.cancel_requested = True  # cancel after the 2nd caption
+            return SimpleNamespace(caption="c")
+
+    req = SmartTagRequest(
+        image_paths=[f"/tmp/img-{i}.png" for i in range(5)],
+        enable_wd14=True, enable_vlm=True, natural_language_mode="vlm",
+    )
+
+    smart_tag_service._run_windowed_pipeline(
+        job, req, tagger=_FakeBatchTagger(), vlm_provider=_CancelAfterTwoVlm(), nl_tagger=None,
+    )
+
+    assert job.status == "cancelled"
+    assert job.succeeded == 2
+    assert len(persisted) == 2  # completed work preserved, remainder skipped
+
+
+def test_multi_tagger_pipeline_batches_and_runs_vlm_concurrently(monkeypatch) -> None:
+    """The multi-tagger consensus path must also batch booru per tagger and run
+    the VLM concurrently (owner-chosen scope), still fusing consensus tags."""
+    monkeypatch.setattr(
+        smart_tag_service, "_append_caption_result",
+        lambda job, path, caption: None,
+    )
+
+    batch_taggers = []
+
+    def fake_resolve(model_name, **_kwargs):
+        t = _FakeBatchTagger()
+        batch_taggers.append(t)
+        return t
+
+    monkeypatch.setattr(smart_tag_service, "_resolve_tagger_by_model", fake_resolve)
+
+    vlm = _ConcurrencyTrackingVlm(concurrent_requests=4)
+    monkeypatch.setattr(
+        "routers.vlm._build_config",
+        lambda overrides=None: SimpleNamespace(endpoint="http://localhost:11434", api_key=""),
+    )
+    monkeypatch.setattr("vlm_providers.get_provider", lambda config: vlm)
+
+    job = SmartTagJobState(job_id="multi-concurrent-job")
+    req = SmartTagRequest(
+        image_paths=[f"/tmp/img-{i}.png" for i in range(6)],
+        enable_wd14=True,
+        enable_vlm=True,
+        natural_language_mode="vlm",
+        taggers=[
+            {"model": "tagger-a", "general_threshold": 0.35, "character_threshold": 0.85},
+            {"model": "tagger-b", "general_threshold": 0.35, "character_threshold": 0.85},
+        ],
+        consensus_min=1,
+    )
+
+    smart_tag_service._run_pipeline(job, req)
+
+    assert job.status == "completed"
+    assert job.succeeded == 6
+    # Each of the 2 taggers batched its booru pass (one window of 6, not 6 calls).
+    assert len(batch_taggers) == 2
+    assert all(
+        t.batch_calls == [[f"/tmp/img-{i}.png" for i in range(6)]] for t in batch_taggers
+    )
+    assert all(t.single_calls == 0 for t in batch_taggers)
+    # VLM ran concurrently in the consensus phase.
+    assert vlm.max_in_flight >= 2

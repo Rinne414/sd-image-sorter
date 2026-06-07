@@ -228,6 +228,39 @@ async def find_duplicates(
     return await run_in_threadpool(service.find_duplicates, threshold, limit, offset)
 
 
+@router.get(
+    "/compare",
+    summary="Compare two images",
+    description="Compute the CLIP cosine similarity (0.0-1.0) between two stored, embedded images.",
+)
+async def compare_images(
+    id_a: int = Query(..., ge=1, description="First image ID"),
+    id_b: int = Query(..., ge=1, description="Second image ID"),
+    service: SimilarityService = Depends(get_similarity_service),
+):
+    """Compare two images' CLIP similarity side by side (read-only)."""
+    return await run_in_threadpool(service.compare_pair, id_a, id_b)
+
+
+@router.get(
+    "/near/{image_id}",
+    summary="Nearest images to one image",
+    description="""
+Return the top-K most similar images to a given image (highest cosine first, no
+threshold), ANN-accelerated. Useful for a one-click "find this image's
+near-duplicates / closest matches" action.
+    """,
+)
+async def near_images(
+    image_id: int,
+    limit: int = Query(default=24, ge=1, le=200, description="Maximum nearest images (1-200)"),
+    collection_id: Optional[int] = Query(default=None, ge=1, description="Restrict to a collection's members"),
+    service: SimilarityService = Depends(get_similarity_service),
+):
+    """Top-K nearest images to a given image ID."""
+    return await run_in_threadpool(service.find_near, image_id, limit, collection_id)
+
+
 @router.get("/stats")
 async def embedding_stats(
     service: SimilarityService = Depends(get_similarity_service),

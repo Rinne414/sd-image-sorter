@@ -1712,6 +1712,42 @@ class TestExportTagsBatch:
         assert payload["results"][0]["error"] is None
         assert "masterpiece" not in payload["results"][0]["rendered"]
 
+    def test_export_preview_exposes_ai_caption_even_when_template_omits_it(self, test_client, test_db, tmp_path: Path):
+        """The Dataset Maker editor renders a booru-tags template that omits
+        {nl_caption}; export-preview must still surface the raw ai_caption so the
+        frontend can seed the VLM / Smart Tag natural-language caption into the
+        editor (it is otherwise visible only in the gallery detail modal, which
+        reads ai_caption directly). Regression for the 'API tagged the images but
+        the caption only shows in the gallery, not the caption editor' bug."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "ai_caption_preview.png"
+        Image.new("RGB", (64, 64), color="white").save(img_path)
+        image_id = db.add_image(
+            path=str(img_path),
+            filename=img_path.name,
+            prompt="1girl",
+            metadata_json="{}",
+        )
+        db.add_tags(image_id, [{"tag": "1girl", "confidence": 0.9}])
+        nl_caption = "1girl, a girl smiling softly in warm afternoon light"
+        db.update_image_caption(image_id, nl_caption)
+
+        response = test_client.post("/api/tags/export-preview", json={
+            "image_ids": [image_id],
+            "preset_id": "custom",
+            # Booru-tags-only template (the editor default) — deliberately no {nl_caption}.
+            "template_override": "{trigger}, {tags:filtered}, {append}",
+        })
+
+        assert response.status_code == 200
+        result = response.json()["results"][0]
+        # The template render must NOT contain the natural-language sentence...
+        assert "smiling softly" not in result["rendered"]
+        # ...but ai_caption must be exposed so the editor can seed/display it.
+        assert result["ai_caption"] == nl_caption
+
     def test_export_batch_uses_image_overrides_for_preview_edits(self, test_client, test_db, tmp_path: Path):
         """Live-preview caption edits must be the exact content written by sidecar export."""
         import database as db

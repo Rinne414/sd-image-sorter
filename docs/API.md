@@ -829,6 +829,12 @@ Get embedding statistics.
 #### GET /api/similarity/model-status
 Get local CLIP runtime readiness and the preferred local model path.
 
+#### GET /api/similarity/compare
+Compute the CLIP cosine similarity (0.0-1.0) between two stored, embedded images (query params `id_a`, `id_b`).
+
+#### GET /api/similarity/near/{image_id}
+Return the top-K most similar images to one image (highest cosine first, no threshold, ANN-accelerated) — a one-click "find this image's closest matches" action.
+
 ### Prompt Lab
 
 #### GET /api/prompts/categories
@@ -1179,6 +1185,8 @@ Pattern variables: `{filename}`, `{index}`, `{index:03d}` (0-padded counter), `{
 
 Accepts either gallery-source items (`image_ids`), small-gallery local items (`image_paths`), or both. `image_overrides` keys may be either `str(image_id)` or absolute paths; both forms map to per-image caption overrides.
 
+Per-image natural-language type (two-box caption editor): `image_types` maps `str(image_id)`/abs-path → `"booru"` | `"nl"` | `"both"`, and `image_nl_overrides` maps the same keys → the user's edited natural-language sentence. After the booru caption is rendered (override or fresh template), an `nl`/`both` entry folds in the natural-language sentence (`both` = tags then sentence; `nl` = sentence only). Images with no `image_types` entry behave exactly as before (booru only) — fully back-compatible for every other caller. Compose applies only to booru-ish content modes (`template`, `tags`); NL-aware modes (`tags_nl`, `nl_caption`, `prompt_nl`) already emit the sentence and are left untouched.
+
 Body:
 ```json
 {
@@ -1192,7 +1200,9 @@ Body:
   "blacklist": ["watermark"],
   "common_tags": ["masterpiece", "best_quality"],
   "normalize_tag_underscores": true,
-  "image_overrides": {"42": "user-edited caption for this image", "C:/dataset/local_001.png": "caption for the local item"}
+  "image_overrides": {"42": "user-edited caption for this image", "C:/dataset/local_001.png": "caption for the local item"},
+  "image_types": {"42": "both", "7": "nl"},
+  "image_nl_overrides": {"42": "a girl stands in a sunny field"}
 }
 ```
 

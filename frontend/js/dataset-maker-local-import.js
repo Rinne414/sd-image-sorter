@@ -508,6 +508,14 @@
         } finally {
             this.imageIds = previous;
         }
+        // Re-render the queue tiles + export preview with the FULL queue
+        // restored so refreshed captions/tags appear without a re-import.
+        // (Bug: gallery-source Smart Tag results updated this.captions but the
+        // queue/preview kept showing the stale pre-tag state, so users had to
+        // re-import from the gallery to see their tags.) _renderQueue must run
+        // after imageIds is restored above, or local items would be dropped.
+        this._renderQueue?.();
+        this._refreshExportPreview?.();
     };
 
     // -------- Caption edits: persist local-source edits to localStorage --------
@@ -611,6 +619,24 @@
                 image_overrides[String(id)] = val;
             }
         }
+        // point 3: per-image NL type + edited NL text, same dual-key scheme.
+        // Only non-default ('nl'/'both') and edited-NL entries are sent.
+        const image_types = {};
+        const image_nl_overrides = {};
+        const _keyFor = (id) => {
+            if (this.isLocalId(id)) {
+                const p = this.localItemPaths.get(Number(id));
+                return p || null;
+            }
+            return String(id);
+        };
+        for (const id of this.imageIds) {
+            const key = _keyFor(id);
+            if (!key) continue;
+            const type = this._captionTypeFor ? this._captionTypeFor(id) : 'booru';
+            if (type === 'nl' || type === 'both') image_types[key] = type;
+            if (this.nlEdits.has(id)) image_nl_overrides[key] = this.nlEdits.get(id);
+        }
 
         return {
             image_ids: galleryIds,
@@ -630,6 +656,8 @@
             blacklist,
             common_tags: commonTags,
             image_overrides,
+            image_types,
+            image_nl_overrides,
         };
     };
 

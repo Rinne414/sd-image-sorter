@@ -15,6 +15,15 @@
         meta: new Map(),
         captions: new Map(),
         captionEdits: new Map(),
+        // point 2/3: parallel natural-language channel. ``captions``/``captionEdits``
+        // stay the booru-tags box (all tag tooling keeps using them unchanged);
+        // ``nlCaptions`` is the NL baseline (from the preview's nl_caption) and
+        // ``nlEdits`` the user's NL-box edits. ``captionType`` holds an explicit
+        // per-image booru|nl|both choice; absence means "auto" (both when an NL
+        // sentence exists, else booru) — see _captionTypeFor in caption-split.
+        nlCaptions: new Map(),
+        nlEdits: new Map(),
+        captionType: new Map(),
         _undoStacks: new Map(),
         _queueSelection: new Set(),
         _lastClickedId: null,
@@ -86,6 +95,8 @@
                 sessionStorage.setItem('sd-image-sorter-dataset-session', JSON.stringify({
                     imageIds: this.imageIds,
                     captionEdits: Object.fromEntries(this.captionEdits),
+                    nlEdits: Object.fromEntries(this.nlEdits),
+                    captionType: Object.fromEntries(this.captionType),
                     activeId: this.activeId,
                     local: this._serializeLocalDatasetState?.() || null,
                 }));
@@ -105,6 +116,23 @@
                     for (const [k, v] of Object.entries(s.captionEdits)) {
                         const id = Number(k);
                         if (Number.isFinite(id)) this.captionEdits.set(id, v);
+                    }
+                }
+                // point 2/3: restore the parallel NL-box edits + per-image type.
+                this.nlEdits.clear();
+                if (s.nlEdits) {
+                    for (const [k, v] of Object.entries(s.nlEdits)) {
+                        const id = Number(k);
+                        if (Number.isFinite(id)) this.nlEdits.set(id, v);
+                    }
+                }
+                this.captionType.clear();
+                if (s.captionType) {
+                    for (const [k, v] of Object.entries(s.captionType)) {
+                        const id = Number(k);
+                        if (Number.isFinite(id) && (v === 'booru' || v === 'nl' || v === 'both')) {
+                            this.captionType.set(id, v);
+                        }
                     }
                 }
                 const active = Number(s.activeId);
@@ -648,6 +676,11 @@
     _appendOrderedScript('/static/js/dataset-maker-pipeline.js');
     // v3.2.2 T-power-PR2 (C): tag confidence pills inside the caption editor.
     _appendOrderedScript('/static/js/dataset-confidence-pills.js');
+    // point 2/3: two-box caption editor (booru + natural-language) with a
+    // per-image type toggle + bulk/auto helpers. Loaded last so its _setActive /
+    // _renderEmptyEditor / _buildQueueItem wrappers compose over part2 + the
+    // local-import + pipeline patches.
+    _appendOrderedScript('/static/js/dataset-maker-caption-split.js');
 
     // Hook into view activation
     function initWhenViewActivates() {

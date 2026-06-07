@@ -42,7 +42,7 @@ EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
     (
         "db_images_write.py",
         "UPDATE images SET content_fingerprint = NULL, embedding = NULL, "
-        "tagged_at = NULL, ai_caption = NULL, aesthetic_score = NULL WHERE id = ?",
+        "tagged_at = NULL, ai_caption = NULL, nl_caption = NULL, aesthetic_score = NULL WHERE id = ?",
     ): 1,
     (
         "db_images_write.py",
@@ -58,23 +58,19 @@ EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
         "indexed_at = CURRENT_TIMESTAMP WHERE id = ?",
     ): 1,
     (
-        "db_tags.py",
-        "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, "
-        "content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
-    ): 1,
-    (
         "db_images_write.py",
         "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, "
         "content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
     ): 1,
     (
         "db_tags.py",
-        "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, ai_caption = ?, "
+        "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, ai_caption = COALESCE(?, ai_caption), "
+        "nl_caption = COALESCE(?, nl_caption), "
         "content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
     ): 1,
     (
         "db_images_write.py",
-        "UPDATE images SET tagged_at = ?, ai_caption = ?, aesthetic_score = ?, embedding = ?, "
+        "UPDATE images SET tagged_at = ?, ai_caption = ?, nl_caption = ?, aesthetic_score = ?, embedding = ?, "
         "content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
     ): 1,
     (
@@ -132,7 +128,7 @@ def _derived_row(image_id: int) -> sqlite3.Row:
         cursor = conn.cursor()
         return cursor.execute(
             """
-            SELECT tagged_at, ai_caption, aesthetic_score, embedding, content_fingerprint
+            SELECT tagged_at, ai_caption, nl_caption, aesthetic_score, embedding, content_fingerprint
             FROM images
             WHERE id = ?
             """,
@@ -151,10 +147,10 @@ def _seed_expensive_derived_state(image_id: int) -> None:
         cursor.execute(
             """
             UPDATE images
-            SET ai_caption = ?, aesthetic_score = ?, embedding = ?, content_fingerprint = ?
+            SET ai_caption = ?, nl_caption = ?, aesthetic_score = ?, embedding = ?, content_fingerprint = ?
             WHERE id = ?
             """,
-            ("caption before rewrite", 8.5, b"embedding-bytes", "fingerprint-1", image_id),
+            ("caption before rewrite", "nl before rewrite", 8.5, b"embedding-bytes", "fingerprint-1", image_id),
         )
 
 
@@ -215,6 +211,7 @@ def test_metadata_only_rewrite_preserves_expensive_derived_state(test_db):
     row = _derived_row(image_id)
     assert row["tagged_at"] is not None
     assert row["ai_caption"] == "caption before rewrite"
+    assert row["nl_caption"] == "nl before rewrite"
     assert row["aesthetic_score"] == 8.5
     assert row["embedding"] == b"embedding-bytes"
     assert row["content_fingerprint"] == "fingerprint-1"
@@ -251,6 +248,7 @@ def test_pixel_change_rewrite_clears_stale_expensive_derived_state(test_db):
     row = _derived_row(image_id)
     assert row["tagged_at"] is None
     assert row["ai_caption"] is None
+    assert row["nl_caption"] is None
     assert row["aesthetic_score"] is None
     assert row["embedding"] is None
     assert row["content_fingerprint"] == "fingerprint-2"

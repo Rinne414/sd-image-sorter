@@ -525,7 +525,7 @@ def build_export_caption(
     rating = rating_override if rating_override is not None else _extract_rating(image)
     rating = _filter_template_value(rating, proc_config, separator)
     trigger_text = _filter_template_value(trigger.strip(), proc_config, separator)
-    nl_caption = _filter_template_value(str(image.get("ai_caption") or "").strip(), proc_config, separator)
+    nl_caption = _filter_template_value(str(image.get("nl_caption") or image.get("ai_caption") or "").strip(), proc_config, separator)
     prompt = _filter_template_value(str(image.get("prompt") or "").strip(), proc_config, separator)
     negative = _filter_template_value(str(image.get("negative_prompt") or "").strip(), proc_config, separator)
     quality = _filter_template_value(

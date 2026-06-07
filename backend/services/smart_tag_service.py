@@ -66,6 +66,21 @@ SMART_TAG_PATH_CHUNK_SIZE = 500
 SMART_TAG_MAX_ERRORS = 50
 SMART_TAG_RECENT_RESULT_LIMIT = 25
 
+# GPU batch size for the booru tagging phase of Smart Tag. Mirrors the regular
+# bulk-tagging worker (services/tagging_service.py passes its fetch batch size,
+# default ~100) so Smart Tag drives the GPU the same way bulk tagging does:
+# WD14's tag_batch self-tunes downward on CUDA OOM (adaptive backoff) and
+# OppaiOracle uses it as a fixed chunk. The previous Smart Tag pipeline tagged
+# ONE image per GPU call, which barely touched the GPU — this restores batching.
+SMART_TAG_TAG_BATCH_SIZE = 64
+
+# How many images flow through one booru->VLM window in the single-tagger
+# pipeline. Bounds peak memory (only this many per-image tag partials are held
+# at once — important for very large libraries) and keeps the progress bar
+# moving, while still giving the GPU a full batch and the VLM up to
+# `concurrent_requests` parallel calls per window.
+SMART_TAG_PIPELINE_WINDOW = 64
+
 
 # ---------------------------------------------------------------------------
 # Noise-tag vocabularies
@@ -1201,6 +1216,210 @@ def _tag_image_with_thresholds(
         return tagger.tag(image_path, **kwargs)
 
 
+def _tag_batch_with_thresholds(
+    tagger,
+    image_paths: List[str],
+    *,
+    general_threshold: float,
+    character_threshold: float,
+    copyright_threshold: float,
+) -> List[Dict[str, Any]]:
+    """GPU-batch a list of images through ``tagger.tag_batch``.
+
+    Returns one result dict per path (same shape as ``tagger.tag``). Mirrors
+    ``_tag_image_with_thresholds`` for the copyright-threshold capability
+    difference (WD14 accepts it, OppaiOracle does not). Falls back to per-image
+    tagging if the backend has no usable ``tag_batch`` or the batch call fails,
+    so behaviour degrades to exactly the old one-at-a-time path rather than
+    breaking the run.
+    """
+    if not image_paths:
+        return []
+
+    batch_fn = getattr(tagger, "tag_batch", None)
+    if callable(batch_fn):
+        import inspect
+
+        kwargs: Dict[str, Any] = {
+            "preferred_batch_size": SMART_TAG_TAG_BATCH_SIZE,
+            "threshold": general_threshold,
+            "character_threshold": character_threshold,
+        }
+        wants_copyright = True
+        try:
+            params = inspect.signature(batch_fn).parameters
+            wants_copyright = ("copyright_threshold" in params) or any(
+                p.kind == p.VAR_KEYWORD for p in params.values()
+            )
+        except (TypeError, ValueError):
+            wants_copyright = True
+        if wants_copyright:
+            kwargs["copyright_threshold"] = copyright_threshold
+
+        for attempt_kwargs in (kwargs, {k: v for k, v in kwargs.items() if k != "copyright_threshold"}):
+            try:
+                results = batch_fn(image_paths, **attempt_kwargs)
+            except TypeError:
+                # A kwarg this backend rejects (e.g. copyright_threshold on
+                # OppaiOracle). Retry with the trimmed kwargs on the next loop;
+                # if that was already the trimmed pass, drop to per-image below.
+                continue
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "smart-tag tag_batch failed (%s); falling back to per-image tagging.",
+                    exc,
+                )
+                break
+            if isinstance(results, tuple):  # return_runtime_info shape (defensive)
+                results = results[0]
+            if results is not None and len(results) == len(image_paths):
+                return list(results)
+            logger.warning(
+                "smart-tag tag_batch returned %s results for %d paths; per-image fallback.",
+                "None" if results is None else len(results),
+                len(image_paths),
+            )
+            break
+
+    # Per-image fallback: each failure is isolated so one bad image doesn't sink
+    # the window. An empty dict means "no tags" — the image can still get a VLM
+    # caption downstream.
+    out: List[Dict[str, Any]] = []
+    for path in image_paths:
+        try:
+            out.append(
+                _tag_image_with_thresholds(
+                    tagger,
+                    path,
+                    general_threshold=general_threshold,
+                    character_threshold=character_threshold,
+                    copyright_threshold=copyright_threshold,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("smart-tag per-image tag failed for %s: %s", path, exc)
+            out.append({})
+    return out
+
+
+def _booru_partial_from_tag_result(raw: Dict[str, Any], req: "SmartTagRequest") -> Dict[str, Any]:
+    """Stage-1 of the pipeline: turn a raw tagger/consensus result into the
+    normalized + noise-stripped + capped tag partial the caption builder needs.
+
+    Shared by ``_process_one_image`` (single + consensus) and the windowed
+    single-tagger pipeline so the two paths can never diverge.
+    """
+    general_rows = _normalize_tag_rows(raw.get("general_tags") or [], "general")
+    copyright_rows = _normalize_tag_rows(raw.get("copyright_tags") or [], "copyright")
+    character_rows = _normalize_tag_rows(raw.get("character_tags") or [], "character")
+    general_rows, copyright_rows, character_rows, noise_stripped = _prepare_smart_tag_rows(
+        general_rows,
+        copyright_rows,
+        character_rows,
+        auto_strip_noise=req.auto_strip_noise,
+        max_tags_per_image=req.max_tags_per_image,
+    )
+    return {
+        "general_rows": general_rows,
+        "copyright_rows": copyright_rows,
+        "character_rows": character_rows,
+        "general_names": _flatten_tag_names(general_rows),
+        "copyright_names": _flatten_tag_names(copyright_rows),
+        "character_names": _flatten_tag_names(character_rows),
+        "rating": raw.get("rating") or None,
+        "noise_stripped": noise_stripped,
+    }
+
+
+def _assemble_result_dict(
+    partial: Dict[str, Any],
+    nl_text: str,
+    image_id: int,
+    req: "SmartTagRequest",
+) -> Dict[str, Any]:
+    """Stage-3 of the pipeline: assemble the final caption + result payload from
+    a tag partial and the natural-language text. Output shape matches what
+    ``_persist_result`` / ``_append_caption_result`` consume."""
+    caption = assemble_caption(
+        rating=partial["rating"],
+        general_tags=partial["general_names"] + partial["copyright_names"],
+        character_tags=partial["character_names"],
+        nl_text=nl_text,
+        trigger_word=req.trigger_word,
+        auto_strip_noise=req.auto_strip_noise,
+    )
+    return {
+        "image_id": image_id,
+        "caption": caption,
+        "general_tags": partial["general_names"],
+        "copyright_tags": partial["copyright_names"],
+        "character_tags": partial["character_names"],
+        "general_tag_rows": partial["general_rows"],
+        "copyright_tag_rows": partial["copyright_rows"],
+        "character_tag_rows": partial["character_rows"],
+        "rating": partial["rating"],
+        "nl_text": nl_text,
+        "noise_stripped_count": partial["noise_stripped"],
+    }
+
+
+def _vlm_context_tags_for(
+    partial: Dict[str, Any], include_tags_as_context: bool
+) -> Optional[List[str]]:
+    """Build the noise-filtered tag list passed to ``provider.caption_image``.
+
+    Replicates ``build_vlm_prompt``'s always-on noise filter so the concurrent
+    pipeline produces the same VLM context the serial path did, then lets the
+    provider's own ``build_user_message`` substitute it into the (job-constant)
+    purpose template — which is why no per-image config mutation is needed and
+    the concurrent calls can't race on shared prompt state.
+    """
+    if not include_tags_as_context:
+        return None
+    names = (
+        (partial.get("general_names") or [])
+        + (partial.get("copyright_names") or [])
+        + (partial.get("character_names") or [])
+    )
+    filtered, _stripped = filter_noise_tags(names)
+    return filtered or None
+
+
+def _toriigate_nl_text(nl_tagger, image_path: str, image_id: int) -> str:
+    """Run a single ToriiGate natural-language caption (local model, serial)."""
+    try:
+        out = nl_tagger.tag(image_path)
+        nl_text = str(out.get("raw_text") or "").strip()
+        if not nl_text:
+            nl_text = ", ".join(_flatten_tag_names(out.get("general_tags") or []))
+        return nl_text
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ToriiGate natural-language caption failed for image %s: %s", image_id, exc)
+        return ""
+
+
+def _iter_request_sources(req: "SmartTagRequest") -> Iterator[Tuple[str, int, str]]:
+    """Flatten the chunked source stream into individual (key, id, path) items."""
+    for source_chunk in _iter_request_source_chunks(req):
+        for source in source_chunk:
+            yield source
+
+
+def _iter_windows(
+    req: "SmartTagRequest", window_size: int
+) -> Iterator[List[Tuple[str, int, str]]]:
+    """Yield source items in fixed-size windows for the booru->VLM pipeline."""
+    size = max(1, int(window_size or 1))
+    window: List[Tuple[str, int, str]] = []
+    for source in _iter_request_sources(req):
+        window.append(source)
+        if len(window) >= size:
+            yield window
+            window = []
+    if window:
+        yield window
+
+
 def _process_one_image(
     *,
     image_path: str,
@@ -1218,54 +1437,28 @@ def _process_one_image(
     directly. This avoids reloading models per-image.
     """
     # ------- Stage 1: WD14 / OppaiOracle local tagging --------------------
-    general_names: List[str] = []
-    copyright_names: List[str] = []
-    character_names: List[str] = []
-    general_rows: List[Dict[str, Any]] = []
-    copyright_rows: List[Dict[str, Any]] = []
-    character_rows: List[Dict[str, Any]] = []
-    rating: Optional[str] = None
-
     if precomputed_tagger_outputs is not None:
         # Multi-tagger consensus from pre-collected per-tagger results.
-        fused = compute_consensus_tags(
+        raw = compute_consensus_tags(
             precomputed_tagger_outputs,
             consensus_min=req.consensus_min,
             skip_categories=req.consensus_skip_categories,
         )
-        general_rows = _normalize_tag_rows(fused.get("general_tags") or [], "general")
-        copyright_rows = _normalize_tag_rows(fused.get("copyright_tags") or [], "copyright")
-        character_rows = _normalize_tag_rows(fused.get("character_tags") or [], "character")
-        general_names = _flatten_tag_names(general_rows)
-        copyright_names = _flatten_tag_names(copyright_rows)
-        character_names = _flatten_tag_names(character_rows)
-        rating = fused.get("rating") or None
     elif req.enable_wd14 and tagger is not None:
-        result = _tag_image_with_thresholds(
+        raw = _tag_image_with_thresholds(
             tagger,
             image_path,
             general_threshold=req.general_threshold,
             character_threshold=req.character_threshold,
             copyright_threshold=req.copyright_threshold,
         )
-        general_rows = _normalize_tag_rows(result.get("general_tags") or [], "general")
-        copyright_rows = _normalize_tag_rows(result.get("copyright_tags") or [], "copyright")
-        character_rows = _normalize_tag_rows(result.get("character_tags") or [], "character")
-        general_names = _flatten_tag_names(general_rows)
-        copyright_names = _flatten_tag_names(copyright_rows)
-        character_names = _flatten_tag_names(character_rows)
-        rating = result.get("rating") or None
+    else:
+        raw = {}
 
-    general_rows, copyright_rows, character_rows, noise_stripped = _prepare_smart_tag_rows(
-        general_rows,
-        copyright_rows,
-        character_rows,
-        auto_strip_noise=req.auto_strip_noise,
-        max_tags_per_image=req.max_tags_per_image,
-    )
-    general_names = _flatten_tag_names(general_rows)
-    copyright_names = _flatten_tag_names(copyright_rows)
-    character_names = _flatten_tag_names(character_rows)
+    partial = _booru_partial_from_tag_result(raw, req)
+    general_names = partial["general_names"]
+    copyright_names = partial["copyright_names"]
+    character_names = partial["character_names"]
 
     # ------- Stage 2: VLM caption --------------------------------------
     nl_text = ""
@@ -1313,28 +1506,7 @@ def _process_one_image(
             nl_text = ""
 
     # ------- Stage 3: Caption assembly ---------------------------------
-    caption = assemble_caption(
-        rating=rating,
-        general_tags=general_names + copyright_names,
-        character_tags=character_names,
-        nl_text=nl_text,
-        trigger_word=req.trigger_word,
-        auto_strip_noise=req.auto_strip_noise,
-    )
-
-    return {
-        "image_id": image_id,
-        "caption": caption,
-        "general_tags": general_names,
-        "copyright_tags": copyright_names,
-        "character_tags": character_names,
-        "general_tag_rows": general_rows,
-        "copyright_tag_rows": copyright_rows,
-        "character_tag_rows": character_rows,
-        "rating": rating,
-        "nl_text": nl_text,
-        "noise_stripped_count": noise_stripped,
-    }
+    return _assemble_result_dict(partial, nl_text, image_id, req)
 
 
 def _persist_result(image_id: int, result: Dict[str, Any], merge_strategy: str) -> None:
@@ -1371,15 +1543,23 @@ def _persist_result(image_id: int, result: Dict[str, Any], merge_strategy: str) 
 
     # On append, glue the new caption onto whatever was there before.
     final_caption = caption
+    # Pure natural-language sentence (no booru tags). Kept separate from the
+    # composed ``final_caption`` so the dataset maker can show / export the
+    # booru tags and the NL sentence independently.
+    nl_text = (result.get("nl_text") or "").strip()
+    final_nl = nl_text
     if merge_strategy == "append":
         try:
             existing_rows = db.get_image_tags(image_id) or []
-            # ai_caption isn't returned by get_image_tags; pull from the
-            # row directly to honour append semantics.
+            # ai_caption / nl_caption aren't returned by get_image_tags; pull
+            # from the row directly to honour append semantics.
             row = db.get_images_by_ids([image_id]).get(image_id) or {}
             prior = (row.get("ai_caption") or "").strip()
             if prior and prior != caption:
                 final_caption = f"{prior}, {caption}".strip(", ")
+            prior_nl = (row.get("nl_caption") or "").strip()
+            if prior_nl and prior_nl != nl_text:
+                final_nl = f"{prior_nl} {nl_text}".strip()
             del existing_rows  # not used; kept for documentation of intent
         except Exception as exc:  # noqa: BLE001
             logger.warning("smart-tag append-merge fallback to replace for %s: %s", image_id, exc)
@@ -1396,6 +1576,7 @@ def _persist_result(image_id: int, result: Dict[str, Any], merge_strategy: str) 
                 "image_id": image_id,
                 "tags": tag_rows,
                 "ai_caption": final_caption or None,
+                "nl_caption": final_nl or None,
             }
         ])
     except Exception as exc:  # noqa: BLE001
@@ -1550,6 +1731,241 @@ def get_caption_results_page(
     }
 
 
+@dataclass
+class _CaptionPhase:
+    """Resolved settings for the natural-language caption phase, shared by the
+    single-tagger and multi-tagger pipelines so both run the VLM the same way."""
+    vlm_provider: Any = None
+    nl_tagger: Any = None
+    use_vlm: bool = False
+    use_toriigate: bool = False
+    worker_count: int = 1
+    include_tags_as_context: bool = True
+
+    @property
+    def nl_active(self) -> bool:
+        return self.use_vlm or self.use_toriigate
+
+
+def _build_caption_phase(req: "SmartTagRequest", vlm_provider, nl_tagger) -> "_CaptionPhase":
+    """Resolve caption-phase settings and, for VLM mode, set the job-constant
+    training-purpose prompt template ONCE on the provider config.
+
+    The provider is built fresh per job and never cached/shared
+    (registry.get_provider always constructs a new instance), so setting the
+    template here can't bleed into another request, and the per-image {tags}
+    substitution done by the provider's build_user_message keeps the concurrent
+    calls race-free (no per-image mutation of shared config).
+    """
+    use_vlm = bool(
+        req.enable_vlm
+        and req.natural_language_mode == "vlm"
+        and vlm_provider is not None
+    )
+    use_toriigate = bool(
+        req.enable_vlm
+        and req.natural_language_mode == "toriigate"
+        and nl_tagger is not None
+    )
+    ctx = _CaptionPhase(
+        vlm_provider=vlm_provider,
+        nl_tagger=nl_tagger,
+        use_vlm=use_vlm,
+        use_toriigate=use_toriigate,
+    )
+    if use_vlm:
+        config = vlm_provider.config
+        ctx.worker_count = max(1, int(getattr(config, "concurrent_requests", 1) or 1))
+        ctx.include_tags_as_context = bool(getattr(config, "include_tags_as_context", True))
+        template = (
+            PROMPT_PRESETS.get(normalize_training_purpose(req.training_purpose))
+            or PROMPT_PRESETS["general"]
+        )
+        config.user_prompt = template
+        config.user_prompt_with_tags = template
+    return ctx
+
+
+def _handle_caption_result(
+    job: SmartTagJobState,
+    req: "SmartTagRequest",
+    source_key: str,
+    image_id: int,
+    path: str,
+    partial: Dict[str, Any],
+    nl_text: str,
+    *,
+    nl_active: bool,
+) -> None:
+    """Assemble + persist one image's caption and update job counters/progress.
+
+    Used by both pipelines. Persists per image (id>0 -> DB, else path-source
+    results file) so a cancel keeps finished work. Has no ``await`` so it stays
+    atomic when called from concurrent asyncio tasks on the single-threaded
+    worker loop.
+    """
+    try:
+        result = _assemble_result_dict(partial, nl_text, image_id, req)
+        if image_id > 0:
+            _persist_result(image_id, result, req.merge_strategy)
+        else:
+            _append_caption_result(job, path, (result.get("caption") or "").strip())
+        job.succeeded += 1
+        job.noise_stripped_count += int(partial.get("noise_stripped") or 0)
+        preview = (result.get("caption") or "").strip()
+        if preview:
+            job.last_caption_preview = preview[:200]
+    except Exception as exc:  # noqa: BLE001
+        job.failed += 1
+        _record_job_error(job, str(source_key), str(exc))
+        logger.warning("smart-tag failed on image %s: %s", source_key, exc)
+    finally:
+        job.processed += 1
+        if job.total > 0:
+            job.phase_completion = min(1.0, job.processed / job.total)
+        label = "VLM captioning" if nl_active else "Processing"
+        job.message = f"{label} {job.processed}/{job.total}"
+
+
+def _fail_missing_source(job: SmartTagJobState, source_key: str) -> None:
+    """Record a source whose file path could not be resolved as a failure."""
+    job.failed += 1
+    _record_job_error(job, str(source_key), "Image path not found")
+    job.processed += 1
+    if job.total > 0:
+        job.phase_completion = min(1.0, job.processed / job.total)
+
+
+def _run_caption_phase(
+    job: SmartTagJobState,
+    req: "SmartTagRequest",
+    items: List[Tuple[str, int, str, Dict[str, Any]]],
+    ctx: "_CaptionPhase",
+) -> None:
+    """Run the natural-language + persist phase for a window of items.
+
+    ``items`` are ``(source_key, image_id, path, partial)`` tuples whose tags
+    are already computed. VLM mode runs up to ``ctx.worker_count`` captions
+    concurrently (this is what makes ``config.concurrent_requests`` matter);
+    ToriiGate runs serially (local GPU model); booru-only assembles directly.
+    Each image is persisted as soon as it completes (cancel-safe).
+    """
+    import asyncio
+
+    if job.cancel_requested or not items:
+        return
+
+    if ctx.use_vlm:
+        async def _caption_all() -> None:
+            sem = asyncio.Semaphore(ctx.worker_count)
+
+            async def _one(item: Tuple[str, int, str, Dict[str, Any]]) -> None:
+                source_key, image_id, path, partial = item
+                if job.cancel_requested:
+                    return
+                nl_text = ""
+                try:
+                    async with sem:
+                        if job.cancel_requested:
+                            return
+                        tags = _vlm_context_tags_for(partial, ctx.include_tags_as_context)
+                        res = await ctx.vlm_provider.caption_image(path, tags=tags)
+                        nl_text = (getattr(res, "caption", "") or "").strip()
+                except Exception as exc:  # noqa: BLE001
+                    # A VLM failure on one image must not fail the image — it
+                    # still gets a booru-tag caption (old serial behaviour).
+                    logger.warning(
+                        "VLM caption failed for image %s: %s", image_id or source_key, exc
+                    )
+                    nl_text = ""
+                _handle_caption_result(
+                    job, req, source_key, image_id, path, partial, nl_text,
+                    nl_active=ctx.nl_active,
+                )
+
+            await asyncio.gather(*[_one(item) for item in items], return_exceptions=True)
+
+        asyncio.run(_caption_all())
+    else:
+        for source_key, image_id, path, partial in items:
+            if job.cancel_requested:
+                break
+            nl_text = (
+                _toriigate_nl_text(ctx.nl_tagger, path, image_id)
+                if ctx.use_toriigate
+                else ""
+            )
+            _handle_caption_result(
+                job, req, source_key, image_id, path, partial, nl_text,
+                nl_active=ctx.nl_active,
+            )
+
+
+def _run_windowed_pipeline(
+    job: SmartTagJobState,
+    req: SmartTagRequest,
+    *,
+    tagger,
+    vlm_provider,
+    nl_tagger,
+) -> None:
+    """Single-tagger Smart Tag pipeline: GPU-batched booru tagging + concurrent
+    VLM captioning, streamed in bounded windows.
+
+    Replaces the old one-image-at-a-time loop, which tagged a single image per
+    GPU call and ran the VLM with ``asyncio.run`` per image — so the GPU sat
+    mostly idle and ``config.concurrent_requests`` was never used. Each image is
+    persisted as soon as its caption is assembled, so cancellation never loses
+    completed work. Sets the terminal job status itself.
+    """
+    ctx = _build_caption_phase(req, vlm_provider, nl_tagger)
+    job.stage = "vlm" if ctx.nl_active else ("tagging" if req.enable_wd14 else "")
+    job.phase_completion = 0.0
+    if ctx.use_vlm:
+        job.message = f"Smart-tagging {job.total} image(s) (VLM x{ctx.worker_count})..."
+    else:
+        job.message = f"Smart-tagging {job.total} image(s)..."
+
+    for window in _iter_windows(req, SMART_TAG_PIPELINE_WINDOW):
+        if job.cancel_requested:
+            break
+        valid = [(sk, iid, p) for (sk, iid, p) in window if p]
+        for source_key, _iid, path in window:
+            if not path:
+                _fail_missing_source(job, source_key)
+        if not valid:
+            continue
+
+        # ---- Booru phase: ONE GPU-batched call for the whole window. ----
+        if req.enable_wd14 and tagger is not None:
+            job.message = f"Tagging {len(valid)} image(s) on GPU..."
+            raw_results = _tag_batch_with_thresholds(
+                tagger,
+                [path for (_sk, _iid, path) in valid],
+                general_threshold=req.general_threshold,
+                character_threshold=req.character_threshold,
+                copyright_threshold=req.copyright_threshold,
+            )
+        else:
+            raw_results = [{} for _ in valid]
+
+        partials = [_booru_partial_from_tag_result(raw or {}, req) for raw in raw_results]
+        items = [
+            (valid[i][0], valid[i][1], valid[i][2], partials[i])
+            for i in range(len(valid))
+        ]
+        # _run_caption_phase persists each image as its caption completes, so a
+        # mid-window cancel keeps finished work and just stops issuing new calls.
+        _run_caption_phase(job, req, items, ctx)
+
+    if job.cancel_requested:
+        job.status = "cancelled"
+        job.message = "Cancelled by user."
+    elif job.status == "running":
+        job.status = "completed"
+        job.message = f"Done. {job.succeeded} ok, {job.failed} failed."
+
+
 def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
     """Body of the worker thread - drives the pipeline and updates job state."""
     global _active_job_id
@@ -1665,153 +2081,98 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                     logger.warning("smart-tag: failed to load tagger %s: %s", model_name, exc)
                     continue
 
-                for img_idx, (source_key, image_id, path) in enumerate(all_sources):
+                # GPU-batch this tagger's pass over the images in windows (the
+                # old per-image loop barely used the GPU). _tag_batch_with_thresholds
+                # self-tunes / falls back per image, so one bad image can't sink
+                # the whole window.
+                for win_start in range(0, len(all_sources), SMART_TAG_PIPELINE_WINDOW):
                     if job.cancel_requested:
                         break
-                    if not path:
-                        continue
-                    try:
-                        out = _tag_image_with_thresholds(
+                    window = all_sources[win_start:win_start + SMART_TAG_PIPELINE_WINDOW]
+                    local_valid = [i for i, (_sk, _iid, p) in enumerate(window) if p]
+                    if local_valid:
+                        batch_out = _tag_batch_with_thresholds(
                             one_tagger,
-                            path,
+                            [window[i][2] for i in local_valid],
                             general_threshold=gen_th,
                             character_threshold=char_th,
                             copyright_threshold=copy_th,
                         )
-                        per_image_outputs[img_idx].append({
-                            "model": model_name,
-                            "weight": weight,
-                            "general_tags": out.get("general_tags") or [],
-                            "copyright_tags": out.get("copyright_tags") or [],
-                            "character_tags": out.get("character_tags") or [],
-                            "rating": out.get("rating"),
-                        })
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning(
-                            "smart-tag consensus: tagger %s failed on %s: %s",
-                            model_name, path, exc,
-                        )
+                        for local_i, out in zip(local_valid, batch_out):
+                            out = out or {}
+                            per_image_outputs[win_start + local_i].append({
+                                "model": model_name,
+                                "weight": weight,
+                                "general_tags": out.get("general_tags") or [],
+                                "copyright_tags": out.get("copyright_tags") or [],
+                                "character_tags": out.get("character_tags") or [],
+                                "rating": out.get("rating"),
+                            })
                     # Fix M1: image-count semantics for processed/total; smooth
                     # sub-phase progress through phase_completion (0.0-1.0).
-                    steps_done = img_idx + 1 + (tagger_idx * len(all_sources))
+                    images_done = min(len(all_sources), win_start + len(window))
+                    steps_done = images_done + (tagger_idx * len(all_sources))
                     job.phase_completion = min(1.0, steps_done / total_tagger_steps)
                     job.processed = min(len(all_sources), steps_done // tagger_count)
-                    job.message = f"Tagging ({model_name}) {img_idx + 1}/{len(all_sources)}"
+                    job.message = f"Tagging ({model_name}) {images_done}/{len(all_sources)}"
 
             if job.cancel_requested:
                 job.status = "cancelled"
                 job.message = "Cancelled by user."
             else:
-                # Now run consensus + VLM for each image.
-                vlm_enabled = req.enable_vlm and (vlm_provider is not None or nl_tagger is not None)
-                job.stage = "vlm" if vlm_enabled else "tagging"
+                # Consensus + concurrent VLM. Build each image's fused tag
+                # partial, then run the SAME concurrent caption phase the
+                # single-tagger path uses, so the multi-tagger mode also gets
+                # VLM concurrency (config.concurrent_requests) instead of the
+                # old one-image-at-a-time asyncio.run.
+                ctx = _build_caption_phase(req, vlm_provider, nl_tagger)
+                job.stage = "vlm" if ctx.nl_active else "tagging"
                 # Fix M1: total stays at the image count; processed resets so
-                # the second phase counts images cleanly. phase_completion
-                # also resets to 0.0 for the new phase.
+                # the second phase counts images cleanly.
                 job.processed = 0
                 job.phase_completion = 0.0
-                job.message = "Running consensus + VLM..." if vlm_enabled else "Running consensus..."
+                job.message = "Running consensus + VLM..." if ctx.nl_active else "Running consensus..."
 
+                pending_items: List[Tuple[str, int, str, Dict[str, Any]]] = []
                 for img_idx, (source_key, image_id, path) in enumerate(all_sources):
-                    if job.cancel_requested:
-                        job.status = "cancelled"
-                        job.message = "Cancelled by user."
-                        break
-                    try:
-                        if not path:
-                            raise ValueError("Image path not found")
-                        result = _process_one_image(
-                            image_path=path,
-                            image_id=image_id,
-                            req=req,
-                            tagger=None,
-                            vlm_provider=vlm_provider,
-                            nl_tagger=nl_tagger,
-                            precomputed_tagger_outputs=per_image_outputs[img_idx] or None,
-                        )
-                        # Tags are persisted per-image so cancel preserves
-                        # already-completed results.
-                        if image_id > 0:
-                            _persist_result(image_id, result, req.merge_strategy)
-                        else:
-                            _append_caption_result(
-                                job, path, (result.get("caption") or "").strip(),
-                            )
-                        job.succeeded += 1
-                        # Fix M2: accumulate per-image noise-strip counts so
-                        # the snapshot can surface "Auto-stripped N noise tags".
-                        job.noise_stripped_count += int(result.get("noise_stripped_count") or 0)
-                        preview = (result.get("caption") or "").strip()
-                        if preview:
-                            job.last_caption_preview = preview[:200]
-                    except Exception as exc:  # noqa: BLE001
-                        job.failed += 1
-                        _record_job_error(job, str(source_key), str(exc))
-                        logger.warning("smart-tag failed on image %s: %s", source_key, exc)
-                    finally:
-                        job.processed = img_idx + 1
-                        if job.total > 0:
-                            job.phase_completion = min(1.0, job.processed / job.total)
-                        stage_label = "VLM captioning" if vlm_enabled else "Processing"
-                        job.message = f"{stage_label} {job.processed}/{job.total}"
+                    if not path:
+                        _fail_missing_source(job, source_key)
+                        continue
+                    fused = compute_consensus_tags(
+                        per_image_outputs[img_idx] or [],
+                        consensus_min=req.consensus_min,
+                        skip_categories=req.consensus_skip_categories,
+                    )
+                    partial = _booru_partial_from_tag_result(fused, req)
+                    pending_items.append((source_key, image_id, path, partial))
 
-                if job.status == "running":
+                for win_start in range(0, len(pending_items), SMART_TAG_PIPELINE_WINDOW):
+                    if job.cancel_requested:
+                        break
+                    _run_caption_phase(
+                        job,
+                        req,
+                        pending_items[win_start:win_start + SMART_TAG_PIPELINE_WINDOW],
+                        ctx,
+                    )
+
+                if job.cancel_requested:
+                    job.status = "cancelled"
+                    job.message = "Cancelled by user."
+                elif job.status == "running":
                     job.status = "completed"
                     job.message = f"Done. {job.succeeded} ok, {job.failed} failed."
         else:
-            # Single-tagger or no-tagger path: per-image loop as before.
-            vlm_enabled = req.enable_vlm and (vlm_provider is not None or nl_tagger is not None)
-            job.stage = "tagging" if req.enable_wd14 else ("vlm" if vlm_enabled else "")
-            job.phase_completion = 0.0
-            job.message = f"Smart-tagging {job.total} image(s)..."
-            for source_chunk in _iter_request_source_chunks(req):
-                for source_key, image_id, path in source_chunk:
-                    if job.cancel_requested:
-                        job.status = "cancelled"
-                        job.message = "Cancelled by user."
-                        break
-                    try:
-                        if not path:
-                            raise ValueError("Image path not found")
-                        result = _process_one_image(
-                            image_path=path,
-                            image_id=image_id,
-                            req=req,
-                            tagger=tagger,
-                            vlm_provider=vlm_provider,
-                            nl_tagger=nl_tagger,
-                        )
-                        # Tags are persisted per-image so cancel preserves
-                        # already-completed results.
-                        if image_id > 0:
-                            _persist_result(image_id, result, req.merge_strategy)
-                        else:
-                            _append_caption_result(
-                                job,
-                                path,
-                                (result.get("caption") or "").strip(),
-                            )
-                        job.succeeded += 1
-                        # Fix M2: surface auto-strip noise count to snapshot.
-                        job.noise_stripped_count += int(result.get("noise_stripped_count") or 0)
-                        preview = (result.get("caption") or "").strip()
-                        if preview:
-                            job.last_caption_preview = preview[:200]
-                    except Exception as exc:  # noqa: BLE001
-                        job.failed += 1
-                        _record_job_error(job, str(source_key), str(exc))
-                        logger.warning("smart-tag failed on image %s: %s", source_key, exc)
-                    finally:
-                        job.processed += 1
-                        if job.total > 0:
-                            job.phase_completion = min(1.0, job.processed / job.total)
-                        job.message = f"Processed {job.processed}/{job.total}"
-                if job.cancel_requested:
-                    break
-
-            if job.status == "running":
-                job.status = "completed"
-                job.message = f"Done. {job.succeeded} ok, {job.failed} failed."
+            # Single-tagger / no-tagger path: GPU-batched booru tagging +
+            # concurrent VLM captioning (see _run_windowed_pipeline). It sets
+            # the terminal job status (completed / cancelled) itself.
+            _run_windowed_pipeline(
+                job,
+                req,
+                tagger=tagger,
+                vlm_provider=vlm_provider,
+                nl_tagger=nl_tagger,
+            )
     except Exception as exc:  # noqa: BLE001
         job.status = "failed"
         job.message = f"Smart Tag failed: {exc}"

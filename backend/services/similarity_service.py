@@ -17,6 +17,8 @@ from similarity import (
     SimilarityInvalidImageError,
     SimilarityDuplicateSearchTooLargeError,
     SimilaritySearchWindowTooLargeError,
+    bytes_to_embedding,
+    cosine_similarity,
     ensure_clip_model_ready,
     get_similarity_index,
 )
@@ -135,6 +137,76 @@ class SimilarityService:
             "has_more": result["has_more"],
             "offset": result["offset"],
             "limit": result["limit"],
+        }
+
+    def compare_pair(self, id_a: int, id_b: int) -> dict:
+        """Compute the CLIP cosine similarity between two stored images.
+
+        Read-only. Raises 404 if either image is missing and 409 if either has
+        no embedding yet (run indexing first). Backs the two-image compare UI.
+        """
+        rows: dict = {}
+        with db.get_db() as conn:
+            cursor = conn.execute(
+                "SELECT id, embedding, filename FROM images WHERE id IN (?, ?)",
+                (id_a, id_b),
+            )
+            for row in cursor.fetchall():
+                rows[int(row["id"])] = row
+        for image_id in (id_a, id_b):
+            if image_id not in rows:
+                raise HTTPException(status_code=404, detail=f"Image {image_id} not found")
+        for image_id in (id_a, id_b):
+            if rows[image_id]["embedding"] is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Image {image_id} has no embedding yet. Index it first (Similar tab).",
+                )
+        emb_a = bytes_to_embedding(rows[id_a]["embedding"])
+        emb_b = bytes_to_embedding(rows[id_b]["embedding"])
+        return {
+            "id_a": id_a,
+            "id_b": id_b,
+            "similarity": round(float(cosine_similarity(emb_a, emb_b)), 4),
+            "filename_a": rows[id_a]["filename"] or "",
+            "filename_b": rows[id_b]["filename"] or "",
+        }
+
+    def find_near(
+        self,
+        image_id: int,
+        limit: int = 24,
+        collection_id: Optional[int] = None,
+    ) -> dict:
+        """Return the top-K nearest images to ``image_id`` (no threshold).
+
+        Wraps the ANN-accelerated ``top_k_similar`` for a one-click
+        "near-duplicates / most-similar" action. Scoped to a collection when
+        ``collection_id`` is given.
+        """
+        allowed_ids = self._resolve_scope_ids(collection_id)
+        if allowed_ids is not None and not allowed_ids:
+            return {"query_image_id": image_id, "results": [], "count": 0}
+        with db.get_db() as conn:
+            row = conn.execute(
+                "SELECT embedding FROM images WHERE id = ?", (image_id,)
+            ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Image {image_id} not found")
+        if row["embedding"] is None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Image {image_id} has no embedding yet. Index it first (Similar tab).",
+            )
+        index = get_similarity_index(db)
+        query_emb = bytes_to_embedding(row["embedding"])
+        results = index.top_k_similar(
+            query_emb, max(1, int(limit)), exclude_id=image_id, allowed_ids=allowed_ids
+        )
+        return {
+            "query_image_id": image_id,
+            "results": results,
+            "count": len(results),
         }
 
     async def search_by_upload(

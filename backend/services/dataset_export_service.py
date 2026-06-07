@@ -125,6 +125,16 @@ class DatasetExportRequest(BaseModel):
     # Empty string means "use whatever the template engine renders".
     image_overrides: Dict[str, str] = Field(default_factory=dict)
 
+    # Per-image natural-language caption type (point 3: two-box editor). Keyed
+    # like ``image_overrides``. Values: ``"booru"`` (tags only — the default and
+    # the back-compat path; absent keys behave identically), ``"nl"`` (replace
+    # tags with the natural-language sentence), ``"both"`` (tags then sentence).
+    # ``image_nl_overrides`` carries the user-edited NL-box text per image so a
+    # freshly-rendered booru caption can be paired with an edited sentence
+    # without freezing the whole caption.
+    image_types: Dict[str, str] = Field(default_factory=dict)
+    image_nl_overrides: Dict[str, str] = Field(default_factory=dict)
+
 
 class DatasetExportPreviewRequest(BaseModel):
     """Request schema for ``POST /api/dataset/export-preview``.
@@ -154,6 +164,8 @@ class DatasetExportPreviewRequest(BaseModel):
     common_tags: List[str] = Field(default_factory=list, max_length=500)
     normalize_tag_underscores: bool = True
     image_overrides: Dict[str, str] = Field(default_factory=dict)
+    image_types: Dict[str, str] = Field(default_factory=dict)
+    image_nl_overrides: Dict[str, str] = Field(default_factory=dict)
     limit: int = Field(default=72, ge=1, le=500)
 
 
@@ -377,6 +389,28 @@ def _validate_export_request(request: DatasetExportRequest) -> Optional[Path]:
     return output_path
 
 
+def _split_keyed_str_map(raw: Optional[Dict[str, Any]]) -> Tuple[Dict[int, str], Dict[str, str]]:
+    """Split a ``{str(image_id)|abs_path: value}`` map into (int-keyed, path-keyed).
+
+    Shared by ``image_overrides``, ``image_types`` and ``image_nl_overrides`` —
+    all three use the same dual key convention (DB id for gallery items, a
+    resolved absolute path for local Dataset Maker items).
+    """
+    int_map: Dict[int, str] = {}
+    path_map: Dict[str, str] = {}
+    for k, v in (raw or {}).items():
+        text = str(v if v is not None else "")
+        try:
+            int_map[int(k)] = text
+        except (TypeError, ValueError):
+            try:
+                normalized = str(Path(normalize_user_path(str(k))).resolve())
+            except (OSError, ValueError):
+                continue
+            path_map[normalized] = text
+    return int_map, path_map
+
+
 def _split_image_overrides(request: Any) -> Tuple[Dict[int, str], Dict[str, str]]:
     """Normalise DB-id and local-path caption overrides.
 
@@ -384,19 +418,68 @@ def _split_image_overrides(request: Any) -> Tuple[Dict[int, str], Dict[str, str]
     paths for local Dataset Maker records. Empty strings are valid overrides:
     a user can intentionally export a blank sidecar from the review table.
     """
-    image_overrides_int: Dict[int, str] = {}
-    image_overrides_path: Dict[str, str] = {}
-    for k, v in (getattr(request, "image_overrides", None) or {}).items():
-        text = str(v or "")
-        try:
-            image_overrides_int[int(k)] = text
-        except (TypeError, ValueError):
-            try:
-                normalized = str(Path(normalize_user_path(str(k))).resolve())
-            except (OSError, ValueError):
-                continue
-            image_overrides_path[normalized] = text
-    return image_overrides_int, image_overrides_path
+    return _split_keyed_str_map(getattr(request, "image_overrides", None))
+
+
+# Content modes whose rendered caption is booru-tags / template only — the
+# per-image NL compose (point 3) layers the natural-language sentence on top of
+# these. NL-aware modes (tags_nl, nl_caption, prompt_nl, caption_*) already emit
+# the sentence globally, so compose is skipped for them to avoid doubling it.
+_NL_COMPOSE_MODES = {"template", "tags"}
+
+
+def _compose_nl_caption(
+    rendered: str,
+    record: Dict[str, Any],
+    image_id: int,
+    src_image_path: str,
+    *,
+    content_mode: str,
+    types_int: Dict[int, str],
+    types_path: Dict[str, str],
+    nl_overrides_int: Dict[int, str],
+    nl_overrides_path: Dict[str, str],
+) -> str:
+    """Fold the natural-language sentence into a booru caption per the image's
+    caption type (point 3: two-box editor / per-image Booru-NL-Both control).
+
+    ``rendered`` is the already-computed booru caption (a verbatim override or a
+    fresh template render). Returns it unchanged when the image has no type
+    entry (the default 'booru', also the full back-compat path for callers that
+    never send ``image_types``) or when the global content mode already
+    incorporates the caption. ``image_nl_overrides`` (the user's edited NL box)
+    wins over the stored ``nl_caption`` so a freshly-rendered booru caption can
+    be paired with an edited sentence without freezing the whole caption.
+    """
+    caption_type = None
+    if image_id and image_id in types_int:
+        caption_type = types_int[image_id]
+    elif src_image_path and src_image_path in types_path:
+        caption_type = types_path[src_image_path]
+    caption_type = str(caption_type or "").strip().lower()
+    if caption_type not in ("nl", "both"):
+        return rendered
+    if str(content_mode or "").strip().lower() not in _NL_COMPOSE_MODES:
+        return rendered
+
+    nl_text: Optional[str] = None
+    if image_id and image_id in nl_overrides_int:
+        nl_text = nl_overrides_int[image_id]
+    elif src_image_path and src_image_path in nl_overrides_path:
+        nl_text = nl_overrides_path[src_image_path]
+    if nl_text is None:
+        # Fall back to the stored pure NL, then the fused ai_caption for rows
+        # tagged before the nl_caption split existed.
+        nl_text = str(record.get("nl_caption") or record.get("ai_caption") or "")
+    nl_text = nl_text.strip()
+    booru = str(rendered or "").strip()
+    if caption_type == "nl":
+        return nl_text or booru
+    # 'both' — tags first, then the sentence (matches the tags_nl mode order).
+    if booru and nl_text:
+        return f"{booru}, {nl_text}"
+    return booru or nl_text
+
 
 
 def _normalise_common_tag(tag: str, *, normalize_tag_underscores: bool) -> str:
@@ -478,15 +561,19 @@ def _render_dataset_sidecar(
     blacklist_set: set[str],
     image_overrides_int: Dict[int, str],
     image_overrides_path: Dict[str, str],
+    image_types_int: Optional[Dict[int, str]] = None,
+    image_types_path: Optional[Dict[str, str]] = None,
+    nl_overrides_int: Optional[Dict[int, str]] = None,
+    nl_overrides_path: Optional[Dict[str, str]] = None,
 ) -> str:
     image_id = int(record.get("id") or 0)
     src_image_path = str(record.get("path") or "")
+    content_mode = str(getattr(request, "content_mode", "template") or "template").strip().lower()
     if image_id and image_id in image_overrides_int:
         rendered = image_overrides_int[image_id]
     elif src_image_path and src_image_path in image_overrides_path:
         rendered = image_overrides_path[src_image_path]
     else:
-        content_mode = str(getattr(request, "content_mode", "template") or "template").strip().lower()
         template_options = (
             _build_dataset_template_options(request, blacklist_set)
             if content_mode == "template"
@@ -502,6 +589,19 @@ def _render_dataset_sidecar(
             normalize_tag_underscores=bool(getattr(request, "normalize_tag_underscores", True)),
         )
         rendered = _append_common_tags_for_mode(rendered, request, content_mode)
+    # Point 3: fold in the per-image natural-language sentence (no-op unless the
+    # image carries an 'nl'/'both' type entry — full back-compat otherwise).
+    rendered = _compose_nl_caption(
+        rendered,
+        record,
+        image_id,
+        src_image_path,
+        content_mode=content_mode,
+        types_int=image_types_int or {},
+        types_path=image_types_path or {},
+        nl_overrides_int=nl_overrides_int or {},
+        nl_overrides_path=nl_overrides_path or {},
+    )
     return apply_caption_transforms(rendered, getattr(request, "caption_transforms", None) or {})
 
 
@@ -550,6 +650,8 @@ def export_dataset(
     blacklist_set = {str(t).strip().lower() for t in request.blacklist if str(t).strip()}
 
     image_overrides_int, image_overrides_path = _split_image_overrides(request)
+    image_types_int, image_types_path = _split_keyed_str_map(getattr(request, "image_types", None))
+    nl_overrides_int, nl_overrides_path = _split_keyed_str_map(getattr(request, "image_nl_overrides", None))
     caption_extension = _dataset_sidecar_extension(request.content_mode)
 
     # ---- Execute the plan ----
@@ -668,6 +770,10 @@ def export_dataset(
                 blacklist_set=blacklist_set,
                 image_overrides_int=image_overrides_int,
                 image_overrides_path=image_overrides_path,
+                image_types_int=image_types_int,
+                image_types_path=image_types_path,
+                nl_overrides_int=nl_overrides_int,
+                nl_overrides_path=nl_overrides_path,
             )
         except Exception as exc:  # pragma: no cover - defensive
             msg = f"caption render failed for image {image_id}: {exc}"
@@ -841,6 +947,8 @@ def preview_dataset_export(request: DatasetExportPreviewRequest) -> Dict[str, An
 
     blacklist_set = {str(t).strip().lower() for t in request.blacklist if str(t).strip()}
     image_overrides_int, image_overrides_path = _split_image_overrides(request)
+    image_types_int, image_types_path = _split_keyed_str_map(getattr(request, "image_types", None))
+    nl_overrides_int, nl_overrides_path = _split_keyed_str_map(getattr(request, "image_nl_overrides", None))
     caption_extension = _dataset_sidecar_extension(content_mode)
     limit = max(1, min(int(request.limit or 72), 500))
     used_image_paths: set[str] = set()
@@ -898,6 +1006,10 @@ def preview_dataset_export(request: DatasetExportPreviewRequest) -> Dict[str, An
                     blacklist_set=blacklist_set,
                     image_overrides_int=image_overrides_int,
                     image_overrides_path=image_overrides_path,
+                    image_types_int=image_types_int,
+                    image_types_path=image_types_path,
+                    nl_overrides_int=nl_overrides_int,
+                    nl_overrides_path=nl_overrides_path,
                 )
             except Exception as exc:  # pragma: no cover - defensive preview fallback
                 render_error = str(exc)
@@ -913,6 +1025,11 @@ def preview_dataset_export(request: DatasetExportPreviewRequest) -> Dict[str, An
             "output_image_path": str(dst_image_path) if dst_image_path is not None and request.output_folder else "",
             "output_caption_path": str(dst_caption_path) if dst_caption_path is not None and (request.output_folder or output_mode == "beside_image") else "",
             "caption": rendered,
+            # Booru tags (rendered template) live in ``caption``; surface the
+            # natural-language sentence separately so the editor's NL box can
+            # show / edit it independently of the booru-tags box (point 2/3).
+            "ai_caption": str(record.get("ai_caption") or ""),
+            "nl_caption": str(record.get("nl_caption") or ""),
             "skipped_reason": skip_reason,
             "error": render_error or None,
         })

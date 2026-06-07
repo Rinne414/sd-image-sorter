@@ -25,6 +25,10 @@ websocket-client>=1.8.0,<2.0
 cffi>=1.14; sys_platform == "win32" and platform_python_implementation != "PyPy"
 sniffio>=1.3.0
 sortedcontainers>=2.4.0
+# socksio: SOCKS proxy backend for httpx (httpx[socks] extra), used by the VLM
+# captioner's optional SOCKS proxy field. Tiny dependency-free pure-Python lib;
+# kept in core so a configured SOCKS proxy works on the lightweight install too.
+socksio>=1.0.0
 slowapi>=0.1.9
 psutil>=5.9.0
 send2trash>=1.8.3

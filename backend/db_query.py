@@ -72,6 +72,7 @@ _IMAGE_COLUMNS_BASE_FIELDS = (
     "indexed_at",
     "tagged_at",
     "ai_caption",
+    "nl_caption",
     "aesthetic_score",
     # v3.3.2 user star rating (FF-2): INTEGER 0-5, NOT NULL DEFAULT 0 (0 = unrated).
     "user_rating",

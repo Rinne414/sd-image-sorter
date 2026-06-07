@@ -214,8 +214,8 @@
         banner.innerHTML = `
             <span class="smart-tag-ollama-icon" aria-hidden="true">⚠️</span>
             <span class="smart-tag-ollama-text">
-                自然语言描述器不可用 — 请打开 VLM 设置并确认 Ollama 正在运行。<br>
-                Natural-language captioner is unavailable — open VLM Settings and verify Ollama is running.
+                自然语言描述器尚未配置 — 请打开 VLM 设置，填入云端 API 端点（如 OpenAI / OpenRouter / Gemini），或确认本地 Ollama 正在运行。<br>
+                No natural-language captioner configured — open VLM Settings to add a cloud API endpoint (OpenAI / OpenRouter / Gemini, etc.), or start a local Ollama.
             </span>
             <button type="button" class="btn btn-small btn-primary smart-tag-ollama-action" id="btn-smart-tag-open-vlm-from-warning">
                 Open VLM Settings
@@ -240,20 +240,40 @@
         const naturalEnabled = !!$('#smart-tag-enable-vlm')?.checked;
         const nlMode = $('#smart-tag-nl-mode')?.value || 'vlm';
         // Only relevant when the user actually plans to use the
-        // VLM-via-Ollama path. ToriiGate runs in-process and doesn't
+        // VLM-via-endpoint path. ToriiGate runs in-process and doesn't
         // care about the Ollama daemon.
         if (!naturalEnabled || nlMode !== 'vlm') {
             banner.hidden = true;
             return;
+        }
+        // A configured VLM endpoint (cloud API such as OpenAI / OpenRouter /
+        // aihubmix / Anthropic / Gemini, or any local server) OR Vertex means
+        // the captioner does NOT depend on Ollama — so the "Ollama required"
+        // banner must not fire. The banner is only for the truly-unconfigured
+        // case where the implicit default would be a local Ollama daemon.
+        //
+        // Bug fix: this used to query ONLY /api/vlm/local-models/recommended,
+        // so a user who had pointed Smart Tag at a cloud API was still nagged
+        // to install / start Ollama (the API had in fact tagged their images).
+        try {
+            const settings = await getJson('/api/vlm/settings');
+            const endpoint = String(settings?.endpoint || '').trim();
+            if (endpoint.length > 0 || settings?.use_vertex === true) {
+                banner.hidden = true;
+                return;
+            }
+        } catch (_err) {
+            // Couldn't read settings — fall through to the Ollama probe rather
+            // than assuming a cloud captioner is configured.
         }
         try {
             const data = await getJson('/api/vlm/local-models/recommended');
             const unavailable = !data?.ollama_installed || !data?.ollama_running;
             banner.hidden = !unavailable;
         } catch (_err) {
-            // If the endpoint itself is unreachable we treat that as
-            // "we can't confirm Ollama is reachable" — show the banner
-            // so the user has a path to fix it.
+            // No configured endpoint AND the Ollama probe failed — we can't
+            // confirm any captioner is reachable, so show the banner with a
+            // path to fix it.
             banner.hidden = false;
         }
     }
@@ -790,10 +810,29 @@
             (window.Logger?.info || console.log)('[smart-tag]', message);
         }
 
-        // Tell Dataset Maker to refresh its captions so the new ones show up
-        // in the editor without requiring a tab switch.
-        if (window.DatasetMaker && typeof window.DatasetMaker._refreshAllCaptions === 'function') {
-            try { window.DatasetMaker._refreshAllCaptions(); } catch (_e) { /* ignore */ }
+        // Surface the new captions in Dataset Maker so they show up in the
+        // editor + queue without requiring a re-import (Bug: gallery-source
+        // images previously needed a manual re-import from the gallery before
+        // Smart Tag results appeared here).
+        const dm = window.DatasetMaker;
+        if (dm) {
+            try {
+                // When the run produced natural-language captions, seed them
+                // from the DB ai_caption into the editor — the booru-tags
+                // template the editor renders omits {nl_caption}, so VLM/API
+                // captions were only visible in the gallery before.
+                const usedVlm = snap.settings?.enable_vlm === true
+                    && (snap.settings?.natural_language_mode || 'vlm') !== 'off';
+                if (usedVlm && typeof dm._seedAiCaptions === 'function' && Array.isArray(dm.imageIds)) {
+                    const galleryIds = dm.imageIds.filter((id) => !(dm.isLocalId?.(id)));
+                    if (galleryIds.length) await dm._seedAiCaptions(galleryIds);
+                }
+            } catch (_e) { /* non-fatal: gallery still shows ai_caption */ }
+            // Re-render queue tiles + export preview + active editor from the
+            // refreshed caption state (this is what a re-import used to force).
+            if (typeof dm._refreshAllCaptions === 'function') {
+                try { await dm._refreshAllCaptions(); } catch (_e) { /* ignore */ }
+            }
         }
         activeJobId = null;
     }

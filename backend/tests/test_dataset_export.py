@@ -512,3 +512,124 @@ def test_export_missing_image_recorded_as_error(test_client, tmp_path: Path):
     assert body["exported"] == 0
     assert body["error_count"] >= 1
     assert any("not found in library" in m for m in body["error_messages"])
+
+
+# ---------------------------------------------------------------------------
+# Point 3: per-image natural-language caption type (two-box editor).
+# image_types = booru | nl | both ; image_nl_overrides = edited NL-box text.
+# Absent type entry => booru-only (the default, also the full back-compat path).
+# ---------------------------------------------------------------------------
+
+_NL_SENTENCE = "a lone figure stands in a quiet field at dawn"
+
+
+@pytest.fixture
+def captioned_image(test_db, tmp_path: Path):
+    """One on-disk image with booru tags AND a stored nl_caption."""
+    import database as db
+
+    src = tmp_path / "capsrc"
+    src.mkdir()
+    path = src / "subject.png"
+    Image.new("RGB", (32, 32), color=(10, 20, 30)).save(path)
+    image_id = db.add_image(path=str(path), filename="subject.png")
+    db.add_tags(image_id, [
+        {"tag": "1girl", "confidence": 0.9},
+        {"tag": "long_hair", "confidence": 0.85},
+    ])
+    db.update_image_caption(image_id, "", nl_caption=_NL_SENTENCE)
+    return image_id, path
+
+
+def _export_caption_beside(test_client, image_id, path, **extra):
+    """Export one image in beside_image mode and return the written caption."""
+    body = {
+        "image_ids": [image_id],
+        "output_mode": "beside_image",
+        "output_folder": "",
+        "naming_pattern": "ignored",
+        "image_op": "copy",
+        "overwrite_policy": "overwrite",
+        **extra,
+    }
+    response = test_client.post("/api/dataset/export", json=body)
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "ok", response.json()
+    return path.with_suffix(".txt").read_text(encoding="utf-8")
+
+
+def test_per_image_type_both_appends_nl(test_client, captioned_image):
+    image_id, path = captioned_image
+    caption = _export_caption_beside(
+        test_client, image_id, path, image_types={str(image_id): "both"}
+    )
+    assert "1girl" in caption  # booru part still present
+    assert caption.strip().endswith(_NL_SENTENCE)  # sentence appended last
+    assert caption.index("1girl") < caption.index(_NL_SENTENCE)  # tags first
+
+
+def test_per_image_type_nl_only_replaces_tags(test_client, captioned_image):
+    image_id, path = captioned_image
+    caption = _export_caption_beside(
+        test_client, image_id, path, image_types={str(image_id): "nl"}
+    )
+    assert caption.strip() == _NL_SENTENCE
+    assert "1girl" not in caption
+
+
+def test_per_image_type_booru_is_unchanged(test_client, captioned_image):
+    image_id, path = captioned_image
+    caption = _export_caption_beside(
+        test_client, image_id, path, image_types={str(image_id): "booru"}
+    )
+    assert "1girl" in caption
+    assert _NL_SENTENCE not in caption
+
+
+def test_absent_type_is_back_compat_booru_only(test_client, captioned_image):
+    """No image_types at all => exact pre-feature behavior (booru only)."""
+    image_id, path = captioned_image
+    caption = _export_caption_beside(test_client, image_id, path)
+    assert "1girl" in caption
+    assert _NL_SENTENCE not in caption
+
+
+def test_per_image_nl_override_wins_over_stored(test_client, captioned_image):
+    image_id, path = captioned_image
+    edited = "an entirely different hand-edited sentence"
+    caption = _export_caption_beside(
+        test_client, image_id, path,
+        image_types={str(image_id): "both"},
+        image_nl_overrides={str(image_id): edited},
+    )
+    assert "1girl" in caption
+    assert caption.strip().endswith(edited)
+    assert _NL_SENTENCE not in caption  # stored nl_caption was overridden
+
+
+def test_nl_compose_not_doubled_for_tags_nl_mode(test_client, captioned_image):
+    """tags_nl already emits the sentence globally; per-image 'both' must not
+    append it a second time."""
+    image_id, path = captioned_image
+    caption = _export_caption_beside(
+        test_client, image_id, path,
+        content_mode="tags_nl",
+        image_types={str(image_id): "both"},
+    )
+    assert caption.count(_NL_SENTENCE) == 1
+
+
+def test_preview_composes_per_image_nl(test_client, captioned_image):
+    image_id, path = captioned_image
+    response = test_client.post("/api/dataset/export-preview", json={
+        "image_ids": [image_id],
+        "output_mode": "beside_image",
+        "image_types": {str(image_id): "both"},
+    })
+    assert response.status_code == 200, response.text
+    items = response.json()["items"]
+    assert len(items) == 1
+    caption = items[0]["caption"]
+    assert "1girl" in caption and _NL_SENTENCE in caption
+    # The preview also surfaces the raw nl_caption separately for the NL box.
+    assert items[0]["nl_caption"] == _NL_SENTENCE

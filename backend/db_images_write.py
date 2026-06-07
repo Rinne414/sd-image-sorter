@@ -50,6 +50,7 @@ def _clear_image_derived_state(cursor: sqlite3.Cursor, image_id: int) -> None:
             embedding = NULL,
             tagged_at = NULL,
             ai_caption = NULL,
+            nl_caption = NULL,
             aesthetic_score = NULL
         WHERE id = ?
         """,
@@ -573,12 +574,18 @@ def mark_pending_images_metadata_error(image_ids: List[int], read_error: str) ->
         )
         return int(cursor.rowcount or 0)
 
-def update_image_caption(image_id: int, caption: str) -> None:
-    """Update the ai_caption field for an image."""
+def update_image_caption(image_id: int, caption: str, nl_caption: Optional[str] = None) -> None:
+    """Update the composed ``ai_caption`` (and optionally pure ``nl_caption``).
+
+    ``caption`` is the composed/display caption (may contain booru tags).
+    ``nl_caption`` is the pure natural-language sentence from a VLM. When
+    ``nl_caption`` is None the existing value is preserved (COALESCE) so callers
+    that only know the composed caption never clobber the pure NL field.
+    """
     with get_db() as conn:
         conn.execute(
-            "UPDATE images SET ai_caption = ? WHERE id = ?",
-            (caption, image_id),
+            "UPDATE images SET ai_caption = ?, nl_caption = COALESCE(?, nl_caption) WHERE id = ?",
+            (caption, nl_caption, image_id),
         )
 
 def set_user_rating(image_id: int, stars: int) -> bool:
@@ -642,7 +649,7 @@ def _copy_image_derived_state(cursor: sqlite3.Cursor, source_image_id: int, targ
 
     source_row = cursor.execute(
         """
-        SELECT tagged_at, ai_caption, aesthetic_score, embedding, content_fingerprint
+        SELECT tagged_at, ai_caption, nl_caption, aesthetic_score, embedding, content_fingerprint
         FROM images
         WHERE id = ?
         """,
@@ -654,6 +661,7 @@ def _copy_image_derived_state(cursor: sqlite3.Cursor, source_image_id: int, targ
             UPDATE images
             SET tagged_at = ?,
                 ai_caption = ?,
+                nl_caption = ?,
                 aesthetic_score = ?,
                 embedding = ?,
                 content_fingerprint = COALESCE(?, content_fingerprint)
@@ -662,6 +670,7 @@ def _copy_image_derived_state(cursor: sqlite3.Cursor, source_image_id: int, targ
             (
                 source_row["tagged_at"],
                 source_row["ai_caption"],
+                source_row["nl_caption"],
                 source_row["aesthetic_score"],
                 source_row["embedding"],
                 source_row["content_fingerprint"],

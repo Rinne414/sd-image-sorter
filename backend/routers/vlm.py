@@ -382,7 +382,7 @@ async def caption_single(request: CaptionSingleRequest):
     # Persist results based on output format
     if not result.error:
         if result.caption:
-            db.update_image_caption(request.image_id, result.caption)
+            db.update_image_caption(request.image_id, result.caption, nl_caption=result.caption)
         if result.tags:
             _persist_tags(db, request.image_id, result.tags)
 
@@ -695,7 +695,7 @@ async def _run_batch(image_source: _BatchImageSource) -> None:
 
             if not result.error and (result.caption or result.tags):
                 if result.caption:
-                    db.update_image_caption(image_id, result.caption)
+                    db.update_image_caption(image_id, result.caption, nl_caption=result.caption)
                 if result.tags:
                     _persist_tags(db, image_id, result.tags)
                 with _batch_state_lock:

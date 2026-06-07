@@ -221,7 +221,13 @@
                     filename: item.filename || '',
                     thumbnail_path: item.thumbnail_path || '',
                 });
-                if (item.rendered) this.captions.set(Number(item.image_id), item.rendered);
+                // point 7 fix: do NOT seed ``captions`` here. This endpoint is
+                // called with a bare ``preset_id:'custom'`` (no trigger/append/
+                // blacklist), so its ``rendered`` is a stripped booru template.
+                // Pre-filling captions made the very next call,
+                // _fetchMissingCaptions (which skips ids already in ``captions``),
+                // a no-op — so the full-options booru render AND the NL seeding
+                // never ran and the natural-language caption was lost on import.
             }
         } catch (e) { /* swallow - queue will just show fallback labels */ }
     };
@@ -263,6 +269,11 @@
                 const data = await r.json();
                 for (const item of (data.results || [])) {
                     if (item.rendered != null) this.captions.set(Number(item.image_id), item.rendered);
+                    // point 2/3: seed the natural-language baseline so the NL box
+                    // and the per-image "both" default have a value on import.
+                    // Don't clobber a user's NL edit; only set the baseline.
+                    const nlText = String(item.nl_caption || '').trim();
+                    if (nlText) this.nlCaptions.set(Number(item.image_id), nlText);
                     if (!this.meta.has(Number(item.image_id))) {
                         this.meta.set(Number(item.image_id), {
                             filename: item.filename || '',
@@ -272,6 +283,50 @@
                 }
             }
         } catch (e) { /* */ }
+    };
+
+    // After a VLM / Smart Tag run the natural-language sentence lives in the
+    // image's DB ``nl_caption`` (pure prose). The booru tags went to the tag
+    // table and are rendered into the booru box separately by
+    // _refreshAllCaptions. Seed the sentence into ``nlCaptions`` so the editor's
+    // NL box shows it and the per-image type auto-defaults to "both" (tags + NL).
+    // (Pre-split builds dumped the fused ai_caption into the single caption box;
+    // with the two-box editor that prose belongs in the NL box, not the tags.)
+    DM._seedAiCaptions = async function (ids) {
+        const galleryIds = (ids || [])
+            .map(Number)
+            .filter((id) => Number.isFinite(id) && id > 0 && !(this.isLocalId?.(id)));
+        if (!galleryIds.length) return 0;
+        let applied = 0;
+        const batchSize = 500;
+        for (let i = 0; i < galleryIds.length; i += batchSize) {
+            const batch = galleryIds.slice(i, i + batchSize);
+            let data;
+            try {
+                const r = await fetch('/api/tags/export-preview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_ids: batch, preset_id: 'custom' }),
+                });
+                if (!r.ok) continue;
+                data = await r.json();
+            } catch (_e) {
+                continue;
+            }
+            for (const item of (data.results || [])) {
+                const id = Number(item.image_id);
+                // Prefer the pure nl_caption; fall back to the fused ai_caption
+                // for rows tagged before the split column existed.
+                const nl = String(item.nl_caption || item.ai_caption || '').trim();
+                if (!Number.isFinite(id) || !nl) continue;
+                this.nlCaptions.set(id, nl);
+                applied += 1;
+            }
+        }
+        // Reflect the seeded NL in the open editor's NL box immediately so the
+        // active image surfaces its sentence without a re-select.
+        this._refreshActiveCaptionBoxes?.();
+        return applied;
     };
 
     // ---------- Tag all ----------
@@ -560,6 +615,16 @@
         for (const [id, val] of this.captionEdits.entries()) {
             image_overrides[String(id)] = val;
         }
+        // point 3: per-image NL type + edited NL text. Only non-default entries
+        // are sent (booru-typed images send nothing → the backend renders them
+        // exactly as before), so even 80k-image exports stay tiny.
+        const image_types = {};
+        const image_nl_overrides = {};
+        for (const id of this.imageIds) {
+            const type = this._captionTypeFor ? this._captionTypeFor(id) : 'booru';
+            if (type === 'nl' || type === 'both') image_types[String(id)] = type;
+            if (this.nlEdits.has(id)) image_nl_overrides[String(id)] = this.nlEdits.get(id);
+        }
 
         return {
             image_ids: this.imageIds,
@@ -577,6 +642,8 @@
             blacklist,
             common_tags: commonTags,
             image_overrides,
+            image_types,
+            image_nl_overrides,
         };
     };
 

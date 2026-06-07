@@ -258,10 +258,34 @@ def encode_image_base64(image_path: str, max_size: int = 1024) -> str:
         return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
+def _socks_proxy_missing_error(exc: Exception) -> "ProviderError":
+    """Build the actionable error for a SOCKS proxy without the socksio backend.
+
+    httpx raises a bare ``ImportError`` ("install httpx[socks]") when a SOCKS
+    proxy is requested but the optional ``socksio`` package is absent. We turn
+    that into a config-level :class:`ProviderError` so the request surfaces a
+    clear, fixable message instead of crashing — and so we never silently fall
+    back to a direct connection, which would leak the connection the user
+    explicitly wanted tunnelled through SOCKS.
+    """
+    return ProviderError(
+        "A SOCKS proxy is configured but the 'socksio' package is not installed. "
+        "Install it with: pip install \"httpx[socks]\"  — or switch to an HTTP/HTTPS "
+        "proxy in VLM Settings.",
+        error_type="config",
+        retryable=False,
+    )
+
+
 def make_async_client(config: VLMConfig, timeout: Optional[float] = None) -> httpx.AsyncClient:
     """Build an httpx.AsyncClient with proxy support derived from config.
 
-    Falls back gracefully if SOCKS support is unavailable (httpx[socks] not installed).
+    HTTP and HTTPS proxies work with stock httpx. SOCKS proxies additionally
+    require the ``socksio`` package (the ``httpx[socks]`` extra); when it is
+    missing we raise a clear :class:`ProviderError` (see
+    :func:`_socks_proxy_missing_error`) rather than letting httpx's raw
+    ImportError crash the request. A malformed (non-SOCKS) proxy config falls
+    back to a direct connection so a typo never hard-fails captioning.
     """
     actual_timeout = timeout if timeout is not None else config.timeout_seconds
     proxies = config.get_proxies()
@@ -279,15 +303,27 @@ def make_async_client(config: VLMConfig, timeout: Optional[float] = None) -> htt
                 from httpx import AsyncHTTPTransport
                 mounts = {scheme: AsyncHTTPTransport(proxy=url) for scheme, url in proxies.items()}
                 kwargs["mounts"] = mounts
-        except Exception as e:
-            logger.warning(f"Failed to apply proxy config (will retry without): {e}")
+        except ImportError as e:
+            # AsyncHTTPTransport(proxy=socks://...) with no socksio backend.
+            raise _socks_proxy_missing_error(e) from e
+        except (TypeError, ValueError) as e:
+            logger.warning(f"Failed to apply proxy config (falling back to direct): {e}")
             kwargs.pop("proxy", None)
             kwargs.pop("mounts", None)
     try:
         return httpx.AsyncClient(**kwargs)
+    except ImportError as e:
+        # The single-proxy ``proxy=`` path builds its transport here, so a
+        # missing socksio surfaces as ImportError at construction time.
+        if config.socks_proxy:
+            raise _socks_proxy_missing_error(e) from e
+        logger.warning(f"Proxy client init failed ({e}); falling back to direct connection.")
+        kwargs.pop("proxy", None)
+        kwargs.pop("mounts", None)
+        return httpx.AsyncClient(timeout=actual_timeout)
     except (TypeError, ValueError) as e:
-        # SOCKS or proxy not supported - retry without proxy
-        logger.warning(f"Proxy unsupported ({e}); install 'httpx[socks]' to enable. Falling back to direct connection.")
+        # Proxy kwarg shape rejected by this httpx version - retry without proxy
+        logger.warning(f"Proxy unsupported ({e}); falling back to direct connection.")
         kwargs.pop("proxy", None)
         kwargs.pop("mounts", None)
         return httpx.AsyncClient(timeout=actual_timeout)
@@ -399,9 +435,15 @@ class VLMProvider:
 
         if self.config.output_format == OUTPUT_FORMAT_BOTH:
             nl_part, tags_part = _parse_hybrid_output(text)
+            # If no structured format was found (the model ignored the JSON /
+            # marker contract), fall back to a shape-based split so a weak
+            # model's "tags, tags. Prose." blob doesn't dump booru tags into the
+            # natural-language caption (the exact leak point 1 reported).
+            if not nl_part and not tags_part:
+                nl_part, tags_part = _heuristic_split_tags_prose(text)
             result.caption = nl_part
             result.tags = _parse_tag_list(tags_part) if tags_part else []
-            # If parsing failed (no markers), put entire text in caption
+            # Last resort: nothing parseable -> keep the whole text as caption.
             if not result.caption and not result.tags:
                 result.caption = text
             return result
@@ -505,25 +547,133 @@ def _parse_tag_list(text: str) -> List[str]:
     return [t for t in raw_tags if t and not _looks_like_garbage_tag(t)]
 
 
-def _parse_hybrid_output(text: str) -> tuple[str, str]:
-    """Parse <NL>...</NL><TAGS>...</TAGS> hybrid output.
+def _try_parse_json_hybrid(text: str) -> Optional[tuple[str, str]]:
+    """Extract ``(nl, tags)`` from a JSON object the model may have emitted.
 
-    Returns (nl_text, tags_text). Either may be empty if not found.
-    Falls back to splitting on common boundary markers if XML-style tags absent.
+    Handles ```json fenced blocks and leading/trailing prose by locating the
+    outermost ``{...}``. Recognises description/caption/nl keys for the prose
+    and a ``tags`` key (list or comma string). Returns ``None`` when no usable
+    JSON object is present so the caller can try the next strategy.
+    """
+    import json as _json
+    import re as _re
+
+    candidate = (text or "").strip()
+    # Strip a leading ```json / ``` fence and trailing ``` if present.
+    fence = _re.match(r"^```[a-zA-Z0-9_-]*\s*\n?(.*?)\n?```\s*$", candidate, _re.DOTALL)
+    if fence:
+        candidate = fence.group(1).strip()
+
+    start = candidate.find("{")
+    end = candidate.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    try:
+        obj = _json.loads(candidate[start:end + 1])
+    except Exception:
+        return None
+    if not isinstance(obj, dict):
+        return None
+
+    nl = ""
+    for key in ("description", "caption", "nl", "nl_caption", "natural_language"):
+        value = obj.get(key)
+        if isinstance(value, str) and value.strip():
+            nl = value.strip()
+            break
+
+    tags_value = obj.get("tags")
+    if isinstance(tags_value, list):
+        tags_str = ", ".join(str(t).strip() for t in tags_value if str(t).strip())
+    elif isinstance(tags_value, str):
+        tags_str = tags_value.strip()
+    else:
+        tags_str = ""
+
+    if nl or tags_str:
+        return nl, tags_str
+    return None
+
+
+def _heuristic_split_tags_prose(text: str) -> tuple[str, str]:
+    """Best-effort split of an unstructured ``tags ... prose`` blob.
+
+    Used only when a model ignored the requested JSON / marker contract. The
+    goal is to keep a comma-separated booru-tag run out of the natural-language
+    caption, not perfect recovery. Conservative: when no clear tag run is found
+    it returns ``("", "")`` so the caller keeps the whole text as the caption
+    and never invents tags from prose.
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return "", ""
+
+    # Strategy 1: line-structured output (tags on their own line(s), prose on
+    # others). A "tag line" has >=3 comma parts, no terminal sentence
+    # punctuation, and a majority of tag-shaped parts.
+    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    if len(lines) >= 2:
+        tag_lines: List[str] = []
+        prose_lines: List[str] = []
+        for line in lines:
+            parts = [p.strip() for p in line.split(",") if p.strip()]
+            is_tag_line = (
+                len(parts) >= 3
+                and line[-1] not in _PROSE_SUFFIX_CHARS
+                and sum(0 if _looks_like_garbage_tag(p) else 1 for p in parts) >= max(2, int(len(parts) * 0.6))
+            )
+            (tag_lines if is_tag_line else prose_lines).append(line)
+        tags_str = ", ".join(tag_lines)
+        prose = " ".join(prose_lines).strip()
+        if tags_str and prose:
+            return prose, tags_str
+
+    # Strategy 2: single line "tag, tag, tag, ..., Prose sentence." — take the
+    # leading run of tag-shaped comma segments; the first prose-shaped segment
+    # starts the natural-language remainder.
+    parts = [p.strip() for p in raw.replace("\n", " ").split(",")]
+    parts = [p for p in parts if p]
+    tag_run: List[str] = []
+    for idx, part in enumerate(parts):
+        if _looks_like_garbage_tag(part) or (part and part[-1] in _PROSE_SUFFIX_CHARS):
+            if len(tag_run) >= 3:
+                prose = ", ".join(parts[idx:]).strip()
+                if prose:
+                    return prose, ", ".join(tag_run)
+            break
+        tag_run.append(part)
+    else:
+        # Every comma segment looked like a tag (no prose region) — route the
+        # whole blob to tags rather than dumping a tag list into the caption.
+        if len(tag_run) >= 3:
+            return "", ", ".join(tag_run)
+
+    return "", ""
+
+
+def _parse_hybrid_output(text: str) -> tuple[str, str]:
+    """Parse hybrid (NL + tags) output, robust to weak models.
+
+    Tries, in order: a JSON object (``{"description": .., "tags": ..}``);
+    XML-style ``<NL>../<TAGS>..`` markers; ``Description:`` / ``Tags:`` section
+    headers. Returns ``(nl_text, tags_text)``; either may be empty when not
+    found. The purely shape-based fallback for marker-less output lives in
+    ``_heuristic_split_tags_prose`` and is applied by the caller.
     """
     import re
 
+    json_result = _try_parse_json_hybrid(text)
+    if json_result is not None:
+        return json_result
+
     nl_match = re.search(r"<NL>(.*?)</NL>", text, re.DOTALL | re.IGNORECASE)
     tags_match = re.search(r"<TAGS>(.*?)</TAGS>", text, re.DOTALL | re.IGNORECASE)
-
     nl_text = nl_match.group(1).strip() if nl_match else ""
     tags_text = tags_match.group(1).strip() if tags_match else ""
-
     if nl_text or tags_text:
         return nl_text, tags_text
 
-    # Fallback: try to split on common section markers
-    # e.g., "Description: ...\nTags: ..."
+    # Fallback: "Description: ...\nTags: ..." style section headers.
     desc_match = re.search(r"(?:description|caption)[:：]\s*(.+?)(?:\n\s*tags?[:：]|\Z)", text, re.IGNORECASE | re.DOTALL)
     tag_match = re.search(r"tags?[:：]\s*(.+?)\Z", text, re.IGNORECASE | re.DOTALL)
     if desc_match or tag_match:

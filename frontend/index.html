@@ -3019,6 +3019,44 @@
                                 </div>
                             </div>
                             <div id="dataset-caption-diff" class="dataset-caption-diff" hidden></div>
+
+                            <!-- point 2/3: two-box caption editor. A per-image
+                                 type toggle decides what gets exported (booru
+                                 tags only / natural-language sentence only /
+                                 both), with bulk + auto helpers for large sets.
+                                 Hidden until an image is active. -->
+                            <div class="dataset-caption-type" id="dataset-caption-type" role="group"
+                                 aria-label="Caption type for this image" hidden>
+                                <span class="dataset-caption-type-label" data-i18n="dataset.captionTypeLabel">This image:</span>
+                                <div class="dataset-caption-type-seg" role="radiogroup">
+                                    <button type="button" class="dataset-caption-type-btn" data-caption-type="booru"
+                                            role="radio" aria-checked="false"
+                                            data-i18n="dataset.captionTypeBooru" data-i18n-title="dataset.captionTypeBooruTip"
+                                            title="Export booru tags only">Booru</button>
+                                    <button type="button" class="dataset-caption-type-btn" data-caption-type="both"
+                                            role="radio" aria-checked="false"
+                                            data-i18n="dataset.captionTypeBoth" data-i18n-title="dataset.captionTypeBothTip"
+                                            title="Export tags, then the natural-language sentence">Both</button>
+                                    <button type="button" class="dataset-caption-type-btn" data-caption-type="nl"
+                                            role="radio" aria-checked="false"
+                                            data-i18n="dataset.captionTypeNl" data-i18n-title="dataset.captionTypeNlTip"
+                                            title="Export the natural-language sentence only">NL</button>
+                                </div>
+                                <div class="dataset-caption-type-bulk">
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-captype-selected"
+                                            data-i18n="dataset.captionTypeApplySelected"
+                                            title="Apply the active image's type to the selected queue images">▸ Selected</button>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-captype-all"
+                                            data-i18n="dataset.captionTypeApplyAll"
+                                            title="Apply the active image's type to every queue image">▸ All</button>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-captype-auto"
+                                            data-i18n="dataset.captionTypeAuto"
+                                            title="Auto: images that have a natural-language caption → Both, the rest → Booru">⚡ Auto</button>
+                                </div>
+                            </div>
+
+                            <label class="dataset-box-label dataset-box-label-booru" id="dataset-booru-label"
+                                   for="dataset-editor-textarea" data-i18n="dataset.booruBoxLabel" hidden>Booru tags</label>
                             <textarea class="dataset-editor-textarea" id="dataset-editor-textarea"
                                       placeholder="caption text..."
                                       data-i18n-placeholder="dataset.captionPlaceholder"
@@ -3036,6 +3074,16 @@
                                 </div>
                                 <div class="dataset-tag-pills-wrap" id="dataset-tag-pills-wrap"></div>
                             </div>
+
+                            <!-- point 2: natural-language box, parallel to the booru box.
+                                 Edits here are kept separate from the tags so the user
+                                 can see and control both independently. -->
+                            <label class="dataset-box-label dataset-box-label-nl" id="dataset-nl-label"
+                                   for="dataset-editor-nl" data-i18n="dataset.nlBoxLabel" hidden>Natural language</label>
+                            <textarea class="dataset-editor-nl" id="dataset-editor-nl"
+                                      placeholder="natural-language caption..."
+                                      data-i18n-placeholder="dataset.nlPlaceholder"
+                                      hidden></textarea>
 
                             <!-- v3.2.2 T-power-PR2 (C): tag confidence pill panel.
                                  Lets the user spot low-confidence false positives at
@@ -3311,6 +3359,16 @@
                                 </div>
                                 <div id="dataset-translation-options" class="dataset-translation-options">
                                     <h4 class="dataset-subsection-title" data-i18n="dataset.translationSettings">VLM translation settings</h4>
+                                    <!-- point 4: inline Chinese reading aid. When on, each tag pill shows
+                                         a (中文) hint. This is a READING AID ONLY — it never enters the
+                                         exported caption (rendered as a separate child span, not tag text). -->
+                                    <label class="dataset-zh-aid-toggle">
+                                        <input type="checkbox" id="dataset-translation-show-zh">
+                                        <span data-i18n="dataset.zhAidToggle">Show Chinese reading aid next to tags</span>
+                                    </label>
+                                    <p class="dataset-zh-aid-note" data-i18n="dataset.zhAidNote">
+                                        Reading aid only — the Chinese is shown next to each tag for easy reading and is never written into the exported captions.
+                                    </p>
                                     <label class="form-label">
                                         <span data-i18n="dataset.translationProviderLabel">Chinese translation provider</span>
                                         <select id="dataset-translation-provider-mode" class="form-input">
@@ -5401,6 +5459,7 @@
     <script src="/static/js/censor-edit.js"></script>
     <script src="/static/js/queue-solitaire.js"></script>
     <script src="/static/js/similar.js"></script>
+    <script src="/static/js/clip-tools.js"></script>
     <script src="/static/js/prompt-lab.js"></script>
     <script src="/static/js/dataset-maker.js"></script>
     <script src="/static/js/smart-tag.js"></script>

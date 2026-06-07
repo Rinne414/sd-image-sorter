@@ -8572,8 +8572,9 @@ function updateSelectionUI() {
         grid.classList.toggle('selection-mode', !!AppState.selectionMode);
     }
 
-    // In gallery selection mode, focus the sidebar on batch actions by hiding the
-    // browse/filter sections (see .filter-sidebar.selection-mode in ui-refresh.css).
+    // In gallery selection mode, keep the browse/filter sections visible so users
+    // can select images across different filters; the batch-action panel is pinned
+    // to the sidebar bottom (see .filter-sidebar.selection-mode in ui-refresh.css).
     const filterSidebar = $('.filter-sidebar');
     if (filterSidebar) {
         filterSidebar.classList.toggle('selection-mode', selectionPanelVisible);

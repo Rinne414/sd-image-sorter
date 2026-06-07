@@ -2926,6 +2926,25 @@ textarea:focus,
     to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Zoom-safe modal clamp (intentionally NOT inside a media query) ──
+   ui-scale.js applies a root CSS `zoom` on large displays (1.3 at 2560px / 2K,
+   up to 1.5 at 4K). CSS `zoom` does not interact consistently with `vh`/`vw`
+   units across Chrome versions, so a modal sized with `max-height:90vh/94vh`
+   can render TALLER than the real viewport; being centred, its top controls
+   (close ✕, Prev/Next) then clip above the screen. The `.modal` overlay is
+   `position:fixed; inset:0` — exactly the viewport in every coordinate system —
+   so clamping the content to a PERCENTAGE of the overlay is immune to the
+   zoom/vh discrepancy and can never exceed the viewport. `!important` makes it
+   a hard, global safety cap for every modal (id-specific vh rules included);
+   it only *caps* size, so narrower/shorter modals keep their own dimensions.
+   `min-height:0` lets the flex child actually shrink so its own
+   `overflow-y:auto` scrolls the inner content instead of pushing past the cap. */
+.modal.visible > .modal-content {
+    max-height: calc(100% - 24px) !important;
+    max-width: calc(100% - 24px) !important;
+    min-height: 0;
+}
+
 /* Progress bar smooth transitions */
 .progress-fill,
 #scan-progress-fill,
@@ -3329,11 +3348,17 @@ textarea:focus,
     background: linear-gradient(135deg, #7c8bff 0%, #33d6e0 100%);
 }
 
-/* In gallery selection mode the sidebar focuses on batch actions — hide the
-   browse/filter sections (filters / folders / collections). The filter set was
-   already applied before entering selection, so nothing actionable is lost. */
-.filter-sidebar.selection-mode [data-sidebar-section] {
-    display: none;
+/* In gallery selection mode KEEP the browse sections (filters / folders /
+   collections) visible so users can select images across DIFFERENT filters in
+   a single pass — hiding them (the previous behaviour) made cross-filter
+   selection impossible. The sidebar already scrolls (`overflow-y:auto`), so the
+   batch-action panel sits below the controls in normal flow and is reached by
+   scrolling.
+   Do NOT position:sticky this panel: it is the DOM sibling immediately AFTER
+   #btn-toggle-select, so a bottom-pinned sticky overlaps that button and steals
+   its clicks (exit-selection-mode becomes unclickable). */
+.filter-sidebar.selection-mode .selection-panel {
+    margin-top: 14px;
 }
 
 #btn-toggle-select.selection-active,

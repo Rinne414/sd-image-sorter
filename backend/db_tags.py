@@ -69,7 +69,8 @@ def add_tags_batch(image_tags_list: List[Dict[str, Any]]) -> None:
         image_tags_list: List of dicts, each with:
             - image_id: int
             - tags: List[Dict] with 'tag' and 'confidence' keys
-            - ai_caption: Optional[str] - natural language caption from VLM models
+            - ai_caption: Optional[str] - composed display caption (may include tags)
+            - nl_caption: Optional[str] - pure natural-language caption from a VLM
             - content_fingerprint: Optional[str] - metadata-independent image hash
     """
     if not image_tags_list:
@@ -81,7 +82,8 @@ def add_tags_batch(image_tags_list: List[Dict[str, Any]]) -> None:
         for item in image_tags_list:
             image_id = item["image_id"]
             tags = item["tags"]
-            ai_caption = item.get("ai_caption")
+            ai_caption = item.get("ai_caption") or None
+            nl_caption = item.get("nl_caption") or None
             content_fingerprint = _ensure_content_fingerprint_value(cursor, image_id, item.get("content_fingerprint"))
 
             # Clear existing tags
@@ -99,17 +101,14 @@ def add_tags_batch(image_tags_list: List[Dict[str, Any]]) -> None:
                     tag_values
                 )
 
-            # Update tagged timestamp and caption
-            if ai_caption:
-                cursor.execute(
-                    "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, ai_caption = ?, content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
-                    (ai_caption, content_fingerprint, image_id)
-                )
-            else:
-                cursor.execute(
-                    "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
-                    (content_fingerprint, image_id)
-                )
+            # Update tagged timestamp and captions. COALESCE preserves an
+            # existing value when the caller passes None (a tag-only run, or a
+            # VLM-only run), so ai_caption (composed display caption) and
+            # nl_caption (pure natural-language) are written independently.
+            cursor.execute(
+                "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, ai_caption = COALESCE(?, ai_caption), nl_caption = COALESCE(?, nl_caption), content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
+                (ai_caption, nl_caption, content_fingerprint, image_id)
+            )
 
         # Single commit at the end (automatic with context manager)
     _invalidate_tags_cache()

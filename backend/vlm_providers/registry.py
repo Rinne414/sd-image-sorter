@@ -159,22 +159,22 @@ PROMPT_PRESETS: Dict[str, Dict[str, str]] = {
         "name": "Hybrid (NL + Tags)",
         "output_format": "both",
         "system_prompt": (
-            "You output both a natural language caption AND a list of danbooru tags. "
-            "Use this exact format with XML-style markers:\n"
-            "<NL>2-4 sentences of natural language description here</NL>\n"
-            "<TAGS>tag1, tag2, tag3, ...</TAGS>\n"
-            "Tags use lowercase with underscores. NL uses plain English sentences."
+            "You output a natural-language caption AND danbooru tags as a single "
+            "JSON object and nothing else. Use exactly this shape:\n"
+            '{"description": "2-4 plain-English sentences", "tags": "tag1, tag2, tag3"}\n'
+            "Tags are lowercase_with_underscores. Output ONLY the JSON object - no "
+            "markdown code fences, no commentary before or after."
         ),
         "user_prompt": (
-            "Describe this image in the hybrid format:\n"
-            "<NL>...</NL> for 2-4 sentences covering subject, pose, scene, lighting, composition.\n"
-            "<TAGS>...</TAGS> for 15-30 danbooru-style tags (lowercase_with_underscores)."
+            "Return a JSON object with two keys for this image:\n"
+            '"description": 2-4 sentences covering subject, pose, scene, lighting, composition.\n'
+            '"tags": 15-30 danbooru-style tags, lowercase_with_underscores, comma-separated.'
         ),
         "user_prompt_with_tags": (
             "Existing tags: {tags}\n\n"
-            "Output:\n"
-            "<NL>2-4 sentences of natural language adding spatial/lighting/atmosphere details NOT in tags above</NL>\n"
-            "<TAGS>refined and expanded danbooru tag list, 15-30 tags total</TAGS>"
+            "Return a JSON object with two keys:\n"
+            '"description": 2-4 sentences adding spatial / lighting / atmosphere details NOT in the tags above.\n'
+            '"tags": a refined and expanded danbooru tag list (15-30 tags total), lowercase_with_underscores, comma-separated.'
         ),
     },
 }

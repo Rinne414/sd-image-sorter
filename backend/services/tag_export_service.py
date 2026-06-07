@@ -502,6 +502,10 @@ def build_sidecar_content(
     prompt = str(image.get("prompt") or "").strip()
     negative_prompt = str(image.get("negative_prompt") or "").strip()
     caption = str(image.get("ai_caption") or "").strip()
+    # Pure natural-language caption (point 1): prefer the dedicated nl_caption
+    # column; fall back to the composed ai_caption for images tagged before the
+    # split existed. The NL-oriented modes use this so booru tags don't leak in.
+    nl_caption_text = str(image.get("nl_caption") or "").strip() or caption
     prefix = str(prefix or "").strip()
 
     # LoRA-friendly underscore normalization for danbooru-tag content modes.
@@ -533,17 +537,17 @@ def build_sidecar_content(
         ])
     if mode == "nl_caption":
         # Pure natural language caption only
-        return _join_caption_parts([prefix, *_filter_text_caption_tokens(caption, blacklist)])
+        return _join_caption_parts([prefix, *_filter_text_caption_tokens(nl_caption_text, blacklist)])
     if mode == "tags_nl":
         # Training-caption mode: local tags first, then natural-language caption; original prompt is excluded.
-        return _join_caption_parts([prefix, *filtered_tags, *_filter_text_caption_tokens(caption, blacklist)])
+        return _join_caption_parts([prefix, *filtered_tags, *_filter_text_caption_tokens(nl_caption_text, blacklist)])
     if mode == "prompt_nl":
         # Original prompt + NL caption (separated by newline for clarity)
         parts = []
         if prefix:
             parts.append(prefix)
         parts.extend(_filter_text_caption_tokens(prompt, blacklist))
-        parts.extend(_filter_text_caption_tokens(caption, blacklist))
+        parts.extend(_filter_text_caption_tokens(nl_caption_text, blacklist))
         return "\n".join(parts) if len(parts) > 1 else (parts[0] if parts else "")
     if mode == "template":
         # Use the export template engine
@@ -1018,6 +1022,16 @@ def render_export_preview(request: Any) -> Dict[str, Any]:
             "filename": image.get("filename") or "",
             "thumbnail_path": image.get("path") or "",
             "rendered": rendered,
+            # Surface the raw natural-language caption (VLM / Smart Tag output)
+            # alongside the template-rendered string. The Dataset Maker editor
+            # renders a booru-tags template that omits {nl_caption}, so without
+            # this the VLM caption was visible in the gallery (which reads
+            # ai_caption directly) but invisible in the caption editor. The
+            # frontend uses this to seed the editor after a Smart Tag run.
+            "ai_caption": str(image.get("ai_caption") or ""),
+            # Pure natural-language caption (point 1/2): lets the editor's NL
+            # box show / edit the sentence separately from the booru-tags box.
+            "nl_caption": str(image.get("nl_caption") or ""),
             "error": None,
         })
 
