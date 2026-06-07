@@ -137,3 +137,48 @@ def test_exclude_extra_empty_no_effect(test_db_with_images):
     baseline = db.get_images_paginated(limit=100)
     with_empty = db.get_images_paginated(exclude_prompts=[], exclude_colors=[], limit=100)
     assert len(baseline["images"]) == len(with_empty["images"])
+
+
+# v3.3.x regression guard (Ask-2 "过滤器筛选不全 + -1 张图"): the count used for
+# get_images_paginated["total"] (_get_filtered_count) must apply the SAME color +
+# exclude filters as the page query and as the offset-path get_filtered_image_count.
+# It previously omitted them, so "total" was inflated under an active color/exclude
+# filter and the gallery looked like the filter had not narrowed the set.
+def test_paginated_total_matches_count_under_color_filter(test_db):
+    import database as db
+
+    warm_a = db.add_image(path="/t/wa.png", filename="wa.png")
+    warm_b = db.add_image(path="/t/wb.png", filename="wb.png")
+    cool_a = db.add_image(path="/t/ca.png", filename="ca.png")
+    with db.get_db() as conn:
+        conn.execute("UPDATE images SET color_temperature = 'warm' WHERE id IN (?, ?)", (warm_a, warm_b))
+        conn.execute("UPDATE images SET color_temperature = 'cool' WHERE id = ?", (cool_a,))
+
+    result = db.get_images_paginated(color_temperature="warm", sort_by="newest", skip_count=False, limit=100)
+    # All matches fit on one page, so total must equal the rows actually returned.
+    assert len(result["images"]) == 2
+    assert result["total"] == 2
+    assert result["total"] == db.get_filtered_image_count(color_temperature="warm")
+
+
+def test_paginated_total_matches_count_under_exclude_color(test_db):
+    import database as db
+
+    warm_a = db.add_image(path="/t/wa.png", filename="wa.png")
+    cool_a = db.add_image(path="/t/ca.png", filename="ca.png")
+    with db.get_db() as conn:
+        conn.execute("UPDATE images SET color_temperature = 'warm' WHERE id = ?", (warm_a,))
+        conn.execute("UPDATE images SET color_temperature = 'cool' WHERE id = ?", (cool_a,))
+
+    result = db.get_images_paginated(exclude_colors=["warm"], skip_count=False, limit=100)
+    assert len(result["images"]) == 1
+    assert result["total"] == 1
+    assert result["total"] == db.get_filtered_image_count(exclude_colors=["warm"])
+
+
+def test_paginated_total_matches_count_under_exclude_tags(test_db_with_images):
+    import database as db
+
+    result = db.get_images_paginated(exclude_tags=["1girl"], skip_count=False, limit=100)
+    assert result["total"] == len(result["images"])
+    assert result["total"] == db.get_filtered_image_count(exclude_tags=["1girl"])

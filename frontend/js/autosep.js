@@ -1404,7 +1404,14 @@ let autosepMoveController = null;
 let autosepMoveTracker = null;
 
 function showAutosepMoveProgress(total) {
-    const container = document.querySelector('.preview-section');
+    // The Auto-Separate markup uses .autosep-pane-action-body / -preview-body
+    // panes; the old `.preview-section` selector never matched any element, so
+    // this whole function early-returned and the move/copy progress bar (and
+    // its preview-pane status) never rendered. Prefer the action pane (where
+    // the Run CTA lives), fall back to the preview pane, then the legacy class.
+    const container = document.querySelector('.autosep-pane-action-body')
+        || document.querySelector('.autosep-pane-preview-body')
+        || document.querySelector('.preview-section');
     if (!container) return;
     const operationMode = getAutoSepOperationMode();
 

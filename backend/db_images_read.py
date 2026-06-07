@@ -931,6 +931,17 @@ def get_images_paginated(
                 collection_id=collection_id,
                 folder=folder,
                 has_metadata=has_metadata,
+                brightness_min=brightness_min,
+                brightness_max=brightness_max,
+                color_temperature=color_temperature,
+                brightness_distribution=brightness_distribution,
+                exclude_tags=exclude_tags,
+                exclude_generators=exclude_generators,
+                exclude_ratings=exclude_ratings,
+                exclude_checkpoints=exclude_checkpoints,
+                exclude_loras=exclude_loras,
+                exclude_prompts=exclude_prompts,
+                exclude_colors=exclude_colors,
             )
 
         # Determine next cursor from the last row returned in this page
@@ -971,6 +982,21 @@ def _get_filtered_count(
     collection_id: Optional[int] = None,
     folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
+    # v3.2.1 color filters + v3.2.2 per-item exclude filters. Added here so the
+    # cursor-pagination first-page COUNT matches the page query (it previously
+    # omitted these, so an active color/exclude filter under newest/oldest sort
+    # produced an inflated "total" that looked like the filter wasn't applied).
+    brightness_min: Optional[float] = None,
+    brightness_max: Optional[float] = None,
+    color_temperature: Optional[str] = None,
+    brightness_distribution: Optional[str] = None,
+    exclude_tags: Optional[List[str]] = None,
+    exclude_generators: Optional[List[str]] = None,
+    exclude_ratings: Optional[List[str]] = None,
+    exclude_checkpoints: Optional[List[str]] = None,
+    exclude_loras: Optional[List[str]] = None,
+    exclude_prompts: Optional[List[str]] = None,
+    exclude_colors: Optional[List[str]] = None,
 ) -> int:
     """Get total count for filtered images.
 
@@ -1024,6 +1050,22 @@ def _get_filtered_count(
     conditions, params = _apply_user_rating_filter(
         conditions, params, min_user_rating
     )
+
+    # Apply v3.2.1 color filters (mirror get_filtered_image_count so the
+    # cursor-path total matches the page query).
+    conditions, params = _apply_color_filter(
+        conditions, params,
+        brightness_min, brightness_max, color_temperature, brightness_distribution,
+    )
+
+    # Apply v3.2.2 per-item exclude filters.
+    conditions, params = _apply_exclude_tags_filter(conditions, params, exclude_tags)
+    conditions, params = _apply_exclude_generators_filter(conditions, params, exclude_generators)
+    conditions, params = _apply_exclude_ratings_filter(conditions, params, exclude_ratings)
+    conditions, params = _apply_exclude_checkpoints_filter(conditions, params, exclude_checkpoints)
+    conditions, params = _apply_exclude_loras_filter(conditions, params, exclude_loras)
+    conditions, params = _apply_exclude_prompts_filter(conditions, params, exclude_prompts, prompt_match_mode)
+    conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
 
     # Apply artist filter (JOIN)
     query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
