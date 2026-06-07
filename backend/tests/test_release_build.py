@@ -97,6 +97,32 @@ def test_portable_launcher_runs_onnx_repair_unconditionally(tmp_path):
         )
 
 
+def test_portable_launcher_opens_browser_in_process_not_hidden_powershell(tmp_path):
+    """Regression lock (v3.3.2, AV false positive): the GENERATED Windows portable
+    launcher must open the browser in-process via SD_IMAGE_SORTER_OPEN_BROWSER=1,
+    never by spawning a hidden-window PowerShell that polls the URL in a loop --
+    the pattern Huorong / 火绒 flagged as trojan-like (commit e5592be).
+
+    run-portable.bat is generated here (it is gitignored, NOT a tracked source
+    file), so fixing run.bat alone would silently leave the shipped portable
+    launcher dirty. This keeps the generator in sync with run.bat and the
+    in-process opener (main._maybe_open_browser_when_ready).
+    """
+    release_builder = load_release_builder()
+    launcher_path = release_builder.write_portable_launcher(tmp_path)
+    content = launcher_path.read_text(encoding="utf-8")
+
+    # Opt in to the in-process opener (matches run.bat).
+    assert 'set "SD_IMAGE_SORTER_OPEN_BROWSER=1"' in content
+
+    # None of the hidden-PowerShell / looped-HTTP-probe markers may reappear.
+    lowered = content.lower()
+    for forbidden in ("powershell", "windowstyle hidden", "invoke-webrequest", "start /b"):
+        assert forbidden not in lowered, (
+            f"AV-flagged browser-probe marker reintroduced in run-portable.bat: {forbidden!r}"
+        )
+
+
 def test_release_skip_rules_drop_hidden_and_docs_files():
     release_builder = load_release_builder()
 
