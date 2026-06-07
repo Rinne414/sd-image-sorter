@@ -45,6 +45,7 @@ keep working unchanged.
 from __future__ import annotations
 
 import json
+import gc
 import logging
 import re
 import threading
@@ -1216,6 +1217,66 @@ def _tag_image_with_thresholds(
         return tagger.tag(image_path, **kwargs)
 
 
+def _recommended_tag_batch_size(model_name: str, use_gpu: bool) -> int:
+    """Hardware-aware booru batch size for Smart Tag.
+
+    Mirrors the bulk tagging worker (``services/tagging_service``): start from
+    ``recommend_tagger_config``'s VRAM/model-aware value instead of a fixed 64,
+    so an 8GB-VRAM laptop GPU starts at a size that actually fits (e.g. 16 for
+    the heavy EVA02 default) rather than attempting 64 and relying on the
+    tagger's OOM backoff. That adaptive backoff stays as the second line of
+    defense. Clamped to ``[1, SMART_TAG_TAG_BATCH_SIZE]``.
+    """
+    try:
+        from hardware_monitor import get_system_info, recommend_tagger_config
+
+        rec = recommend_tagger_config(
+            get_system_info(), model_name=(model_name or None), use_gpu=use_gpu
+        )
+        if use_gpu:
+            size = int(rec.get("recommended_batch_size") or 16)
+        else:
+            size = int(rec.get("recommended_cpu_chunk_size") or 8)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("smart-tag: hardware batch-size probe failed (%s); using fallback.", exc)
+        size = 16 if use_gpu else 8
+    return max(1, min(size, SMART_TAG_TAG_BATCH_SIZE))
+
+
+def _apply_memory_pressure(job: "SmartTagJobState", tagger, current_batch_size: int) -> int:
+    """Live VRAM/RAM-pressure check (mirrors the bulk tagging worker) so Smart
+    Tag reacts to the user's *current* machine usage mid-run, not just at job
+    start: it refreshes the tagger session when free VRAM is nearly gone and
+    shrinks the booru batch when RAM is tight. Returns the (possibly reduced)
+    batch size; never grows it back (conservative, like the bulk worker)."""
+    try:
+        from hardware_monitor import check_memory_pressure
+
+        pressure = check_memory_pressure()
+    except Exception:  # pragma: no cover - hardware_monitor optional
+        return current_batch_size
+
+    if pressure.get("should_restart_session") and hasattr(tagger, "_recreate_session"):
+        try:
+            tagger._recreate_session()
+            job.message = "VRAM pressure detected — refreshed the tagger session."
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("smart-tag: session refresh under VRAM pressure failed: %s", exc)
+
+    ram_pct = pressure.get("ram_percent_used")
+    if pressure.get("should_pause"):
+        reduced = max(1, current_batch_size // 2)
+        gc.collect()
+        time.sleep(2)
+        job.message = f"Memory pressure high — pausing briefly and reducing batch to {reduced}."
+        return reduced
+    if ram_pct is not None and ram_pct >= 90.0 and current_batch_size > 2:
+        reduced = max(2, current_batch_size // 2)
+        job.message = f"High RAM usage — reducing batch to {reduced}."
+        return reduced
+    return current_batch_size
+
+
 def _tag_batch_with_thresholds(
     tagger,
     image_paths: List[str],
@@ -1223,6 +1284,7 @@ def _tag_batch_with_thresholds(
     general_threshold: float,
     character_threshold: float,
     copyright_threshold: float,
+    preferred_batch_size: int = SMART_TAG_TAG_BATCH_SIZE,
 ) -> List[Dict[str, Any]]:
     """GPU-batch a list of images through ``tagger.tag_batch``.
 
@@ -1241,7 +1303,7 @@ def _tag_batch_with_thresholds(
         import inspect
 
         kwargs: Dict[str, Any] = {
-            "preferred_batch_size": SMART_TAG_TAG_BATCH_SIZE,
+            "preferred_batch_size": preferred_batch_size,
             "threshold": general_threshold,
             "character_threshold": character_threshold,
         }
@@ -1919,6 +1981,15 @@ def _run_windowed_pipeline(
     completed work. Sets the terminal job status itself.
     """
     ctx = _build_caption_phase(req, vlm_provider, nl_tagger)
+    # Hardware-aware booru batch size (mirrors the bulk tagging worker): an
+    # 8GB-VRAM laptop starts at a size that fits instead of a fixed 64.
+    booru_batch_size = (
+        _recommended_tag_batch_size(
+            getattr(tagger, "model_name", "") or req.tagger_model or "", req.use_gpu
+        )
+        if (req.enable_wd14 and tagger is not None)
+        else SMART_TAG_TAG_BATCH_SIZE
+    )
     job.stage = "vlm" if ctx.nl_active else ("tagging" if req.enable_wd14 else "")
     job.phase_completion = 0.0
     if ctx.use_vlm:
@@ -1938,6 +2009,7 @@ def _run_windowed_pipeline(
 
         # ---- Booru phase: ONE GPU-batched call for the whole window. ----
         if req.enable_wd14 and tagger is not None:
+            booru_batch_size = _apply_memory_pressure(job, tagger, booru_batch_size)
             job.message = f"Tagging {len(valid)} image(s) on GPU..."
             raw_results = _tag_batch_with_thresholds(
                 tagger,
@@ -1945,6 +2017,7 @@ def _run_windowed_pipeline(
                 general_threshold=req.general_threshold,
                 character_threshold=req.character_threshold,
                 copyright_threshold=req.copyright_threshold,
+                preferred_batch_size=booru_batch_size,
             )
         else:
             raw_results = [{} for _ in valid]
@@ -2081,6 +2154,10 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                     logger.warning("smart-tag: failed to load tagger %s: %s", model_name, exc)
                     continue
 
+                tagger_batch_size = _recommended_tag_batch_size(
+                    getattr(one_tagger, "model_name", "") or model_name, req.use_gpu
+                )
+
                 # GPU-batch this tagger's pass over the images in windows (the
                 # old per-image loop barely used the GPU). _tag_batch_with_thresholds
                 # self-tunes / falls back per image, so one bad image can't sink
@@ -2091,12 +2168,14 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                     window = all_sources[win_start:win_start + SMART_TAG_PIPELINE_WINDOW]
                     local_valid = [i for i, (_sk, _iid, p) in enumerate(window) if p]
                     if local_valid:
+                        tagger_batch_size = _apply_memory_pressure(job, one_tagger, tagger_batch_size)
                         batch_out = _tag_batch_with_thresholds(
                             one_tagger,
                             [window[i][2] for i in local_valid],
                             general_threshold=gen_th,
                             character_threshold=char_th,
                             copyright_threshold=copy_th,
+                            preferred_batch_size=tagger_batch_size,
                         )
                         for local_i, out in zip(local_valid, batch_out):
                             out = out or {}

@@ -163,3 +163,39 @@ def test_apply_cuda_memory_guard_caps_toriigate_gpu_fraction(monkeypatch):
     fraction, device = calls[0]
     assert 0.3 <= fraction <= 0.95
     assert device == 0
+
+
+def test_decide_kv_cache_is_on_for_cpu():
+    """On CPU the KV cache is free speed (no VRAM cost), so always enable it."""
+    tagger = ToriiGateTagger.__new__(ToriiGateTagger)
+    tagger.use_gpu = False
+    assert tagger._decide_kv_cache() is True
+
+
+def test_decide_kv_cache_gpu_gated_on_free_vram(monkeypatch):
+    """On GPU the KV cache (≈2-4x faster) is only enabled when free VRAM is
+    comfortable; a tight card stays cache-off to avoid an OOM mid-generation."""
+    tagger = ToriiGateTagger.__new__(ToriiGateTagger)
+    tagger.use_gpu = True
+
+    class _FakeCuda:
+        def __init__(self, free_mb):
+            self._free = int(free_mb * 1024 * 1024)
+
+        def is_available(self):
+            return True
+
+        def mem_get_info(self, _index=0):
+            return (self._free, 24 * 1024 * 1024 * 1024)
+
+    # Comfortable free VRAM -> KV cache ON.
+    monkeypatch.setattr(toriigate_module, "torch", SimpleNamespace(cuda=_FakeCuda(8000)))
+    assert tagger._decide_kv_cache() is True
+
+    # Tight free VRAM (below threshold) -> KV cache OFF.
+    monkeypatch.setattr(toriigate_module, "torch", SimpleNamespace(cuda=_FakeCuda(1000)))
+    assert tagger._decide_kv_cache() is False
+
+    # torch unavailable on a GPU request -> conservative OFF.
+    monkeypatch.setattr(toriigate_module, "torch", None)
+    assert tagger._decide_kv_cache() is False

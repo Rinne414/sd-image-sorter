@@ -22,9 +22,11 @@ image rectangle so the model can mask attention away from the gray bars.
 from __future__ import annotations
 
 import csv
+import gc
 import logging
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
@@ -38,13 +40,32 @@ from config import (
     TAGGER_MODELS,
     get_oppai_oracle_model_dir,
 )
-from ai_runtime_guard import exclusive_ai_runtime
+from ai_runtime_guard import exclusive_ai_runtime, looks_like_cuda_oom
 from model_download_sources import endpoint_label, get_hf_endpoint_order
 from utils.path_validation import normalize_user_path
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "oppai-oracle-v1.1"
+
+# Shared bounded pool to overlap CPU-bound image decode/letterbox so the GPU is
+# not starved between batches (PIL + numpy release the GIL). GPU inference stays
+# serialized by exclusive_ai_runtime; this only parallelizes preprocessing.
+_PREPROCESS_MAX_WORKERS = min(8, (os.cpu_count() or 4))
+_preprocess_executor: Optional[ThreadPoolExecutor] = None
+_preprocess_executor_lock = threading.Lock()
+
+
+def _get_preprocess_executor() -> ThreadPoolExecutor:
+    global _preprocess_executor
+    if _preprocess_executor is None:
+        with _preprocess_executor_lock:
+            if _preprocess_executor is None:
+                _preprocess_executor = ThreadPoolExecutor(
+                    max_workers=_PREPROCESS_MAX_WORKERS,
+                    thread_name_prefix="oppai-preprocess",
+                )
+    return _preprocess_executor
 
 
 def _normalize_oppai_model_alias(model_name: Optional[str]) -> str:
@@ -552,7 +573,13 @@ class OppaiOracleTagger:
             result["error"] = error
         return result
 
-    def _run_inference(self, pixel_values: np.ndarray, padding_mask: np.ndarray) -> np.ndarray:
+    def _run_inference(
+        self,
+        pixel_values: np.ndarray,
+        padding_mask: np.ndarray,
+        *,
+        allow_cpu_fallback: bool = True,
+    ) -> np.ndarray:
         assert self.session is not None
         try:
             outputs = self.session.run(
@@ -560,7 +587,11 @@ class OppaiOracleTagger:
                 {"pixel_values": pixel_values, "padding_mask": padding_mask},
             )
         except Exception as exc:
-            if self._session_uses_gpu():
+            # When the caller is doing GPU batch-size backoff it passes
+            # ``allow_cpu_fallback=False`` so the OOM propagates and it can retry
+            # a SMALLER batch on the GPU first, instead of this method silently
+            # dropping the whole run to CPU (permanently) on the first failure.
+            if self._session_uses_gpu() and allow_cpu_fallback:
                 logger.warning("OppaiOracle GPU inference failed (%s); rebuilding on CPU.", exc)
                 self.session = self._create_session(
                     self._resolved_model_path or "",
@@ -575,6 +606,85 @@ class OppaiOracleTagger:
             else:
                 raise
         return outputs[0]
+
+    def _recreate_gpu_session(self) -> None:
+        """Rebuild the ONNX session on the GPU to clear CUDA state between
+        batch-size backoff steps (mirrors the WD14 tagger). Best-effort: if the
+        rebuild fails or no GPU provider is available, the existing session is
+        kept and the next attempt simply runs on it."""
+        if not self._resolved_model_path or not self._session_uses_gpu():
+            return
+        try:
+            available = ort.get_available_providers()
+            providers = [
+                p
+                for p in ("CUDAExecutionProvider", "DmlExecutionProvider", "CPUExecutionProvider")
+                if p in available
+            ]
+            if not any(p in providers for p in ("CUDAExecutionProvider", "DmlExecutionProvider")):
+                return
+            self.session = self._create_session(
+                self._resolved_model_path,
+                self._build_session_options(gpu_enabled=True),
+                providers,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("OppaiOracle GPU session rebuild failed (%s); keeping current session.", exc)
+
+    def _run_batch_inference_adaptive(
+        self,
+        pixel_values: np.ndarray,
+        padding_mask: np.ndarray,
+        *,
+        min_chunk_size: int = 1,
+        backoff_steps: Optional[List[Dict[str, Any]]] = None,
+    ) -> Tuple[np.ndarray, int]:
+        """Run inference on a preprocessed batch, halving the GPU sub-chunk on
+        failure (e.g. CUDA OOM) and rebuilding the GPU session before giving up
+        the GPU. Falls back to CPU only once the sub-chunk is at the floor.
+
+        Mirrors the WD14 tagger's adaptive backoff so a too-large batch degrades
+        to a smaller GPU batch instead of crashing or permanently dropping to
+        CPU. Returns ``(stacked_probabilities, final_chunk_size)`` where the
+        second value lets the caller remember the largest size that worked.
+        """
+        total = int(pixel_values.shape[0])
+        if total == 0:
+            return pixel_values[:0], max(1, int(min_chunk_size))
+
+        floor = max(1, int(min_chunk_size))
+        collected: List[np.ndarray] = []
+        chunk = total
+        cursor = 0
+        while cursor < total:
+            current = min(chunk, total - cursor)
+            sub_pv = pixel_values[cursor:cursor + current]
+            sub_pm = padding_mask[cursor:cursor + current]
+            try:
+                probs = self._run_inference(sub_pv, sub_pm, allow_cpu_fallback=False)
+            except Exception as exc:
+                if self._session_uses_gpu() and current > floor and looks_like_cuda_oom(exc):
+                    next_chunk = max(floor, current // 2)
+                    logger.warning(
+                        "OppaiOracle GPU OOM at batch %d (%s); retrying at %d.",
+                        current, exc, next_chunk,
+                    )
+                    if backoff_steps is not None:
+                        backoff_steps.append(
+                            {"from": current, "to": next_chunk, "mode": "gpu_backoff", "error": str(exc)}
+                        )
+                    gc.collect()
+                    self._recreate_gpu_session()
+                    chunk = next_chunk
+                    continue
+                # Non-OOM error, or already at the floor: last-resort CPU fallback
+                # for this sub-batch. If even CPU fails, let it propagate so the
+                # caller can mark just this chunk's images empty (graceful degrade).
+                probs = self._run_inference(sub_pv, sub_pm, allow_cpu_fallback=True)
+            for row in probs:
+                collected.append(row)
+            cursor += current
+        return np.stack(collected, axis=0), chunk
 
     def _maybe_refresh_session(self, image_count: int) -> None:
         if image_count <= 0:
@@ -619,6 +729,34 @@ class OppaiOracleTagger:
                 character_threshold=character_threshold,
             )
 
+    def _preprocess_paths(self, paths: List[str]) -> List[Any]:
+        """Decode + letterbox-preprocess a chunk in parallel; returns a list
+        aligned with ``paths`` where each entry is a ``(pixel_values,
+        padding_mask)`` tuple or the Exception that failed it (per-image
+        isolation, order preserved). Threads overlap CPU decode so the GPU is
+        not starved; serial for a single image."""
+        def _one(path: str):
+            with Image.open(path) as image:
+                return preprocess_image(image, target=self._target, pad_color=self._pad_color)
+
+        if len(paths) <= 1:
+            serial: List[Any] = []
+            for path in paths:
+                try:
+                    serial.append(_one(path))
+                except Exception as exc:
+                    serial.append(exc)
+            return serial
+
+        futures = [_get_preprocess_executor().submit(_one, path) for path in paths]
+        prepared: List[Any] = []
+        for future in futures:
+            try:
+                prepared.append(future.result())
+            except Exception as exc:
+                prepared.append(exc)
+        return prepared
+
     def tag_batch(
         self,
         image_paths: List[str],
@@ -629,7 +767,6 @@ class OppaiOracleTagger:
         character_threshold: Optional[float] = None,
         return_runtime_info: bool = False,
     ) -> Any:
-        del min_batch_size  # accepted for API compat
         if not image_paths:
             empty: List[Dict[str, Any]] = []
             if return_runtime_info:
@@ -646,8 +783,11 @@ class OppaiOracleTagger:
             if not self._loaded:
                 self.load()
 
-            chunk = max(1, int(preferred_batch_size or 1))
+            initial_chunk = max(1, int(preferred_batch_size or 1))
+            chunk = initial_chunk
+            min_chunk = max(1, int(min_batch_size or 1))
             results: List[Dict[str, Any]] = [self._build_empty_result() for _ in image_paths]
+            backoff_steps: List[Dict[str, Any]] = []
 
             cursor = 0
             while cursor < len(image_paths):
@@ -656,40 +796,59 @@ class OppaiOracleTagger:
                 pv_list: List[np.ndarray] = []
                 pm_list: List[np.ndarray] = []
                 indices: List[int] = []
-                for offset, path in enumerate(batch_paths):
+                prepared_chunk = self._preprocess_paths(batch_paths)
+                for offset, prepared in enumerate(prepared_chunk):
                     src_idx = cursor + offset
-                    try:
-                        with Image.open(path) as image:
-                            pv, pm = preprocess_image(
-                                image, target=self._target, pad_color=self._pad_color
-                            )
+                    if isinstance(prepared, Exception):
+                        logger.error("OppaiOracle preprocess failed for %s: %s", batch_paths[offset], prepared)
+                        results[src_idx] = self._build_empty_result(str(prepared))
+                    else:
+                        pv, pm = prepared
                         pv_list.append(pv)
                         pm_list.append(pm)
                         indices.append(src_idx)
-                    except Exception as exc:
-                        logger.error("OppaiOracle preprocess failed for %s: %s", path, exc)
-                        results[src_idx] = self._build_empty_result(str(exc))
 
                 if pv_list:
                     pv_batch = np.stack(pv_list, axis=0).astype(np.float32, copy=False)
                     pm_batch = np.stack(pm_list, axis=0).astype(bool, copy=False)
-                    probs_batch = self._run_inference(pv_batch, pm_batch)
-                    for i, src_idx in enumerate(indices):
-                        results[src_idx] = self._process_probs(
-                            probs_batch[i],
-                            threshold=threshold,
-                            character_threshold=character_threshold,
+                    try:
+                        probs_batch, used_chunk = self._run_batch_inference_adaptive(
+                            pv_batch,
+                            pm_batch,
+                            min_chunk_size=min_chunk,
+                            backoff_steps=backoff_steps,
                         )
+                    except Exception as exc:
+                        # Unrecoverable (even the CPU fallback failed): degrade
+                        # gracefully by marking this chunk's images empty instead
+                        # of sinking the whole call.
+                        logger.error(
+                            "OppaiOracle inference failed for a %d-image batch (%s); marking empty.",
+                            len(indices), exc,
+                        )
+                        for src_idx in indices:
+                            results[src_idx] = self._build_empty_result(str(exc))
+                    else:
+                        for i, src_idx in enumerate(indices):
+                            results[src_idx] = self._process_probs(
+                                probs_batch[i],
+                                threshold=threshold,
+                                character_threshold=character_threshold,
+                            )
+                        # Remember the largest sub-chunk that actually fit so later
+                        # windows don't re-attempt (and re-OOM) the original size.
+                        if used_chunk < chunk:
+                            chunk = max(min_chunk, used_chunk)
                     self._maybe_refresh_session(len(indices))
                 cursor = end
 
             if return_runtime_info:
                 return results, {
-                    "initial_chunk_size": chunk,
+                    "initial_chunk_size": initial_chunk,
                     "final_chunk_size": chunk,
-                    "backoff_steps": [],
+                    "backoff_steps": backoff_steps,
                     "used_cpu_fallback": not self.use_gpu,
-                    "attempted_gpu_backoff": False,
+                    "attempted_gpu_backoff": bool(backoff_steps),
                 }
             return results
 

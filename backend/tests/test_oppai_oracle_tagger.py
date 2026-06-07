@@ -247,3 +247,153 @@ def test_get_oppai_oracle_tagger_returns_singleton() -> None:
     c = get_oppai_oracle_tagger(use_gpu=False, threshold=0.5)
     assert c is a
     assert c.threshold == 0.5
+
+
+# ---------------------------------------------------------------------------
+# GPU OOM backoff (adaptive batch sizing)
+# ---------------------------------------------------------------------------
+
+
+class _FakeOrtSession:
+    """Stand-in ONNX session: raises (OOM) when the batch exceeds max_batch."""
+
+    def __init__(self, *, max_batch, providers, num_tags, fail_always=False, oom=True):
+        self._max_batch = max_batch
+        self._providers = list(providers)
+        self._num_tags = num_tags
+        self._fail_always = fail_always
+        self._oom = oom
+        self.run_batch_sizes = []
+
+    def get_providers(self):
+        return list(self._providers)
+
+    def run(self, output_names, feed):
+        batch = int(feed["pixel_values"].shape[0])
+        self.run_batch_sizes.append(batch)
+        if self._fail_always or batch > self._max_batch:
+            msg = "CUDA out of memory: failed to allocate" if self._oom else "invalid input dimensions"
+            raise RuntimeError(msg)
+        probs = np.zeros((batch, self._num_tags), dtype=np.float32)
+        probs[:, 2] = 0.99   # 1girl -> kept above the default threshold
+        probs[:, 7] = 0.85   # rating:questionable
+        return [probs]
+
+
+def _make_fake_loaded_tagger(tmp_path: Path, *, max_batch=2, fail_always=False):
+    """A tagger wired with a fake GPU session, bypassing the real ONNX load."""
+    csv_path = _write_minimal_oppai_csv(tmp_path)
+    tagger = OppaiOracleTagger(use_gpu=True)
+    tagger._load_tags(str(csv_path))
+    tagger._target = 8  # tiny canvas keeps preprocessing cheap
+    tagger._pad_color = (114, 114, 114)
+    tagger._resolved_model_path = "fake-model.onnx"
+    tagger._loaded = True
+    tagger.use_gpu = True
+    tagger.session = _FakeOrtSession(
+        max_batch=max_batch,
+        providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+        num_tags=len(tagger.tags),
+        fail_always=fail_always,
+    )
+    return tagger
+
+
+def test_run_inference_reraises_when_cpu_fallback_disabled(tmp_path: Path) -> None:
+    """allow_cpu_fallback=False must let the GPU error propagate (so the batch
+    backoff can retry a SMALLER GPU batch) instead of silently dropping to CPU."""
+    tagger = _make_fake_loaded_tagger(tmp_path, fail_always=True)
+    pv = np.zeros((1, 3, 8, 8), dtype=np.float32)
+    pm = np.zeros((1, 8, 8), dtype=bool)
+
+    with pytest.raises(Exception):
+        tagger._run_inference(pv, pm, allow_cpu_fallback=False)
+
+    # It must NOT have rebuilt the session on CPU.
+    assert tagger.use_gpu is True
+    assert "CUDAExecutionProvider" in tagger.session.get_providers()
+
+
+def test_tag_batch_backs_off_gpu_chunk_on_oom_and_stays_on_gpu(tmp_path: Path, monkeypatch) -> None:
+    """A batch that OOMs at the requested size must retry at a halved size ON
+    THE GPU (not crash, not fall to CPU permanently), and tag every image."""
+    tagger = _make_fake_loaded_tagger(tmp_path, max_batch=2)
+    # Keep the GPU session rebuild between backoff steps a no-op (no real model).
+    monkeypatch.setattr(tagger, "_recreate_gpu_session", lambda: None)
+
+    paths = []
+    for i in range(4):
+        p = tmp_path / f"img-{i}.png"
+        Image.new("RGB", (12, 16), (200, 50, 50)).save(p)
+        paths.append(str(p))
+
+    results, info = tagger.tag_batch(paths, preferred_batch_size=4, return_runtime_info=True)
+
+    # Every image tagged with the high-confidence 1girl tag.
+    assert len(results) == 4
+    assert all(any(t["tag"] == "1girl" for t in r["general_tags"]) for r in results)
+    # Stayed on the GPU (did NOT permanently fall back to CPU after one OOM).
+    assert tagger.use_gpu is True
+    # Backoff happened: the 4-batch failed, then halved sub-batches succeeded.
+    assert info["attempted_gpu_backoff"] is True
+    assert info["initial_chunk_size"] == 4
+    assert info["final_chunk_size"] <= 2
+    assert tagger.session.run_batch_sizes[0] == 4
+    assert all(b <= 2 for b in tagger.session.run_batch_sizes[1:])
+
+
+def test_tag_batch_non_oom_error_skips_halving_and_falls_to_cpu(tmp_path: Path, monkeypatch) -> None:
+    """A NON-OOM GPU error must NOT trigger batch halving (halving cannot fix it);
+    it should fall straight to the CPU fallback instead of wastefully shrinking."""
+    tagger = _make_fake_loaded_tagger(tmp_path, max_batch=2)
+    gpu_session = _FakeOrtSession(
+        max_batch=2,
+        providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+        num_tags=len(tagger.tags),
+        oom=False,
+    )
+    tagger.session = gpu_session
+    cpu_session = _FakeOrtSession(
+        max_batch=9999, providers=["CPUExecutionProvider"], num_tags=len(tagger.tags),
+    )
+    # CPU rebuild returns a session that succeeds at any size.
+    monkeypatch.setattr(tagger, "_create_session", lambda *a, **k: cpu_session)
+    monkeypatch.setattr(tagger, "_build_session_options", lambda **k: object())
+
+    paths = []
+    for i in range(4):
+        p = tmp_path / f"n-{i}.png"
+        Image.new("RGB", (10, 12), (10, 20, 30)).save(p)
+        paths.append(str(p))
+
+    results, info = tagger.tag_batch(paths, preferred_batch_size=4, return_runtime_info=True)
+
+    assert len(results) == 4
+    assert all(any(t["tag"] == "1girl" for t in r["general_tags"]) for r in results)
+    # No GPU halving happened (non-OOM): the GPU session only ever saw size 4.
+    assert all(step.get("mode") != "gpu_backoff" for step in info["backoff_steps"])
+    assert all(b == 4 for b in gpu_session.run_batch_sizes)
+    # It fell back to CPU rather than crashing or halving.
+    assert tagger.use_gpu is False
+
+
+def test_tag_batch_isolates_unreadable_image_and_preserves_order(tmp_path: Path) -> None:
+    """A bad image in the middle of a batch must be isolated (empty result) while
+    its neighbours still tag, in order (parallel preprocessing keeps order)."""
+    tagger = _make_fake_loaded_tagger(tmp_path, max_batch=8)
+    good = []
+    for i in range(3):
+        p = tmp_path / f"g-{i}.png"
+        Image.new("RGB", (10, 12), (5, 5, 5)).save(p)
+        good.append(str(p))
+    paths = [good[0], str(tmp_path / "does-not-exist.png"), good[1], good[2]]
+
+    results = tagger.tag_batch(paths, preferred_batch_size=8)
+
+    assert len(results) == 4
+    # Index 1 (the unreadable path) is isolated, not a crash.
+    assert "error" in results[1]
+    assert results[1]["general_tags"] == []
+    # The readable neighbours still tagged, in order.
+    for index in (0, 2, 3):
+        assert any(t["tag"] == "1girl" for t in results[index]["general_tags"])

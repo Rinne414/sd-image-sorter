@@ -365,7 +365,7 @@ class _AdaptiveGpuBatchSession:
         batch = inputs["input"]
         _AdaptiveGpuBatchSession.run_batch_sizes.append(int(batch.shape[0]))
         if "CUDAExecutionProvider" in self._providers and batch.shape[0] > self.fail_threshold:
-            raise RuntimeError("CUDA batch too large")
+            raise RuntimeError("CUDA out of memory (batch too large)")
         output = np.zeros((batch.shape[0], 3), dtype=np.float32)
         output[:, 0] = 0.93
         return [output]

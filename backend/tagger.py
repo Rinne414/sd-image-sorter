@@ -9,6 +9,7 @@ import json
 import logging
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple, TYPE_CHECKING, Literal, overload
 
@@ -24,12 +25,34 @@ from config import (
     TAGGER_USE_GPU,
     get_wd14_model_dir,
 )
-from ai_runtime_guard import exclusive_ai_runtime
+from ai_runtime_guard import exclusive_ai_runtime, looks_like_cuda_oom
 from model_download_sources import endpoint_label, get_hf_endpoint_order
 from utils.path_validation import normalize_user_path
 
 logger = logging.getLogger(__name__)
 CUSTOM_WD14_PROFILE_MODEL = "wd-swinv2-tagger-v3"
+
+# Bounded thread pool that overlaps CPU-bound image decode/preprocess so the GPU
+# is not left idle waiting on a single core between batches. PIL decode/resize and
+# numpy release the GIL, so threads give a real speedup. Shared + lazily created
+# (mirrors thumbnail_cache); the GPU inference itself stays serialized by
+# exclusive_ai_runtime, so this pool only parallelizes the CPU preprocessing.
+_PREPROCESS_MAX_WORKERS = min(8, (os.cpu_count() or 4))
+_preprocess_executor: Optional[ThreadPoolExecutor] = None
+_preprocess_executor_lock = threading.Lock()
+
+
+def _get_preprocess_executor() -> ThreadPoolExecutor:
+    global _preprocess_executor
+    if _preprocess_executor is None:
+        with _preprocess_executor_lock:
+            if _preprocess_executor is None:
+                _preprocess_executor = ThreadPoolExecutor(
+                    max_workers=_PREPROCESS_MAX_WORKERS,
+                    thread_name_prefix="wd14-preprocess",
+                )
+    return _preprocess_executor
+
 
 # Will be imported lazily
 ort = None
@@ -852,14 +875,20 @@ class WD14Tagger:
                 continue
             except Exception as error:
                 session_uses_gpu = self._session_uses_gpu()
+                is_oom = looks_like_cuda_oom(error)
                 logger.warning(
-                    "True batched WD14 inference failed for chunk size %d on %s: %s",
+                    "True batched WD14 inference failed for chunk size %d on %s (%s): %s",
                     current_chunk_size,
                     "GPU" if session_uses_gpu else "CPU",
+                    "OOM" if is_oom else "non-OOM error",
                     error,
                 )
 
-                if session_uses_gpu and current_chunk_size > min_chunk_size:
+                # Only halve the GPU batch for genuine out-of-memory errors. A
+                # non-OOM GPU failure (driver glitch, bad input) won't be cured by
+                # a smaller batch, so skip straight to the CPU fallback below
+                # instead of wastefully halving 64 -> 1 first.
+                if session_uses_gpu and current_chunk_size > min_chunk_size and is_oom:
                     attempted_gpu_backoff = True
                     next_chunk_size = max(min_chunk_size, current_chunk_size // 2)
                     if next_chunk_size == current_chunk_size and current_chunk_size > min_chunk_size:
@@ -1013,6 +1042,34 @@ class WD14Tagger:
         """
         self._session_refresh_interval = max(0, interval)
         logger.info("Session refresh interval set to %d", self._session_refresh_interval)
+
+    def _preprocess_paths(self, paths: List[str]) -> List[Any]:
+        """Decode + preprocess a chunk of images, returning a list aligned with
+        ``paths`` where each entry is the preprocessed array or the Exception
+        that failed it (per-image isolation, order preserved). Uses a small
+        thread pool so the GPU is not left waiting on single-threaded PIL
+        decode/resize; falls back to serial for a single image."""
+        def _one(path: str) -> np.ndarray:
+            with Image.open(path) as image:
+                return self._preprocess(image)
+
+        if len(paths) <= 1:
+            serial: List[Any] = []
+            for path in paths:
+                try:
+                    serial.append(_one(path))
+                except Exception as error:
+                    serial.append(error)
+            return serial
+
+        futures = [_get_preprocess_executor().submit(_one, path) for path in paths]
+        prepared: List[Any] = []
+        for future in futures:
+            try:
+                prepared.append(future.result())
+            except Exception as error:
+                prepared.append(error)
+        return prepared
 
     def _preprocess(self, image: Image.Image) -> np.ndarray:
         """Preprocess image for inference."""
@@ -1194,15 +1251,15 @@ class WD14Tagger:
                 prepared_inputs: List[np.ndarray] = []
                 prepared_indices: List[int] = []
 
-                for offset, path in enumerate(chunk_paths):
+                prepared_chunk = self._preprocess_paths(chunk_paths)
+                for offset, prepared in enumerate(prepared_chunk):
                     source_index = chunk_start + offset
-                    try:
-                        with Image.open(path) as image:
-                            prepared_inputs.append(self._preprocess(image))
+                    if isinstance(prepared, Exception):
+                        logger.error("Error preprocessing %s: %s", chunk_paths[offset], prepared)
+                        results[source_index] = self._build_empty_result(str(prepared))
+                    else:
+                        prepared_inputs.append(prepared)
                         prepared_indices.append(source_index)
-                    except Exception as error:
-                        logger.error("Error preprocessing %s: %s", path, error)
-                        results[source_index] = self._build_empty_result(str(error))
 
                 if prepared_inputs:
                     if self._supports_true_batch and len(prepared_inputs) > 1:

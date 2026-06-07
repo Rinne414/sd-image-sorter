@@ -61,6 +61,10 @@ TORIIGATE_CUDA_MEMORY_FRACTION = max(
     0.30,
     min(0.95, read_float_env("SD_TORIIGATE_CUDA_MEMORY_FRACTION", 0.80)),
 )
+# Free VRAM (MB) required to turn the generation KV cache on. The cache makes
+# ToriiGate generation ~2-4x faster but costs a few hundred MB; below this we
+# keep it off so a tight GPU does not OOM mid-generation. CPU always uses it.
+TORIIGATE_KV_CACHE_MIN_FREE_MB = read_float_env("SD_TORIIGATE_KV_CACHE_MIN_FREE_MB", 3000.0)
 CAPTION_COUNT_PATTERNS = (
     (re.compile(r"\b(?:a|an|one|single)\s+(?:young\s+)?(?:girl|woman)\b"), "1girl"),
     (re.compile(r"\b(?:a|an|one|single)\s+(?:young\s+)?boy\b"), "1boy"),
@@ -180,6 +184,8 @@ class ToriiGateTagger:
         self._loaded = False
         self._resolved_model_dir: Optional[str] = None
         self._session_refresh_interval = 0
+        # Decided lazily on first generation (needs the live device + free VRAM).
+        self._use_kv_cache: Optional[bool] = None
 
     def _download_model(self) -> str:
         config = TAGGER_MODELS[self.model_name]
@@ -243,6 +249,23 @@ class ToriiGateTagger:
 
     def _make_prompt(self) -> str:
         return TORIIGATE_SHORT_QUERY
+
+    def _decide_kv_cache(self) -> bool:
+        """Enable the generation KV cache (~2-4x faster) when it is safe.
+
+        On CPU it is free speed (no VRAM cost). On GPU the 160-token cache costs
+        a few hundred MB, so only enable it when there is comfortable free VRAM;
+        a tight card stays cache-off to avoid an OOM mid-generation (which would
+        otherwise drop the whole run to CPU via the per-image fallback)."""
+        if not self.use_gpu:
+            return True
+        if torch is None or not getattr(torch, "cuda", None) or not torch.cuda.is_available():
+            return False
+        try:
+            free_bytes, _total = torch.cuda.mem_get_info(0)
+            return (free_bytes / (1024 ** 2)) >= TORIIGATE_KV_CACHE_MIN_FREE_MB
+        except Exception:
+            return False
 
     def load(self) -> None:
         if self._loaded:
@@ -326,6 +349,7 @@ class ToriiGateTagger:
 
     def _recreate_session(self) -> None:
         self._loaded = False
+        self._use_kv_cache = None
         self._teardown_model()
         self.load()
 
@@ -568,12 +592,14 @@ class ToriiGateTagger:
             for key, value in inputs.items()
         }
 
+        if self._use_kv_cache is None:
+            self._use_kv_cache = self._decide_kv_cache()
         with torch.inference_mode(), exclusive_ai_runtime("toriigate-inference"):
             generated = self.model.generate(
                 **inputs,
                 do_sample=False,
                 max_new_tokens=self.max_new_tokens,
-                use_cache=False,
+                use_cache=self._use_kv_cache,
             )
 
         prompt_tokens = inputs["input_ids"].shape[1]

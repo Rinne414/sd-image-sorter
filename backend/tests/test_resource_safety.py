@@ -247,6 +247,100 @@ def test_tagger_batch_uses_updated_runtime_chunk_for_next_preprocess_window(monk
     assert info["attempted_gpu_backoff"] is True
 
 
+def test_wd14_non_oom_batch_error_skips_gpu_halving(monkeypatch, tmp_path: Path):
+    """A non-OOM batch error must NOT halve the GPU batch (halving cannot fix it);
+    it goes straight to the CPU fallback instead of wastefully shrinking 4 -> 1."""
+    monkeypatch.setattr(tagger_module, "_ensure_imports", lambda: None)
+
+    image_paths = []
+    for index in range(4):
+        path = tmp_path / f"nonoom-{index}.png"
+        Image.new("RGB", (8, 8), color="white").save(path)
+        image_paths.append(str(path))
+
+    tagger = tagger_module.WD14Tagger(use_gpu=True)
+    tagger._loaded = True
+    tagger.session = object()
+    tagger._input_name = "input"
+    tagger._supports_true_batch = True
+    tagger._input_hw = (8, 8)
+    tagger.general_tags = [(0, "safe")]
+    tagger.threshold = 0.5
+    monkeypatch.setattr(tagger, "_session_uses_gpu", lambda: tagger.use_gpu)
+    monkeypatch.setattr(tagger, "_preprocess", lambda _image: np.zeros((8, 8, 3), dtype=np.float32))
+
+    cpu_fallbacks = {"count": 0}
+
+    def fake_run_inference(input_data, *, allow_gpu_fallback=True):
+        # The batched call (>1 row) raises a NON-OOM error; single-row runs succeed.
+        if input_data.shape[0] > 1:
+            raise RuntimeError("invalid input dimensions for node")
+        return np.zeros((1, 1), dtype=np.float32)
+
+    def fake_cpu_fallback(_error):
+        cpu_fallbacks["count"] += 1
+        tagger.use_gpu = False
+
+    monkeypatch.setattr(tagger, "_run_inference", fake_run_inference)
+    monkeypatch.setattr(tagger, "_fallback_to_cpu_session", fake_cpu_fallback)
+
+    results, info = tagger.tag_batch(image_paths, preferred_batch_size=4, return_runtime_info=True)
+
+    assert len(results) == 4
+    # Non-OOM: no GPU batch-halving steps...
+    assert all(step.get("mode") != "gpu_backoff" for step in info["backoff_steps"])
+    # ...it went straight to the CPU fallback exactly once.
+    assert cpu_fallbacks["count"] == 1
+    assert info["used_cpu_fallback"] is True
+
+
+def test_wd14_tag_batch_isolates_unreadable_image(monkeypatch, tmp_path: Path):
+    """A bad image is isolated (empty result) while readable neighbours tag, in
+    order — parallel preprocessing must preserve order + per-image isolation."""
+    monkeypatch.setattr(tagger_module, "_ensure_imports", lambda: None)
+
+    good = []
+    for index in range(2):
+        path = tmp_path / f"ok-{index}.png"
+        Image.new("RGB", (8, 8), color="white").save(path)
+        good.append(str(path))
+    paths = [good[0], str(tmp_path / "missing.png"), good[1]]
+
+    tagger = tagger_module.WD14Tagger(use_gpu=True)
+    tagger._loaded = True
+    tagger.session = object()
+    tagger._input_name = "input"
+    tagger._supports_true_batch = True
+    tagger._input_hw = (8, 8)
+    tagger.general_tags = [(0, "safe")]
+    tagger.threshold = 0.5
+    monkeypatch.setattr(tagger, "_session_uses_gpu", lambda: True)
+    monkeypatch.setattr(tagger, "_preprocess", lambda _image: np.zeros((8, 8, 3), dtype=np.float32))
+
+    def fake_backoff(prepared_inputs, prepared_indices, paths_arg, **_kw):
+        results = [None] * len(paths_arg)
+        for source_index in prepared_indices:
+            result = tagger._build_empty_result()
+            result["general_tags"] = [{"tag": "safe", "confidence": 1.0}]
+            results[source_index] = result
+        return results, {
+            "initial_chunk_size": len(prepared_inputs),
+            "final_chunk_size": len(prepared_inputs),
+            "backoff_steps": [],
+            "used_cpu_fallback": False,
+            "attempted_gpu_backoff": False,
+        }
+
+    monkeypatch.setattr(tagger, "_run_true_batch_with_backoff", fake_backoff)
+
+    results = tagger.tag_batch(paths, preferred_batch_size=8)
+
+    assert len(results) == 3
+    assert "error" in results[1]
+    for index in (0, 2):
+        assert results[index]["general_tags"][0]["tag"] == "safe"
+
+
 class _NoFetchAllCursor:
     def __init__(self, rows):
         self.rows = list(rows)

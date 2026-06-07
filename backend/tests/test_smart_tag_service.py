@@ -1222,13 +1222,16 @@ def test_coerce_request_allows_valid_trigger_words(trigger) -> None:
 class _FakeBatchTagger:
     """Fake tagger exposing tag_batch (GPU batch) + tag (per-image fallback)."""
 
-    def __init__(self) -> None:
+    def __init__(self, model_name: str = "wd-eva02-large-tagger-v3") -> None:
+        self.model_name = model_name
         self.batch_calls = []
+        self.batch_sizes = []
         self.single_calls = 0
 
     def tag_batch(self, image_paths, *, preferred_batch_size=None, threshold=None,
                   character_threshold=None, copyright_threshold=None, **_kw):
         self.batch_calls.append(list(image_paths))
+        self.batch_sizes.append(preferred_batch_size)
         return [
             {
                 "general_tags": [{"tag": "1girl", "confidence": 0.95}],
@@ -1299,6 +1302,128 @@ def test_windowed_pipeline_batches_booru_on_gpu(monkeypatch) -> None:
     assert tagger.single_calls == 0
     assert job.succeeded == 5
     assert all("1girl" in caption for _path, caption in persisted)
+
+
+def test_recommended_tag_batch_size_is_hardware_aware(monkeypatch) -> None:
+    """Smart Tag must size the booru batch from the hardware recommender (like
+    the bulk worker), forwarding the real model name + GPU flag, instead of a
+    fixed 64 — so an 8GB-VRAM laptop starts at a size that fits."""
+    calls = {}
+
+    def _fake_recommend(system_info, *, model_name=None, use_gpu=None):
+        calls["model_name"] = model_name
+        calls["use_gpu"] = use_gpu
+        return {"recommended_batch_size": 16, "recommended_cpu_chunk_size": 8}
+
+    monkeypatch.setattr("hardware_monitor.get_system_info", lambda *a, **k: {"stub": True})
+    monkeypatch.setattr("hardware_monitor.recommend_tagger_config", _fake_recommend)
+
+    assert smart_tag_service._recommended_tag_batch_size("wd-eva02-large-tagger-v3", True) == 16
+    assert calls["model_name"] == "wd-eva02-large-tagger-v3"
+    assert calls["use_gpu"] is True
+    # CPU path uses recommended_cpu_chunk_size.
+    assert smart_tag_service._recommended_tag_batch_size("wd-eva02-large-tagger-v3", False) == 8
+
+
+def test_recommended_tag_batch_size_clamps_and_falls_back(monkeypatch) -> None:
+    """Over-large recommendations are capped at the ceiling; a probe failure
+    degrades to a safe fixed fallback instead of raising."""
+    monkeypatch.setattr("hardware_monitor.get_system_info", lambda *a, **k: {})
+    monkeypatch.setattr(
+        "hardware_monitor.recommend_tagger_config",
+        lambda *a, **k: {"recommended_batch_size": 9999, "recommended_cpu_chunk_size": 9999},
+    )
+    assert (
+        smart_tag_service._recommended_tag_batch_size("x", True)
+        == smart_tag_service.SMART_TAG_TAG_BATCH_SIZE
+    )
+
+    def _boom(*a, **k):
+        raise RuntimeError("no hardware probe in this env")
+
+    monkeypatch.setattr("hardware_monitor.recommend_tagger_config", _boom)
+    # Must not raise; falls back to a safe non-zero size on either device.
+    assert smart_tag_service._recommended_tag_batch_size("x", True) == 16
+    assert smart_tag_service._recommended_tag_batch_size("x", False) == 8
+
+
+def test_windowed_pipeline_uses_hardware_aware_batch_size(monkeypatch) -> None:
+    """The single-tagger booru phase must pass the hardware-recommended batch
+    size to tag_batch (not the fixed SMART_TAG_TAG_BATCH_SIZE ceiling)."""
+    monkeypatch.setattr(
+        smart_tag_service, "_append_caption_result",
+        lambda job, path, caption: None,
+    )
+    monkeypatch.setattr(smart_tag_service, "_recommended_tag_batch_size", lambda model, gpu: 7)
+    # Isolate hardware-aware *sizing* from live memory-pressure shrinking (which
+    # has its own test); otherwise a high-RAM machine halves 7 -> 3 and this
+    # assertion becomes machine-dependent.
+    monkeypatch.setattr(
+        smart_tag_service, "_apply_memory_pressure", lambda job, tagger, size: size
+    )
+
+    tagger = _FakeBatchTagger()
+    job = SmartTagJobState(job_id="hw-batch-job")
+    job.total = 3
+    req = SmartTagRequest(
+        image_paths=[f"/tmp/img-{i}.png" for i in range(3)],
+        enable_wd14=True,
+        enable_vlm=False,
+    )
+
+    smart_tag_service._run_windowed_pipeline(
+        job, req, tagger=tagger, vlm_provider=None, nl_tagger=None,
+    )
+
+    assert tagger.batch_sizes == [7]  # hardware-aware size, not the 64 ceiling
+
+
+def test_apply_memory_pressure_shrinks_batch_and_refreshes_session(monkeypatch) -> None:
+    """Smart Tag must react to LIVE memory pressure (not just at job start):
+    shrink the booru batch when RAM is tight and refresh the tagger session
+    when free VRAM is nearly gone. Degrades safely if the probe is unavailable."""
+    monkeypatch.setattr(smart_tag_service.time, "sleep", lambda *_a, **_k: None)
+
+    class _FakeTagger:
+        def __init__(self):
+            self.refreshed = 0
+
+        def _recreate_session(self):
+            self.refreshed += 1
+
+    job = SmartTagJobState(job_id="pressure")
+
+    def _pressure(**values):
+        base = {"should_pause": False, "should_restart_session": False, "ram_percent_used": 40.0}
+        base.update(values)
+        monkeypatch.setattr("hardware_monitor.check_memory_pressure", lambda: base)
+
+    # No pressure -> unchanged, no refresh.
+    _pressure()
+    quiet = _FakeTagger()
+    assert smart_tag_service._apply_memory_pressure(job, quiet, 32) == 32
+    assert quiet.refreshed == 0
+
+    # Critical RAM (should_pause) -> halved.
+    _pressure(should_pause=True, ram_percent_used=96.0)
+    assert smart_tag_service._apply_memory_pressure(job, _FakeTagger(), 32) == 16
+
+    # High (>=90%) but not critical RAM -> halved, floor 2.
+    _pressure(ram_percent_used=92.0)
+    assert smart_tag_service._apply_memory_pressure(job, _FakeTagger(), 32) == 16
+
+    # Free VRAM nearly gone -> refresh the tagger session.
+    _pressure(should_restart_session=True)
+    tagger = _FakeTagger()
+    smart_tag_service._apply_memory_pressure(job, tagger, 32)
+    assert tagger.refreshed == 1
+
+    # Probe failure -> unchanged, never raises.
+    def _boom():
+        raise RuntimeError("no psutil/torch in this env")
+
+    monkeypatch.setattr("hardware_monitor.check_memory_pressure", _boom)
+    assert smart_tag_service._apply_memory_pressure(job, _FakeTagger(), 32) == 32
 
 
 def test_tag_batch_with_thresholds_falls_back_to_per_image() -> None:
