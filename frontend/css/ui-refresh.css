@@ -3329,6 +3329,13 @@ textarea:focus,
     background: linear-gradient(135deg, #7c8bff 0%, #33d6e0 100%);
 }
 
+/* In gallery selection mode the sidebar focuses on batch actions — hide the
+   browse/filter sections (filters / folders / collections). The filter set was
+   already applied before entering selection, so nothing actionable is lost. */
+.filter-sidebar.selection-mode [data-sidebar-section] {
+    display: none;
+}
+
 #btn-toggle-select.selection-active,
 #btn-toggle-select[aria-pressed="true"] {
     background: linear-gradient(135deg, #7c8bff 0%, #33d6e0 100%);
