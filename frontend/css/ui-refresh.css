@@ -1742,6 +1742,24 @@ textarea:focus,
     vertical-align: middle;
 }
 
+/* MODELS-08: reusable "Which should I pick?" link sitting under a model picker.
+   Styled as a quiet inline link-button that opens the Model Manager. */
+.model-pick-help-link {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--color-accent, #7c8bff);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+}
+.model-pick-help-link:hover {
+    text-decoration: underline;
+}
+
 .model-card.is-missing {
     border-color: rgba(124, 139, 255, 0.28);
 }

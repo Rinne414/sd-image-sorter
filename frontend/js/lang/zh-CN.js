@@ -1935,6 +1935,7 @@ window.I18nLang_zhCN = {
     'models.recommendedTooltip': '包含在「下载所有推荐模型」中',
     'models.essentials': '核心模型 · 推荐所有人安装',
     'models.optionalSection': '其他与进阶模型',
+    'models.whichToPick': '❓ 我该选哪个模型？',
     // Bulk-download "Download all recommended models" flow
     'models.bulkDownload': '一键下载推荐模型',
     'models.bulkDownloadTitle': '一次性下载所有推荐模型（跳过 Wenaka Privacy YOLO、跳过 ToriiGate；WD14 只下默认的那个）',

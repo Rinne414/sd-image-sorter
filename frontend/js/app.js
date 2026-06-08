@@ -4701,6 +4701,17 @@ function initEventListeners() {
     });
     setupNavToolsMenu();
 
+    // MODELS-08: reusable "Which should I pick?" affordance. Any element with
+    // data-action="open-model-guidance" opens the (now essentials-first) Model
+    // Manager, the canonical place that compares models and flags the
+    // recommended ones. Delegated so it works for every current/future picker.
+    document.addEventListener('click', (e) => {
+        const trigger = e.target.closest('[data-action="open-model-guidance"]');
+        if (!trigger) return;
+        e.preventDefault();
+        document.getElementById('btn-open-model-manager')?.click();
+    });
+
     // Scan button
     $('#btn-scan').addEventListener('click', () => showModal('scan-modal'));
     $('#btn-browse-folder')?.addEventListener('click', () => {

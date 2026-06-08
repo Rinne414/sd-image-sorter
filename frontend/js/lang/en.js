@@ -1762,6 +1762,7 @@ window.I18nLang_en = {
     'models.recommendedTooltip': 'Included in “Download all recommended models”',
     'models.essentials': 'Essentials · recommended for everyone',
     'models.optionalSection': 'Additional & advanced models',
+    'models.whichToPick': '❓ Which model should I pick?',
     // Bulk-download "Download all recommended models" flow
     'models.bulkDownload': 'Download all recommended models',
     'models.bulkDownloadTitle': 'Download every recommended model in one go (skips Wenaka Privacy YOLO and ToriiGate; uses default WD14 only)',
