@@ -621,6 +621,8 @@ const AppState = {
     update: {
         checking: false,
         status: null,
+        channel: null,
+        channelError: null,
     },
 
     // Current modal selection state
@@ -1458,6 +1460,21 @@ const API = {
 
     async getUpdateStatus(force = false) {
         return this.get(`/api/updates/status?force=${force ? 'true' : 'false'}`);
+    },
+
+    async getUpdateChannel() {
+        return this.get('/api/updates/channel');
+    },
+
+    async saveUpdateProxy(proxyPrefix, channelName = 'Custom Proxy') {
+        return this.post('/api/updates/channel/proxy', {
+            proxy_prefix: proxyPrefix,
+            channel_name: channelName,
+        });
+    },
+
+    async resetUpdateChannel() {
+        return this.delete('/api/updates/channel');
     },
 
     async applyUpdate(options = {}) {
@@ -2443,6 +2460,76 @@ function _createUpdatePopup() {
     return el;
 }
 
+function buildUpdateChannelPanel(channel, channelError = null) {
+    const hasOverride = Boolean(channel?.has_channel_override);
+    const proxyPrefix = channel?.download_url_prefix || '';
+    const channelName = channel?.channel_name || (
+        hasOverride
+            ? appT('update.customChannel', 'Custom channel')
+            : appT('update.defaultChannel', 'Official GitHub')
+    );
+    const currentText = channelError
+        ? appT('update.channelLoadFailed', 'Channel settings unavailable')
+        : (
+            hasOverride
+                ? appT('update.channelCustomSummary', '{name} · {proxy}', {
+                    name: channelName,
+                    proxy: proxyPrefix || appT('update.proxyPrefixMissing', 'No proxy prefix'),
+                })
+                : appT('update.channelDefaultSummary', 'Official GitHub')
+        );
+    const openAttr = hasOverride ? ' open' : '';
+    const disabledAttr = channelError ? ' disabled' : '';
+
+    return `<details class="guided-advanced-panel update-channel-panel"${openAttr}>
+        <summary class="guided-advanced-summary">
+            <span class="update-popup-channel-summary">
+                <strong>${escapeHtml(appT('update.channelPanelTitle', 'Update proxy / custom channel'))}</strong>
+                <span class="update-popup-channel-current">${escapeHtml(currentText)}</span>
+            </span>
+            <span class="guided-advanced-hint">${escapeHtml(appT('update.channelPanelHint', 'Use this when GitHub is blocked.'))}</span>
+        </summary>
+        <div class="guided-advanced-body">
+            <div class="update-popup-channel-form">
+                <label for="update-proxy-prefix">${escapeHtml(appT('update.proxyPrefixLabel', 'Proxy prefix'))}</label>
+                <input
+                    id="update-proxy-prefix"
+                    class="update-popup-proxy-input"
+                    type="url"
+                    inputmode="url"
+                    autocomplete="off"
+                    spellcheck="false"
+                    data-update-channel-control
+                    placeholder="${escapeHtml(appT('update.proxyPlaceholder', 'https://your-proxy/'))}"
+                    value="${escapeHtml(proxyPrefix)}"
+                    ${disabledAttr}
+                >
+                <p class="helper-text">${escapeHtml(appT('update.proxyInlineHelp', 'Paste a GitHub proxy prefix. Leave empty and Save to restore official GitHub.'))}</p>
+            </div>
+            <div class="update-popup-channel-actions">
+                <button class="btn btn-primary btn-small" data-update-action="save-proxy" data-update-channel-control${disabledAttr}>${escapeHtml(appT('update.saveProxy', 'Save Proxy'))}</button>
+                <button class="btn btn-secondary btn-small" data-update-action="reset-channel" data-update-channel-control${disabledAttr}>${escapeHtml(appT('update.resetChannel', 'Reset Channel'))}</button>
+            </div>
+            <p class="update-popup-channel-feedback" data-update-channel-feedback hidden></p>
+        </div>
+    </details>`;
+}
+
+function setUpdateChannelControlsBusy(popup, busy) {
+    popup.querySelectorAll('[data-update-channel-control]').forEach((control) => {
+        control.disabled = Boolean(busy);
+    });
+}
+
+function setUpdateChannelFeedback(popup, message, tone = 'info') {
+    const el = popup.querySelector('[data-update-channel-feedback]');
+    if (!el) return;
+    el.hidden = !message;
+    el.textContent = message || '';
+    el.classList.toggle('is-error', tone === 'error');
+    el.classList.toggle('is-success', tone === 'success');
+}
+
 async function _showUpdatePopup(anchorBtn) {
     const popup = _createUpdatePopup();
     const currentVersion = AppState.appVersion || appT('update.versionUnknown', '?');
@@ -2452,6 +2539,17 @@ async function _showUpdatePopup(anchorBtn) {
     const latestVersion = status?.latest_version || currentVersion;
     const releaseUrl = status?.release_url || (githubUrl ? githubUrl + '/releases/latest' : '');
     const releaseNotes = status?.release_notes || '';
+    let channel = AppState.update.channel;
+    let channelError = null;
+
+    try {
+        channel = await API.getUpdateChannel();
+        AppState.update.channel = channel;
+        AppState.update.channelError = null;
+    } catch (error) {
+        channelError = error;
+        AppState.update.channelError = error;
+    }
 
     let notesHtml = '';
     if (releaseNotes) {
@@ -2492,6 +2590,8 @@ async function _showUpdatePopup(anchorBtn) {
         </div>` : ''}
         ${notesHtml ? '<div class="update-popup-divider"></div>' + notesHtml : ''}
         <div class="update-popup-divider"></div>
+        ${buildUpdateChannelPanel(channel, channelError)}
+        <div class="update-popup-divider"></div>
         ${actionsHtml}
     </div>`;
 
@@ -2525,6 +2625,47 @@ async function _showUpdatePopup(anchorBtn) {
                 if (btn2 && AppState.update.status) _showUpdatePopup(btn2);
             } catch (err) {
                 _hideUpdatePopup();
+            }
+        } else if (action === 'save-proxy') {
+            const input = popup.querySelector('#update-proxy-prefix');
+            const proxyPrefix = String(input?.value || '').trim();
+            const successMessage = proxyPrefix
+                ? appT('update.proxySaved', 'Update proxy saved.')
+                : appT('update.proxyReset', 'Update channel reset to official GitHub.');
+            setUpdateChannelControlsBusy(popup, true);
+            setUpdateChannelFeedback(popup, appT('update.proxySaving', 'Saving update proxy...'));
+            try {
+                const nextChannel = proxyPrefix
+                    ? await API.saveUpdateProxy(proxyPrefix, appT('update.proxyChannelName', 'Custom Proxy'))
+                    : await API.resetUpdateChannel();
+                AppState.update.channel = nextChannel;
+                AppState.update.channelError = null;
+                showToast(successMessage, 'success');
+                _hideUpdatePopup();
+                const btn2 = document.getElementById('btn-app-update');
+                if (btn2) void _showUpdatePopup(btn2);
+            } catch (error) {
+                const message = formatUserError(error, appT('update.proxySaveFailed', 'Failed to save the update proxy'));
+                setUpdateChannelControlsBusy(popup, false);
+                setUpdateChannelFeedback(popup, message, 'error');
+                showToast(message, 'error');
+            }
+        } else if (action === 'reset-channel') {
+            setUpdateChannelControlsBusy(popup, true);
+            setUpdateChannelFeedback(popup, appT('update.proxySaving', 'Saving update proxy...'));
+            try {
+                const nextChannel = await API.resetUpdateChannel();
+                AppState.update.channel = nextChannel;
+                AppState.update.channelError = null;
+                showToast(appT('update.proxyReset', 'Update channel reset to official GitHub.'), 'success');
+                _hideUpdatePopup();
+                const btn2 = document.getElementById('btn-app-update');
+                if (btn2) void _showUpdatePopup(btn2);
+            } catch (error) {
+                const message = formatUserError(error, appT('update.proxySaveFailed', 'Failed to save the update proxy'));
+                setUpdateChannelControlsBusy(popup, false);
+                setUpdateChannelFeedback(popup, message, 'error');
+                showToast(message, 'error');
             }
         }
     };

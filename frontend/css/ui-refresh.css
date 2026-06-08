@@ -134,7 +134,8 @@ body::after {
     border-radius: 16px;
     padding: 20px;
     min-width: 300px;
-    max-width: 400px;
+    width: min(440px, calc(100vw - 32px));
+    max-width: 440px;
     box-shadow: 0 20px 48px rgba(2, 6, 23, 0.45);
 }
 .update-popup-header {
@@ -207,6 +208,105 @@ body::after {
 }
 .update-popup-link:hover {
     text-decoration: underline;
+}
+
+.update-channel-panel {
+    margin-top: 2px;
+    border-radius: 12px;
+}
+
+.update-popup .guided-advanced-summary {
+    align-items: center;
+    padding: 12px 14px;
+}
+
+.update-popup .guided-advanced-hint {
+    flex: 0 0 auto;
+    max-width: 150px;
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.update-popup .guided-advanced-body {
+    gap: 12px;
+    padding: 0 14px 14px;
+}
+
+.update-popup-channel-summary {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.update-popup-channel-summary strong {
+    color: var(--text-primary, #f8fbff);
+    font-size: 13px;
+    line-height: 1.3;
+}
+
+.update-popup-channel-current {
+    color: var(--text-muted, #98aabf);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.update-popup-channel-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.update-popup-channel-form label {
+    color: var(--text-primary, #f8fbff);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.update-popup-proxy-input {
+    width: 100%;
+    min-height: 38px;
+    border: 1px solid rgba(191, 219, 254, 0.14);
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.72);
+    color: var(--text-primary, #f8fbff);
+    font-size: 13px;
+    padding: 8px 10px;
+    outline: none;
+}
+
+.update-popup-proxy-input:focus {
+    border-color: rgba(124, 139, 255, 0.55);
+    box-shadow: 0 0 0 3px rgba(124, 139, 255, 0.16);
+}
+
+.update-popup-channel-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.update-popup-channel-actions .btn {
+    flex: 1;
+    min-width: 0;
+}
+
+.update-popup-channel-feedback {
+    margin: 0;
+    color: var(--text-muted, #98aabf);
+    font-size: 12px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.update-popup-channel-feedback.is-error {
+    color: var(--danger, #ff6b7a);
+}
+
+.update-popup-channel-feedback.is-success {
+    color: var(--accent-success, #66e0a3);
 }
 
 .nav-tabs {
@@ -1389,8 +1489,7 @@ textarea:focus,
         max-width: 44px;
     }
 
-    .nav-actions #btn-refresh-ui,
-    .nav-actions #btn-app-update {
+    .nav-actions #btn-refresh-ui {
         display: none;
     }
 }
