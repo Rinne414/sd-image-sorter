@@ -3163,6 +3163,10 @@ textarea:focus,
     min-height: 0;
 }
 
+#confirm-modal.visible {
+    z-index: 3200;
+}
+
 /* Progress bar smooth transitions */
 .progress-fill,
 #scan-progress-fill,

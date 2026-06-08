@@ -525,8 +525,9 @@ const VLMCaption = {
                     </div>
                     <div class="vlm-model-card-actions">
                         ${m.installed
-                            ? `<button class="btn btn-small btn-ghost" data-vlm-use="${escapeHtml(m.id)}">Use This</button>`
-                            : `<button class="btn btn-small btn-primary" data-vlm-pull="${escapeHtml(m.id)}">Download</button>`
+                            ? `<button class="btn btn-small btn-ghost" data-vlm-use="${escapeHtml(m.id)}">${escapeHtml(this._t('vlmSettings.useModel', 'Use This'))}</button>
+                               <button class="btn btn-small btn-ghost danger" data-vlm-delete="${escapeHtml(m.id)}">${escapeHtml(this._t('vlmSettings.deleteModel', 'Delete'))}</button>`
+                            : `<button class="btn btn-small btn-primary" data-vlm-pull="${escapeHtml(m.id)}">${escapeHtml(this._t('vlmSettings.downloadModel', 'Download'))}</button>`
                         }
                     </div>
                 </div>`;
@@ -544,11 +545,94 @@ const VLMCaption = {
                     this._setVal('vlm-model', btn.dataset.vlmUse);
                     this._setVal('vlm-endpoint', 'http://localhost:11434/v1');
                     this._setVal('vlm-provider', 'openai_compat');
-                    this._showStatus('vlm-status', `Selected ${btn.dataset.vlmUse} — endpoint set to Ollama`, 'success');
+                    this._showStatus(
+                        'vlm-status',
+                        this._t('vlmSettings.modelSelected', 'Selected {model} — endpoint set to Ollama')
+                            .replace('{model}', btn.dataset.vlmUse),
+                        'success'
+                    );
                 });
+            });
+            container.querySelectorAll('[data-vlm-delete]').forEach(btn => {
+                btn.addEventListener('click', () => this.confirmDeleteModel(btn.dataset.vlmDelete, btn));
             });
         } catch (e) {
             container.innerHTML = `<p class="helper-text">Failed to load models: ${escapeHtml(e.message)}</p>`;
+        }
+    },
+
+    confirmDeleteModel(modelName, trigger = null) {
+        const normalized = String(modelName || '').trim();
+        if (!normalized) return;
+
+        const title = this._t('vlmSettings.deleteModelTitle', 'Delete local model?');
+        const message = this._t(
+            'vlmSettings.deleteModelConfirm',
+            'Delete {model} from Ollama? You can download it again later.'
+        ).replace('{model}', normalized);
+        const runDelete = () => { void this.deleteModel(normalized, trigger); };
+
+        if (typeof window.App?.showConfirm === 'function') {
+            window.App.showConfirm(title, message, runDelete);
+        } else if (window.confirm(message)) {
+            runDelete();
+        }
+    },
+
+    async deleteModel(modelName, trigger = null) {
+        const normalized = String(modelName || '').trim();
+        if (!normalized) return;
+
+        if (trigger) {
+            trigger.disabled = true;
+            trigger.textContent = this._t('vlmSettings.deletingModel', 'Deleting...');
+        }
+        this._showStatus(
+            'vlm-status',
+            this._t('vlmSettings.deletingModelNamed', 'Deleting {model}...').replace('{model}', normalized),
+            'info'
+        );
+
+        try {
+            const resp = await fetch('/api/vlm/local-models/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: normalized }),
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                this._showStatus(
+                    'vlm-status',
+                    this._t('vlmSettings.deleteModelFailed', 'Delete failed: {reason}')
+                        .replace('{reason}', err.detail || resp.statusText),
+                    'error'
+                );
+                if (trigger) {
+                    trigger.disabled = false;
+                    trigger.textContent = this._t('vlmSettings.deleteModel', 'Delete');
+                }
+                return;
+            }
+            if (this._getVal('vlm-model') === normalized) {
+                this._setVal('vlm-model', '');
+            }
+            this._showStatus(
+                'vlm-status',
+                this._t('vlmSettings.deleteModelDone', 'Deleted {model}.').replace('{model}', normalized),
+                'success'
+            );
+            await this.loadRecommendedModels();
+        } catch (e) {
+            this._showStatus(
+                'vlm-status',
+                this._t('vlmSettings.deleteModelFailed', 'Delete failed: {reason}')
+                    .replace('{reason}', e.message || e),
+                'error'
+            );
+            if (trigger) {
+                trigger.disabled = false;
+                trigger.textContent = this._t('vlmSettings.deleteModel', 'Delete');
+            }
         }
     },
 

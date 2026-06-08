@@ -87,7 +87,9 @@
 .vlm-model-card.installed { border-color: rgba(34, 197, 94, 0.3); }
 .vlm-model-card-header { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
 .vlm-model-card-meta { font-size: 0.75rem; color: var(--text-secondary); margin: 4px 0; }
-.vlm-model-card-actions { margin-top: 8px; }
+.vlm-model-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.vlm-model-card-actions .btn { flex: 1 1 96px; min-width: 0; }
+.vlm-model-card-actions .btn.danger { color: var(--accent-danger, #ef4444); }
 
 .vlm-badge-nsfw { font-size: 0.7rem; padding: 1px 5px; border-radius: 4px; background: rgba(239, 68, 68, 0.15); color: #f87171; }
 .vlm-badge-installed { font-size: 0.7rem; padding: 1px 5px; border-radius: 4px; background: rgba(34, 197, 94, 0.15); color: #4ade80; }
