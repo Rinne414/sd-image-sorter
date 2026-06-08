@@ -782,6 +782,7 @@ window.I18nLang_en = {
     'censor.emptyStep2': 'Send images to Censor Edit, then pick one from the queue.',
     'censor.backToGallery': 'Open Gallery',
     'censor.processing': 'Processing...',
+    'censor.shortcuts': 'Shortcuts',
     'censor.arrowsNav': 'Arrows Navigate',
     'censor.brushSizeKeys': '[ ] Brush Size',
     'censor.ctrlScrollZoom': 'Ctrl+Scroll Zoom',

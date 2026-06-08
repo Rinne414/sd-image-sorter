@@ -793,6 +793,7 @@ window.I18nLang_zhCN = {
     'censor.emptyStep2': '把要编辑的图片发送到打码编辑，再从队列里点一张开始。',
     'censor.backToGallery': '打开图库',
     'censor.processing': '处理中...',
+    'censor.shortcuts': '快捷键',
     'censor.arrowsNav': '方向键导航',
     'censor.brushSizeKeys': '[ ] 调整画笔',
     'censor.ctrlScrollZoom': 'Ctrl+滚轮缩放',

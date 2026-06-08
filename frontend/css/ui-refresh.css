@@ -4656,6 +4656,59 @@ textarea:focus,
     white-space: normal !important;
 }
 
+#view-censor .censor-shortcuts-disclosure {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+#view-censor .censor-shortcuts-disclosure > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 1px solid rgba(191, 219, 254, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+}
+
+#view-censor .censor-shortcuts-disclosure > summary::-webkit-details-marker {
+    display: none;
+}
+
+#view-censor .censor-shortcuts-disclosure > summary:hover,
+#view-censor .censor-shortcuts-disclosure[open] > summary {
+    color: var(--text-primary);
+    border-color: rgba(51, 214, 224, 0.28);
+    background: rgba(51, 214, 224, 0.1);
+}
+
+#view-censor .censor-shortcuts-disclosure:not([open]) .censor-shortcuts-popover {
+    display: none;
+}
+
+#view-censor .censor-shortcuts-popover {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 8px);
+    z-index: 80;
+    display: grid;
+    gap: 8px;
+    min-width: 230px;
+    padding: 10px 12px;
+    border: 1px solid rgba(191, 219, 254, 0.14);
+    border-radius: 12px;
+    background: rgba(10, 18, 30, 0.96);
+    box-shadow: 0 18px 38px rgba(2, 6, 23, 0.42);
+}
+
+#view-censor .censor-shortcuts-popover .status-item {
+    white-space: nowrap !important;
+}
+
 #view-censor .zoom-controls-v2 {
     background: rgba(255, 255, 255, 0.04) !important;
     border-color: rgba(191, 219, 254, 0.1) !important;
