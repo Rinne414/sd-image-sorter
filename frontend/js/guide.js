@@ -48,6 +48,48 @@
                         'If the prompt format toggle is available in the preview modal, compare the converted format before copying it into another tool.',
                     ],
                 },
+                reader: {
+                    icon: '📖',
+                    title: 'Read Image',
+                    purpose: [
+                        'Inspect one image in depth — including images that are NOT in your library — read its full SD metadata, edit generation info, and use the Privacy / obfuscation tools.',
+                    ],
+                    steps: [
+                        'Open from the Gallery preview (Metadata / Info), or drag-and-drop / paste any image file here.',
+                        'Read the parsed prompt, negative, model, sampler, and other generation parameters.',
+                        'Use "Edit Metadata" to adjust fields, then "Save New Image" to write a copy.',
+                        'Switch to "Privacy Tools" to encode (protect) or decode (restore) an image.',
+                    ],
+                    features: [
+                        'Reads external images via drag-drop, file picker, or clipboard paste.',
+                        'Full metadata editor with a save-as-new-image action.',
+                        'Privacy / obfuscation workbench (encode, decode, batch).',
+                    ],
+                    tips: [
+                        'The Gallery preview modal already covers quick metadata viewing — come here when you need to edit, read an out-of-library file, or use Privacy Tools.',
+                    ],
+                },
+                dataset: {
+                    icon: '📦',
+                    title: 'Dataset',
+                    purpose: [
+                        'Turn a set of images into a LoRA-training-ready dataset: import, caption (booru tags + natural language), tidy captions, then export images and matching .txt files to one folder.',
+                    ],
+                    steps: [
+                        'Import: add images from the Gallery selection or a folder path (step 1).',
+                        'Workbench: review each image, edit its booru tags and natural-language caption, and use Smart Tag (WD14 + VLM) or Auto-tag to fill them in (step 2).',
+                        'Export: choose the caption format and output folder, then export image + .txt pairs (step 3).',
+                    ],
+                    features: [
+                        'Two-box caption editor: booru tags (with colored danbooru groups) plus a natural-language caption.',
+                        'Smart Tag bundles WD14 tagging and VLM captioning with an optional trigger word.',
+                        'Mass tag editor for bulk find/replace, add, remove, and cleanup across the whole set.',
+                    ],
+                    tips: [
+                        'Set a trigger word before exporting if you are training a specific character or style.',
+                        'Use the tag-confidence panel to drop low-confidence tags before export.',
+                    ],
+                },
                 autosep: {
                     icon: '📁',
                     title: 'Auto-Separate',
@@ -221,6 +263,48 @@
                     tips: [
                         '当筛选条件越来越多时，直接打开筛选编辑器比只看摘要更清楚。',
                         '如果预览弹窗里能切换提示词格式，复制前先确认转换后的格式是否真的是你要用的版本。',
+                    ],
+                },
+                reader: {
+                    icon: '📖',
+                    title: '读图',
+                    purpose: [
+                        '深入查看单张图片（包括不在图库里的图片），读取完整 SD 元数据、编辑生成信息，并使用隐私 / 混淆工具。',
+                    ],
+                    steps: [
+                        '从图库预览（元数据 / 信息）打开，或把任意图片拖入 / 粘贴到这里。',
+                        '查看解析出的 prompt、负面、模型、sampler 等生成参数。',
+                        '用「编辑元数据」修改字段，再用「另存为新图片」写出一份副本。',
+                        '切到「隐私工具」可对图片进行编码（保护）或解码（还原）。',
+                    ],
+                    features: [
+                        '支持拖放、文件选择、剪贴板粘贴读取外部图片。',
+                        '完整的元数据编辑器，可另存为新图片。',
+                        '隐私 / 混淆工作台（编码、解码、批量）。',
+                    ],
+                    tips: [
+                        '快速看元数据用图库预览弹窗即可；需要编辑、读取库外图片或用隐私工具时再来这里。',
+                    ],
+                },
+                dataset: {
+                    icon: '📦',
+                    title: '数据集',
+                    purpose: [
+                        '把一批图片做成可直接训练 LoRA 的数据集：导入、打标（booru 标签 + 自然语言描述）、整理 caption，再把图片和对应的 .txt 一起导出到同一个文件夹。',
+                    ],
+                    steps: [
+                        '导入：从图库选择或文件夹路径添加图片（第 1 步）。',
+                        '工作台：逐张查看图片，编辑 booru 标签和自然语言 caption，用 Smart Tag（WD14 + VLM）或自动打标来填充（第 2 步）。',
+                        '导出：选择 caption 格式和输出文件夹，导出 图片 + .txt 成对文件（第 3 步）。',
+                    ],
+                    features: [
+                        '双框 caption 编辑器：booru 标签（带 danbooru 分组配色）+ 自然语言描述。',
+                        'Smart Tag 把 WD14 打标和 VLM 描述打包，可选触发词（trigger word）。',
+                        '批量标签编辑器，可对整组做查找替换、增删、清理。',
+                    ],
+                    tips: [
+                        '训练特定角色或画风时，导出前先设好 trigger word。',
+                        '用标签置信度面板在导出前剔除低置信度标签。',
                     ],
                 },
                 autosep: {
@@ -762,7 +846,9 @@
         show(tabName) {
             const copy = this._copy();
             const tab = this._tab(tabName);
-            if (!tab) return;
+            // Return false (not undefined) so callers can fall back to the
+            // keyboard-shortcuts panel when a tab has no guide copy.
+            if (!tab) return false;
 
             this._ensureModal();
             this._openTab = tabName;
@@ -790,6 +876,7 @@
                 }
             };
             document.addEventListener('keydown', this._escHandler, true);
+            return true;
         },
 
         hide() {

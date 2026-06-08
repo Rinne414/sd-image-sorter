@@ -116,8 +116,10 @@ const KeyboardShortcutsPanel = (function () {
         const currentTab = typeof window.Guide.getCurrentTab === 'function'
             ? window.Guide.getCurrentTab()
             : (window.App && window.App.AppState && window.App.AppState.currentView) || 'gallery';
-        window.Guide.show(currentTab);
-        return true;
+        // Propagate whether the guide actually opened. When a tab has no guide
+        // copy, Guide.show() returns false and the caller falls back to the
+        // keyboard-shortcuts panel instead of silently doing nothing.
+        return window.Guide.show(currentTab) === true;
     }
 
     function init() {
