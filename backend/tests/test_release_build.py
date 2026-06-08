@@ -1125,9 +1125,10 @@ def test_autosep_and_manual_sort_default_to_copy_for_safety():
 
     This test pins both halves:
       1. The HTML radios in index.html ship with ``checked`` on the
-         ``copy`` value (not ``move``) for all three radio groups:
-         autosep-operation-mode-main, autosep-operation-mode-settings,
-         manual-sort-operation.
+         ``copy`` value (not ``move``) for the two action-owner radio
+         groups: autosep-operation-mode-main and manual-sort-operation.
+         The old autosep-operation-mode-settings duplicate must stay
+         absent; the main Action pane now owns Auto-Separate file action.
       2. The JS fallbacks in autosep.js / manual-sort.js / app.js
          resolve to ``copy`` when localStorage has no saved value
          (or when the saved value is corrupt/unrecognized).
@@ -1147,7 +1148,7 @@ def test_autosep_and_manual_sort_default_to_copy_for_safety():
     # ---- HTML radios ----
     # For each radio group, find both the move and copy radio tags and
     # assert the copy one carries ``checked`` while the move one does not.
-    for group in ("autosep-operation-mode-main", "autosep-operation-mode-settings", "manual-sort-operation"):
+    for group in ("autosep-operation-mode-main", "manual-sort-operation"):
         move_pattern = re.compile(
             rf'<input type="radio" name="{re.escape(group)}" value="move"[^>]*>',
             re.IGNORECASE,
@@ -1171,6 +1172,12 @@ def test_autosep_and_manual_sort_default_to_copy_for_safety():
             f"Found: {copy_match.group(0)!r}"
         )
 
+    assert 'name="autosep-operation-mode-settings"' not in index_html, (
+        "Auto-Separate Settings must not reintroduce the duplicate file-action "
+        "radio group; the main Action pane owns operation mode after the "
+        "NOISE-03/04 de-dup."
+    )
+
     # ---- HTML helper text under manual-sort radios ----
     # Helper text + status line should reflect ``copy`` as the initial
     # state. JS overrides on user toggle, but the static HTML the user
@@ -1179,6 +1186,16 @@ def test_autosep_and_manual_sort_default_to_copy_for_safety():
     assert 'data-i18n="manual.actionModeMoveHelp"' not in index_html
     assert "Action mode: Copy and keep originals" in index_html
     assert "Action mode: Move originals" not in index_html
+    execution_mode_match = re.search(
+        r'<div class="helper-text" id="manual-sort-execution-mode"[^>]*>',
+        index_html,
+        re.IGNORECASE,
+    )
+    assert execution_mode_match is not None
+    assert "data-i18n" not in execution_mode_match.group(0).lower(), (
+        "manual-sort-execution-mode is dynamic text with a {mode} param; "
+        "global data-i18n cannot supply that param and must not overwrite it."
+    )
 
     # ---- autosep.js DEFAULT_AUTOSEP_SETTINGS.operationMode ----
     autosep_default_match = re.search(
@@ -1208,6 +1225,10 @@ def test_autosep_and_manual_sort_default_to_copy_for_safety():
     assert "localStorage.getItem(MANUAL_SORT_OPERATION_MODE_KEY) || 'copy'" in manual_sort_js, (
         "manual-sort.js localStorage fallback must be 'copy'. "
         "Locked by Principle #11."
+    )
+    assert "operationMode: 'copy'" in manual_sort_js, (
+        "ManualSortState.operationMode must initialize to 'copy' before init "
+        "runs. Locked by Principle #11."
     )
     assert "return mode === 'move' ? 'move' : 'copy'" in manual_sort_js, (
         "manual-sort.js normalizeManualSortOperationMode must fall back to "

@@ -14,7 +14,7 @@ const ManualSortState = {
     // that collection by reference (no file move) instead of moving the file.
     collectionSlots: { w: null, a: null, s: null, d: null },
     collectionsCache: [],
-    operationMode: 'move',
+    operationMode: 'copy',
     index: 0,
     total: 0,
     combo: 0,
@@ -177,7 +177,7 @@ function manualSortText(key, enText, zhText = enText) {
 }
 
 function formatManualSortI18n(key, fallback, replacements = {}) {
-    const v = window.I18n?.t?.(key);
+    const v = window.I18n?.t?.(key, replacements);
     const raw = (v && v !== key) ? v : fallback;
     return Object.entries(replacements).reduce(
         (out, [token, value]) => out.replaceAll(`{${token}}`, String(value)),
