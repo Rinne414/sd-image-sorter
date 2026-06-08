@@ -7747,3 +7747,21 @@ html.lang-zh #view-censor .queue-action-btn span {
     display: flex;
     gap: 8px;
 }
+
+/* ==========================================================================
+   NOISE-10 — floating background-job progress bars: distinct vertical slots
+   The 6 bars (tag/scan/reconnect/move/delete/remove) collapsed onto 2 bottom
+   offsets: tag+reconnect at 16px, scan+move+delete+remove at 124px — so a scan
+   running alongside a move (or tag alongside reconnect) overlapped. Give each
+   independent job its own slot; move/delete/remove are mutually exclusive
+   (one selection file-op at a time) so they share the top slot. Full dynamic
+   stacking template intentionally deferred per the plan.
+   ========================================================================== */
+.bg-reconnect-progress {
+    bottom: 232px;
+}
+#bg-move-progress,
+#bg-delete-progress,
+#bg-remove-progress {
+    bottom: 340px;
+}
