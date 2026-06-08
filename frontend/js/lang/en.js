@@ -2301,7 +2301,7 @@ window.I18nLang_en = {
     'vlmSettings.apiKey': 'API Key (optional for local)',
     'vlmSettings.apiKeyPlaceholder': 'sk-... (leave blank for Ollama)',
     'vlmSettings.model': 'Model Name',
-    'vlmSettings.modelHelper': 'Type model name directly, or click "Fetch" to see available models.',
+    'vlmSettings.modelHelper': 'Pick a recommended model from the dropdown, type any model name directly, or click "Fetch" to list what your endpoint already has.',
     'vlmSettings.fetchModels': 'Fetch Available Models',
     'vlmSettings.promptConfig': 'Prompt Configuration',
     'vlmSettings.preset': 'Preset',

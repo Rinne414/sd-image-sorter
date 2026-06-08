@@ -5746,8 +5746,9 @@
 
             <div class="form-group">
                 <label for="vlm-model" data-i18n="vlmSettings.model">Model Name</label>
-                <input type="text" id="vlm-model" class="input-field" placeholder="qwen2.5-vl:7b">
-                <small class="helper-text" data-i18n="vlmSettings.modelHelper">Type model name directly, or click "Fetch" to see available models.</small>
+                <input type="text" id="vlm-model" class="input-field" placeholder="qwen2.5-vl:7b" list="vlm-model-suggestions" autocomplete="off">
+                <datalist id="vlm-model-suggestions"></datalist>
+                <small class="helper-text" data-i18n="vlmSettings.modelHelper">Pick a recommended model from the dropdown, type any model name directly, or click "Fetch" to list what your endpoint already has.</small>
                 <button class="btn btn-small btn-ghost" id="btn-vlm-fetch-models" style="margin-top:4px" data-i18n="vlmSettings.fetchModels">Fetch Available Models</button>
                 <div id="vlm-model-list-status" class="vlm-status" style="display:none"></div>
                 <div id="vlm-model-list" class="vlm-model-list"></div>

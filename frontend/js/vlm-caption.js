@@ -434,12 +434,33 @@ const VLMCaption = {
 
     // --- Local Model Management ---
 
+    _populateModelSuggestions(models) {
+        const datalist = document.getElementById('vlm-model-suggestions');
+        if (!datalist) return;
+        datalist.innerHTML = models.map((m) => {
+            const id = String(m?.id || '').trim();
+            if (!id) return '';
+            const hintParts = [];
+            if (m?.name) hintParts.push(String(m.name));
+            if (m?.size_gb) hintParts.push(`${m.size_gb} GB`);
+            const hint = hintParts.join(' · ');
+            return `<option value="${escapeHtml(id)}">${escapeHtml(hint)}</option>`;
+        }).join('');
+    },
+
     async loadRecommendedModels() {
         const container = document.getElementById('vlm-local-models');
         if (!container) return;
         try {
             const resp = await fetch('/api/vlm/local-models/recommended');
             const data = await resp.json();
+
+            // MODELS-03: feed the #vlm-model input's typeahead datalist from the
+            // recommended set so the free-text box offers a dropdown of known
+            // models (id + short hint) without removing the ability to type any
+            // model name. Populated regardless of Ollama state — useful for both
+            // local and cloud endpoints.
+            this._populateModelSuggestions(Array.isArray(data.models) ? data.models : []);
 
             if (!data.ollama_installed) {
                 container.innerHTML = `<div class="vlm-ollama-install">

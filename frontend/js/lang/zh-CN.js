@@ -2465,7 +2465,7 @@ window.I18nLang_zhCN = {
     'vlmSettings.apiKey': 'API Key (本地模型不需要)',
     'vlmSettings.apiKeyPlaceholder': 'sk-... (Ollama 留空)',
     'vlmSettings.model': '模型名称',
-    'vlmSettings.modelHelper': '直接输入模型名，或点「获取可用模型」从 endpoint 列出。',
+    'vlmSettings.modelHelper': '可从下拉里选推荐模型，也可直接输入任意模型名，或点「获取可用模型」从 endpoint 列出。',
     'vlmSettings.fetchModels': '获取可用模型',
     'vlmSettings.promptConfig': '提示词配置',
     'vlmSettings.preset': '提示词预设',
