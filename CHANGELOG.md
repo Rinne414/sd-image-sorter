@@ -5,6 +5,57 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.3] - 2026-06-09
+
+Deep UI/UX overhaul release. The app now follows the real image workflow more closely:
+Gallery / Reader → Sort → Censor Edit → Similar → Dataset, with Prompt Lab and Artist ID
+behind Tools. Settings & Models is now the single door for models, sound, UI scale, and
+AI defaults; preview and selection surfaces expose the next pipeline step instead of
+dead-ending. Backend features that already existed but had no UI are now reachable
+(star ratings, per-image score/colors/artist/caption actions, update proxy/channel,
+Prompt Lab data tools, VLM provider detect and local model delete). The duplicate Gallery
+AI Tag and Dataset Smart Tag entry points now share one backend coordinator, guarded by
+a LoRA caption golden test so existing training captions stay stable.
+
+深度 UI/UX 大改版。应用现在更贴近真实图片工作流：图库 / 读图 → 整理 → 打码编辑 →
+相似图 → 数据集，Prompt Lab 与画师识别收进 Tools。设置与模型成为统一入口，集中管理模型、
+声音、界面缩放与 AI 默认值；预览弹窗和选择面板会直接给出下一步操作，不再成功后断线。
+此前后端已存在但前端没有入口的能力已接上（星级评分、单图美学/颜色/画师/描述、更新代理/通道、
+Prompt Lab 数据工具、VLM provider 自动识别与本地模型删除）。Gallery AI Tag 与 Dataset Smart Tag
+也改由同一个后端协调器管理，并用 LoRA caption golden test 锁住既有训练 caption 输出。
+
+### Added / 新增
+- **Pipeline handoffs and next-step CTAs**: preview modal handoffs now send an image to Censor Edit, Similar, Dataset Maker, Collections, Prompt Helper, or Reader; scan/tag/sort success states show persistent next-step CTAs instead of transient toasts.
+  - **流程交接与下一步 CTA**：预览弹窗可把图片送到打码编辑、相似图、Dataset Maker、合集、Prompt Helper 或读图；扫描 / 打标 / 整理完成后显示持续的下一步入口，不再只靠一闪而过的 toast。
+- **Settings & Models home**: the old setup entry is now a Settings door with sound mute, UI scale, AI default persistence/reset, model guidance, bulk model download, and disk usage in one place.
+  - **设置与模型主页**：旧的功能准备入口改成统一设置门，集中声音静音、界面缩放、AI 默认值保存/重置、模型指引、批量模型下载与磁盘占用。
+- **Previously invisible backend features now have UI**: user star ratings, per-image Score / Colors / Artist / Caption actions, VLM provider auto-detect, update proxy/channel settings, Prompt Lab recategorize/delete tools, and local Ollama VLM model delete.
+  - **此前没有前端入口的后端能力已接上**：用户星级评分、单图美学 / 颜色 / 画师 / 描述、VLM provider 自动识别、更新代理/通道设置、Prompt Lab 重新分类/删除工具、本地 Ollama VLM 模型删除。
+
+### Changed / 变更
+- **Navigation and information architecture**: core tabs are now ordered around the pipeline, while Prompt Lab and Artist ID live under Tools. Censor naming is standardized as **Censor Edit / 打码编辑**.
+  - **导航与信息架构**：核心标签按流程排序，Prompt Lab 与画师识别收进 Tools。打码功能命名统一为 **Censor Edit / 打码编辑**。
+- **Unified tagging coordinator**: Gallery `/api/tag/*` and Dataset `/api/smart-tag/*` now share a `TaggingPipelineService` coordinator and cannot run two heavy tagger/VLM jobs independently at the same time.
+  - **统一打标协调器**：Gallery `/api/tag/*` 与 Dataset `/api/smart-tag/*` 现在共用 `TaggingPipelineService` 协调器，避免两个重型打标 / VLM 任务各自独立并发。
+- **Noise reduction via progressive disclosure**: Queue Manager filters, Dataset notices, Censor shortcut hints, caption editor secondary tools, and Gallery selection export/remove actions are collapsed until needed.
+  - **渐进展开降低噪音**：Queue Manager 筛选、Dataset 提示、打码快捷键、caption 编辑器次级工具、图库选择面板的导出/移除动作都默认收起，需要时再展开。
+
+### Fixed / 修复
+- **Static asset cache-busting**: frontend JS/CSS served by the backend now carries version cache-busting/no-cache behavior so upgrades do not silently reuse stale UI files.
+  - **静态资源缓存失效**：后端提供的前端 JS/CSS 现在跟随版本做缓存失效 / no-cache，升级后不会静默继续用旧 UI 文件。
+- **Overlapping background progress bars**: scan/tag/reconnect/file-operation progress bars now occupy distinct slots.
+  - **后台进度条不再重叠**：扫描、打标、重连、文件操作进度条现在使用不同位置。
+- **Selection and handoff cleanup**: bulk handoffs clear stale gallery selection where appropriate, and selection/context-menu/Dataset handoff paths now share the same helper.
+  - **选择与交接清理**：批量交接后会按需清理图库旧选择，选择面板 / 右键菜单 / Dataset 交接路径共用同一 helper。
+
+### Internal / 内部
+- **LoRA caption golden gate**: added deterministic tests for Smart Tag caption assembly, Gallery tag export, Dataset export, and export preview before the tagging coordinator merge.
+  - **LoRA caption golden gate**：在合并打标协调器前，为 Smart Tag caption 组装、Gallery 标签导出、Dataset 导出与导出预览加入确定性测试。
+
+### Upgrading / 升级注意
+- **Zero manual steps.** No database schema change ships in v3.3.3. Preferences added in this release use browser `localStorage`; existing libraries and model files are untouched.
+  - **零手动操作。** v3.3.3 不包含数据库结构变更。本次新增偏好使用浏览器 `localStorage`；既有图库与模型文件不受影响。
+
 ## [3.3.2] - 2026-06-08
 
 Sort & Cull Workbench release. The Manual Sort tab becomes a multi-mode culling hub: it keeps
