@@ -1228,14 +1228,12 @@ const PromptLab = {
         // Tab switching
         document.querySelectorAll('.promptlab-tab').forEach(tab => {
             tab.addEventListener('click', () => {
-                self.activateMode(tab.dataset.mode);
-            });
-        });
-
-        document.querySelectorAll('[data-promptlab-mode-target]').forEach((button) => {
-            button.addEventListener('click', () => {
+                // NOISE-09: clicking any mode tab also dismisses the first-use
+                // guide card. This used to be the job of the duplicate Compare/
+                // Build/Random buttons in the "What Next" card, now removed
+                // because they shadowed these always-visible mode tabs.
                 self.dismissFirstUseCard();
-                self.activateMode(button.dataset.promptlabModeTarget);
+                self.activateMode(tab.dataset.mode);
             });
         });
 
