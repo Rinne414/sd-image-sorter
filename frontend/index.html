@@ -250,7 +250,7 @@
                         </button>
                         <button class="btn btn-ghost full-width" id="mobile-btn-model-manager" aria-label="Open model manager">
                             <span>🧰</span>
-                            <span data-i18n="models.manager">Setup</span>
+                            <span data-i18n="models.manager">Settings</span>
                         </button>
                         <button class="btn btn-ghost full-width" id="mobile-btn-tags-library">
                             <span>📚</span>
@@ -277,8 +277,8 @@
             </div>
             <div class="nav-actions">
                 <!-- Group 1: Config & meta (least frequent) -->
-                <button id="btn-open-model-manager" class="btn btn-ghost btn-icon-only" type="button" title="Model & environment setup" aria-label="Open model manager" data-i18n-title="models.managerTooltip" data-i18n-aria="models.title">
-                    <span aria-hidden="true">🧰</span>
+                <button id="btn-open-model-manager" class="btn btn-ghost btn-icon-only" type="button" title="Settings & Models" aria-label="Open Settings & Models" data-i18n-title="models.managerTooltip" data-i18n-aria="models.title">
+                    <span aria-hidden="true">⚙️</span>
                 </button>
                 <button id="btn-language-toggle" class="btn btn-ghost btn-icon-only btn-language" title="Switch language" aria-label="Switch language" data-i18n-title="lang.switchTooltip" data-i18n-aria="lang.switchLabel">
                     <span aria-hidden="true">🌐</span>
@@ -3691,10 +3691,25 @@
                 </button>
                 <div class="modal-header">
                     <div>
-                        <h2 id="model-manager-title" data-i18n="models.title">Feature Setup</h2>
-                        <p class="modal-description" data-i18n="models.description">See which features are ready now, which ones need extra downloads, and how much cache the app may keep.</p>
+                        <h2 id="model-manager-title" data-i18n="models.title">Settings & Models</h2>
+                        <p class="modal-description" data-i18n="models.description">Control app preferences, AI models, cache, and setup from one place.</p>
                     </div>
                 </div>
+                <section class="settings-home-panel" aria-labelledby="settings-home-title">
+                    <div class="settings-home-header">
+                        <h3 id="settings-home-title" data-i18n="settings.title">Settings</h3>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-copy">
+                            <strong data-i18n="settings.soundTitle">Sound</strong>
+                            <span data-i18n="settings.soundBody">Manual sort feedback sounds</span>
+                        </div>
+                        <button type="button" class="btn btn-ghost settings-sound-toggle" id="btn-settings-sound-toggle" aria-pressed="true">
+                            <span aria-hidden="true" id="settings-sound-icon">🔊</span>
+                            <span id="settings-sound-label" data-i18n="settings.soundOn">On</span>
+                        </button>
+                    </div>
+                </section>
                 <div class="model-manager-summary" id="model-manager-summary"></div>
                 <div class="model-manager-bulk-actions" id="model-manager-bulk-actions">
                     <button class="btn btn-primary btn-bulk-download" id="btn-bulk-download-models" type="button" data-i18n="models.bulkDownload" data-i18n-title="models.bulkDownloadTitle" title="Download all recommended models in one go (skips Wenaka Privacy YOLO and ToriiGate; uses default WD14 only)">

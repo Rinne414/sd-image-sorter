@@ -5238,6 +5238,7 @@ function initEventListeners() {
 
     $('#btn-open-model-manager')?.addEventListener('click', openModelManager);
     $('#model-manager-close')?.addEventListener('click', () => hideModal('model-manager-modal'));
+    initSettingsControls();
 
     // Sort reverse button
     $('#sort-reverse-btn').addEventListener('click', () => {
@@ -10199,6 +10200,63 @@ function bindDatasetAuditLazyInit() {
     });
 }
 
+function isSortAudioEnabled() {
+    if (window.AudioManager && typeof window.AudioManager.enabled === 'boolean') {
+        return window.AudioManager.enabled;
+    }
+    return localStorage.getItem('sort-audio-enabled') !== 'false';
+}
+
+function syncSettingsSoundControl() {
+    const btn = document.getElementById('btn-settings-sound-toggle');
+    if (!btn) return;
+    const enabled = isSortAudioEnabled();
+    const icon = document.getElementById('settings-sound-icon');
+    const label = document.getElementById('settings-sound-label');
+    const labelText = enabled
+        ? appT('settings.soundOn', 'On')
+        : appT('settings.soundOff', 'Muted');
+    btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    btn.classList.toggle('is-muted', !enabled);
+    btn.setAttribute(
+        'aria-label',
+        enabled
+            ? appT('settings.soundToggleOff', 'Mute manual sort sounds')
+            : appT('settings.soundToggleOn', 'Enable manual sort sounds')
+    );
+    if (icon) icon.textContent = enabled ? '🔊' : '🔇';
+    if (label) {
+        label.dataset.i18n = enabled ? 'settings.soundOn' : 'settings.soundOff';
+        label.textContent = labelText;
+    }
+}
+
+function toggleSettingsSound() {
+    let enabled;
+    if (window.AudioManager && typeof window.AudioManager.toggle === 'function') {
+        enabled = window.AudioManager.toggle();
+    } else {
+        enabled = !(localStorage.getItem('sort-audio-enabled') !== 'false');
+        localStorage.setItem('sort-audio-enabled', enabled ? 'true' : 'false');
+    }
+    syncSettingsSoundControl();
+    showToast(
+        enabled
+            ? appT('settings.soundSavedOn', 'Manual sort sounds enabled')
+            : appT('settings.soundSavedOff', 'Manual sort sounds muted'),
+        'info'
+    );
+}
+
+function initSettingsControls() {
+    const btn = document.getElementById('btn-settings-sound-toggle');
+    if (btn && btn.dataset.bound !== '1') {
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', toggleSettingsSound);
+    }
+    syncSettingsSoundControl();
+}
+
 async function openModelManager() {
     // Remove first-run pulse indicator once user has found the button
     const setupBtn = $('#btn-open-model-manager');
@@ -10212,6 +10270,7 @@ async function openModelManager() {
         summaryEl.innerHTML = `<div class="model-manager-stat"><strong>${escapeHtml(appT('models.loadingTitle', 'Checking'))}</strong><span>${escapeHtml(appT('models.loadingBody', 'Checking what is ready on this computer...'))}</span></div>`;
     }
     if (gridEl) gridEl.innerHTML = '';
+    syncSettingsSoundControl();
     showModal('model-manager-modal');
 
     // Disk usage loads independently so a slow model probe doesn't block it.

@@ -1641,6 +1641,55 @@ textarea:focus,
     margin-bottom: 18px;
 }
 
+.settings-home-panel {
+    display: grid;
+    gap: 10px;
+    margin: 0 0 18px;
+    padding: 12px;
+    border: 1px solid rgba(124, 139, 255, 0.2);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.settings-home-header h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 15px;
+}
+
+.settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    min-height: 42px;
+}
+
+.settings-row-copy {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.settings-row-copy strong {
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.settings-row-copy span {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.settings-sound-toggle {
+    min-width: 92px;
+    justify-content: center;
+}
+
+.settings-sound-toggle.is-muted {
+    color: var(--text-muted);
+}
+
 .model-manager-stat {
     padding: 14px 16px;
     border-radius: 16px;

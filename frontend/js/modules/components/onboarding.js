@@ -61,8 +61,8 @@ const OnboardingTour = (function() {
         },
         {
             id: 'setup',
-            title: 'Feature Setup',
-            content: `<p>Click the <strong>wrench icon</strong> to download AI models.</p>
+            title: 'Settings & Models',
+            content: `<p>Click the <strong>settings icon</strong> to manage app settings and AI models.</p>
                 <ul>
                     <li>WD14 tagger for auto-tagging</li>
                     <li>CLIP for similar image search</li>
@@ -129,8 +129,8 @@ const OnboardingTour = (function() {
         },
         {
             id: 'setup',
-            title: '功能准备',
-            content: `<p>点击右上角 <strong>🧰 扳手图标</strong> 下载 AI 模型。</p>
+            title: '设置与模型',
+            content: `<p>点击右上角 <strong>⚙️ 设置图标</strong> 管理应用设置和 AI 模型。</p>
                 <ul>
                     <li>WD14 打标模型</li>
                     <li>CLIP 相似图搜索模型</li>
