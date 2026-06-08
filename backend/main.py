@@ -423,8 +423,30 @@ async def add_security_headers(request: Request, call_next):
 
 # Serve frontend static files
 frontend_path = str(BACKEND_DIR.parent / "frontend")
+
+
+class NoCacheStaticFiles(StaticFiles):
+    """Serve frontend JS/CSS with ``Cache-Control: no-cache``.
+
+    GET / already injects a per-file ``?v=`` content hash onto every
+    ``/static/*.js`` and ``/static/*.css`` reference inside index.html, which
+    busts the cache on upgrade *and* on same-version edits. But scripts appended
+    at runtime (e.g. the Dataset Maker sub-modules via ``_appendOrderedScript``,
+    or guide translation packs) bypass that injection, and a stale cached shell
+    could deliver outdated hashes. ``no-cache`` makes the browser revalidate;
+    because StaticFiles already emits ETag + Last-Modified, an unchanged asset
+    costs only a conditional request that returns 304. This is the transport
+    fix that stops "new HTML running old JS" after an update — see GET /.
+    """
+
+    async def get_response(self, path: str, scope):  # type: ignore[override]
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 if os.path.exists(frontend_path):
-    app.mount("/static", StaticFiles(directory=frontend_path), name="static")
+    app.mount("/static", NoCacheStaticFiles(directory=frontend_path), name="static")
 
 
 # Regex used by GET / to add ``?v=APP_VERSION`` to /static/*.js and *.css URLs
@@ -723,10 +745,17 @@ async def root():
             with open(index_path, "r", encoding="utf-8") as f:
                 html = f.read()
             html = _inject_static_cache_busters(html)
-            return HTMLResponse(content=html, status_code=200)
+            # ``no-cache`` forces the browser to revalidate the shell on every
+            # load, so the freshly-injected per-file ``?v=`` hashes are never
+            # served stale from a previous version. Cheap on localhost.
+            return HTMLResponse(
+                content=html,
+                status_code=200,
+                headers={"Cache-Control": "no-cache"},
+            )
         except OSError as exc:
             logger.warning("Falling back to FileResponse for index.html: %s", exc)
-            return FileResponse(index_path)
+            return FileResponse(index_path, headers={"Cache-Control": "no-cache"})
     return {"message": "SD Image Sorter API", "docs": "/docs"}
 
 

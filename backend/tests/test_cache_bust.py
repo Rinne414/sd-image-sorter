@@ -175,6 +175,33 @@ def test_root_falls_back_when_index_is_unreadable(fake_index_app, monkeypatch):
     assert response.status_code == 200
 
 
+def test_root_sets_no_cache_header(fake_index_app):
+    """The shell HTML must revalidate so its freshly-injected ?v= hashes are
+    never served stale from a previously-cached version."""
+    main_module = fake_index_app
+    client = TestClient(main_module.app)
+
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.headers.get("cache-control") == "no-cache"
+
+
+def test_static_assets_set_no_cache_header(fake_index_app):
+    """Static JS/CSS must revalidate instead of serving a stale cached bundle.
+
+    This covers scripts appended dynamically at runtime (e.g. the Dataset Maker
+    sub-modules via ``_appendOrderedScript``) that bypass the GET / ``?v=``
+    injection. The mount serves from the real bundled frontend, so app.js is a
+    safe, always-present asset to probe.
+    """
+    main_module = fake_index_app
+    client = TestClient(main_module.app)
+
+    response = client.get("/static/js/app.js")
+    assert response.status_code == 200
+    assert response.headers.get("cache-control") == "no-cache"
+
+
 def test_cache_bust_regex_is_anchored_to_static_paths():
     """Sanity-check the regex itself — must not match arbitrary src= matches.
 
