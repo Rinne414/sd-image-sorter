@@ -3146,6 +3146,7 @@ window.I18nLang_zhCN = {
     'dataset.folderBarPlaceholder': '拖入文件夹或输入路径...',
     'dataset.includeSubfolders': '含子文件夹',
     'dataset.folderImportGo': '扫描并加入',
+    'dataset.importNotesSummary': '导入说明与限制',
     'dataset.largeImportReminder': '100k+ 图片请使用上方文件夹路径栏。浏览器拖放和 ZIP 导入必须先在浏览器里枚举文件，数量很大时会慢、占内存，甚至卡住。',
     'dataset.dropzoneText': '拖放图片、ZIP 或文件夹到此处',
     'dataset.dropzoneHint': '默认包含子文件夹。导入后缩略图显示在下方。',

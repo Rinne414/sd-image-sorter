@@ -2920,20 +2920,30 @@
                             <button type="button" class="btn btn-ghost btn-small dataset-import-audit-button" id="btn-dataset-import-audit"
                                     data-i18n="dataset.runAudit">Run Audit</button>
                         </div>
-                        <div class="dataset-large-import-reminder" role="note">
-                            <span aria-hidden="true">⚠️</span>
-                            <span data-i18n="dataset.largeImportReminder">
-                                For 100k+ images, use the folder path bar. Browser drag/drop and ZIP import must enumerate files in the browser first and can be slow or memory-heavy.
-                            </span>
-                        </div>
-                        <div class="dataset-sidecar-import-notice" id="dataset-sidecar-import-notice" role="note">
-                            <strong data-i18n="dataset.sidecarNoticeTitle">Same-name .txt beside original files</strong>
-                            <ul>
-                                <li data-i18n="dataset.sidecarNoticeGalleryFolder">Supported when images come from Gallery or the folder path scan above.</li>
-                                <li data-i18n="dataset.sidecarNoticeCacheOnly">Drag/drop images, dropped folders, ZIP, and RAR also write the .txt next to the imported copy in the app data directory.</li>
-                                <li data-i18n="dataset.sidecarNoticeRar">RAR needs the optional 'rarfile' Python package and a system 'unrar' binary; if missing, extract to a folder or convert to ZIP first.</li>
-                            </ul>
-                        </div>
+                        <!-- NOISE-06: the two always-visible import notices (100k+ reminder
+                             + same-name .txt behaviour) stacked up and crowded the import tab.
+                             Collapsed into a default-closed disclosure — available, not noisy. -->
+                        <details class="guided-advanced-panel dataset-import-notes">
+                            <summary class="guided-advanced-summary">
+                                <span data-i18n="dataset.importNotesSummary">Import notes &amp; limits</span>
+                            </summary>
+                            <div class="guided-advanced-body">
+                                <div class="dataset-large-import-reminder" role="note">
+                                    <span aria-hidden="true">⚠️</span>
+                                    <span data-i18n="dataset.largeImportReminder">
+                                        For 100k+ images, use the folder path bar. Browser drag/drop and ZIP import must enumerate files in the browser first and can be slow or memory-heavy.
+                                    </span>
+                                </div>
+                                <div class="dataset-sidecar-import-notice" id="dataset-sidecar-import-notice" role="note">
+                                    <strong data-i18n="dataset.sidecarNoticeTitle">Same-name .txt beside original files</strong>
+                                    <ul>
+                                        <li data-i18n="dataset.sidecarNoticeGalleryFolder">Supported when images come from Gallery or the folder path scan above.</li>
+                                        <li data-i18n="dataset.sidecarNoticeCacheOnly">Drag/drop images, dropped folders, ZIP, and RAR also write the .txt next to the imported copy in the app data directory.</li>
+                                        <li data-i18n="dataset.sidecarNoticeRar">RAR needs the optional 'rarfile' Python package and a system 'unrar' binary; if missing, extract to a folder or convert to ZIP first.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </details>
 
                         <!-- Drag-drop zone (accepts images, zip, folders) -->
                         <div class="dataset-dropzone" id="dataset-dropzone">

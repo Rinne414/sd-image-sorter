@@ -3146,6 +3146,7 @@ window.I18nLang_en = {
     'dataset.folderBarPlaceholder': 'Drag folder here or type path...',
     'dataset.includeSubfolders': 'Subfolders',
     'dataset.folderImportGo': 'Scan',
+    'dataset.importNotesSummary': 'Import notes & limits',
     'dataset.largeImportReminder': 'For 100k+ images, use the folder path bar. Browser drag/drop and ZIP import must enumerate files in the browser first and can be slow or memory-heavy.',
     'dataset.dropzoneText': 'Drag and drop images, ZIP files, or folders here',
     'dataset.dropzoneHint': 'Subfolders included by default. Images appear below after import.',
