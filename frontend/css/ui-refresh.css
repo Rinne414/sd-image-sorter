@@ -1691,6 +1691,23 @@ textarea:focus,
     gap: 14px;
 }
 
+/* MODELS-07: full-width section dividers inside the model grid (Essentials /
+   Additional). grid-column: 1 / -1 makes each heading span every column. */
+.model-manager-section {
+    grid-column: 1 / -1;
+    margin: 6px 2px -2px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-tertiary, #8a94a6);
+}
+.model-manager-section:not(:first-child) {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(191, 219, 254, 0.08);
+}
+
 .model-card {
     display: flex;
     flex-direction: column;
@@ -1703,6 +1720,26 @@ textarea:focus,
 
 .model-card.is-ready {
     border-color: rgba(34, 197, 94, 0.32);
+}
+
+/* MODELS-07: recommended ("essentials") cards get a teal accent + inline badge
+   so the must-have models stand out from optional/advanced ones. */
+.model-card.is-recommended {
+    border-color: rgba(94, 234, 212, 0.42);
+    box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.12) inset;
+}
+.model-card-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    background: rgba(94, 234, 212, 0.16);
+    color: #9af2e0;
+    vertical-align: middle;
 }
 
 .model-card.is-missing {

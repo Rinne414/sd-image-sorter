@@ -1931,6 +1931,10 @@ window.I18nLang_zhCN = {
     'models.failedBody': '暂时无法读取本机功能状态。',
     'models.ready': '现在能用',
     'models.missing': '还没准备好',
+    'models.recommended': '推荐',
+    'models.recommendedTooltip': '包含在「下载所有推荐模型」中',
+    'models.essentials': '核心模型 · 推荐所有人安装',
+    'models.optionalSection': '其他与进阶模型',
     // Bulk-download "Download all recommended models" flow
     'models.bulkDownload': '一键下载推荐模型',
     'models.bulkDownloadTitle': '一次性下载所有推荐模型（跳过 Wenaka Privacy YOLO、跳过 ToriiGate；WD14 只下默认的那个）',

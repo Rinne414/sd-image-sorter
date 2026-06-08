@@ -10247,7 +10247,7 @@ function renderModelManager(models = []) {
         });
     }).catch(() => {});
 
-    gridEl.innerHTML = models.map((model) => {
+    const renderModelCard = (model) => {
         const safeId = escapeHtml(model.id);
         const status = model.status || (model.available ? 'ready' : 'missing');
         const statusClass = status === 'ready' ? 'is-ready' : 'is-missing';
@@ -10274,10 +10274,10 @@ function renderModelManager(models = []) {
         }).join('') : '';
 
         return `
-            <article class="model-card ${statusClass}" data-model-id="${safeId}">
+            <article class="model-card ${statusClass}${model.recommended ? ' is-recommended' : ''}" data-model-id="${safeId}">
                 <div class="model-card-header">
                     <div>
-                        <div class="model-card-group">${escapeHtml(model.group_key ? appT(model.group_key, model.group || appT('models.groupFallback', 'Feature')) : (model.group || appT('models.groupFallback', 'Feature')))}</div>
+                        <div class="model-card-group">${escapeHtml(model.group_key ? appT(model.group_key, model.group || appT('models.groupFallback', 'Feature')) : (model.group || appT('models.groupFallback', 'Feature')))}${model.recommended ? ` <span class="model-card-badge" title="${escapeHtml(appT('models.recommendedTooltip', 'Included in “Download all recommended models”'))}">${escapeHtml(appT('models.recommended', 'Recommended'))}</span>` : ''}</div>
                         <div class="model-card-title">${escapeHtml(model.name || model.id)}</div>
                     </div>
                     <span class="model-card-status ${statusClass}">${escapeHtml(statusLabel)}</span>
@@ -10311,7 +10311,24 @@ function renderModelManager(models = []) {
                 </div>
             </article>
         `;
-    }).join('');
+    };
+
+    // MODELS-07: essentials-first. Recommended models render in a leading
+    // "Essentials" section; optional/advanced ones (ToriiGate, OppaiOracle,
+    // Wenaka Privacy YOLO) drop into an "Additional" section so a new user is
+    // not faced with a flat, undifferentiated wall of model cards.
+    const sectionHeading = (key, fallback) =>
+        `<div class="model-manager-section" role="presentation">${escapeHtml(appT(key, fallback))}</div>`;
+    const recommendedModels = models.filter((model) => model.recommended);
+    const optionalModels = models.filter((model) => !model.recommended);
+    gridEl.innerHTML = [
+        recommendedModels.length
+            ? sectionHeading('models.essentials', 'Essentials · recommended for everyone') + recommendedModels.map(renderModelCard).join('')
+            : '',
+        optionalModels.length
+            ? sectionHeading('models.optionalSection', 'Additional & advanced models') + optionalModels.map(renderModelCard).join('')
+            : '',
+    ].join('');
 
     const withRestartReminder = (message, prepareResult) => {
         if (!prepareResult?.restart_recommended) return message;

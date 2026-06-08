@@ -64,6 +64,33 @@ def test_model_inventory_is_built_without_router_imports(monkeypatch):
     assert all("status" in item and "download_supported" in item for item in inventory)
 
 
+def test_model_inventory_flags_recommended_essentials(monkeypatch):
+    # MODELS-07: every inventory entry carries a `recommended` flag so the
+    # Model Manager can render essentials first; it must match the curated set.
+    monkeypatch.setattr(model_service, "get_model_health", lambda: _fake_health())
+    monkeypatch.setitem(sys.modules, "aesthetic", SimpleNamespace(is_available=lambda: False))
+
+    inventory = model_service.ModelService().build_model_inventory()
+
+    assert all("recommended" in item for item in inventory)
+    for item in inventory:
+        assert item["recommended"] == (item["id"] in model_service.RECOMMENDED_MODEL_IDS)
+    recommended_ids = {item["id"] for item in inventory if item["recommended"]}
+    assert {"wd14", "censor-nudenet", "clip", "aesthetic", "artist", "sam3"} == recommended_ids
+    # Optional/advanced models must NOT be flagged as essentials.
+    assert not any(item["recommended"] for item in inventory if item["id"] in {"toriigate", "oppai-oracle", "censor-legacy"})
+
+
+def test_recommended_ids_match_bulk_bundle():
+    # MODELS-07 sync guard: the "essentials" set surfaced in the Model Manager
+    # must stay identical to the "Download all recommended models" bundle so the
+    # two cannot silently drift.
+    from routers.models import BULK_MODEL_BUNDLE
+
+    bundle_ids = {item["id"] for item in BULK_MODEL_BUNDLE}
+    assert bundle_ids == set(model_service.RECOMMENDED_MODEL_IDS)
+
+
 def test_prepare_wd14_repairs_windows_onnx_runtime(monkeypatch):
     repair_calls = []
 

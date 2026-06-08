@@ -436,6 +436,22 @@ def build_privacy_yolo_prepare_error(target_dir: Path, reason: str) -> Dict[str,
     }
 
 
+# MODELS-07: the "essentials" set surfaced first (with a Recommended badge) in
+# the Model Manager. These are the models a typical user should install — they
+# back the default pipeline (tagging, censor, similarity, scoring, artist ID,
+# segmentation). It MUST stay in sync with BULK_MODEL_BUNDLE in
+# routers/models.py (the "Download all recommended models" button); a unit test
+# asserts the two sets are equal so they cannot silently drift.
+RECOMMENDED_MODEL_IDS = frozenset({
+    "wd14",
+    "censor-nudenet",
+    "clip",
+    "aesthetic",
+    "artist",
+    "sam3",
+})
+
+
 class ModelService:
     """Owns model health aggregation, downloads, and preparation side effects."""
 
@@ -573,7 +589,7 @@ class ModelService:
         else:
             sam3_key = "models.sam3.missing"
 
-        return [
+        inventory = [
             {
                 "id": "wd14",
                 "name": "WD14 Tagger",
@@ -766,6 +782,12 @@ class ModelService:
                 ],
             },
         ]
+        # MODELS-07: flag the essentials so the Model Manager can render them
+        # first with a Recommended badge. Optional/advanced models (ToriiGate,
+        # OppaiOracle, Wenaka Privacy YOLO) fall into the "additional" section.
+        for entry in inventory:
+            entry["recommended"] = entry["id"] in RECOMMENDED_MODEL_IDS
+        return inventory
 
     def download_privacy_yolo_bundle(self) -> Dict[str, str]:
         target_dir = Path(get_yolo_model_dir())
