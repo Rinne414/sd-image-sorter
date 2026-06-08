@@ -602,7 +602,10 @@ function markRecommendedDetectorMode() {
     Array.from(select.options).forEach((option) => {
         const key = option.getAttribute('data-i18n');
         const base = key && window.I18n?.t ? window.I18n.t(key) : option.textContent.replace(/\s+\([^)]*\)\s*$/, '');
-        option.textContent = (recommended && option.value === recommended)
+        // Some option labels (e.g. censor.both = "Recommended: Both …") already
+        // carry the recommended word in their i18n string; don't double-mark.
+        const alreadyMarked = base.includes(label);
+        option.textContent = (recommended && option.value === recommended && !alreadyMarked)
             ? `${base} (${label})`
             : base;
     });
