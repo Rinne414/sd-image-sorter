@@ -283,6 +283,8 @@ window.I18nLang_en = {
     // Color backfill (v3.2.1)
     'color.bannerTitle': 'Color sort needs analysis first',
     'color.bannerCta': 'Analyze now',
+    'color.openAnalysisTab': 'Open Color Analysis',
+    'color.openAnalysisTabWithCount': 'Open Color Analysis ({count})',
     'color.bannerDismiss': 'Hide',
     'color.toastTitle': 'Color analysis',
     'color.pause': 'Pause',
@@ -2343,6 +2345,7 @@ window.I18nLang_en = {
     'tagger.colorCancel': 'Stop',
     'filter.colorBackfillMissing': 'Color filters need analysis on {count} more images.',
     'filter.colorBackfillRunNow': 'Run color analysis',
+    'filter.colorBackfillOpen': 'Open Color Analysis',
     'filter.colorBackfillHint': 'Analysis is local and takes about 1 minute per 1,000 images.',
     // v3.2.1 VLM tagger backend
     'modal.tagGroupLocal': 'Local Tagger (Danbooru tags)',

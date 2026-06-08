@@ -285,6 +285,8 @@ window.I18nLang_zhCN = {
     // Color backfill (v3.2.1)
     'color.bannerTitle': '色彩排序需要先补算',
     'color.bannerCta': '现在补算',
+    'color.openAnalysisTab': '打开色彩分析',
+    'color.openAnalysisTabWithCount': '打开色彩分析（{count}）',
     'color.bannerDismiss': '隐藏',
     'color.toastTitle': '色彩分析',
     'color.pause': '暂停',
@@ -2506,6 +2508,7 @@ window.I18nLang_zhCN = {
     'tagger.colorCancel': '停止',
     'filter.colorBackfillMissing': '色彩筛选还需分析 {count} 张图。',
     'filter.colorBackfillRunNow': '立即分析色彩',
+    'filter.colorBackfillOpen': '打开色彩分析',
     'filter.colorBackfillHint': '色彩分析在本地运行，每 1000 张图大约 1 分钟。',
     // v3.2.1 VLM tagger backend
     'modal.tagGroupLocal': '本地 Tagger (Danbooru 标签)',

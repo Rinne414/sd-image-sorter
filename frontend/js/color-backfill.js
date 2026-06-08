@@ -42,14 +42,14 @@
             document.getElementById("gallery-sort")?.addEventListener("change", (e) => {
                 this.maybeShowBanner(e.target.value);
             });
-            document.getElementById("btn-color-backfill-start")?.addEventListener("click", () => this.startAnalysis());
+            document.getElementById("btn-color-backfill-start")?.addEventListener("click", () => this.openColorAnalysis());
             document.getElementById("btn-color-backfill-dismiss")?.addEventListener("click", () => this.dismissBanner());
             document.getElementById("nav-color-progress")?.addEventListener("click", () => this.openToast());
             document.getElementById("btn-color-progress-close")?.addEventListener("click", () => this.closeToast());
             document.getElementById("btn-color-progress-hide")?.addEventListener("click", () => this.closeToast());
             document.getElementById("btn-color-progress-pause")?.addEventListener("click", () => this.cancelAnalysis());
             // v3.2.1 task #26: filter modal inline banner.
-            document.getElementById("btn-filter-color-backfill-start")?.addEventListener("click", () => this.startAnalysis());
+            document.getElementById("btn-filter-color-backfill-start")?.addEventListener("click", () => this.openColorAnalysis());
             // Refresh the filter banner whenever the filter modal opens.
             window.addEventListener("filterModalOpened", () => this.refreshFilterBanner());
         },
@@ -86,10 +86,13 @@
             }
             const startBtn = document.getElementById("btn-color-backfill-start");
             if (startBtn) {
-                startBtn.textContent = this.t(
-                    `Analyze ${missingCount.toLocaleString()} images`,
-                    `补算 ${missingCount.toLocaleString()} 张`,
-                );
+                const label = window.I18n?.t?.("color.openAnalysisTabWithCount", { count: missingCount.toLocaleString() });
+                startBtn.textContent = label && label !== "color.openAnalysisTabWithCount"
+                    ? label
+                    : this.t(
+                        `Open Color Analysis (${missingCount.toLocaleString()})`,
+                        `打开色彩分析（${missingCount.toLocaleString()}）`,
+                    );
             }
             banner.hidden = false;
             this.bannerVisible = true;
@@ -133,6 +136,16 @@
         },
 
         // ---- Start / cancel ----------------------------------------------
+
+        openColorAnalysis() {
+            this.hideBanner();
+            if (typeof window.App?.openColorAnalysis === "function") {
+                window.App.openColorAnalysis();
+                return;
+            }
+            document.getElementById("btn-tag")?.click();
+            setTimeout(() => window.V321Integration?.setTaggerTab?.("color"), 0);
+        },
 
         async startAnalysis() {
             this.hideBanner();

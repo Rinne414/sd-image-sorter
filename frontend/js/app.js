@@ -2143,6 +2143,25 @@ function openVlmSettings() {
     return !!document.getElementById('vlm-settings-modal');
 }
 
+function openColorAnalysis() {
+    showModal('tag-modal');
+    const selectColorTab = () => {
+        if (window.V321Integration && typeof window.V321Integration.setTaggerTab === 'function') {
+            window.V321Integration.setTaggerTab('color');
+            if (typeof window.V321Integration._refreshColorTab === 'function') {
+                window.V321Integration._refreshColorTab();
+            }
+            return true;
+        }
+        const colorTab = document.querySelector('#tag-modal .tagger-tab[data-tagger-tab="color"]');
+        colorTab?.click();
+        return !!colorTab;
+    };
+    if (selectColorTab()) return true;
+    setTimeout(selectColorTab, 0);
+    return true;
+}
+
 // ============== FLOW-05/06/07: post-action "next step" CTA banner ==============
 // Every pipeline step (scan / tag / sort) used to end with a toast that vanished
 // after a few seconds, leaving the user at a dead-end with no hint what to do
@@ -12479,6 +12498,7 @@ function buildAppContext() {
         filterLibraryContent,
         switchView,
         openVlmSettings,
+        openColorAnalysis,
         openGalleryPreview,
         applyPromptFilter,
         // Expose the canonical modal closer so cross-module callers (gallery.js
