@@ -329,7 +329,15 @@
         const option = document.createElement('option');
         const name = String(model?.name || model?.path || '').trim();
         option.value = name;
-        option.textContent = name + (model?.recommended ? ` (${t('smartTag.taggerRecommended', 'Recommended')})` : '');
+        // Surface the beginner-facing "best for" hint directly in the visible
+        // option text (not just the title tooltip) so the Dataset Smart-Tag
+        // dropdown is self-describing, matching the Gallery picker. The option
+        // value stays the raw model name so selection logic is unaffected.
+        const recommendedSuffix = model?.recommended
+            ? ` (${t('smartTag.taggerRecommended', 'Recommended')})`
+            : '';
+        const bestForSuffix = model?.best_for ? ` — ${model.best_for}` : '';
+        option.textContent = name + recommendedSuffix + bestForSuffix;
         if (model?.best_for) option.title = `${name} - ${model.best_for}`;
         if (model?.disabled) {
             option.disabled = true;
