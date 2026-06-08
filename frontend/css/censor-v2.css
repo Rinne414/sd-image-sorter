@@ -727,6 +727,38 @@
     margin-bottom: 10px;
 }
 
+/* NOISE-01: collapsible Photo Filters card (default closed). The <summary>
+   carries the card header; a rotating chevron signals open/closed state. */
+.censor-side-card-collapsible > .censor-side-card-summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.censor-side-card-collapsible > .censor-side-card-summary::-webkit-details-marker {
+    display: none;
+}
+.censor-side-card-collapsible > .censor-side-card-summary::after {
+    content: '▸';
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-secondary, #9aa3b2);
+    transition: transform 150ms ease;
+}
+.censor-side-card-collapsible[open] > .censor-side-card-summary::after {
+    transform: rotate(90deg);
+}
+.censor-side-card-collapsible > *:not(.censor-side-card-summary) {
+    margin-top: 10px;
+}
+/* Author rule: the filter grid sets its own display:grid, which outranks the UA
+   "closed <details> hides children" rule — so force-hide non-summary content
+   when collapsed. Higher specificity than .sidebar-filter-2col. */
+.censor-side-card-collapsible:not([open]) > *:not(.censor-side-card-summary) {
+    display: none;
+}
+
 .sidebar-flat-row,
 .censor-side-row {
     display: flex;

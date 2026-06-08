@@ -2103,13 +2103,16 @@
                             <div id="censor-simple-guide" style="display:none"></div>
                         </div>
 
-                        <div class="censor-side-card">
-                            <div class="censor-side-card-header">
+                        <!-- NOISE-01: Photo Filters collapsed by default (8 sliders) to
+                             cut the censor sidebar's at-rest control count. The slider ids
+                             are unchanged, so censor-edit.js getElementById lookups still work. -->
+                        <details class="censor-side-card censor-side-card-collapsible">
+                            <summary class="censor-side-card-header censor-side-card-summary">
                                 <div>
                                     <h4 class="censor-side-card-title">🎨 <span data-i18n="censor.filters">Filters</span></h4>
                                     <p class="censor-side-card-subtitle" data-i18n="censor.filterPanelHelp">Tune the image, preview the histogram, then apply once.</p>
                                 </div>
-                            </div>
+                            </summary>
                             <div class="sidebar-filter-2col">
                                 <div class="sidebar-filter-item">
                                     <label><span data-i18n="censor.brightness">Bright</span>: <span id="filter-brightness-value">0</span></label>
@@ -2167,7 +2170,7 @@
                                 <div class="filter-histogram-wrap"><canvas id="filter-histogram-canvas"></canvas></div>
                                 <div id="filter-color-palette" class="modal-color-palette"></div>
                             </div>
-                        </div>
+                        </details>
 
                         <div class="sidebar-bottom-actions censor-side-card censor-save-card">
                             <div class="censor-side-card-header">
