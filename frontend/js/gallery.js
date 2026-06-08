@@ -261,6 +261,112 @@ const Gallery = {
         }
     },
 
+    // v3.3.3 WIRING-01: user star rating (0-5). The backend was fully built
+    // (POST /api/images/{id}/rating, min_user_rating filter, user_rating sort,
+    // migration 015) but the frontend surfaced none of it. The value rides on
+    // each image object (image.user_rating), so unlike favorites there is no
+    // separate id-set to hydrate — we read/patch it in place.
+    _userRatingOf(image) {
+        const n = Number(image?.user_rating);
+        return Number.isFinite(n) && n >= 0 && n <= 5 ? Math.round(n) : 0;
+    },
+
+    _ratingBadgeHtml(image) {
+        const stars = this._userRatingOf(image);
+        if (stars <= 0) return '';
+        const label = this._t('rating.cardLabel', { stars }, `${stars}/5 stars`);
+        return `<span class="gallery-item-stars" data-rating-badge `
+            + `title="${this._escapeHtml(label)}" aria-label="${this._escapeHtml(label)}">`
+            + `${'★'.repeat(stars)}</span>`;
+    },
+
+    _renderModalRating(image) {
+        const container = document.getElementById('modal-user-rating');
+        if (!container) return;
+        const stars = this._userRatingOf(image);
+        const id = Number(image?.id);
+        container.dataset.imageId = Number.isFinite(id) ? String(id) : '';
+        container.dataset.rating = String(stars);
+        const starLabel = (n) => this._t('rating.setStars', { stars: n }, `Rate ${n}/5`);
+        let html = '';
+        for (let n = 1; n <= 5; n++) {
+            html += `<button type="button" class="star${n <= stars ? ' is-filled' : ''}" data-star="${n}" `
+                + `role="radio" aria-checked="${n === stars ? 'true' : 'false'}" `
+                + `title="${this._escapeHtml(starLabel(n))}" aria-label="${this._escapeHtml(starLabel(n))}">★</button>`;
+        }
+        const clearLabel = this._t('rating.clear', null, 'Clear rating');
+        html += `<button type="button" class="star-clear${stars === 0 ? ' is-hidden' : ''}" data-star="0" `
+            + `title="${this._escapeHtml(clearLabel)}" aria-label="${this._escapeHtml(clearLabel)}">✕</button>`;
+        container.innerHTML = html;
+        if (!container.dataset.bound) {
+            container.dataset.bound = '1';
+            container.addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-star]');
+                if (!btn) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const value = Number(btn.dataset.star);
+                const imageId = Number(container.dataset.imageId);
+                if (Number.isFinite(imageId)) this.setUserRating(imageId, value);
+            });
+        }
+    },
+
+    _applyRatingToState(imageId, value) {
+        const id = Number(imageId);
+        let prev = 0;
+        const apply = (list) => {
+            if (!Array.isArray(list)) return;
+            const img = list.find((image) => Number(image?.id) === id);
+            if (img) { prev = this._userRatingOf(img); img.user_rating = value; }
+        };
+        apply(this.images);
+        apply(window.App?.AppState?.images);
+        return prev;
+    },
+
+    _renderRatingEverywhere(imageId, value) {
+        const id = Number(imageId);
+        const modal = document.getElementById('modal-user-rating');
+        if (modal && Number(modal.dataset.imageId) === id) {
+            this._renderModalRating({ id, user_rating: value });
+        }
+        const item = document.querySelector(`#gallery-grid .gallery-item[data-id="${id}"]`);
+        if (item) {
+            const existing = item.querySelector('[data-rating-badge]');
+            const html = this._ratingBadgeHtml({ id, user_rating: value });
+            if (existing) {
+                if (html) existing.outerHTML = html; else existing.remove();
+            } else if (html) {
+                const anchor = item.querySelector('.gallery-item-media') || item;
+                anchor.insertAdjacentHTML('beforeend', html);
+            }
+        }
+    },
+
+    async setUserRating(imageId, stars) {
+        const app = window.App || {};
+        const id = Number(imageId);
+        const value = Math.max(0, Math.min(5, Math.round(Number(stars) || 0)));
+        // Optimistic update with rollback on failure (mirrors toggleFavorite).
+        const prev = this._applyRatingToState(id, value);
+        this._renderRatingEverywhere(id, value);
+        try {
+            const result = await app.API?.setRating?.(id, value);
+            const saved = Number(result?.user_rating);
+            const finalVal = Number.isFinite(saved) ? saved : value;
+            this._applyRatingToState(id, finalVal);
+            this._renderRatingEverywhere(id, finalVal);
+        } catch (error) {
+            this._applyRatingToState(id, prev);
+            this._renderRatingEverywhere(id, prev);
+            app.showToast?.(
+                app.appT?.('rating.failed', 'Could not update rating') || 'Could not update rating',
+                'error'
+            );
+        }
+    },
+
     _normalizeGenerator(generator) {
         const normalized = String(generator || 'unknown').trim().toLowerCase();
         return Object.prototype.hasOwnProperty.call(DEFAULT_GENERATOR_COLORS, normalized)
@@ -845,6 +951,7 @@ const Gallery = {
             return `
                 ${imageTag}
                 ${this._favoriteButtonHtml(image)}
+                ${this._ratingBadgeHtml(image)}
                 <div class="gallery-item-overlay" aria-hidden="true">
                     <span class="gallery-item-generator" data-generator-value="${this._escapeHtml(generatorValue)}" style="background: ${generatorColor}">
                         ${this._escapeHtml(generatorLabel)}
@@ -882,6 +989,7 @@ const Gallery = {
             <div class="gallery-item-media">
                 <img ${imgAttributes} alt="${safeFilename}" draggable="false"${highResAttr}>
                 ${this._favoriteButtonHtml(image)}
+                ${this._ratingBadgeHtml(image)}
             </div>
             <div class="gallery-item-large-meta">
                 <div class="gallery-item-large-top">
@@ -2949,6 +3057,7 @@ ${String(value)}`)
         // add it here so the user is aware.
         this._updateAiProviderNote(summaryImage?.generator);
         $('#modal-size').textContent = summaryImage ? `${summaryImage.width || '?'}×${summaryImage.height || '?'} • ${formatSize(summaryImage.file_size || 0)}` : '-';
+        this._renderModalRating(summaryImage || { id: imageId, user_rating: 0 });
         $('#modal-prompt-text').textContent = summaryImage?.prompt || this._t('modal.loadingPrompt', null, 'Loading prompt…');
         $('#modal-negative-text').textContent = this._t('modal.loadingNegative', null, 'Loading…');
         $('#modal-loading-state').textContent = this._t('modal.loadingDetails', null, 'Loading details…');
@@ -3159,6 +3268,7 @@ ${String(value)}`)
             modalGeneratorFinal.textContent = this._formatGeneratorLabel(image.generator);
         }
         $('#modal-size').textContent = `${image.width}×${image.height} • ${formatSize(image.file_size)}`;
+        this._renderModalRating(image);
         $('#modal-prompt-text').textContent = image.prompt || this._t('modal.noPrompt', null, 'No prompt');
         const parsedData = this._extractParsedData(image);
         this._lastModalImage = image;

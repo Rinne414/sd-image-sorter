@@ -1598,6 +1598,12 @@ const API = {
         return this.post('/api/collections/favorites', { image_id: imageId, favorited });
     },
 
+    // v3.3.3 WIRING-01: set a user star rating (0-5; 0 = unrated). Backend:
+    // POST /api/images/{id}/rating -> {image_id, user_rating, updated}.
+    async setRating(imageId, stars) {
+        return this.post(`/api/images/${imageId}/rating`, { stars });
+    },
+
     async listCollections() {
         return this.get('/api/collections');
     },

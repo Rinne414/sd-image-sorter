@@ -1742,6 +1742,70 @@ textarea:focus,
     vertical-align: middle;
 }
 
+/* WIRING-01: user star rating. Interactive control in the image modal +
+   read-only star badge on gallery cards. */
+.star-rating {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+}
+.star-rating .star {
+    background: none;
+    border: none;
+    padding: 0 1px;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    color: rgba(255, 255, 255, 0.25);
+    transition: color 120ms ease, transform 120ms ease;
+}
+.star-rating .star.is-filled {
+    color: #ffce54;
+}
+.star-rating .star:hover {
+    transform: scale(1.15);
+}
+/* Hover preview: light every star, then dim the ones after the hovered one. */
+.star-rating-interactive:hover .star {
+    color: #ffce54;
+}
+.star-rating-interactive .star:hover ~ .star {
+    color: rgba(255, 255, 255, 0.25);
+}
+.star-rating .star-clear {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 12px;
+    margin-left: 6px;
+    line-height: 1;
+}
+.star-rating .star-clear:hover {
+    color: var(--color-danger, #ff6b6b);
+}
+.star-rating .star-clear.is-hidden {
+    display: none;
+}
+.meta-item-rating {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Read-only star badge overlaid on a gallery card (bottom-left). */
+.gallery-item-stars {
+    position: absolute;
+    bottom: 6px;
+    left: 6px;
+    z-index: 3;
+    font-size: 12px;
+    letter-spacing: 1px;
+    color: #ffce54;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+    pointer-events: none;
+}
+
 /* MODELS-08: reusable "Which should I pick?" link sitting under a model picker.
    Styled as a quiet inline link-button that opens the Model Manager. */
 .model-pick-help-link {

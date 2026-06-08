@@ -1936,6 +1936,12 @@ window.I18nLang_zhCN = {
     'models.essentials': '核心模型 · 推荐所有人安装',
     'models.optionalSection': '其他与进阶模型',
     'models.whichToPick': '❓ 我该选哪个模型？',
+    // WIRING-01 用户星级评分
+    'rating.modalLabel': '我的评分：',
+    'rating.setStars': '评 {stars}/5 星',
+    'rating.clear': '清除评分',
+    'rating.cardLabel': '{stars}/5 星',
+    'rating.failed': '评分更新失败',
     // Bulk-download "Download all recommended models" flow
     'models.bulkDownload': '一键下载推荐模型',
     'models.bulkDownloadTitle': '一次性下载所有推荐模型（跳过 Wenaka Privacy YOLO、跳过 ToriiGate；WD14 只下默认的那个）',
