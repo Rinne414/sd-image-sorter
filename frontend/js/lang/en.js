@@ -1359,6 +1359,21 @@ window.I18nLang_en = {
     'modal.showLess': 'Show Less',
     'modal.aiCaption': 'AI Caption',
     'modal.captionCopied': 'Caption copied',
+    'modal.analyzeThis': 'Analyze:',
+    'modal.analyzeThisImage': 'Analyze this image',
+    'modal.scoreThis': 'Score',
+    'modal.scoreThisImage': 'Score this image',
+    'modal.scoreThisDone': 'Aesthetic score updated: {score}',
+    'modal.analyzeColorsThis': 'Analyze colors for this image',
+    'modal.colorsThis': 'Colors',
+    'modal.colorsThisDone': 'Color analysis updated',
+    'modal.identifyArtistThis': 'Identify artist/style for this image',
+    'modal.artistThis': 'Artist',
+    'modal.artistThisDone': 'Artist: {artist} ({confidence})',
+    'modal.captionThis': 'Caption',
+    'modal.captionThisImage': 'Caption this image with VLM',
+    'modal.captionThisDone': 'Caption updated',
+    'modal.analysisThisFailed': 'This image analysis failed',
 
     // ========================
     // Scan Modal

@@ -12413,6 +12413,7 @@ function buildAppContext() {
         formatSize,
         loadImages,
         loadStats,
+        refreshAestheticStatus,
         updateSelectionUI,
         emitSelectionStateChanged,
         getSelectedGalleryCount,

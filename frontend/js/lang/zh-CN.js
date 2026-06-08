@@ -1532,6 +1532,21 @@ window.I18nLang_zhCN = {
     'modal.showLess': '收起',
     'modal.aiCaption': 'AI 自然语言描述',
     'modal.captionCopied': '描述已复制',
+    'modal.analyzeThis': '分析：',
+    'modal.analyzeThisImage': '分析这张图片',
+    'modal.scoreThis': '评分',
+    'modal.scoreThisImage': '给这张图做美学评分',
+    'modal.scoreThisDone': '美学评分已更新：{score}',
+    'modal.analyzeColorsThis': '分析这张图的颜色',
+    'modal.colorsThis': '颜色',
+    'modal.colorsThisDone': '颜色分析已更新',
+    'modal.identifyArtistThis': '识别这张图的画师 / 画风',
+    'modal.artistThis': '画师',
+    'modal.artistThisDone': '画师：{artist}（{confidence}）',
+    'modal.captionThis': '描述',
+    'modal.captionThisImage': '用 VLM 描述这张图',
+    'modal.captionThisDone': '描述已更新',
+    'modal.analysisThisFailed': '这张图分析失败',
 
     // ========================
     // Scan Modal

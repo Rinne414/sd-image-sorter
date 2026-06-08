@@ -162,6 +162,8 @@ const Gallery = {
     loading: false,
     lastSelectedIndex: null,
     _languageBound: false,
+    _analysisBound: false,
+    _modalAnalysisRunning: new Set(),
     lazyObserver: null,
     currentPreviewIndex: -1,
     currentPreviewRequestId: 0,
@@ -415,6 +417,153 @@ const Gallery = {
                 break;
             default:
                 break;
+        }
+    },
+
+    _patchImageState(imageId, patch = {}) {
+        const id = Number(imageId);
+        const apply = (list) => {
+            if (!Array.isArray(list)) return;
+            const image = list.find((item) => Number(item?.id) === id);
+            if (image) Object.assign(image, patch);
+        };
+        apply(this.images);
+        apply(window.App?.AppState?.images);
+        if (this._lastModalImage && Number(this._lastModalImage.id) === id) {
+            Object.assign(this._lastModalImage, patch);
+        }
+    },
+
+    _modalAnalysisActions: new Set(['aesthetic', 'color', 'artist', 'caption']),
+
+    _syncModalAnalysisButtons() {
+        const anyBusy = this._modalAnalysisRunning.size > 0;
+        document.querySelectorAll('[data-modal-analysis]').forEach((button) => {
+            const action = button.dataset.modalAnalysis;
+            const busy = anyBusy;
+            const actionBusy = this._modalAnalysisRunning.has(action);
+            button.disabled = anyBusy;
+            button.classList.toggle('is-busy', busy);
+            button.classList.toggle('is-running-action', actionBusy);
+            button.setAttribute('aria-busy', busy ? 'true' : 'false');
+            button.setAttribute('aria-disabled', anyBusy ? 'true' : 'false');
+        });
+    },
+
+    _setModalAnalysisBusy(action, busy) {
+        if (busy) this._modalAnalysisRunning.add(action);
+        else this._modalAnalysisRunning.delete(action);
+        this._syncModalAnalysisButtons();
+    },
+
+    async _refreshCurrentPreviewDetails(imageId) {
+        if (Number(this._currentPreviewId) !== Number(imageId)) return;
+        const api = getRequiredGalleryAPI();
+        const result = await api.getImage(imageId);
+        if (Number(this._currentPreviewId) !== Number(imageId)) return;
+        this._hydratePreview(result.image, result.tags);
+    },
+
+    _getArtistSinglePayload(imageId) {
+        const artist = window.ArtistIdent;
+        const threshold = Number(artist?.getThresholdValue?.());
+        let modelConfig = {};
+        if (artist && typeof artist._getIdentifyModelConfig === 'function') {
+            modelConfig = artist._getIdentifyModelConfig();
+        } else {
+            const modelSource = String(document.getElementById('artist-model-source')?.value || 'huggingface').trim() || 'huggingface';
+            const modelPath = String(document.getElementById('artist-model-path')?.value || '').trim();
+            modelConfig = {
+                model_source: modelSource,
+                model_path: modelSource === 'local' ? modelPath : null,
+                use_gpu: document.getElementById('artist-use-gpu') ? !!document.getElementById('artist-use-gpu').checked : null,
+            };
+        }
+        return {
+            image_id: Number(imageId),
+            threshold: Number.isFinite(threshold) ? threshold : 0.03,
+            top_k: 5,
+            ...modelConfig,
+        };
+    },
+
+    async _handleModalAnalysis(action) {
+        const app = window.App || {};
+        const api = getRequiredGalleryAPI();
+        const showToast = app.showToast || window.showToast;
+        const id = Number(this._currentPreviewId);
+        if (!this._modalAnalysisActions.has(action) || !Number.isFinite(id) || this._modalAnalysisRunning.size > 0) return;
+
+        this._setModalAnalysisBusy(action, true);
+        try {
+            if (action === 'aesthetic') {
+                const result = await api.post(`/api/aesthetic/score/${id}`);
+                const score = Number(result?.aesthetic_score);
+                if (Number.isFinite(score)) {
+                    this._patchImageState(id, { aesthetic_score: score });
+                    if (Number(this._currentPreviewId) === id && this._lastModalImage && this._lastParsedData) {
+                        this._renderModalSections(this._lastModalImage, this._lastParsedData);
+                    }
+                }
+                await app.refreshAestheticStatus?.();
+                const scoreText = Number.isFinite(score) ? score.toFixed(2) : '-';
+                showToast?.(
+                    this._t('modal.scoreThisDone', { score: scoreText }, 'Aesthetic score updated: {score}').replace('{score}', scoreText),
+                    'success'
+                );
+                return;
+            }
+
+            if (action === 'color') {
+                const result = await api.post(`/api/colors/analyze-single/${id}`);
+                if (result?.color_data) {
+                    this._patchImageState(id, { color_data: result.color_data });
+                }
+                await window.ColorBackfill?.refreshProgress?.();
+                showToast?.(this._t('modal.colorsThisDone', null, 'Color analysis updated'), 'success');
+                return;
+            }
+
+            if (action === 'artist') {
+                const result = await api.post('/api/artists/identify', this._getArtistSinglePayload(id));
+                await window.ArtistIdent?.loadStats?.();
+                const artistName = result?.artist || 'undefined';
+                const confidence = Number(result?.confidence);
+                const confidenceText = Number.isFinite(confidence) ? `${Math.round(confidence * 100)}%` : '-';
+                showToast?.(
+                    this._t('modal.artistThisDone', { artist: artistName, confidence: confidenceText }, 'Artist: {artist} ({confidence})')
+                        .replace('{artist}', artistName)
+                        .replace('{confidence}', confidenceText),
+                    'success'
+                );
+                return;
+            }
+
+            if (action === 'caption') {
+                const tags = (this._lastModalTags || [])
+                    .map((tag) => tag?.tag)
+                    .filter(Boolean);
+                const result = await api.post('/api/vlm/caption', { image_id: id, tags });
+                if (result?.error) {
+                    throw new Error(result.error);
+                }
+                if (result?.caption) {
+                    this._patchImageState(id, { ai_caption: result.caption, nl_caption: result.caption });
+                    if (Number(this._currentPreviewId) === id && this._lastModalImage) {
+                        this._renderModalCaption(this._lastModalImage);
+                    }
+                }
+                await this._refreshCurrentPreviewDetails(id);
+                await app.loadImages?.();
+                showToast?.(this._t('modal.captionThisDone', null, 'Caption updated'), 'success');
+            }
+        } catch (error) {
+            showToast?.(
+                formatUserError(error, this._t('modal.analysisThisFailed', null, 'This image analysis failed')),
+                'error'
+            );
+        } finally {
+            this._setModalAnalysisBusy(action, false);
         }
     },
 
@@ -3217,6 +3366,16 @@ ${String(value)}`)
                 this._handleModalHandoff(btn.dataset.modalHandoff);
             });
         }
+        if (!this._analysisBound) {
+            this._analysisBound = true;
+            document.querySelector('.modal-analysis-row')?.addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-modal-analysis]');
+                if (!btn) return;
+                e.preventDefault();
+                this._handleModalAnalysis(btn.dataset.modalAnalysis);
+            });
+        }
+        this._syncModalAnalysisButtons();
         // FLOW-02: bind the inline tag-editor controls once, and make sure each
         // freshly-opened image starts in read-only (not a leftover edit session).
         this._bindTagEditOnce();

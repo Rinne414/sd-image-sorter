@@ -7723,7 +7723,8 @@ html.lang-zh #view-censor .queue-action-btn span {
    Dataset, Collection, Prompt, Reader). Mirrors the right-click context menu so
    users never have to close → reselect → reopen to move an image downstream.
    ========================================================================== */
-.modal-handoff-row {
+.modal-handoff-row,
+.modal-analysis-row {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -7732,7 +7733,12 @@ html.lang-zh #view-censor .queue-action-btn span {
     padding-top: 14px;
     border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
 }
-.modal-handoff-label {
+.modal-analysis-row {
+    margin-top: 8px;
+    padding-top: 8px;
+}
+.modal-handoff-label,
+.modal-analysis-label {
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.01em;
@@ -7740,7 +7746,8 @@ html.lang-zh #view-censor .queue-action-btn span {
     margin-right: 2px;
     text-transform: uppercase;
 }
-.modal-handoff-btn {
+.modal-handoff-btn,
+.modal-analysis-btn {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -7758,18 +7765,34 @@ html.lang-zh #view-censor .queue-action-btn span {
         color var(--transition-normal, 180ms ease),
         background var(--transition-normal, 180ms ease);
 }
-.modal-handoff-btn:hover {
+.modal-handoff-btn:hover,
+.modal-analysis-btn:hover {
     transform: translateY(-1px);
     color: var(--text-primary, #eef1f8);
     border-color: var(--border-glow, rgba(124, 139, 255, 0.38));
     background: var(--bg-hover, rgba(40, 46, 66, 0.72));
 }
-.modal-handoff-btn:focus-visible {
+.modal-handoff-btn:focus-visible,
+.modal-analysis-btn:focus-visible {
     outline: 2px solid var(--accent-primary, #7c8bff);
     outline-offset: 2px;
 }
-.modal-handoff-btn:active {
+.modal-handoff-btn:active,
+.modal-analysis-btn:active {
     transform: translateY(0);
+}
+.modal-analysis-btn.is-busy {
+    opacity: 0.72;
+    cursor: progress;
+}
+.modal-analysis-btn:disabled {
+    transform: none;
+    cursor: progress;
+}
+.modal-analysis-btn.is-running-action {
+    border-color: var(--accent-primary, #7c8bff);
+    background: var(--bg-active, rgba(124, 139, 255, 0.16));
+    color: var(--text-primary, #eef1f8);
 }
 
 /* NOISE-05 — scan-modal "danger zone" hosting the relocated Clear-DB action.
