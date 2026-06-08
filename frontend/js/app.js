@@ -4647,6 +4647,9 @@ async function sendSelectionToDatasetMaker() {
             ? await window.DatasetMaker._resolveGallerySelectionIds()
             : ids;
         await window.DatasetMaker.addImageIds(resolvedIds, { switchView: true, showToast: true });
+        // FLOW-08: clear the gallery selection after the handoff so it does not
+        // linger stale when the user returns to the Gallery tab.
+        clearGallerySelectionAfterBulkAction();
     } catch (exc) {
         showToast(
             appT('selection.sendToDatasetMakerFailed',
@@ -5497,9 +5500,11 @@ function initEventListeners() {
                     filterKey: AppState.selectionFilterKey || null,
                     visibleImageIds: normalizeSelectionImageIds((AppState.images || []).map((image) => image?.id)),
                 });
+                clearGallerySelectionAfterBulkAction(); // FLOW-08: don't leave a stale selection behind
                 return;
             }
             addToCensorQueue(getSelectedGalleryIds());
+            clearGallerySelectionAfterBulkAction(); // FLOW-08: don't leave a stale selection behind
             return;
         }
         switchView('censor');
