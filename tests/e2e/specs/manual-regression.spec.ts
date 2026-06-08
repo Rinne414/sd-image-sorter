@@ -1584,6 +1584,11 @@ test('queue manager should search, reorder, and sync back to the censor sidebar'
   await expect(page.locator('#qs-filter-summary')).toContainText(
     /No queue filters are active yet|当前还没有启用队列筛选/,
   )
+  await expect(page.locator('#qs-filter-advanced-fields')).toBeHidden()
+  await expect(page.locator('#qs-filter-bar > .qs-filter-field')).toHaveCount(3)
+  await page.locator('#qs-filter-advanced').click()
+  await expect(page.locator('#qs-filter-advanced-fields')).toBeVisible()
+  await expect(page.locator('#qs-filter-advanced-fields .qs-filter-field')).toHaveCount(10)
 
   await page.locator('#qs-filter-gallery').click()
   await expect(page.locator('#qs-filter-summary')).toContainText(

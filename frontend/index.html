@@ -1773,12 +1773,7 @@
                         </div>
 
                         <div class="qs-filter-bar" id="qs-filter-bar">
-                            <div class="qs-filter-help" data-i18n="queueSolitaire.filterHelp">Search tags or prompt keywords, then move matching images into a section.</div>
                             <div class="qs-filter-summary" id="qs-filter-summary" data-i18n="queueSolitaire.filterSummaryIdle">No queue filters active yet.</div>
-                            <button class="btn btn-ghost btn-small" id="qs-filter-advanced" type="button">🧰 <span data-i18n="queueSolitaire.advancedFilters">Advanced Filters</span></button>
-                            <button class="btn btn-ghost btn-small" id="qs-filter-gallery" type="button">🖼️ <span data-i18n="queueSolitaire.useGalleryFilters">Use Gallery Filters</span></button>
-                            <button class="btn btn-ghost btn-small" id="qs-filter-reset" type="button">↺ <span data-i18n="queueSolitaire.resetFilters">Reset</span></button>
-                            <button class="btn btn-ghost btn-small" id="qs-filter-select" type="button">✓ <span data-i18n="queueSolitaire.selectMatched">Select Matched</span></button>
                             <div class="qs-filter-field">
                                 <span class="qs-filter-label" data-i18n="queueSolitaire.searchLabel">Tag / Prompt</span>
                                 <input type="text" id="qs-filter-tag" placeholder="Tag / prompt keyword..." data-i18n-placeholder="queueSolitaire.searchPlaceholder" style="flex:1; min-width:150px;">
@@ -1805,60 +1800,66 @@
                                     <option value="unrated" data-i18n="queueSolitaire.unrated">Unrated</option>
                                 </select>
                             </div>
-                            <div class="qs-filter-field">
-                                <span class="qs-filter-label" data-i18n="filter.sizeRules">Size Rules</span>
-                                <select id="qs-filter-resolution" style="min-width:110px;">
-                                    <option value="" data-i18n="filter.any">Any</option>
-                                    <option value="hd" data-i18n="queueSolitaire.resolutionHD">HD</option>
-                                    <option value="sd" data-i18n="queueSolitaire.resolutionSD">SD</option>
-                                </select>
-                            </div>
-                            <div class="qs-filter-field">
-                                <span class="qs-filter-label" data-i18n="filter.checkpoints">Checkpoint</span>
-                                <input type="text" id="qs-filter-checkpoint" placeholder="Search checkpoint..." data-i18n-placeholder="filter.searchCheckpoints" style="min-width:130px;">
-                            </div>
-                            <div class="qs-filter-field">
-                                <span class="qs-filter-label" data-i18n="filter.loras">LoRAs</span>
-                                <input type="text" id="qs-filter-lora" placeholder="Search loras..." data-i18n-placeholder="filter.searchLoras" style="min-width:130px;">
-                            </div>
-                            <div class="qs-filter-field">
-                                <span class="qs-filter-label" data-i18n="filter.widthMin">Min width</span>
-                                <input type="number" id="qs-filter-minw" placeholder="Min width" data-i18n-placeholder="filter.widthMin" style="width:90px;">
-                            </div>
-                            <div class="qs-filter-field">
-                                <span class="qs-filter-label" data-i18n="filter.widthMax">Max width</span>
-                                <input type="number" id="qs-filter-maxw" placeholder="Max width" data-i18n-placeholder="filter.widthMax" style="width:90px;">
-                            </div>
-                            <div class="qs-filter-field">
-                                <span class="qs-filter-label" data-i18n="filter.heightMin">Min height</span>
-                                <input type="number" id="qs-filter-minh" placeholder="Min height" data-i18n-placeholder="filter.heightMin" style="width:90px;">
-                            </div>
-                            <div class="qs-filter-field">
-                                <span class="qs-filter-label" data-i18n="filter.heightMax">Max height</span>
-                                <input type="number" id="qs-filter-maxh" placeholder="Max height" data-i18n-placeholder="filter.heightMax" style="width:90px;">
-                            </div>
-                            <div class="qs-filter-field">
-                                <span class="qs-filter-label" data-i18n="filter.aspect">Aspect Ratio</span>
-                                <select id="qs-filter-aspect" style="min-width:110px;">
-                                    <option value="" data-i18n="filter.any">Any</option>
-                                    <option value="square" data-i18n="filter.square">Square</option>
-                                    <option value="landscape" data-i18n="filter.landscape">Landscape</option>
-                                    <option value="portrait" data-i18n="filter.portrait">Portrait</option>
-                                </select>
-                            </div>
-                            <div class="qs-filter-field">
-                                <span class="qs-filter-label" data-i18n="filter.aestheticMin">Min score</span>
-                                <input type="number" id="qs-filter-aesthetic" placeholder="Min ★" step="0.5" min="0" max="10" style="width:70px;">
-                            </div>
-                            <div class="qs-filter-field">
-                                <span class="qs-filter-label" data-i18n="filter.aestheticMax">Max score</span>
-                                <input type="number" id="qs-filter-aesthetic-max" placeholder="Max ★" step="0.5" min="0" max="10" style="width:70px;">
-                            </div>
-                            <button class="btn btn-ghost btn-small" id="qs-filter-apply" data-i18n="action.search">Search</button>
+                            <button class="btn btn-ghost btn-small qs-filter-advanced-toggle" id="qs-filter-advanced" type="button" aria-expanded="false" aria-controls="qs-filter-advanced-fields">🧰 <span data-i18n="queueSolitaire.advancedFilters">Advanced Filters</span></button>
+                            <button class="btn btn-ghost btn-small" id="qs-filter-gallery" type="button">🖼️ <span data-i18n="queueSolitaire.useGalleryFilters">Use Gallery Filters</span></button>
+                            <button class="btn btn-ghost btn-small" id="qs-filter-reset" type="button">↺ <span data-i18n="queueSolitaire.resetFilters">Reset</span></button>
+                            <button class="btn btn-ghost btn-small" id="qs-filter-select" type="button">✓ <span data-i18n="queueSolitaire.selectMatched">Select Matched</span></button>
+                            <button class="btn btn-ghost btn-small" id="qs-filter-apply" type="button" data-i18n="action.search">Search</button>
                             <span class="qs-filter-match" id="qs-filter-match-count" data-i18n="queueSolitaire.initialMatching">0 matching</span>
                             <span style="color:var(--text-muted)">→</span>
                             <select id="qs-filter-target" style="min-width:120px;"></select>
                             <button class="btn btn-primary btn-small" id="qs-filter-move"><span data-i18n="queueSolitaire.moveToSection">Move</span> ▶</button>
+                            <div class="qs-filter-advanced-fields" id="qs-filter-advanced-fields" hidden>
+                                <div class="qs-filter-field">
+                                    <span class="qs-filter-label" data-i18n="filter.sizeRules">Size Rules</span>
+                                    <select id="qs-filter-resolution" style="min-width:110px;">
+                                        <option value="" data-i18n="filter.any">Any</option>
+                                        <option value="hd" data-i18n="queueSolitaire.resolutionHD">HD</option>
+                                        <option value="sd" data-i18n="queueSolitaire.resolutionSD">SD</option>
+                                    </select>
+                                </div>
+                                <div class="qs-filter-field">
+                                    <span class="qs-filter-label" data-i18n="filter.checkpoints">Checkpoint</span>
+                                    <input type="text" id="qs-filter-checkpoint" placeholder="Search checkpoint..." data-i18n-placeholder="filter.searchCheckpoints" style="min-width:130px;">
+                                </div>
+                                <div class="qs-filter-field">
+                                    <span class="qs-filter-label" data-i18n="filter.loras">LoRAs</span>
+                                    <input type="text" id="qs-filter-lora" placeholder="Search loras..." data-i18n-placeholder="filter.searchLoras" style="min-width:130px;">
+                                </div>
+                                <div class="qs-filter-field">
+                                    <span class="qs-filter-label" data-i18n="filter.widthMin">Min width</span>
+                                    <input type="number" id="qs-filter-minw" placeholder="Min width" data-i18n-placeholder="filter.widthMin" style="width:90px;">
+                                </div>
+                                <div class="qs-filter-field">
+                                    <span class="qs-filter-label" data-i18n="filter.widthMax">Max width</span>
+                                    <input type="number" id="qs-filter-maxw" placeholder="Max width" data-i18n-placeholder="filter.widthMax" style="width:90px;">
+                                </div>
+                                <div class="qs-filter-field">
+                                    <span class="qs-filter-label" data-i18n="filter.heightMin">Min height</span>
+                                    <input type="number" id="qs-filter-minh" placeholder="Min height" data-i18n-placeholder="filter.heightMin" style="width:90px;">
+                                </div>
+                                <div class="qs-filter-field">
+                                    <span class="qs-filter-label" data-i18n="filter.heightMax">Max height</span>
+                                    <input type="number" id="qs-filter-maxh" placeholder="Max height" data-i18n-placeholder="filter.heightMax" style="width:90px;">
+                                </div>
+                                <div class="qs-filter-field">
+                                    <span class="qs-filter-label" data-i18n="filter.aspect">Aspect Ratio</span>
+                                    <select id="qs-filter-aspect" style="min-width:110px;">
+                                        <option value="" data-i18n="filter.any">Any</option>
+                                        <option value="square" data-i18n="filter.square">Square</option>
+                                        <option value="landscape" data-i18n="filter.landscape">Landscape</option>
+                                        <option value="portrait" data-i18n="filter.portrait">Portrait</option>
+                                    </select>
+                                </div>
+                                <div class="qs-filter-field">
+                                    <span class="qs-filter-label" data-i18n="filter.aestheticMin">Min score</span>
+                                    <input type="number" id="qs-filter-aesthetic" placeholder="Min ★" step="0.5" min="0" max="10" style="width:70px;">
+                                </div>
+                                <div class="qs-filter-field">
+                                    <span class="qs-filter-label" data-i18n="filter.aestheticMax">Max score</span>
+                                    <input type="number" id="qs-filter-aesthetic-max" placeholder="Max ★" step="0.5" min="0" max="10" style="width:70px;">
+                                </div>
+                            </div>
                         </div>
 
                         <div class="qs-marquee" id="qs-marquee"></div>

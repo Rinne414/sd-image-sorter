@@ -30,6 +30,7 @@
         autoSortProfiles: [],
         editingProfileId: '',
         profileDraftSections: [],
+        quickAdvancedVisible: false,
     };
 
     let _nextSectionId = 1;
@@ -567,6 +568,21 @@
         }
     }
 
+    function setQuickAdvancedVisible(visible) {
+        state.quickAdvancedVisible = Boolean(visible);
+        const advancedFields = document.getElementById('qs-filter-advanced-fields');
+        const toggle = document.getElementById('qs-filter-advanced');
+        if (advancedFields) advancedFields.hidden = !state.quickAdvancedVisible;
+        if (toggle) {
+            toggle.setAttribute('aria-expanded', state.quickAdvancedVisible ? 'true' : 'false');
+            toggle.classList.toggle('active', state.quickAdvancedVisible);
+        }
+    }
+
+    function toggleQuickAdvancedFields() {
+        setQuickAdvancedVisible(!state.quickAdvancedVisible);
+    }
+
     function createProfileSectionDraft() {
         return {
             id: `profile-sec-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
@@ -1093,6 +1109,7 @@
         state.advancedFilters = null;
         state.appliedFilterMode = 'none';
         state.filterMatches.clear();
+        setQuickAdvancedVisible(false);
         updateQueueFilterSummary();
         render();
     }
@@ -1592,6 +1609,7 @@
         state.detailCache.clear();
         state.galleryFilterMode = false;
         state.advancedFilters = null;
+        setQuickAdvancedVisible(false);
         loadAutoSortProfiles();
         renderAutoSortProfileMenu();
 
@@ -1675,7 +1693,7 @@
         // Filter apply
         document.getElementById('qs-filter-apply')?.addEventListener('click', applyFilter);
         document.getElementById('qs-filter-move')?.addEventListener('click', moveFilteredToSection);
-        document.getElementById('qs-filter-advanced')?.addEventListener('click', openAdvancedFilterModal);
+        document.getElementById('qs-filter-advanced')?.addEventListener('click', toggleQuickAdvancedFields);
         document.getElementById('qs-filter-gallery')?.addEventListener('click', applyGalleryFilters);
         document.getElementById('qs-filter-reset')?.addEventListener('click', resetFilterForm);
         document.getElementById('qs-filter-select')?.addEventListener('click', selectMatchedItems);
