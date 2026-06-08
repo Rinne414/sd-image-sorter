@@ -1690,6 +1690,57 @@ textarea:focus,
     color: var(--text-muted);
 }
 
+.settings-inline-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.settings-inline-control .input-field {
+    min-width: 118px;
+    height: 34px;
+    padding: 6px 10px;
+}
+
+.settings-preferences-panel {
+    margin-top: 2px;
+}
+
+.settings-preferences-body {
+    display: grid;
+    gap: 10px;
+}
+
+.settings-preference-summary {
+    display: grid;
+    gap: 3px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.settings-preference-summary strong {
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.settings-preference-summary span {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.settings-preference-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 .model-manager-stat {
     padding: 14px 16px;
     border-radius: 16px;

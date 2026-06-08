@@ -71,6 +71,66 @@ const ArtistIdent = {
         thresholdValue.textContent = this.getThresholdValue().toFixed(2);
     },
 
+    capturePreferences() {
+        const source = document.getElementById('artist-model-source')?.value || 'huggingface';
+        return {
+            modelSource: String(source || 'huggingface').trim() || 'huggingface',
+            modelPath: String(document.getElementById('artist-model-path')?.value || '').trim(),
+            threshold: this.getThresholdValue(),
+            useGpu: document.getElementById('artist-use-gpu') ? !!document.getElementById('artist-use-gpu').checked : true,
+        };
+    },
+
+    savePreferences() {
+        const saved = window.App?.Prefs?.setArtistDefaults?.(this.capturePreferences()) || false;
+        window.App?.syncSettingsPreferenceStatus?.();
+        return saved;
+    },
+
+    applySavedPreferences() {
+        const prefs = window.App?.Prefs?.getArtistDefaults?.();
+        if (!prefs || typeof prefs !== 'object') return false;
+
+        const source = document.getElementById('artist-model-source');
+        const path = document.getElementById('artist-model-path');
+        const threshold = document.getElementById('artist-threshold');
+        const useGpu = document.getElementById('artist-use-gpu');
+
+        if (source && prefs.modelSource) source.value = prefs.modelSource;
+        if (path && prefs.modelPath != null) path.value = String(prefs.modelPath || '');
+        const savedThreshold = Number(prefs.threshold);
+        if (threshold && Number.isFinite(savedThreshold) && savedThreshold >= 0 && savedThreshold <= 0.25) {
+            threshold.value = String(savedThreshold);
+        }
+        if (useGpu && typeof prefs.useGpu === 'boolean') {
+            useGpu.checked = prefs.useGpu;
+        }
+        this._syncControls();
+        window.App?.syncSettingsPreferenceStatus?.();
+        return true;
+    },
+
+    resetPreferenceControls() {
+        const source = document.getElementById('artist-model-source');
+        const path = document.getElementById('artist-model-path');
+        const threshold = document.getElementById('artist-threshold');
+        const useGpu = document.getElementById('artist-use-gpu');
+
+        if (source) source.value = 'huggingface';
+        if (path) path.value = '';
+        if (threshold) threshold.value = String(this.thresholdDefaults.value);
+        if (useGpu) useGpu.checked = true;
+        this._syncControls();
+    },
+
+    resetSavedPreferences(options = {}) {
+        window.App?.Prefs?.clearArtistDefaults?.();
+        if (options.apply) {
+            this.resetPreferenceControls();
+        }
+        window.App?.syncSettingsPreferenceStatus?.();
+    },
+
     getArtistStat(artist) {
         return this.stats?.artist_stats?.[artist] || { count: 0, avg_confidence: 0, max_confidence: 0 };
     },
@@ -99,6 +159,7 @@ const ArtistIdent = {
 
     init() {
         this.bindEvents();
+        this.applySavedPreferences();
         this._syncControls();
         this.refreshAvailabilityState();
         this.loadDiagnostics();
@@ -1015,6 +1076,11 @@ const ArtistIdent = {
         document.addEventListener('input', (event) => {
             if (event.target?.id === 'artist-threshold') {
                 this.syncThresholdDisplay();
+                this.savePreferences();
+                return;
+            }
+            if (event.target?.id === 'artist-model-path') {
+                this.savePreferences();
             }
         });
 
@@ -1024,6 +1090,11 @@ const ArtistIdent = {
                 if (localModelGroup) {
                     localModelGroup.style.display = event.target.value === 'local' ? 'block' : 'none';
                 }
+                this.savePreferences();
+                return;
+            }
+            if (event.target?.id === 'artist-use-gpu') {
+                this.savePreferences();
             }
         });
 
@@ -1084,3 +1155,6 @@ const ArtistIdent = {
 
 // Export
 window.ArtistIdent = ArtistIdent;
+document.addEventListener('DOMContentLoaded', () => {
+    ArtistIdent.applySavedPreferences();
+});

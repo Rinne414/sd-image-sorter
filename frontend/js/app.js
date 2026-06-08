@@ -152,6 +152,9 @@ const GALLERY_VIEW_MODE_KEY = 'gallery-view-mode';
 const FILTER_STATE_KEY = 'sd-image-sorter-filter-state';
 const SCAN_ADVANCED_OPEN_KEY = 'sd-image-sorter-scan-advanced-open';
 const TAG_ADVANCED_OPEN_KEY = 'sd-image-sorter-tag-advanced-open';
+const UI_SCALE_STORAGE_KEY = 'ui_scale_v1';
+const TAGGER_DEFAULTS_STORAGE_KEY = 'sd-image-sorter-tagger-defaults-v1';
+const ARTIST_DEFAULTS_STORAGE_KEY = 'sd-image-sorter-artist-defaults-v1';
 const FILTERED_SELECTION_CONFIRM_THRESHOLD = 10000;
 const FILTERED_SELECTION_CHUNK_SIZE = 2000;
 const EXPORT_PREVIEW_MAX_IMAGES = 2000;
@@ -176,6 +179,127 @@ function writeStoredBoolean(storageKey, value) {
         // Ignore localStorage failures.
     }
 }
+
+function readStoredJson(storageKey, fallback = null) {
+    try {
+        const raw = localStorage.getItem(storageKey);
+        if (!raw) return fallback;
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : fallback;
+    } catch (error) {
+        return fallback;
+    }
+}
+
+function writeStoredJson(storageKey, value) {
+    try {
+        localStorage.setItem(storageKey, JSON.stringify(value));
+        return true;
+    } catch (error) {
+        return false;
+    }
+}
+
+function removeStoredKey(storageKey) {
+    try {
+        localStorage.removeItem(storageKey);
+    } catch (error) {
+        // Ignore localStorage failures.
+    }
+}
+
+function finiteNumberInRange(value, min, max, fallback = null) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return fallback;
+    if (numeric < min || numeric > max) return fallback;
+    return numeric;
+}
+
+function booleanPreference(value, fallback = null) {
+    if (typeof value === 'boolean') return value;
+    if (value === 'true' || value === '1') return true;
+    if (value === 'false' || value === '0') return false;
+    return fallback;
+}
+
+const AppPreferences = {
+    keys: {
+        uiScale: UI_SCALE_STORAGE_KEY,
+        taggerDefaults: TAGGER_DEFAULTS_STORAGE_KEY,
+        artistDefaults: ARTIST_DEFAULTS_STORAGE_KEY,
+    },
+
+    getUiScaleMode() {
+        try {
+            const raw = localStorage.getItem(UI_SCALE_STORAGE_KEY);
+            return raw || 'auto';
+        } catch (error) {
+            return 'auto';
+        }
+    },
+
+    setUiScaleMode(value) {
+        const mode = value == null || value === 'auto' ? 'auto' : String(value);
+        if (window.UiScale && typeof window.UiScale.set === 'function') {
+            window.UiScale.set(mode);
+        } else {
+            try {
+                localStorage.setItem(UI_SCALE_STORAGE_KEY, mode);
+            } catch (error) {
+                // Ignore localStorage failures.
+            }
+        }
+    },
+
+    getTaggerDefaults() {
+        return readStoredJson(TAGGER_DEFAULTS_STORAGE_KEY, null);
+    },
+
+    setTaggerDefaults(defaults) {
+        const payload = {
+            version: 1,
+            savedAt: new Date().toISOString(),
+            modelName: String(defaults?.modelName || '').trim(),
+            threshold: finiteNumberInRange(defaults?.threshold, 0, 1, null),
+            characterThreshold: finiteNumberInRange(defaults?.characterThreshold, 0, 1, null),
+            useGpu: booleanPreference(defaults?.useGpu, null),
+            batchSize: defaults?.batchSize != null ? String(defaults.batchSize) : '',
+            customProfile: String(defaults?.customProfile || '').trim(),
+            customModelPath: String(defaults?.customModelPath || '').trim(),
+            customTagsPath: String(defaults?.customTagsPath || '').trim(),
+        };
+        return writeStoredJson(TAGGER_DEFAULTS_STORAGE_KEY, payload);
+    },
+
+    clearTaggerDefaults() {
+        removeStoredKey(TAGGER_DEFAULTS_STORAGE_KEY);
+    },
+
+    getArtistDefaults() {
+        return readStoredJson(ARTIST_DEFAULTS_STORAGE_KEY, null);
+    },
+
+    setArtistDefaults(defaults) {
+        const payload = {
+            version: 1,
+            savedAt: new Date().toISOString(),
+            modelSource: String(defaults?.modelSource || 'huggingface').trim() || 'huggingface',
+            modelPath: String(defaults?.modelPath || '').trim(),
+            threshold: finiteNumberInRange(defaults?.threshold, 0, 0.25, 0.03),
+            useGpu: booleanPreference(defaults?.useGpu, true),
+        };
+        return writeStoredJson(ARTIST_DEFAULTS_STORAGE_KEY, payload);
+    },
+
+    clearArtistDefaults() {
+        removeStoredKey(ARTIST_DEFAULTS_STORAGE_KEY);
+    },
+
+    clearAiDefaults() {
+        this.clearTaggerDefaults();
+        this.clearArtistDefaults();
+    },
+};
 
 function getDefaultGalleryPageSize(mode = null) {
     const resolvedMode = mode || localStorage.getItem(GALLERY_VIEW_MODE_KEY) || 'grid';
@@ -2974,6 +3098,7 @@ function getTaggerLocalizedScale(value) {
 
 let _taggerModelCatalog = [];
 let _taggerModelCatalogMap = new Map();
+let _suppressTaggerPreferencePersistence = false;
 const TAGGER_CHUNK_OPTIONS = [1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 24, 32, 48, 64];
 
 function normalizeTaggerModelName(value, fallback = 'wd-swinv2-tagger-v3') {
@@ -3799,6 +3924,114 @@ function syncTaggerModelUi(options = {}) {
     });
 
     syncTagAdvancedUi({ resetToPreference: resetAdvancedToPreference || applyModelDefaults });
+}
+
+function getAvailableTaggerOptionValue(value) {
+    const select = $('#tag-model-select');
+    const requested = String(value || '').trim();
+    if (!select || !requested) return '';
+    const option = Array.from(select.querySelectorAll('option')).find((item) => item.value === requested && !item.disabled);
+    return option ? requested : '';
+}
+
+function captureTaggerDefaultsFromDom() {
+    const modelSelect = $('#tag-model-select');
+    const thresholdInput = $('#tag-threshold');
+    const characterThresholdInput = $('#tag-character-threshold');
+    const useGpu = $('#tag-use-gpu');
+    const batchSelect = $('#tagger-batch-size');
+    return {
+        modelName: modelSelect?.value || '',
+        threshold: finiteNumberInRange(thresholdInput?.value, 0, 1, 0.35),
+        characterThreshold: finiteNumberInRange(characterThresholdInput?.value, 0, 1, 0.85),
+        useGpu: useGpu ? !!useGpu.checked : true,
+        batchSize: batchSelect?.value || '',
+        customProfile: $('#tag-custom-profile-select')?.value || '',
+        customModelPath: $('#tag-model-path')?.value || '',
+        customTagsPath: $('#tag-tags-path')?.value || '',
+    };
+}
+
+function persistTaggerDefaultsFromDom() {
+    if (_suppressTaggerPreferencePersistence) return false;
+    const saved = AppPreferences.setTaggerDefaults(captureTaggerDefaultsFromDom());
+    syncSettingsPreferenceStatus();
+    return saved;
+}
+
+function applyStoredTaggerDefaults(options = {}) {
+    const defaults = options.defaults || AppPreferences.getTaggerDefaults();
+    if (!defaults || typeof defaults !== 'object') return false;
+
+    const modelSelect = $('#tag-model-select');
+    const modelValue = getAvailableTaggerOptionValue(defaults.modelName);
+    if (modelSelect && modelValue) {
+        modelSelect.value = modelValue;
+    }
+
+    const customProfile = $('#tag-custom-profile-select');
+    if (customProfile && defaults.customProfile) customProfile.value = defaults.customProfile;
+    const customModelPath = $('#tag-model-path');
+    if (customModelPath && defaults.customModelPath) customModelPath.value = defaults.customModelPath;
+    const customTagsPath = $('#tag-tags-path');
+    if (customTagsPath && defaults.customTagsPath) customTagsPath.value = defaults.customTagsPath;
+
+    const threshold = finiteNumberInRange(defaults.threshold, 0, 1, null);
+    const thresholdInput = $('#tag-threshold');
+    const thresholdValue = $('#tag-threshold-value');
+    if (thresholdInput && threshold !== null) {
+        thresholdInput.value = String(threshold);
+        thresholdInput.dataset.userChosen = '1';
+        if (thresholdValue) thresholdValue.textContent = thresholdInput.value;
+    }
+
+    const characterThreshold = finiteNumberInRange(defaults.characterThreshold, 0, 1, null);
+    const characterThresholdInput = $('#tag-character-threshold');
+    const characterThresholdValue = $('#tag-character-threshold-value');
+    if (characterThresholdInput && characterThreshold !== null) {
+        characterThresholdInput.value = String(characterThreshold);
+        characterThresholdInput.dataset.userChosen = '1';
+        if (characterThresholdValue) characterThresholdValue.textContent = characterThresholdInput.value;
+    }
+
+    const useGpu = $('#tag-use-gpu');
+    const savedGpu = booleanPreference(defaults.useGpu, null);
+    if (useGpu && savedGpu !== null) {
+        useGpu.checked = savedGpu;
+        useGpu.dataset.userChosen = '1';
+    }
+
+    const batchSelect = $('#tagger-batch-size');
+    if (batchSelect && defaults.batchSize) {
+        batchSelect.value = String(defaults.batchSize);
+        batchSelect.dataset.userChosen = '1';
+    }
+
+    syncTaggerModelUi({ applyModelDefaults: false, resetAdvancedToPreference: true });
+    syncSettingsPreferenceStatus();
+    return true;
+}
+
+function resetTaggerDefaultControls() {
+    const modelSelect = $('#tag-model-select');
+    if (modelSelect) {
+        const defaultModel = getAvailableTaggerOptionValue('wd-swinv2-tagger-v3') || modelSelect.querySelector('option:not([disabled])')?.value || modelSelect.value;
+        modelSelect.value = defaultModel;
+    }
+
+    ['tag-threshold', 'tag-character-threshold', 'tag-use-gpu', 'tagger-batch-size'].forEach((id) => {
+        const element = document.getElementById(id);
+        if (element?.dataset) delete element.dataset.userChosen;
+    });
+
+    const customProfile = $('#tag-custom-profile-select');
+    if (customProfile) customProfile.value = 'wd14';
+    const customModelPath = $('#tag-model-path');
+    if (customModelPath) customModelPath.value = '';
+    const customTagsPath = $('#tag-tags-path');
+    if (customTagsPath) customTagsPath.value = '';
+
+    syncTaggerModelUi({ applyModelDefaults: true, resetAdvancedToPreference: true });
 }
 
 function syncSelectionModeButton() {
@@ -5088,11 +5321,13 @@ function initEventListeners() {
         e.target.dataset.userChosen = '1';
         $('#tag-threshold-value').textContent = e.target.value;
         syncTagAdvancedUi();
+        persistTaggerDefaultsFromDom();
     });
     $('#tag-character-threshold').addEventListener('input', (e) => {
         e.target.dataset.userChosen = '1';
         $('#tag-character-threshold-value').textContent = e.target.value;
         syncTagAdvancedUi();
+        persistTaggerDefaultsFromDom();
     });
     $('#tag-retag-all')?.addEventListener('change', () => syncTagAdvancedUi());
 
@@ -5100,19 +5335,26 @@ function initEventListeners() {
     $('#tag-model-select').addEventListener('change', () => {
         delete $('#tag-use-gpu')?.dataset.userChosen;
         syncTaggerModelUi({ applyModelDefaults: true, toastOnAutoSafe: true });
+        persistTaggerDefaultsFromDom();
     });
     $('#tag-custom-profile-select')?.addEventListener('change', () => {
         delete $('#tag-use-gpu')?.dataset.userChosen;
         syncTaggerModelUi({ applyModelDefaults: true, toastOnAutoSafe: true });
         syncTagAdvancedUi();
+        persistTaggerDefaultsFromDom();
+    });
+    ['tag-model-path', 'tag-tags-path'].forEach((id) => {
+        document.getElementById(id)?.addEventListener('input', () => persistTaggerDefaultsFromDom());
     });
     $('#tag-use-gpu')?.addEventListener('change', () => {
         $('#tag-use-gpu').dataset.userChosen = '1';
         syncTaggerModelUi({ applyModelDefaults: false });
+        persistTaggerDefaultsFromDom();
     });
     $('#tagger-batch-size')?.addEventListener('change', (event) => {
         event.target.dataset.userChosen = '1';
         syncTaggerModelUi({ applyModelDefaults: false });
+        persistTaggerDefaultsFromDom();
     });
     $('#scan-advanced-options')?.addEventListener('toggle', (event) => {
         writeStoredBoolean(SCAN_ADVANCED_OPEN_KEY, Boolean(event.currentTarget?.open));
@@ -7474,10 +7716,19 @@ async function loadTaggerModels() {
         );
 
         select.innerHTML = options.join('');
-        select.value = currentValue === 'custom' || models.some((model) => model.name === currentValue)
-            ? currentValue
-            : defaultModel;
-        select.dispatchEvent(new Event('change'));
+        const savedDefaults = AppPreferences.getTaggerDefaults();
+        const savedModel = getAvailableTaggerOptionValue(savedDefaults?.modelName);
+        const currentModel = getAvailableTaggerOptionValue(currentValue);
+        const fallbackModel = getAvailableTaggerOptionValue(defaultModel) || select.querySelector('option:not([disabled])')?.value || defaultModel;
+        select.value = savedModel || currentModel || fallbackModel;
+        _suppressTaggerPreferencePersistence = true;
+        try {
+            select.dispatchEvent(new Event('change'));
+            applyStoredTaggerDefaults({ defaults: savedDefaults });
+        } finally {
+            _suppressTaggerPreferencePersistence = false;
+        }
+        syncSettingsPreferenceStatus();
     } catch (error) {
         Logger.warn('Failed to load tagger models list:', error);
         syncTaggerModelUi({ applyModelDefaults: false });
@@ -7603,6 +7854,8 @@ async function startTagging() {
         }
         syncTaggerModelUi({ applyModelDefaults: false });
     }
+
+    persistTaggerDefaultsFromDom();
 
     try {
         _tagStartInFlight = true;
@@ -10248,13 +10501,187 @@ function toggleSettingsSound() {
     );
 }
 
-function initSettingsControls() {
-    const btn = document.getElementById('btn-settings-sound-toggle');
-    if (btn && btn.dataset.bound !== '1') {
-        btn.dataset.bound = '1';
-        btn.addEventListener('click', toggleSettingsSound);
+function getSettingsUiScaleMode() {
+    const mode = String(AppPreferences.getUiScaleMode() || 'auto');
+    return ['auto', '1', '1.15', '1.3', '1.4', '1.5'].includes(mode) ? mode : 'auto';
+}
+
+function formatScalePercent(scale) {
+    const numeric = Number(scale);
+    return `${Math.round((Number.isFinite(numeric) ? numeric : 1) * 100)}%`;
+}
+
+function syncSettingsUiScaleControl() {
+    const select = document.getElementById('settings-ui-scale');
+    if (!select) return;
+    const mode = getSettingsUiScaleMode();
+    select.value = mode;
+
+    const current = document.getElementById('settings-ui-scale-current');
+    if (current) {
+        delete current.dataset.i18n;
+        const percent = formatScalePercent(window.UiScale?.get?.() || 1);
+        current.textContent = mode === 'auto'
+            ? appT('settings.uiScaleCurrentAuto', 'Auto is active now ({percent}).', { percent })
+            : appT('settings.uiScaleCurrentManual', 'Fixed scale is active now ({percent}).', { percent });
     }
+}
+
+function handleSettingsUiScaleChange(event) {
+    const mode = event.target?.value || 'auto';
+    AppPreferences.setUiScaleMode(mode);
+    syncSettingsUiScaleControl();
+    showToast(
+        mode === 'auto'
+            ? appT('settings.uiScaleSavedAuto', 'UI scale set to Auto')
+            : appT('settings.uiScaleSavedManual', 'UI scale set to {percent}', { percent: formatScalePercent(mode) }),
+        'info'
+    );
+}
+
+function captureArtistDefaultsFromDom() {
+    return {
+        modelSource: document.getElementById('artist-model-source')?.value || 'huggingface',
+        modelPath: document.getElementById('artist-model-path')?.value || '',
+        threshold: finiteNumberInRange(document.getElementById('artist-threshold')?.value, 0, 0.25, 0.03),
+        useGpu: document.getElementById('artist-use-gpu') ? !!document.getElementById('artist-use-gpu').checked : true,
+    };
+}
+
+function persistArtistDefaultsFromDom() {
+    const saved = AppPreferences.setArtistDefaults(captureArtistDefaultsFromDom());
+    syncSettingsPreferenceStatus();
+    return saved;
+}
+
+function formatGpuPreferenceLabel(value) {
+    return value
+        ? appT('settings.prefGpu', 'GPU')
+        : appT('settings.prefCpu', 'CPU');
+}
+
+function syncSettingsPreferenceStatus() {
+    const taggerStatus = document.getElementById('settings-tagger-defaults-status');
+    if (taggerStatus) {
+        delete taggerStatus.dataset.i18n;
+        const prefs = AppPreferences.getTaggerDefaults();
+        if (prefs?.modelName) {
+            const threshold = prefs.threshold != null ? Number(prefs.threshold).toFixed(2) : '0.35';
+            const character = prefs.characterThreshold != null ? Number(prefs.characterThreshold).toFixed(2) : '0.85';
+            taggerStatus.textContent = appT(
+                'settings.taggerDefaultsSaved',
+                '{model} · General {threshold} · Character {character} · {gpu} · Batch {batch}',
+                {
+                    model: prefs.modelName,
+                    threshold,
+                    character,
+                    gpu: formatGpuPreferenceLabel(prefs.useGpu !== false),
+                    batch: prefs.batchSize || appT('settings.prefAutoBatch', 'Auto'),
+                }
+            );
+        } else {
+            taggerStatus.dataset.i18n = 'settings.taggerDefaultsEmpty';
+            taggerStatus.textContent = appT('settings.taggerDefaultsEmpty', 'No saved tagger defaults yet.');
+        }
+    }
+
+    const artistStatus = document.getElementById('settings-artist-defaults-status');
+    if (artistStatus) {
+        delete artistStatus.dataset.i18n;
+        const prefs = AppPreferences.getArtistDefaults();
+        if (prefs?.modelSource) {
+            artistStatus.textContent = appT(
+                'settings.artistDefaultsSaved',
+                '{source} · Threshold {threshold} · {gpu}',
+                {
+                    source: prefs.modelSource,
+                    threshold: Number(prefs.threshold ?? 0.03).toFixed(2),
+                    gpu: formatGpuPreferenceLabel(prefs.useGpu !== false),
+                }
+            );
+        } else {
+            artistStatus.dataset.i18n = 'settings.artistDefaultsEmpty';
+            artistStatus.textContent = appT('settings.artistDefaultsEmpty', 'No saved Artist ID defaults yet.');
+        }
+    }
+}
+
+function saveCurrentAiDefaults() {
+    persistTaggerDefaultsFromDom();
+    if (window.ArtistIdent && typeof window.ArtistIdent.savePreferences === 'function') {
+        window.ArtistIdent.savePreferences();
+    } else {
+        persistArtistDefaultsFromDom();
+    }
+    syncSettingsPreferenceStatus();
+    showToast(appT('settings.aiDefaultsSaved', 'AI defaults saved'), 'success');
+}
+
+function resetArtistDefaultControls() {
+    const source = document.getElementById('artist-model-source');
+    const path = document.getElementById('artist-model-path');
+    const localGroup = document.getElementById('artist-local-model-group');
+    const threshold = document.getElementById('artist-threshold');
+    const thresholdValue = document.getElementById('artist-threshold-value');
+    const useGpu = document.getElementById('artist-use-gpu');
+
+    if (source) source.value = 'huggingface';
+    if (path) path.value = '';
+    if (localGroup) localGroup.style.display = 'none';
+    if (threshold) threshold.value = '0.03';
+    if (thresholdValue) thresholdValue.textContent = '0.03';
+    if (useGpu) useGpu.checked = true;
+}
+
+function resetAiDefaultPreferences() {
+    AppPreferences.clearAiDefaults();
+    resetTaggerDefaultControls();
+    if (window.ArtistIdent && typeof window.ArtistIdent.resetSavedPreferences === 'function') {
+        window.ArtistIdent.resetSavedPreferences({ apply: true, silent: true });
+    } else {
+        resetArtistDefaultControls();
+    }
+    syncSettingsPreferenceStatus();
+    showToast(appT('settings.aiDefaultsReset', 'AI defaults reset'), 'info');
+}
+
+function syncSettingsControls() {
     syncSettingsSoundControl();
+    syncSettingsUiScaleControl();
+    syncSettingsPreferenceStatus();
+}
+
+function initSettingsControls() {
+    const soundBtn = document.getElementById('btn-settings-sound-toggle');
+    if (soundBtn && soundBtn.dataset.bound !== '1') {
+        soundBtn.dataset.bound = '1';
+        soundBtn.addEventListener('click', toggleSettingsSound);
+    }
+
+    const uiScale = document.getElementById('settings-ui-scale');
+    if (uiScale && uiScale.dataset.bound !== '1') {
+        uiScale.dataset.bound = '1';
+        uiScale.addEventListener('change', handleSettingsUiScaleChange);
+    }
+
+    const saveAi = document.getElementById('btn-settings-save-ai-defaults');
+    if (saveAi && saveAi.dataset.bound !== '1') {
+        saveAi.dataset.bound = '1';
+        saveAi.addEventListener('click', saveCurrentAiDefaults);
+    }
+
+    const resetAi = document.getElementById('btn-settings-reset-ai-defaults');
+    if (resetAi && resetAi.dataset.bound !== '1') {
+        resetAi.dataset.bound = '1';
+        resetAi.addEventListener('click', resetAiDefaultPreferences);
+    }
+
+    if (document.body && document.body.dataset.settingsLanguageBound !== '1') {
+        document.body.dataset.settingsLanguageBound = '1';
+        document.addEventListener('languageChanged', syncSettingsControls);
+    }
+
+    syncSettingsControls();
 }
 
 async function openModelManager() {
@@ -10270,7 +10697,7 @@ async function openModelManager() {
         summaryEl.innerHTML = `<div class="model-manager-stat"><strong>${escapeHtml(appT('models.loadingTitle', 'Checking'))}</strong><span>${escapeHtml(appT('models.loadingBody', 'Checking what is ready on this computer...'))}</span></div>`;
     }
     if (gridEl) gridEl.innerHTML = '';
-    syncSettingsSoundControl();
+    syncSettingsControls();
     showModal('model-manager-modal');
 
     // Disk usage loads independently so a slow model probe doesn't block it.
@@ -12508,6 +12935,7 @@ async function openSimilarFromImage(imageId) {
 function buildAppContext() {
     return {
         API,
+        Prefs: AppPreferences,
         AppState,
         showToast,
         createGuideOverlay,
@@ -12603,6 +13031,8 @@ function buildAppContext() {
         copyScanDiagnostics,
         openScanLogFile,
         clampTaggerChunkToAvailableOption,
+        syncSettingsPreferenceStatus,
+        persistArtistDefaultsFromDom,
         $,
         $$
     };

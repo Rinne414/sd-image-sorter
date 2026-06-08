@@ -3709,6 +3709,49 @@
                             <span id="settings-sound-label" data-i18n="settings.soundOn">On</span>
                         </button>
                     </div>
+                    <div class="settings-row">
+                        <div class="settings-row-copy">
+                            <strong data-i18n="settings.appearanceTitle">Appearance</strong>
+                            <span id="settings-ui-scale-current" data-i18n="settings.uiScaleBody">UI scale follows your desktop size</span>
+                        </div>
+                        <label class="settings-inline-control">
+                            <span data-i18n="settings.uiScaleLabel">UI Scale</span>
+                            <select id="settings-ui-scale" class="input-field">
+                                <option value="auto" data-i18n="settings.uiScaleAuto">Auto</option>
+                                <option value="1" data-i18n="settings.uiScale100">100%</option>
+                                <option value="1.15" data-i18n="settings.uiScale115">115%</option>
+                                <option value="1.3" data-i18n="settings.uiScale130">130%</option>
+                                <option value="1.4" data-i18n="settings.uiScale140">140%</option>
+                                <option value="1.5" data-i18n="settings.uiScale150">150%</option>
+                            </select>
+                        </label>
+                    </div>
+                    <details class="guided-advanced-panel settings-preferences-panel" id="settings-ai-defaults-panel">
+                        <summary class="guided-advanced-summary">
+                            <span data-i18n="settings.aiDefaultsTitle">AI defaults</span>
+                            <span class="guided-advanced-hint" data-i18n="settings.aiDefaultsHint">Tagger and Artist settings are saved automatically.</span>
+                        </summary>
+                        <div class="guided-advanced-body settings-preferences-body">
+                            <div class="settings-preference-summary">
+                                <strong data-i18n="settings.taggerDefaultsTitle">Tagger defaults</strong>
+                                <span id="settings-tagger-defaults-status" data-i18n="settings.taggerDefaultsEmpty">No saved tagger defaults yet.</span>
+                            </div>
+                            <div class="settings-preference-summary">
+                                <strong data-i18n="settings.artistDefaultsTitle">Artist defaults</strong>
+                                <span id="settings-artist-defaults-status" data-i18n="settings.artistDefaultsEmpty">No saved Artist ID defaults yet.</span>
+                            </div>
+                            <div class="settings-preference-actions">
+                                <button type="button" class="btn btn-ghost btn-small" id="btn-settings-save-ai-defaults">
+                                    <span aria-hidden="true">💾</span>
+                                    <span data-i18n="settings.saveCurrentAiDefaults">Save current AI defaults</span>
+                                </button>
+                                <button type="button" class="btn btn-ghost btn-small danger" id="btn-settings-reset-ai-defaults">
+                                    <span aria-hidden="true">↺</span>
+                                    <span data-i18n="settings.resetAiDefaults">Reset AI defaults</span>
+                                </button>
+                            </div>
+                        </div>
+                    </details>
                 </section>
                 <div class="model-manager-summary" id="model-manager-summary"></div>
                 <div class="model-manager-bulk-actions" id="model-manager-bulk-actions">
