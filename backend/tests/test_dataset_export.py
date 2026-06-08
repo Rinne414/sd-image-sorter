@@ -633,3 +633,124 @@ def test_preview_composes_per_image_nl(test_client, captioned_image):
     assert "1girl" in caption and _NL_SENTENCE in caption
     # The preview also surfaces the raw nl_caption separately for the NL box.
     assert items[0]["nl_caption"] == _NL_SENTENCE
+
+
+def test_lora_caption_golden_matrix_across_tag_and_dataset_exports(test_client, test_db, tmp_path: Path):
+    """Golden gate for the v3.3.3 tagging-pipeline merge.
+
+    The Gallery tag export path and Dataset Maker export path must keep the
+    same LoRA caption semantics while the two tagging entry points are unified:
+    tag underscores normalize for trainer captions, score_* stays intact,
+    tags_nl excludes original prompt text, and per-image NL composition never
+    appends the sentence twice.
+    """
+    import database as db
+    from services.smart_tag_service import assemble_caption
+
+    src = tmp_path / "golden-src"
+    src.mkdir()
+    image_path = src / "golden_lora.png"
+    Image.new("RGB", (32, 32), color=(40, 80, 120)).save(image_path)
+    image_id = db.add_image(
+        path=str(image_path),
+        filename=image_path.name,
+        prompt="newest, original prompt should not appear",
+        metadata_json="{}",
+    )
+    db.add_tags(image_id, [
+        {"tag": "blue_hair", "confidence": 0.95},
+        {"tag": "looking_at_viewer", "confidence": 0.90},
+        {"tag": "score_9_up", "confidence": 0.85},
+        {"tag": "safe", "confidence": 0.80},
+    ])
+    db.update_image_caption(
+        image_id,
+        "golden_trigger, blue hair, a blue-haired girl smiling",
+        nl_caption="a blue-haired girl smiling",
+    )
+
+    actual = {
+        "smart_tag_caption": assemble_caption(
+            rating="general",
+            general_tags=["blue_hair", "looking_at_viewer", "score_9_up", "safe"],
+            character_tags=["tomori_(bang_dream!)"],
+            nl_text="a blue-haired girl smiling",
+            trigger_word="tomori_lora",
+            auto_strip_noise=True,
+        ),
+    }
+
+    tag_tags_nl_out = tmp_path / "tag-tags-nl"
+    tag_tags_nl_out.mkdir()
+    response = test_client.post("/api/tags/export-batch", json={
+        "image_ids": [image_id],
+        "output_folder": str(tag_tags_nl_out),
+        "content_mode": "tags_nl",
+        "prefix": "tomori_lora",
+        "blacklist": ["safe", "newest"],
+    })
+    assert response.status_code == 200, response.text
+    actual["tags_api_tags_nl"] = (tag_tags_nl_out / "golden_lora.txt").read_text(encoding="utf-8")
+
+    tag_caption_merged_out = tmp_path / "tag-caption-merged"
+    tag_caption_merged_out.mkdir()
+    response = test_client.post("/api/tags/export-batch", json={
+        "image_ids": [image_id],
+        "output_folder": str(tag_caption_merged_out),
+        "content_mode": "caption_merged",
+        "prefix": "tomori_lora",
+        "blacklist": ["safe", "newest"],
+    })
+    assert response.status_code == 200, response.text
+    actual["tags_api_caption_merged"] = (tag_caption_merged_out / "golden_lora.txt").read_text(encoding="utf-8")
+
+    response = test_client.post("/api/dataset/export", json={
+        "image_ids": [image_id],
+        "output_mode": "beside_image",
+        "output_folder": "",
+        "naming_pattern": "ignored",
+        "image_op": "copy",
+        "overwrite_policy": "overwrite",
+        "content_mode": "tags",
+        "blacklist": ["safe"],
+        "image_types": {str(image_id): "both"},
+        "image_nl_overrides": {str(image_id): "manual edited NL"},
+    })
+    assert response.status_code == 200, response.text
+    actual["dataset_tags_both"] = image_path.with_suffix(".txt").read_text(encoding="utf-8")
+
+    response = test_client.post("/api/dataset/export", json={
+        "image_ids": [image_id],
+        "output_mode": "beside_image",
+        "output_folder": "",
+        "naming_pattern": "ignored",
+        "image_op": "copy",
+        "overwrite_policy": "overwrite",
+        "content_mode": "tags_nl",
+        "blacklist": ["safe"],
+        "image_types": {str(image_id): "both"},
+    })
+    assert response.status_code == 200, response.text
+    actual["dataset_tags_nl_no_double"] = image_path.with_suffix(".txt").read_text(encoding="utf-8")
+
+    response = test_client.post("/api/dataset/export-preview", json={
+        "image_ids": [image_id],
+        "output_mode": "beside_image",
+        "content_mode": "tags",
+        "blacklist": ["safe"],
+        "image_types": {str(image_id): "both"},
+    })
+    assert response.status_code == 200, response.text
+    preview_item = response.json()["items"][0]
+    actual["dataset_preview_both"] = preview_item["caption"]
+    actual["dataset_preview_nl_caption"] = preview_item["nl_caption"]
+
+    assert actual == {
+        "smart_tag_caption": "tomori_lora, tomori (bang dream!), blue hair, looking at viewer, a blue-haired girl smiling",
+        "tags_api_tags_nl": "tomori_lora, blue hair, looking at viewer, score_9_up, a blue-haired girl smiling",
+        "tags_api_caption_merged": "tomori_lora, golden_trigger, blue hair, a blue-haired girl smiling, original prompt should not appear, looking at viewer, score_9_up",
+        "dataset_tags_both": "blue hair, looking at viewer, score_9_up, manual edited NL",
+        "dataset_tags_nl_no_double": "blue hair, looking at viewer, score_9_up, a blue-haired girl smiling",
+        "dataset_preview_both": "blue hair, looking at viewer, score_9_up, a blue-haired girl smiling",
+        "dataset_preview_nl_caption": "a blue-haired girl smiling",
+    }
