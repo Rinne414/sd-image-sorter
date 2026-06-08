@@ -7542,3 +7542,59 @@ html.lang-zh #view-censor .queue-action-btn span {
     background: rgba(255, 184, 92, 0.16);
     color: #ffce8a;
 }
+
+/* ==========================================================================
+   FLOW-03 — Preview-modal handoff row
+   A "Send to:" strip of pill buttons inside the image preview modal that routes
+   the current image straight into the next pipeline step (Censor, Similar,
+   Dataset, Collection, Prompt, Reader). Mirrors the right-click context menu so
+   users never have to close → reselect → reopen to move an image downstream.
+   ========================================================================== */
+.modal-handoff-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+}
+.modal-handoff-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--text-muted, #7b829c);
+    margin-right: 2px;
+    text-transform: uppercase;
+}
+.modal-handoff-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--text-secondary, #aeb6cc);
+    background: var(--bg-card, rgba(26, 31, 47, 0.62));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    border-radius: 10px;
+    cursor: pointer;
+    transition: transform var(--transition-normal, 180ms ease),
+        border-color var(--transition-normal, 180ms ease),
+        color var(--transition-normal, 180ms ease),
+        background var(--transition-normal, 180ms ease);
+}
+.modal-handoff-btn:hover {
+    transform: translateY(-1px);
+    color: var(--text-primary, #eef1f8);
+    border-color: var(--border-glow, rgba(124, 139, 255, 0.38));
+    background: var(--bg-hover, rgba(40, 46, 66, 0.72));
+}
+.modal-handoff-btn:focus-visible {
+    outline: 2px solid var(--accent-primary, #7c8bff);
+    outline-offset: 2px;
+}
+.modal-handoff-btn:active {
+    transform: translateY(0);
+}

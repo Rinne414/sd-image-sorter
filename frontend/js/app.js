@@ -12222,6 +12222,12 @@ function buildAppContext() {
         switchView,
         openGalleryPreview,
         applyPromptFilter,
+        // Expose the canonical modal closer so cross-module callers (gallery.js
+        // checkpoint/LoRA click-to-filter, FLOW-03 preview handoffs) can close
+        // #image-modal. Previously these called window.App.closeModal, which was
+        // undefined — a latent no-op. `closeModal` is an alias of hideModal.
+        closeModal: hideModal,
+        hideModal,
         addToCensorQueue,
         sendToCensor: addToCensorQueue,
         openPromptBuildFromImage,

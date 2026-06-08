@@ -2644,6 +2644,12 @@ window.I18nLang_en = {
     'reader.editFormatWarningJpg': 'JPG is better for sharing than for keeping full image info. Transparent areas will also be flattened.',
     'reader.editFormatWarningWebp': 'WebP usually keeps more info than JPG, but some apps still fail to read all prompt fields back.',
     'modal.openFolder': 'Open in folder',
+    'modal.sendTo': 'Send to:',
+    'modal.addToDataset': 'Add to dataset',
+    'modal.collection': 'Collection',
+    'modal.promptHelper': 'Prompt',
+    'modal.openInReader': 'Open in full Reader',
+    'modal.fullReader': 'Full Reader',
     'modal.openFolderFailed': 'Failed to open folder',
 
     // ========================

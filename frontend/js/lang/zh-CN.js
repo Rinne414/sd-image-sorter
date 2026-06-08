@@ -2808,6 +2808,12 @@ window.I18nLang_zhCN = {
     'reader.editFormatWarningJpg': 'JPG 更适合分享，不适合保完整图片信息；透明区域也会变成实底。',
     'reader.editFormatWarningWebp': 'WebP 通常比 JPG 更能保留信息，但仍有部分软件读不全提示词。',
     'modal.openFolder': '打开所在文件夹',
+    'modal.sendTo': '发送到：',
+    'modal.addToDataset': '加入数据集',
+    'modal.collection': '收藏集',
+    'modal.promptHelper': '提示词',
+    'modal.openInReader': '在读图中打开',
+    'modal.fullReader': '完整读图',
     'modal.openFolderFailed': '打开文件夹失败',
 
     // ========================

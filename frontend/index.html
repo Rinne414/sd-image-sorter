@@ -3858,6 +3858,19 @@
                         <span class="meta-item meta-item-rating"><strong data-i18n="rating.modalLabel">Your rating:</strong> <span class="star-rating star-rating-interactive" id="modal-user-rating" role="radiogroup" aria-label="Your star rating"></span></span>
                     </div>
 
+                    <!-- FLOW-03: send this image straight into the next pipeline step
+                         instead of dead-ending at the preview. Targets reuse the same
+                         functions the right-click context menu already calls. -->
+                    <div class="modal-handoff-row" role="group" aria-label="Send this image to another tool">
+                        <span class="modal-handoff-label" data-i18n="modal.sendTo">Send to:</span>
+                        <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="censor" title="Send to Censor Edit" data-i18n-title="gallery.contextSendToCensor">🔳 <span data-i18n="nav.censor">Censor</span></button>
+                        <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="similar" title="Find similar images" data-i18n-title="gallery.contextFindSimilar">🔎 <span data-i18n="nav.similar">Similar</span></button>
+                        <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="dataset" title="Add to dataset" data-i18n-title="modal.addToDataset">📦 <span data-i18n="nav.dataset">Dataset</span></button>
+                        <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="collection" title="Add to collection" data-i18n-title="collections.contextAddTo">📚 <span data-i18n="modal.collection">Collection</span></button>
+                        <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="prompt" title="Open in Prompt Helper" data-i18n-title="gallery.contextPromptHelper">🧪 <span data-i18n="modal.promptHelper">Prompt</span></button>
+                        <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="reader" title="Open in full Reader" data-i18n-title="modal.openInReader">📖 <span data-i18n="modal.fullReader">Full Reader</span></button>
+                    </div>
+
                     <!--
                         Closed-source AI provider hint. Shown when generator
                         is `gemini` or `gpt-image`. We currently identify these

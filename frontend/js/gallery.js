@@ -367,6 +367,57 @@ const Gallery = {
         }
     },
 
+    // FLOW-03: route the currently-previewed image into the next pipeline step.
+    // Reuses the exact functions the right-click context menu calls, so behavior
+    // stays consistent. View-switching handoffs close the modal first; "collection"
+    // overlays a picker so the modal is left underneath.
+    _handleModalHandoff(action) {
+        const app = window.App || {};
+        const id = this._currentPreviewId;
+        if (!id) return;
+        const image = this.images.find((im) => Number(im.id) === Number(id))
+            || app.AppState?.images?.find((im) => Number(im.id) === Number(id));
+        const filename = (image && image.filename) || '';
+        const closeModal = () => {
+            const fn = app.closeModal || window.closeModal || window.hideModal;
+            if (typeof fn === 'function') fn('image-modal');
+        };
+        switch (action) {
+            case 'censor':
+                if (typeof app.addToCensorQueue === 'function') app.addToCensorQueue([id]);
+                else app.showToast?.(app.appT?.('gallery.contextSendToCensorFailed', 'Failed to send image to Edit') || 'Failed', 'error');
+                closeModal();
+                break;
+            case 'similar':
+                app.openSimilarFromImage?.(id);
+                closeModal();
+                break;
+            case 'dataset':
+                if (window.DatasetMaker?.addImageIds) {
+                    window.DatasetMaker.addImageIds([id], { switchView: true, showToast: true });
+                    closeModal();
+                } else {
+                    app.showToast?.(app.appT?.('selection.sendToDatasetMakerUnavailable', 'Dataset Maker module not loaded yet — try again in a moment.') || 'Dataset Maker not loaded yet', 'error');
+                }
+                break;
+            case 'collection':
+                // Picker overlays on top; keep the image modal underneath so the
+                // user returns to the image after choosing a collection.
+                window.CollectionsUI?.openAddToCollectionPicker?.([id]);
+                break;
+            case 'prompt':
+                app.openPromptBuildFromImage?.(id);
+                closeModal();
+                break;
+            case 'reader':
+                app.openReaderFromImage?.(id, filename);
+                closeModal();
+                break;
+            default:
+                break;
+        }
+    },
+
     _normalizeGenerator(generator) {
         const normalized = String(generator || 'unknown').trim().toLowerCase();
         return Object.prototype.hasOwnProperty.call(DEFAULT_GENERATOR_COLORS, normalized)
@@ -3021,6 +3072,18 @@ ${String(value)}`)
         this._initSectionToggles();
         const summaryImage = this.images.find(image => image.id === imageId) || window.App?.AppState?.images?.find(image => image.id === imageId);
         this.currentPreviewIndex = this.images.findIndex(image => image.id === imageId);
+        this._currentPreviewId = imageId;
+        // FLOW-03: bind the modal handoff row once (delegated). The row sends the
+        // currently-previewed image into the next pipeline step.
+        if (!this._handoffBound) {
+            this._handoffBound = true;
+            document.querySelector('.modal-handoff-row')?.addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-modal-handoff]');
+                if (!btn) return;
+                e.preventDefault();
+                this._handleModalHandoff(btn.dataset.modalHandoff);
+            });
+        }
         this.currentPreviewRequestId += 1;
         const requestId = this.currentPreviewRequestId;
         this.showAllTags = false;
