@@ -1941,6 +1941,7 @@ window.I18nLang_zhCN = {
     'models.essentials': '核心模型 · 推荐所有人安装',
     'models.optionalSection': '其他与进阶模型',
     'models.whichToPick': '❓ 我该选哪个模型？',
+    'models.openSetup': '打开设置 / 下载模型',
     // WIRING-01 用户星级评分
     'rating.modalLabel': '我的评分：',
     'rating.setStars': '评 {stars}/5 星',

@@ -527,11 +527,19 @@ const SimilarImages = {
                     </details>
                 `
                 : '';
+            // ENTRY-06: shared "needs setup -> open Model Manager" affordance.
+            // The data-action button reuses the global delegated handler.
+            const setupBtnHtml = result.available ? '' : `
+                <button type="button" class="btn btn-secondary btn-small model-health-setup-btn" data-action="open-model-guidance">
+                    ⚙️ ${escapeHtml(this._t('models.openSetup', 'Open Setup / Download'))}
+                </button>
+            `;
             banner.innerHTML = `
                 <div class="model-health-copy">
                     <span class="model-health-title">${escapeHtml(title)}</span>
                     <span>${escapeHtml(description)}</span>
                     ${detailsHtml}
+                    ${setupBtnHtml}
                 </div>
             `;
             this.updateActionAvailability();
@@ -542,6 +550,9 @@ const SimilarImages = {
                 <div class="model-health-copy">
                     <span class="model-health-title">${escapeHtml(this._t('similar.setupNeedsTitle', 'Similarity setup needs one more step'))}</span>
                     <span>${escapeHtml(this._t('similar.statusLoadFailed', 'Similarity setup could not be checked right now.'))}</span>
+                    <button type="button" class="btn btn-secondary btn-small model-health-setup-btn" data-action="open-model-guidance">
+                        ⚙️ ${escapeHtml(this._t('models.openSetup', 'Open Setup / Download'))}
+                    </button>
                 </div>
             `;
             this.modelStatus = {

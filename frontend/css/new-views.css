@@ -704,6 +704,13 @@
     gap: 4px;
 }
 
+/* ENTRY-06: shared "Open Setup / Download" button inside Similar/Artist
+   not-ready banners. align-self keeps it from stretching full width. */
+.model-health-banner .model-health-setup-btn {
+    align-self: flex-start;
+    margin-top: 8px;
+}
+
 .model-health-banner .model-health-details {
     margin-top: 10px;
     border-top: 1px solid rgba(191, 219, 254, 0.1);

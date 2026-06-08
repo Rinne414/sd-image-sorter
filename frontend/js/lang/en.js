@@ -1768,6 +1768,7 @@ window.I18nLang_en = {
     'models.essentials': 'Essentials · recommended for everyone',
     'models.optionalSection': 'Additional & advanced models',
     'models.whichToPick': '❓ Which model should I pick?',
+    'models.openSetup': 'Open Setup / Download',
     // WIRING-01 user star rating
     'rating.modalLabel': 'Your rating:',
     'rating.setStars': 'Rate {stars}/5',

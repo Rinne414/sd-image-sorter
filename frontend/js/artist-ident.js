@@ -395,6 +395,13 @@ const ArtistIdent = {
             if (result.runtime_path) detailItems.push(`${this.tText('Runtime path', '运行时路径')}: ${result.runtime_path}`);
             if (result.checkpoint_path) detailItems.push(`${this.tText('Checkpoint path', '检查点路径')}: ${result.checkpoint_path}`);
             banner.className = classes.join(' ');
+            // ENTRY-06: shared "needs setup -> open Model Manager" affordance,
+            // reusing the global data-action="open-model-guidance" handler.
+            const setupBtnHtml = result.available ? '' : `
+                <button type="button" class="btn btn-secondary btn-small model-health-setup-btn" data-action="open-model-guidance">
+                    ⚙️ ${this._escapeHtml(this.tText('Open Setup / Download', '打开设置 / 下载模型'))}
+                </button>
+            `;
             banner.innerHTML = `
                 <div class="model-health-copy">
                     <span class="model-health-title">${this._escapeHtml(title)}</span>
@@ -405,6 +412,7 @@ const ArtistIdent = {
                             <ul>${detailItems.map((item) => `<li>${this._escapeHtml(item)}</li>`).join('')}</ul>
                         </details>
                     ` : ''}
+                    ${setupBtnHtml}
                 </div>
             `;
             this.refreshAvailabilityState();
@@ -414,6 +422,9 @@ const ArtistIdent = {
                 <div class="model-health-copy">
                     <span class="model-health-title">${this._escapeHtml(this.tText('Style Finder needs setup first', '画师识别还需要先完成准备'))}</span>
                     <span>${this._escapeHtml(this.tText('Artist runtime status could not be loaded.', '画师识别运行状态无法加载。'))}</span>
+                    <button type="button" class="btn btn-secondary btn-small model-health-setup-btn" data-action="open-model-guidance">
+                        ⚙️ ${this._escapeHtml(this.tText('Open Setup / Download', '打开设置 / 下载模型'))}
+                    </button>
                 </div>
             `;
             this.diagnostics = { available: false };
