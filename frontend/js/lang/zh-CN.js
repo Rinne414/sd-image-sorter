@@ -797,6 +797,7 @@ window.I18nLang_zhCN = {
     'censor.blur': '模糊',
     'censor.black': '黑色遮挡',
     'censor.white': '白色遮挡',
+    'censor.recommendedTag': '推荐',
 
     // Auto-Detect Modal
     'censor.autoDetectSettings': '自动检测设置',

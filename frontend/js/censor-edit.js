@@ -588,6 +588,26 @@ function censorT(key, params = null, fallback = '') {
     return formatCensorFallback(fallback || key, params);
 }
 
+// MODELS-05: surface the backend-recommended detector inline on the
+// #censor-model-type dropdown so a new user can see which mode to pick without
+// reading the separate "Recommended mode" banner. The option text is owned by
+// i18n (data-i18n -> textContent on every languageChanged), so we recompute the
+// base label from the data-i18n key and re-append the marker; this runs after
+// i18n.applyToDOM() because the languageChanged event is dispatched last.
+function markRecommendedDetectorMode() {
+    const select = document.getElementById('censor-model-type');
+    if (!select) return;
+    const recommended = CensorState.backendModelStatus?.recommended_backend || '';
+    const label = censorT('censor.recommendedTag', null, 'Recommended');
+    Array.from(select.options).forEach((option) => {
+        const key = option.getAttribute('data-i18n');
+        const base = key && window.I18n?.t ? window.I18n.t(key) : option.textContent.replace(/\s+\([^)]*\)\s*$/, '');
+        option.textContent = (recommended && option.value === recommended)
+            ? `${base} (${label})`
+            : base;
+    });
+}
+
 function isEditableTarget(target) {
     if (!target || !(target instanceof Element)) return false;
     const tagName = String(target.tagName || '').toUpperCase();
@@ -793,6 +813,11 @@ function bindEvents() {
         updateSelectedLegacyModelHelp(legacy);
         renderCensorCapabilityPanel();
     });
+
+    // i18n resets the detector option labels on language switch (data-i18n ->
+    // textContent); re-apply the "(Recommended)" marker afterwards. The event is
+    // dispatched after i18n.applyToDOM(), so this runs last.
+    document.addEventListener('languageChanged', markRecommendedDetectorMode);
 
     $('#censor-style')?.addEventListener('change', (e) => CensorState.style = e.target.value);
 
@@ -2851,6 +2876,7 @@ async function loadCensorModelStatus() {
             if (modelTypeSelect && result.recommended_backend) {
                 modelTypeSelect.value = result.recommended_backend;
             }
+            markRecommendedDetectorMode();
             updateDetectionModelInputs();
 
             if (banner) {

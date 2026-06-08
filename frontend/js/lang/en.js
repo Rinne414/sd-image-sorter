@@ -786,6 +786,7 @@ window.I18nLang_en = {
     'censor.blur': 'Blur',
     'censor.black': 'Black',
     'censor.white': 'White',
+    'censor.recommendedTag': 'Recommended',
 
     // Auto-Detect Modal
     'censor.autoDetectSettings': 'Auto-Detect Settings',
