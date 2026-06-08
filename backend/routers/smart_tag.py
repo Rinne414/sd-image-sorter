@@ -14,21 +14,28 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, ConfigDict
 
 from services.smart_tag_service import (
-    cancel_active_job,
     get_caption_results_page,
-    get_active_job,
     get_job,
-    start_smart_tag_job,
+)
+from services.tagging_pipeline_service import (
+    TaggingPipelineService,
+    get_tagging_pipeline_service,
 )
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/smart-tag", tags=["smart-tag"])
 SMART_TAG_MAX_EXPLICIT_SOURCES = 5_000_000
+
+
+def get_legacy_tagging_service_for_smart_tag():
+    from routers.tags import get_tagging_service
+
+    return get_tagging_service()
 
 
 class SmartTagStartRequest(BaseModel):
@@ -70,10 +77,17 @@ class SmartTagStartRequest(BaseModel):
 
 
 @router.post("/start")
-def start(request: SmartTagStartRequest) -> Dict[str, Any]:
+def start(
+    request: SmartTagStartRequest,
+    pipeline: TaggingPipelineService = Depends(get_tagging_pipeline_service),
+    legacy_service: Any = Depends(get_legacy_tagging_service_for_smart_tag),
+) -> Dict[str, Any]:
     payload = request.model_dump()
     try:
-        snapshot = start_smart_tag_job(payload)
+        snapshot = pipeline.start_smart_tagging(
+            payload,
+            legacy_service=legacy_service,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -88,19 +102,17 @@ def start(request: SmartTagStartRequest) -> Dict[str, Any]:
 
 
 @router.get("/progress")
-def progress(job_id: Optional[str] = None) -> Dict[str, Any]:
+def progress(
+    job_id: Optional[str] = None,
+    pipeline: TaggingPipelineService = Depends(get_tagging_pipeline_service),
+) -> Dict[str, Any]:
     """Return the snapshot for either ``job_id`` or the active job.
 
     If neither matches we return ``{"status": "idle"}`` so the frontend
     can treat the response as the canonical "no run is active" signal
     without a 404 round-trip.
     """
-    job = get_job(job_id) if job_id else get_active_job()
-    if job is None:
-        return {"status": "idle", "active": False}
-    snapshot = job.snapshot()
-    snapshot["active"] = job.status in ("queued", "running")
-    return snapshot
+    return pipeline.get_smart_tag_progress(job_id)
 
 
 @router.get("/results")
@@ -117,8 +129,7 @@ def results(
 
 
 @router.post("/cancel")
-def cancel() -> Dict[str, Any]:
-    job = cancel_active_job()
-    if job is None:
-        raise HTTPException(status_code=404, detail="No active Smart Tag job to cancel.")
-    return {"job_id": job.job_id, "status": job.status, "cancel_requested": True}
+def cancel(
+    pipeline: TaggingPipelineService = Depends(get_tagging_pipeline_service),
+) -> Dict[str, Any]:
+    return pipeline.cancel_smart_tagging()

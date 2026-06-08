@@ -19,6 +19,10 @@ from services.tagging_service import (
     CombinedTagExportRequest,
     ExportPreviewRequest,
 )
+from services.tagging_pipeline_service import (
+    TaggingPipelineService,
+    get_tagging_pipeline_service,
+)
 from services.tag_export_service import combined_export_path
 
 
@@ -247,9 +251,10 @@ async def start_tagging(
     request: TagRequest,
     background_tasks: BackgroundTasks,
     service: TaggingService = Depends(get_tagging_service),
+    pipeline: TaggingPipelineService = Depends(get_tagging_pipeline_service),
 ):
     """Start tagging images with WD14 tagger."""
-    return service.start_tagging(request, background_tasks)
+    return pipeline.start_gallery_tagging(request, background_tasks, legacy_service=service)
 
 
 @router.get("/tagger/models")
@@ -263,17 +268,19 @@ async def get_tagger_models(
 @router.get("/tag/progress")
 async def get_tag_progress(
     service: TaggingService = Depends(get_tagging_service),
+    pipeline: TaggingPipelineService = Depends(get_tagging_pipeline_service),
 ):
     """Get current tagging progress."""
-    return service.get_progress()
+    return pipeline.get_gallery_progress(legacy_service=service)
 
 
 @router.post("/tag/cancel")
 async def cancel_tagging(
     service: TaggingService = Depends(get_tagging_service),
+    pipeline: TaggingPipelineService = Depends(get_tagging_pipeline_service),
 ):
     """Request cancellation of the current tagging task."""
-    return service.cancel_tagging()
+    return pipeline.cancel_gallery_tagging(legacy_service=service)
 
 
 @router.post("/tag/reset")
