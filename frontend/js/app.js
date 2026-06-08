@@ -4819,7 +4819,7 @@ async function sendSelectionToDatasetMaker() {
         const resolvedIds = typeof window.DatasetMaker._resolveGallerySelectionIds === 'function'
             ? await window.DatasetMaker._resolveGallerySelectionIds()
             : ids;
-        await window.DatasetMaker.addImageIds(resolvedIds, { switchView: true, showToast: true });
+        await addToDatasetMaker(resolvedIds, { switchView: true, showToast: true });
         // FLOW-08: clear the gallery selection after the handoff so it does not
         // linger stale when the user returns to the Gallery tab.
         clearGallerySelectionAfterBulkAction();
@@ -4831,6 +4831,27 @@ async function sendSelectionToDatasetMaker() {
             'error'
         );
     }
+}
+
+async function addToDatasetMaker(imageIds = [], options = {}) {
+    const ids = normalizeSelectionImageIds(imageIds);
+    if (ids.length === 0) {
+        showToast(appT('selection.emptyHint', 'Select images, or choose all current filter matches.'), 'info');
+        return false;
+    }
+    if (!window.DatasetMaker || typeof window.DatasetMaker.addImageIds !== 'function') {
+        showToast(
+            appT('selection.sendToDatasetMakerUnavailable',
+                 'Dataset Maker module not loaded yet — try again in a moment.'),
+            'error'
+        );
+        return false;
+    }
+    await window.DatasetMaker.addImageIds(ids, {
+        switchView: options.switchView !== false,
+        showToast: options.showToast !== false,
+    });
+    return true;
 }
 
 function updateNavigationOverflowState() {
@@ -12511,6 +12532,7 @@ function buildAppContext() {
         hidePipelineNextStep,
         addToCensorQueue,
         sendToCensor: addToCensorQueue,
+        addToDatasetMaker,
         openPromptBuildFromImage,
         openReaderFromImage,
         openSimilarFromImage,

@@ -1131,8 +1131,8 @@ const SimilarImages = {
     // leaving for the Gallery. These reuse the same handoff targets the gallery
     // context menu / preview modal use.
     _addToDataset(id) {
-        if (window.DatasetMaker?.addImageIds) {
-            window.DatasetMaker.addImageIds([id], { switchView: true, showToast: true });
+        if (typeof window.App?.addToDatasetMaker === 'function') {
+            window.App.addToDatasetMaker([id], { switchView: true, showToast: true });
         } else {
             window.App?.showToast?.(this._t('selection.sendToDatasetMakerUnavailable', 'Dataset Maker module not loaded yet — try again in a moment.'), 'error');
         }

@@ -395,9 +395,9 @@ const Gallery = {
                 closeModal();
                 break;
             case 'dataset':
-                if (window.DatasetMaker?.addImageIds) {
-                    window.DatasetMaker.addImageIds([id], { switchView: true, showToast: true });
-                    closeModal();
+                if (typeof app.addToDatasetMaker === 'function') {
+                    app.addToDatasetMaker([id], { switchView: true, showToast: true })
+                        .then((ok) => { if (ok) closeModal(); });
                 } else {
                     app.showToast?.(app.appT?.('selection.sendToDatasetMakerUnavailable', 'Dataset Maker module not loaded yet — try again in a moment.') || 'Dataset Maker not loaded yet', 'error');
                 }
@@ -3847,6 +3847,7 @@ ${String(value)}`)
                     app.showToast?.(t('gallery.contextSendToCensorFailed', 'Failed to send image to Edit'), 'error');
                 }
             }},
+            { label: labelWithScope('modal.addToDataset', 'Add to dataset'), icon: '\u{1F4E6}', action: () => app.addToDatasetMaker?.(actionImageIds, { switchView: true, showToast: true }) },
             { label: t('gallery.contextFindSimilar', 'Find Similar'), icon: '\u{1F50E}', action: () => app.openSimilarFromImage?.(image.id) },
             { label: t('gallery.contextNearDuplicates', 'Find near-duplicates (CLIP)'), icon: '\u{1F46F}', action: () => window.ClipTools?.near?.(image.id) },
             actionCount === 2
