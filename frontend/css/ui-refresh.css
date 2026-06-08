@@ -3100,6 +3100,76 @@ textarea:focus,
     min-height: 500px;
 }
 
+.promptlab-admin-panel {
+    margin-top: 12px;
+}
+
+.promptlab-admin-body,
+.promptlab-admin-section,
+.promptlab-resource-list {
+    display: grid;
+    gap: 10px;
+}
+
+.promptlab-admin-section h5 {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.promptlab-admin-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+}
+
+.promptlab-admin-form .btn {
+    justify-content: center;
+}
+
+.promptlab-resource-item,
+.promptlab-resource-empty {
+    min-width: 0;
+    padding: 9px 10px;
+    border: 1px solid rgba(191, 219, 254, 0.08);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.promptlab-resource-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.promptlab-resource-main {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.promptlab-resource-title,
+.promptlab-resource-meta {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.promptlab-resource-title {
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.promptlab-resource-meta,
+.promptlab-resource-empty {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
 .artist-main {
     grid-template-columns: minmax(260px, 300px) minmax(0, 1fr) minmax(280px, 340px);
 }

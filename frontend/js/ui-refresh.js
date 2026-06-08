@@ -272,6 +272,12 @@
             this._setText('#view-promptlab .tagset-selector label', 'promptlab.tagSet');
             this._setOptionText('#promptlab-set-select', { '': 'promptlab.selectTagSet' });
             this._setButton('#btn-promptlab-apply-tagset', 'promptlab.applyTagSet');
+            this._setText('#view-promptlab .promptlab-admin-panel .guided-advanced-summary > span:first-child', 'promptlab.manageData');
+            this._setText('#view-promptlab .promptlab-admin-panel .guided-advanced-hint', 'promptlab.manageDataHint');
+            this._setTextAll('#view-promptlab .promptlab-admin-section h5', ['promptlab.recategorizeTitle', 'promptlab.customTagSets', 'promptlab.customExclusions']);
+            this._setPlaceholder('#promptlab-recat-tag', 'promptlab.recategorizeTagPlaceholder');
+            this._setPlaceholder('#promptlab-recat-category', 'promptlab.recategorizeCategoryPlaceholder');
+            this._setButton('#btn-promptlab-recategorize', 'common.save');
             this._setText('#view-promptlab .promptlab-builder-header h4', 'promptlab.slots');
             this._setButton('#btn-promptlab-random', 'promptlab.randomize', '🎲', 'promptlab.randomize');
             this._setButton('#btn-promptlab-clear', 'promptlab.clear', '🗑️', 'promptlab.clear');

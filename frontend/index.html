@@ -2593,6 +2593,31 @@
                                     <h4 data-i18n="promptlab.categories">Tag Categories</h4>
                                     <input type="text" class="input" id="promptlab-search" placeholder="Search tags..." data-i18n-placeholder="promptlab.searchTags">
                                 </div>
+                                <details class="guided-advanced-panel promptlab-admin-panel">
+                                    <summary class="guided-advanced-summary">
+                                        <span data-i18n="promptlab.manageData">Prompt data tools</span>
+                                        <span class="guided-advanced-hint" data-i18n="promptlab.manageDataHint">Custom sets, exclusions, categories</span>
+                                    </summary>
+                                    <div class="guided-advanced-body promptlab-admin-body">
+                                        <section class="promptlab-admin-section">
+                                            <h5 data-i18n="promptlab.recategorizeTitle">Move tag category</h5>
+                                            <div class="promptlab-admin-form">
+                                                <input class="input-field" id="promptlab-recat-tag" type="text" data-i18n-placeholder="promptlab.recategorizeTagPlaceholder" placeholder="tag_name">
+                                                <input class="input-field" id="promptlab-recat-category" type="text" list="promptlab-category-options" data-i18n-placeholder="promptlab.recategorizeCategoryPlaceholder" placeholder="category">
+                                                <datalist id="promptlab-category-options"></datalist>
+                                                <button class="btn btn-small btn-secondary" id="btn-promptlab-recategorize" type="button" data-i18n="common.save">Save</button>
+                                            </div>
+                                        </section>
+                                        <section class="promptlab-admin-section">
+                                            <h5 data-i18n="promptlab.customTagSets">Custom tag sets</h5>
+                                            <div class="promptlab-resource-list" id="promptlab-custom-set-list"></div>
+                                        </section>
+                                        <section class="promptlab-admin-section">
+                                            <h5 data-i18n="promptlab.customExclusions">Custom exclusions</h5>
+                                            <div class="promptlab-resource-list" id="promptlab-exclusion-list"></div>
+                                        </section>
+                                    </div>
+                                </details>
                                 <div class="promptlab-browser-body" id="promptlab-categories">
                                     <div class="empty-state" data-i18n="promptlab.loadingCategories">Loading categories...</div>
                                 </div>

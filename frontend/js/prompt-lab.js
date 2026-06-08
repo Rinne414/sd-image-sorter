@@ -65,6 +65,7 @@ const PromptLab = {
             await this.loadPresets();
             await this._ensureImageCatalog().catch(() => null);
             this.renderTagSetOptions();
+            this.renderPromptDataTools();
             this.renderCategoryBrowser();
             this.renderSlotBuilder();
             this.renderPresetList();
@@ -401,12 +402,21 @@ const PromptLab = {
         const applyTagSet = document.getElementById('btn-promptlab-apply-tagset');
         const prependInput = document.getElementById('promptlab-prepend');
         const appendInput = document.getElementById('promptlab-append');
+        const recatTagInput = document.getElementById('promptlab-recat-tag');
+        const recatCategoryInput = document.getElementById('promptlab-recat-category');
+        const recatButton = document.getElementById('btn-promptlab-recategorize');
 
         if (searchInput) searchInput.disabled = !isReady;
         if (tagSetSelect) tagSetSelect.disabled = !isReady;
         if (applyTagSet) applyTagSet.disabled = !isReady;
         if (prependInput) prependInput.disabled = !isReady;
         if (appendInput) appendInput.disabled = !isReady;
+        if (recatTagInput) recatTagInput.disabled = !isReady;
+        if (recatCategoryInput) recatCategoryInput.disabled = !isReady;
+        if (recatButton) recatButton.disabled = !isReady;
+        document.querySelectorAll('.btn-promptlab-delete-set, .btn-promptlab-delete-exclusion').forEach((button) => {
+            button.disabled = !isReady;
+        });
         this.updateActionState();
     },
 
@@ -725,6 +735,80 @@ const PromptLab = {
         ];
 
         selector.innerHTML = options.join('');
+    },
+
+    _isUserPromptResource(item, builtinPrefix) {
+        const id = String(item?.id ?? '').trim();
+        return Boolean(id) && !id.startsWith(builtinPrefix);
+    },
+
+    _renderResourceEmpty(key, fallback) {
+        return `<div class="promptlab-resource-empty">${this._escapeValue(this._t(key, fallback))}</div>`;
+    },
+
+    _renderResourceItem(item, actionClass) {
+        const safeId = this._safeDataValue(item.id);
+        const safeName = this._escapeValue(item.name || item.rule_name || item.id);
+        const safeMeta = this._escapeValue(this._formatPromptResourceMeta(item));
+        return `
+            <div class="promptlab-resource-item">
+                <div class="promptlab-resource-main">
+                    <span class="promptlab-resource-title">${safeName}</span>
+                    ${safeMeta ? `<span class="promptlab-resource-meta">${safeMeta}</span>` : ''}
+                </div>
+                <button class="btn btn-small btn-ghost ${actionClass}" type="button" data-id="${safeId}" title="${this._escapeValue(this._t('common.delete', 'Delete'))}" aria-label="${this._escapeValue(this._t('common.delete', 'Delete'))}">🗑️</button>
+            </div>
+        `;
+    },
+
+    _formatPromptResourceMeta(item) {
+        if (!item) return '';
+        if (Array.isArray(item.members) || Array.isArray(item.tags)) {
+            const count = item.tag_count ?? (item.members || item.tags || []).length;
+            const parts = [];
+            if (item.category) parts.push(item.category);
+            parts.push(this._t('promptlab.tagCount', '{count} tags', { count }).replace('{count}', count));
+            return parts.join(' · ');
+        }
+
+        const conditions = (item.conditions || [])
+            .map((condition) => condition.tag || condition.condition_tag || '')
+            .filter(Boolean);
+        const targets = (item.targets || [])
+            .map((target) => target.tag || target.excluded_tag || target.category || target.excluded_category || '')
+            .filter(Boolean);
+        if (!conditions.length && !targets.length) {
+            return item.description || '';
+        }
+        return `${conditions.join(', ') || '*'} → ${targets.join(', ') || '*'}`;
+    },
+
+    renderPromptDataTools() {
+        const categoryOptions = document.getElementById('promptlab-category-options');
+        if (categoryOptions) {
+            const categories = Object.keys(this.categories || {}).sort((a, b) => a.localeCompare(b));
+            categoryOptions.innerHTML = categories
+                .map((category) => `<option value="${this._escapeValue(category)}"></option>`)
+                .join('');
+        }
+
+        const setList = document.getElementById('promptlab-custom-set-list');
+        if (setList) {
+            const userSets = this.tagSets.filter((set) => this._isUserPromptResource(set, 'builtin-tag-set'));
+            setList.innerHTML = userSets.length
+                ? userSets.map((set) => this._renderResourceItem(set, 'btn-promptlab-delete-set')).join('')
+                : this._renderResourceEmpty('promptlab.noCustomTagSets', 'No custom tag sets yet.');
+        }
+
+        const exclusionList = document.getElementById('promptlab-exclusion-list');
+        if (exclusionList) {
+            const userRules = this.exclusionRules.filter((rule) => this._isUserPromptResource(rule, 'builtin-exclusion'));
+            exclusionList.innerHTML = userRules.length
+                ? userRules.map((rule) => this._renderResourceItem(rule, 'btn-promptlab-delete-exclusion')).join('')
+                : this._renderResourceEmpty('promptlab.noCustomExclusions', 'No custom exclusions yet.');
+        }
+
+        this.setReadyState(this.isReady);
     },
 
     renderOutput() {
@@ -1084,6 +1168,101 @@ const PromptLab = {
         );
     },
 
+    async recategorizeTag() {
+        const tagInput = document.getElementById('promptlab-recat-tag');
+        const categoryInput = document.getElementById('promptlab-recat-category');
+        const tag = String(tagInput?.value || '').trim();
+        const category = String(categoryInput?.value || '').trim();
+
+        if (!tag || !category) {
+            window.App.showToast(
+                this._t('promptlab.recategorizeMissing', 'Enter both a tag and a category.'),
+                'warning'
+            );
+            return;
+        }
+
+        try {
+            await window.App.API.post(`/api/prompts/recategorize?tag=${encodeURIComponent(tag)}&category=${encodeURIComponent(category)}`, {});
+            Object.keys(this.slots).forEach((slotCategory) => {
+                const tags = this.slots[slotCategory] || [];
+                if (!tags.includes(tag)) return;
+                this.slots[slotCategory] = tags.filter((slotTag) => slotTag !== tag);
+                if (!this.slots[category]) this.slots[category] = [];
+                if (!this.slots[category].includes(tag)) this.slots[category] = [...this.slots[category], tag];
+            });
+            await this.loadCategories();
+            await this.loadTagSets();
+            this.renderTagSetOptions();
+            this.renderPromptDataTools();
+            this.renderCategoryBrowser();
+            this.renderSlotBuilder();
+            window.App.showToast(
+                this._t('promptlab.recategorized', 'Moved "{tag}" to "{category}".', { tag, category }),
+                'success'
+            );
+        } catch (e) {
+            window.App.showToast(
+                formatUserError(e, this._t('promptlab.recategorizeFailed', 'Failed to move tag category')),
+                'error'
+            );
+        }
+    },
+
+    deleteTagSet(setId) {
+        const set = this.tagSets.find((item) => String(item.id) === String(setId));
+        if (!set || !this._isUserPromptResource(set, 'builtin-tag-set')) return;
+
+        window.App.showConfirm(
+            this._t('promptlab.deleteTagSetTitle', 'Delete custom tag set?'),
+            this._t('promptlab.deleteTagSetMessage', 'Delete "{name}"? This cannot be undone.', { name: set.name }),
+            async () => {
+                try {
+                    await window.App.API.delete(`/api/prompts/sets/${encodeURIComponent(setId)}`);
+                    await this.loadTagSets();
+                    this.renderTagSetOptions();
+                    this.renderPromptDataTools();
+                    window.App.showToast(
+                        this._t('promptlab.tagSetDeleted', 'Tag set deleted'),
+                        'info'
+                    );
+                } catch (e) {
+                    window.App.showToast(
+                        formatUserError(e, this._t('promptlab.tagSetDeleteFailed', 'Failed to delete tag set')),
+                        'error'
+                    );
+                }
+            }
+        );
+    },
+
+    deleteExclusionRule(ruleId) {
+        const rule = this.exclusionRules.find((item) => String(item.id) === String(ruleId));
+        if (!rule || !this._isUserPromptResource(rule, 'builtin-exclusion')) return;
+
+        window.App.showConfirm(
+            this._t('promptlab.deleteExclusionTitle', 'Delete custom exclusion?'),
+            this._t('promptlab.deleteExclusionMessage', 'Delete "{name}"? This cannot be undone.', { name: rule.name }),
+            async () => {
+                try {
+                    await window.App.API.delete(`/api/prompts/exclusions/${encodeURIComponent(ruleId)}`);
+                    await this.loadExclusionRules();
+                    this.renderPromptDataTools();
+                    this.renderOutput();
+                    window.App.showToast(
+                        this._t('promptlab.exclusionDeleted', 'Exclusion deleted'),
+                        'info'
+                    );
+                } catch (e) {
+                    window.App.showToast(
+                        formatUserError(e, this._t('promptlab.exclusionDeleteFailed', 'Failed to delete exclusion')),
+                        'error'
+                    );
+                }
+            }
+        );
+    },
+
     // ============== Copy ==============
 
     // Prompt Lab -> Gallery round-trip: take the composed/active prompt and use
@@ -1170,6 +1349,17 @@ const PromptLab = {
         btnCopy?.addEventListener('click', () => this.copyPrompt());
         btnClear?.addEventListener('click', () => this.clearAll());
         btnSavePreset?.addEventListener('click', () => this.savePreset());
+        document.getElementById('btn-promptlab-recategorize')?.addEventListener('click', () => this.recategorizeTag());
+        document.getElementById('promptlab-custom-set-list')?.addEventListener('click', (event) => {
+            const button = event.target.closest('.btn-promptlab-delete-set');
+            if (!button) return;
+            this.deleteTagSet(this._decodeDataValue(button.dataset.id));
+        });
+        document.getElementById('promptlab-exclusion-list')?.addEventListener('click', (event) => {
+            const button = event.target.closest('.btn-promptlab-delete-exclusion');
+            if (!button) return;
+            this.deleteExclusionRule(this._decodeDataValue(button.dataset.id));
+        });
         outputEl?.addEventListener('input', (event) => {
             this.generatedPrompt = event.target.value;
             this.generatedPromptCore = this._stripAffixesFromPrompt(event.target.value);
