@@ -7331,3 +7331,95 @@ html.lang-zh #view-censor .queue-action-btn span {
     padding: 4px 10px 8px;
     text-transform: uppercase;
 }
+
+/* ============================================================
+   v3.3.3 WS1 — "Tools ▾" nav dropdown
+   Demotes Prompt Helper + Style Finder out of the main bar so the six
+   core pipeline tabs keep their labels on 1366px laptops. The toggle
+   mirrors .nav-tab styling; the menu is a glass popover.
+   ============================================================ */
+.nav-tools {
+    position: relative;
+    display: inline-flex;
+    align-items: stretch;
+    flex-shrink: 0;
+}
+
+.nav-tools-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    white-space: nowrap;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(184, 215, 233, 0.08);
+    border-radius: var(--radius-xl);
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-normal);
+}
+.nav-tools-toggle:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+}
+.nav-tools-toggle.active,
+.nav-tools-toggle.menu-open {
+    background: rgba(124, 139, 255, 0.14);
+    border-color: var(--border-color);
+    color: #ffd7b5;
+    box-shadow: inset 0 0 0 1px rgba(124, 139, 255, 0.12);
+}
+.nav-tools-caret {
+    font-size: 10px;
+    opacity: 0.7;
+    transition: transform var(--transition-normal);
+}
+.nav-tools-toggle.menu-open .nav-tools-caret {
+    transform: rotate(180deg);
+}
+
+.nav-tools-menu {
+    /* position: fixed (not absolute) so the dropdown escapes the .nav-tabs
+       overflow-x:auto scroll container, which would otherwise clip it
+       vertically. Top/right are set inline by setupNavToolsMenu() from the
+       toggle's bounding rect. */
+    position: fixed;
+    z-index: 250;
+    min-width: 210px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px;
+    border-radius: 14px;
+    background: var(--glass-bg-strong, rgba(18, 20, 38, 0.94));
+    backdrop-filter: blur(22px) saturate(140%);
+    -webkit-backdrop-filter: blur(22px) saturate(140%);
+    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12));
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+    animation: navToolsMenuIn 140ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.nav-tools-menu[hidden] {
+    display: none;
+}
+@keyframes navToolsMenuIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Menu items reuse .nav-tab styling but render full-width, left-aligned. */
+.nav-tools-item {
+    width: 100%;
+    justify-content: flex-start;
+    border-radius: 10px;
+}
+.nav-tools-badge {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 8px;
+    background: rgba(255, 184, 92, 0.16);
+    color: #ffce8a;
+}

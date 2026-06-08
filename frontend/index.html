@@ -123,6 +123,13 @@
                 <span class="hamburger-line" aria-hidden="true"></span>
             </button>
 
+                <!-- v3.3.3 WS1: tabs reordered to read as the actual pipeline
+                     (view -> sort -> censor -> similar -> dataset); experimental/
+                     power tools (Prompt Helper, Style Finder) sit after the
+                     divider. switchView + the .nav-tab click binding are both
+                     order-agnostic (keyed on data-view), so this is a pure
+                     reorder. Glyphs disambiguated: Sort 🗂️ (was 📁), Similar 🔎
+                     (was 🔍), Style Finder 🖌️ (was 🎨 = the brand logo). -->
                 <div class="nav-tabs" role="tablist" aria-label="Application views">
                     <button class="nav-tab active" id="nav-tab-gallery" data-view="gallery" role="tab" aria-selected="true" aria-controls="view-gallery"
                             data-i18n-title="nav.gallery" title="Gallery">
@@ -130,14 +137,24 @@
                         <span class="tab-text" data-i18n="nav.gallery">Gallery</span>
                     </button>
                     <button class="nav-tab" id="nav-tab-reader" data-view="reader" role="tab" aria-selected="false" aria-controls="view-reader"
-                            data-i18n-title="nav.reader" title="Reader">
+                            data-i18n-title="nav.reader" title="Read Image">
                         <span class="tab-icon" aria-hidden="true">📖</span>
-                        <span class="tab-text" data-i18n="nav.reader">Reader</span>
+                        <span class="tab-text" data-i18n="nav.reader">Read Image</span>
+                    </button>
+                    <button class="nav-tab" id="nav-tab-sorting" data-view="sorting" role="tab" aria-selected="false" aria-controls="view-sorting"
+                            data-i18n-title="nav.sorting" title="Organize">
+                        <span class="tab-icon" aria-hidden="true">🗂️</span>
+                        <span class="tab-text" data-i18n="nav.sorting">Organize</span>
                     </button>
                     <button class="nav-tab" id="nav-tab-censor" data-view="censor" role="tab" aria-selected="false" aria-controls="view-censor"
-                            data-i18n-title="nav.censor" title="Edit">
+                            data-i18n-title="nav.censor" title="Censor Edit">
                         <span class="tab-icon" aria-hidden="true">🔳</span>
-                        <span class="tab-text" data-i18n="nav.censor">Edit</span>
+                        <span class="tab-text" data-i18n="nav.censor">Censor Edit</span>
+                    </button>
+                    <button class="nav-tab" id="nav-tab-similar" data-view="similar" role="tab" aria-selected="false" aria-controls="view-similar"
+                            data-i18n-title="nav.similar" title="Find Similar">
+                        <span class="tab-icon" aria-hidden="true">🔎</span>
+                        <span class="tab-text" data-i18n="nav.similar">Find Similar</span>
                     </button>
                     <button class="nav-tab" id="nav-tab-dataset" data-view="dataset" role="tab" aria-selected="false" aria-controls="view-dataset"
                             data-i18n-title="nav.dataset" title="Dataset">
@@ -145,26 +162,34 @@
                         <span class="tab-text" data-i18n="nav.dataset">Dataset</span>
                     </button>
                     <span class="nav-divider" aria-hidden="true"></span>
-                    <button class="nav-tab" id="nav-tab-similar" data-view="similar" role="tab" aria-selected="false" aria-controls="view-similar"
-                            data-i18n-title="nav.similar" title="Similar">
-                        <span class="tab-icon" aria-hidden="true">🔍</span>
-                        <span class="tab-text" data-i18n="nav.similar">Similar</span>
-                    </button>
-                    <button class="nav-tab" id="nav-tab-artist" data-view="artist" role="tab" aria-selected="false" aria-controls="view-artist"
-                            data-i18n-title="nav.artist" title="Artist ID">
-                        <span class="tab-icon" aria-hidden="true">🎨</span>
-                        <span class="tab-text" data-i18n="nav.artist">Artist ID</span>
-                    </button>
-                    <button class="nav-tab" id="nav-tab-promptlab" data-view="promptlab" role="tab" aria-selected="false" aria-controls="view-promptlab"
-                            data-i18n-title="nav.promptlab" title="Prompt Lab">
-                        <span class="tab-icon" aria-hidden="true">🧪</span>
-                        <span class="tab-text" data-i18n="nav.promptlab">Prompt Lab</span>
-                    </button>
-                    <button class="nav-tab" id="nav-tab-sorting" data-view="sorting" role="tab" aria-selected="false" aria-controls="view-sorting"
-                            data-i18n-title="nav.sorting" title="Sorting">
-                        <span class="tab-icon" aria-hidden="true">📁</span>
-                        <span class="tab-text" data-i18n="nav.sorting">Sorting</span>
-                    </button>
+                    <!-- v3.3.3 WS1: Tools dropdown demotes the power/experimental tools
+                         (Prompt Helper + Style Finder) out of the main bar so the 6 core
+                         pipeline tabs keep their labels at 1366px (no icon-only collapse).
+                         Items stay .nav-tab so switchView + the click binding work
+                         unchanged; the toggle reflects .active when a tool view is open
+                         (see updateNavToolsActive). -->
+                    <div class="nav-tools" id="nav-tools">
+                        <button class="nav-tools-toggle" id="nav-tools-toggle" type="button"
+                                aria-haspopup="true" aria-expanded="false" aria-controls="nav-tools-menu"
+                                data-i18n-title="nav.moreTools" title="More Tools">
+                            <span class="tab-icon" aria-hidden="true">🧰</span>
+                            <span class="tab-text" data-i18n="nav.tools">Tools</span>
+                            <span class="nav-tools-caret" aria-hidden="true">▾</span>
+                        </button>
+                        <div class="nav-tools-menu" id="nav-tools-menu" aria-label="More tools" hidden>
+                            <button class="nav-tab nav-tools-item" id="nav-tab-promptlab" data-view="promptlab" role="tab" aria-selected="false" aria-controls="view-promptlab"
+                                    data-i18n-title="nav.promptlab" title="Prompt Helper">
+                                <span class="tab-icon" aria-hidden="true">🧪</span>
+                                <span class="tab-text" data-i18n="nav.promptlab">Prompt Helper</span>
+                            </button>
+                            <button class="nav-tab nav-tools-item" id="nav-tab-artist" data-view="artist" role="tab" aria-selected="false" aria-controls="view-artist"
+                                    data-i18n-title="nav.artist" title="Style Finder">
+                                <span class="tab-icon" aria-hidden="true">🖌️</span>
+                                <span class="tab-text" data-i18n="nav.artist">Style Finder</span>
+                                <span class="nav-tools-badge" data-i18n="nav.experimental">Experimental</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
             <!-- Mobile Navigation Menu (Overlay) -->
@@ -176,39 +201,42 @@
                             <span aria-hidden="true">✕</span>
                         </button>
                     </div>
+                    <!-- v3.3.3 WS1: mirror the desktop pipeline order so the two
+                         IA definitions never drift. Core pipeline first, then a
+                         "More Tools" group for Prompt Helper + Style Finder. -->
                     <div class="mobile-nav-tabs" role="navigation" aria-label="Mobile navigation">
                         <button class="mobile-nav-item active" data-view="gallery" aria-label="Gallery view">
                             <span class="mobile-nav-icon" aria-hidden="true">🖼️</span>
                             <span class="mobile-nav-text" data-i18n="nav.gallery">Gallery</span>
                         </button>
-                        <button class="mobile-nav-item" data-view="reader" aria-label="Reader view">
+                        <button class="mobile-nav-item" data-view="reader" aria-label="Read Image view">
                             <span class="mobile-nav-icon" aria-hidden="true">📖</span>
-                            <span class="mobile-nav-text" data-i18n="nav.reader">Reader</span>
+                            <span class="mobile-nav-text" data-i18n="nav.reader">Read Image</span>
                         </button>
-                        <button class="mobile-nav-item" data-view="censor" aria-label="Censored Edit view">
+                        <button class="mobile-nav-item" data-view="sorting" aria-label="Organize view">
+                            <span class="mobile-nav-icon" aria-hidden="true">🗂️</span>
+                            <span class="mobile-nav-text" data-i18n="nav.sorting">Organize</span>
+                        </button>
+                        <button class="mobile-nav-item" data-view="censor" aria-label="Censor Edit view">
                             <span class="mobile-nav-icon" aria-hidden="true">🔳</span>
-                            <span class="mobile-nav-text" data-i18n="nav.censor">Edit</span>
+                            <span class="mobile-nav-text" data-i18n="nav.censor">Censor Edit</span>
+                        </button>
+                        <button class="mobile-nav-item" data-view="similar" aria-label="Find Similar view">
+                            <span class="mobile-nav-icon" aria-hidden="true">🔎</span>
+                            <span class="mobile-nav-text" data-i18n="nav.similar">Find Similar</span>
                         </button>
                         <button class="mobile-nav-item" data-view="dataset" aria-label="Dataset Maker view">
                             <span class="mobile-nav-icon" aria-hidden="true">📦</span>
                             <span class="mobile-nav-text" data-i18n="nav.dataset">Dataset</span>
                         </button>
                         <div class="mobile-nav-group-label" data-i18n="nav.moreTools">More Tools</div>
-                        <button class="mobile-nav-item" data-view="similar" aria-label="Similar Images view">
-                            <span class="mobile-nav-icon" aria-hidden="true">🔍</span>
-                            <span class="mobile-nav-text" data-i18n="nav.similar">Similar</span>
-                        </button>
-                        <button class="mobile-nav-item" data-view="artist" aria-label="Artist ID view">
-                            <span class="mobile-nav-icon" aria-hidden="true">🎨</span>
-                            <span class="mobile-nav-text" data-i18n="nav.artist">Artist ID</span>
-                        </button>
-                        <button class="mobile-nav-item" data-view="promptlab" aria-label="Prompt Lab view">
+                        <button class="mobile-nav-item" data-view="promptlab" aria-label="Prompt Helper view">
                             <span class="mobile-nav-icon" aria-hidden="true">🧪</span>
-                            <span class="mobile-nav-text" data-i18n="nav.promptlab">Prompt Lab</span>
+                            <span class="mobile-nav-text" data-i18n="nav.promptlab">Prompt Helper</span>
                         </button>
-                        <button class="mobile-nav-item" data-view="sorting" aria-label="Sorting view">
-                            <span class="mobile-nav-icon" aria-hidden="true">📁</span>
-                            <span class="mobile-nav-text" data-i18n="nav.sorting">Sorting</span>
+                        <button class="mobile-nav-item" data-view="artist" aria-label="Style Finder view">
+                            <span class="mobile-nav-icon" aria-hidden="true">🖌️</span>
+                            <span class="mobile-nav-text" data-i18n="nav.artist">Style Finder</span>
                         </button>
                     </div>
                     <div class="mobile-nav-actions">

@@ -89,7 +89,9 @@ export class PromptLabPage {
    */
   async goto() {
     await this.page.goto('/')
-    await this.page.locator('[data-view="promptlab"]').click()
+    // v3.3.3: Prompt Lab now lives under the "Tools ▾" dropdown.
+    await this.page.locator('#nav-tools-toggle').click()
+    await this.page.locator('#nav-tools-menu [data-view="promptlab"]').click()
     await this.page.waitForLoadState('networkidle')
   }
 

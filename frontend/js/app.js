@@ -3917,6 +3917,10 @@ function switchView(viewName) {
         tab.classList.toggle('active', isActive);
         tab.setAttribute('aria-selected', String(isActive));
     });
+    // v3.3.3 WS1: mirror active state onto the Tools toggle (its menu items are
+    // hidden in the dropdown) and collapse the menu after a choice is made.
+    updateNavToolsActive(viewName);
+    window._closeNavToolsMenu?.();
 
     // Update mobile nav items
     $$('.mobile-nav-item').forEach(item => {
@@ -4631,6 +4635,63 @@ function updateNavigationOverflowState() {
     return true;
 }
 
+// v3.3.3 WS1: the "Tools ▾" dropdown holds Prompt Helper + Style Finder so the
+// six core pipeline tabs keep their labels on 1366px laptops. The menu items are
+// still ``.nav-tab`` buttons (so switchView + the click binding treat them like
+// any tab); this only wires the open/close toggle and outside-click/Escape close.
+function setupNavToolsMenu() {
+    const toggle = document.getElementById('nav-tools-toggle');
+    const menu = document.getElementById('nav-tools-menu');
+    if (!toggle || !menu) return;
+
+    const close = () => {
+        if (menu.hidden) return;
+        menu.hidden = true;
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.classList.remove('menu-open');
+    };
+    const open = () => {
+        menu.hidden = false;
+        // Position the fixed menu under the toggle, right-aligned to it.
+        const r = toggle.getBoundingClientRect();
+        menu.style.top = `${Math.round(r.bottom + 8)}px`;
+        menu.style.right = `${Math.round(window.innerWidth - r.right)}px`;
+        toggle.setAttribute('aria-expanded', 'true');
+        toggle.classList.add('menu-open');
+    };
+
+    toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (menu.hidden) open(); else close();
+    });
+    // Close on any outside click.
+    document.addEventListener('click', (e) => {
+        if (menu.hidden) return;
+        if (toggle.contains(e.target) || menu.contains(e.target)) return;
+        close();
+    });
+    // Close on Escape and return focus to the toggle.
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !menu.hidden) {
+            close();
+            toggle.focus();
+        }
+    });
+
+    // Exposed so switchView can collapse the menu after a tool is chosen.
+    window._closeNavToolsMenu = close;
+}
+
+// Reflect the active state onto the Tools toggle when a tool view is open, since
+// its menu items live inside a (usually closed) dropdown where the .active
+// highlight would otherwise be invisible.
+function updateNavToolsActive(viewName) {
+    const toggle = document.getElementById('nav-tools-toggle');
+    if (!toggle) return;
+    const TOOL_VIEWS = ['promptlab', 'artist'];
+    toggle.classList.toggle('active', TOOL_VIEWS.includes(viewName));
+}
+
 // ============== Event Listeners ==============
 
 function initEventListeners() {
@@ -4638,6 +4699,7 @@ function initEventListeners() {
     $$('.nav-tab').forEach(tab => {
         tab.addEventListener('click', () => switchView(tab.dataset.view));
     });
+    setupNavToolsMenu();
 
     // Scan button
     $('#btn-scan').addEventListener('click', () => showModal('scan-modal'));

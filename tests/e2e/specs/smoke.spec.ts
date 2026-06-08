@@ -488,6 +488,17 @@ async function mockArtistDiagnosticsReady(page) {
 }
 
 async function openView(page, view: string) {
+  // v3.3.3: Prompt Helper + Style Finder live under the "Tools ▾" dropdown.
+  const toolItem = page.locator(`#nav-tools-menu [data-view="${view}"]`)
+  if (await toolItem.count()) {
+    const toggle = page.locator('#nav-tools-toggle')
+    if (await toggle.isVisible().catch(() => false)) {
+      await toggle.click({ force: true })
+      await toolItem.click({ force: true })
+      return
+    }
+  }
+
   const desktopTab = page.locator(`.nav-tabs [data-view="${view}"]`).first()
   if (await desktopTab.count()) {
     const box = await desktopTab.boundingBox()
@@ -678,6 +689,13 @@ test.describe('Smoke Tests', () => {
         .filter(Boolean)
     )
     desktopViews.forEach((view) => availableViews.add(view))
+
+    // v3.3.3: Prompt Helper + Style Finder are reachable via the "Tools ▾"
+    // dropdown; collect their data-view from the menu (present even when closed).
+    const toolViews = await page.locator('#nav-tools-menu [data-view]').evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute('data-view') || '').filter(Boolean)
+    )
+    toolViews.forEach((view) => availableViews.add(view))
 
     const mobileToggle = page.locator('#mobile-menu-toggle')
     if (await mobileToggle.isVisible().catch(() => false)) {

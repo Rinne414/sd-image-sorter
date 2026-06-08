@@ -12,7 +12,8 @@ const OnboardingTour = (function() {
     const FIRST_RUN_CHECK_KEY = 'sd-image-sorter-has-seen-images';
 
     // Current tour version - increment when adding new features
-    const TOUR_VERSION = 1;
+    // v2 (v3.3.3): rewritten navigation step for the pipeline-ordered nav + Tools menu.
+    const TOUR_VERSION = 2;
 
     // Tour step definitions (bilingual)
     const TOUR_STEPS_EN = [
@@ -33,16 +34,16 @@ const OnboardingTour = (function() {
         {
             id: 'navigation-tabs',
             title: 'Navigation Tabs',
-            content: `<p>Switch between different views:</p>
+            content: `<p>The tabs read left-to-right as your workflow:</p>
                 <ul>
-                    <li><strong>Gallery</strong> - Browse and filter your images</li>
-                    <li><strong>Auto-Separate</strong> - Move images matching filters</li>
-                    <li><strong>Manual Sort</strong> - WASD keyboard sorting</li>
-                    <li><strong>Censored Edit</strong> - Canvas-based censoring</li>
-                    <li><strong>Similar</strong> - Find similar images</li>
-                    <li><strong>Prompt Lab</strong> - Analyze prompts</li>
-                    <li><strong>Artist ID</strong> - Identify artist styles</li>
-                </ul>`,
+                    <li><strong>Gallery</strong> - browse, filter and tag your images</li>
+                    <li><strong>Read Image</strong> - inspect full metadata + privacy tools</li>
+                    <li><strong>Organize</strong> - auto-separate by filter, or WASD manual sort</li>
+                    <li><strong>Censor Edit</strong> - canvas-based censoring</li>
+                    <li><strong>Find Similar</strong> - CLIP visual similarity &amp; duplicates</li>
+                    <li><strong>Dataset</strong> - build a LoRA training set (caption + export)</li>
+                </ul>
+                <p>More tools (Prompt Helper, Style Finder) live under the <strong>Tools ▾</strong> menu.</p>`,
             target: '.nav-tabs',
             position: 'bottom'
         },
@@ -99,16 +100,16 @@ const OnboardingTour = (function() {
         {
             id: 'navigation-tabs',
             title: '导航标签',
-            content: `<p>切换不同功能：</p>
+            content: `<p>标签从左到右就是你的工作流程：</p>
                 <ul>
-                    <li><strong>Gallery</strong> - 浏览和筛选图库</li>
-                    <li><strong>Auto-Separate</strong> - 按筛选批量移动</li>
-                    <li><strong>Manual Sort</strong> - WASD 键盘分拣</li>
-                    <li><strong>Edit</strong> - 打码编辑</li>
-                    <li><strong>Similar</strong> - 相似图搜索</li>
-                    <li><strong>Prompt Lab</strong> - 提示词工坊</li>
-                    <li><strong>Artist ID</strong> - 画师风格识别</li>
-                </ul>`,
+                    <li><strong>图片库</strong> - 浏览、筛选、打标</li>
+                    <li><strong>读图</strong> - 查看完整元数据 + 隐私工具</li>
+                    <li><strong>整理图片</strong> - 按筛选自动分类，或 WASD 手动分拣</li>
+                    <li><strong>打码编辑</strong> - 画布式打码</li>
+                    <li><strong>找相似</strong> - CLIP 视觉相似 &amp; 查重</li>
+                    <li><strong>数据集</strong> - 制作 LoRA 训练集（caption + 导出）</li>
+                </ul>
+                <p>更多工具（提示词助手、画风识别）在 <strong>工具 ▾</strong> 菜单里。</p>`,
             target: '.nav-tabs',
             position: 'bottom'
         },

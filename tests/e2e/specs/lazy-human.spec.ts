@@ -14,6 +14,18 @@ function isBenignConsoleError(text: string): boolean {
 }
 
 async function openView(page: Page, view: string) {
+  // v3.3.3: Prompt Helper + Style Finder live under the "Tools ▾" dropdown.
+  const toolItem = page.locator(`#nav-tools-menu [data-view="${view}"]`)
+  if (await toolItem.count()) {
+    const toggle = page.locator('#nav-tools-toggle')
+    if (await toggle.isVisible().catch(() => false)) {
+      await toggle.click()
+      await toolItem.click()
+      await expect(page.locator(`#view-${view}`)).toBeVisible({ timeout: 15000 })
+      return
+    }
+  }
+
   const desktopTab = page.locator(`.nav-tabs [data-view="${view}"]`)
   const mobileOverlay = page.locator('#mobile-nav-overlay')
   const mobileTab = page.locator(`#mobile-nav-overlay .mobile-nav-item[data-view="${view}"]`)

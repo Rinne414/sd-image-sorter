@@ -153,7 +153,9 @@ const onboardingStorageState = {
       localStorage: [
         {
           name: 'sd-image-sorter-onboarding-completed',
-          value: JSON.stringify({ version: 1, completed: true, completedAt: '2026-04-08T00:00:00.000Z' }),
+          // version must be >= onboarding.js TOUR_VERSION (2 since v3.3.3) so the
+          // tour stays suppressed in e2e; a stale version re-triggers the overlay.
+          value: JSON.stringify({ version: 2, completed: true, completedAt: '2026-04-08T00:00:00.000Z' }),
         },
       ],
     },

@@ -23,6 +23,7 @@ window.I18nLang_en = {
     'nav.experimental': 'Experimental',
     'nav.navigation': 'Navigation',
     'nav.moreTools': 'More Tools',
+    'nav.tools': 'Tools',
 
     // ========================
     // Brand / App Title

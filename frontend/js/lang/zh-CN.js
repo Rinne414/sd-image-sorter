@@ -25,6 +25,7 @@ window.I18nLang_zhCN = {
     'nav.experimental': '实验性',
     'nav.navigation': '导航',
     'nav.moreTools': '更多工具',
+    'nav.tools': '工具',
 
     // ========================
     // Brand / App Title
