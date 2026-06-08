@@ -75,8 +75,10 @@ const OnboardingTour = (function() {
         {
             id: 'complete',
             title: 'You\'re All Set!',
-            content: `<p>Start by scanning a folder, then explore the features.</p>
-                <p>Click anywhere outside this dialog to close it.</p>`,
+            content: `<p>The fastest way to start:</p>
+                <p><button type="button" class="btn btn-primary" data-onboarding-action="quickstart">🚀 Quick Start — choose a folder to scan</button></p>
+                <p class="helper-text">This opens the import dialog. After scanning, click <strong>🏷️ Tag</strong> to auto-tag with <strong>wd-swinv2</strong> — the balanced, recommended model, already selected for you.</p>
+                <p>Or click anywhere outside this dialog to explore on your own.</p>`,
             target: null,
             position: 'center'
         }
@@ -141,8 +143,10 @@ const OnboardingTour = (function() {
         {
             id: 'complete',
             title: '准备就绪！',
-            content: `<p>先扫描一个文件夹，然后探索各项功能吧。</p>
-                <p>点击对话框外任意位置可关闭本引导。</p>`,
+            content: `<p>最快的上手方式：</p>
+                <p><button type="button" class="btn btn-primary" data-onboarding-action="quickstart">🚀 快速开始 — 选择要扫描的文件夹</button></p>
+                <p class="helper-text">这会打开导入对话框。扫描完后点 <strong>🏷️ 打标</strong>，即可用 <strong>wd-swinv2</strong>（已为你选好的均衡推荐模型）自动打标。</p>
+                <p>或点击对话框外任意位置，自行探索。</p>`,
             target: null,
             position: 'center'
         }
@@ -383,6 +387,23 @@ const OnboardingTour = (function() {
 
         titleEl.textContent = step.title;
         contentEl.innerHTML = step.content;
+
+        // MODELS-01: the final step offers a "Quick Start" CTA that does the
+        // choosing for a new user — finish the tour and open the Import/Scan
+        // dialog so the only decision left is picking a folder. Tagging then
+        // defaults to the recommended wd-swinv2 model, so no model choice is
+        // forced on a beginner.
+        const quickStartBtn = contentEl.querySelector('[data-onboarding-action="quickstart"]');
+        if (quickStartBtn) {
+            quickStartBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                complete();
+                // Let the overlay tear down before opening the scan modal.
+                setTimeout(() => {
+                    document.getElementById('btn-scan')?.click();
+                }, 150);
+            });
+        }
 
         // Update buttons
         const backBtn = tooltipEl.querySelector('.onboarding-back');
