@@ -222,6 +222,7 @@ function createDefaultFilterState() {
         aspectRatio: '',
         minAesthetic: null,
         maxAesthetic: null,
+        minUserRating: null,
         brightnessMin: null,
         brightnessMax: null,
         colorTemperature: '',
@@ -263,6 +264,7 @@ function cloneFilterState(filters) {
         aspectRatio: normalizeAspectRatioFilter(source.aspectRatio),
         minAesthetic: source.minAesthetic ?? null,
         maxAesthetic: source.maxAesthetic ?? null,
+        minUserRating: source.minUserRating ?? null,
         brightnessMin: source.brightnessMin ?? null,
         brightnessMax: source.brightnessMax ?? null,
         colorTemperature: ['warm', 'neutral', 'cool'].includes(String(source.colorTemperature || '').trim())
@@ -345,6 +347,7 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
         aspectRatio: normalizeAspectRatioFilter(source.aspectRatio) || null,
         minAesthetic: source.minAesthetic ?? null,
         maxAesthetic: source.maxAesthetic ?? null,
+        minUserRating: source.minUserRating ?? null,
         brightnessMin: source.brightnessMin ?? null,
         brightnessMax: source.brightnessMax ?? null,
         colorTemperature: source.colorTemperature || null,
@@ -386,6 +389,7 @@ function buildAdvancedFilterContract(filters = AppState?.filters || createDefaul
         aspectRatio: request.aspectRatio || '',
         minAesthetic: request.minAesthetic ?? null,
         maxAesthetic: request.maxAesthetic ?? null,
+        minUserRating: request.minUserRating ?? null,
         brightnessMin: request.brightnessMin ?? null,
         brightnessMax: request.brightnessMax ?? null,
         colorTemperature: request.colorTemperature || '',
@@ -556,6 +560,7 @@ window.AppFilterAccess = {
         if (filters.aspectRatio) params.set('aspect_ratio', filters.aspectRatio);
         if (filters.minAesthetic) params.set('min_aesthetic', filters.minAesthetic);
         if (filters.maxAesthetic) params.set('max_aesthetic', filters.maxAesthetic);
+        if (filters.minUserRating) params.set('min_user_rating', filters.minUserRating);
         if (filters.brightnessMin) params.set('brightness_min', filters.brightnessMin);
         if (filters.brightnessMax) params.set('brightness_max', filters.brightnessMax);
         if (filters.colorTemperature) params.set('color_temperature', filters.colorTemperature);
@@ -741,6 +746,7 @@ function _galleryHasActiveFilter() {
     if (f.minHeight != null || f.maxHeight != null) return true;
     if (f.aspectRatio) return true;
     if (f.minAesthetic != null || f.maxAesthetic != null) return true;
+    if (f.minUserRating != null) return true;
     if (f.brightnessMin != null || f.brightnessMax != null) return true;
     if (f.colorTemperature) return true;
     if (f.brightnessDistribution) return true;
@@ -921,6 +927,7 @@ const SORT_PAIRS = {
     prompt_length: 'prompt_length_asc',
     tag_count: 'tag_count_asc',
     rating: 'rating_desc',
+    user_rating: 'user_rating_asc',
     character_count: 'character_count_asc',
     file_size: 'file_size_asc',
     aesthetic: 'aesthetic_asc',
@@ -1178,6 +1185,7 @@ const API = {
         if (aspectRatio) params.set('aspect_ratio', aspectRatio);
         if (filters.minAesthetic) params.set('min_aesthetic', filters.minAesthetic);
         if (filters.maxAesthetic) params.set('max_aesthetic', filters.maxAesthetic);
+        if (filters.minUserRating) params.set('min_user_rating', filters.minUserRating);
         if (filters.brightnessMin) params.set('brightness_min', filters.brightnessMin);
         if (filters.brightnessMax) params.set('brightness_max', filters.brightnessMax);
         if (filters.colorTemperature) params.set('color_temperature', filters.colorTemperature);
@@ -9570,6 +9578,8 @@ async function openFilterModal(options = {}) {
     const maxAestheticInput = $('#filter-aesthetic-max');
     if (minAestheticInput) minAestheticInput.value = filterState.minAesthetic ?? '';
     if (maxAestheticInput) maxAestheticInput.value = filterState.maxAesthetic ?? '';
+    const minUserRatingInput = $('#filter-user-rating-min');
+    if (minUserRatingInput) minUserRatingInput.value = filterState.minUserRating ?? '';
     const brightnessMinInput = $('#filter-brightness-min');
     const brightnessMaxInput = $('#filter-brightness-max');
     if (brightnessMinInput) brightnessMinInput.value = filterState.brightnessMin ?? '';
@@ -11246,6 +11256,10 @@ function applyModalFilters() {
     filterState.minAesthetic = minAesthetic;
     filterState.maxAesthetic = maxAesthetic;
 
+    // v3.3.3 WIRING-01: minimum user star rating (1-5; '' = any).
+    const minUserRating = parseInt($('#filter-user-rating-min')?.value, 10) || null;
+    filterState.minUserRating = minUserRating;
+
     const brightnessMin = parseFloat($('#filter-brightness-min')?.value) || null;
     const brightnessMax = parseFloat($('#filter-brightness-max')?.value) || null;
     const colorTemperatureRadio = $('input[name="color-temperature"]:checked');
@@ -11329,6 +11343,8 @@ function resetAllFilters() {
     const maxAeInput = $('#filter-aesthetic-max');
     if (minAeInput) minAeInput.value = '';
     if (maxAeInput) maxAeInput.value = '';
+    const minUserRatingInputReset = $('#filter-user-rating-min');
+    if (minUserRatingInputReset) minUserRatingInputReset.value = '';
     const brightnessMinInput = $('#filter-brightness-min');
     const brightnessMaxInput = $('#filter-brightness-max');
     if (brightnessMinInput) brightnessMinInput.value = '';

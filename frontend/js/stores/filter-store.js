@@ -31,6 +31,8 @@
             aspectRatio: '',
             minAesthetic: null,
             maxAesthetic: null,
+            // v3.3.3 WIRING-01: minimum user star rating (1-5; null = any).
+            minUserRating: null,
             brightnessMin: null,
             brightnessMax: null,
             colorTemperature: '',
@@ -79,6 +81,7 @@
                 : '',
             minAesthetic: source.minAesthetic ?? null,
             maxAesthetic: source.maxAesthetic ?? null,
+            minUserRating: source.minUserRating ?? null,
             brightnessMin: source.brightnessMin ?? null,
             brightnessMax: source.brightnessMax ?? null,
             colorTemperature: ['warm', 'neutral', 'cool'].includes(String(source.colorTemperature || '').trim())

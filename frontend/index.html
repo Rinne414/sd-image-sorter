@@ -609,6 +609,7 @@
                                 <option value="prompt_length" data-i18n="sort.optionPromptLength">Prompt Length</option>
                                 <option value="tag_count" data-i18n="sort.optionTags">Tags</option>
                                 <option value="rating" data-i18n="sort.optionRating">Rating</option>
+                                <option value="user_rating" data-i18n="sort.optionUserRating">★ My Rating</option>
                                 <option value="character_count" data-i18n="sort.optionCharacters">Characters</option>
                                 <option value="file_size" data-i18n="sort.optionFileSize">File Size</option>
                                 <option value="aesthetic" data-i18n="sort.optionAesthetic">Aesthetic Score</option>
@@ -5016,6 +5017,31 @@
                                 <button class="btn btn-ghost btn-small aesthetic-quick" data-min="5" data-max="" data-i18n="filter.aestheticGood">Good (5+)</button>
                                 <button class="btn btn-ghost btn-small aesthetic-quick" data-min="" data-max="4" data-i18n="filter.aestheticLow">Low (&lt;4)</button>
                                 <button class="btn btn-ghost btn-small aesthetic-quick" data-min="" data-max="" data-i18n="filter.aestheticUnscored">Unscored</button>
+                            </div>
+                        </section>
+
+                        <!-- v3.3.3 WIRING-01: filter by the user's own star rating
+                             (distinct from the AI content "Ratings" section above). -->
+                        <section class="filter-panel">
+                            <div class="filter-panel-header">
+                                <div>
+                                    <p class="filter-panel-kicker">★</p>
+                                    <h4 data-i18n="filter.userRatingTitle">My Star Rating</h4>
+                                </div>
+                                <p class="filter-panel-help" data-i18n="filter.userRatingHelp">Show only images you rated at least this many stars.</p>
+                            </div>
+                            <div class="dimension-grid" role="group">
+                                <label class="dimension-field">
+                                    <span class="dimension-label" data-i18n="filter.userRatingMin">Minimum</span>
+                                    <select id="filter-user-rating-min" class="input-field" aria-label="Minimum user star rating">
+                                        <option value="" data-i18n="filter.userRatingAny">Any</option>
+                                        <option value="1">★ 1+</option>
+                                        <option value="2">★★ 2+</option>
+                                        <option value="3">★★★ 3+</option>
+                                        <option value="4">★★★★ 4+</option>
+                                        <option value="5">★★★★★ 5</option>
+                                    </select>
+                                </label>
                             </div>
                         </section>
 
