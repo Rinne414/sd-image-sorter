@@ -7689,3 +7689,61 @@ html.lang-zh #view-censor .queue-action-btn span {
     color: var(--text-primary, #eef1f8);
     background: var(--bg-hover, rgba(40, 46, 66, 0.72));
 }
+
+/* ==========================================================================
+   FLOW-02 — inline tag editor in the preview modal
+   ✎ Edit turns the read-only tag list into removable chips + an add box, so
+   tags are editable where you look at the image (not only in Dataset/Mass Tag).
+   ========================================================================== */
+.modal-tags-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+#btn-edit-modal-tags.active {
+    background: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.18);
+    color: var(--text-primary, #eef1f8);
+}
+.modal-tags-editor {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.modal-tags-editor[hidden] {
+    display: none;
+}
+.modal-tags-edit-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.tag.tag-editable {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding-right: 4px;
+}
+.tag.tag-editable .tag-remove {
+    border: none;
+    background: transparent;
+    color: var(--text-secondary, #aeb6cc);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 2px;
+    border-radius: 4px;
+    transition: color var(--transition-normal, 180ms ease),
+        background var(--transition-normal, 180ms ease);
+}
+.tag.tag-editable .tag-remove:hover {
+    color: var(--accent-danger, #ff6b81);
+    background: rgba(var(--accent-danger-rgb, 255, 107, 129), 0.16);
+}
+.modal-tags-add-input {
+    max-width: 320px;
+}
+.modal-tags-edit-actions {
+    display: flex;
+    gap: 8px;
+}

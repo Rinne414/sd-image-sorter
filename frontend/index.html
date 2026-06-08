@@ -3951,10 +3951,25 @@
 
                     <div class="modal-tags">
                         <div class="modal-tags-header">
-                            <h4>Tags</h4>
-                            <button class="btn btn-ghost btn-small" id="btn-toggle-all-tags">Show More</button>
+                            <h4 data-i18n="modal.tags">Tags</h4>
+                            <div class="modal-tags-header-actions">
+                                <!-- FLOW-02: edit tags inline, right where you're looking at the
+                                     image, instead of leaving for Dataset / Mass Tag. -->
+                                <button class="btn btn-ghost btn-small" id="btn-edit-modal-tags" type="button" data-i18n-title="modal.editTags" title="Edit tags">✎ <span data-i18n="modal.edit">Edit</span></button>
+                                <button class="btn btn-ghost btn-small" id="btn-toggle-all-tags" data-i18n="common.showMore">Show More</button>
+                            </div>
                         </div>
                         <div id="modal-tags-list" class="tags-list"></div>
+                        <!-- FLOW-02 inline tag editor (hidden until Edit). Saves via the
+                             single-image scope of the bulk add/remove endpoints. -->
+                        <div id="modal-tags-editor" class="modal-tags-editor" hidden>
+                            <div id="modal-tags-edit-chips" class="modal-tags-edit-chips" aria-label="Editable tags"></div>
+                            <input type="text" id="modal-tags-add-input" class="input-field modal-tags-add-input" placeholder="Add a tag, press Enter" data-i18n-placeholder="modal.addTagPlaceholder">
+                            <div class="modal-tags-edit-actions">
+                                <button class="btn btn-primary btn-small" id="btn-save-modal-tags" type="button" data-i18n="common.save">Save</button>
+                                <button class="btn btn-ghost btn-small" id="btn-cancel-modal-tags" type="button" data-i18n="common.cancel">Cancel</button>
+                            </div>
+                        </div>
                     </div>
                     <div class="modal-caption" id="modal-caption-section" style="display: none;">
                         <div class="modal-tags-header">

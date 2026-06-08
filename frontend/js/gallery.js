@@ -2964,6 +2964,139 @@ const Gallery = {
         }
     },
 
+    // ============== FLOW-02: inline tag editing in the preview modal ==============
+    // Tags could only be edited in Dataset / Mass Tag — never where you actually
+    // look at the image. The ✎ Edit toggle turns the read-only tag list into
+    // removable chips + an add box; Save diffs against the original and commits
+    // through the single-image scope of the bulk add/remove endpoints. AI rating
+    // tags (general/sensitive/...) stay read-only — they're model output, not
+    // user vocabulary.
+    _ratingTagNames() {
+        return ['general', 'sensitive', 'questionable', 'explicit'];
+    },
+
+    _bindTagEditOnce() {
+        if (this._tagEditBound) return;
+        this._tagEditBound = true;
+        document.querySelector('#btn-edit-modal-tags')?.addEventListener('click', () => {
+            if (this._tagsEditMode) this._exitTagEdit(); else this._enterTagEdit();
+        });
+        document.querySelector('#btn-cancel-modal-tags')?.addEventListener('click', () => this._exitTagEdit());
+        document.querySelector('#btn-save-modal-tags')?.addEventListener('click', () => this._saveModalTags());
+        const input = document.querySelector('#modal-tags-add-input');
+        input?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this._addTagFromInput();
+            }
+        });
+    },
+
+    _enterTagEdit() {
+        const ratings = this._ratingTagNames();
+        const otherTags = (this._lastModalTags || []).filter(t => !ratings.includes(t.tag));
+        this._tagEditWorking = otherTags.map(t => t.tag);
+        this._tagEditOriginal = [...this._tagEditWorking];
+        this._tagsEditMode = true;
+        const list = document.querySelector('#modal-tags-list');
+        const editor = document.querySelector('#modal-tags-editor');
+        if (list) { list.hidden = true; list.style.display = 'none'; }
+        if (editor) editor.hidden = false;
+        const editBtn = document.querySelector('#btn-edit-modal-tags');
+        if (editBtn) editBtn.classList.add('active');
+        this._renderTagEditChips();
+        const input = document.querySelector('#modal-tags-add-input');
+        if (input) { input.value = ''; input.focus(); }
+    },
+
+    _exitTagEdit() {
+        this._tagsEditMode = false;
+        const list = document.querySelector('#modal-tags-list');
+        const editor = document.querySelector('#modal-tags-editor');
+        if (editor) editor.hidden = true;
+        if (list) { list.hidden = false; list.style.display = ''; }
+        const editBtn = document.querySelector('#btn-edit-modal-tags');
+        if (editBtn) editBtn.classList.remove('active');
+    },
+
+    _renderTagEditChips() {
+        const wrap = document.querySelector('#modal-tags-edit-chips');
+        if (!wrap) return;
+        wrap.innerHTML = (this._tagEditWorking || []).map((tag, i) =>
+            `<span class="tag tag-editable">${this._escapeHtml(tag)}<button type="button" class="tag-remove" data-idx="${i}" aria-label="Remove tag">×</button></span>`
+        ).join('');
+        wrap.querySelectorAll('.tag-remove').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const idx = Number(btn.dataset.idx);
+                if (Number.isInteger(idx)) {
+                    this._tagEditWorking.splice(idx, 1);
+                    this._renderTagEditChips();
+                }
+            });
+        });
+    },
+
+    _addTagFromInput() {
+        const input = document.querySelector('#modal-tags-add-input');
+        if (!input) return;
+        const raw = (input.value || '').trim();
+        if (!raw) return;
+        // Accept comma-separated input; normalize to lowercase to match WD14 vocab.
+        raw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean).forEach(tag => {
+            if (!this._tagEditWorking.includes(tag)) this._tagEditWorking.push(tag);
+        });
+        input.value = '';
+        this._renderTagEditChips();
+        input.focus();
+    },
+
+    async _saveModalTags() {
+        const id = Number(this._currentPreviewId);
+        if (!id) { this._exitTagEdit(); return; }
+        // Fold any text still sitting in the add box into the working set first.
+        this._addTagFromInput();
+        const original = new Set(this._tagEditOriginal || []);
+        const working = new Set(this._tagEditWorking || []);
+        const added = [...working].filter(t => !original.has(t));
+        const removed = [...original].filter(t => !working.has(t));
+        if (added.length === 0 && removed.length === 0) { this._exitTagEdit(); return; }
+
+        const app = window.App || {};
+        const api = app.API;
+        const saveBtn = document.querySelector('#btn-save-modal-tags');
+        if (saveBtn) saveBtn.disabled = true;
+        try {
+            if (added.length) {
+                await api.post('/api/tags/bulk/add', { image_ids: [id], tags: added, dry_run: false });
+            }
+            if (removed.length) {
+                await api.post('/api/tags/bulk/remove', { image_ids: [id], tags: removed, dry_run: false });
+            }
+            app.showToast?.(this._t('modal.tagsSaved', null, 'Tags updated'), 'success');
+            this._exitTagEdit();
+            await this._reloadModalTags(id);
+            app.loadImages?.();
+        } catch (e) {
+            app.showToast?.(this._t('modal.tagsSaveFailed', null, 'Failed to update tags'), 'error');
+        } finally {
+            if (saveBtn) saveBtn.disabled = false;
+        }
+    },
+
+    async _reloadModalTags(id) {
+        const api = window.App?.API;
+        if (!api?.getImage) return;
+        try {
+            const result = await api.getImage(Number(id));
+            if (result?.tags) {
+                this._lastModalTags = result.tags;
+                this._renderModalTags(result.tags);
+            }
+        } catch (_e) {
+            /* best-effort refresh */
+        }
+    },
+
     _serializeGenerationParams(image, parsedData) {
         const rawParamText = this._extractRawParameterText(image);
         if (rawParamText) {
@@ -3084,6 +3217,10 @@ ${String(value)}`)
                 this._handleModalHandoff(btn.dataset.modalHandoff);
             });
         }
+        // FLOW-02: bind the inline tag-editor controls once, and make sure each
+        // freshly-opened image starts in read-only (not a leftover edit session).
+        this._bindTagEditOnce();
+        this._exitTagEdit();
         this.currentPreviewRequestId += 1;
         const requestId = this.currentPreviewRequestId;
         this.showAllTags = false;
