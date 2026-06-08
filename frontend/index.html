@@ -529,8 +529,8 @@
                                 <button id="btn-send-selection-to-dataset-maker" class="btn btn-secondary full-width" title="Push the selected images into the Dataset Maker queue (training set workspace)"><span>📦</span> <span data-i18n="selection.sendToDatasetMaker">To Dataset Maker</span></button>
                             </div>
                         </div>
-                        <div class="selection-panel-section">
-                            <span class="selection-panel-section-title" data-i18n="selection.exportSection">Export</span>
+                        <details class="selection-panel-section selection-panel-disclosure">
+                            <summary class="selection-panel-section-title selection-panel-disclosure-summary" data-i18n="selection.exportSection">Export</summary>
                             <div class="selection-panel-actions selection-panel-export-actions" aria-label="Export selected images">
                                 <button id="btn-export-selected" class="btn btn-secondary full-width selection-panel-explained-action">
                                     <span>📤</span>
@@ -547,14 +547,14 @@
                                     </span>
                                 </button>
                             </div>
-                        </div>
-                        <div class="selection-panel-section selection-panel-danger-section">
-                            <span class="selection-panel-section-title" data-i18n="selection.dangerSection">Remove</span>
+                        </details>
+                        <details class="selection-panel-section selection-panel-disclosure selection-panel-danger-section">
+                            <summary class="selection-panel-section-title selection-panel-disclosure-summary" data-i18n="selection.dangerSection">Remove</summary>
                             <div class="selection-panel-actions selection-panel-danger-actions" aria-label="Remove selected images">
                                 <button id="btn-remove-selected-gallery" class="btn btn-secondary full-width" title="Remove selected images from gallery (files not deleted)"><span>🧹</span> <span data-i18n="selection.removeFromGallery">Remove from Gallery</span></button>
                                 <button id="btn-delete-selected-files" class="btn btn-ghost danger full-width" title="Move selected image files to trash"><span>🗑</span> <span data-i18n="selection.deleteSelectedFiles">Move to Trash...</span></button>
                             </div>
-                        </div>
+                        </details>
                     </div>
                 </aside>
 

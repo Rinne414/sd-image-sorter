@@ -5520,6 +5520,43 @@ html.lang-zh #view-censor .queue-action-btn span {
     text-transform: uppercase;
 }
 
+.selection-panel-disclosure {
+    display: block;
+}
+
+.selection-panel-disclosure-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.selection-panel-disclosure-summary::-webkit-details-marker {
+    display: none;
+}
+
+.selection-panel-disclosure-summary::after {
+    content: '▾';
+    color: rgba(255, 255, 255, 0.46);
+    font-size: 10px;
+    transition: transform 0.16s ease;
+}
+
+.selection-panel-disclosure[open] .selection-panel-disclosure-summary::after {
+    transform: rotate(180deg);
+}
+
+.selection-panel-disclosure:not([open]) > .selection-panel-actions {
+    display: none;
+}
+
+.selection-panel-disclosure[open] > .selection-panel-actions {
+    margin-top: 7px;
+}
+
 .selection-panel-helper {
     color: rgba(255, 255, 255, 0.56);
     font-size: 11px;
