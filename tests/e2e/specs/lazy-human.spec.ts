@@ -196,6 +196,10 @@ test.describe('lazy human frontend QA', () => {
     await expect(page.locator('#autosep-preview')).toBeVisible()
     await page.locator('#btn-autosep-settings').click()
     await expect(page.locator('#autosep-settings-modal.visible')).toBeVisible()
+    await expect(page.locator('#autosep-settings-modal input[data-autosep-setting="autoPreview"]')).toHaveCount(1)
+    await expect(page.locator('#autosep-settings-modal input[data-autosep-setting="rememberDestination"]')).toHaveCount(0)
+    await expect(page.locator('#autosep-settings-modal input[data-autosep-setting="confirmBeforeMove"]')).toHaveCount(0)
+    await expect(page.locator('#autosep-settings-modal input[data-autosep-operation-mode]')).toHaveCount(0)
     await page.locator('#btn-cancel-autosep-settings').click()
     await expect(page.locator('#autosep-settings-modal.visible')).toHaveCount(0)
 
