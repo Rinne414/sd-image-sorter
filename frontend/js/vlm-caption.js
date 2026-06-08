@@ -49,6 +49,12 @@ const VLMCaption = {
         // v3.2.1 — output-format segmented + provider/proxy/vertex reactivity
         this._bindOutputFormat();
         document.getElementById('vlm-provider')?.addEventListener('change', () => this._refreshAdvancedSectionsVisibility());
+        // WS6 (VLM auto-detect): the /api/vlm/detect-provider endpoint existed but
+        // nothing called it. When the endpoint URL changes, ask the backend to
+        // guess the provider from the URL pattern and update the select. Blank
+        // endpoints are left alone so a deliberate Anthropic/Gemini pick (which
+        // often has no endpoint) is not clobbered back to openai_compat.
+        document.getElementById('vlm-endpoint')?.addEventListener('change', () => this._autoDetectProvider());
         ['vlm-http-proxy', 'vlm-https-proxy', 'vlm-socks-proxy', 'vlm-use-vertex'].forEach(id => {
             const el = document.getElementById(id);
             const evt = el?.type === 'checkbox' ? 'change' : 'input';
@@ -66,6 +72,32 @@ const VLMCaption = {
             const resp = await fetch('/api/vlm/settings');
             if (resp.ok) this.settings = await resp.json();
         } catch (e) { /* ignore */ }
+    },
+
+    // WS6: classify the endpoint URL via the backend and sync the provider
+    // select. Best-effort + silent (the select visibly updating is the feedback).
+    async _autoDetectProvider() {
+        const endpoint = (this._getVal('vlm-endpoint') || '').trim();
+        if (!endpoint) return;
+        try {
+            const resp = await fetch('/api/vlm/detect-provider', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ endpoint }),
+            });
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const provider = data?.provider;
+            const select = document.getElementById('vlm-provider');
+            if (!provider || !select) return;
+            const hasOption = Array.from(select.options).some((o) => o.value === provider);
+            if (hasOption && select.value !== provider) {
+                select.value = provider;
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        } catch (_e) {
+            /* best-effort: a detection failure leaves the manual selection intact */
+        }
     },
 
     openSettingsModal() {
