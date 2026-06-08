@@ -1672,6 +1672,18 @@ async function pollAutosepMoveProgress(expectedTotal, destination = '') {
                         if (window.App && window.App.loadImages) {
                             window.App.loadImages();
                         }
+                        // FLOW-07: persistent next-step CTA after a successful separate,
+                        // so sorting no longer dead-ends (the toast above still confirms
+                        // the destination). Reuses window.App.showPipelineNextStep.
+                        window.App?.showPipelineNextStep?.({
+                            icon: '🗂️',
+                            title: _formatAutoSepI18n('flow.sortDoneTitle', 'Sorting done — what next?'),
+                            actions: [
+                                { icon: '🔳', label: _formatAutoSepI18n('nav.censor', 'Censor Edit'), action: 'view:censor' },
+                                { icon: '📦', label: _formatAutoSepI18n('nav.dataset', 'Dataset'), action: 'view:dataset' },
+                                { icon: '🖼️', label: _formatAutoSepI18n('nav.gallery', 'Gallery'), action: 'view:gallery' },
+                            ],
+                        });
                     }
                 }, 300);
                 break;

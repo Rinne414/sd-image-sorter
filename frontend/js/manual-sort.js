@@ -2965,6 +2965,19 @@ function finishSorting() {
         'success'
     );
 
+    // FLOW-07: persistent next-step CTA after finishing a manual sort, so the
+    // session no longer dead-ends (the summary toast above still reports the
+    // stats). Reuses window.App.showPipelineNextStep.
+    window.App?.showPipelineNextStep?.({
+        icon: '🗂️',
+        title: formatManualSortI18n('flow.sortDoneTitle', 'Sorting done — what next?'),
+        actions: [
+            { icon: '🔳', label: formatManualSortI18n('nav.censor', 'Censor Edit'), action: 'view:censor' },
+            { icon: '📦', label: formatManualSortI18n('nav.dataset', 'Dataset'), action: 'view:dataset' },
+            { icon: '🖼️', label: formatManualSortI18n('nav.gallery', 'Gallery'), action: 'view:gallery' },
+        ],
+    });
+
     // Return to setup
     hideSortInterfaces();
     $('#sort-setup').style.display = 'block';
