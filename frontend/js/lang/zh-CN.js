@@ -1011,6 +1011,8 @@ window.I18nLang_zhCN = {
     'similar.preview': '预览',
     'similar.reader': '读图',
     'similar.edit': '编辑',
+    'similar.dataset': '数据集',
+    'similar.collection': '收藏集',
     'similar.build': '构建',
     'similar.duplicates': '查重',
     'similar.searchById': '按 ID 搜索',

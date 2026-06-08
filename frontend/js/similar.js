@@ -1033,6 +1033,8 @@ const SimilarImages = {
                 if (action === 'preview') this._previewImage(id);
                 if (action === 'reader') this._openInReader(id, btn.dataset.filename || '');
                 if (action === 'edit') this._sendToEdit(id);
+                if (action === 'dataset') this._addToDataset(id);
+                if (action === 'collection') this._addToCollection(id);
                 if (action === 'build') this._openInBuild(id);
             });
         });
@@ -1124,6 +1126,22 @@ const SimilarImages = {
         window.App?.openPromptBuildFromImage?.(id);
     },
 
+    // FLOW-04: Similar results used to dead-end at Preview/Reader/Edit/Build —
+    // you couldn't pull a found image into a training set or collection without
+    // leaving for the Gallery. These reuse the same handoff targets the gallery
+    // context menu / preview modal use.
+    _addToDataset(id) {
+        if (window.DatasetMaker?.addImageIds) {
+            window.DatasetMaker.addImageIds([id], { switchView: true, showToast: true });
+        } else {
+            window.App?.showToast?.(this._t('selection.sendToDatasetMakerUnavailable', 'Dataset Maker module not loaded yet — try again in a moment.'), 'error');
+        }
+    },
+
+    _addToCollection(id) {
+        window.CollectionsUI?.openAddToCollectionPicker?.([id]);
+    },
+
     _renderSearchResult(result, getThumbnailUrl) {
         const card = document.createElement('div');
         card.className = 'similar-result';
@@ -1156,6 +1174,8 @@ const SimilarImages = {
             <button class="btn btn-ghost btn-small similar-action-btn" data-action="preview" data-id="${result.id}">👁 ${this._t('similar.preview', 'Preview')}</button>
             <button class="btn btn-ghost btn-small similar-action-btn" data-action="reader" data-id="${result.id}" data-filename="${escapeHtml(result.filename || '')}">📖 ${this._t('similar.reader', 'Reader')}</button>
             <button class="btn btn-ghost btn-small similar-action-btn" data-action="edit" data-id="${result.id}">🔳 ${this._t('similar.edit', 'Edit')}</button>
+            <button class="btn btn-ghost btn-small similar-action-btn" data-action="dataset" data-id="${result.id}">📦 ${this._t('similar.dataset', 'Dataset')}</button>
+            <button class="btn btn-ghost btn-small similar-action-btn" data-action="collection" data-id="${result.id}">📚 ${this._t('similar.collection', 'Collection')}</button>
             <button class="btn btn-secondary btn-small similar-action-btn" data-action="build" data-id="${result.id}">✏️ ${this._t('similar.build', 'Build')}</button>
         `;
 

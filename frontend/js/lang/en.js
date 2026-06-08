@@ -1000,6 +1000,8 @@ window.I18nLang_en = {
     'similar.preview': 'Preview',
     'similar.reader': 'Reader',
     'similar.edit': 'Edit',
+    'similar.dataset': 'Dataset',
+    'similar.collection': 'Collection',
     'similar.build': 'Build',
     'similar.duplicates': 'Duplicates',
     'similar.searchById': 'Search by ID',
