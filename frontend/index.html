@@ -647,11 +647,6 @@
                                     <span aria-hidden="true">▮</span>
                                 </button>
                             </div>
-                            <div class="divider-v" aria-hidden="true" style="margin-left: 8px;"></div>
-                            <button id="btn-clear-db" class="btn btn-ghost btn-small btn-icon-only danger gallery-clear-button" type="button" title="Destructive: removes ALL images from the current library database. Files on disk are preserved. Use carefully." aria-label="Clear gallery database (destructive)" aria-describedby="btn-clear-db-desc" data-i18n-title="action.clearGalleryTooltip">
-                                <span aria-hidden="true">🗑️</span>
-                            </button>
-                            <span id="btn-clear-db-desc" class="sr-only">Destructive action — removes every image record from the current library. Files on disk are not deleted.</span>
                         </div>
 
                     </div>
@@ -2030,7 +2025,6 @@
                             <div class="censor-side-card-header">
                                 <div>
                                     <h4 class="censor-side-card-title" data-i18n="censor.paintPanel">Brush & Paint</h4>
-                                    <p class="censor-side-card-subtitle" data-i18n="censor.paintPanelHelp">Most-used drawing controls stay together at the top.</p>
                                 </div>
                             </div>
                             <div class="censor-side-row">
@@ -2057,7 +2051,6 @@
                             <div class="censor-side-card-header">
                                 <div>
                                     <h4 class="censor-side-card-title" data-i18n="censor.detectPanel">Auto Detect</h4>
-                                    <p class="censor-side-card-subtitle" data-i18n="censor.detectPanelHelp">Pick the detector, then run current / batch / settings from one place.</p>
                                 </div>
                             </div>
                             <div class="censor-detect-quick">
@@ -2110,7 +2103,6 @@
                             <summary class="censor-side-card-header censor-side-card-summary">
                                 <div>
                                     <h4 class="censor-side-card-title">🎨 <span data-i18n="censor.filters">Filters</span></h4>
-                                    <p class="censor-side-card-subtitle" data-i18n="censor.filterPanelHelp">Tune the image, preview the histogram, then apply once.</p>
                                 </div>
                             </summary>
                             <div class="sidebar-filter-2col">
@@ -2176,7 +2168,6 @@
                             <div class="censor-side-card-header">
                                 <div>
                                     <h4 class="censor-side-card-title" data-i18n="censor.outputPanel">Save & Queue</h4>
-                                    <p class="censor-side-card-subtitle" data-i18n="censor.outputPanelHelp">Keep save actions obvious. Keep dangerous clear actions far away.</p>
                                 </div>
                             </div>
                             <div class="censor-save-actions">
@@ -4049,6 +4040,16 @@
                                 <span class="checkbox-custom" aria-hidden="true"></span>
                                 <span class="checkbox-text" id="scan-auto-tag-label" data-i18n="scan.autoTagLabel">Auto-tag after import (slower)</span>
                             </label>
+                        </div>
+                        <!-- NOISE-05: Clear-DB relocated here from the always-visible gallery
+                             toolbar (it sat next to the view toggles — a destructive action one
+                             slip away from everyday controls). Same #btn-clear-db id so the
+                             existing handler + busy-guard (app.js) keep working unchanged. -->
+                        <div class="scan-danger-zone">
+                            <button id="btn-clear-db" class="btn btn-ghost btn-small danger gallery-clear-button" type="button" aria-describedby="btn-clear-db-desc" data-i18n-title="action.clearGalleryTooltip" title="Remove all images from the current library (files stay on disk)">
+                                <span aria-hidden="true">🗑️</span> <span data-i18n="action.clearGallery">Clear Current Library</span>
+                            </button>
+                            <span id="btn-clear-db-desc" class="helper-text" data-i18n="action.clearGalleryTooltip">Remove all images from the current library (files stay on disk)</span>
                         </div>
                     </div>
                 </details>

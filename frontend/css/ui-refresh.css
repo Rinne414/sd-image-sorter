@@ -7598,3 +7598,19 @@ html.lang-zh #view-censor .queue-action-btn span {
 .modal-handoff-btn:active {
     transform: translateY(0);
 }
+
+/* NOISE-05 — scan-modal "danger zone" hosting the relocated Clear-DB action.
+   Separated from the import options above so a destructive library wipe never
+   sits flush against everyday controls (its old home was the gallery toolbar). */
+.scan-danger-zone {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--accent-danger, #ff6b81);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
+}
+.scan-danger-zone .helper-text {
+    margin: 0;
+}
