@@ -2289,7 +2289,18 @@ const V321Integration = {
         });
         form.append(inputRow, addCurrent, removeCurrent, addAll, removeAll);
 
-        panel.append(head, helper, commonList, diagnostics, cleanup, form);
+        const secondaryTools = document.createElement('details');
+        secondaryTools.className = 'export-preview-tools-disclosure';
+        const secondarySummary = document.createElement('summary');
+        const checksLabel = this._i18n('batchExport.previewChecks', 'Checks');
+        const cleanupLabel = this._i18n('batchExport.previewCleanupTools', 'Cleanup');
+        const metrics = this._getPreviewDiagnostics();
+        secondarySummary.innerHTML = `<span></span><small></small>`;
+        secondarySummary.querySelector('span').textContent = `${checksLabel} / ${cleanupLabel}`;
+        secondarySummary.querySelector('small').textContent = `${metrics.edited}/${metrics.total}`;
+        secondaryTools.append(secondarySummary, diagnostics, cleanup);
+
+        panel.append(head, helper, commonList, form, secondaryTools);
         return panel;
     },
 
