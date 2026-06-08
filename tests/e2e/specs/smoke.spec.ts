@@ -122,8 +122,16 @@ async function getGalleryScrollState(page) {
   })
 }
 
-async function openSelectionMoreActions(page) {
+async function openSelectionPanelSection(page, sectionName: 'Export' | 'Remove') {
   await expect(page.locator('#selection-actions')).toBeVisible()
+  const disclosure = page
+    .locator('#selection-actions details.selection-panel-disclosure')
+    .filter({ has: page.locator('summary', { hasText: new RegExp(`^${sectionName}$`) }) })
+  await expect(disclosure).toHaveCount(1)
+  await disclosure.evaluate((element: HTMLDetailsElement) => {
+    element.open = true
+  })
+  await expect(disclosure).toHaveJSProperty('open', true)
 }
 
 async function getVisibleGalleryRects(page, count = 4) {
@@ -1939,6 +1947,8 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#btn-move-selected')).toBeVisible()
     await expect(page.locator('#btn-copy-selected')).toBeVisible()
     await expect(page.locator('#btn-send-to-censor')).toBeVisible()
+    await openSelectionPanelSection(page, 'Export')
+    await openSelectionPanelSection(page, 'Remove')
     await expect(page.locator('#btn-export-selected')).toBeVisible()
     await expect(page.locator('#btn-delete-selected-files')).toBeVisible()
     await expect(page.locator('#btn-export-selected')).toBeDisabled()
@@ -2119,6 +2129,7 @@ test.describe('Smoke Tests', () => {
     await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(0)
     await expect(page.locator('#selection-scope-summary')).toContainText('all current filter matches')
 
+    await openSelectionPanelSection(page, 'Export')
     await page.locator('#btn-export-selected').click()
     await expect(page.locator('#export-modal.visible')).toBeVisible()
     await expect(page.locator('#export-text')).toHaveValue(/filtered one/)
@@ -2276,6 +2287,7 @@ test.describe('Smoke Tests', () => {
     await page.waitForLoadState('networkidle')
 
     await page.locator('#btn-toggle-select').click()
+    await openSelectionPanelSection(page, 'Remove')
     await expect(page.locator('#btn-remove-selected-gallery')).toBeVisible()
     await expect(page.locator('#btn-delete-selected-files')).toBeVisible()
     await expect(page.locator('#btn-remove-selected-gallery')).toBeDisabled()
@@ -2304,6 +2316,7 @@ test.describe('Smoke Tests', () => {
     expect(deletePayloads).toHaveLength(0)
 
     await page.locator('#gallery-grid .gallery-item[data-id="301"]').click()
+    await openSelectionPanelSection(page, 'Remove')
     await expect(page.locator('#btn-delete-selected-files')).toBeEnabled()
     await page.locator('#btn-delete-selected-files').click()
     await expect(page.locator('#confirm-modal.visible')).toBeVisible()
@@ -2519,6 +2532,7 @@ test.describe('Smoke Tests', () => {
     await page.locator('#gallery-grid .gallery-item[data-id="11"]').click()
     await page.locator('#gallery-grid .gallery-item[data-id="22"]').click()
     await page.locator('#gallery-grid .gallery-item[data-id="33"]').click()
+    await openSelectionPanelSection(page, 'Export')
     await expect(page.locator('#btn-export-selected')).toContainText('Combined Export')
     await page.locator('#btn-export-selected').click()
 
@@ -2641,6 +2655,7 @@ test.describe('Smoke Tests', () => {
     await page.locator('#btn-toggle-select').click()
     await page.locator('#gallery-grid .gallery-item[data-id="71"]').click()
     await page.locator('#gallery-grid .gallery-item[data-id="72"]').click()
+    await openSelectionPanelSection(page, 'Export')
     await expect(page.locator('#btn-batch-export-tags')).toContainText('Same-name .txt')
     await page.locator('#btn-batch-export-tags').click()
 
