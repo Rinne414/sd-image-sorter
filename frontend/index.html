@@ -378,6 +378,17 @@
 
         <!-- Main Content Area -->
         <main id="main-content" class="main-content" role="main" tabindex="-1">
+            <!-- FLOW-05/06/07: persistent "what's next" CTA shown after scan / tag /
+                 sort complete, replacing the success toast that used to vanish and
+                 leave each pipeline step dead-ending. Populated by
+                 window.App.showPipelineNextStep(); fixed strip so it never shifts
+                 the view layout. -->
+            <div id="pipeline-next-step" class="pipeline-next-step" hidden role="status" aria-live="polite">
+                <span class="pns-icon" aria-hidden="true">✅</span>
+                <span class="pns-title"></span>
+                <span class="pns-actions"></span>
+                <button type="button" class="pns-dismiss" aria-label="Dismiss" data-i18n-aria="common.close" title="Dismiss" data-i18n-title="common.close">×</button>
+            </div>
             <!-- Gallery View -->
             <section id="view-gallery" class="view active" role="tabpanel" aria-labelledby="nav-tab-gallery">
                 <aside class="filter-sidebar compact" aria-label="Image filters">

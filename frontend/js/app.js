@@ -2113,6 +2113,69 @@ function hideModal(modalId) {
     }
 }
 
+// ============== FLOW-05/06/07: post-action "next step" CTA banner ==============
+// Every pipeline step (scan / tag / sort) used to end with a toast that vanished
+// after a few seconds, leaving the user at a dead-end with no hint what to do
+// next. This one shared banner replaces that success toast with a persistent,
+// dismissible "what's next" prompt that offers one-click routes to the following
+// step. Other modules (autosep, manual-sort) reach it via
+// window.App.showPipelineNextStep().
+function _runPipelineNextStepAction(action) {
+    if (typeof action === 'function') { action(); return; }
+    if (typeof action !== 'string') return;
+    const sep = action.indexOf(':');
+    const kind = sep === -1 ? action : action.slice(0, sep);
+    const arg = sep === -1 ? '' : action.slice(sep + 1);
+    if (kind === 'view') {
+        switchView(arg);
+    } else if (kind === 'modal') {
+        showModal(arg);
+    }
+}
+
+function hidePipelineNextStep() {
+    const banner = document.getElementById('pipeline-next-step');
+    if (!banner) return;
+    banner.classList.remove('visible');
+    banner.hidden = true;
+}
+
+let _pipelineNextStepDismissBound = false;
+function showPipelineNextStep(opts = {}) {
+    const banner = document.getElementById('pipeline-next-step');
+    if (!banner) return;
+    const iconEl = banner.querySelector('.pns-icon');
+    const titleEl = banner.querySelector('.pns-title');
+    const actionsEl = banner.querySelector('.pns-actions');
+    if (!iconEl || !titleEl || !actionsEl) return;
+
+    iconEl.textContent = opts.icon || '✅';
+    titleEl.textContent = opts.title || '';
+    actionsEl.innerHTML = '';
+    const actions = Array.isArray(opts.actions) ? opts.actions.slice(0, 3) : [];
+    actions.forEach((a, i) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-small ' + (i === 0 ? 'btn-primary' : 'btn-ghost');
+        btn.textContent = (a.icon ? a.icon + ' ' : '') + (a.label || '');
+        btn.addEventListener('click', () => {
+            hidePipelineNextStep();
+            _runPipelineNextStepAction(a.action);
+        });
+        actionsEl.appendChild(btn);
+    });
+
+    // Bind the dismiss (×) once.
+    if (!_pipelineNextStepDismissBound) {
+        _pipelineNextStepDismissBound = true;
+        banner.querySelector('.pns-dismiss')?.addEventListener('click', hidePipelineNextStep);
+    }
+
+    banner.hidden = false;
+    void banner.offsetWidth; // force reflow so the slide-in transition replays
+    banner.classList.add('visible');
+}
+
 function closeFilterModal() {
     hideModal('filter-modal');
     resetFilterModalController();
@@ -6891,7 +6954,27 @@ async function pollScanProgress(retryCount = 0, generation = _scanPollGeneration
             const completionMessage = libraryReadyWasHandled
                 ? appT('scan.completedBackgroundToast', 'The remaining image details are ready now.')
                 : (progress.message || appT('scan.completedToast', 'Import complete. Everything is ready now.'));
-            showToast(completionMessage, errorCount > 0 ? 'warning' : 'success');
+            // FLOW-05: replace the vanishing success toast with a persistent
+            // next-step CTA. Warnings/errors still toast. Skip the banner when
+            // auto-tag is on (the tag modal opens itself right after).
+            const _scanNewCount = Number(progress.new ?? progress.result?.new ?? progress.processed ?? 0);
+            const _scanAutoTagOn = !!document.getElementById('scan-auto-tag')?.checked;
+            if (errorCount > 0) {
+                showToast(completionMessage, 'warning');
+            } else if (_scanAutoTagOn) {
+                showToast(completionMessage, 'success');
+            } else {
+                showPipelineNextStep({
+                    icon: '✅',
+                    title: _scanNewCount > 0
+                        ? appT('flow.scanDoneTitle', 'Imported {count} images — what next?').replace('{count}', String(_scanNewCount))
+                        : appT('flow.scanDoneTitleZero', 'Import complete — what next?'),
+                    actions: [
+                        { icon: '🏷️', label: appT('flow.ctaTag', 'Tag with AI'), action: 'modal:tag-modal' },
+                        { icon: '🗂️', label: appT('nav.sorting', 'Organize'), action: 'view:sorting' },
+                    ],
+                });
+            }
             hideModal('scan-modal');
             $('#scan-progress-container').style.display = 'none';
             $('#btn-start-scan').disabled = false;
@@ -7413,7 +7496,22 @@ async function pollTagProgress() {
             clearTagProgressTimer();
             _hideBgTagProgress();
             _showCompletionFlash();
-            showToast(progress.message, errors > 0 ? 'warning' : 'success');
+            // FLOW-06: persistent next-step CTA in place of the success toast.
+            const _taggedCount = Number(progress.completed ?? progress.processed ?? 0);
+            if (errors > 0) {
+                showToast(progress.message, 'warning');
+            } else {
+                showPipelineNextStep({
+                    icon: '🏷️',
+                    title: _taggedCount > 0
+                        ? appT('flow.tagDoneTitle', 'Tagged {count} images — what next?').replace('{count}', String(_taggedCount))
+                        : appT('flow.tagDoneTitleZero', 'Tagging complete — what next?'),
+                    actions: [
+                        { icon: '🗂️', label: appT('nav.sorting', 'Organize'), action: 'view:sorting' },
+                        { icon: '📦', label: appT('nav.dataset', 'Dataset'), action: 'view:dataset' },
+                    ],
+                });
+            }
             hideModal('tag-modal');
             $('#tag-progress-container').style.display = 'none';
             unlockLiveProgressText('#tag-progress-text', 'modal.tagLoadingModel', 'Loading model...');
@@ -12228,6 +12326,8 @@ function buildAppContext() {
         // undefined — a latent no-op. `closeModal` is an alias of hideModal.
         closeModal: hideModal,
         hideModal,
+        showPipelineNextStep,
+        hidePipelineNextStep,
         addToCensorQueue,
         sendToCensor: addToCensorQueue,
         openPromptBuildFromImage,
