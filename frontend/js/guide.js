@@ -138,7 +138,7 @@
                 },
                 censor: {
                     icon: '🔳',
-                    title: 'Censored Edit',
+                    title: 'Censor Edit',
                     purpose: [
                         'Apply mosaic, blur, bars, or manual painting to one or many selected images.',
                     ],
@@ -252,7 +252,7 @@
                         '先用“扫描文件夹”把图片导入数据库。',
                         '使用生成器标签、筛选器与排序，先把图库收敛到真正想处理的图片。',
                         '打开单张图片，查看提示词、标签、LoRA、参数，以及不同提示词格式的转换结果。',
-                        '需要批量导出、送去马赛克编辑或执行其他批量操作时，再打开“选择图片”。',
+                        '需要批量导出、送去打码编辑或执行其他批量操作时，再打开“选择图片”。',
                     ],
                     features: [
                         '支持多种浏览模式，适合密集浏览、大图预览或瀑布流查看。',
@@ -355,7 +355,7 @@
                 },
                 censor: {
                     icon: '🔳',
-                    title: '马赛克编辑',
+                    title: '打码编辑',
                     purpose: [
                         '对一张或多张图片应用马赛克、模糊、黑条或手动涂抹。',
                     ],

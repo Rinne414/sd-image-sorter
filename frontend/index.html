@@ -524,7 +524,7 @@
                             <div class="selection-panel-actions selection-panel-primary-actions" aria-label="Common batch actions">
                                 <button id="btn-move-selected" class="btn btn-primary full-width" title="Move selected images to another folder"><span>📁</span> <span data-i18n="selection.moveSelected">Move...</span></button>
                                 <button id="btn-copy-selected" class="btn btn-secondary full-width" title="Copy selected images to another folder"><span>📄</span> <span data-i18n="selection.copySelected">Copy...</span></button>
-                                <button id="btn-send-to-censor" class="btn btn-primary full-width" title="Send selected images to censor editor"><span>🔳</span> <span data-i18n="selection.censorEdit">Censor</span></button>
+                                <button id="btn-send-to-censor" class="btn btn-primary full-width" title="Send to Censor Edit" data-i18n-title="gallery.contextSendToCensor"><span>🔳</span> <span data-i18n="selection.censorEdit">Censor Edit</span></button>
                                 <!-- v3.2.2 task #4: replaced Analyze Colors button with Send to Dataset Maker; color analysis still runs from the Tag Images modal -->
                                 <button id="btn-send-selection-to-dataset-maker" class="btn btn-secondary full-width" title="Push the selected images into the Dataset Maker queue (training set workspace)"><span>📦</span> <span data-i18n="selection.sendToDatasetMaker">To Dataset Maker</span></button>
                             </div>
@@ -788,7 +788,7 @@
                                     <span aria-hidden="true" class="onboarding-step-icon">🧭</span>
                                     <div class="onboarding-step-copy">
                                         <strong data-i18n="onboarding.step4Title">Explore the tabs</strong>
-                                        <span data-i18n="onboarding.step4Hint">Use the top-left tabs to switch between Reader (with Privacy Tools inside), Sort (WASD manual), Censor, Similar, Prompt Lab, and Artist ID.</span>
+                                        <span data-i18n="onboarding.step4Hint">Use the top-left tabs to switch between Reader (with Privacy Tools inside), Sort (WASD manual), Censor Edit, Similar, Prompt Lab, and Artist ID.</span>
                                     </div>
                                 </li>
                             </ol>
@@ -1698,7 +1698,7 @@
             </div>
             </section>
 
-            <!-- Censored Edit View -->
+            <!-- Censor Edit View -->
             <section id="view-censor" class="view">
                 <div class="censor-workspace-v2">
                     <!-- Queue Manager Solitaire (full-screen overlay within workspace) -->
@@ -3924,7 +3924,7 @@
                          functions the right-click context menu already calls. -->
                     <div class="modal-handoff-row" role="group" aria-label="Send this image to another tool">
                         <span class="modal-handoff-label" data-i18n="modal.sendTo">Send to:</span>
-                        <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="censor" title="Send to Censor Edit" data-i18n-title="gallery.contextSendToCensor">🔳 <span data-i18n="nav.censor">Censor</span></button>
+                        <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="censor" title="Send to Censor Edit" data-i18n-title="gallery.contextSendToCensor">🔳 <span data-i18n="nav.censor">Censor Edit</span></button>
                         <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="similar" title="Find similar images" data-i18n-title="gallery.contextFindSimilar">🔎 <span data-i18n="nav.similar">Similar</span></button>
                         <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="dataset" title="Add to dataset" data-i18n-title="modal.addToDataset">📦 <span data-i18n="nav.dataset">Dataset</span></button>
                         <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="collection" title="Add to collection" data-i18n-title="collections.contextAddTo">📚 <span data-i18n="modal.collection">Collection</span></button>

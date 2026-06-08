@@ -509,7 +509,7 @@
             this._setButton('#btn-invert-selection-filtered', 'selection.invertAllFiltered', '⇄', 'selection.invertAllFiltered');
             this._setButton('#btn-move-selected', 'selection.moveSelected', '📁', 'selection.moveSelected');
             this._setButton('#btn-copy-selected', 'selection.copySelected', '📄', 'selection.copySelected');
-            this._setButton('#btn-send-to-censor', 'selection.censorEdit', '🔳', 'selection.censorEdit');
+            this._setButton('#btn-send-to-censor', 'selection.censorEdit', '🔳', 'gallery.contextSendToCensor');
             this._setButton('#btn-remove-selected-gallery', 'selection.removeFromGallery', '🧹', 'selection.removeFromGallery');
             this._setButton('#btn-delete-selected-files', 'selection.deleteSelectedFiles', '🗑', 'selection.deleteSelectedFiles');
             this._setButton('#btn-clear-selection', 'selection.deselectAll');
