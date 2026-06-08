@@ -126,8 +126,8 @@ const V321Integration = {
 
         // The "Open VLM Settings" button used by the Natural Language flow.
         const openVlmSettings = () => {
-            if (window.VLMCaption?.openSettingsModal) {
-                window.VLMCaption.openSettingsModal();
+            if (typeof window.App?.openVlmSettings === 'function') {
+                window.App.openVlmSettings();
             } else {
                 document.getElementById('btn-vlm-settings')?.click();
             }
@@ -519,8 +519,8 @@ const V321Integration = {
         });
         list.querySelector('#btn-vlm-banner-settings')?.addEventListener('click', (event) => {
             event.stopPropagation();
-            if (window.VLMCaption?.openSettingsModal) {
-                window.VLMCaption.openSettingsModal();
+            if (typeof window.App?.openVlmSettings === 'function') {
+                window.App.openVlmSettings();
             } else {
                 document.getElementById('btn-vlm-settings')?.click();
             }

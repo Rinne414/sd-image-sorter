@@ -2130,6 +2130,19 @@ function hideModal(modalId) {
     }
 }
 
+function openVlmSettings() {
+    if (window.VLMCaption && typeof window.VLMCaption.openSettingsModal === 'function') {
+        window.VLMCaption.openSettingsModal();
+        return true;
+    }
+    if (typeof showModal === 'function') {
+        showModal('vlm-settings-modal');
+        return true;
+    }
+    document.getElementById('vlm-settings-modal')?.classList.add('visible');
+    return !!document.getElementById('vlm-settings-modal');
+}
+
 // ============== FLOW-05/06/07: post-action "next step" CTA banner ==============
 // Every pipeline step (scan / tag / sort) used to end with a toast that vanished
 // after a few seconds, leaving the user at a dead-end with no hint what to do
@@ -12465,6 +12478,7 @@ function buildAppContext() {
         switchLibraryTab,
         filterLibraryContent,
         switchView,
+        openVlmSettings,
         openGalleryPreview,
         applyPromptFilter,
         // Expose the canonical modal closer so cross-module callers (gallery.js

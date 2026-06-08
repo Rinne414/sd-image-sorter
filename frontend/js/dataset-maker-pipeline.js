@@ -1246,7 +1246,11 @@
             `;
             list.appendChild(summary);
             summary.querySelector('#btn-dataset-translation-settings')?.addEventListener('click', () => {
-                if (window.VLMCaption?.openSettingsModal) window.VLMCaption.openSettingsModal();
+                if (typeof window.App?.openVlmSettings === 'function') {
+                    window.App.openVlmSettings();
+                } else {
+                    document.getElementById('btn-vlm-settings')?.click();
+                }
             });
             if (data.items_truncated) {
                 const note = document.createElement('div');

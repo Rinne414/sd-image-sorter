@@ -223,12 +223,10 @@
         `;
         naturalSection.parentNode.insertBefore(banner, naturalSection);
         banner.querySelector('#btn-smart-tag-open-vlm-from-warning')?.addEventListener('click', () => {
-            if (window.VLMCaption && typeof window.VLMCaption.openSettingsModal === 'function') {
-                window.VLMCaption.openSettingsModal();
-            } else if (typeof window.showModal === 'function') {
-                window.showModal('vlm-settings-modal');
+            if (typeof window.App?.openVlmSettings === 'function') {
+                window.App.openVlmSettings();
             } else {
-                document.getElementById('vlm-settings-modal')?.classList.add('visible');
+                document.getElementById('btn-vlm-settings')?.click();
             }
         });
         return banner;
@@ -983,12 +981,10 @@
             event.currentTarget.dataset.userTouched = 'true';
         });
         $('#btn-smart-tag-vlm-settings')?.addEventListener('click', () => {
-            if (window.VLMCaption && typeof window.VLMCaption.openSettingsModal === 'function') {
-                window.VLMCaption.openSettingsModal();
-            } else if (typeof window.showModal === 'function') {
-                window.showModal('vlm-settings-modal');
+            if (typeof window.App?.openVlmSettings === 'function') {
+                window.App.openVlmSettings();
             } else {
-                document.getElementById('vlm-settings-modal')?.classList.add('visible');
+                document.getElementById('btn-vlm-settings')?.click();
             }
         });
 
