@@ -922,6 +922,18 @@ def test_gallery_single_color_action_patches_frontend_color_fields():
     assert "this._patchImageState(id, colorPatch);" in gallery_source
 
 
+def test_queue_manager_gallery_filters_use_backend_selection_contract():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "queue-solitaire.js").read_text(encoding="utf-8")
+
+    assert "resolveGalleryFilterMatches" in source
+    assert "api.createSelectionToken(filters" in source
+    assert "api.getSelectionChunk(selectionToken" in source
+    assert "selection_token" in source
+    assert "queueSet.has(normalized)" in source
+    assert "if (fromGallery)" in source
+
+
 def test_gallery_selection_panel_is_desktop_user_facing_not_visible_dom_jargon():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")

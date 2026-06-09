@@ -1052,12 +1052,67 @@
         await applyFilterState(state.advancedFilters, true);
     }
 
+    async function resolveGalleryFilterMatches(filters, imageIds) {
+        const api = window.App?.API;
+        if (!api?.createSelectionToken || !api?.getSelectionChunk) return null;
+
+        const queueIds = Array.from(new Set((imageIds || [])
+            .map((id) => Number(id))
+            .filter((id) => Number.isFinite(id) && id > 0)));
+        if (!queueIds.length) return new Set();
+
+        const queueSet = new Set(queueIds);
+        const matched = new Set();
+        const limit = 5000;
+        const tokenPayload = await api.createSelectionToken(filters, limit);
+        const selectionToken = tokenPayload?.selection_token || tokenPayload?.token;
+        if (!selectionToken) return null;
+
+        let offset = 0;
+        let guard = 0;
+        while (guard < 200) {
+            guard += 1;
+            const chunk = await api.getSelectionChunk(selectionToken, { offset, limit });
+            (chunk?.image_ids || []).forEach((id) => {
+                const normalized = Number(id);
+                if (queueSet.has(normalized)) matched.add(normalized);
+            });
+
+            if (!chunk?.has_more || matched.size >= queueSet.size) break;
+            const nextOffset = Number(chunk.next_offset);
+            if (!Number.isFinite(nextOffset) || nextOffset <= offset) break;
+            offset = nextOffset;
+        }
+
+        return matched;
+    }
+
     async function applyFilterState(filters, fromGallery = false) {
         state.galleryFilterMode = fromGallery;
         state.appliedFilterMode = fromGallery ? 'gallery' : 'advanced';
         updateQueueFilterSummary();
         state.filterMatches.clear();
         const allIds = getAllImageIds();
+
+        if (fromGallery) {
+            try {
+                const backendMatches = await resolveGalleryFilterMatches(filters, allIds);
+                if (backendMatches) {
+                    state.filterMatches = backendMatches;
+                    const countEl = document.getElementById('qs-filter-match-count');
+                    if (countEl) {
+                        countEl.textContent = t('queueSolitaire.galleryMatching', '{count} matching (gallery filters)', { count: state.filterMatches.size })
+                            .replace('{count}', state.filterMatches.size);
+                    }
+                    updateQueueFilterSummary();
+                    render();
+                    return;
+                }
+            } catch (error) {
+                console.warn('Queue Manager could not resolve Gallery filters through the backend; using local queue filters.', error);
+            }
+        }
+
         await ensureImageDetails(allIds);
 
         for (const id of allIds) {
