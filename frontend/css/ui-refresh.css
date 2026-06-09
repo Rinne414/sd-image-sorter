@@ -855,6 +855,13 @@ textarea:focus,
 .filter-sidebar {
     padding: 18px;
     width: var(--sidebar-width);
+    box-sizing: border-box;
+    height: calc((100vh * var(--ui-scale-inverse, 1)) - var(--nav-height));
+    max-height: calc((100vh * var(--ui-scale-inverse, 1)) - var(--nav-height));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: 32px;
+    scrollbar-gutter: stable;
 }
 
 .filter-header,

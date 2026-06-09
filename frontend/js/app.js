@@ -4290,11 +4290,14 @@ function ensureSelectionPanelVisible(panel) {
     const panelRect = panel.getBoundingClientRect();
     const sidebarRect = sidebar.getBoundingClientRect();
     const padding = 10;
+    const viewportBottom = window.innerHeight || document.documentElement.clientHeight || sidebarRect.bottom;
+    const visibleBottom = Math.min(sidebarRect.bottom, viewportBottom);
+    const visibleTop = Math.max(sidebarRect.top, 0);
 
-    if (panelRect.bottom > sidebarRect.bottom - padding) {
-        sidebar.scrollTop += panelRect.bottom - sidebarRect.bottom + padding;
-    } else if (panelRect.top < sidebarRect.top + padding) {
-        sidebar.scrollTop -= sidebarRect.top + padding - panelRect.top;
+    if (panelRect.bottom > visibleBottom - padding) {
+        sidebar.scrollTop += panelRect.bottom - visibleBottom + padding;
+    } else if (panelRect.top < visibleTop + padding) {
+        sidebar.scrollTop -= visibleTop + padding - panelRect.top;
     }
 }
 

@@ -742,6 +742,45 @@ test('gallery selection actions should stay in the left sidebar instead of float
   expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(sidebarBox!.x + sidebarBox!.width + 1)
 })
 
+test('gallery sidebar selection controls should remain reachable under UI scale', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.addInitScript(() => {
+    localStorage.setItem('ui_scale_v1', '1.3')
+  })
+  await openMainPage(page)
+
+  const sidebar = page.locator('.filter-sidebar')
+  const selectButton = page.locator('#btn-toggle-select')
+  const selectionPanel = page.locator('.filter-sidebar #selection-actions')
+
+  await expect.poll(async () => page.evaluate(() => window.UiScale?.get?.())).toBe(1.3)
+
+  await expect.poll(async () => {
+    return await sidebar.evaluate((node: HTMLElement) => {
+      const rect = node.getBoundingClientRect()
+      return {
+        bottom: Math.round(rect.bottom),
+        viewport: window.innerHeight,
+      }
+    })
+  }).toEqual({ bottom: 900, viewport: 900 })
+
+  await selectButton.click()
+  await expect(selectionPanel).toBeVisible()
+
+  await expect.poll(async () => {
+    return await sidebar.evaluate((node: HTMLElement) => {
+      const panel = node.querySelector('#selection-actions')
+      if (!(panel instanceof HTMLElement)) return { visible: false }
+      const rect = panel.getBoundingClientRect()
+      return {
+        visible: rect.top >= 0 && rect.bottom <= window.innerHeight,
+        canScroll: node.scrollHeight > node.clientHeight,
+      }
+    })
+  }).toEqual({ visible: true, canScroll: true })
+})
+
 test('filtered gallery selection should clear when gallery filters change', async ({ page }) => {
   await openMainPage(page)
 

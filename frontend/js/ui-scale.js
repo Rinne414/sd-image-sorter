@@ -60,6 +60,8 @@
 
   function setZoom(target) {
     var de = document.documentElement;
+    de.style.setProperty('--ui-scale-current', String(target));
+    de.style.setProperty('--ui-scale-inverse', String(1 / target));
     if (Math.abs(currentZoom() - target) <= 0.001) return;
     // An empty string removes the inline zoom (back to the CSS default of 1).
     de.style.zoom = target === 1 ? '' : String(target);
