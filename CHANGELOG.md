@@ -15,7 +15,10 @@ dead-ending. Backend features that already existed but had no UI are now reachab
 (star ratings, per-image score/colors/artist/caption actions, update proxy/channel,
 Prompt Lab data tools, VLM provider detect and local model delete). The duplicate Gallery
 AI Tag and Dataset Smart Tag entry points now share one backend coordinator, guarded by
-a LoRA caption golden test so existing training captions stay stable.
+a LoRA caption golden test so existing training captions stay stable. Post-validation QA
+also tightened first-run desktop readability, desktop pipeline-nav labels, Censor Edit cursor
+alignment under UI scale, filtered selection scope, Queue Manager gallery-filter scope/counts,
+and VLM/Color single-image wiring.
 
 深度 UI/UX 大改版。应用现在更贴近真实图片工作流：图库 / 读图 → 整理 → 打码编辑 →
 相似图 → 数据集，Prompt Lab 与画师识别收进 Tools。设置与模型成为统一入口，集中管理模型、
@@ -23,6 +26,8 @@ a LoRA caption golden test so existing training captions stay stable.
 此前后端已存在但前端没有入口的能力已接上（星级评分、单图美学/颜色/画师/描述、更新代理/通道、
 Prompt Lab 数据工具、VLM provider 自动识别与本地模型删除）。Gallery AI Tag 与 Dataset Smart Tag
 也改由同一个后端协调器管理，并用 LoRA caption golden test 锁住既有训练 caption 输出。
+发布验证后又补强了首次桌面入口可读性、桌面流程导航文字、打码编辑光标对齐、筛选选择范围、
+Queue Manager 图库筛选范围与计数，以及 VLM / 单图颜色分析的前后端接线。
 
 ### Added / 新增
 - **Pipeline handoffs and next-step CTAs**: preview modal handoffs now send an image to Censor Edit, Similar, Dataset Maker, Collections, Prompt Helper, or Reader; scan/tag/sort success states show persistent next-step CTAs instead of transient toasts.
@@ -47,6 +52,8 @@ Prompt Lab 数据工具、VLM provider 自动识别与本地模型删除）。Ga
   - **后台进度条不再重叠**：扫描、打标、重连、文件操作进度条现在使用不同位置。
 - **Selection and handoff cleanup**: bulk handoffs clear stale gallery selection where appropriate, and selection/context-menu/Dataset handoff paths now share the same helper.
   - **选择与交接清理**：批量交接后会按需清理图库旧选择，选择面板 / 右键菜单 / Dataset 交接路径共用同一 helper。
+- **Post-validation QA fixes**: Censor Edit brush cursor now stays under the pointer at UI scale 130% and canvas zoom 150%; first-run desktop entry points and the main pipeline nav labels stay readable at laptop widths; filtered selection now preserves collection, folder, metadata, user-rating, and exclusion scope; Queue Manager's "Use Gallery Filters" resolves through backend selection-token/chunk and keeps its dynamic count stable; single-image Color updates flat Gallery state; and VLM settings preserve the with-tags prompt.
+  - **发布验证后的 QA 修复**：打码编辑笔刷光标在 UI 130% 与画布 150% 缩放下仍贴合指针；首次进入时「导入图片 / AI 打标签」与主流程导航文字在桌面宽度保持可读；筛选选择范围保留合集、文件夹、元数据、用户星级与排除条件；Queue Manager 的「使用图库筛选」改走后端 selection-token/chunk，动态计数不会被翻译刷新重置；单图颜色分析会即时更新图库状态；VLM 设置会保存带 tags 的 prompt。
 
 ### Internal / 内部
 - **LoRA caption golden gate**: added deterministic tests for Smart Tag caption assembly, Gallery tag export, Dataset export, and export preview before the tagging coordinator merge.
