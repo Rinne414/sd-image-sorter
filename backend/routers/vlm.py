@@ -309,6 +309,7 @@ class SaveSettingsRequest(BaseModel):
     concurrent_requests: Optional[int] = Field(default=None, ge=1, le=16)
     system_prompt: Optional[str] = None
     user_prompt: Optional[str] = None
+    user_prompt_with_tags: Optional[str] = None
     include_tags_as_context: Optional[bool] = None
     max_image_size: Optional[int] = Field(default=None, ge=128, le=4096)
     nsfw_retry_prompt: Optional[str] = None

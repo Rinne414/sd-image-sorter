@@ -303,6 +303,35 @@ def test_vlm_settings_reject_invalid_concurrent_requests(test_client):
     assert "concurrent_requests" in response.text
 
 
+def test_vlm_settings_preserve_prompt_with_tags(test_client, monkeypatch):
+    import routers.vlm as vlm_router
+
+    saved = {}
+    monkeypatch.setattr(vlm_router, "_load_vlm_settings", lambda: dict(saved))
+    monkeypatch.setattr(vlm_router, "_save_vlm_settings", lambda settings: saved.update(settings))
+
+    response = test_client.post(
+        "/api/vlm/settings",
+        json={
+            "provider": "openai",
+            "model": "qa-model",
+            "user_prompt": "Describe the image.",
+            "user_prompt_with_tags": "Describe the image using these tags: {tags}",
+            "include_tags_as_context": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert saved["user_prompt_with_tags"] == "Describe the image using these tags: {tags}"
+
+    settings_response = test_client.get("/api/vlm/settings")
+    assert settings_response.status_code == 200
+    assert settings_response.json()["user_prompt_with_tags"] == "Describe the image using these tags: {tags}"
+
+    config = vlm_router._build_config()
+    assert config.user_prompt_with_tags == "Describe the image using these tags: {tags}"
+
+
 def test_vlm_build_config_clamps_corrupt_concurrent_requests(monkeypatch):
     import routers.vlm as vlm_router
 
