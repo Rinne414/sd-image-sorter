@@ -1286,6 +1286,7 @@ window.I18nLang_zhCN = {
     'queueSolitaire.filterSummaryQuick': '队列筛选已应用',
     'queueSolitaire.filterSummaryAdvanced': '高级队列筛选已应用',
     'queueSolitaire.filterSummaryGallery': '已复制图库筛选',
+    'queueSolitaire.collectionScope': '合集范围',
     'queueSolitaire.filterSummaryQuickAll': '当前队列筛选没有额外限制，所以整个队列都在范围内。',
     'queueSolitaire.filterSummaryAdvancedAll': '当前高级队列筛选已经应用，但它还没有把范围缩小，整个队列仍然都在范围内。',
     'queueSolitaire.filterSummaryGalleryAll': '已经复制了图库筛选，但它目前没有缩小范围，整个队列仍然都在范围内。',

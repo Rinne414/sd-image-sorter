@@ -406,29 +406,40 @@
         const allLabel = t('common.all', 'All');
         const noneLabel = t('common.none', 'None');
         const anyLabel = t('filter.any', 'Any');
+        const hasMeaningfulSummary = (value, ...emptyLabels) => {
+            if (value == null || value === '') return false;
+            const normalized = String(value).trim();
+            if (!normalized) return false;
+            return ![allLabel, noneLabel, anyLabel, ...emptyLabels]
+                .some((label) => normalized === String(label || '').trim());
+        };
 
-        if (summary.generators && summary.generators !== allLabel) {
+        if (filters.collectionId) {
+            parts.push(t('queueSolitaire.collectionScope', 'Collection scope'));
+        }
+
+        if (hasMeaningfulSummary(summary.generators)) {
             parts.push(`${t('filter.generators', 'Generators')}: ${summary.generators}`);
         }
-        if (summary.ratings && summary.ratings !== allLabel) {
+        if (hasMeaningfulSummary(summary.ratings)) {
             parts.push(`${t('filter.ratings', 'Ratings')}: ${summary.ratings}`);
         }
-        if (summary.tags && summary.tags !== noneLabel) {
+        if (hasMeaningfulSummary(summary.tags)) {
             parts.push(`${t('filter.tags', 'Tags')}: ${summary.tags}`);
         }
-        if (summary.prompts && summary.prompts !== noneLabel) {
+        if (hasMeaningfulSummary(summary.prompts)) {
             parts.push(`${t('filter.prompts', 'Prompts')}: ${summary.prompts}`);
         }
-        if (summary.search && summary.search !== noneLabel) {
+        if (hasMeaningfulSummary(summary.search)) {
             parts.push(`${t('filter.search', 'Search')}: ${summary.search}`);
         }
-        if (summary.checkpoints && summary.checkpoints !== noneLabel) {
+        if (hasMeaningfulSummary(summary.checkpoints)) {
             parts.push(`${t('filter.checkpoints', 'Checkpoints')}: ${summary.checkpoints}`);
         }
-        if (summary.loras && summary.loras !== noneLabel) {
+        if (hasMeaningfulSummary(summary.loras)) {
             parts.push(`${t('filter.loras', 'LoRAs')}: ${summary.loras}`);
         }
-        if (summary.dimensions && summary.dimensions !== anyLabel) {
+        if (hasMeaningfulSummary(summary.dimensions)) {
             parts.push(`${t('filter.sizeRules', 'Size Rules')}: ${summary.dimensions}`);
         }
 
@@ -439,6 +450,14 @@
         }
 
         return parts;
+    }
+
+    function setFilterMatchCountText(text, i18nKey = null) {
+        const countEl = document.getElementById('qs-filter-match-count');
+        if (!countEl) return;
+        if (i18nKey) countEl.setAttribute('data-i18n', i18nKey);
+        else countEl.removeAttribute('data-i18n');
+        countEl.textContent = text;
     }
 
     function buildQuickFilterSummaryParts() {
@@ -562,10 +581,7 @@
             if (select) select.value = '';
         });
 
-        const countEl = document.getElementById('qs-filter-match-count');
-        if (countEl) {
-            countEl.textContent = t('queueSolitaire.initialMatching', '0 matching');
-        }
+        setFilterMatchCountText(t('queueSolitaire.initialMatching', '0 matching'), 'queueSolitaire.initialMatching');
     }
 
     function setQuickAdvancedVisible(visible) {
@@ -1031,11 +1047,10 @@
             if (match) state.filterMatches.add(id);
         }
 
-        const countEl = document.getElementById('qs-filter-match-count');
-        if (countEl) {
-            countEl.textContent = t('queueSolitaire.matching', '{count} matching', { count: state.filterMatches.size })
-                .replace('{count}', state.filterMatches.size);
-        }
+        setFilterMatchCountText(
+            t('queueSolitaire.matching', '{count} matching', { count: state.filterMatches.size })
+                .replace('{count}', state.filterMatches.size)
+        );
 
         updateQueueFilterSummary();
         render();
@@ -1099,11 +1114,10 @@
                 const backendMatches = await resolveGalleryFilterMatches(filters, allIds);
                 if (backendMatches) {
                     state.filterMatches = backendMatches;
-                    const countEl = document.getElementById('qs-filter-match-count');
-                    if (countEl) {
-                        countEl.textContent = t('queueSolitaire.galleryMatching', '{count} matching (gallery filters)', { count: state.filterMatches.size })
-                            .replace('{count}', state.filterMatches.size);
-                    }
+                    setFilterMatchCountText(
+                        t('queueSolitaire.galleryMatching', '{count} matching (gallery filters)', { count: state.filterMatches.size })
+                            .replace('{count}', state.filterMatches.size)
+                    );
                     updateQueueFilterSummary();
                     render();
                     return;
@@ -1120,13 +1134,12 @@
             if (matchesFilterState(meta, filters)) state.filterMatches.add(id);
         }
 
-        const countEl = document.getElementById('qs-filter-match-count');
-        if (countEl) {
-            countEl.textContent = (fromGallery
+        setFilterMatchCountText(
+            (fromGallery
                 ? t('queueSolitaire.galleryMatching', '{count} matching (gallery filters)', { count: state.filterMatches.size })
                 : t('queueSolitaire.advancedMatching', '{count} matching (advanced filters)', { count: state.filterMatches.size }))
-                .replace('{count}', state.filterMatches.size);
-        }
+                .replace('{count}', state.filterMatches.size)
+        );
 
         updateQueueFilterSummary();
         render();

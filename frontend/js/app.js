@@ -5098,7 +5098,14 @@ function updateNavigationOverflowState() {
     if (!navBar || !navTabs) return window.innerWidth <= 768;
 
     const forceMobileLayout = window.innerWidth <= 768;
-    navBar.classList.remove('nav-tabs-overflow', 'nav-actions-compact', 'nav-tabs-icon-only');
+    navBar.classList.remove(
+        'nav-tabs-overflow',
+        'nav-actions-compact',
+        'nav-tabs-icon-only',
+        'nav-tabs-compact-labels',
+        'nav-tabs-compact-secondary',
+        'nav-tabs-compact-brand'
+    );
     if (forceMobileLayout) {
         navBar.classList.add('nav-tabs-overflow');
         return true;
@@ -5121,15 +5128,27 @@ function updateNavigationOverflowState() {
         return false;
     }
 
-    // v3.2.2: with the new 📦 Dataset tab the count of primary tabs went
-    // from 7 to 8, which pushes 1366-1440 px laptops past the cliff.
-    // Try a 3-step graceful degradation before falling back to the
-    // hamburger overlay:
-    //   1. Compact the nav-actions buttons (smaller padding)
-    //   2. Hide the text labels on the nav tabs (icon-only) - tabs
-    //      keep their aria-label so screen readers and tooltips still
-    //      announce the destination
-    //   3. Full mobile-menu fallback
+    // Desktop-first degradation: keep the pipeline labels readable before
+    // falling back to icon-only. Reader and Tools are secondary to the numbered
+    // pipeline, so they collapse first on laptop widths.
+    navBar.classList.add('nav-tabs-compact-labels');
+    if (!needsOverflow()) {
+        closeMobileMenu();
+        return false;
+    }
+
+    navBar.classList.add('nav-tabs-compact-secondary');
+    if (!needsOverflow()) {
+        closeMobileMenu();
+        return false;
+    }
+
+    navBar.classList.add('nav-tabs-compact-brand');
+    if (!needsOverflow()) {
+        closeMobileMenu();
+        return false;
+    }
+
     navBar.classList.add('nav-actions-compact');
     if (!needsOverflow()) {
         closeMobileMenu();
@@ -5142,7 +5161,13 @@ function updateNavigationOverflowState() {
         return false;
     }
 
-    navBar.classList.remove('nav-actions-compact', 'nav-tabs-icon-only');
+    navBar.classList.remove(
+        'nav-actions-compact',
+        'nav-tabs-icon-only',
+        'nav-tabs-compact-labels',
+        'nav-tabs-compact-secondary',
+        'nav-tabs-compact-brand'
+    );
     navBar.classList.add('nav-tabs-overflow');
     return true;
 }

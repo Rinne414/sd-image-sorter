@@ -469,6 +469,99 @@ body::after {
     gap: 4px;
 }
 
+/* v3.3.3 post-QA: keep the main desktop pipeline readable on 1280-1440px
+   laptops before falling back to icon-only tabs. */
+.nav-bar.nav-tabs-compact-labels {
+    padding-inline: 12px;
+    gap: 8px;
+}
+
+.nav-bar.nav-tabs-compact-labels .nav-brand {
+    gap: 8px;
+}
+
+.nav-bar.nav-tabs-compact-labels .brand-icon {
+    font-size: 24px;
+}
+
+.nav-bar.nav-tabs-compact-labels .brand-text {
+    max-width: 132px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 16px;
+}
+
+.nav-bar.nav-tabs-compact-labels .brand-version {
+    font-size: 10px;
+}
+
+.nav-bar.nav-tabs-compact-labels .nav-tabs {
+    margin-left: 6px;
+    gap: 4px;
+}
+
+.nav-bar.nav-tabs-compact-labels .nav-tab,
+.nav-bar.nav-tabs-compact-labels .nav-tools-toggle {
+    padding: 8px 7px;
+    gap: 4px;
+    border-radius: 12px;
+    font-size: 13px;
+}
+
+html.lang-zh .nav-bar.nav-tabs-compact-labels .nav-tab,
+html.lang-zh .nav-bar.nav-tabs-compact-labels .nav-tools-toggle {
+    padding-inline: 7px;
+}
+
+.nav-bar.nav-tabs-compact-labels .nav-actions {
+    gap: 3px;
+}
+
+.nav-bar.nav-tabs-compact-labels .btn-icon-only {
+    min-width: 34px;
+    max-width: 36px;
+}
+
+.nav-bar.nav-tabs-compact-labels .nav-actions #btn-scan,
+.nav-bar.nav-tabs-compact-labels .nav-actions #btn-tag {
+    padding-inline: 9px;
+}
+
+.nav-bar.nav-tabs-compact-secondary .nav-tab[data-view="reader"] .tab-text,
+.nav-bar.nav-tabs-compact-secondary #nav-tools-toggle .tab-text {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+.nav-bar.nav-tabs-compact-secondary #nav-tools-toggle {
+    min-width: 38px;
+}
+
+.nav-bar.nav-tabs-compact-brand .brand-text,
+.nav-bar.nav-tabs-compact-brand .brand-version {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+.nav-bar.nav-tabs-compact-brand .nav-brand {
+    min-width: 34px;
+}
+
 .nav-actions > *,
 .gallery-header > *,
 .gallery-header-left > *,

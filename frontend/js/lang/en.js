@@ -2943,6 +2943,7 @@ window.I18nLang_en = {
     'queueSolitaire.filterSummaryQuick': 'Queue filters applied',
     'queueSolitaire.filterSummaryAdvanced': 'Advanced queue filters applied',
     'queueSolitaire.filterSummaryGallery': 'Gallery filters copied',
+    'queueSolitaire.collectionScope': 'Collection scope',
     'queueSolitaire.filterSummaryQuickAll': 'Queue filters are clear, so the whole queue is currently in scope.',
     'queueSolitaire.filterSummaryAdvancedAll': 'Advanced queue filters are applied, but they currently leave the whole queue in scope.',
     'queueSolitaire.filterSummaryGalleryAll': 'Gallery filters were copied, but they currently leave the whole queue in scope.',
