@@ -41,7 +41,9 @@ The UI now follows the real image workflow, Settings & Models is the single setu
 - Targeted backend tests for the unified tagging coordinator, tag routers, Smart Tag, Dataset export golden gate, VLM, colors, artists, prompts, and update services passed during the overhaul.
 - Frontend syntax checks passed for all changed JS files in the final UI/UX phases.
 - Live desktop Playwright fallback checks passed at 1440×900 and 1366×768 for Settings, AI defaults persistence, Censor Edit naming, all 8 views, and preview modal open/close with zero console errors.
-- Final full CI, package build, release QA, and portable boot smoke are run as the release gate before publishing.
+- Full `scripts/run_ci.py` passed: lock freshness, dependency security audit, frontend JS syntax, ruff lint, backend full suite, and Playwright E2E (`124 passed / 5 skipped`).
+- `scripts/build_release_packages.py --version 3.3.3` built all 6 required assets; `scripts/lazy_release_qa.py --skip-server` passed manifest and checksum integrity.
+- Real Windows portable smoke passed from `sd-image-sorter-v3.3.3-windows-portable.zip`: `run-portable.bat` booted on port 8498, `/api/stats` reported `app_version: 3.3.3`, and `/api/images` returned 200.
 
 ---
 
