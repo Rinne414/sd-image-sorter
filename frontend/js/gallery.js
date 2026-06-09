@@ -434,6 +434,24 @@ const Gallery = {
         }
     },
 
+    _buildColorAnalysisPatch(colorData = {}) {
+        const patch = {};
+        [
+            'dominant_colors',
+            'avg_brightness',
+            'color_temperature',
+            'color_saturation',
+            'brightness_distribution',
+            'brightness_histogram',
+            'brightness_skew',
+        ].forEach((field) => {
+            if (Object.prototype.hasOwnProperty.call(colorData, field)) {
+                patch[field] = colorData[field];
+            }
+        });
+        return patch;
+    },
+
     _modalAnalysisActions: new Set(['aesthetic', 'color', 'artist', 'caption']),
 
     _syncModalAnalysisButtons() {
@@ -517,7 +535,10 @@ const Gallery = {
             if (action === 'color') {
                 const result = await api.post(`/api/colors/analyze-single/${id}`);
                 if (result?.color_data) {
-                    this._patchImageState(id, { color_data: result.color_data });
+                    const colorPatch = this._buildColorAnalysisPatch(result.color_data);
+                    if (Object.keys(colorPatch).length > 0) {
+                        this._patchImageState(id, colorPatch);
+                    }
                 }
                 await window.ColorBackfill?.refreshProgress?.();
                 showToast?.(this._t('modal.colorsThisDone', null, 'Color analysis updated'), 'success');

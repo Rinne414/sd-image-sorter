@@ -904,6 +904,24 @@ def test_gallery_context_menu_has_workflow_actions_and_trash_is_explicit():
     assert "emitSelectionStateChanged" in app_source
 
 
+def test_gallery_single_color_action_patches_frontend_color_fields():
+    repo_root = Path(__file__).resolve().parents[2]
+    gallery_source = (repo_root / "frontend" / "js" / "gallery.js").read_text(encoding="utf-8")
+
+    assert "_buildColorAnalysisPatch" in gallery_source
+    for field in [
+        "dominant_colors",
+        "avg_brightness",
+        "color_temperature",
+        "color_saturation",
+        "brightness_distribution",
+    ]:
+        assert f"'{field}'" in gallery_source
+
+    assert "this._patchImageState(id, { color_data: result.color_data });" not in gallery_source
+    assert "this._patchImageState(id, colorPatch);" in gallery_source
+
+
 def test_gallery_selection_panel_is_desktop_user_facing_not_visible_dom_jargon():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
