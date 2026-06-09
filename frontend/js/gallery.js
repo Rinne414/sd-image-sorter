@@ -3516,6 +3516,23 @@ ${String(value)}`)
         $('#btn-copy-prompt').onclick = () => copyToClipboard((getPromptView().promptText || ''), this._t('modal.promptCopied', null, 'Prompt copied'));
         $('#btn-copy-negative').onclick = () => copyToClipboard((getPromptView().negativeText || ''), this._t('modal.negativeCopied', null, 'Negative prompt copied'));
         $('#btn-copy-tags').onclick = () => copyToClipboard((this._lastModalTags || []).map(tag => tag.tag).join(', '), this._t('modal.tagsCopied', null, 'Tags copied'));
+        const tagCategoryButton = document.querySelector('#btn-copy-tags-category');
+        if (tagCategoryButton) {
+            tagCategoryButton.onclick = (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                window.TagCategoryCopy?.showMenu?.({
+                    anchor: tagCategoryButton,
+                    source: {
+                        imageId: this._lastModalImage?.id,
+                        image: this._lastModalImage,
+                        tags: this._lastModalTags || [],
+                        prompt: getPromptView().promptText || '',
+                    },
+                    title: this._t('tagCategory.copyOptions', null, 'Copy Options'),
+                });
+            };
+        }
         const btnCopyCaption = document.querySelector('#btn-copy-caption');
         if (btnCopyCaption) {
             btnCopyCaption.onclick = () => copyToClipboard(
@@ -3845,10 +3862,33 @@ ${String(value)}`)
             const label = t(key, fallback);
             return scopeLabel ? `${label} · ${scopeLabel}` : label;
         };
+        const tagCopySource = { imageId: image.id, image };
 
         const items = [
             { label: t('gallery.contextPreview', 'Preview'), icon: '\u{1F5BC}', action: () => this.openPreview(image.id) },
             { label: isSelected ? t('gallery.contextDeselectImage', 'Deselect Image') : t('gallery.contextSelectImage', 'Select Image'), icon: isSelected ? '\u2715' : '\u2713', action: () => this._setContextImageSelection(image.id, !isSelected) },
+            { type: 'separator' },
+            { label: t('gallery.contextCopyTags', 'Copy Tags'), icon: '\u{1F3F7}', action: async () => {
+                const copy = window.TagCategoryCopy;
+                if (!copy) {
+                    app.showToast?.(t('modal.copyFailed', 'Failed to copy text'), 'error');
+                    return;
+                }
+                const tags = await copy.getTagsFromSource(tagCopySource);
+                await copy.copyTags(tags, t('modal.tagsCopied', 'Tags copied'));
+            }},
+            { label: t('gallery.contextCopyTagCategory', 'Copy Tag Category...'), icon: '\u25BE', action: (event) => {
+                if (!window.TagCategoryCopy?.showMenu) {
+                    app.showToast?.(t('modal.copyFailed', 'Failed to copy text'), 'error');
+                    return;
+                }
+                window.TagCategoryCopy.showMenu({
+                    x: event.clientX,
+                    y: event.clientY,
+                    source: tagCopySource,
+                    title: t('tagCategory.copyOptions', 'Copy Options'),
+                });
+            }},
             { type: 'separator' },
             { label: this.isFavorited(image.id)
                 ? t('collections.contextUnfavorite', 'Remove from Favorites')
@@ -3928,8 +3968,13 @@ ${String(value)}`)
             label.textContent = item.label;
 
             button.append(icon, label);
-            button.addEventListener('click', () => {
-                item.action();
+            button.addEventListener('click', (event) => {
+                Promise.resolve(item.action(event, menu)).catch((error) => {
+                    const message = typeof formatUserError === 'function'
+                        ? formatUserError(error, t('modal.copyFailed', 'Failed to copy text'))
+                        : t('modal.copyFailed', 'Failed to copy text');
+                    app.showToast?.(message, 'error');
+                });
                 menu.remove();
             });
             menu.appendChild(button);

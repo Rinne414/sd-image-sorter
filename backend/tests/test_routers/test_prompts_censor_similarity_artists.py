@@ -68,6 +68,23 @@ class TestPromptsRouter:
 
         assert response.status_code == 404
 
+    def test_categorize_respects_user_recategorized_tags(self, test_client):
+        recategorized = test_client.post(
+            "/api/prompts/recategorize?tag=school_uniform&category=style",
+            json={},
+        )
+        assert recategorized.status_code == 200
+
+        response = test_client.post(
+            "/api/prompts/categorize",
+            json=["school uniform", "standing"],
+        )
+
+        assert response.status_code == 200
+        results = {item["tag"]: item["category"] for item in response.json()["results"]}
+        assert results["school uniform"] == "style"
+        assert results["standing"] == "pose"
+
     def test_generate_prompt_uses_generator_output(self, test_client, monkeypatch):
         from routers import prompts as prompts_router
 

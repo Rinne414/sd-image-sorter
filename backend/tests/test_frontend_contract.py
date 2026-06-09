@@ -1144,3 +1144,48 @@ def test_scan_stalled_diagnostics_are_visible_and_copyable_from_frontend():
     ]:
         assert key in en_source
         assert key in zh_source
+
+
+def test_tag_category_copy_and_promptlab_board_are_wired():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    gallery_source = (repo_root / "frontend" / "js" / "gallery.js").read_text(encoding="utf-8")
+    reader_source = (repo_root / "frontend" / "js" / "image-reader.js").read_text(encoding="utf-8")
+    promptlab_source = (repo_root / "frontend" / "js" / "prompt-lab.js").read_text(encoding="utf-8")
+    copy_source = (repo_root / "frontend" / "js" / "tag-category-copy.js").read_text(encoding="utf-8")
+    css = (repo_root / "frontend" / "css" / "ui-refresh.css").read_text(encoding="utf-8")
+    en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
+    zh_source = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
+
+    assert "/static/js/tag-category-copy.js" in html
+    assert html.index("/static/js/tag-category-copy.js") < html.index("/static/js/gallery.js")
+    assert 'id="btn-copy-tags-category"' in html
+    assert 'id="reader-copy-prompt-category"' in html
+    assert 'id="promptlab-category-board-modal"' in html
+    assert 'id="btn-promptlab-category-board"' in html
+
+    assert "window.TagCategoryCopy" in copy_source
+    assert "/api/prompts/categorize" in copy_source
+    assert "CORE_BOARD_GROUPS" in copy_source
+    assert "gallery.contextCopyTagCategory" in gallery_source
+    assert "TagCategoryCopy.showMenu" in gallery_source
+    assert "_copyPromptCategory" in reader_source
+    assert "openCategoryBoard" in promptlab_source
+    assert "submitCategoryBoard" in promptlab_source
+    assert "/api/prompts/recategorize" in promptlab_source
+    assert ".tag-category-copy-menu" in css
+    assert ".promptlab-category-board-columns" in css
+
+    for key in [
+        "tagCategory.copyOptions",
+        "tagCategory.appearance",
+        "tagCategory.clothing",
+        "tagCategory.pose",
+        "tagCategory.scenery",
+        "tagCategory.unclassified",
+        "promptlab.categoryBoardTitle",
+        "promptlab.submitCategoryBoard",
+        "gallery.contextCopyTagCategory",
+    ]:
+        assert key in en_source
+        assert key in zh_source

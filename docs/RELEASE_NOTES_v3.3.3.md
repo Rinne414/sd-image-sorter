@@ -1,8 +1,8 @@
 ## v3.3.3 — UI/UX 大改 + 工作流打通 / UI Overhaul + Workflow Wiring
 
-界面按真实流程重排，设置与模型集中到一个入口；预览、选择、扫描、打标、整理完成后都有下一步操作。星级评分、单图分析、更新代理、Prompt Lab 数据工具、VLM 管理等后端能力已接上；发布后 QA 又修正光标、桌面导航、筛选范围与接线细节。
+界面按真实流程重排，设置与模型集中到一个入口；预览、选择、扫描、打标、整理完成后都有下一步操作。星级评分、单图分析、更新代理、Prompt Lab 数据工具、VLM 管理等后端能力已接上；发布后 QA 又补上按分类复制标签与 tagger 词库分类覆盖。
 
-The UI now follows the real workflow, Settings & Models is the single setup door, and post-action screens guide the next step. Post-QA fixes tightened cursor alignment, desktop navigation labels, filter scope, and backend wiring.
+The UI now follows the real workflow, Settings & Models is the single setup door, and post-action screens guide the next step. Post-QA fixes tightened cursor alignment, category-aware tag copy, tagger vocabulary categories, and backend wiring.
 
 ---
 
@@ -26,6 +26,10 @@ The UI now follows the real workflow, Settings & Models is the single setup door
   - 后端提供的前端 JS/CSS 会随版本刷新，减少升级后继续加载旧界面的情况。
 - **Post-validation QA fixes / 发布验证后 QA 修复**: Censor Edit brush cursor stays aligned under UI scale + canvas zoom, first-run desktop entry points and main pipeline nav labels stay readable at laptop widths, filtered selection and Queue Manager Gallery filters preserve backend scope, Queue Manager dynamic counts stay stable after translation refresh, single-image Color updates Gallery state immediately, and VLM settings preserve the with-tags prompt.
   - 打码编辑笔刷光标在界面缩放与画布缩放下保持对齐；首次进入桌面入口与主流程导航文字在笔记本宽度保持可读；筛选选择与 Queue Manager 图库筛选保留后端范围；Queue Manager 动态计数不会被翻译刷新重置；单图颜色分析会即时更新图库状态；VLM 设置会保存带 tags 的 prompt。
+- **Category-aware tag copy / 按分类复制标签**: Gallery context actions and Reader copy controls can copy all tags or only Appearance, Clothing, Pose, Scenery, Style, Quality/Meta, or Unclassified tags, with a handoff into Prompt Lab for category review.
+  - 图库右键操作与 Reader 复制控件可复制全部标签，或只复制外观、服装、姿势、场景、风格、质量/元信息、未分类标签，并可交给 Prompt Lab 检查分类。
+- **Tagger CSV category coverage / Tagger CSV 分类覆盖**: WD14, PixAI, EVA02, and Oppai Oracle local CSV vocab tags now resolve to frontend categories with zero `unknown` entries; user-made tags outside known vocab can still remain `unknown`.
+  - WD14、PixAI、EVA02 与 Oppai Oracle 本地 CSV 词库现在全部能落入前端分类，`unknown` 为 0；不在已知词库里的用户自造 tag 仍可保留为 `unknown`。
 
 ---
 
@@ -44,7 +48,8 @@ The UI now follows the real workflow, Settings & Models is the single setup door
 - Frontend syntax checks passed for all changed JS files in the final UI/UX phases.
 - Live desktop Playwright fallback checks passed at 1440×900 and 1366×768 for Settings, AI defaults persistence, Censor Edit naming, all 8 views, and preview modal open/close with zero console errors.
 - Post-validation live checks passed at 1280×800, 1366×768, and 1440×900 for desktop pipeline nav readability, first-run entry readability, Censor cursor drift (≤~1.2px on visible canvas), filtered selection, Queue Manager backend scope/count stability, single-image Color state, VLM settings round-trip, and update proxy save/reset with zero console/API errors.
-- Full `scripts/run_ci.py` passed: lock freshness, dependency security audit, frontend JS syntax, ruff lint, backend full suite, and Playwright E2E (`124 passed / 5 skipped`).
+- Full `scripts/run_ci.py` passed: lock freshness, dependency security audit, frontend JS syntax, ruff lint, backend full suite, and Playwright E2E (`126 passed / 5 skipped`).
+- Category coverage gate passed across 6 local tagger CSV files: WD14, PixAI, EVA02, and Oppai Oracle all reported `unknown=0`.
 - `scripts/build_release_packages.py --version 3.3.3` built all 6 required assets; `scripts/lazy_release_qa.py --skip-server` passed manifest and checksum integrity.
 - Real Windows portable smoke passed from the rebuilt `sd-image-sorter-v3.3.3-windows-portable.zip`: `run-portable.bat` booted on port 8508, `/api/stats` reported `app_version: 3.3.3`, and `/api/images` returned 200.
 

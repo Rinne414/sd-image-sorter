@@ -859,6 +859,7 @@
                                     </button>
                                     <button id="reader-toggle-format" class="reader-copy-btn">View: Original</button>
                                     <button id="reader-copy-prompt" class="reader-copy-btn" data-i18n="reader.copy">Copy</button>
+                                    <button id="reader-copy-prompt-category" class="reader-copy-btn tag-category-menu-trigger" title="Copy Options" aria-label="Copy Options" data-i18n-title="tagCategory.copyOptions" data-i18n-aria="tagCategory.copyOptions">▾</button>
                                 </div>
                                 <div id="reader-prompt-text" class="reader-section-text"></div>
                             </div>
@@ -2589,6 +2590,29 @@
                         </div>
                     </div>
 
+                    <div class="modal" id="promptlab-category-board-modal">
+                        <div class="modal-backdrop"></div>
+                        <div class="modal-content modal-large promptlab-category-board-modal">
+                            <button class="modal-close" id="promptlab-category-board-close" type="button">✕</button>
+                            <div class="promptlab-category-board-head">
+                                <div>
+                                    <h3 data-i18n="promptlab.categoryBoardTitle">Suggest Tag Categories</h3>
+                                    <p class="modal-description" data-i18n="promptlab.categoryBoardDesc">Drag tags into better categories, then submit to save local category overrides.</p>
+                                </div>
+                                <span id="promptlab-category-board-count" class="promptlab-category-board-total">0</span>
+                            </div>
+                            <div id="promptlab-category-board-status" class="promptlab-category-board-status"></div>
+                            <div id="promptlab-category-board-columns" class="promptlab-category-board-columns"></div>
+                            <div class="promptlab-category-board-footer">
+                                <span id="promptlab-category-board-note" data-i18n="promptlab.categoryBoardNote">Changes are saved only when submitted.</span>
+                                <div class="promptlab-category-board-actions">
+                                    <button class="btn btn-secondary" id="promptlab-category-board-cancel" type="button" data-i18n="common.cancel">Cancel</button>
+                                    <button class="btn btn-primary" id="promptlab-category-board-submit" type="button" data-i18n="promptlab.submitCategoryBoard">Submit Suggestions</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Random Mode (existing feature preserved) -->
                     <div class="promptlab-mode" id="promptlab-mode-random">
                         <div class="promptlab-random-layout">
@@ -2611,6 +2635,7 @@
                                                 <input class="input-field" id="promptlab-recat-category" type="text" list="promptlab-category-options" data-i18n-placeholder="promptlab.recategorizeCategoryPlaceholder" placeholder="category">
                                                 <datalist id="promptlab-category-options"></datalist>
                                                 <button class="btn btn-small btn-secondary" id="btn-promptlab-recategorize" type="button" data-i18n="common.save">Save</button>
+                                                <button class="btn btn-small btn-ghost" id="btn-promptlab-category-board" type="button" data-i18n="promptlab.openCategoryBoard">Category Board</button>
                                             </div>
                                         </section>
                                         <section class="promptlab-admin-section">
@@ -3899,6 +3924,7 @@
                                 <button class="btn btn-ghost btn-small" id="btn-copy-prompt" aria-label="Copy prompt" title="Copy prompt only">📋 <span data-i18n="modal.prompt">Prompt</span></button>
                                 <button class="btn btn-ghost btn-small" id="btn-copy-negative" aria-label="Copy negative" title="Copy negative prompt only">📋 <span data-i18n="modal.negative">Negative</span></button>
                                 <button class="btn btn-ghost btn-small" id="btn-copy-tags" aria-label="Copy tags" title="Copy tags only">📋 <span data-i18n="modal.tags">Tags</span></button>
+                                <button class="btn btn-ghost btn-small tag-category-menu-trigger" id="btn-copy-tags-category" aria-label="Copy Options" title="Copy Options" data-i18n-title="tagCategory.copyOptions" data-i18n-aria="tagCategory.copyOptions">▾</button>
                                 <button class="btn btn-ghost btn-small" id="btn-copy-params" aria-label="Copy params" title="Copy params only">📋 <span data-i18n="modal.params">Params</span></button>
                             </div>
                         </div>
@@ -5612,6 +5638,7 @@
     <!-- Main application (contains API, AppState, modals, toast, etc.) -->
     <script src="/static/js/app.js"></script>
     <script src="/static/js/folder-browser.js"></script>
+    <script src="/static/js/tag-category-copy.js"></script>
     <script src="/static/js/gallery.js"></script>
     <script src="/static/js/collections-ui.js"></script>
     <script src="/static/js/folder-tree.js"></script>

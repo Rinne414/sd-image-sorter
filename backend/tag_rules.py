@@ -19,11 +19,14 @@ logger = logging.getLogger(__name__)
 # Patterns can be exact matches or prefix/suffix patterns.
 
 # Meta tags (composition/count)
-META_TAGS = {
+SUBJECT_COUNT_TAGS = {
     "1girl", "2girls", "3girls", "4girls", "5girls", "6+girls", "multiple_girls",
     "1boy", "2boys", "3boys", "4boys", "5boys", "6+boys", "multiple_boys",
     "solo", "duo", "trio", "group", "crowd",
     "1other", "androgynous", "male_focus", "female_focus",
+}
+
+META_TAGS = {
     "comic", "4koma", "multiple_views", "highres", "absurdres",
     "tall_image", "wide_image", "portrait", "landscape",
     "signature", "artist_name", "twitter_username", "pixiv_username",
@@ -35,6 +38,9 @@ META_TAGS = {
     "check_translation", "translated", "partially_translated",
     "commentary", "commentary_request", "paid_reward_available",
     "cover", "cover_page", "novel_cover", "album_cover",
+    "silent_comic", "too_many", "company_name", "circle_name",
+    "content_rating", "roman_numeral", "bad_end", "tally", "take_your_pick",
+    "side-by-side", "trefoil",
 }
 
 # Quality / booster tags
@@ -44,6 +50,7 @@ QUALITY_TAGS = {
     "best quality", "amazing quality", "very aesthetic", "newest",
     "year_2024", "year_2025", "year_2026", "very_awa", "very awa",
     "huge_filesize", "huge filesize", "ultra-detailed", "high_resolution",
+    "bad_anatomy",
 }
 
 # Rating tags
@@ -63,6 +70,8 @@ EXPRESSION_TAGS = {
     "expressionless", "serious", "seductive_smile", "evil_smile",
     "tongue", "tongue_out", "drooling", "nosebleed",
     "happy", "sad", "sleepy", "tired", "drunk",
+    "smug", "talking", "wince", "doyagao", "zzz", "0_0", "emoticon", "mukyuu",
+    "long_tongue",
     ":d", ":o", ":3", "^^", ";)", "xd", "^_^", ">_<", "o_o", "@_@",
     "v-shaped_eyebrows", "raised_eyebrow", "furrowed_brow",
 }
@@ -83,6 +92,11 @@ POSE_TAGS = {
     "hugging", "carrying", "piggyback", "princess_carry",
     "cowgirl_position", "missionary", "doggy_style",
     "head_tilt", "head_rest", "chin_rest", "turned_head",
+    "yokozuwari", "leg_lift", "on_one_knee", "on_ground", "open_hand",
+    "w_arms", "convenient_leg", "foot_dangle", "arms_around_waist",
+    "left-handed", "sidesaddle", "leg_hold", "salute", "balancing",
+    "presenting", "thumbs_up", "head_down", "between_fingers", "reclining",
+    "heads_together", "handstand", "dorsiflexion",
 }
 
 # Camera angle tags
@@ -126,6 +140,11 @@ BODY_TAGS = {
     "pointy_ears", "animal_ears", "cat_ears", "dog_ears", "fox_ears",
     "tail", "cat_tail", "fox_tail", "wings", "horns", "halo",
     "fangs", "sharp_teeth",
+    "partially_visible_vulva", "lactation", "antlers", "scales", "joints",
+    "bald", "whisker_markings", "facepaint", "disembodied_limb", "skinny",
+    "mechanical_arms", "foreskin", "huge_ahoge", "extra_arms", "topknot",
+    "bruise", "ribs", "stitches", "fat", "manly", "blunt_ends",
+    "median_furrow", "obese", "material_growth",
 }
 
 # Action tags
@@ -143,6 +162,16 @@ ACTION_TAGS = {
     "fellatio", "cunnilingus", "handjob", "footjob",
     "grabbing", "groping", "licking", "biting",
     "hug", "embrace", "bleeding", "blood",
+    "dildo", "gangbang", "headpat", "bukkake", "shibari",
+    "imminent_penetration", "public_indecency", "orgasm", "femdom",
+    "shared_bathing", "enema", "exhibitionism", "slapping", "tying",
+    "wakamezake", "reverse_cowgirl_position", "battle", "bath",
+    "pulled_by_self", "kicking", "peeing", "pee", "have_to_pee", "69",
+    "deepthroat", "orgy", "murder", "aiming", "feeding", "bestiality",
+    "fucked_silly", "pulling", "spinning", "symmetrical_docking",
+    "asymmetrical_docking", "after_fellatio", "prone_bone", "strangling",
+    "asphyxiation", "foot_worship", "incest", "humiliation", "public_use",
+    "defloration", "choke_hold",
 }
 
 # Background / setting tags
@@ -162,6 +191,23 @@ BACKGROUND_TAGS = {
     "train", "bus", "car_interior", "airplane",
     "stage", "arena", "pool", "hot_spring", "onsen",
     "fantasy", "sci-fi", "cyberpunk", "steampunk",
+    "basket", "car", "pen", "controller", "cable", "tatami", "torii",
+    "architecture", "red_moon", "bucket", "key", "anchor", "computer",
+    "ufo", "eraser", "pencil", "chimney", "toothbrush", "parasol",
+    "scissors", "gears", "machine", "cockpit", "television", "pool_ladder",
+    "sack", "dango", "sanshoku_dango", "wagashi", "sake", "coin", "grill",
+    "kebab", "pocky", "gohei", "confetti", "snowflakes", "carrot",
+    "pumpkin", "hibiscus", "peach", "magatama", "trigram", "yunomi",
+    "sakazuki", "tokkuri", "takoyaki", "dessert", "parfait", "tuna",
+    "icing", "cherry", "cannon", "arrow_(projectile)",
+    "paintbrush", "frog", "vines", "house", "doughnut", "monitor",
+    "chalkboard", "elevator", "digital_media_player", "cookie",
+    "eighth_note", "winter", "summer", "cabinet", "ceiling", "shelf",
+    "toilet", "ipod", "muffin", "senbei", "sweets", "stool", "tank",
+    "planet", "beer", "saucer", "cushion", "shell", "egg", "scroll",
+    "futon", "thermos", "folder", "lemon", "cork", "tarot", "money",
+    "brush", "cosmetics", "clover",
+    "shower_head", "gym", "rubber_duck", "bulletin_board",
 }
 
 # Style / art style tags
@@ -177,6 +223,10 @@ STYLE_TAGS = {
     "detailed", "intricate", "ornate", "minimalist",
     "cinematic_lighting", "dramatic_lighting", "soft_lighting",
     "depth_of_field", "motion_blur", "bokeh", "lens_flare",
+    "limited_palette", "electricity", "colored_stripes", "squiggle",
+    "partially_colored", "negative_space", "high_contrast",
+    "rotational_symmetry", "film_grain", "double_exposure", "x-ray",
+    "afterimage", "ripples", "shiny", "still_life",
 }
 
 NSFW_BODY_KEYWORDS = {
@@ -186,6 +236,8 @@ NSFW_BODY_KEYWORDS = {
     "veins", "toe", "toes", "soles", "toenails", "fingernails", "nails", "tattoo",
     "eyelash", "eyelashes", "lip", "lips", "mole", "freckle", "scar", "birthmark",
     "abs", "collarbone", "armpit", "thigh_gap", "dimples", "cheek",
+    "erection", "anal", "facial", "pubic", "bulge", "injury", "vulva", "lactation",
+    "suggestive_fluid",
 }
 
 OUTFIT_DETAIL_KEYWORDS = {
@@ -199,6 +251,21 @@ OUTFIT_DETAIL_KEYWORDS = {
     "neckerchief", "wrist_cuff", "cuffs", "armlet", "pauldron", "gauntlet",
     "epaulette", "holster", "sheath", "zettai_ryouiki",
     "hood", "hood_up", "hood_down", "hooded",
+    "lace", "side_slit", "glove", "zipper", "pocket", "legwear", "beads",
+    "pendant", "mary_janes", "gold_trim",
+    "zip", "unzipped", "tabard", "sportswear", "bandana", "blindfold",
+    "beanie", "bandeau", "center_opening",
+    "bespectacled", "gakuran", "geta", "tabi", "bodystocking", "tube_top",
+    "mittens", "wristwatch", "haori", "habit", "lowleg", "pom_pom",
+    "bangle", "earmuffs", "thighlet", "randoseru", "muneate", "tasuki",
+    "leather", "latex", "faulds", "bonnet", "fashion", "flats", "tuxedo",
+    "knee_pads", "hip_vent", "single_sock", "open_fly", "tate_eboshi",
+    "briefcase", "cheerleader", "waitress", "race_queen", "rigging",
+    "scabbard", "head_wreath", "shimenawa", "harness", "ear_ornament",
+    "two-sided_fabric", "greaves", "arm_guards", "hachimaki", "fundoshi",
+    "cutoffs", "babydoll", "zouri", "single_shoe", "negligee", "tutu",
+    "uwabaki", "kigurumi", "gown", "victorian", "name_tag", "badge",
+    "emblem", "patch", "stripe", "stripes", "striped",
 }
 
 BACKGROUND_OBJECT_KEYWORDS = {
@@ -208,6 +275,27 @@ BACKGROUND_OBJECT_KEYWORDS = {
     "tree", "grass", "fence", "wall", "door", "table", "bench", "stairs",
     "bridge", "fountain", "statue", "candle", "lantern", "chandelier",
     "vehicle", "train", "bicycle", "motorcycle",
+    "building", "bush", "leaf", "leaves", "branch", "branches", "sunlight",
+    "power_lines", "utility_pole", "contrail", "wind", "box", "bottle",
+    "burger", "sandwich", "bread", "plate", "road", "sidewalk",
+    "full_moon", "reflection",
+    "tomato", "teddy_bear", "popsicle", "chocolate", "chopsticks",
+    "spoon", "fork", "apple", "strawberry", "ofuda", "camera",
+    "railing", "horizon", "aircraft", "sun", "blanket", "turret",
+    "moon", "basket", "pen", "controller", "cable", "bucket", "key",
+    "anchor", "computer", "ufo", "eraser", "pencil", "chimney",
+    "toothbrush", "parasol", "scissors", "gear", "gears", "machine",
+    "cockpit", "television", "ladder", "sack", "dango", "wagashi",
+    "sake", "coin", "grill", "kebab", "pocky", "gohei", "confetti",
+    "snowflake", "snowflakes", "carrot", "pumpkin", "hibiscus", "peach",
+    "magatama", "trigram", "yunomi", "sakazuki", "tokkuri", "takoyaki",
+    "dessert", "parfait", "tuna", "icing", "cherry", "cannon",
+    "paintbrush", "frog", "vines", "house", "doughnut", "monitor",
+    "chalkboard", "elevator", "player", "ipod", "cookie", "note", "notes",
+    "winter", "summer", "cabinet", "ceiling", "shelf", "toilet", "muffin",
+    "senbei", "sweets", "stool", "tank", "planet", "beer", "saucer",
+    "cushion", "shell", "egg", "scroll", "futon", "thermos", "folder",
+    "lemon", "cork", "tarot", "money", "brush", "cosmetics", "clover",
 }
 
 ACTION_DETAIL_KEYWORDS = {
@@ -218,19 +306,30 @@ ACTION_DETAIL_KEYWORDS = {
     "bent_over", "lifted_by_self", "arm_support", "arm_up", "hand_on_own_hip",
     "female_masturbation", "gag", "gagged", "rope", "leash", "presenting_foot", "mouth_hold", "looking_at_another",
     "sword", "gun", "rifle", "pistol", "knife", "dagger", "axe", "bow_(weapon)",
-    "staff", "wand", "shield", "spear", "hammer",
+    "staff", "wand", "shield", "spear", "hammer", "katana", "polearm", "scythe",
     "smoking", "playing", "typing", "drawing", "painting", "waving",
+    "breath", "breathing", "wading", "partially_submerged",
+    "dildo", "gangbang", "femdom", "bukkake", "shibari", "public_indecency",
+    "imminent_penetration", "orgasm", "enema", "exhibitionism", "slapping",
+    "tying", "wakamezake", "battle", "bath", "pulled_by_self", "kicking",
+    "peeing", "pee", "have_to_pee", "69", "deepthroat", "orgy", "murder",
+    "aiming", "feeding", "bestiality", "fucked_silly", "pulling",
+    "spinning", "symmetrical_docking", "asymmetrical_docking",
 }
 
 EXPRESSION_DETAIL_KEYWORDS = {
     "sweat", "saliva", "parted_lips", "trembling", "wet", "fang", "heart", "blurry",
-    "pov_crotch", "mismatched_pupils", "symbol-shaped_pupils",
+    "pov_crotch", "mismatched_pupils", "symbol-shaped_pupils", "anger_vein",
+    "shaded_face",
 }
 
 META_DETAIL_KEYWORDS = {
     "censored", "uncensored", "bar_censor", "virtual_youtuber",
     "text", "username", "watermark", "signature", "symbol",
-    "spoken", "dated", "commentary", "translation",
+    "spoken", "dated", "commentary", "translation", "parody",
+    "crossover", "meme", "letterboxed", "motion_lines", "logo",
+    "christmas", "birthday", "connection", "mechanics",
+    "content_rating", "company_name", "circle_name", "roman_numeral",
 }
 
 CHARACTER_DETAIL_KEYWORDS = {
@@ -238,6 +337,105 @@ CHARACTER_DETAIL_KEYWORDS = {
     "yuri", "hetero", "interracial",
     "dark-skinned_female", "animal_ear_fluff",
     "cosplay", "siblings", "couple", "family", "twins",
+}
+
+CHARACTER_ENTITY_TOKENS = {
+    "girl", "girls", "boy", "boys", "woman", "women", "man", "men",
+    "male", "female", "child", "person", "people", "creature", "animal",
+    "monster", "demon", "elf", "robot", "furry", "pokemon", "sisters",
+    "sister", "brothers", "brother", "bara", "yaoi", "otoko", "ko", "mecha", "doll",
+    "persona", "oni", "ghost", "dragon", "shota", "android", "nun", "angel",
+    "witch", "fairy", "vampire", "bishounen", "mother", "daughter",
+    "everyone", "doctor", "ninja", "idol", "giant", "giantess", "gyaru",
+    "draph", "erune", "miqo", "nekomata", "cyborg", "jiangshi",
+    "superhero", "skeleton", "seraph", "friends", "slave", "lamia", "kyuubi",
+}
+
+BODY_DETAIL_TOKENS = {
+    "face", "eye", "eyes", "eyed", "sideburns", "stubble", "tanlines",
+    "futanari", "venus", "plump", "fur", "areolae", "fins", "faceless",
+    "bangs", "ponytail", "hair", "tips", "halo", "blood", "mustache",
+    "goatee", "eyeliner", "antennae", "kneepits", "underbust",
+    "vulva", "lactation", "antlers", "scales", "joints", "bald",
+    "whisker", "markings", "facepaint", "limb", "skinny", "foreskin",
+    "ahoge", "topknot", "bruise", "ribs", "stitches", "fat", "manly",
+    "blunt", "ends", "furrow", "obese", "growth",
+}
+
+OUTFIT_DETAIL_TOKENS = {
+    "pouch", "headset", "circlet", "shawl", "sarashi", "buruma",
+    "watch", "shrug", "warmers", "strap", "outfit", "miko", "pocket",
+    "zipper", "beads", "buckle", "neck", "covers", "bespectacled",
+    "gakuran", "geta", "tabi", "bodystocking", "mittens", "haori",
+    "habit", "lowleg", "bangle", "earmuffs", "thighlet", "randoseru",
+    "muneate", "tasuki", "faulds", "bonnet", "flats", "tuxedo",
+    "briefcase", "cheerleader", "waitress", "queen", "rigging", "scabbard",
+    "wreath", "shimenawa", "harness", "ornament", "fabric", "greaves",
+    "guards", "hachimaki", "fundoshi", "cutoffs", "babydoll", "zouri",
+    "shoe", "negligee", "tutu", "uwabaki", "kigurumi", "gown",
+    "victorian", "badge", "emblem", "patch", "stripe", "stripes", "striped",
+    "wedgie", "zenra", "nudist",
+}
+
+BACKGROUND_DETAIL_TOKENS = {
+    "floor", "sand", "rock", "paper", "sign", "can", "mug", "card",
+    "bouquet", "skull", "crystal", "machinery", "ship", "snowing",
+    "bubble", "innertube", "object", "moon", "basket", "pen", "controller",
+    "cable", "tatami", "torii", "architecture", "bucket", "key", "anchor",
+    "computer", "ufo", "eraser", "pencil", "chimney", "toothbrush",
+    "parasol", "scissors", "gear", "gears", "machine", "cockpit",
+    "television", "ladder", "sack", "dango", "wagashi", "coin", "grill",
+    "kebab", "gohei", "snowflakes", "carrot", "pumpkin", "hibiscus",
+    "peach", "magatama", "trigram", "yunomi", "sakazuki", "tokkuri",
+    "takoyaki", "dessert", "parfait", "tuna", "icing", "cherry",
+    "cannon", "arrow", "projectile", "paintbrush", "frog", "vines",
+    "house", "doughnut", "monitor", "chalkboard", "elevator", "player",
+    "ipod", "cookie", "note", "notes", "winter", "summer", "cabinet",
+    "ceiling", "shelf", "toilet", "muffin", "senbei", "sweets", "stool",
+    "tank", "planet", "beer", "saucer", "cushion", "shell", "egg",
+    "scroll", "futon", "thermos", "folder", "lemon", "cork", "tarot",
+    "money", "brush", "cosmetics", "clover", "duck", "bulletin",
+}
+
+STYLE_DETAIL_TOKENS = {
+    "theme", "glint", "rays", "inset", "chibi", "tachi",
+    "halloween", "valentine", "contemporary", "oekaki", "music",
+    "alternate", "color", "layer", "palette", "electricity", "light",
+    "shade", "dark", "transparent", "squiggle", "colored", "contrast",
+    "symmetry", "grain", "exposure", "ray", "afterimage", "ripples",
+    "shiny", "space",
+}
+
+META_STRUCTURE_TOKENS = {
+    "cover", "koma", "effects", "page", "number", "doujin", "borrowed",
+    "character", "age", "difference", "comparison",
+    "connection", "mechanics", "zodiac", "rating", "numeral", "4koma",
+    "trefoil",
+}
+
+POSE_DETAIL_TOKENS = {
+    "contrapposto", "wielding", "wield", "thumbs", "pointing", "spread",
+    "viewer", "towards", "ahead", "glance", "on", "behind", "sides",
+    "lift", "dangle", "ground", "knee", "salute", "presenting",
+    "balancing", "sidesaddle", "yokozuwari", "convenient", "around", "waist",
+    "thumbs", "down", "together", "reclining", "fingers", "handstand",
+    "dorsiflexion",
+}
+
+ACTION_DETAIL_TOKENS = {
+    "rape", "insertion", "cigarette", "smoking", "hug", "wading",
+    "drink", "grab", "grip", "dildo", "gangbang", "femdom", "bukkake",
+    "shibari", "indecency", "orgasm", "enema", "exhibitionism", "slapping",
+    "tying", "battle", "bath", "pee", "peeing", "deepthroat", "orgy",
+    "murder", "aiming", "feeding", "bestiality", "spinning", "docking",
+    "pulling", "kicking", "choke",
+}
+
+EXPRESSION_DETAIL_TOKENS = {
+    "tsurime", "tareme", "jitome", "naughty", "wide", "eyed", "smug",
+    "wince", "doyagao", "emoticon", "mukyuu", "annoyed", "nervous",
+    "moaning", "shouting", "yawning", "panicking", "hungry", "bored",
+    "torogao", "o3o", "nyan", "squeans",
 }
 
 # Hairstyle patterns — tags about hair arrangement → body
@@ -256,7 +454,9 @@ OBJECT_PROP_KEYWORDS = {
     "fish", "butterfly", "snake", "rabbit", "fox", "wolf",
     "cake", "candy", "ice_cream", "wine", "tea", "coffee",
     "umbrella", "fan", "mirror", "clock", "flag", "guitar", "piano",
-    "ball", "balloon", "ribbon", "chains", "cuffs",
+    "ball", "balloon", "ribbon", "chain", "chains", "cuffs", "stuffed_toy",
+    "stuffed_animal", "bug", "gem", "instrument", "cross", "musical_note",
+    "microphone", "gift", "tray", "alcohol",
 }
 
 # Effect / rendering keywords → style
@@ -265,7 +465,8 @@ EFFECT_KEYWORDS = {
     "halftone", "gradient", "shadow", "silhouette", "backlighting",
     "rim_lighting", "ambient", "particle", "dust", "smoke",
     "fire", "ice", "lightning", "magic", "aura", "energy",
-    "border", "frame", "vignette",
+    "border", "frame", "vignette", "outline", "spot_color", "science_fiction",
+    "emphasis_lines", "speed_lines", "jaggy_lines",
 }
 
 # Outfit tag patterns (checked by substring matching)
@@ -293,6 +494,10 @@ OUTFIT_KEYWORDS = [
     "mask", "bandage", "headgear", "headpiece",
     "turtleneck", "highleg", "halterneck", "miniskirt",
     "micro_bikini", "side-tie", "string_bikini",
+    "cardigan", "backpack", "helmet", "suit", "denim", "scrunchie",
+    "goggles", "brooch", "bandaid", "armband", "veil", "formal",
+    "casual", "revealing_clothes", "clothes", "eyewear",
+    "thighhigh", "hakama", "buckle",
 ]
 
 # ============================================================
@@ -301,6 +506,46 @@ OUTFIT_KEYWORDS = [
 # Loaded lazily from selected_tags.csv files (category 4 = character)
 
 _wd14_character_tags: Optional[Set[str]] = None
+_booru_tag_categories: Optional[Dict[str, str]] = None
+
+_BOORU_CATEGORY_BY_ID = {
+    0: "general",
+    1: "artist",
+    3: "copyright",
+    4: "character",
+    5: "meta",
+    9: "rating",
+}
+
+
+def _iter_tagger_selected_tag_csvs() -> List[Path]:
+    """Find local tagger selected_tags.csv files that can provide vocab metadata."""
+    repo_root = Path(__file__).resolve().parent.parent
+    roots: List[Path] = []
+    try:
+        from config import get_oppai_oracle_model_dir, get_wd14_model_dir
+        roots.extend([Path(get_wd14_model_dir()), Path(get_oppai_oracle_model_dir())])
+    except Exception:
+        pass
+
+    roots.extend([
+        repo_root / "data" / "models" / "wd14-tagger",
+        repo_root / "models" / "wd14-tagger",
+        repo_root / "data" / "models" / "oppai-oracle",
+    ])
+
+    seen_roots: Set[Path] = set()
+    csv_paths: List[Path] = []
+    for root in roots:
+        try:
+            resolved = root.resolve()
+        except Exception:
+            resolved = root
+        if resolved in seen_roots or not root.exists():
+            continue
+        seen_roots.add(resolved)
+        csv_paths.extend(sorted(root.rglob("selected_tags.csv")))
+    return csv_paths
 
 
 def _load_wd14_character_tags() -> Set[str]:
@@ -310,18 +555,7 @@ def _load_wd14_character_tags() -> Set[str]:
         return _wd14_character_tags
 
     tags: Set[str] = set()
-    try:
-        from config import get_wd14_model_dir
-        wd14_root = Path(get_wd14_model_dir())
-    except Exception:
-        # config might not be importable in all contexts; try relative path
-        wd14_root = Path(__file__).resolve().parent.parent / "models" / "wd14-tagger"
-
-    if not wd14_root.exists():
-        _wd14_character_tags = tags
-        return tags
-
-    for csv_path in wd14_root.glob("*/selected_tags.csv"):
+    for csv_path in _iter_tagger_selected_tag_csvs():
         try:
             with csv_path.open("r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
@@ -336,6 +570,61 @@ def _load_wd14_character_tags() -> Set[str]:
     logger.info("Loaded %d character tags from WD14 model files", len(tags))
     _wd14_character_tags = tags
     return tags
+
+
+def _load_booru_tag_categories() -> Dict[str, str]:
+    """Load tagger vocab category metadata from available booru-style tag files."""
+    global _booru_tag_categories
+    if _booru_tag_categories is not None:
+        return _booru_tag_categories
+
+    categories: Dict[str, str] = {}
+    for csv_path in _iter_tagger_selected_tag_csvs():
+        try:
+            with csv_path.open("r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    tag_name = row.get("name", "").strip()
+                    if not tag_name:
+                        continue
+                    try:
+                        category_id = int(row.get("category", ""))
+                    except (TypeError, ValueError):
+                        continue
+                    category = _BOORU_CATEGORY_BY_ID.get(category_id)
+                    if category:
+                        categories[tag_name.lower().replace(" ", "_")] = category
+        except Exception as exc:
+            logger.debug("Failed to load booru tag categories from %s: %s", csv_path, exc)
+
+    _booru_tag_categories = categories
+    return categories
+
+
+def _fallback_known_booru_general_category(tag_lower: str, clean_tokens: Set[str]) -> str:
+    """Return a non-unknown bucket for known tagger vocab category-0 tags."""
+    if (
+        tag_lower.startswith(("bad_", "worst_", "low_", "poor_"))
+        or clean_tokens.intersection({"error", "mistake", "quality", "noise", "jpeg"})
+    ):
+        return "quality"
+    if clean_tokens.intersection({"style", "palette", "sepia", "grain", "contrast", "symmetry", "perspective"}):
+        return "style"
+    if clean_tokens.intersection({"smile", "angry", "shy", "sad", "happy", "annoyed", "nervous", "screaming", "thinking"}):
+        return "expression"
+    if clean_tokens.intersection({"standing", "sitting", "kneeling", "lying", "reclining", "leaning", "walking", "running", "turning", "handstand"}):
+        return "pose"
+    if clean_tokens.intersection({"holding", "taking", "recording", "punching", "kicking", "pulling", "control", "waking", "drying"}):
+        return "action"
+    if clean_tokens.intersection({"skin", "arm", "arms", "leg", "legs", "hand", "hands", "head", "hair", "eye", "eyes", "bone", "wing", "wings", "tail", "uterus", "prosthesis"}):
+        return "body"
+    if clean_tokens.intersection({"shirt", "dress", "skirt", "shoe", "shoes", "hat", "fedora", "cloth", "clothing", "cutout", "neckwear", "sleeve", "strap", "pin"}):
+        return "outfit"
+    if clean_tokens.intersection({"room", "sky", "pool", "water", "waves", "building", "tower", "house", "vase", "laptop", "switch", "board", "poster", "bamboo"}):
+        return "background"
+    if clean_tokens.intersection({"girl", "boy", "man", "woman", "bride", "alien", "zombie", "knight", "husband", "wife"}):
+        return "character"
+    return "meta"
 
 
 # Known franchise suffixes — tags matching `name_(franchise)` are characters
@@ -364,6 +653,12 @@ def categorize_tag(tag: str) -> str:
     background, action, style, quality, meta, rating, angle, unknown
     """
     tag_lower = tag.lower().replace(" ", "_")
+    clean_tag = tag_lower.replace("_(", "(").replace(")_", ")")
+    clean_tokens = {
+        token.strip("()[]{}'\"")
+        for token in re.split(r"[_\-\s]+", tag_lower)
+        if token and token.strip("()[]{}'\"")
+    }
 
     # Exact set lookups first (fast)
     if tag_lower in RATING_TAGS:
@@ -379,6 +674,10 @@ def categorize_tag(tag: str) -> str:
         return "quality"
     if tag_lower in QUALITY_TAGS:
         return "quality"
+    if tag_lower in SUBJECT_COUNT_TAGS or re.match(r"^\d+\+?(girls|boys|others)$", tag_lower):
+        return "character"
+    if tag_lower.startswith("multiple_") and clean_tokens.intersection({"girls", "boys", "others"}):
+        return "character"
     if tag_lower in META_TAGS:
         return "meta"
     if tag_lower in EXPRESSION_TAGS:
@@ -400,6 +699,17 @@ def categorize_tag(tag: str) -> str:
     if tag_lower.startswith("artist:") or tag_lower.startswith("artist_"):
         return "artist"
 
+    booru_categories = _load_booru_tag_categories()
+    booru_category = booru_categories.get(tag_lower)
+    if booru_category == "rating":
+        return "rating"
+    if booru_category == "artist":
+        return "artist"
+    if booru_category in {"character", "copyright"}:
+        return "character"
+    if booru_category == "meta":
+        return "meta"
+
     # WD14-based character detection (loaded from selected_tags.csv) — checked
     # early because substring-based keyword matching below can false-positive
     # on character names (e.g. "hat" matching "hatsune_miku").
@@ -408,8 +718,7 @@ def categorize_tag(tag: str) -> str:
         return "character"
 
     # Franchise-suffix heuristic: name_(franchise) → character
-    compact = tag_lower.replace("_(", "(").replace(")_", ")")
-    if _FRANCHISE_PATTERN.match(compact):
+    if _FRANCHISE_PATTERN.match(clean_tag):
         return "character"
 
     paren_match = re.search(r"\(([^)]+)\)$", tag_lower)
@@ -418,36 +727,77 @@ def categorize_tag(tag: str) -> str:
         if franchise in _FRANCHISE_SUFFIXES:
             return "character"
 
-    tokens = {token for token in re.split(r"[_\-\s]+", tag_lower) if token}
-
-    if re.match(r"^(year|era)_\d{4}$", tag_lower) or tokens.intersection({"year", "version", "resolution", "filesize", "ratio"}):
+    if (
+        re.match(r"^(year|era)_\d{4}$", tag_lower)
+        or re.fullmatch(r"(?:18|19|20)\d{2}", tag_lower)
+        or clean_tokens.intersection({"year", "version", "resolution", "filesize", "ratio"})
+    ):
         return "meta"
 
-    if tag_lower.endswith("_focus") or tag_lower.endswith("_view") or tag_lower.endswith("_shot") or tag_lower.startswith("from_"):
+    if tag_lower.endswith("_focus") or tag_lower.endswith("_view") or tag_lower.endswith("_shot") or tag_lower.endswith("shot") or tag_lower.startswith(("from_", "pov_")):
         return "angle"
+    if tag_lower in {"straight-on", "straight_on"}:
+        return "angle"
+
+    if tag_lower.endswith("_background") or tag_lower.endswith(" background"):
+        return "background"
+
+    if clean_tokens.intersection(META_STRUCTURE_TOKENS) or re.fullmatch(r"\d+koma", tag_lower):
+        return "meta"
 
     if tag_lower.endswith("_style") or tag_lower.endswith("style") or "lineart" in tag_lower or "render" in tag_lower:
         return "style"
-
-    if tokens.intersection({"smile", "blush", "wink", "grin", "laughing", "crying", "expressionless", "seductive", "embarrassed", "surprised"}):
+    if clean_tokens.intersection(STYLE_DETAIL_TOKENS) or tag_lower.endswith("_(style)") or tag_lower.endswith("_(medium)"):
+        return "style"
+    if tag_lower in {"?", "..."} or re.fullmatch(r":[a-z<>()]+|[\W_]+|[\^;:xdoop_<>\-]+", tag_lower):
         return "expression"
 
-    if tokens.intersection({"standing", "sitting", "kneeling", "lying", "leaning", "pose", "stretching", "jumping", "walking", "running", "hugging", "dancing", "squatting", "crouching", "floating", "tilt", "bent", "crossed"}):
+    if clean_tokens.intersection({"smile", "blush", "wink", "grin", "laughing", "crying", "expressionless", "seductive", "embarrassed", "surprised", "mouth", "looking"}):
+        return "expression"
+    if clean_tokens.intersection(EXPRESSION_DETAIL_TOKENS):
+        return "expression"
+
+    if clean_tokens.intersection({"standing", "sitting", "kneeling", "lying", "leaning", "pose", "stretching", "jumping", "walking", "running", "hugging", "dancing", "squatting", "crouching", "floating", "tilt", "bent", "crossed"}):
+        return "pose"
+    if (
+        tag_lower.startswith(("hand_on_", "hands_on_", "own_hands_", "clenched_hand", "facing_"))
+        or tag_lower.endswith(("_pull", "_raised"))
+        or tag_lower == "v"
+        or tag_lower.endswith("_v")
+        or clean_tokens.intersection({"hands", "hand", "arms", "arm", "legs", "leg", "knees", "knee", "fingers", "finger"})
+            and clean_tokens.intersection({"up", "together", "outstretched", "clenched", "bent", "crossed", "apart", "side", "behind", "back", "raised", "interlocked", "spread", "v"})
+    ):
+        return "pose"
+    if tag_lower == "top-down_bottom-up":
+        return "pose"
+    if clean_tokens.intersection(POSE_DETAIL_TOKENS) and clean_tokens.intersection({"arms", "arm", "hands", "hand", "legs", "leg", "head", "viewer", "glance", "floor", "contrapposto", "wielding", "wield"}):
         return "pose"
 
-    if tokens.intersection({"outdoors", "indoors", "beach", "ocean", "sea", "sky", "forest", "night", "day", "sunset", "sunrise", "room", "bedroom", "bathroom", "classroom", "city", "street", "park", "garden", "field"}):
+    if clean_tokens.intersection({"outdoors", "indoors", "beach", "ocean", "sea", "sky", "forest", "night", "day", "sunset", "sunrise", "room", "bedroom", "bathroom", "classroom", "city", "street", "park", "garden", "field", "building", "bush", "leaf", "leaves", "tree", "road", "wall", "scenery", "nature", "blossoms", "crescent"}):
+        return "background"
+    if clean_tokens.intersection(BACKGROUND_DETAIL_TOKENS):
         return "background"
 
-    if tokens.intersection({"hair", "eyes", "breasts", "chest", "thighs", "legs", "skin", "ears", "tail", "wings", "horns", "fangs", "teeth", "navel", "belly", "feet", "armpits"}):
+    if clean_tokens.intersection({"hair", "eyes", "breasts", "chest", "thighs", "legs", "skin", "ears", "tail", "tails", "wings", "horns", "horn", "halo", "fangs", "teeth", "navel", "belly", "feet", "armpits", "eyebrows", "pupils", "sclera", "pectorals", "mark", "nose", "claws", "feathers", "beard", "curvy", "bangs", "torso", "tentacles", "toned"}):
+        return "body"
+    if clean_tokens.intersection(BODY_DETAIL_TOKENS):
+        return "body"
+    if tag_lower.endswith(("_twintails", "_drills", "_tail", "_tails", "_eye", "_eyes", "_sclera")):
         return "body"
 
-    if tokens.intersection({"holding", "grabbing", "touching", "kissing", "licking", "biting", "reading", "writing", "drinking", "eating", "swimming"}):
+    if clean_tokens.intersection({"holding", "grabbing", "touching", "kissing", "licking", "biting", "reading", "writing", "drinking", "eating", "swimming", "kiss"}):
+        return "action"
+    if clean_tokens.intersection(ACTION_DETAIL_TOKENS):
         return "action"
 
     if any(keyword in tag_lower for keyword in NSFW_BODY_KEYWORDS):
         return "body"
 
     if any(keyword in tag_lower for keyword in OUTFIT_DETAIL_KEYWORDS):
+        return "outfit"
+    if clean_tokens.intersection(OUTFIT_DETAIL_TOKENS):
+        return "outfit"
+    if tag_lower.endswith(("_print", "_trim")):
         return "outfit"
 
     if any(keyword in tag_lower for keyword in BACKGROUND_OBJECT_KEYWORDS):
@@ -463,6 +813,16 @@ def categorize_tag(tag: str) -> str:
         return "meta"
 
     if any(keyword in tag_lower for keyword in CHARACTER_DETAIL_KEYWORDS):
+        return "character"
+    if (
+        clean_tokens.intersection(CHARACTER_ENTITY_TOKENS)
+        or tag_lower in {"aged_down", "aged_up", "genderswap"}
+        or tag_lower.startswith("genderswap")
+        or re.search(r"(girl|boy|woman|man|male|female)s?$", tag_lower)
+    ):
+        return "character"
+
+    if paren_match and clean_tokens.intersection({"creature", "character", "pokemon"}):
         return "character"
 
     # Outfit detection via keyword matching
@@ -489,6 +849,9 @@ def categorize_tag(tag: str) -> str:
     # Meta heuristic: tags about image structure/annotations
     if tag_lower.startswith("no_") or tag_lower.startswith("non-") or tag_lower.endswith("_request"):
         return "meta"
+
+    if booru_category == "general":
+        return _fallback_known_booru_general_category(tag_lower, clean_tokens)
 
     return "unknown"
 

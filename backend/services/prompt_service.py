@@ -39,6 +39,10 @@ def _normalize_prompt_resource_ref(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _normalize_tag_lookup_key(value: Any) -> str:
+    return str(value or "").strip().lower().replace(" ", "_")
+
+
 class PromptService:
     """Service wrapper for Prompt Lab routes."""
 
@@ -77,6 +81,24 @@ class PromptService:
 
     def categorize_tags(self, tags: List[str]) -> Dict[str, Any]:
         results = categorize_tags_batch(tags)
+        requested_by_key: Dict[str, List[str]] = {}
+        for tag in results:
+            key = _normalize_tag_lookup_key(tag)
+            if key:
+                requested_by_key.setdefault(key, []).append(tag)
+
+        if requested_by_key:
+            with db.get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT tag, category FROM tag_categories WHERE is_user_defined = 1")
+                for row in cursor.fetchall():
+                    override_key = _normalize_tag_lookup_key(row[0])
+                    override_category = str(row[1] or "").strip()
+                    if not override_key or not override_category:
+                        continue
+                    for requested_tag in requested_by_key.get(override_key, []):
+                        results[requested_tag] = override_category
+
         return {"results": [{"tag": tag, "category": category} for tag, category in results.items()]}
 
     def recategorize_tag(self, tag: str, category: str) -> Dict[str, Any]:

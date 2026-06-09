@@ -12,6 +12,8 @@
         _currentResult: null,
         _currentSourcePath: '',
         _currentOriginalSourcePath: '',
+        _currentLibraryImageId: null,
+        _currentReaderTags: [],
         _promptFormat: 'original', // 'original' | 'sd' | 'nai'
         _histogramMode: 'rgb',
         _languageBound: false,
@@ -64,6 +66,7 @@
 
             // Copy buttons
             document.getElementById('reader-copy-prompt')?.addEventListener('click', () => this._copy('prompt'));
+            document.getElementById('reader-copy-prompt-category')?.addEventListener('click', (event) => this._copyPromptCategory(event));
             document.getElementById('reader-copy-negative')?.addEventListener('click', () => this._copy('negative'));
             document.getElementById('reader-copy-params')?.addEventListener('click', () => this._copy('params'));
             document.getElementById('reader-copy-all')?.addEventListener('click', () => this._copy('all'));
@@ -942,6 +945,8 @@
                 const result = await response.json();
                 this._currentResult = result;
                 this._currentImage = file;
+                this._currentLibraryImageId = null;
+                this._currentReaderTags = [];
                 this._currentSourcePath = result?.source_temp_path || '';
                 this._renderResult(result, file.name, { resetFormat: true, sourceKind });
 
@@ -994,6 +999,8 @@
                     sourceKind: 'library',
                     originalSourcePath: detailPayload?.image?.path || '',
                 });
+                this._currentLibraryImageId = id;
+                this._currentReaderTags = Array.isArray(detailPayload?.tags) ? detailPayload.tags : [];
                 return true;
             } catch (error) {
                 window.App?.showToast?.(
@@ -1389,11 +1396,31 @@
             });
         },
 
+        _copyPromptCategory(event) {
+            const r = this._currentResult;
+            if (!r) {
+                window.App?.showToast?.(this._t('reader.noPrompt', 'No prompt found in this image'), 'warning');
+                return;
+            }
+            const promptView = this._buildPromptView(r, this._promptFormat);
+            window.TagCategoryCopy?.showMenu?.({
+                anchor: event?.currentTarget || document.getElementById('reader-copy-prompt-category'),
+                source: {
+                    imageId: this._currentLibraryImageId,
+                    tags: this._currentReaderTags || [],
+                    prompt: promptView?.promptText || r.prompt || '',
+                },
+                title: this._t('tagCategory.copyOptions', 'Copy Options'),
+            });
+        },
+
         _clear() {
             this._currentImage = null;
             this._currentResult = null;
             this._currentSourcePath = '';
             this._currentOriginalSourcePath = '';
+            this._currentLibraryImageId = null;
+            this._currentReaderTags = [];
             this._currentSourceKind = 'file';
             this._setClipboardPasteState(false);
             this._lastSuggestedOutputPath = '';
