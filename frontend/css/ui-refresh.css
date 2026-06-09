@@ -1480,13 +1480,21 @@ textarea:focus,
         min-width: 100px;
     }
 
-    .nav-actions .btn:not(.btn-icon-only) span:last-child {
+    .nav-actions .btn:not(.btn-icon-only):not(#btn-scan):not(#btn-tag) span:last-child {
         display: none;
     }
-    .nav-actions .btn:not(.btn-icon-only) {
+    .nav-actions .btn:not(.btn-icon-only):not(#btn-scan):not(#btn-tag) {
         padding: 7px 10px;
         min-width: 38px;
         max-width: 44px;
+    }
+
+    .nav-actions #btn-scan,
+    .nav-actions #btn-tag {
+        flex: 0 0 auto;
+        min-width: max-content;
+        max-width: none;
+        padding-inline: 12px;
     }
 
     .nav-actions #btn-refresh-ui {

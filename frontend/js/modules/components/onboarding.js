@@ -8,7 +8,7 @@ const OnboardingTour = (function() {
 
     const STORAGE_KEY = 'sd-image-sorter-onboarding-completed';
     const DISMISSED_KEY = 'sd-image-sorter-onboarding-dismissed-version';
-    const AUTO_START_ENABLED = true;
+    const AUTO_START_ENABLED = false;
     const FIRST_RUN_CHECK_KEY = 'sd-image-sorter-has-seen-images';
 
     // Current tour version - increment when adding new features
