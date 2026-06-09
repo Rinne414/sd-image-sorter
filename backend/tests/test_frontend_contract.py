@@ -271,6 +271,38 @@ def test_full_selection_workflows_do_not_fallback_to_gallery_dom():
     )
 
 
+def test_selection_filter_payload_preserves_full_gallery_scope():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+
+    selection_match = re.search(
+        r"function buildSelectionFilterRequest\(.*?\) \{\n(?P<body>.*?)\n\}",
+        source,
+        re.DOTALL,
+    )
+    assert selection_match is not None
+    selection_body = selection_match.group("body")
+
+    advanced_match = re.search(
+        r"function buildAdvancedFilterContract\(.*?\) \{\n(?P<body>.*?)\n\}",
+        source,
+        re.DOTALL,
+    )
+    assert advanced_match is not None
+    advanced_body = advanced_match.group("body")
+
+    for field in (
+        "minUserRating",
+        "excludePrompts",
+        "excludeColors",
+        "collectionId",
+        "folder",
+        "hasMetadata",
+    ):
+        assert f"{field}:" in selection_body
+        assert f"{field}:" in advanced_body
+
+
 def test_batch_caption_export_requires_selection_not_loaded_gallery_fallback():
     repo_root = Path(__file__).resolve().parents[2]
     source = (repo_root / "frontend" / "js" / "v321-ui.js").read_text(encoding="utf-8")

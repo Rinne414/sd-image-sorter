@@ -1784,6 +1784,7 @@ class ImageService:
                     artist=contract["artist"],
                     min_aesthetic=contract["minAesthetic"],
                     max_aesthetic=contract["maxAesthetic"],
+                    min_user_rating=contract["minUserRating"],
                     brightness_min=contract["brightnessMin"],
                     brightness_max=contract["brightnessMax"],
                     color_temperature=contract["colorTemperature"],
@@ -1793,6 +1794,11 @@ class ImageService:
                     exclude_ratings=contract.get("excludeRatings"),
                     exclude_checkpoints=contract.get("excludeCheckpoints"),
                     exclude_loras=contract.get("excludeLoras"),
+                    exclude_prompts=contract.get("excludePrompts"),
+                    exclude_colors=contract.get("excludeColors"),
+                    collection_id=contract.get("collectionId"),
+                    folder=contract.get("folder"),
+                    has_metadata=contract.get("hasMetadata"),
                 ):
                     for image_id in batch_ids:
                         handle.write(f"{int(image_id)}\n")
@@ -2162,6 +2168,7 @@ class ImageService:
         aspect_ratio: Optional[str] = None,
         min_aesthetic: Optional[float] = None,
         max_aesthetic: Optional[float] = None,
+        min_user_rating: Optional[int] = None,
         excluded_image_ids: Optional[List[int]] = None,
         # v3.2.1 color filters
         brightness_min: Optional[float] = None,
@@ -2174,6 +2181,9 @@ class ImageService:
         exclude_ratings: Optional[List[str]] = None,
         exclude_checkpoints: Optional[List[str]] = None,
         exclude_loras: Optional[List[str]] = None,
+        exclude_prompts: Optional[List[str]] = None,
+        exclude_colors: Optional[List[str]] = None,
+        collection_id: Optional[int] = None,
         folder: Optional[str] = None,  # v3.3.2 Library Navigation
         has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
     ) -> Dict[str, Any]:
@@ -2188,12 +2198,14 @@ class ImageService:
         max_height = _coerce_optional_int_filter(max_height, "maxHeight")
         min_aesthetic = _coerce_optional_float_filter(min_aesthetic, "minAesthetic")
         max_aesthetic = _coerce_optional_float_filter(max_aesthetic, "maxAesthetic")
+        min_user_rating = _coerce_optional_int_filter(min_user_rating, "minUserRating")
         brightness_min = _coerce_optional_float_filter(brightness_min, "brightnessMin")
         brightness_max = _coerce_optional_float_filter(brightness_max, "brightnessMax")
         color_temperature = _coerce_optional_string_filter(color_temperature, "colorTemperature")
         color_temperature = color_temperature.lower() if color_temperature else None
         brightness_distribution = _coerce_optional_string_filter(brightness_distribution, "brightnessDistribution")
         brightness_distribution = brightness_distribution.lower() if brightness_distribution else None
+        collection_id = _coerce_optional_int_filter(collection_id, "collectionId")
         tag_mode = _coerce_tag_mode(tag_mode)
         prompt_match_mode = _coerce_prompt_match_mode(prompt_match_mode)
         excluded_image_ids = _coerce_selection_id_list(
@@ -2233,6 +2245,7 @@ class ImageService:
             "aspectRatio": aspect_ratio,
             "minAesthetic": min_aesthetic,
             "maxAesthetic": max_aesthetic,
+            "minUserRating": min_user_rating,
             "brightnessMin": brightness_min,
             "brightnessMax": brightness_max,
             "colorTemperature": color_temperature,
@@ -2243,6 +2256,9 @@ class ImageService:
             "excludeRatings": _sanitize_filter_values(exclude_ratings) or [],
             "excludeCheckpoints": _sanitize_filter_values(exclude_checkpoints) or [],
             "excludeLoras": _sanitize_filter_values(exclude_loras) or [],
+            "excludePrompts": _sanitize_filter_values(exclude_prompts) or [],
+            "excludeColors": _sanitize_filter_values(exclude_colors) or [],
+            "collectionId": collection_id,
             "folder": _coerce_optional_string_filter(folder, "folder"),
             "hasMetadata": _coerce_optional_bool_filter(has_metadata, "hasMetadata"),
         }
@@ -2273,6 +2289,7 @@ class ImageService:
             artist=contract["artist"],
             min_aesthetic=contract["minAesthetic"],
             max_aesthetic=contract["maxAesthetic"],
+            min_user_rating=contract["minUserRating"],
             brightness_min=contract["brightnessMin"],
             brightness_max=contract["brightnessMax"],
             color_temperature=contract["colorTemperature"],
@@ -2283,6 +2300,9 @@ class ImageService:
             exclude_ratings=contract.get("excludeRatings"),
             exclude_checkpoints=contract.get("excludeCheckpoints"),
             exclude_loras=contract.get("excludeLoras"),
+            exclude_prompts=contract.get("excludePrompts"),
+            exclude_colors=contract.get("excludeColors"),
+            collection_id=contract.get("collectionId"),
             folder=contract.get("folder"),
             has_metadata=contract.get("hasMetadata"),
             fetch_chunk_size=SELECTION_IDS_FETCH_CHUNK,
@@ -2309,6 +2329,7 @@ class ImageService:
             artist=contract["artist"],
             min_aesthetic=contract["minAesthetic"],
             max_aesthetic=contract["maxAesthetic"],
+            min_user_rating=contract["minUserRating"],
             brightness_min=contract["brightnessMin"],
             brightness_max=contract["brightnessMax"],
             color_temperature=contract["colorTemperature"],
@@ -2319,6 +2340,9 @@ class ImageService:
             exclude_ratings=contract.get("excludeRatings"),
             exclude_checkpoints=contract.get("excludeCheckpoints"),
             exclude_loras=contract.get("excludeLoras"),
+            exclude_prompts=contract.get("excludePrompts"),
+            exclude_colors=contract.get("excludeColors"),
+            collection_id=contract.get("collectionId"),
             folder=contract.get("folder"),
             has_metadata=contract.get("hasMetadata"),
         )
@@ -2344,7 +2368,21 @@ class ImageService:
         filters = payload.get("filters")
         if not isinstance(filters, dict):
             raise HTTPException(status_code=400, detail="Invalid selection token")
-        for list_field in ("generators", "tags", "ratings", "checkpoints", "loras", "prompts"):
+        for list_field in (
+            "generators",
+            "tags",
+            "ratings",
+            "checkpoints",
+            "loras",
+            "prompts",
+            "excludeTags",
+            "excludeGenerators",
+            "excludeRatings",
+            "excludeCheckpoints",
+            "excludeLoras",
+            "excludePrompts",
+            "excludeColors",
+        ):
             value = filters.get(list_field)
             if value is not None and not isinstance(value, list):
                 raise _invalid_selection_token()
@@ -2369,6 +2407,7 @@ class ImageService:
                 aspect_ratio=filters.get("aspectRatio"),
                 min_aesthetic=filters.get("minAesthetic"),
                 max_aesthetic=filters.get("maxAesthetic"),
+                min_user_rating=filters.get("minUserRating") or filters.get("min_user_rating"),
                 brightness_min=filters.get("brightnessMin"),
                 brightness_max=filters.get("brightnessMax"),
                 color_temperature=filters.get("colorTemperature"),
@@ -2379,6 +2418,9 @@ class ImageService:
                 exclude_ratings=filters.get("excludeRatings"),
                 exclude_checkpoints=filters.get("excludeCheckpoints"),
                 exclude_loras=filters.get("excludeLoras"),
+                exclude_prompts=filters.get("excludePrompts"),
+                exclude_colors=filters.get("excludeColors"),
+                collection_id=filters.get("collectionId") or filters.get("collection_id"),
                 folder=filters.get("folder"),
                 has_metadata=filters.get("hasMetadata"),
             )
@@ -2449,6 +2491,7 @@ class ImageService:
         aspect_ratio: Optional[str] = None,
         min_aesthetic: Optional[float] = None,
         max_aesthetic: Optional[float] = None,
+        min_user_rating: Optional[int] = None,
         brightness_min: Optional[float] = None,
         brightness_max: Optional[float] = None,
         color_temperature: Optional[str] = None,
@@ -2458,6 +2501,11 @@ class ImageService:
         exclude_ratings: Optional[List[str]] = None,
         exclude_checkpoints: Optional[List[str]] = None,
         exclude_loras: Optional[List[str]] = None,
+        exclude_prompts: Optional[List[str]] = None,
+        exclude_colors: Optional[List[str]] = None,
+        collection_id: Optional[int] = None,
+        folder: Optional[str] = None,
+        has_metadata: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """Resolve the full filtered-result ID set in current gallery sort order."""
         contract = self._build_selection_filter_contract(
@@ -2479,6 +2527,7 @@ class ImageService:
             aspect_ratio=aspect_ratio,
             min_aesthetic=min_aesthetic,
             max_aesthetic=max_aesthetic,
+            min_user_rating=min_user_rating,
             brightness_min=brightness_min,
             brightness_max=brightness_max,
             color_temperature=color_temperature,
@@ -2488,6 +2537,11 @@ class ImageService:
             exclude_ratings=exclude_ratings,
             exclude_checkpoints=exclude_checkpoints,
             exclude_loras=exclude_loras,
+            exclude_prompts=exclude_prompts,
+            exclude_colors=exclude_colors,
+            collection_id=collection_id,
+            folder=folder,
+            has_metadata=has_metadata,
         )
         image_ids = self._selection_ids_from_contract(
             contract,

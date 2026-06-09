@@ -137,6 +137,7 @@ def iter_selection_token_id_chunks(selection_token: str, chunk_size: int = EXPOR
         artist=filters.get("artist"),
         min_aesthetic=filters.get("minAesthetic"),
         max_aesthetic=filters.get("maxAesthetic"),
+        min_user_rating=filters.get("minUserRating") or filters.get("min_user_rating"),
         excluded_image_ids=filters.get("excludedImageIds") or None,
         brightness_min=filters.get("brightnessMin"),
         brightness_max=filters.get("brightnessMax"),
@@ -147,6 +148,11 @@ def iter_selection_token_id_chunks(selection_token: str, chunk_size: int = EXPOR
         exclude_ratings=filters.get("excludeRatings") or None,
         exclude_checkpoints=filters.get("excludeCheckpoints") or None,
         exclude_loras=filters.get("excludeLoras") or None,
+        exclude_prompts=filters.get("excludePrompts") or None,
+        exclude_colors=filters.get("excludeColors") or None,
+        collection_id=filters.get("collectionId") or filters.get("collection_id"),
+        folder=filters.get("folder"),
+        has_metadata=filters.get("hasMetadata"),
     )
 
 
@@ -170,6 +176,7 @@ def count_selection_token_ids(selection_token: str) -> int:
         artist=filters.get("artist"),
         min_aesthetic=filters.get("minAesthetic"),
         max_aesthetic=filters.get("maxAesthetic"),
+        min_user_rating=filters.get("minUserRating") or filters.get("min_user_rating"),
         excluded_image_ids=filters.get("excludedImageIds") or None,
         brightness_min=filters.get("brightnessMin"),
         brightness_max=filters.get("brightnessMax"),
@@ -180,6 +187,11 @@ def count_selection_token_ids(selection_token: str) -> int:
         exclude_ratings=filters.get("excludeRatings") or None,
         exclude_checkpoints=filters.get("excludeCheckpoints") or None,
         exclude_loras=filters.get("excludeLoras") or None,
+        exclude_prompts=filters.get("excludePrompts") or None,
+        exclude_colors=filters.get("excludeColors") or None,
+        collection_id=filters.get("collectionId") or filters.get("collection_id"),
+        folder=filters.get("folder"),
+        has_metadata=filters.get("hasMetadata"),
     )
 
 

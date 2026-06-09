@@ -434,6 +434,52 @@ class TestGetImages:
 class TestSelectionIds:
     """Tests for POST /api/images/selection-ids endpoint."""
 
+    def _seed_full_gallery_scope(self, db, tmp_path: Path):
+        alpha = tmp_path / "selection-contract-alpha"
+        beta = tmp_path / "selection-contract-beta"
+        alpha.mkdir()
+        beta.mkdir()
+        collection = db.create_collection("Selection Contract")
+        collection_id = int(collection["id"])
+
+        def add_case(name, *, folder=alpha, generator="comfyui", prompt="target prompt", rating=5, color="warm", member=True):
+            image_path = folder / f"{name}.png"
+            image_id = db.add_image(
+                path=str(image_path),
+                filename=image_path.name,
+                generator=generator,
+                prompt=prompt,
+                metadata_json="{}",
+            )
+            db.set_user_rating(image_id, rating)
+            db.update_image_colors(image_id, {
+                "avg_brightness": 128,
+                "color_temperature": color,
+                "brightness_distribution": "balanced",
+            })
+            if member:
+                db.set_collection_membership(collection_id, image_id, True)
+            return image_id
+
+        keep_id = add_case("keep")
+        add_case("low-rating", rating=2)
+        add_case("excluded-prompt", prompt="target prompt, blocked-term")
+        add_case("excluded-color", color="cool")
+        add_case("wrong-collection", member=False)
+        add_case("wrong-folder", folder=beta)
+        add_case("no-metadata", generator="unknown", prompt=None)
+
+        payload = {
+            "sortBy": "name_asc",
+            "minUserRating": 4,
+            "excludePrompts": ["blocked-term"],
+            "excludeColors": ["cool"],
+            "collectionId": collection_id,
+            "folder": str(alpha),
+            "hasMetadata": True,
+        }
+        return keep_id, payload
+
     def test_selection_ids_returns_all_filtered_ids_in_sort_order(self, test_client, test_db_with_images):
         """Filtered selection should return the full matching ID set in current sort order."""
         expected_by_filename = {
@@ -584,6 +630,15 @@ class TestSelectionIds:
         assert excluded.status_code == 200
         assert excluded.json() == {"image_ids": [landscape_id], "total": 1}
 
+    def test_selection_ids_preserves_full_gallery_filter_contract(self, test_client, test_db, tmp_path):
+        """Legacy all-filtered selection must not drop Gallery filters added after v3.2.2."""
+        keep_id, payload = self._seed_full_gallery_scope(test_client.test_db, tmp_path)
+
+        response = test_client.post("/api/images/selection-ids", json=payload)
+
+        assert response.status_code == 200
+        assert response.json() == {"image_ids": [keep_id], "total": 1}
+
     def test_selection_ids_rejects_oversized_legacy_response(self, test_client, monkeypatch):
         """The compatibility endpoint must not return unbounded giant ID arrays."""
         import services.image_service as image_service_module
@@ -719,6 +774,26 @@ class TestSelectionIds:
 
         assert count_selection_token_ids(token) == 1
         assert list(iter_selection_token_id_chunks(token, chunk_size=10)) == [[landscape_id]]
+
+    def test_selection_token_and_sidecar_preserve_full_gallery_filter_contract(self, test_client, test_db, tmp_path):
+        """Token chunks and sidecar helpers must keep the same full Gallery scope."""
+        from services.tag_export_service import count_selection_token_ids, iter_selection_token_id_chunks
+
+        keep_id, payload = self._seed_full_gallery_scope(test_client.test_db, tmp_path)
+        token_response = test_client.post("/api/images/selection-token", json={**payload, "chunkSize": 10})
+        assert token_response.status_code == 200
+        assert token_response.json()["total_estimate"] == 1
+        token = token_response.json()["selection_token"]
+
+        chunk_response = test_client.get(
+            "/api/images/selection-chunk",
+            params={"selection_token": token, "offset": 0, "limit": 10},
+        )
+
+        assert chunk_response.status_code == 200
+        assert chunk_response.json()["image_ids"] == [keep_id]
+        assert count_selection_token_ids(token) == 1
+        assert list(iter_selection_token_id_chunks(token, chunk_size=10)) == [[keep_id]]
 
     def test_selection_token_can_exclude_small_explicit_selection(self, test_client, test_db_with_images):
         """Token mode should preserve filtered-invert semantics without materializing every ID."""

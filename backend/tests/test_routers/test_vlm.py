@@ -177,9 +177,19 @@ def test_vlm_caption_batch_accepts_filters_payload(monkeypatch, test_client, tes
     from vlm_providers.base import VLMResult
 
     image_path = tmp_path / "filters-vlm.png"
+    other_path = tmp_path / "filters-vlm-other.png"
     Image.new("RGB", (32, 32), color="white").save(image_path)
-    image_id = db.add_image(path=str(image_path), filename=image_path.name)
+    Image.new("RGB", (32, 32), color="black").save(other_path)
+    image_id = db.add_image(path=str(image_path), filename=image_path.name, generator="comfyui", prompt="clean prompt")
+    other_id = db.add_image(path=str(other_path), filename=other_path.name, prompt="blocked-term")
     db.add_tags(image_id, [{"tag": "vlm-filter-scope", "confidence": 0.9}])
+    db.add_tags(other_id, [{"tag": "vlm-filter-scope", "confidence": 0.9}])
+    db.set_user_rating(image_id, 5)
+    db.set_user_rating(other_id, 5)
+    db.update_image_colors(image_id, {"avg_brightness": 220, "color_temperature": "warm"})
+    db.update_image_colors(other_id, {"avg_brightness": 20, "color_temperature": "cool"})
+    collection = db.create_collection("VLM Filter Contract")
+    db.set_collection_membership(int(collection["id"]), image_id, True)
 
     class FakeProvider:
         def __init__(self, config):
@@ -215,6 +225,12 @@ def test_vlm_caption_batch_accepts_filters_payload(monkeypatch, test_client, tes
             "tags": ["vlm-filter-scope"],
             "tagMode": "and",
             "sortBy": "newest",
+            "minUserRating": 4,
+            "excludePrompts": ["blocked-term"],
+            "excludeColors": ["cool"],
+            "collectionId": int(collection["id"]),
+            "folder": str(tmp_path),
+            "hasMetadata": True,
         }
     })
 
@@ -225,6 +241,7 @@ def test_vlm_caption_batch_accepts_filters_payload(monkeypatch, test_client, tes
     monkeypatch.setattr(vlm_router.asyncio, "create_task", real_create_task)
     asyncio.run(scheduled.pop())
     assert db.get_image_by_id(image_id)["ai_caption"] == "captioned from filters"
+    assert not db.get_image_by_id(other_id).get("ai_caption")
 
 
 def test_vlm_run_batch_uses_bounded_gather_for_large_inputs(monkeypatch, test_db):

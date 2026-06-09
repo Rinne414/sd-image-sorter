@@ -241,12 +241,12 @@ Set an image's explicit user star rating (v3.3.2). Body `{ "stars": 0-5 }` where
 #### POST /api/images/selection-ids
 Resolve the full ordered ID set for the current filtered result set.
 
-This is the compatibility endpoint for callers that need one complete response. It uses the same filter payload as the gallery, including `tagMode` (`and`/`or`) and `excludeTags` / `excludeGenerators` / `excludeRatings` / `excludeCheckpoints` / `excludeLoras`. Responses are capped at 100,000 IDs; larger selections return `413` and must use the token/chunk pair below unless `sortBy` is `random`.
+This is the compatibility endpoint for callers that need one complete response. It uses the same filter payload as the gallery, including `tagMode` (`and`/`or`), `minUserRating`, color fields, `folder`, `hasMetadata`, `collectionId`, and all include/exclude filters (`excludeTags` / `excludeGenerators` / `excludeRatings` / `excludeCheckpoints` / `excludeLoras` / `excludePrompts` / `excludeColors`). Responses are capped at 100,000 IDs; larger selections return `413` and must use the token/chunk pair below unless `sortBy` is `random`.
 
 #### POST /api/images/selection-token
 Create a stateless token for chunked filtered-selection ID retrieval.
 
-Request body is the same filter payload as `selection-ids`, including `tagMode`, exclude filters, and color fields (`brightnessMin`, `brightnessMax`, `colorTemperature`, `brightnessDistribution`), plus optional `chunkSize` (`1..10000`, default `2000`) and `excludedImageIds` (`0..10000`) for inverted filtered-selection scopes.
+Request body is the same filter payload as `selection-ids`, including `tagMode`, `minUserRating`, `folder`, `hasMetadata`, `collectionId`, exclude filters, and color fields (`brightnessMin`, `brightnessMax`, `colorTemperature`, `brightnessDistribution`, `excludeColors`), plus optional `chunkSize` (`1..10000`, default `2000`) and `excludedImageIds` (`0..10000`) for inverted filtered-selection scopes.
 
 Response:
 

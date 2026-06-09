@@ -110,6 +110,7 @@ class SelectionIdsRequest(BaseModel):
     aspectRatio: Optional[str] = None
     minAesthetic: Optional[float] = Field(default=None, ge=0, le=10)
     maxAesthetic: Optional[float] = Field(default=None, ge=0, le=10)
+    minUserRating: Optional[int] = Field(default=None, ge=0, le=5)
     brightnessMin: Optional[float] = Field(default=None, ge=0, le=255)
     brightnessMax: Optional[float] = Field(default=None, ge=0, le=255)
     colorTemperature: Optional[str] = Field(default=None, pattern="^(warm|cool|neutral)$")
@@ -123,6 +124,9 @@ class SelectionIdsRequest(BaseModel):
     excludeRatings: List[str] = Field(default_factory=list)
     excludeCheckpoints: List[str] = Field(default_factory=list)
     excludeLoras: List[str] = Field(default_factory=list)
+    excludePrompts: List[str] = Field(default_factory=list)
+    excludeColors: List[str] = Field(default_factory=list)
+    collectionId: Optional[int] = Field(default=None, ge=1)
 
     @model_validator(mode="after")
     def validate_prompt_match_mode(self):
@@ -643,6 +647,7 @@ async def create_selection_token(
         aspect_ratio=request.aspectRatio,
         min_aesthetic=request.minAesthetic,
         max_aesthetic=request.maxAesthetic,
+        min_user_rating=request.minUserRating,
         brightness_min=request.brightnessMin,
         brightness_max=request.brightnessMax,
         color_temperature=request.colorTemperature,
@@ -653,6 +658,9 @@ async def create_selection_token(
         exclude_ratings=request.excludeRatings,
         exclude_checkpoints=request.excludeCheckpoints,
         exclude_loras=request.excludeLoras,
+        exclude_prompts=request.excludePrompts,
+        exclude_colors=request.excludeColors,
+        collection_id=request.collectionId,
         folder=request.folder,
         has_metadata=request.hasMetadata,
         chunk_size=request.chunkSize,
@@ -813,6 +821,7 @@ async def get_selection_ids(
         aspect_ratio=request.aspectRatio,
         min_aesthetic=request.minAesthetic,
         max_aesthetic=request.maxAesthetic,
+        min_user_rating=request.minUserRating,
         brightness_min=request.brightnessMin,
         brightness_max=request.brightnessMax,
         color_temperature=request.colorTemperature,
@@ -822,6 +831,11 @@ async def get_selection_ids(
         exclude_ratings=request.excludeRatings,
         exclude_checkpoints=request.excludeCheckpoints,
         exclude_loras=request.excludeLoras,
+        exclude_prompts=request.excludePrompts,
+        exclude_colors=request.excludeColors,
+        collection_id=request.collectionId,
+        folder=request.folder,
+        has_metadata=request.hasMetadata,
     )
 
 

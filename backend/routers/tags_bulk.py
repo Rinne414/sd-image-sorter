@@ -117,6 +117,7 @@ class BulkTagFilterContract(BaseModel):
     aspectRatio: Optional[str] = None
     minAesthetic: Optional[float] = Field(default=None, ge=0, le=10)
     maxAesthetic: Optional[float] = Field(default=None, ge=0, le=10)
+    minUserRating: Optional[int] = Field(default=None, ge=0, le=5)
     brightnessMin: Optional[float] = Field(default=None, ge=0, le=255)
     brightnessMax: Optional[float] = Field(default=None, ge=0, le=255)
     colorTemperature: Optional[str] = Field(default=None, pattern="^(warm|cool|neutral)$")
@@ -130,6 +131,11 @@ class BulkTagFilterContract(BaseModel):
     excludeRatings: List[str] = Field(default_factory=list)
     excludeCheckpoints: List[str] = Field(default_factory=list)
     excludeLoras: List[str] = Field(default_factory=list)
+    excludePrompts: List[str] = Field(default_factory=list)
+    excludeColors: List[str] = Field(default_factory=list)
+    collectionId: Optional[int] = Field(default=None, ge=1)
+    folder: Optional[str] = Field(default=None, max_length=4096)
+    hasMetadata: Optional[bool] = None
 
     @model_validator(mode="after")
     def normalize_contract(self) -> "BulkTagFilterContract":
@@ -274,6 +280,7 @@ def _filter_contract_db_kwargs(filters: BulkTagFilterContract) -> Dict[str, Any]
         "excluded_image_ids": _list_or_none(filters.excludedImageIds),
         "min_aesthetic": filters.minAesthetic,
         "max_aesthetic": filters.maxAesthetic,
+        "min_user_rating": filters.minUserRating,
         "brightness_min": filters.brightnessMin,
         "brightness_max": filters.brightnessMax,
         "color_temperature": filters.colorTemperature,
@@ -283,6 +290,11 @@ def _filter_contract_db_kwargs(filters: BulkTagFilterContract) -> Dict[str, Any]
         "exclude_ratings": _list_or_none(filters.excludeRatings),
         "exclude_checkpoints": _list_or_none(filters.excludeCheckpoints),
         "exclude_loras": _list_or_none(filters.excludeLoras),
+        "exclude_prompts": _list_or_none(filters.excludePrompts),
+        "exclude_colors": _list_or_none(filters.excludeColors),
+        "collection_id": filters.collectionId,
+        "folder": filters.folder,
+        "has_metadata": filters.hasMetadata,
     }
 
 

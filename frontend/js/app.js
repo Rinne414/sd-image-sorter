@@ -404,6 +404,7 @@ function cloneFilterState(filters) {
         excludeLoras: [...(source.excludeLoras || [])],
         excludePrompts: [...(source.excludePrompts || [])],
         excludeColors: [...(source.excludeColors || [])],
+        collectionId: source.collectionId ?? null,
         folder: source.folder ? String(source.folder).trim() : null,
         hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
     };
@@ -484,6 +485,7 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
         excludeLoras: [...(source.excludeLoras || [])],
         excludePrompts: [...(source.excludePrompts || [])],
         excludeColors: [...(source.excludeColors || [])],
+        collectionId: source.collectionId ?? null,
         folder: source.folder ? String(source.folder).trim() : null,
         hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
     };
@@ -525,6 +527,9 @@ function buildAdvancedFilterContract(filters = AppState?.filters || createDefaul
         excludeLoras: request.excludeLoras,
         excludePrompts: request.excludePrompts,
         excludeColors: request.excludeColors,
+        collectionId: request.collectionId ?? null,
+        folder: request.folder || null,
+        hasMetadata: request.hasMetadata ?? null,
     };
 }
 

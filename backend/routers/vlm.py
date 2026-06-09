@@ -466,6 +466,7 @@ def _filters_to_selection_kwargs(filters: Dict[str, Any]) -> Dict[str, Any]:
         "aspect_ratio": pick("aspectRatio", "aspect_ratio"),
         "min_aesthetic": pick("minAesthetic", "min_aesthetic"),
         "max_aesthetic": pick("maxAesthetic", "max_aesthetic"),
+        "min_user_rating": pick("minUserRating", "min_user_rating"),
         "brightness_min": pick("brightnessMin", "brightness_min"),
         "brightness_max": pick("brightnessMax", "brightness_max"),
         "color_temperature": pick("colorTemperature", "color_temperature"),
@@ -476,6 +477,11 @@ def _filters_to_selection_kwargs(filters: Dict[str, Any]) -> Dict[str, Any]:
         "exclude_ratings": pick("excludeRatings", "exclude_ratings"),
         "exclude_checkpoints": pick("excludeCheckpoints", "exclude_checkpoints"),
         "exclude_loras": pick("excludeLoras", "exclude_loras"),
+        "exclude_prompts": pick("excludePrompts", "exclude_prompts"),
+        "exclude_colors": pick("excludeColors", "exclude_colors"),
+        "collection_id": pick("collectionId", "collection_id"),
+        "folder": pick("folder"),
+        "has_metadata": pick("hasMetadata", "has_metadata"),
     }
 
 

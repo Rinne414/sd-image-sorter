@@ -113,6 +113,67 @@ def test_bulk_remove_accepts_filter_contract_in_chunks(monkeypatch, test_client,
         assert [row["tag"] for row in db.get_image_tags(image_id)] == ["keep_me"]
 
 
+def test_bulk_filter_contract_preserves_full_gallery_scope(test_client, tmp_path):
+    """Legacy filters scope should not drop Gallery filters before mutating tags."""
+    import database as db
+
+    alpha = tmp_path / "bulk-contract-alpha"
+    beta = tmp_path / "bulk-contract-beta"
+    alpha.mkdir()
+    beta.mkdir()
+    collection = db.create_collection("Bulk Filter Contract")
+    collection_id = int(collection["id"])
+
+    def add_case(name, *, folder=alpha, generator="comfyui", prompt="clean prompt", rating=5, color="warm", member=True):
+        image_path = folder / f"bulk-contract-{name}.png"
+        image_id = db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            generator=generator,
+            prompt=prompt,
+            metadata_json="{}",
+        )
+        db.add_tags(image_id, [{"tag": "remove_me", "confidence": 0.9}])
+        db.set_user_rating(image_id, rating)
+        db.update_image_colors(image_id, {
+            "avg_brightness": 128,
+            "color_temperature": color,
+            "brightness_distribution": "balanced",
+        })
+        if member:
+            db.set_collection_membership(collection_id, image_id, True)
+        return image_id
+
+    keep_id = add_case("keep")
+    add_case("low-rating", rating=2)
+    add_case("excluded-prompt", prompt="clean prompt, blocked-term")
+    add_case("excluded-color", color="cool")
+    add_case("wrong-collection", member=False)
+    add_case("wrong-folder", folder=beta)
+    add_case("no-metadata", generator="unknown", prompt=None)
+
+    response = test_client.post("/api/tags/bulk/remove", json={
+        "filters": {
+            "search": "bulk-contract-",
+            "sortBy": "name_asc",
+            "minUserRating": 4,
+            "excludePrompts": ["blocked-term"],
+            "excludeColors": ["cool"],
+            "collectionId": collection_id,
+            "folder": str(alpha),
+            "hasMetadata": True,
+        },
+        "tags": ["remove_me"],
+        "dry_run": True,
+    })
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_images_checked"] == 1
+    assert payload["affected_images"] == 1
+    assert payload["sample_changes"][0]["image_id"] == keep_id
+
+
 def test_find_replace_empty_replace_deletes_matching_tag(test_client, tmp_path):
     """Find & Replace with an empty replacement is the UI's delete operation."""
     import database as db

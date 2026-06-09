@@ -302,6 +302,7 @@ def iter_filtered_image_id_chunks(
     excluded_image_ids: Optional[List[int]] = None,
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
+    min_user_rating: Optional[int] = None,
     include_unreadable: bool = False,
     # v3.2.1 color filters
     brightness_min: Optional[float] = None,
@@ -314,6 +315,11 @@ def iter_filtered_image_id_chunks(
     exclude_ratings: Optional[List[str]] = None,
     exclude_checkpoints: Optional[List[str]] = None,
     exclude_loras: Optional[List[str]] = None,
+    exclude_prompts: Optional[List[str]] = None,
+    exclude_colors: Optional[List[str]] = None,
+    collection_id: Optional[int] = None,
+    folder: Optional[str] = None,
+    has_metadata: Optional[bool] = None,
 ) -> Iterator[List[int]]:
     """Yield filtered image IDs in bounded chunks without a giant ID list.
 
@@ -346,6 +352,7 @@ def iter_filtered_image_id_chunks(
             excluded_image_ids=excluded_image_ids,
             min_aesthetic=min_aesthetic,
             max_aesthetic=max_aesthetic,
+            min_user_rating=min_user_rating,
             include_unreadable=include_unreadable,
             brightness_min=brightness_min,
             brightness_max=brightness_max,
@@ -356,6 +363,11 @@ def iter_filtered_image_id_chunks(
             exclude_ratings=exclude_ratings,
             exclude_checkpoints=exclude_checkpoints,
             exclude_loras=exclude_loras,
+            exclude_prompts=exclude_prompts,
+            exclude_colors=exclude_colors,
+            collection_id=collection_id,
+            folder=folder,
+            has_metadata=has_metadata,
             fetch_chunk_size=normalized_chunk_size,
             offset=offset,
             limit=normalized_chunk_size,
