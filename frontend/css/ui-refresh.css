@@ -832,6 +832,11 @@ textarea:focus,
     }
 }
 
+:root {
+    --ui-viewport-height: calc(100vh * var(--ui-scale-inverse, 1));
+    --ui-viewport-below-nav: calc(var(--ui-viewport-height) - var(--nav-height));
+}
+
 .filter-sidebar,
 .autosep-panel,
 .sort-setup,
@@ -856,8 +861,8 @@ textarea:focus,
     padding: 18px;
     width: var(--sidebar-width);
     box-sizing: border-box;
-    height: calc((100vh * var(--ui-scale-inverse, 1)) - var(--nav-height));
-    max-height: calc((100vh * var(--ui-scale-inverse, 1)) - var(--nav-height));
+    height: var(--ui-viewport-below-nav);
+    max-height: var(--ui-viewport-below-nav);
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-bottom: 32px;
@@ -4684,7 +4689,7 @@ textarea:focus,
 }
 
 #view-censor .censor-workspace-v2 {
-    height: calc(100vh - var(--nav-height)) !important;
+    height: var(--censor-workspace-height, var(--ui-viewport-below-nav)) !important;
     background:
         radial-gradient(circle at 14% 18%, rgba(51, 214, 224, 0.16), transparent 30%),
         radial-gradient(circle at 84% 20%, rgba(124, 139, 255, 0.14), transparent 30%),

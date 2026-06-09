@@ -781,6 +781,65 @@ test('gallery sidebar selection controls should remain reachable under UI scale'
   }).toEqual({ visible: true, canScroll: true })
 })
 
+test('full-height workspaces should stay inside the desktop viewport under UI scale', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.addInitScript(() => {
+    localStorage.setItem('ui_scale_v1', '1.3')
+  })
+  await openMainPage(page)
+
+  await expect.poll(async () => page.evaluate(() => window.UiScale?.get?.())).toBe(1.3)
+
+  const probes = [
+    { view: 'censor', selector: '.censor-workspace-v2' },
+    { view: 'censor', selector: '.censor-sidebar-v2.left' },
+    { view: 'censor', selector: '.censor-sidebar-v2.right' },
+    { view: 'dataset', selector: '#view-dataset .dataset-maker' },
+    { view: 'sorting', selector: '#view-autosep .autosep-shell' },
+    { view: 'sorting', selector: '#btn-execute-autosep' },
+  ]
+
+  async function createResidualPageScroll() {
+    await page.waitForTimeout(820)
+    await page.evaluate(() => {
+      if (!document.getElementById('e2e-scroll-residue-spacer')) {
+        const spacer = document.createElement('div')
+        spacer.id = 'e2e-scroll-residue-spacer'
+        spacer.style.height = '1800px'
+        spacer.style.width = '1px'
+        spacer.style.pointerEvents = 'none'
+        spacer.setAttribute('aria-hidden', 'true')
+        document.body.appendChild(spacer)
+      }
+      window.scrollTo(0, Math.min(520, Math.max(0, document.documentElement.scrollHeight - window.innerHeight)))
+    })
+    await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+  }
+
+  for (const probe of probes) {
+    await createResidualPageScroll()
+    await openView(page, probe.view)
+    await expect.poll(async () => {
+      return await page.evaluate((selector) => {
+        const element = document.querySelector(selector)
+        if (!element) return { missing: true }
+        const rect = element.getBoundingClientRect()
+        return {
+          topInside: rect.top >= -1,
+          bottomInside: rect.bottom <= window.innerHeight + 1,
+          pageScrollReset: Math.round(window.scrollY),
+          viewport: window.innerHeight,
+        }
+      }, probe.selector)
+    }, { message: `${probe.view} ${probe.selector} should stay inside the scaled desktop viewport` }).toEqual({
+      topInside: true,
+      bottomInside: true,
+      pageScrollReset: 0,
+      viewport: 900,
+    })
+  }
+})
+
 test('filtered gallery selection should clear when gallery filters change', async ({ page }) => {
   await openMainPage(page)
 

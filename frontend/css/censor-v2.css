@@ -48,18 +48,13 @@
 }
 
 #view-censor .censor-workspace-v2 {
+    --censor-workspace-height: calc(var(--ui-viewport-below-nav, calc(100vh - var(--nav-height))) - 8px);
     display: flex !important;
     width: 100% !important;
     flex: 1 1 auto !important;
     min-width: 0 !important;
-    height: calc(100vh - var(--nav-height)) !important;
-    /* Account for navbar height: size below the fixed 72px nav AND offset down
-       by it. Without the margin the workspace sized to (100vh - nav) but still
-       started at y0, so once an image loaded its top toolbar rendered behind the
-       fixed nav (toolbar buttons clipped under the tabs) with a matching gap at
-       the bottom. The workspace is a flex item, so the margin reserves space
-       (no margin-collapse) and the area fills the viewport below the nav. */
-    margin-top: var(--nav-height) !important;
+    height: var(--censor-workspace-height) !important;
+    margin-top: 0 !important;
     background: radial-gradient(circle at 50% 50%, #1a0b2e 0%, #0a0a0f 100%) !important;
     position: relative;
     overflow: hidden !important;
@@ -106,8 +101,8 @@
     backdrop-filter: var(--glass-blur-xl) !important;
     border-right: 1px solid rgba(var(--censor-accent-rgb), 0.15) !important;
     padding: 10px !important;
-    height: calc(100vh - var(--nav-height)) !important;
-    max-height: calc(100vh - var(--nav-height)) !important;
+    height: var(--censor-workspace-height, var(--ui-viewport-below-nav, calc(100vh - var(--nav-height)))) !important;
+    max-height: var(--censor-workspace-height, var(--ui-viewport-below-nav, calc(100vh - var(--nav-height)))) !important;
     z-index: 20;
     overflow-y: auto !important;
     box-shadow: 5px 0 30px rgba(0, 0, 0, 0.2);
@@ -150,7 +145,7 @@
     z-index: 10;
     /* Don't use 100vh - it ignores the navbar and pushes toolbar off screen */
     height: 100% !important;
-    max-height: calc(100vh - var(--nav-height)) !important;
+    max-height: var(--censor-workspace-height, var(--ui-viewport-below-nav, calc(100vh - var(--nav-height)))) !important;
 }
 
 /* v3.3.2 UX: empty editor (no image loaded) — hide the editing chrome so the

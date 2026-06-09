@@ -2735,6 +2735,7 @@ async function loadCanvasImage(id) {
             if (filenameEl) filenameEl.textContent = item.outputFilename;
 
             resetZoom();
+            scheduleCensorCanvasRefit(nextCanvas.width, nextCanvas.height);
             if (typeof window.__updateCensorFilterPreview === 'function') {
                 window.__updateCensorFilterPreview();
             }
@@ -2775,11 +2776,12 @@ async function loadCanvasImage(id) {
 
 function fitCanvasToContainer(canvas, imgW, imgH) {
     const container = document.getElementById('canvas-container');
-    if (!container) return;
+    if (!container || !(canvas instanceof HTMLCanvasElement)) return;
 
     // Get container dimensions (minus padding if any)
     const contW = container.clientWidth;
     const contH = container.clientHeight;
+    if (contW <= 0 || contH <= 0 || imgW <= 0 || imgH <= 0) return;
 
     // Calculate aspect ratios
     const imgRatio = imgW / imgH;
@@ -2803,19 +2805,39 @@ function fitCanvasToContainer(canvas, imgW, imgH) {
     canvas.style.height = `${finalH}px`;
 }
 
+function refitCensorCanvasPair(width = null, height = null) {
+    const c1 = document.getElementById('censor-canvas');
+    const c2 = document.getElementById('censor-canvas-buffer');
+    const referenceCanvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
+    const refWidth = width || referenceCanvas?.width || CensorState.originalImage?.width || 0;
+    const refHeight = height || referenceCanvas?.height || CensorState.originalImage?.height || 0;
+    fitCanvasToContainer(c1, refWidth, refHeight);
+    fitCanvasToContainer(c2, refWidth, refHeight);
+}
+
+function scheduleCensorCanvasRefit(width = null, height = null) {
+    refitCensorCanvasPair(width, height);
+    requestAnimationFrame(() => {
+        refitCensorCanvasPair(width, height);
+        applyZoom();
+    });
+    setTimeout(() => {
+        refitCensorCanvasPair(width, height);
+        applyZoom();
+    }, 80);
+    setTimeout(() => {
+        refitCensorCanvasPair(width, height);
+        applyZoom();
+    }, 180);
+}
+
 // Re-fit on window resize (debounced, removable)
 let _resizeDebounceTimer = null;
 function _handleCensorResize() {
     clearTimeout(_resizeDebounceTimer);
     _resizeDebounceTimer = setTimeout(() => {
         if (CensorState.activeId && CensorState.originalImage) {
-            const c1 = document.getElementById('censor-canvas');
-            const c2 = document.getElementById('censor-canvas-buffer');
-            const referenceCanvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
-            const width = referenceCanvas?.width || CensorState.originalImage.width;
-            const height = referenceCanvas?.height || CensorState.originalImage.height;
-            fitCanvasToContainer(c1, width, height);
-            fitCanvasToContainer(c2, width, height);
+            refitCensorCanvasPair();
         }
     }, 150);
 }

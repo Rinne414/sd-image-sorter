@@ -4361,6 +4361,35 @@ function applyPromptFilter(prompt) {
     return true;
 }
 
+function resetViewScrollPosition() {
+    const mainContent = document.getElementById('main-content');
+    document.documentElement.style.overflowAnchor = 'none';
+    document.body.style.overflowAnchor = 'none';
+    if (mainContent) {
+        mainContent.style.overflowAnchor = 'none';
+        mainContent.scrollTop = 0;
+    }
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    try {
+        window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    } catch (_error) {
+        window.scrollTo(0, 0);
+    }
+}
+
+function scheduleViewScrollReset() {
+    resetViewScrollPosition();
+    requestAnimationFrame(() => {
+        resetViewScrollPosition();
+        requestAnimationFrame(resetViewScrollPosition);
+    });
+    setTimeout(resetViewScrollPosition, 50);
+    setTimeout(resetViewScrollPosition, 160);
+    setTimeout(resetViewScrollPosition, 320);
+    setTimeout(resetViewScrollPosition, 700);
+}
+
 function switchView(viewName) {
     const previousView = AppState.currentView;
 
@@ -4422,6 +4451,7 @@ function switchView(viewName) {
     $$('.view').forEach(view => {
         view.classList.toggle('active', view.id === `view-${viewName}`);
     });
+    scheduleViewScrollReset();
 
     // Hide selection FAB when not in Gallery view
     if (viewName !== 'gallery') {
@@ -4481,6 +4511,7 @@ function switchView(viewName) {
     }
 
     updateSelectionUI();
+    scheduleViewScrollReset();
 }
 
 function getSelectedGalleryExamples(ids, limit = 5) {
