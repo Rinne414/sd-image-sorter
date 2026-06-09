@@ -182,6 +182,10 @@
     /* Critical for flex child to shrink properly */
 }
 
+.censor-canvas-wrapper-v2:hover {
+    cursor: none;
+}
+
 /* Canvas Elements */
 .censor-canvas-wrapper-v2 canvas {
     transition: transform 0.1s ease-out, opacity 0.3s ease-in-out !important;

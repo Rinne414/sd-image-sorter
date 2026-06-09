@@ -893,7 +893,7 @@ function bindEvents() {
         boundHandlers.mouseup = onCanvasMouseUp;
         window.addEventListener('mousemove', boundHandlers.mousemove);
         window.addEventListener('mouseup', boundHandlers.mouseup);
-        wrapper.addEventListener('mouseenter', () => $('#cursor-overlay').style.display = 'block');
+        wrapper.addEventListener('mouseenter', updateCursorOverlay);
         wrapper.addEventListener('mouseleave', () => $('#cursor-overlay').style.display = 'none');
         wrapper.addEventListener('contextmenu', e => e.preventDefault());
     }
@@ -3779,10 +3779,17 @@ function onCanvasMouseDown(e) {
     if (!CensorState.activeId) return;
     // Don't start drawing if space is held (pan mode)
     if (spacePressed) return;
-    document.getElementById('canvas-wrapper')?.focus();
+
+    const point = getCanvasPointerCoordinates(e);
+    if (!point) {
+        updateCursorOverlay(e);
+        return;
+    }
+
+    focusCanvasWrapperWithoutScroll();
     CensorState.isDrawing = true;
 
-    const { x, y } = getCanvasCoordinates(e);
+    const { x, y } = point;
     CensorState.lastPoint = { x, y };
 
     if (CensorState.currentTool === 'clone' && e.altKey) {
@@ -3826,7 +3833,21 @@ function onCanvasMouseMove(e) {
 
     if (!CensorState.isDrawing || !CensorState.activeId) return;
 
-    const { x, y } = getCanvasCoordinates(e);
+    const point = getCanvasPointerCoordinates(e);
+    if (!point) {
+        CensorState.lastPoint = null;
+        return;
+    }
+
+    const { x, y } = point;
+    if (!CensorState.lastPoint) {
+        if (isProxyEditActive() && CensorState.activeStrokeOperation) {
+            CensorState.activeStrokeOperation.points.push(toOriginalPoint(point));
+        }
+        drawAtPoint(x, y);
+        CensorState.lastPoint = { x, y };
+        return;
+    }
 
     // Interpolate
     const steps = Math.max(1, Math.floor(Math.hypot(x - CensorState.lastPoint.x, y - CensorState.lastPoint.y) / 2));
@@ -3880,8 +3901,11 @@ async function onCanvasMouseUp() {
 }
 
 function getCanvasCoordinates(e) {
-    const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
+    const canvas = getActiveCensorCanvas();
+    if (!canvas) return { x: 0, y: 0 };
+
     const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return { x: 0, y: 0 };
 
     // Account for CSS scaling
     const scaleX = canvas.width / rect.width;
@@ -3890,6 +3914,45 @@ function getCanvasCoordinates(e) {
     return {
         x: (e.clientX - rect.left) * scaleX,
         y: (e.clientY - rect.top) * scaleY
+    };
+}
+
+function getActiveCensorCanvas() {
+    return document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
+}
+
+function isPointerInsideRect(e, rect) {
+    if (!e || !rect || !rect.width || !rect.height) return false;
+    return e.clientX >= rect.left
+        && e.clientX <= rect.right
+        && e.clientY >= rect.top
+        && e.clientY <= rect.bottom;
+}
+
+function getCanvasPointerCoordinates(e) {
+    const canvas = getActiveCensorCanvas();
+    if (!canvas || !CensorState.activeId) return null;
+    const rect = canvas.getBoundingClientRect();
+    if (!isPointerInsideRect(e, rect)) return null;
+    return getCanvasCoordinates(e);
+}
+
+function focusCanvasWrapperWithoutScroll() {
+    const wrapper = document.getElementById('canvas-wrapper');
+    if (!wrapper || typeof wrapper.focus !== 'function') return;
+    try {
+        wrapper.focus({ preventScroll: true });
+    } catch (_) {
+        wrapper.focus();
+    }
+}
+
+function getElementViewportToCssScale(element, rect = null) {
+    if (!element) return { x: 1, y: 1 };
+    const bounds = rect || element.getBoundingClientRect();
+    return {
+        x: bounds.width ? (element.offsetWidth / bounds.width) : 1,
+        y: bounds.height ? (element.offsetHeight / bounds.height) : 1,
     };
 }
 
@@ -4988,13 +5051,28 @@ function updateCursorOverlay(e) {
     const wrapper = document.getElementById('canvas-wrapper');
     if (!cursor || !wrapper) return;
 
-    // e.clientX is global. Get relative to wrapper
+    const canvas = getActiveCensorCanvas();
+    if (!canvas || !CensorState.activeId) {
+        cursor.style.display = 'none';
+        return;
+    }
+
+    const canvasRect = canvas.getBoundingClientRect();
+    if (!isPointerInsideRect(e, canvasRect)) {
+        cursor.style.display = 'none';
+        return;
+    }
+
+    // clientX/clientY and getBoundingClientRect() are viewport coordinates.
+    // Under root CSS zoom, writing those values back as CSS px zooms them a
+    // second time, so convert viewport pixels into wrapper-local CSS pixels.
     const rect = wrapper.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const wrapperScale = getElementViewportToCssScale(wrapper, rect);
+    const x = (e.clientX - rect.left) * wrapperScale.x;
+    const y = (e.clientY - rect.top) * wrapperScale.y;
 
     // Visible only if inside wrapper
-    if (x < 0 || y < 0 || x > rect.width || y > rect.height) {
+    if (x < 0 || y < 0 || x > wrapper.offsetWidth || y > wrapper.offsetHeight) {
         cursor.style.display = 'none';
         return;
     }
@@ -5002,13 +5080,11 @@ function updateCursorOverlay(e) {
     cursor.style.display = 'block';
 
     // Calculate visual size based on canvas scaling
-    const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
     let visualSize = getCanvasBrushSize();
 
-    if (canvas && canvas.width > 0 && CensorState.activeId) {
-        const canvasRect = canvas.getBoundingClientRect();
+    if (canvas.width > 0) {
         const scale = canvasRect.width / canvas.width;
-        visualSize = getCanvasBrushSize() * scale;
+        visualSize = getCanvasBrushSize() * scale * wrapperScale.x;
     }
 
     cursor.style.width = `${visualSize}px`;
