@@ -680,7 +680,7 @@ class TestScan:
 class TestMove:
     """Tests for POST /api/move endpoint."""
 
-    def test_move_to_nonexistent_folder(self, test_client, test_db):
+    def test_move_to_nonexistent_folder(self, test_client, test_db, tmp_path: Path):
         """Moving to nonexistent folder - path validation allows creation."""
         import database as db
 
@@ -694,7 +694,7 @@ class TestMove:
             "/api/move",
             json={
                 "image_ids": [image_id],
-                "destination_folder": "/completely/invalid/path/12345"
+                "destination_folder": str(tmp_path / "created-destination")
             }
         )
 
@@ -704,6 +704,27 @@ class TestMove:
         assert response.status_code == 200
         data = response.json()
         assert data["results"][0]["success"] is False
+
+    def test_move_to_uncreatable_folder_returns_400(self, test_client, test_db, tmp_path: Path):
+        """Moving to a path that validates but cannot be created should return 400."""
+        import database as db
+
+        image_id = db.add_image(
+            path="/test/move_test.png",
+            filename="move_test.png",
+        )
+
+        with patch("services.sorting_service.os.makedirs", side_effect=OSError("read-only filesystem")):
+            response = test_client.post(
+                "/api/move",
+                json={
+                    "image_ids": [image_id],
+                    "destination_folder": str(tmp_path / "blocked-destination")
+                }
+            )
+
+        assert response.status_code == 400
+        assert "Could not create destination folder" in response.text
 
     def test_move_empty_list(self, test_client, tmp_path: Path):
         """Moving empty image list should fail validation."""

@@ -1756,7 +1756,14 @@ class SortingService:
         # lands as it happens (a byte-level move would otherwise silently copy
         # truncated/corrupt PNGs to the destination).
         images_map = db.get_images_by_ids(image_ids)
-        os.makedirs(destination_folder, exist_ok=True)
+        try:
+            os.makedirs(destination_folder, exist_ok=True)
+        except OSError as exc:
+            logger.warning("Could not create destination folder %s: %s", destination_folder, exc)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not create destination folder: {exc}",
+            ) from exc
 
         results = [
             self._move_one_image(image_id, images_map.get(image_id), operation, destination_folder)
