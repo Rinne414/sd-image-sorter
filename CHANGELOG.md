@@ -5,6 +5,36 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-06-10
+
+Full-pipeline reliability release driven by a three-track audit (frontend UI/UX, backend, end-to-end pipeline). Tag categories are correct again (clothing tags no longer leak into "background", protecting LoRA caption exports), bulk tag operations and AI jobs now cover exactly the scope you filtered, long-running jobs report real errors instead of fake success and survive page reloads, and censored images refresh their thumbnails immediately.
+
+由三路全面体检（前端 UI/UX、后端、端到端流程）驱动的可靠性大版本。标签分类恢复正确（服装类标签不再被误判为"背景"，保护 LoRA caption 导出）；批量标签操作与 AI 任务的作用范围与你筛选的完全一致；长任务出错时如实报错、刷新页面后可恢复；打码保存后缩略图立即更新。
+
+### Fixed / 修复
+- **Tag categorization regression**: common outfit/body/action tags (tank_top, pencil_skirt, winter_coat, holding_egg…) were misrouted to "background" since v3.3.3; dataset export "remove background tags" could silently strip clothing tags from LoRA training captions. Category rules reordered with a garment veto and locked by regression tests.
+  - **标签分类回归**：v3.3.3 起 tank_top、pencil_skirt、winter_coat 等常见服装/动作标签被误分到"背景"，数据集导出勾选"移除背景标签"时会悄悄删掉训练 caption 里的服装标签。已重排分类规则并用回归测试锁定。
+- **Bulk tag operations skipped images**: mass remove/find-replace/cleanup committed per chunk while paging the same shrinking filter — with >500 matches roughly half were silently skipped. All bulk scopes (tags, Smart Tag, VLM batch) now snapshot matching IDs before mutating.
+  - **批量标签操作漏图**：批量移除/查找替换边改边翻页，超过 500 张时约一半被静默跳过。现在所有批量范围先快照 ID 再修改。
+- **Sorting scope fidelity**: Auto-Separate "Copy from Gallery", WASD manual sort, and batch-move now honor collection, folder, star-rating, has-metadata, exclude-prompts/colors, and brightness/color filters — the moved set equals what the gallery shows, and the "matches gallery" indicator is truthful.
+  - **整理范围保真**：自动分流"从图库复制"、WASD 手动整理与批量移动现在完整继承合集/文件夹/星级/排除词/明暗等筛选，移动范围与图库所见一致，"与图库筛选一致"指示不再误报。
+- **Job reliability overhaul**: scan progress no longer freezes when polled during startup; Dataset Maker "Tag all" attaches the real progress bar; aesthetic/artist batch crashes show errors instead of success toasts; Smart Tag and VLM batches retry transient network errors, resume after F5 (cancel reachable again), and VLM batch covers the full filtered set instead of only the loaded page; completed VLM batches no longer pop open a closed preview window.
+  - **任务可靠性整顿**：扫描刚启动时轮询不再卡死；数据集制作"全部打标"接上真实进度条；美学/画师批次崩溃时如实报错而非显示成功；Smart Tag 与 VLM 批次可重试瞬时网络错误、F5 后可恢复并能取消、VLM 范围覆盖全部筛选结果而非仅已加载页；VLM 完成后不再自动弹出已关闭的预览窗。
+- **One AI job at a time**: gallery tagging, Smart Tag, and VLM caption batches are now mutually exclusive under one coordinator (409 with a clear bilingual message), preventing double GPU model loads and caption double-writes.
+  - **同时只跑一个 AI 任务**：图库打标、Smart Tag 与 VLM 批量描述纳入同一协调器互斥（409 + 双语提示），避免 GPU 双载模型与 caption 重复写入。
+- **Censored thumbnails refresh immediately**: thumbnail URLs are now versioned by file modification time, so overwriting an image in Censor Edit updates its gallery thumbnail instead of showing the uncensored cached version for up to 24 hours.
+  - **打码后缩略图立即更新**：缩略图 URL 按文件修改时间加版本号，打码覆盖保存后图库立即显示已打码图，不再被浏览器缓存 24 小时。
+- **Exact prompt exclusion is exact**: excluding "cat" in exact mode no longer hides "catgirl"/"scattered".
+  - **精确排除词真正精确**：exact 模式排除 "cat" 不再连 "catgirl"/"scattered" 一起隐藏。
+- **Desktop UX polish**: Tools menu opens at the right position on 2K/4K auto-zoom; "Teach categories" from the preview window closes it before opening Prompt Lab; "Build prompt from this image" works for older images outside the recent-200 catalog; large model downloads no longer show a false "stalled" warning after 4 minutes; Browse button no longer triple-fires; filter summaries keep their colons and missing translations were filled in.
+  - **桌面体验打磨**：2K/4K 自动缩放下 Tools 菜单定位正确；预览窗内"教分类"会先关闭预览再打开 Prompt Lab；"用此图构建 Prompt"对 200 张目录之外的旧图也有效；大模型下载不再 4 分钟后误报"卡住"；浏览按钮不再一次触发多次；筛选摘要冒号与缺失的中文翻译已补齐。
+
+### Upgrading / 升级注意
+- No database migration. Existing libraries, image files, captions, model files, tags, and ratings are untouched.
+  - 不含数据库迁移。既有图库、图片文件、caption、模型文件、标签与评分不受影响。
+- API note: starting a tagging/Smart-Tag/VLM job while another runs now returns 409 (previously sometimes 400).
+  - API 提示：AI 任务互斥冲突现在统一返回 409（此前部分场景为 400）。
+
 ## [3.3.4] - 2026-06-10
 
 Focused Gallery/Reader usability release after v3.3.3. The preview modal now behaves like a real inspector for continuous image reading: common metadata stays visible, the content pane keeps its scroll position when switching images, and low-frequency handoff/analysis actions no longer push the prompt out of the way. This release also finishes category/purpose copy flows and Prompt Lab image-tag recipes, with 2K viewport fixes for right-side menus.
