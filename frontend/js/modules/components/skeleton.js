@@ -165,8 +165,8 @@ const SkeletonModal = {
         const modal = document.getElementById(modalId);
         if (!modal) return;
 
-        // Find the modal info column
-        const infoColumn = modal.querySelector('.modal-info-workspace');
+        // Keep the persistent preview header visible while detail content loads.
+        const infoColumn = modal.querySelector('.modal-info-scroll') || modal.querySelector('.modal-info-workspace');
         if (!infoColumn) return;
 
         // Create skeleton content wrapper

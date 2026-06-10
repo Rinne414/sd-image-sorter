@@ -848,6 +848,123 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#reader-tool-panel-reader')).toBeVisible()
   })
 
+  test('reader should keep reading position when opening another gallery image', async ({ page }) => {
+    const imageIds = [611, 612]
+    let parseCount = 0
+    const longPrompt = Array.from({ length: 80 }, (_, index) => `detail_tag_${index}`).join(', ')
+    const generationParams = {
+      seed: '123456789',
+      steps: '28',
+      cfg_scale: '7',
+      sampler: 'DPM++ 2M',
+      ...Object.fromEntries(
+        Array.from({ length: 36 }, (_, index) => [`param_${index}`, `value_${index}`])
+      ),
+    }
+
+    await Promise.all(imageIds.map((id) => mockImageAsset(page, id)))
+    await page.route('**/api/images**', async (route) => {
+      const url = new URL(route.request().url())
+      const detailId = imageIds.find((id) => url.pathname === `/api/images/${id}`)
+      if (detailId) {
+        await route.fulfill({
+          json: {
+            image: {
+              id: detailId,
+              filename: `reader-position-${detailId}.png`,
+              path: `L:/reader/reader-position-${detailId}.png`,
+              generator: 'webui',
+              prompt: longPrompt,
+              negative_prompt: 'lowres, blurry',
+              width: 1024,
+              height: 1536,
+              file_size: 123456,
+              checkpoint: 'position-model.safetensors',
+            },
+            tags: [],
+          },
+        })
+        return
+      }
+
+      if (url.pathname !== '/api/images') {
+        await route.continue()
+        return
+      }
+
+      await route.fulfill({
+        json: {
+          images: imageIds.map((id) => buildMockGalleryImage(id, {
+            filename: `reader-position-${id}.png`,
+            path: `L:/reader/reader-position-${id}.png`,
+            generator: 'webui',
+            prompt: longPrompt,
+          })),
+          total: imageIds.length,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+    await page.route('**/api/parse-image', async (route) => {
+      parseCount += 1
+      await route.fulfill({
+        json: {
+          generator: 'webui',
+          prompt: longPrompt,
+          negative_prompt: 'lowres, blurry',
+          checkpoint: 'position-model.safetensors',
+          width: 1024,
+          height: 1536,
+          file_size: 123456,
+          metadata: { _parsed: { generation_params: generationParams } },
+          source_temp_path: `/tmp/sd_image_sorter_reader_uploads/reader-position-${parseCount}.png`,
+        },
+      })
+    })
+
+    await openMainPage(page)
+    await page.setViewportSize({ width: 1280, height: 720 })
+    await page.evaluate(async (targetId) => {
+      await window.App.openReaderFromImage(targetId, 'reader-position-611.png')
+    }, imageIds[0])
+
+    await expect(page.locator('#view-reader.active')).toBeVisible()
+    await expect(page.locator('#reader-file-info')).toContainText('reader-position-611.png')
+    await expect(page.locator('#reader-quick-facts')).toContainText('position-model')
+    await expect(page.locator('#reader-quick-facts')).toContainText('123456789')
+    const beforeScroll = await page.evaluate(() => {
+      const candidates = [
+        document.querySelector('#view-reader .reader-right'),
+        document.getElementById('view-reader'),
+        document.scrollingElement,
+      ].filter(Boolean) as HTMLElement[]
+      const scrollEl = candidates.find((element) => element.scrollHeight - element.clientHeight > 120)
+      if (!scrollEl) return 0
+      scrollEl.scrollTop = Math.min(520, Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight))
+      ;(window as any).__readerScrollProbe = scrollEl.className || scrollEl.id || scrollEl.tagName
+      return scrollEl.scrollTop
+    })
+    expect(beforeScroll).toBeGreaterThan(100)
+
+    await page.evaluate(async (targetId) => {
+      await window.App.openReaderFromImage(targetId, 'reader-position-612.png')
+    }, imageIds[1])
+
+    await expect(page.locator('#reader-file-info')).toContainText('reader-position-612.png')
+    await expect.poll(async () => {
+      return await page.evaluate(() => {
+        const candidates = [
+          document.querySelector('#view-reader .reader-right'),
+          document.getElementById('view-reader'),
+          document.scrollingElement,
+        ].filter(Boolean) as HTMLElement[]
+        const scrollEl = candidates.find((element) => element.scrollHeight - element.clientHeight > 120)
+        return scrollEl?.scrollTop || 0
+      })
+    }).toBeGreaterThan(100)
+  })
+
   test('reader library overwrite should confirm before save request and flag gallery refresh intent', async ({ page }) => {
     const imageId = 501
     const libraryPath = 'L:/datasets/library-reader-source.png'
@@ -1914,6 +2031,239 @@ test.describe('Smoke Tests', () => {
     await expect(image).toHaveClass(/selected/)
   })
 
+  test('gallery preview inspector should keep scroll position when switching images', async ({ page }) => {
+    const imageIds = [171, 172]
+    const longPrompt = Array.from({ length: 100 }, (_, index) => `modal_tag_${index}`).join(', ')
+    const imageDetail = (id: number) => ({
+      id,
+      filename: `modal-reader-${id}.png`,
+      path: `L:/modal/modal-reader-${id}.png`,
+      generator: 'webui',
+      prompt: longPrompt,
+      negative_prompt: 'lowres, blurry',
+      width: 1024,
+      height: 1536,
+      file_size: 123456,
+      checkpoint: 'modal-model.safetensors',
+      metadata_json: {
+        _parsed: {
+          generation_params: {
+            seed: String(1000 + id),
+            steps: '30',
+            cfg_scale: '7.5',
+            sampler: 'Euler a',
+            scheduler: 'Normal',
+            denoise: '0.45',
+            ...Object.fromEntries(Array.from({ length: 40 }, (_, index) => [`extra_${index}`, `value_${index}`])),
+          },
+        },
+      },
+    })
+
+    await mockGalleryImages(page, imageIds.map((id) => imageDetail(id)))
+    await page.route('**/api/images/*', async (route) => {
+      const id = Number(new URL(route.request().url()).pathname.split('/').pop())
+      if (!imageIds.includes(id)) {
+        await route.continue()
+        return
+      }
+      await route.fulfill({
+        json: {
+          image: imageDetail(id),
+          tags: Array.from({ length: 70 }, (_, index) => ({ tag: `tag_${index}`, confidence: 0.9 })),
+        },
+      })
+    })
+
+    await openMainPage(page)
+    await page.evaluate(async () => {
+      await window.Gallery.openPreview(171)
+    })
+    await expect(page.locator('#image-modal.visible')).toBeVisible()
+    await expect(page.locator('#modal-filename')).toContainText('modal-reader-171.png')
+    await expect(page.locator('#modal-key-params')).toBeVisible()
+    await expect(page.locator('#modal-copy-menu')).toBeVisible()
+    await expect(page.locator('#modal-tools-menu')).toBeVisible()
+    await expect(page.locator('.modal-handoff-row')).toBeHidden()
+    await expect(page.locator('.modal-analysis-row')).toBeHidden()
+
+    const beforeScroll = await page.evaluate(() => {
+      const info = (document.querySelector('#image-modal .modal-info-scroll') as HTMLElement | null)
+        || (document.querySelector('#image-modal .modal-info') as HTMLElement | null)
+      if (!info) return 0
+      info.scrollTop = Math.min(520, Math.max(0, info.scrollHeight - info.clientHeight))
+      return info.scrollTop
+    })
+    expect(beforeScroll).toBeGreaterThan(100)
+
+    await page.locator('#modal-next-image').click()
+    await expect(page.locator('#modal-filename')).toContainText('modal-reader-172.png')
+    await expect.poll(async () => {
+      return await page.evaluate(() => {
+        const info = (document.querySelector('#image-modal .modal-info-scroll') as HTMLElement | null)
+          || (document.querySelector('#image-modal .modal-info') as HTMLElement | null)
+        return info?.scrollTop || 0
+      })
+    }).toBeGreaterThan(100)
+  })
+
+  test('gallery context menu should stay visible at the right and bottom viewport edges', async ({ page }) => {
+    await page.setViewportSize({ width: 900, height: 500 })
+    await mockGalleryImages(page, [
+      { id: 153, filename: 'context-edge.png', checkpoint: 'context-model.safetensors' },
+    ])
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    const image = page.locator('#gallery-grid .gallery-item[data-id="153"]')
+    await expect(image).toBeVisible()
+    await image.evaluate((element: HTMLElement) => {
+      Object.assign(element.style, {
+        position: 'fixed',
+        right: '16px',
+        top: '150px',
+        width: '180px',
+        height: '180px',
+        zIndex: '20',
+      })
+    })
+    const imageBox = await image.boundingBox()
+    expect(imageBox).toBeTruthy()
+    const clickX = imageBox!.x + imageBox!.width - 2
+    const clickY = imageBox!.y + imageBox!.height / 2
+    await image.evaluate((element, point) => {
+      element.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        button: 2,
+        clientX: point.x,
+        clientY: point.y,
+      }))
+    }, { x: clickX, y: clickY })
+
+    const menu = page.locator('.gallery-context-menu')
+    await expect(menu).toBeVisible()
+    const box = await menu.boundingBox()
+    expect(box).toBeTruthy()
+    expect(box!.x).toBeGreaterThanOrEqual(7)
+    expect(box!.y).toBeGreaterThanOrEqual(7)
+    expect(box!.x + box!.width).toBeLessThanOrEqual(893)
+    expect(box!.y + box!.height).toBeLessThanOrEqual(493)
+    expect(box!.height).toBeLessThanOrEqual(421)
+    expect(box!.x + box!.width).toBeLessThanOrEqual(imageBox!.x - 4)
+    expect(clickY).toBeGreaterThanOrEqual(box!.y)
+    expect(clickY).toBeLessThanOrEqual(box!.y + box!.height)
+    await expect(menu).toHaveCSS('overflow-y', 'auto')
+  })
+
+  test('gallery context menu should stay near right-side images on 2k ui scale', async ({ page }) => {
+    await page.setViewportSize({ width: 2560, height: 1440 })
+    await mockGalleryImages(page, [
+      { id: 154, filename: 'context-edge-2k.png', checkpoint: 'context-model.safetensors' },
+    ])
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    const image = page.locator('#gallery-grid .gallery-item[data-id="154"]')
+    await expect(image).toBeVisible()
+    await image.evaluate((element: HTMLElement) => {
+      Object.assign(element.style, {
+        position: 'fixed',
+        right: '16px',
+        top: '180px',
+        width: '220px',
+        height: '220px',
+        zIndex: '20',
+      })
+    })
+    const imageBox = await image.boundingBox()
+    expect(imageBox).toBeTruthy()
+    const clickX = imageBox!.x + imageBox!.width - 4
+    const clickY = imageBox!.y + imageBox!.height / 2
+    await page.mouse.click(clickX, clickY, { button: 'right' })
+
+    const menu = page.locator('.gallery-context-menu')
+    await expect(menu).toBeVisible()
+    const box = await menu.boundingBox()
+    expect(box).toBeTruthy()
+    expect(box!.x).toBeGreaterThanOrEqual(7)
+    expect(box!.y).toBeGreaterThanOrEqual(7)
+    expect(box!.x + box!.width).toBeLessThanOrEqual(2553)
+    expect(box!.height).toBeLessThanOrEqual(421)
+    expect(box!.x + box!.width).toBeLessThanOrEqual(imageBox!.x - 4)
+    expect(clickY).toBeGreaterThanOrEqual(box!.y)
+    expect(clickY).toBeLessThanOrEqual(box!.y + box!.height)
+    await expect(menu).toHaveCSS('overflow-y', 'auto')
+  })
+
+  test('gallery category copy menu should copy clean purpose prompts', async ({ page }) => {
+    await page.addInitScript(() => {
+      ;(window as any).__clipboardText = ''
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async (text: string) => {
+            ;(window as any).__clipboardText = String(text)
+          },
+        },
+      })
+    })
+
+    const promptTags = ['masterpiece', 'best_quality', '1girl', 'blue_hair', 'school_uniform', 'standing', 'city', 'future_tag']
+    const categoryMap: Record<string, string> = {
+      masterpiece: 'quality',
+      best_quality: 'quality',
+      '1girl': 'character',
+      blue_hair: 'body',
+      school_uniform: 'outfit',
+      standing: 'pose',
+      city: 'background',
+      future_tag: 'future_category',
+    }
+
+    await page.route('**/api/prompts/categorize', async (route) => {
+      const tags = route.request().postDataJSON() as string[]
+      await route.fulfill({
+        json: {
+          results: tags.map((tag) => ({ tag, category: categoryMap[tag] || 'unknown' })),
+        },
+      })
+    })
+
+    await mockGalleryImages(page, [
+      {
+        id: 152,
+        filename: 'purpose-copy.png',
+        prompt: promptTags.join(', '),
+        checkpoint: 'context-model.safetensors',
+      },
+    ])
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    const image = page.locator('#gallery-grid .gallery-item[data-id="152"]')
+    await expect(image).toBeVisible()
+    await image.click({ button: 'right' })
+
+    const contextMenu = page.locator('.gallery-context-menu')
+    await expect(contextMenu).toBeVisible()
+    await contextMenu.getByRole('menuitem', { name: /Copy Tag Category/ }).click()
+
+    const copyMenu = page.locator('.tag-category-copy-menu')
+    await expect(copyMenu).toBeVisible()
+    await expect(copyMenu).toContainText('Purpose prompts')
+    await expect(copyMenu).toContainText('Clean training caption')
+    await expect(copyMenu.locator('.tag-category-copy-item[data-group="unclassified"] .tag-category-copy-count')).toHaveText('1')
+    await copyMenu.locator('[data-purpose="trainingCaption"]').click()
+
+    await expect.poll(async () => {
+      return await page.evaluate(() => (window as any).__clipboardText || '')
+    }).toBe('1girl, blue_hair, school_uniform, standing, city')
+  })
+
   test('should only enable selection actions after at least one image is selected', async ({ page }) => {
     await mockImageAsset(page, 101)
     await page.route('**/api/images**', async (route) => {
@@ -2656,7 +3006,7 @@ test.describe('Smoke Tests', () => {
     await page.locator('#gallery-grid .gallery-item[data-id="71"]').click()
     await page.locator('#gallery-grid .gallery-item[data-id="72"]').click()
     await openSelectionPanelSection(page, 'Export')
-    await expect(page.locator('#btn-batch-export-tags')).toContainText('Same-name .txt')
+    await expect(page.locator('#btn-batch-export-tags')).toContainText('Training captions')
     await page.locator('#btn-batch-export-tags').click()
 
     await expect(page.locator('#batch-export-modal.visible')).toBeVisible()
@@ -3444,6 +3794,112 @@ test.describe('Smoke Tests', () => {
     expect(receivedConfig?.count_tag).toBe('')
     expect(receivedConfig?.include_negative).toBe(false)
     await expect(page.locator('#promptlab-output')).toHaveValue('cinematic_lighting, standing')
+  })
+
+  test('prompt lab build should turn image tags into clean category prompts', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('promptlab-guide-seen', 'true')
+    })
+
+    const recipeTags = ['masterpiece', 'best_quality', '1girl', 'blue_hair', 'school_uniform', 'standing', 'city', 'future_tag']
+    const categoryMap: Record<string, string> = {
+      masterpiece: 'quality',
+      best_quality: 'quality',
+      '1girl': 'character',
+      blue_hair: 'body',
+      school_uniform: 'outfit',
+      standing: 'pose',
+      city: 'background',
+      future_tag: 'future_category',
+    }
+
+    await page.route('**/api/prompts/categories', async (route) => {
+      await route.fulfill({
+        json: {
+          categories: {
+            character: ['1girl'],
+            body: ['blue_hair'],
+            outfit: ['school_uniform'],
+            pose: ['standing'],
+            background: ['city'],
+            quality: ['masterpiece', 'best_quality'],
+          },
+        },
+      })
+    })
+    await page.route('**/api/prompts/sets', async (route) => {
+      await route.fulfill({ json: { sets: [] } })
+    })
+    await page.route('**/api/prompts/exclusions', async (route) => {
+      await route.fulfill({ json: { rules: [] } })
+    })
+    await page.route('**/api/prompts/presets', async (route) => {
+      await route.fulfill({ json: { presets: [] } })
+    })
+    await page.route('**/api/prompts/categorize', async (route) => {
+      const tags = route.request().postDataJSON() as string[]
+      await route.fulfill({
+        json: {
+          results: tags.map((tag) => ({ tag, category: categoryMap[tag] || 'unknown' })),
+        },
+      })
+    })
+    await page.route('**/api/images/501', async (route) => {
+      await route.fulfill({
+        json: {
+          image: {
+            id: 501,
+            filename: 'recipe-source.png',
+            prompt: recipeTags.join(', '),
+            negative_prompt: '',
+            width: 1024,
+            height: 1536,
+            generator: 'comfyui',
+          },
+          tags: recipeTags.map((tag) => ({ tag, confidence: 0.9 })),
+        },
+      })
+    })
+    await page.route('**/api/images?*', async (route) => {
+      await route.fulfill({
+        json: {
+          images: [
+            {
+              id: 501,
+              filename: 'recipe-source.png',
+              prompt: recipeTags.join(', '),
+              width: 1024,
+              height: 1536,
+              generator: 'comfyui',
+            },
+          ],
+          total: 1,
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await openView(page, 'promptlab')
+    await expect(page.locator('#view-promptlab.active')).toBeVisible()
+    await page.locator('.promptlab-tab[data-mode="build"]').click()
+
+    await expect.poll(async () => {
+      return await page.locator('#pl-build-source option').allTextContents()
+    }).toContain('recipe-source.png')
+
+    await page.locator('#pl-build-source').selectOption('501')
+    await expect(page.locator('#pl-build-category-workbench')).toBeVisible()
+    await expect(page.locator('#pl-build-category-workbench')).toContainText('Image Prompt Recipe')
+    await expect(page.locator('#pl-build-category-workbench')).toContainText('school_uniform')
+    await expect(page.locator('#pl-build-category-workbench')).toContainText('future_tag')
+
+    await page.locator('#pl-build-use-checked').click()
+    await expect(page.locator('#pl-build-prompt')).toHaveValue('1girl, blue_hair, school_uniform, standing, city')
+
+    await page.locator('#pl-build-prompt').fill('masterpiece, 1girl, blue_hair, school_uniform, standing, city, best_quality, 1girl')
+    await page.locator('#pl-build-drop-quality').click()
+    await expect(page.locator('#pl-build-prompt')).toHaveValue('1girl, blue_hair, school_uniform, standing, city')
   })
 
   test('prompt lab should clear stale generated prompt when loading a preset', async ({ page }) => {

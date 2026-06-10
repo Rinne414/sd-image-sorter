@@ -542,7 +542,7 @@
                                 <button id="btn-batch-export-tags" class="btn btn-secondary full-width selection-panel-explained-action">
                                     <span>📝</span>
                                     <span>
-                                        <strong data-i18n="selection.exportTagsToFiles">Same-name .txt...</strong>
+                                        <strong data-i18n="selection.exportTagsToFiles">Training captions...</strong>
                                         <small data-i18n="selection.exportTagsToFilesHelp">Training captions, one file per image</small>
                                     </span>
                                 </button>
@@ -847,10 +847,25 @@
                         <div id="reader-status" class="reader-status" style="display: none;"></div>
                         <div id="reader-result-panel" class="reader-result-panel">
                             <div class="reader-header">
-                                <span id="reader-generator" class="reader-generator-badge"></span>
-                                <span id="reader-file-info" class="reader-file-info"></span>
-                                <button id="reader-clear" class="btn btn-ghost btn-sm" data-i18n="reader.clear">Clear</button>
+                                <div class="reader-header-main">
+                                    <span id="reader-generator" class="reader-generator-badge"></span>
+                                    <span id="reader-file-info" class="reader-file-info"></span>
+                                </div>
+                                <div class="reader-header-actions">
+                                    <details class="reader-copy-menu" id="reader-copy-menu">
+                                        <summary class="reader-copy-menu-trigger">
+                                            <span data-i18n="reader.copy">Copy</span>
+                                            <span aria-hidden="true">▾</span>
+                                        </summary>
+                                        <div class="reader-copy-menu-list">
+                                            <button id="reader-copy-sd" class="reader-copy-menu-item" type="button" data-i18n="reader.copySd">Copy as SD Text</button>
+                                            <button id="reader-copy-all" class="reader-copy-menu-item" type="button" data-i18n="reader.copyAll">Copy All</button>
+                                        </div>
+                                    </details>
+                                    <button id="reader-clear" class="btn btn-ghost btn-sm" data-i18n="reader.clear">Clear</button>
+                                </div>
                             </div>
+                            <div id="reader-quick-facts" class="reader-quick-facts" hidden></div>
                             <div class="reader-section">
                                 <div class="reader-section-header">
                                     <button type="button" class="reader-section-toggle" data-target="reader-prompt-text" data-collapse-key="prompt">
@@ -862,6 +877,15 @@
                                     <button id="reader-copy-prompt-category" class="reader-copy-btn tag-category-menu-trigger" title="Copy Options" aria-label="Copy Options" data-i18n-title="tagCategory.copyOptions" data-i18n-aria="tagCategory.copyOptions">▾</button>
                                 </div>
                                 <div id="reader-prompt-text" class="reader-section-text"></div>
+                            </div>
+                            <div class="reader-section" id="reader-category-tags-section" hidden>
+                                <div class="reader-section-header">
+                                    <button type="button" class="reader-section-toggle" data-target="reader-category-tags" data-collapse-key="categoryTags">
+                                        <span class="reader-section-title" data-i18n="reader.categoryTags">Prompt Tags by Category</span>
+                                        <span class="collapse-icon">▼</span>
+                                    </button>
+                                </div>
+                                <div id="reader-category-tags" class="reader-category-tags"></div>
                             </div>
                             <div class="reader-section" id="reader-negative-section">
                                 <div class="reader-section-header">
@@ -1000,10 +1024,6 @@
                                         <button id="reader-save-metadata-as" class="btn btn-primary btn-sm" type="button" data-i18n="reader.saveAsNewImage">Save New Image</button>
                                     </div>
                                 </div>
-                            </div>
-                            <div class="reader-actions">
-                                <button id="reader-copy-sd" class="btn btn-secondary btn-sm" data-i18n="reader.copySd">Copy as SD Text</button>
-                                <button id="reader-copy-all" class="btn btn-primary btn-sm" data-i18n="reader.copyAll">Copy All</button>
                             </div>
                         </div>
                     </div>
@@ -2569,7 +2589,27 @@
                                 <textarea id="pl-build-negative" class="input-field" rows="3" style="width:100%;font-family:monospace;font-size:13px;"></textarea>
                             </div>
                             <div class="promptlab-build-info" id="pl-build-info"></div>
-                            <div style="display:flex;gap:8px;">
+                            <div class="promptlab-build-category-workbench" id="pl-build-category-workbench" hidden>
+                                <div class="promptlab-build-category-head">
+                                    <div>
+                                        <strong data-i18n="promptlab.imagePromptRecipe">Image Prompt Recipe</strong>
+                                        <small data-i18n="promptlab.imagePromptRecipeHint">Pick categories from the source image, then build a clean prompt or training caption.</small>
+                                    </div>
+                                    <span id="pl-build-category-count" class="promptlab-build-category-count">0</span>
+                                </div>
+                                <div class="promptlab-build-category-actions">
+                                    <button class="btn btn-primary btn-small" id="pl-build-use-checked" type="button" data-i18n="promptlab.useCheckedCategories">Use checked categories</button>
+                                    <button class="btn btn-secondary btn-small" id="pl-build-copy-caption" type="button" data-i18n="promptlab.copyTrainingCaption">Copy training caption</button>
+                                </div>
+                                <div id="pl-build-category-groups" class="promptlab-build-category-groups"></div>
+                            </div>
+                            <div class="promptlab-build-cleaner">
+                                <button class="btn btn-ghost btn-small" id="pl-build-clean-prompt" type="button" data-i18n="promptlab.cleanPrompt">Clean prompt</button>
+                                <button class="btn btn-ghost btn-small" id="pl-build-drop-quality" type="button" data-i18n="promptlab.dropQualityMeta">Remove quality/meta</button>
+                                <button class="btn btn-ghost btn-small" id="pl-build-space-tags" type="button" data-i18n="promptlab.underscoresToSpaces">Underscores to spaces</button>
+                                <button class="btn btn-ghost btn-small" id="pl-build-reorder" type="button" data-i18n="promptlab.reorderByCategory">Reorder by category</button>
+                            </div>
+                            <div class="promptlab-build-actions">
                                 <button class="btn btn-primary btn-small" id="pl-build-copy">📋 <span data-i18n="promptlab.copyPrompt">Copy Prompt</span></button>
                                 <button class="btn btn-secondary btn-small" id="pl-build-copy-all">📋 <span data-i18n="promptlab.copyAll">Copy All</span></button>
                             </div>
@@ -3914,87 +3954,100 @@
                     </div>
                 </div>
                     <div class="modal-info modal-info-workspace">
-                        <div class="modal-sticky-actions">
-                            <div class="modal-action-primary">
-                                <button class="btn btn-primary btn-small" id="btn-copy-all" aria-label="Copy all image info to clipboard" data-i18n="modal.copyAll">Copy All</button>
-                                <button class="btn btn-secondary btn-small" id="btn-toggle-prompt-format" aria-label="Toggle prompt format" data-i18n="modal.viewAsSD">View as SD</button>
-                                <button class="btn btn-ghost btn-small" id="btn-reparse-metadata" aria-label="Read image info again" data-i18n="modal.reparse">Read Again</button>
+                        <div class="modal-info-header">
+                            <div class="modal-sticky-actions">
+                                <div class="modal-action-primary">
+                                    <button class="btn btn-secondary btn-small" id="btn-toggle-prompt-format" aria-label="Toggle prompt format" data-i18n="modal.viewAsSD">View as SD</button>
+                                    <details class="modal-copy-menu" id="modal-copy-menu">
+                                        <summary class="btn btn-primary btn-small modal-copy-menu-trigger">
+                                            <span data-i18n="reader.copy">Copy</span>
+                                            <span aria-hidden="true">▾</span>
+                                        </summary>
+                                        <div class="modal-copy-menu-list">
+                                            <button class="modal-copy-menu-item" id="btn-copy-all" type="button" aria-label="Copy all image info to clipboard" data-i18n="modal.copyAll">Copy All</button>
+                                            <button class="modal-copy-menu-item" id="btn-copy-prompt" type="button" aria-label="Copy prompt" title="Copy prompt only"><span data-i18n="modal.prompt">Prompt</span></button>
+                                            <button class="modal-copy-menu-item" id="btn-copy-negative" type="button" aria-label="Copy negative" title="Copy negative prompt only"><span data-i18n="modal.negative">Negative</span></button>
+                                            <button class="modal-copy-menu-item" id="btn-copy-tags" type="button" aria-label="Copy tags" title="Copy tags only"><span data-i18n="modal.tags">Tags</span></button>
+                                            <button class="modal-copy-menu-item tag-category-menu-trigger" id="btn-copy-tags-category" type="button" aria-label="Copy Options" title="Copy Options" data-i18n-title="tagCategory.copyOptions" data-i18n-aria="tagCategory.copyOptions"><span data-i18n="tagCategory.copyOptions">Copy Options</span></button>
+                                            <button class="modal-copy-menu-item" id="btn-copy-params" type="button" aria-label="Copy params" title="Copy params only"><span data-i18n="modal.params">Params</span></button>
+                                        </div>
+                                    </details>
+                                    <details class="modal-tools-menu" id="modal-tools-menu">
+                                        <summary class="btn btn-ghost btn-small modal-tools-menu-trigger">
+                                            <span data-i18n="nav.tools">Tools</span>
+                                            <span aria-hidden="true">▾</span>
+                                        </summary>
+                                        <div class="modal-tools-menu-list">
+                                            <div class="modal-tools-menu-section">
+                                                <div class="modal-tools-menu-label" data-i18n="modal.sendTo">Send to:</div>
+                                                <div class="modal-handoff-row" role="group" aria-label="Send this image to another tool">
+                                                    <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="censor" title="Send to Censor Edit" data-i18n-title="gallery.contextSendToCensor">🔳 <span data-i18n="nav.censor">Censor Edit</span></button>
+                                                    <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="similar" title="Find similar images" data-i18n-title="gallery.contextFindSimilar">🔎 <span data-i18n="nav.similar">Similar</span></button>
+                                                    <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="dataset" title="Add to dataset" data-i18n-title="modal.addToDataset">📦 <span data-i18n="nav.dataset">Dataset</span></button>
+                                                    <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="collection" title="Add to collection" data-i18n-title="collections.contextAddTo">📚 <span data-i18n="modal.collection">Collection</span></button>
+                                                    <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="prompt" title="Open in Prompt Helper" data-i18n-title="gallery.contextPromptHelper">🧪 <span data-i18n="modal.promptHelper">Prompt</span></button>
+                                                    <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="reader" title="Open in full Reader" data-i18n-title="modal.openInReader">📖 <span data-i18n="modal.fullReader">Full Reader</span></button>
+                                                </div>
+                                            </div>
+                                            <div class="modal-tools-menu-section">
+                                                <div class="modal-tools-menu-label" data-i18n="modal.analyzeThis">Analyze:</div>
+                                                <div class="modal-analysis-row" role="group" aria-label="Analyze this image" data-i18n-aria="modal.analyzeThisImage">
+                                                    <button type="button" class="btn btn-ghost btn-small modal-analysis-btn" data-modal-analysis="aesthetic" title="Score this image" data-i18n-title="modal.scoreThisImage">★ <span data-i18n="modal.scoreThis">Score</span></button>
+                                                    <button type="button" class="btn btn-ghost btn-small modal-analysis-btn" data-modal-analysis="color" title="Analyze colors for this image" data-i18n-title="modal.analyzeColorsThis">🎨 <span data-i18n="modal.colorsThis">Colors</span></button>
+                                                    <button type="button" class="btn btn-ghost btn-small modal-analysis-btn" data-modal-analysis="artist" title="Identify artist/style for this image" data-i18n-title="modal.identifyArtistThis">🖌️ <span data-i18n="modal.artistThis">Artist</span></button>
+                                                    <button type="button" class="btn btn-ghost btn-small modal-analysis-btn" data-modal-analysis="caption" title="Caption this image with VLM" data-i18n-title="modal.captionThisImage">🧠 <span data-i18n="modal.captionThis">Caption</span></button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </details>
+                                    <button class="btn btn-ghost btn-small" id="btn-reparse-metadata" aria-label="Read image info again" data-i18n="modal.reparse">Read Again</button>
+                                </div>
                             </div>
-                            <div class="modal-action-secondary modal-copy-shortcuts">
-                                <button class="btn btn-ghost btn-small" id="btn-copy-prompt" aria-label="Copy prompt" title="Copy prompt only">📋 <span data-i18n="modal.prompt">Prompt</span></button>
-                                <button class="btn btn-ghost btn-small" id="btn-copy-negative" aria-label="Copy negative" title="Copy negative prompt only">📋 <span data-i18n="modal.negative">Negative</span></button>
-                                <button class="btn btn-ghost btn-small" id="btn-copy-tags" aria-label="Copy tags" title="Copy tags only">📋 <span data-i18n="modal.tags">Tags</span></button>
-                                <button class="btn btn-ghost btn-small tag-category-menu-trigger" id="btn-copy-tags-category" aria-label="Copy Options" title="Copy Options" data-i18n-title="tagCategory.copyOptions" data-i18n-aria="tagCategory.copyOptions">▾</button>
-                                <button class="btn btn-ghost btn-small" id="btn-copy-params" aria-label="Copy params" title="Copy params only">📋 <span data-i18n="modal.params">Params</span></button>
+                            <h3 id="modal-filename">filename.png</h3>
+                            <div class="modal-path-row" style="display: none;">
+                                <div class="modal-path-block">
+                                    <span id="modal-file-subfolder" class="modal-file-subfolder" title=""></span>
+                                    <span id="modal-file-path" class="modal-file-path" title=""></span>
+                                </div>
+                                <button id="btn-open-folder" class="btn-icon" title="Open in folder" data-i18n-title="modal.openFolder">📂</button>
+                            </div>
+                            <div class="modal-meta">
+                                <span class="meta-item"><strong>Generator:</strong> <span id="modal-generator">-</span></span>
+                                <span class="meta-item"><strong>Size:</strong> <span id="modal-size">-</span></span>
+                                <span class="meta-item" id="modal-checkpoint-item" style="display:none"><strong>Checkpoint:</strong> <span id="modal-checkpoint">-</span></span>
+                                <span class="meta-item" id="modal-aesthetic-item" style="display:none"><strong>Aesthetic:</strong> <span id="modal-aesthetic-score">-</span></span>
+                                <span id="modal-img2img-badge" class="img2img-badge" style="display:none">img2img</span>
+                                <span class="meta-item meta-item-rating"><strong data-i18n="rating.modalLabel">Your rating:</strong> <span class="star-rating star-rating-interactive" id="modal-user-rating" role="radiogroup" aria-label="Your star rating"></span></span>
+                            </div>
+
+                            <!--
+                                Closed-source AI provider hint. Shown when generator
+                                is `gemini` or `gpt-image`. We currently identify these
+                                images via metadata only (EXIF Software/Make/Description
+                                + C2PA Content Credentials byte scan). The invisible
+                                in-pixel watermark (SynthID for Gemini, OpenAI's
+                                perceptual signal for gpt-image) is NOT checked yet.
+                                See TECHNICAL_DEBT_NOTES.md → "Pixel-watermark detection
+                                for Gemini/gpt-image".
+                            -->
+                            <div class="modal-ai-provider-note" id="modal-ai-provider-note" style="display:none" role="note" aria-live="polite">
+                                <span class="modal-ai-provider-icon" aria-hidden="true">ℹ️</span>
+                                <span class="modal-ai-provider-text" id="modal-ai-provider-text" data-i18n="modal.aiProviderNote.gemini">Identified via Content Credentials / EXIF metadata. Google's invisible SynthID watermark embedded in the pixels themselves is not yet checked by this app — planned for a future opt-in detector.</span>
+                            </div>
+
+                            <div class="modal-loading-state" id="modal-loading-state">Loading details…</div>
+
+                            <div class="modal-key-params" id="modal-key-params" style="display:none">
+                                <span class="key-param" id="kp-steps" style="display:none"><strong>Steps:</strong> <span></span></span>
+                                <span class="key-param" id="kp-sampler" style="display:none"><strong>Sampler:</strong> <span></span></span>
+                                <span class="key-param" id="kp-scheduler" style="display:none"><strong>Scheduler:</strong> <span></span></span>
+                                <span class="key-param" id="kp-cfg" style="display:none"><strong>CFG:</strong> <span></span></span>
+                                <span class="key-param" id="kp-seed" style="display:none"><strong>Seed:</strong> <span></span></span>
+                                <span class="key-param" id="kp-denoise" style="display:none"><strong>Denoise:</strong> <span></span></span>
                             </div>
                         </div>
-                        <h3 id="modal-filename">filename.png</h3>
-                        <div class="modal-path-row" style="display: none;">
-                            <div class="modal-path-block">
-                                <span id="modal-file-subfolder" class="modal-file-subfolder" title=""></span>
-                                <span id="modal-file-path" class="modal-file-path" title=""></span>
-                        </div>
-                        <button id="btn-open-folder" class="btn-icon" title="Open in folder" data-i18n-title="modal.openFolder">📂</button>
-                    </div>
-                    <div class="modal-meta">
-                        <span class="meta-item"><strong>Generator:</strong> <span id="modal-generator">-</span></span>
-                        <span class="meta-item"><strong>Size:</strong> <span id="modal-size">-</span></span>
-                        <span class="meta-item" id="modal-checkpoint-item" style="display:none"><strong>Checkpoint:</strong> <span id="modal-checkpoint">-</span></span>
-                        <span class="meta-item" id="modal-aesthetic-item" style="display:none"><strong>Aesthetic:</strong> <span id="modal-aesthetic-score">-</span></span>
-                        <span id="modal-img2img-badge" class="img2img-badge" style="display:none">img2img</span>
-                        <span class="meta-item meta-item-rating"><strong data-i18n="rating.modalLabel">Your rating:</strong> <span class="star-rating star-rating-interactive" id="modal-user-rating" role="radiogroup" aria-label="Your star rating"></span></span>
-                    </div>
 
-                    <!-- FLOW-03: send this image straight into the next pipeline step
-                         instead of dead-ending at the preview. Targets reuse the same
-                         functions the right-click context menu already calls. -->
-                    <div class="modal-handoff-row" role="group" aria-label="Send this image to another tool">
-                        <span class="modal-handoff-label" data-i18n="modal.sendTo">Send to:</span>
-                        <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="censor" title="Send to Censor Edit" data-i18n-title="gallery.contextSendToCensor">🔳 <span data-i18n="nav.censor">Censor Edit</span></button>
-                        <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="similar" title="Find similar images" data-i18n-title="gallery.contextFindSimilar">🔎 <span data-i18n="nav.similar">Similar</span></button>
-                        <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="dataset" title="Add to dataset" data-i18n-title="modal.addToDataset">📦 <span data-i18n="nav.dataset">Dataset</span></button>
-                        <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="collection" title="Add to collection" data-i18n-title="collections.contextAddTo">📚 <span data-i18n="modal.collection">Collection</span></button>
-                        <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="prompt" title="Open in Prompt Helper" data-i18n-title="gallery.contextPromptHelper">🧪 <span data-i18n="modal.promptHelper">Prompt</span></button>
-                        <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="reader" title="Open in full Reader" data-i18n-title="modal.openInReader">📖 <span data-i18n="modal.fullReader">Full Reader</span></button>
-                    </div>
-                    <div class="modal-analysis-row" role="group" aria-label="Analyze this image" data-i18n-aria="modal.analyzeThisImage">
-                        <span class="modal-analysis-label" data-i18n="modal.analyzeThis">Analyze:</span>
-                        <button type="button" class="btn btn-ghost btn-small modal-analysis-btn" data-modal-analysis="aesthetic" title="Score this image" data-i18n-title="modal.scoreThisImage">★ <span data-i18n="modal.scoreThis">Score</span></button>
-                        <button type="button" class="btn btn-ghost btn-small modal-analysis-btn" data-modal-analysis="color" title="Analyze colors for this image" data-i18n-title="modal.analyzeColorsThis">🎨 <span data-i18n="modal.colorsThis">Colors</span></button>
-                        <button type="button" class="btn btn-ghost btn-small modal-analysis-btn" data-modal-analysis="artist" title="Identify artist/style for this image" data-i18n-title="modal.identifyArtistThis">🖌️ <span data-i18n="modal.artistThis">Artist</span></button>
-                        <button type="button" class="btn btn-ghost btn-small modal-analysis-btn" data-modal-analysis="caption" title="Caption this image with VLM" data-i18n-title="modal.captionThisImage">🧠 <span data-i18n="modal.captionThis">Caption</span></button>
-                    </div>
-
-                    <!--
-                        Closed-source AI provider hint. Shown when generator
-                        is `gemini` or `gpt-image`. We currently identify these
-                        images via metadata only (EXIF Software/Make/Description
-                        + C2PA Content Credentials byte scan). The invisible
-                        in-pixel watermark (SynthID for Gemini, OpenAI's
-                        perceptual signal for gpt-image) is NOT checked yet.
-                        See TECHNICAL_DEBT_NOTES.md → "Pixel-watermark detection
-                        for Gemini/gpt-image".
-                    -->
-                    <div class="modal-ai-provider-note" id="modal-ai-provider-note" style="display:none" role="note" aria-live="polite">
-                        <span class="modal-ai-provider-icon" aria-hidden="true">ℹ️</span>
-                        <span class="modal-ai-provider-text" id="modal-ai-provider-text" data-i18n="modal.aiProviderNote.gemini">Identified via Content Credentials / EXIF metadata. Google's invisible SynthID watermark embedded in the pixels themselves is not yet checked by this app — planned for a future opt-in detector.</span>
-                    </div>
-
-                    <div class="modal-loading-state" id="modal-loading-state">Loading details…</div>
-
-                    <div class="modal-key-params" id="modal-key-params" style="display:none">
-                        <span class="key-param" id="kp-steps" style="display:none"><strong>Steps:</strong> <span></span></span>
-                        <span class="key-param" id="kp-sampler" style="display:none"><strong>Sampler:</strong> <span></span></span>
-                        <span class="key-param" id="kp-scheduler" style="display:none"><strong>Scheduler:</strong> <span></span></span>
-                        <span class="key-param" id="kp-cfg" style="display:none"><strong>CFG:</strong> <span></span></span>
-                        <span class="key-param" id="kp-seed" style="display:none"><strong>Seed:</strong> <span></span></span>
-                        <span class="key-param" id="kp-denoise" style="display:none"><strong>Denoise:</strong> <span></span></span>
-                    </div>
-
-                    <div class="modal-section" id="modal-loras-section" style="display:none">
-                        <h4 class="section-toggle" data-target="modal-loras-list" data-collapse-key="loras" data-i18n="modal.loras">LoRAs <span class="collapse-icon">▼</span></h4>
-                        <div id="modal-loras-list" class="lora-pills"></div>
-                    </div>
+                        <div class="modal-info-scroll">
 
                     <div class="modal-prompt modal-section">
                         <h4 class="section-toggle" data-target="modal-prompt-text" data-collapse-key="prompt" data-i18n="modal.prompt">Prompt <span class="collapse-icon">▼</span></h4>
@@ -4004,6 +4057,11 @@
                     <div class="modal-section" id="modal-negative-section" style="display:none">
                         <h4 class="section-toggle" data-target="modal-negative-text" data-collapse-key="negative" data-i18n="modal.negativePrompt">Negative Prompt <span class="collapse-icon">▼</span></h4>
                         <p id="modal-negative-text" class="modal-negative-text">-</p>
+                    </div>
+
+                    <div class="modal-section" id="modal-loras-section" style="display:none">
+                        <h4 class="section-toggle" data-target="modal-loras-list" data-collapse-key="loras" data-i18n="modal.loras">LoRAs <span class="collapse-icon">▼</span></h4>
+                        <div id="modal-loras-list" class="lora-pills"></div>
                     </div>
 
                     <div class="modal-section" id="modal-characters-section" style="display:none">
@@ -4075,6 +4133,7 @@
                         </div>
                         <p id="modal-caption-text" class="modal-caption-content" style="white-space: pre-wrap; font-style: italic; color: var(--text-secondary); line-height: 1.6;"></p>
                     </div>
+                        </div>
                 </div>
             </div>
         </div>

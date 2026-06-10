@@ -3,7 +3,7 @@
  */
 (function () {
     const CATEGORY_GROUPS = [
-        { id: 'appearance', labelKey: 'tagCategory.appearance', fallback: 'Appearance', icon: '◌', categories: ['body', 'character', 'expression'], saveCategory: 'body' },
+        { id: 'appearance', labelKey: 'tagCategory.appearance', fallback: 'Appearance', icon: '◌', categories: ['character', 'body', 'expression'], saveCategory: 'body' },
         { id: 'clothing', labelKey: 'tagCategory.clothing', fallback: 'Clothing', icon: '▣', categories: ['outfit'], saveCategory: 'outfit' },
         { id: 'pose', labelKey: 'tagCategory.pose', fallback: 'Pose', icon: '↕', categories: ['pose', 'action', 'angle'], saveCategory: 'pose' },
         { id: 'scenery', labelKey: 'tagCategory.scenery', fallback: 'Scenery', icon: '△', categories: ['background'], saveCategory: 'background' },
@@ -15,6 +15,34 @@
     const CORE_BOARD_GROUPS = CATEGORY_GROUPS.filter((group) => (
         ['appearance', 'clothing', 'pose', 'scenery', 'unclassified'].includes(group.id)
     ));
+    const KNOWN_CATEGORIES = new Set(CATEGORY_GROUPS.flatMap((group) => group.categories));
+    const CATEGORY_ALIASES = {
+        anatomy: 'body',
+        camera: 'angle',
+        clothes: 'outfit',
+        clothing: 'outfit',
+        composition: 'meta',
+        copyright: 'character',
+        environment: 'background',
+        face: 'expression',
+        general: 'unknown',
+        medium: 'style',
+        object: 'background',
+        prop: 'background',
+        subject: 'character',
+        view: 'angle',
+    };
+
+    const PURPOSE_PRESETS = [
+        { id: 'characterPrompt', labelKey: 'tagCategory.characterPrompt', fallback: 'Character / Appearance', icon: '◎', groupIds: ['appearance'] },
+        { id: 'outfitPrompt', labelKey: 'tagCategory.outfitPrompt', fallback: 'Outfit prompt', icon: '▣', groupIds: ['clothing'] },
+        { id: 'poseScenePrompt', labelKey: 'tagCategory.poseScenePrompt', fallback: 'Pose + Scene prompt', icon: '↕', groupIds: ['pose', 'scenery'] },
+        { id: 'stylePrompt', labelKey: 'tagCategory.stylePrompt', fallback: 'Style prompt', icon: '✦', groupIds: ['style'] },
+        { id: 'trainingCaption', labelKey: 'tagCategory.trainingCaption', fallback: 'Clean training caption', icon: 'TXT', groupIds: ['appearance', 'clothing', 'pose', 'scenery', 'style'] },
+        { id: 'noQualityPrompt', labelKey: 'tagCategory.noQualityPrompt', fallback: 'Prompt without quality/meta', icon: '-#', groupIds: ['appearance', 'clothing', 'pose', 'scenery', 'style', 'unclassified'] },
+    ];
+
+    const FIND_GROUP_IDS = ['appearance', 'clothing', 'pose', 'scenery', 'style'];
 
     function t(key, fallback, params) {
         const value = window.I18n?.t?.(key, params);
@@ -36,6 +64,12 @@
             .trim()
             .replace(/^["']|["']$/g, '')
             .replace(/\s+/g, ' ');
+    }
+
+    function normalizeCategoryName(value) {
+        const clean = normalizeTagValue(value || 'unknown').toLowerCase() || 'unknown';
+        if (KNOWN_CATEGORIES.has(clean)) return clean;
+        return CATEGORY_ALIASES[clean] || 'unknown';
     }
 
     function parsePromptTags(value) {
@@ -124,7 +158,7 @@
             const result = await window.App?.API?.post?.('/api/prompts/categorize', cleanTags);
             (result?.results || []).forEach((item) => {
                 const tag = normalizeTagValue(item?.tag);
-                const category = normalizeTagValue(item?.category || 'unknown').toLowerCase() || 'unknown';
+                const category = normalizeCategoryName(item?.category);
                 if (!tag) return;
                 if (!byCategory[category]) byCategory[category] = [];
                 byCategory[category].push(tag);
@@ -153,6 +187,33 @@
         return dedupeTags(group.categories.flatMap((category) => classified.byCategory[category] || []));
     }
 
+    function groupById(groupId) {
+        return CATEGORY_GROUPS.find((group) => group.id === groupId) || null;
+    }
+
+    function tagsForGroupIds(classified, groupIds = []) {
+        return dedupeTags((groupIds || []).flatMap((groupId) => {
+            const group = groupById(groupId);
+            return group ? tagsForGroup(classified, group) : [];
+        }));
+    }
+
+    function buildPurposePrompt(classified, presetOrId) {
+        const preset = typeof presetOrId === 'string'
+            ? PURPOSE_PRESETS.find((item) => item.id === presetOrId)
+            : presetOrId;
+        if (!preset) return [];
+        return tagsForGroupIds(classified, preset.groupIds);
+    }
+
+    function cleanPromptTags(tags, options = {}) {
+        const cleaned = dedupeTags(tags).map((tag) => {
+            const value = normalizeTagValue(tag);
+            return options.spaces ? value.replace(/_/g, ' ') : value;
+        });
+        return dedupeTags(cleaned);
+    }
+
     function groupForCategory(category) {
         const clean = String(category || 'unknown').toLowerCase();
         return CORE_BOARD_GROUPS.find((group) => group.categories.includes(clean)) || CORE_BOARD_GROUPS.find((group) => group.id === 'unclassified');
@@ -173,8 +234,68 @@
         });
     }
 
+    function findGalleryByTags(tags, label) {
+        const cleanTags = dedupeTags(tags).slice(0, 24);
+        if (cleanTags.length === 0) {
+            window.App?.showToast?.(t('tagCategory.noneFound', 'No tags found for that category.'), 'warning');
+            return false;
+        }
+        if (typeof window.App?.applyTagFiltersFromExternal !== 'function') {
+            window.App?.showToast?.(t('tagCategory.findUnavailable', 'Gallery filtering is not ready yet.'), 'error');
+            return false;
+        }
+        return window.App.applyTagFiltersFromExternal(cleanTags, {
+            replaceTags: true,
+            tagMode: 'and',
+            label,
+        });
+    }
+
+    function appendSectionTitle(body, label) {
+        const title = document.createElement('div');
+        title.className = 'tag-category-copy-section-title';
+        title.textContent = label;
+        body.appendChild(title);
+    }
+
     function removeMenu() {
         document.querySelector('.tag-category-copy-menu')?.remove();
+    }
+
+    function clampMenuToViewport(menu, left, top) {
+        const margin = 8;
+        const viewportWidth = document.documentElement.clientWidth || window.innerWidth || 0;
+        const viewportHeight = document.documentElement.clientHeight || window.innerHeight || 0;
+        const availableWidth = Math.max(1, viewportWidth - margin * 2);
+        const availableHeight = Math.max(1, viewportHeight - margin * 2);
+        const uiScale = Math.max(0.1, window.UiScale?.get?.() || parseFloat(document.documentElement.style.zoom) || 1);
+        const toCssPx = (value) => value / uiScale;
+        const clamp = (value, min, max) => Math.min(Math.max(value, min), Math.max(min, max));
+
+        menu.style.maxWidth = `${toCssPx(availableWidth)}px`;
+        menu.style.maxHeight = `${toCssPx(availableHeight)}px`;
+        menu.style.left = '0px';
+        menu.style.top = '0px';
+
+        const rect = menu.getBoundingClientRect();
+        const menuWidth = Math.min(rect.width || 0, availableWidth);
+        const menuHeight = Math.min(rect.height || 0, availableHeight);
+        const x = Number.isFinite(left) ? left : margin;
+        const y = Number.isFinite(top) ? top : margin;
+        let nextLeft = x;
+        let nextTop = y;
+
+        if (nextLeft + menuWidth + margin > viewportWidth) {
+            nextLeft = x - menuWidth;
+        }
+        if (nextTop + menuHeight + margin > viewportHeight) {
+            nextTop = y - menuHeight;
+        }
+
+        nextLeft = clamp(nextLeft, margin, viewportWidth - menuWidth - margin);
+        nextTop = clamp(nextTop, margin, viewportHeight - menuHeight - margin);
+        menu.style.left = `${Math.round(toCssPx(nextLeft))}px`;
+        menu.style.top = `${Math.round(toCssPx(nextTop))}px`;
     }
 
     function positionMenu(menu, options = {}) {
@@ -188,18 +309,7 @@
             top = rect.bottom + 6;
         }
 
-        menu.style.left = `${Number.isFinite(left) ? left : 12}px`;
-        menu.style.top = `${Number.isFinite(top) ? top : 12}px`;
-
-        requestAnimationFrame(() => {
-            const rect = menu.getBoundingClientRect();
-            if (rect.right > window.innerWidth - 8) {
-                menu.style.left = `${Math.max(8, window.innerWidth - rect.width - 8)}px`;
-            }
-            if (rect.bottom > window.innerHeight - 8) {
-                menu.style.top = `${Math.max(8, window.innerHeight - rect.height - 8)}px`;
-            }
-        });
+        clampMenuToViewport(menu, left, top);
     }
 
     function buildMenuShell(options = {}) {
@@ -263,6 +373,30 @@
         });
         body.appendChild(allButton);
 
+        appendSectionTitle(body, t('tagCategory.purposePrompts', 'Purpose prompts'));
+        PURPOSE_PRESETS.forEach((preset) => {
+            const presetTags = buildPurposePrompt(classified, preset);
+            const label = t(preset.labelKey, preset.fallback);
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'tag-category-copy-item tag-category-copy-purpose';
+            button.dataset.purpose = preset.id;
+            button.innerHTML = `
+                <span class="tag-category-copy-icon" aria-hidden="true">${escapeHtml(preset.icon)}</span>
+                <span class="tag-category-copy-label">${escapeHtml(label)}</span>
+                <span class="tag-category-copy-count">${presetTags.length}</span>
+            `;
+            button.addEventListener('click', () => {
+                copyTags(
+                    preset.id === 'trainingCaption' ? cleanPromptTags(presetTags, { spaces: false }) : presetTags,
+                    t('tagCategory.purposeCopied', 'Copied {purpose}', { purpose: label }).replace('{purpose}', label)
+                );
+                removeMenu();
+            });
+            body.appendChild(button);
+        });
+
+        appendSectionTitle(body, t('tagCategory.copyByCategory', 'Copy by category'));
         CATEGORY_GROUPS.forEach((group) => {
             const groupTags = tagsForGroup(classified, group);
             const label = t(group.labelKey, group.fallback);
@@ -280,6 +414,28 @@
                     groupTags,
                     t('tagCategory.groupCopied', 'Copied {category} tags', { category: label }).replace('{category}', label)
                 );
+                removeMenu();
+            });
+            body.appendChild(button);
+        });
+
+        appendSectionTitle(body, t('tagCategory.findSimilarByCategory', 'Find images by category'));
+        FIND_GROUP_IDS.forEach((groupId) => {
+            const group = groupById(groupId);
+            if (!group) return;
+            const groupTags = tagsForGroup(classified, group);
+            const label = t(group.labelKey, group.fallback);
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'tag-category-copy-item tag-category-copy-find';
+            button.dataset.group = group.id;
+            button.innerHTML = `
+                <span class="tag-category-copy-icon" aria-hidden="true">⌕</span>
+                <span class="tag-category-copy-label">${escapeHtml(label)}</span>
+                <span class="tag-category-copy-count">${groupTags.length}</span>
+            `;
+            button.addEventListener('click', () => {
+                findGalleryByTags(groupTags, label);
                 removeMenu();
             });
             body.appendChild(button);
@@ -317,12 +473,17 @@
     window.TagCategoryCopy = {
         CATEGORY_GROUPS,
         CORE_BOARD_GROUPS,
+        PURPOSE_PRESETS,
+        buildPurposePrompt,
         classifyTags,
+        cleanPromptTags,
         copyTags,
+        findGalleryByTags,
         getTagsFromSource,
         groupForCategory,
         parsePromptTags,
         showMenu,
         tagsForGroup,
+        tagsForGroupIds,
     };
 }());

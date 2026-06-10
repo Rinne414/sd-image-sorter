@@ -327,7 +327,7 @@
             this._setButton('#btn-copy-tags', 'modal.copyTags');
             this._setButton('#btn-copy-params', 'modal.copyParams');
             this._setButton('#btn-copy-all', 'modal.copyAll');
-            this._setButton('#btn-reparse-metadata', 'modal.reparse');
+            this._setButton('#btn-reparse-metadata', 'modal.reparse', '↻', 'modal.reparse');
             this._setTextAll('.modal-meta strong', ['modal.generator', 'modal.size', 'modal.checkpoint']);
             this._setText('#modal-loading-state', 'modal.loadingDetails');
             this._setText('#modal-img2img-badge', 'modal.img2img');

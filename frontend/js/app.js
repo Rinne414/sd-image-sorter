@@ -10102,6 +10102,39 @@ function addTagFilter(tag) {
     }
 }
 
+function applyTagFiltersFromExternal(tags, options = {}) {
+    const cleanTags = Array.from(new Set((tags || [])
+        .map((tag) => String(tag || '').trim())
+        .filter(Boolean)));
+    if (cleanTags.length === 0) {
+        showToast(appT('tagCategory.noneFound', 'No tags found for that category.'), 'warning');
+        return false;
+    }
+
+    const replaceTags = options.replaceTags === true;
+    const nextMode = options.tagMode === 'or' ? 'or' : 'and';
+    updateAppFilters((filters) => {
+        const currentTags = Array.isArray(filters.tags) ? filters.tags : [];
+        filters.tags = replaceTags
+            ? cleanTags
+            : Array.from(new Set([...currentTags, ...cleanTags]));
+        filters.tagMode = nextMode;
+        filters.cursor = null;
+        filters.offset = 0;
+    });
+    renderActiveTagFilters();
+    updateFilterSummary();
+    switchView('gallery');
+    loadImages();
+
+    const label = String(options.label || '').trim();
+    const message = label
+        ? appT('tagCategory.findAppliedNamed', 'Showing images matching {category} tags', { category: label }).replace('{category}', label)
+        : appT('tagCategory.findApplied', 'Showing images matching those tags');
+    showToast(message, 'success');
+    return true;
+}
+
 function removeTagFilter(tag) {
     updateAppFilters((filters) => {
         filters.tags = filters.tags.filter(t => t !== tag);
@@ -13073,6 +13106,7 @@ function buildAppContext() {
         openColorAnalysis,
         openGalleryPreview,
         applyPromptFilter,
+        applyTagFiltersFromExternal,
         // Expose the canonical modal closer so cross-module callers (gallery.js
         // checkpoint/LoRA click-to-filter, FLOW-03 preview handoffs) can close
         // #image-modal. Previously these called window.App.closeModal, which was

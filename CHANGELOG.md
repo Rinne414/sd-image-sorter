@@ -5,6 +5,28 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.4] - 2026-06-10
+
+Focused Gallery/Reader usability release after v3.3.3. The preview modal now behaves like a real inspector for continuous image reading: common metadata stays visible, the content pane keeps its scroll position when switching images, and low-frequency handoff/analysis actions no longer push the prompt out of the way. This release also finishes category/purpose copy flows and Prompt Lab image-tag recipes, with 2K viewport fixes for right-side menus.
+
+v3.3.3 后的 Gallery / Reader 可用性修复版。预览弹窗现在更像真正的连续读图 inspector：常用元数据保持可见，切换图片时正文阅读位置不会重置，低频交接/分析按钮不会再把 Prompt 挤下去。本版同时补完分类/用途型复制与 Prompt Lab 图片标签配方，并修正 2K 视口下右侧菜单定位。
+
+### Fixed / 修复
+- **Gallery preview inspector**: fixed header + independent scroll body; Copy and Tools menus replace the always-visible action rows.
+  - **图库预览 inspector**：固定头部 + 独立正文滚动；Copy 与 Tools 菜单替代常驻动作按钮行。
+- **Preview scroll retention**: previous/next image navigation preserves the information-pane reading position.
+  - **预览切图保留阅读位置**：上一张/下一张切换会保留信息区阅读位置。
+- **2K right-edge menu placement**: Gallery context menus stay near right-side images and inside the viewport; modal Tools and close controls no longer overlap.
+  - **2K 右侧菜单定位**：图库右键菜单贴近右侧图片且保持在视口内；弹窗 Tools 与关闭按钮不再重叠。
+- **Purpose prompt copy**: Gallery/Reader category copy can emit clean training captions, image-search keywords, and category-specific tag prompts.
+  - **用途型 Prompt 复制**：Gallery / Reader 分类复制可输出干净训练 caption、搜图关键词与按分类的 tag prompt。
+- **Prompt Lab image recipe**: selected gallery images can seed a categorized prompt recipe and build a cleaned prompt with quality/meta noise removed when requested.
+  - **Prompt Lab 图片配方**：可用图库图片生成分类 prompt 配方，并按需去掉质量词/元信息噪音。
+
+### Upgrading / 升级注意
+- No database migration. Existing libraries, image files, captions, model files, tags, and ratings are untouched.
+  - 不含数据库迁移。既有图库、图片文件、caption、模型文件、标签与评分不受影响。
+
 ## [3.3.3] - 2026-06-09
 
 Deep UI/UX overhaul release. The app now follows the real image workflow more closely:

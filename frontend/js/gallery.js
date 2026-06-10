@@ -3361,9 +3361,48 @@ ${String(value)}`)
         this._zoomMouseupHandler = null;
     },
 
+    _getModalInfoScroller() {
+        return document.querySelector('#image-modal .modal-info-scroll')
+            || document.querySelector('#image-modal .modal-info');
+    },
+
+    _captureModalInfoScrollState() {
+        const info = this._getModalInfoScroller();
+        if (!info) return null;
+        const maxScroll = Math.max(0, info.scrollHeight - info.clientHeight);
+        return {
+            top: info.scrollTop || 0,
+            ratio: maxScroll > 0 ? (info.scrollTop || 0) / maxScroll : 0,
+        };
+    },
+
+    _restoreModalInfoScrollState(scrollState) {
+        const info = this._getModalInfoScroller();
+        if (!info || !scrollState) return;
+        const apply = () => {
+            const maxScroll = Math.max(0, info.scrollHeight - info.clientHeight);
+            if (maxScroll <= 0) return;
+            const targetTop = Math.max(scrollState.top || 0, (scrollState.ratio || 0) * maxScroll);
+            info.scrollTop = Math.min(maxScroll, targetTop);
+        };
+        requestAnimationFrame(() => requestAnimationFrame(apply));
+        window.setTimeout(apply, 120);
+    },
+
+    _closeModalCopyMenu() {
+        document.getElementById('modal-copy-menu')?.removeAttribute('open');
+    },
+
+    _closeModalToolsMenu() {
+        document.getElementById('modal-tools-menu')?.removeAttribute('open');
+    },
+
     async openPreview(imageId) {
         const { $, showModal, formatSize, showToast } = getGalleryAppContext();
         const API = getRequiredGalleryAPI();
+        const wasModalVisible = document.getElementById('image-modal')?.classList.contains('visible');
+        const modalInfoScrollState = wasModalVisible ? this._captureModalInfoScrollState() : null;
+        this._pendingModalInfoScrollState = modalInfoScrollState;
 
         // Reset zoom/pan transform when opening a new preview (including adjacent navigation)
         const modalImgReset = $('#modal-image');
@@ -3384,6 +3423,7 @@ ${String(value)}`)
                 const btn = e.target.closest('[data-modal-handoff]');
                 if (!btn) return;
                 e.preventDefault();
+                this._closeModalToolsMenu();
                 this._handleModalHandoff(btn.dataset.modalHandoff);
             });
         }
@@ -3393,7 +3433,21 @@ ${String(value)}`)
                 const btn = e.target.closest('[data-modal-analysis]');
                 if (!btn) return;
                 e.preventDefault();
+                this._closeModalToolsMenu();
                 this._handleModalAnalysis(btn.dataset.modalAnalysis);
+            });
+        }
+        if (!this._modalCopyMenuOutsideBound) {
+            this._modalCopyMenuOutsideBound = true;
+            document.addEventListener('click', (event) => {
+                const copyMenu = document.getElementById('modal-copy-menu');
+                const toolsMenu = document.getElementById('modal-tools-menu');
+                if (copyMenu?.hasAttribute('open') && !copyMenu.contains(event.target)) {
+                    copyMenu.removeAttribute('open');
+                }
+                if (toolsMenu?.hasAttribute('open') && !toolsMenu.contains(event.target)) {
+                    toolsMenu.removeAttribute('open');
+                }
             });
         }
         this._syncModalAnalysisButtons();
@@ -3509,6 +3563,8 @@ ${String(value)}`)
                 showToast?.(successMessage, 'success');
             } catch (error) {
                 showToast?.(this._t('modal.copyFailed', null, 'Failed to copy text'), 'error');
+            } finally {
+                this._closeModalCopyMenu();
             }
         };
         const getPromptView = () => this._getModalPromptView() || this._buildPromptView(this._lastModalImage, this._lastParsedData, 'original');
@@ -3521,6 +3577,7 @@ ${String(value)}`)
             tagCategoryButton.onclick = (event) => {
                 event.preventDefault();
                 event.stopPropagation();
+                this._closeModalCopyMenu();
                 window.TagCategoryCopy?.showMenu?.({
                     anchor: tagCategoryButton,
                     source: {
@@ -3557,6 +3614,12 @@ ${String(value)}`)
         };
 
         showModal?.('image-modal');
+        if (modalInfoScrollState) {
+            this._restoreModalInfoScrollState(modalInfoScrollState);
+        } else {
+            const info = this._getModalInfoScroller();
+            if (info) info.scrollTop = 0;
+        }
 
         // Zoom/pan for modal image
         {
@@ -3679,6 +3742,7 @@ ${String(value)}`)
         this._applyModalSectionStates();
         $('#modal-loading-state').style.display = 'none';
         $('#btn-toggle-all-tags').textContent = this._t('modal.showMore', null, 'Show More');
+        this._restoreModalInfoScrollState(this._pendingModalInfoScrollState);
 
         // Extract and display color distribution
         this._extractColorDistribution($('#modal-image'));
@@ -3850,8 +3914,6 @@ ${String(value)}`)
 
         const menu = document.createElement('div');
         menu.className = 'gallery-context-menu';
-        menu.style.left = `${e.clientX}px`;
-        menu.style.top = `${e.clientY}px`;
         menu.setAttribute('role', 'menu');
 
         const scopeLabel = actionCount > 1
@@ -3981,15 +4043,7 @@ ${String(value)}`)
         });
 
         document.body.appendChild(menu);
-
-        // Adjust position if menu overflows viewport
-        const menuRect = menu.getBoundingClientRect();
-        if (menuRect.right > window.innerWidth) {
-            menu.style.left = `${window.innerWidth - menuRect.width - 8}px`;
-        }
-        if (menuRect.bottom > window.innerHeight) {
-            menu.style.top = `${window.innerHeight - menuRect.height - 8}px`;
-        }
+        this._positionContextMenu(menu, e.clientX, e.clientY, e.currentTarget || e.target?.closest?.('.gallery-item'));
 
         // Close on click outside or Escape.
         const closeMenu = () => {
@@ -4004,6 +4058,57 @@ ${String(value)}`)
             document.addEventListener('click', closeMenu);
             document.addEventListener('keydown', closeOnEscape);
         }, 0);
+    },
+
+    _positionContextMenu(menu, clientX, clientY, anchorElement = null) {
+        if (!menu) return;
+        const margin = 8;
+        const gap = 6;
+        const viewportWidth = document.documentElement.clientWidth || window.innerWidth || 0;
+        const viewportHeight = document.documentElement.clientHeight || window.innerHeight || 0;
+        const availableWidth = Math.max(1, viewportWidth - margin * 2);
+        const availableHeight = Math.max(1, viewportHeight - margin * 2);
+        const maxMenuHeight = Math.min(420, availableHeight);
+        const uiScale = Math.max(0.1, window.UiScale?.get?.() || parseFloat(document.documentElement.style.zoom) || 1);
+        const toCssPx = (value) => value / uiScale;
+        const clamp = (value, min, max) => Math.min(Math.max(value, min), Math.max(min, max));
+        const anchorRect = anchorElement?.getBoundingClientRect?.() || null;
+        const rawX = Number.isFinite(clientX) ? clientX : anchorRect?.right;
+        const rawY = Number.isFinite(clientY) ? clientY : anchorRect?.top;
+        const pointerInsideAnchor = anchorRect
+            && rawX >= anchorRect.left - 1
+            && rawX <= anchorRect.right + 1
+            && rawY >= anchorRect.top - 1
+            && rawY <= anchorRect.bottom + 1;
+        const x = anchorRect && !pointerInsideAnchor
+            ? clamp(rawX ?? anchorRect.right, anchorRect.left, anchorRect.right)
+            : (rawX ?? margin);
+        const y = anchorRect && !pointerInsideAnchor
+            ? clamp(rawY ?? anchorRect.top, anchorRect.top, anchorRect.bottom)
+            : (rawY ?? margin);
+
+        menu.style.maxWidth = `${toCssPx(availableWidth)}px`;
+        menu.style.maxHeight = `${toCssPx(maxMenuHeight)}px`;
+        menu.style.left = '0px';
+        menu.style.top = '0px';
+
+        const rect = menu.getBoundingClientRect();
+        const menuWidth = Math.min(rect.width || 0, availableWidth);
+        const menuHeight = Math.min(rect.height || 0, maxMenuHeight);
+        let left = x;
+        let top = y;
+
+        if (left + menuWidth + margin > viewportWidth) {
+            left = anchorRect ? anchorRect.left - menuWidth - gap : x - menuWidth;
+        }
+        if (top + menuHeight + margin > viewportHeight) {
+            top = anchorRect ? anchorRect.bottom - menuHeight : y - menuHeight;
+        }
+
+        left = clamp(left, margin, viewportWidth - menuWidth - margin);
+        top = clamp(top, margin, viewportHeight - menuHeight - margin);
+        menu.style.left = `${Math.round(toCssPx(left))}px`;
+        menu.style.top = `${Math.round(toCssPx(top))}px`;
     },
 
     // Cleanup when switching views

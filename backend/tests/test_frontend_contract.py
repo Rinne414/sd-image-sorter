@@ -992,8 +992,8 @@ def test_export_ui_explains_output_formats_before_action():
     assert "export.descPromptNumbered" in zh_source
     assert "Combined Export..." in en_source
     assert "合并导出..." in zh_source
-    assert "Same-name .txt..." in en_source
-    assert "同名 .txt..." in zh_source
+    assert "Training captions..." in en_source
+    assert "训练 caption..." in zh_source
     assert "训练 caption" in zh_source
     assert "可选 Class Token + AI caption + Prompt + Tags" in zh_source
     assert "训练用 .txt" in zh_source
@@ -1153,6 +1153,7 @@ def test_tag_category_copy_and_promptlab_board_are_wired():
     reader_source = (repo_root / "frontend" / "js" / "image-reader.js").read_text(encoding="utf-8")
     promptlab_source = (repo_root / "frontend" / "js" / "prompt-lab.js").read_text(encoding="utf-8")
     copy_source = (repo_root / "frontend" / "js" / "tag-category-copy.js").read_text(encoding="utf-8")
+    app_source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
     css = (repo_root / "frontend" / "css" / "ui-refresh.css").read_text(encoding="utf-8")
     en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
     zh_source = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
@@ -1161,23 +1162,47 @@ def test_tag_category_copy_and_promptlab_board_are_wired():
     assert html.index("/static/js/tag-category-copy.js") < html.index("/static/js/gallery.js")
     assert 'id="btn-copy-tags-category"' in html
     assert 'id="reader-copy-prompt-category"' in html
+    assert 'id="reader-category-tags-section"' in html
     assert 'id="promptlab-category-board-modal"' in html
     assert 'id="btn-promptlab-category-board"' in html
+    assert 'id="pl-build-category-workbench"' in html
+    assert 'id="pl-build-use-checked"' in html
+    assert 'id="pl-build-copy-caption"' in html
+    assert 'id="pl-build-clean-prompt"' in html
+    assert 'id="pl-build-drop-quality"' in html
+    assert 'id="pl-build-space-tags"' in html
+    assert 'id="pl-build-reorder"' in html
 
     assert "window.TagCategoryCopy" in copy_source
     assert "/api/prompts/categorize" in copy_source
     assert "CORE_BOARD_GROUPS" in copy_source
+    assert "PURPOSE_PRESETS" in copy_source
+    assert "buildPurposePrompt" in copy_source
+    assert "CATEGORY_ALIASES" in copy_source
+    assert "normalizeCategoryName" in copy_source
+    assert "findGalleryByTags" in copy_source
     assert "gallery.contextCopyTagCategory" in gallery_source
     assert "TagCategoryCopy.showMenu" in gallery_source
     assert "_copyPromptCategory" in reader_source
+    assert "_renderReaderCategoryTags" in reader_source
     assert "openCategoryBoard" in promptlab_source
     assert "submitCategoryBoard" in promptlab_source
+    assert "_renderBuildCategoryWorkbench" in promptlab_source
+    assert "_useCheckedBuildCategories" in promptlab_source
+    assert "_cleanBuildPrompt" in promptlab_source
     assert "/api/prompts/recategorize" in promptlab_source
+    assert "applyTagFiltersFromExternal" in app_source
     assert ".tag-category-copy-menu" in css
+    assert ".tag-category-copy-purpose" in css
+    assert ".reader-category-tags" in css
+    assert ".promptlab-build-category-workbench" in css
     assert ".promptlab-category-board-columns" in css
 
     for key in [
         "tagCategory.copyOptions",
+        "tagCategory.purposePrompts",
+        "tagCategory.findSimilarByCategory",
+        "tagCategory.trainingCaption",
         "tagCategory.appearance",
         "tagCategory.clothing",
         "tagCategory.pose",
@@ -1185,6 +1210,11 @@ def test_tag_category_copy_and_promptlab_board_are_wired():
         "tagCategory.unclassified",
         "promptlab.categoryBoardTitle",
         "promptlab.submitCategoryBoard",
+        "promptlab.imagePromptRecipe",
+        "promptlab.useCheckedCategories",
+        "promptlab.copyTrainingCaption",
+        "promptlab.cleanPrompt",
+        "reader.categoryTags",
         "gallery.contextCopyTagCategory",
     ]:
         assert key in en_source

@@ -7439,9 +7439,13 @@ input[type="radio"] {
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 12px;
-    padding: 6px;
-    min-width: 220px;
+    border-radius: 10px;
+    padding: 4px;
+    min-width: 190px;
+    max-width: min(260px, calc(100vw - 16px));
+    max-height: min(420px, calc(100vh - 16px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
     box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
 }
 .context-menu-item {
@@ -7453,10 +7457,10 @@ input[type="radio"] {
     cursor: pointer;
     display: flex;
     font: inherit;
-    font-size: 0.86rem;
-    gap: 9px;
-    min-height: 34px;
-    padding: 8px 10px;
+    font-size: 0.8rem;
+    gap: 7px;
+    min-height: 30px;
+    padding: 6px 8px;
     text-align: left;
     transition: background 0.15s, color 0.15s;
     width: 100%;
@@ -7475,7 +7479,7 @@ input[type="radio"] {
     color: #ffd1ca;
 }
 .context-menu-icon {
-    flex: 0 0 20px;
+    flex: 0 0 18px;
     text-align: center;
 }
 .context-menu-label {
@@ -7487,7 +7491,7 @@ input[type="radio"] {
 .context-menu-separator {
     background: rgba(255, 255, 255, 0.1);
     height: 1px;
-    margin: 5px 6px;
+    margin: 3px 6px;
 }
 
 /* ===== Library Health View ===== */

@@ -29,6 +29,7 @@
             modelAssets: false,
             loras: false,
             hashes: false,
+            categoryTags: true,
             editor: false,
         },
 
@@ -69,10 +70,22 @@
             document.getElementById('reader-copy-prompt-category')?.addEventListener('click', (event) => this._copyPromptCategory(event));
             document.getElementById('reader-copy-negative')?.addEventListener('click', () => this._copy('negative'));
             document.getElementById('reader-copy-params')?.addEventListener('click', () => this._copy('params'));
-            document.getElementById('reader-copy-all')?.addEventListener('click', () => this._copy('all'));
-            document.getElementById('reader-copy-sd')?.addEventListener('click', () => this._copy('sd'));
+            document.getElementById('reader-copy-all')?.addEventListener('click', () => {
+                this._copy('all');
+                this._closeCopyMenu();
+            });
+            document.getElementById('reader-copy-sd')?.addEventListener('click', () => {
+                this._copy('sd');
+                this._closeCopyMenu();
+            });
             document.getElementById('reader-clear')?.addEventListener('click', () => this._clear());
             document.getElementById('reader-toggle-format')?.addEventListener('click', () => this._toggleFormat());
+            document.addEventListener('click', (event) => {
+                const menu = document.getElementById('reader-copy-menu');
+                if (menu?.hasAttribute('open') && !menu.contains(event.target)) {
+                    menu.removeAttribute('open');
+                }
+            });
 
             // Paste button — stop propagation so clicking it doesn't also open the file picker
             const pasteBtn = document.getElementById('reader-paste-btn');
@@ -245,6 +258,45 @@
                 const expanded = this._collapsedState[key] !== false;
                 this._applySectionState(toggle, target, expanded);
             });
+        },
+
+        _closeCopyMenu() {
+            document.getElementById('reader-copy-menu')?.removeAttribute('open');
+        },
+
+        _getReaderScrollElements() {
+            const elements = [
+                document.getElementById('view-reader'),
+                document.querySelector('#view-reader .reader-right'),
+            ].filter(Boolean);
+            return [...new Set(elements)];
+        },
+
+        _captureReaderScrollState() {
+            return this._getReaderScrollElements().map((element) => {
+                const maxScroll = Math.max(0, element.scrollHeight - element.clientHeight);
+                return {
+                    element,
+                    top: element.scrollTop || 0,
+                    ratio: maxScroll > 0 ? (element.scrollTop || 0) / maxScroll : 0,
+                };
+            });
+        },
+
+        _restoreReaderScrollState(scrollState) {
+            if (!Array.isArray(scrollState) || scrollState.length === 0) return;
+            const apply = () => {
+                scrollState.forEach((snapshot) => {
+                    const element = snapshot?.element;
+                    if (!element || !element.isConnected) return;
+                    const maxScroll = Math.max(0, element.scrollHeight - element.clientHeight);
+                    if (maxScroll <= 0) return;
+                    const targetTop = Math.max(snapshot.top || 0, (snapshot.ratio || 0) * maxScroll);
+                    element.scrollTop = Math.min(maxScroll, targetTop);
+                });
+            };
+            requestAnimationFrame(() => requestAnimationFrame(apply));
+            window.setTimeout(apply, 120);
         },
 
         _isReaderTempSourcePath(path) {
@@ -663,6 +715,41 @@
             }
         },
 
+        _renderQuickFacts(result, gp, options = {}) {
+            const container = document.getElementById('reader-quick-facts');
+            if (!container) return;
+
+            const facts = [];
+            const addFact = (labelKey, fallback, value, title = '') => {
+                const clean = String(value ?? '').trim();
+                if (!clean || clean === '-') return;
+                facts.push({
+                    label: this._t(labelKey, fallback),
+                    value: clean,
+                    title: title || clean,
+                });
+            };
+
+            addFact('reader.checkpoint', 'Checkpoint', options.checkpoint || result?.checkpoint || gp?.model, options.checkpointRaw || '');
+            if (result?.width && result?.height) {
+                addFact('reader.editSize', 'Size', `${result.width}x${result.height}`);
+            } else {
+                addFact('reader.editSize', 'Size', gp?.size);
+            }
+            addFact('reader.editSeed', 'Seed', gp?.seed ?? gp?.noise_seed);
+            addFact('reader.editSteps', 'Steps', gp?.steps);
+            addFact('reader.editCfg', 'CFG', gp?.cfg_scale ?? gp?.cfg ?? gp?.['CFG scale']);
+            addFact('reader.editSampler', 'Sampler', gp?.sampler || gp?.sampler_name);
+
+            container.hidden = facts.length === 0;
+            container.innerHTML = facts.map((fact) => `
+                <span class="reader-quick-fact" title="${this._escapeHtml(fact.title)}">
+                    <span class="reader-quick-fact-label">${this._escapeHtml(fact.label)}</span>
+                    <span class="reader-quick-fact-value">${this._escapeHtml(fact.value)}</span>
+                </span>
+            `).join('');
+        },
+
         _renderReaderColorDistribution() {
             const preview = document.getElementById('reader-image-preview');
             const section = document.getElementById('reader-color-section');
@@ -962,6 +1049,7 @@
                     }
                 }
                 if (resultPanel) resultPanel.style.display = 'block';
+                this._restoreReaderScrollState(options.preserveScrollState);
             } catch (error) {
                 if (statusEl) {
                     statusEl.textContent = this._t('reader.parseFailed', `Could not read this image: ${error.message}`, {
@@ -980,6 +1068,7 @@
 
             try {
                 this._switchWorkspaceTool('reader');
+                const scrollState = this._currentResult ? this._captureReaderScrollState() : null;
                 const [response, detailResponse] = await Promise.all([
                     fetch(`/api/image-file/${id}`),
                     fetch(`/api/images/${id}`),
@@ -998,9 +1087,12 @@
                 await this._handleFile(file, {
                     sourceKind: 'library',
                     originalSourcePath: detailPayload?.image?.path || '',
+                    preserveScrollState: scrollState,
                 });
                 this._currentLibraryImageId = id;
                 this._currentReaderTags = Array.isArray(detailPayload?.tags) ? detailPayload.tags : [];
+                this._renderReaderCategoryTags(this._currentResult);
+                this._restoreReaderScrollState(scrollState);
                 return true;
             } catch (error) {
                 window.App?.showToast?.(
@@ -1241,10 +1333,12 @@
             this._updateFormatButton();
             const clipboardMetadataMissing = this._clipboardMetadataMissing(result, options.sourceKind || this._currentSourceKind);
             this._renderPromptSection(result, { clipboardMetadataMissing });
+            this._renderReaderCategoryTags(result);
 
             // Checkpoint — strip path, show clean name, tooltip for full path
             const cpRaw = result.checkpoint || gp.model || '';
             const cpClean = this._cleanModelName(cpRaw);
+            this._renderQuickFacts(result, gp, { checkpoint: cpClean, checkpointRaw: cpRaw });
             const cpEl = document.getElementById('reader-checkpoint');
             if (cpEl) {
                 cpEl.textContent = cpClean || '-';
@@ -1334,6 +1428,88 @@
 
             this._renderReaderColorDistribution();
             this._syncSectionStates();
+        },
+
+        async _renderReaderCategoryTags(result) {
+            const section = document.getElementById('reader-category-tags-section');
+            const container = document.getElementById('reader-category-tags');
+            if (!section || !container) return;
+
+            const copy = window.TagCategoryCopy;
+            if (!copy?.getTagsFromSource || !copy?.classifyTags) {
+                section.hidden = true;
+                container.innerHTML = '';
+                return;
+            }
+
+            const promptView = this._buildPromptView(result || this._currentResult, this._promptFormat);
+            const source = {
+                imageId: this._currentLibraryImageId,
+                tags: this._currentReaderTags || [],
+                prompt: promptView?.promptText || result?.prompt || '',
+            };
+            const renderToken = `${Date.now()}-${Math.random()}`;
+            this._readerCategoryRenderToken = renderToken;
+            container.innerHTML = `<div class="tag-category-copy-loading">${this._escapeHtml(this._t('common.loading', 'Loading...'))}</div>`;
+            section.hidden = false;
+
+            try {
+                const tags = await copy.getTagsFromSource(source);
+                const classified = await copy.classifyTags(tags);
+                if (this._readerCategoryRenderToken !== renderToken) return;
+
+                const groups = (copy.CATEGORY_GROUPS || [])
+                    .map((group) => {
+                        const groupTags = copy.tagsForGroup(classified, group);
+                        return { group, groupTags };
+                    })
+                    .filter(({ groupTags }) => groupTags.length > 0);
+
+                if (!groups.length) {
+                    section.hidden = true;
+                    container.innerHTML = '';
+                    return;
+                }
+
+                container.innerHTML = groups.map(({ group, groupTags }) => {
+                    const label = this._t(group.labelKey, group.fallback);
+                    return `
+                        <section class="reader-category-group" data-group="${this._escapeHtml(group.id)}">
+                            <div class="reader-category-group-head">
+                                <span class="reader-category-title">${this._escapeHtml(label)}</span>
+                                <span class="tag-category-copy-count">${groupTags.length}</span>
+                                <span class="reader-category-actions">
+                                    <button type="button" class="btn btn-ghost btn-small reader-category-copy" data-group="${this._escapeHtml(group.id)}">${this._escapeHtml(this._t('reader.copy', 'Copy'))}</button>
+                                    <button type="button" class="btn btn-ghost btn-small reader-category-find" data-group="${this._escapeHtml(group.id)}">${this._escapeHtml(this._t('tagCategory.find', 'Find'))}</button>
+                                </span>
+                            </div>
+                            <div class="reader-category-chip-list">
+                                ${groupTags.map((tag) => `<span class="reader-category-chip">${this._escapeHtml(tag)}</span>`).join('')}
+                            </div>
+                        </section>
+                    `;
+                }).join('');
+
+                container.querySelectorAll('.reader-category-copy').forEach((button) => {
+                    button.addEventListener('click', () => {
+                        const group = groups.find((item) => item.group.id === button.dataset.group);
+                        if (!group) return;
+                        const label = this._t(group.group.labelKey, group.group.fallback);
+                        copy.copyTags(group.groupTags, this._t('tagCategory.groupCopied', 'Copied {category} tags', { category: label }).replace('{category}', label));
+                    });
+                });
+                container.querySelectorAll('.reader-category-find').forEach((button) => {
+                    button.addEventListener('click', () => {
+                        const group = groups.find((item) => item.group.id === button.dataset.group);
+                        if (!group) return;
+                        const label = this._t(group.group.labelKey, group.group.fallback);
+                        copy.findGalleryByTags(group.groupTags, label);
+                    });
+                });
+            } catch (_error) {
+                section.hidden = true;
+                container.innerHTML = '';
+            }
         },
 
         _copy(what) {
@@ -1449,11 +1625,16 @@
             const metadataEditor = document.getElementById('reader-metadata-editor');
             const metadataEditorBody = document.getElementById('reader-editor-body');
             const metadataWarning = document.getElementById('reader-edit-format-warning');
+            const quickFacts = document.getElementById('reader-quick-facts');
             if (colorSection) colorSection.style.display = 'none';
             const modelAssetsSection = document.getElementById('reader-model-assets-section');
             const modelAssets = document.getElementById('reader-model-assets');
             if (modelAssetsSection) modelAssetsSection.style.display = 'none';
             if (modelAssets) modelAssets.innerHTML = '';
+            if (quickFacts) {
+                quickFacts.innerHTML = '';
+                quickFacts.hidden = true;
+            }
             if (metadataEditor) metadataEditor.hidden = true;
             if (metadataEditorBody) metadataEditorBody.style.display = 'none';
             if (metadataWarning) {
