@@ -114,6 +114,51 @@ def test_exclude_prompts_filters_out_matching_images(test_db):
     assert drop not in ids
 
 
+# v3.4.0 FIX: exact-mode excludePrompts must use exact token equality, not the
+# broad substring LIKE the include side pre-filters with. The include side is
+# corrected by an exact post-filter; excludes have none, so the LIKE pattern
+# permanently over-excluded (excluding "cat" also hid "catgirl"/"scattered").
+def test_exclude_prompts_exact_mode_does_not_match_substrings(test_db):
+    import database as db
+
+    catgirl = db.add_image(path="/t/exg.png", filename="exg.png", prompt="1girl, catgirl, smile")
+    scattered = db.add_image(path="/t/exs.png", filename="exs.png", prompt="scattered petals, 1girl")
+    cat = db.add_image(path="/t/exc.png", filename="exc.png", prompt="1girl, cat, smile")
+
+    result = db.get_images_paginated(exclude_prompts=["cat"], prompt_match_mode="exact", limit=100)
+    ids = [img["id"] for img in result["images"]]
+    assert catgirl in ids, "exact-mode exclude 'cat' must not exclude 'catgirl'"
+    assert scattered in ids, "exact-mode exclude 'cat' must not exclude 'scattered'"
+    assert cat not in ids, "exact-mode exclude 'cat' must exclude the 'cat' token"
+
+
+def test_exclude_prompts_exact_mode_normalizes_term(test_db):
+    """Exact-mode exclude terms normalize like stored tokens (case + underscores)."""
+    import database as db
+
+    eared = db.add_image(path="/t/exn.png", filename="exn.png", prompt="masterpiece, cat ears")
+    plain = db.add_image(path="/t/exp.png", filename="exp.png", prompt="masterpiece, landscape")
+
+    result = db.get_images_paginated(exclude_prompts=["Cat_Ears"], prompt_match_mode="exact", limit=100)
+    ids = [img["id"] for img in result["images"]]
+    assert eared not in ids
+    assert plain in ids
+
+
+def test_exclude_prompts_contains_mode_still_matches_substrings(test_db):
+    import database as db
+
+    catgirl = db.add_image(path="/t/cg.png", filename="cg.png", prompt="1girl, catgirl, smile")
+    cat = db.add_image(path="/t/c.png", filename="c.png", prompt="1girl, cat, smile")
+    dog = db.add_image(path="/t/d.png", filename="d.png", prompt="1girl, dog, smile")
+
+    result = db.get_images_paginated(exclude_prompts=["cat"], prompt_match_mode="contains", limit=100)
+    ids = [img["id"] for img in result["images"]]
+    assert catgirl not in ids
+    assert cat not in ids
+    assert dog in ids
+
+
 def test_exclude_colors_filters_out_matching_images(test_db):
     """Images whose color_temperature is excluded should be removed."""
     import database as db

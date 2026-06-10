@@ -66,6 +66,10 @@ SMART_TAG_ID_CHUNK_SIZE = 500
 SMART_TAG_PATH_CHUNK_SIZE = 500
 SMART_TAG_MAX_ERRORS = 50
 SMART_TAG_RECENT_RESULT_LIMIT = 25
+# Job hygiene: finished (completed/failed/cancelled) jobs and their on-disk
+# caption-results files used to accumulate for the life of the process. Keep
+# only this many finished jobs; older ones are pruned when a new job starts.
+SMART_TAG_FINISHED_JOBS_KEPT = 5
 
 # GPU batch size for the booru tagging phase of Smart Tag. Mirrors the regular
 # bulk-tagging worker (services/tagging_service.py passes its fetch batch size,
@@ -691,6 +695,39 @@ def cancel_active_job() -> Optional[SmartTagJobState]:
         job.message = "Cancellation requested..."
         return job
 
+
+_TERMINAL_JOB_STATUSES = {"completed", "failed", "cancelled"}
+
+
+def _prune_finished_jobs_locked(keep: int = SMART_TAG_FINISHED_JOBS_KEPT) -> List[str]:
+    """Drop all but the newest ``keep`` finished jobs from the registry.
+
+    Caller must hold ``_jobs_lock``. Returns the caption-results file paths
+    of the evicted jobs so the caller can delete them outside the lock.
+    """
+    finished = [
+        job for job in _jobs.values()
+        if job.status in _TERMINAL_JOB_STATUSES and job.job_id != _active_job_id
+    ]
+    overflow = len(finished) - max(0, int(keep))
+    if overflow <= 0:
+        return []
+    finished.sort(key=lambda job: job.finished_at or job.started_at)
+    evicted_paths: List[str] = []
+    for job in finished[:overflow]:
+        _jobs.pop(job.job_id, None)
+        if job.caption_results_path:
+            evicted_paths.append(job.caption_results_path)
+    return evicted_paths
+
+
+def _delete_caption_result_files(paths: List[str]) -> None:
+    """Best-effort cleanup of pruned jobs' data/smart-tag-results/*.jsonl files."""
+    for path in paths:
+        try:
+            Path(path).unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("Could not delete smart-tag results file %s: %s", path, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -1702,7 +1739,13 @@ def _iter_request_source_chunks(req: SmartTagRequest) -> Iterator[List[Tuple[str
         yield _sources_from_image_id_chunk([int(image_id) for image_id in id_chunk])
 
     if req.selection_token:
-        for id_chunk in iter_selection_token_id_chunks(req.selection_token, chunk_size=SMART_TAG_ID_CHUNK_SIZE):
+        # snapshot=True: the windowed pipeline persists tags/captions per
+        # window while this iterator is still live. If the token filters on
+        # tags the run rewrites (tag X scope, excludeTags), offset pagination
+        # would skip images as the matching set mutates underneath it.
+        for id_chunk in iter_selection_token_id_chunks(
+            req.selection_token, chunk_size=SMART_TAG_ID_CHUNK_SIZE, snapshot=True
+        ):
             yield _sources_from_image_id_chunk([int(image_id) for image_id in id_chunk])
 
     for path_chunk in _iter_chunks(req.image_paths, SMART_TAG_PATH_CHUNK_SIZE):
@@ -2044,17 +2087,17 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
     global _active_job_id
     job.status = "running"
     job.message = "Resolving images..."
-    job.total = _request_total(req)
-    if job.total <= 0:
-        job.status = "failed"
-        job.message = "No matching images found."
-        job.finished_at = time.time()
-        with _jobs_lock:
-            if _active_job_id == job.job_id:
-                _active_job_id = None
-        return
 
     try:
+        # Inside the try so a failure (e.g. a selection token that no longer
+        # decodes) lands in the failed-state handler below instead of wedging
+        # the active-job slot until restart.
+        job.total = _request_total(req)
+        if job.total <= 0:
+            job.status = "failed"
+            job.message = "No matching images found."
+            return
+
         # Lazy provider construction so importing this module never triggers
         # heavy ONNX / VLM SDK loads.
         tagger = None
@@ -2281,6 +2324,9 @@ def start_smart_tag_job(payload: Dict[str, Any]) -> Dict[str, Any]:
                     "Another Smart Tag job is already running. "
                     "Cancel it first or wait for it to finish."
                 )
+        # Job hygiene: evict old finished jobs (and remember their on-disk
+        # caption-results files) now that a new job is starting.
+        stale_result_files = _prune_finished_jobs_locked()
         job = SmartTagJobState(
             job_id=_new_job_id(),
             settings={
@@ -2308,6 +2354,10 @@ def start_smart_tag_job(payload: Dict[str, Any]) -> Dict[str, Any]:
         )
         _jobs[job.job_id] = job
         _active_job_id = job.job_id
+
+    # File deletion happens outside _jobs_lock so a slow disk cannot stall
+    # progress polls; these jsonl files are no longer referenced by any job.
+    _delete_caption_result_files(stale_result_files)
 
     threading.Thread(
         target=_run_pipeline,

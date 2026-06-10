@@ -450,6 +450,18 @@ async def start_sort_session(
             exclude_loras=request.exclude_loras,
             collection_slots=request.collection_slots,
             mode=request.mode,
+            # v3.3.x gallery-scope parity (Finding: filter→scope dropped
+            # collection/folder/rating/exclude/brightness scopes on this path)
+            min_user_rating=request.min_user_rating,
+            brightness_min=request.brightness_min,
+            brightness_max=request.brightness_max,
+            color_temperature=request.color_temperature,
+            brightness_distribution=request.brightness_distribution,
+            exclude_prompts=request.exclude_prompts,
+            exclude_colors=request.exclude_colors,
+            collection_id=request.collection_id,
+            folder=request.folder,
+            has_metadata=request.has_metadata,
         )
 
     return service.start_sort_session(

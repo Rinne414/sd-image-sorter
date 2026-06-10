@@ -299,10 +299,17 @@ def _filter_contract_db_kwargs(filters: BulkTagFilterContract) -> Dict[str, Any]
 
 
 def _iter_filter_contract_id_chunks(filters: BulkTagFilterContract) -> Iterator[List[int]]:
-    yield from db.iter_filtered_image_id_chunks(
+    # Snapshot the matching IDs BEFORE any chunk is committed. The canonical
+    # bulk flow (filter gallery by tag X -> mass-remove/replace tag X) mutates
+    # the very rows the filter matches; live offset pagination would skip
+    # roughly half of them as the matching set shrinks between chunks.
+    yield from db.iter_id_snapshot_chunks(
+        db.iter_filtered_image_id_chunks(
+            chunk_size=BULK_TAG_ID_CHUNK_SIZE,
+            sort_by=filters.sortBy,
+            **_filter_contract_db_kwargs(filters),
+        ),
         chunk_size=BULK_TAG_ID_CHUNK_SIZE,
-        sort_by=filters.sortBy,
-        **_filter_contract_db_kwargs(filters),
     )
 
 
@@ -314,6 +321,7 @@ def _iter_scope_id_chunks(request: BulkTagScopeRequest) -> Iterator[List[int]]:
         yield from iter_selection_token_id_chunks(
             request.selection_token,
             chunk_size=BULK_TAG_ID_CHUNK_SIZE,
+            snapshot=True,
         )
         return
     if request.filters is not None:

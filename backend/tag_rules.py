@@ -109,7 +109,7 @@ ANGLE_TAGS = {
     "dynamic_angle", "foreshortening", "fisheye",
     "face_focus", "ass_focus", "breast_focus",
     "feet_focus", "navel_focus", "hand_focus",
-    "profile", "back",
+    "profile", "back", "pantyshot",
 }
 
 # Body feature tags
@@ -207,7 +207,7 @@ BACKGROUND_TAGS = {
     "planet", "beer", "saucer", "cushion", "shell", "egg", "scroll",
     "futon", "thermos", "folder", "lemon", "cork", "tarot", "money",
     "brush", "cosmetics", "clover",
-    "shower_head", "gym", "rubber_duck", "bulletin_board",
+    "shower_head", "gym", "rubber_duck", "bulletin_board", "cityscape",
 }
 
 # Style / art style tags
@@ -330,6 +330,7 @@ META_DETAIL_KEYWORDS = {
     "crossover", "meme", "letterboxed", "motion_lines", "logo",
     "christmas", "birthday", "connection", "mechanics",
     "content_rating", "company_name", "circle_name", "roman_numeral",
+    "screenshot", "screencap",
 }
 
 CHARACTER_DETAIL_KEYWORDS = {
@@ -499,6 +500,16 @@ OUTFIT_KEYWORDS = [
     "casual", "revealing_clothes", "clothes", "eyewear",
     "thighhigh", "hakama", "buckle",
 ]
+
+# Garment signals that veto the generic-object background classification in
+# categorize_tag (v3.3.4 regression fix): BACKGROUND_DETAIL_TOKENS /
+# BACKGROUND_OBJECT_KEYWORDS contain generic nouns (tank, pencil, key, shell,
+# winter, ...) that must not steal compound garment tags like tank_top,
+# pencil_skirt, key_necklace, or winter_coat. Substring keywords are kept >3
+# chars so e.g. "bra" cannot veto "branch"; the short garment words are
+# matched as whole tokens instead.
+_GARMENT_VETO_KEYWORDS = tuple(k for k in OUTFIT_KEYWORDS if len(k) > 3)
+_GARMENT_VETO_TOKENS = {"bra", "hat", "cap", "tie", "bow"}
 
 # ============================================================
 # WD14 Character Tag Cache
@@ -734,7 +745,9 @@ def categorize_tag(tag: str) -> str:
     ):
         return "meta"
 
-    if tag_lower.endswith("_focus") or tag_lower.endswith("_view") or tag_lower.endswith("_shot") or tag_lower.endswith("shot") or tag_lower.startswith(("from_", "pov_")):
+    # Only "_shot" (cowboy_shot, wide_shot) is an angle signal; a bare "shot"
+    # suffix misrouted anime_screenshot/screenshot here (v3.3.4 regression).
+    if tag_lower.endswith("_focus") or tag_lower.endswith("_view") or tag_lower.endswith("_shot") or tag_lower.startswith(("from_", "pov_")):
         return "angle"
     if tag_lower in {"straight-on", "straight_on"}:
         return "angle"
@@ -775,8 +788,6 @@ def categorize_tag(tag: str) -> str:
 
     if clean_tokens.intersection({"outdoors", "indoors", "beach", "ocean", "sea", "sky", "forest", "night", "day", "sunset", "sunrise", "room", "bedroom", "bathroom", "classroom", "city", "street", "park", "garden", "field", "building", "bush", "leaf", "leaves", "tree", "road", "wall", "scenery", "nature", "blossoms", "crescent"}):
         return "background"
-    if clean_tokens.intersection(BACKGROUND_DETAIL_TOKENS):
-        return "background"
 
     if clean_tokens.intersection({"hair", "eyes", "breasts", "chest", "thighs", "legs", "skin", "ears", "tail", "tails", "wings", "horns", "horn", "halo", "fangs", "teeth", "navel", "belly", "feet", "armpits", "eyebrows", "pupils", "sclera", "pectorals", "mark", "nose", "claws", "feathers", "beard", "curvy", "bangs", "torso", "tentacles", "toned"}):
         return "body"
@@ -800,8 +811,20 @@ def categorize_tag(tag: str) -> str:
     if tag_lower.endswith(("_print", "_trim")):
         return "outfit"
 
-    if any(keyword in tag_lower for keyword in BACKGROUND_OBJECT_KEYWORDS):
-        return "background"
+    # Generic-object background classification (v3.3.4 regression fix): these
+    # sets hold generic nouns (tank, pencil, key, shell, egg, moon, winter,
+    # summer, ...), so they must run AFTER the body/action/outfit checks above
+    # and must not fire on garment compounds (tank_top, pencil_skirt,
+    # winter_coat) — those fall through to the OUTFIT_KEYWORDS loop below.
+    has_garment_signal = (
+        any(keyword in tag_lower for keyword in _GARMENT_VETO_KEYWORDS)
+        or clean_tokens.intersection(_GARMENT_VETO_TOKENS)
+    )
+    if not has_garment_signal:
+        if clean_tokens.intersection(BACKGROUND_DETAIL_TOKENS):
+            return "background"
+        if any(keyword in tag_lower for keyword in BACKGROUND_OBJECT_KEYWORDS):
+            return "background"
 
     if any(keyword in tag_lower for keyword in ACTION_DETAIL_KEYWORDS):
         return "action"

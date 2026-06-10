@@ -5,6 +5,7 @@ Endpoints for identifying artist/style in images using LSNet-style classificatio
 """
 import os
 import logging
+import threading
 from pathlib import Path
 from typing import List, Optional, Dict
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -32,6 +33,10 @@ router = APIRouter(prefix="/api/artists", tags=["artists"])
 # database access pattern. 5,000,000 covers any realistic personal library
 # (50k was still rejecting real users with bigger collections).
 ARTIST_BATCH_IMAGE_LIMIT = 5_000_000
+
+# Held across the is-running check and start_batch_progress in
+# /identify-batch so two concurrent starts cannot both pass the check.
+_batch_start_lock = threading.Lock()
 
 
 # ============== Request/Response Models ==============
@@ -289,10 +294,14 @@ async def identify_batch(
     Note:
         Only one batch can run at a time.
     """
-    if service.is_batch_running():
-        raise HTTPException(status_code=409, detail="Batch identification already in progress")
+    with _batch_start_lock:
+        # Check-and-start under one lock so two concurrent requests cannot
+        # both observe "not running" and start twice (same single-lock start
+        # pattern as routers/colors.py start_analysis).
+        if service.is_batch_running():
+            raise HTTPException(status_code=409, detail="Batch identification already in progress")
 
-    service.start_batch_progress(total=len(request.image_ids))
+        service.start_batch_progress(total=len(request.image_ids))
 
     # Start background task
     background_tasks.add_task(

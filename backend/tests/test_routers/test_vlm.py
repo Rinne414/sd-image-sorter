@@ -100,6 +100,39 @@ def test_vlm_batch_progress_and_debug_chat(monkeypatch, test_client, test_db, tm
     assert "data:image" not in serialized
 
 
+def test_vlm_batch_token_source_uses_pre_mutation_snapshot(monkeypatch, test_db):
+    """Token/filters batch sources must snapshot IDs before captioning mutates rows.
+
+    Workers persist captions and merged VLM tags while the producer iterates;
+    a token filtering on tags/excludeTags the batch rewrites would otherwise
+    skip images mid-run (offset pagination over a shrinking matching set).
+    """
+    import routers.vlm as vlm_router
+    import services.tag_export_service as tag_export_service
+
+    observed_snapshot_flags = []
+    monkeypatch.setattr(tag_export_service, "count_selection_token_ids", lambda token: 3)
+
+    def fake_iter_selection_token_id_chunks(token, chunk_size, snapshot=False):
+        observed_snapshot_flags.append(snapshot)
+        return iter([[1, 2, 3]])
+
+    monkeypatch.setattr(
+        tag_export_service,
+        "iter_selection_token_id_chunks",
+        fake_iter_selection_token_id_chunks,
+    )
+
+    source = vlm_router._build_batch_image_source(
+        vlm_router.BatchCaptionRequest(selection_token="token-abc")
+    )
+
+    assert source.source_type == "selection_token"
+    assert source.total == 3
+    assert list(source.iter_chunks()) == [[1, 2, 3]]
+    assert observed_snapshot_flags == [True]
+
+
 def test_vlm_caption_batch_accepts_selection_token(monkeypatch, test_client, test_db, tmp_path: Path):
     import database as db
     import routers.vlm as vlm_router
@@ -411,3 +444,72 @@ def test_vlm_caption_single_resolves_indexed_path(monkeypatch, test_client, tmp_
     assert response.status_code == 200
     assert response.json()["caption"] == "resolved ok"
     assert seen_paths == [str(runtime_path)]
+
+
+def test_vlm_caption_batch_rejected_with_409_while_smart_tag_active(monkeypatch, test_client):
+    from types import SimpleNamespace
+
+    import routers.vlm as vlm_router
+    from services import tagging_pipeline_service
+
+    monkeypatch.setattr(
+        tagging_pipeline_service.smart_tag_service,
+        "get_active_job",
+        lambda: SimpleNamespace(job_id="smart-active", status="running"),
+    )
+
+    response = test_client.post("/api/vlm/caption-batch", json={"image_ids": [1]})
+
+    assert response.status_code == 409
+    assert "Smart Tag" in response.text
+    # The rejected start must not leave the batch slot claimed.
+    assert vlm_router.is_caption_batch_active() is False
+
+
+def test_smart_tag_start_rejected_with_409_while_vlm_batch_active(test_client):
+    import routers.vlm as vlm_router
+
+    with vlm_router._batch_state_lock:
+        original_running = vlm_router._batch_state["running"]
+        vlm_router._batch_state["running"] = True
+    try:
+        response = test_client.post(
+            "/api/smart-tag/start",
+            json={"image_ids": [1], "enable_vlm": False},
+        )
+        assert response.status_code == 409
+        assert "VLM" in response.text
+    finally:
+        with vlm_router._batch_state_lock:
+            vlm_router._batch_state["running"] = original_running
+
+
+def test_gallery_tag_start_rejected_with_409_while_vlm_batch_active(test_client):
+    import routers.vlm as vlm_router
+
+    with vlm_router._batch_state_lock:
+        original_running = vlm_router._batch_state["running"]
+        vlm_router._batch_state["running"] = True
+    try:
+        response = test_client.post("/api/tag/start", json={"image_ids": [1]})
+        assert response.status_code == 409
+        assert "VLM" in response.text
+    finally:
+        with vlm_router._batch_state_lock:
+            vlm_router._batch_state["running"] = original_running
+
+
+def test_vlm_caption_batch_releases_slot_when_source_resolution_fails(monkeypatch, test_client):
+    from fastapi import HTTPException
+
+    import routers.vlm as vlm_router
+
+    def boom(request):
+        raise HTTPException(400, "selection token no longer decodes")
+
+    monkeypatch.setattr(vlm_router, "_build_batch_image_source", boom)
+
+    response = test_client.post("/api/vlm/caption-batch", json={"image_ids": [1]})
+
+    assert response.status_code == 400
+    assert vlm_router.is_caption_batch_active() is False

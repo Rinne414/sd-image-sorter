@@ -88,6 +88,12 @@ def score_single_image(
         raise HTTPException(status_code=500, detail=exc.message)
 
 
+# Held across the is-running check and start_scoring_progress so two
+# concurrent /score-all requests cannot both observe "not running" and start
+# twice (same single-lock start pattern as routers/colors.py start_analysis).
+_scoring_start_lock = threading.Lock()
+
+
 @router.post("/aesthetic/score-all")
 def score_all_images(
     background_tasks: BackgroundTasks,
@@ -95,19 +101,20 @@ def score_all_images(
     service: AestheticService = Depends(get_aesthetic_service),
 ):
     """Score all unscored images in background. Use force=true to rescore all."""
-    if service.is_scoring_running():
-        return {"status": "already_running", **service.get_scoring_progress()}
+    with _scoring_start_lock:
+        if service.is_scoring_running():
+            return {"status": "already_running", **service.get_scoring_progress()}
 
-    try:
-        from aesthetic import is_available
-        if not is_available():
-            raise HTTPException(status_code=503, detail="Aesthetic predictor dependencies not installed")
-    except (ImportError, OSError) as exc:
-        _log_router_warning_once("score", "Aesthetic predictor torch import failed", exc)
-        raise HTTPException(status_code=503, detail="Aesthetic predictor dependencies not installed or runtime is broken")
+        try:
+            from aesthetic import is_available
+            if not is_available():
+                raise HTTPException(status_code=503, detail="Aesthetic predictor dependencies not installed")
+        except (ImportError, OSError) as exc:
+            _log_router_warning_once("score", "Aesthetic predictor torch import failed", exc)
+            raise HTTPException(status_code=503, detail="Aesthetic predictor dependencies not installed or runtime is broken")
 
-    total = service.count_images_to_score(force=force)
-    service.start_scoring_progress(total=total)
+        total = service.count_images_to_score(force=force)
+        service.start_scoring_progress(total=total)
 
     background_tasks.add_task(_score_batch, force)
     return {"status": "started", "total": total}

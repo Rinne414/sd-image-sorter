@@ -498,11 +498,18 @@ def _apply_exclude_prompts_filter(conditions: List[str], params: List[Any],
             )
             params.append(f"%{escape_like_pattern(normalized_term)}%")
         else:
+            # v3.4.0 FIX: exact mode must compare whole normalized tokens.
+            # The include filter uses a broad LIKE pre-filter because it is
+            # corrected by an exact post-filter; excludes have no post-pass,
+            # so a LIKE here permanently over-excluded (excluding "cat" also
+            # hid "catgirl"/"scattered"). image_prompt_tokens stores tokens
+            # already normalized via normalize_prompt_token, matching
+            # normalized_term above.
             conditions.append(
                 "NOT EXISTS (SELECT 1 FROM image_prompt_tokens ipt "
-                "WHERE ipt.image_id = i.id AND ipt.token LIKE ? ESCAPE '\\')"
+                "WHERE ipt.image_id = i.id AND ipt.token = ?)"
             )
-            params.append(f"%{escape_like_pattern(normalized_term)}%")
+            params.append(normalized_term)
     return conditions, params
 
 

@@ -16,27 +16,6 @@ from services.service_provider import ServiceProvider
 
 router = APIRouter(prefix="/api/prompts", tags=["prompts"])
 
-_RECIPE_TOKEN_EXCLUDES = (
-    "negative prompt",
-    "steps:",
-    "cfg scale",
-    "cfg:",
-    "sampler:",
-    "scheduler:",
-    "seed:",
-    "size:",
-    "model hash",
-    "output format",
-    "generation time",
-)
-
-
-def _is_useful_recipe_token(token: str) -> bool:
-    text = str(token or "").strip().lower()
-    if not text or len(text) < 2:
-        return False
-    return not any(excluded in text for excluded in _RECIPE_TOKEN_EXCLUDES)
-
 
 # ============================================================
 # Pydantic Models

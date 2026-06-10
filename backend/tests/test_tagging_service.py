@@ -709,7 +709,9 @@ def test_start_tagging_still_rejects_when_worker_is_actually_alive():
             BackgroundTasks(),
         )
     except HTTPException as exc:
-        assert exc.status_code == 400
+        # 409 Conflict: busy responses are aligned across gallery tag,
+        # smart tag, and the VLM caption batch.
+        assert exc.status_code == 409
         assert exc.detail == "Tagging already in progress"
     else:
         raise AssertionError("Expected start_tagging() to reject a live worker")

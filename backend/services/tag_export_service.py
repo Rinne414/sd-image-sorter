@@ -5,8 +5,6 @@ from __future__ import annotations
 
 import json
 import os
-import base64
-import binascii
 import time
 import uuid
 from pathlib import Path
@@ -57,7 +55,6 @@ VALID_OVERWRITE_POLICIES = {"unique", "overwrite", "skip"}
 #                    working without extra plumbing.
 VALID_OUTPUT_MODES = {"folder", "beside_image"}
 EXPORT_DB_CHUNK_SIZE = 500
-SELECTION_TOKEN_VERSION = 2
 PROMPT_MATCH_MODE_EXACT = "exact"
 PROMPT_MATCH_MODE_CONTAINS = "contains"
 COMBINED_EXPORT_RECENT_ERROR_LIMIT = 20
@@ -99,24 +96,43 @@ def _iter_id_list_chunks(image_ids: Iterable[Any], chunk_size: int = EXPORT_DB_C
 
 
 def _decode_selection_token(selection_token: str) -> Dict[str, Any]:
-    try:
-        padded = selection_token + "=" * (-len(selection_token) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
-    except (binascii.Error, json.JSONDecodeError, UnicodeDecodeError, ValueError):
-        raise HTTPException(status_code=400, detail="Invalid selection token")
+    # Reuse ImageService's validating decoder (lazy import: image_service
+    # imports this module at top level). Beyond the version/dict checks it
+    # type-checks list fields and coerces numeric filters, so a malformed
+    # token ({"minUserRating": "abc"}) fails here with HTTP 400 instead of a
+    # ValueError-driven 500 deep inside the SQL builders.
+    from services.image_service import ImageService
 
-    if not isinstance(payload, dict) or payload.get("v") != SELECTION_TOKEN_VERSION:
-        raise HTTPException(status_code=400, detail="Invalid selection token")
-    filters = payload.get("filters")
-    if not isinstance(filters, dict):
-        raise HTTPException(status_code=400, detail="Invalid selection token")
+    filters = ImageService()._decode_selection_token(selection_token)
     if (filters.get("sortBy") or "newest") == "random":
         raise HTTPException(status_code=400, detail="random sort cannot use selection-token export")
     return filters
 
 
-def iter_selection_token_id_chunks(selection_token: str, chunk_size: int = EXPORT_DB_CHUNK_SIZE) -> Iterator[List[int]]:
+def iter_selection_token_id_chunks(
+    selection_token: str,
+    chunk_size: int = EXPORT_DB_CHUNK_SIZE,
+    *,
+    snapshot: bool = False,
+) -> Iterator[List[int]]:
+    """Yield the token's matching image IDs in chunks.
+
+    ``snapshot=True`` materializes all matching IDs to a temp file BEFORE the
+    first chunk is yielded. Callers that mutate tags/captions the token's
+    filters can reference (bulk tag ops, smart-tag, VLM caption batches) MUST
+    pass it, otherwise the underlying offset pagination skips images as the
+    matching set shrinks between committed chunks. Read-only consumers
+    (exports) can keep the default streaming behavior.
+    """
     filters = _decode_selection_token(selection_token)
+    id_chunks = _iter_decoded_filter_id_chunks(filters, chunk_size)
+    if snapshot:
+        yield from db.iter_id_snapshot_chunks(id_chunks, chunk_size=chunk_size)
+    else:
+        yield from id_chunks
+
+
+def _iter_decoded_filter_id_chunks(filters: Dict[str, Any], chunk_size: int) -> Iterator[List[int]]:
     yield from db.iter_filtered_image_id_chunks(
         chunk_size=chunk_size,
         generators=filters.get("generators") or None,

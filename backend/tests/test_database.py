@@ -2405,3 +2405,47 @@ class TestTagsCacheInvalidation:
         # The sneaky_tag might not appear because cache is still valid
         # (depends on TTL, but within same test execution it should be cached)
         assert "original_tag" in second_tag_names
+
+
+class TestIterIdSnapshotChunks:
+    """Tests for the pre-mutation ID snapshot iterator (bulk-op skip fix)."""
+
+    def test_source_drained_before_first_chunk_is_yielded(self):
+        """The whole source must be snapshotted before any chunk is exposed.
+
+        This is the property that makes self-mutating filtered scopes safe:
+        consumers can commit per chunk without shrinking the worklist.
+        """
+        pulled = []
+
+        def source():
+            for chunk in ([1, 2], [3, 4], [5]):
+                pulled.append(list(chunk))
+                yield chunk
+
+        generator = db.iter_id_snapshot_chunks(source(), chunk_size=2)
+        first = next(generator)
+
+        assert pulled == [[1, 2], [3, 4], [5]]
+        assert first == [1, 2]
+        assert list(generator) == [[3, 4], [5]]
+
+    def test_rechunks_to_requested_size_and_removes_temp_file(self, monkeypatch):
+        import os
+        import tempfile
+
+        created_paths = []
+        real_named_temporary_file = tempfile.NamedTemporaryFile
+
+        def recording_named_temporary_file(*args, **kwargs):
+            handle = real_named_temporary_file(*args, **kwargs)
+            created_paths.append(handle.name)
+            return handle
+
+        monkeypatch.setattr(db.tempfile, "NamedTemporaryFile", recording_named_temporary_file)
+
+        chunks = list(db.iter_id_snapshot_chunks(iter([[7, 8, 9, 10, 11]]), chunk_size=2))
+
+        assert chunks == [[7, 8], [9, 10], [11]]
+        assert len(created_paths) == 1
+        assert not os.path.exists(created_paths[0])

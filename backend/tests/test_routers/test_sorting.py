@@ -3205,3 +3205,224 @@ def test_cull_start_and_action_via_api(test_client, tmp_path):
     assert action.status_code == 200
     payload = action.json()
     assert payload["mode"] == "cull" and payload["decision"] == "keep"
+
+
+# ============================================================================
+# v3.3.x gallery-scope parity (regression for the filter→scope data-loss bug:
+# min_user_rating / collection_id / folder / has_metadata / exclude_prompts /
+# exclude_colors / brightness fields were silently dropped on the sorting
+# path, so batch move and manual sort operated on a WIDER set than the
+# gallery displayed).
+# ============================================================================
+
+_V33X_SCOPE_PAYLOAD = {
+    "min_user_rating": 3,
+    "brightness_min": 10.5,
+    "brightness_max": 200.0,
+    "color_temperature": "warm",
+    "brightness_distribution": "balanced",
+    "exclude_prompts": ["bad hands"],
+    "exclude_colors": ["cool"],
+    "collection_id": 7,
+    "folder": "D:/library/keepers",
+    "has_metadata": True,
+}
+
+
+class TestSortingScopeFilterParity:
+    """Every v3.3.x gallery-scope filter must reach the count/iter/session queries."""
+
+    def test_batch_move_forwards_v33x_scope_filters_to_count(self, test_client, tmp_path: Path):
+        with patch("services.sorting_service.db.get_filtered_image_count", return_value=0) as mock_count:
+            response = test_client.post(
+                "/api/batch-move",
+                json={**_V33X_SCOPE_PAYLOAD, "destination_folder": str(tmp_path)},
+            )
+
+        assert response.status_code == 200
+        kwargs = mock_count.call_args.kwargs
+        for key, expected in _V33X_SCOPE_PAYLOAD.items():
+            assert kwargs[key] == expected, f"batch-move count query dropped {key}"
+
+    def test_batch_move_forwards_v33x_scope_filters_to_snapshot_iterator(self, tmp_path: Path, isolated_sorting_service, monkeypatch):
+        from services import sorting_service as sorting_service_module
+        from services.sorting_service import BatchMoveRequest
+
+        background_tasks = BackgroundTasks()
+        captured_kwargs = {}
+
+        monkeypatch.setattr(sorting_service_module.db, "get_filtered_image_count", lambda **_kwargs: 1)
+
+        def fake_iter_filtered_image_id_chunks(**kwargs):
+            captured_kwargs.update(kwargs)
+            yield []
+
+        monkeypatch.setattr(sorting_service_module.db, "iter_filtered_image_id_chunks", fake_iter_filtered_image_id_chunks)
+
+        isolated_sorting_service.batch_move_images(
+            BatchMoveRequest(destination_folder=str(tmp_path / "dest"), **_V33X_SCOPE_PAYLOAD),
+            background_tasks,
+        )
+        background_tasks.tasks[0].func()
+
+        for key, expected in _V33X_SCOPE_PAYLOAD.items():
+            assert captured_kwargs[key] == expected, f"batch-move snapshot query dropped {key}"
+
+    def test_batch_move_scope_only_filters_satisfy_safety_guard(self):
+        """A collection-only (or folder/★-rating-only) scope is a legitimate filter."""
+        from services.sorting_service import BatchMoveRequest
+
+        for kwargs in (
+            {"collection_id": 12},
+            {"folder": "D:/library/keepers"},
+            {"min_user_rating": 4},
+            {"exclude_prompts": ["bad hands"]},
+            {"exclude_colors": ["cool"]},
+            {"has_metadata": False},
+        ):
+            parsed = BatchMoveRequest(destination_folder="X:/dest", **kwargs)
+            for field, value in kwargs.items():
+                assert getattr(parsed, field) == value
+
+    def test_batch_move_zero_star_rating_alone_does_not_unlock_whole_library(self):
+        """min_user_rating=0 is a no-op at the DB layer ("show all"), so it must
+        not satisfy the catastrophic-foot-gun guard by itself."""
+        from pydantic import ValidationError
+        from services.sorting_service import BatchMoveRequest
+
+        with pytest.raises(ValidationError):
+            BatchMoveRequest(destination_folder="X:/dest", min_user_rating=0)
+
+    def test_start_sort_session_forwards_v33x_scope_filters_from_json_body(self, test_client, tmp_path: Path):
+        with patch("services.sorting_service.db.get_filtered_image_ids", return_value=[]) as mock_ids:
+            response = test_client.post(
+                "/api/sort/start",
+                json={
+                    **_V33X_SCOPE_PAYLOAD,
+                    "folders": {"w": str(tmp_path / "slot-w")},
+                    "operation_mode": "copy",
+                },
+            )
+
+        assert response.status_code == 200
+        kwargs = mock_ids.call_args.kwargs
+        for key, expected in _V33X_SCOPE_PAYLOAD.items():
+            assert kwargs[key] == expected, f"manual-sort session query dropped {key}"
+
+    def test_start_sort_session_legacy_query_path_defaults_scope_fields_to_none(self, test_client):
+        """Backward compatibility: legacy query-string starts behave exactly as before."""
+        with patch("services.sorting_service.db.get_filtered_image_ids", return_value=[]) as mock_ids:
+            response = test_client.post("/api/sort/start?generators=unknown")
+
+        assert response.status_code == 200
+        kwargs = mock_ids.call_args.kwargs
+        for key in _V33X_SCOPE_PAYLOAD:
+            assert kwargs[key] is None, f"legacy path unexpectedly set {key}"
+
+    def test_batch_move_min_user_rating_and_exclude_prompts_constrain_real_count(self, test_client, tmp_path: Path):
+        """End-to-end against a real DB: ★≥N + exclude-prompts narrow the matched
+        set exactly like the gallery shows (previously the whole generator scope
+        would have been moved)."""
+        db = test_client.test_db
+        prompts = ["sunny meadow landscape", "bad hands close-up", "sunny beach panorama"]
+        image_ids = []
+        for index, prompt in enumerate(prompts):
+            image_ids.append(db.add_image(
+                path=f"/test/scope-parity/img_{index}.png",
+                filename=f"scope_parity_{index}.png",
+                generator="webui",
+                prompt=prompt,
+                negative_prompt=None,
+                checkpoint=None,
+                loras=[],
+                width=64,
+                height=64,
+                file_size=1,
+                metadata_json="{}",
+            ))
+
+        assert db.set_user_rating(image_ids[0], 4)
+        assert db.set_user_rating(image_ids[1], 5)
+        # image_ids[2] stays unrated (0 stars)
+
+        response = test_client.post(
+            "/api/batch-move",
+            json={
+                "generators": ["webui"],
+                "min_user_rating": 4,
+                "exclude_prompts": ["bad hands"],
+                "prompt_match_mode": "contains",
+                "destination_folder": str(tmp_path / "scope-dest"),
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        # Of the 3 webui images only img_0 is rated >= 4 AND free of "bad hands".
+        assert data.get("total", data.get("count")) == 1
+
+    def test_start_sort_session_min_user_rating_constrains_real_session_set(self, test_client, tmp_path: Path):
+        """End-to-end against a real DB: the WASD session set honors the ★≥N scope."""
+        from PIL import Image
+
+        db = test_client.test_db
+        image_ids = []
+        for index in range(3):
+            image_path = tmp_path / f"scope_session_{index}.png"
+            Image.new("RGB", (16, 16), color=(index * 40 % 255, 30, 60)).save(image_path)
+            image_ids.append(db.add_image(
+                path=str(image_path),
+                filename=image_path.name,
+                generator="unknown",
+                prompt=None,
+                negative_prompt=None,
+                checkpoint=None,
+                loras=[],
+                width=16,
+                height=16,
+                file_size=1,
+                metadata_json="{}",
+            ))
+
+        assert db.set_user_rating(image_ids[1], 5)
+
+        response = test_client.post(
+            "/api/sort/start",
+            json={
+                "generators": ["unknown"],
+                "min_user_rating": 5,
+                "folders": {"w": str(tmp_path / "five-star-dest")},
+                "operation_mode": "copy",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_images"] == 1
+        assert data["current"]["id"] == image_ids[1]
+
+
+class TestBatchMoveCancellingBusyGuard:
+    """A batch move in 'cancelling' state is still busy (worker draining)."""
+
+    def test_batch_move_rejects_second_start_while_cancelling(self, test_client, tmp_path: Path, isolated_sorting_service):
+        isolated_sorting_service._batch_move_progress = {
+            "status": "cancelling",
+            "current": 3,
+            "total": 9,
+            "message": "Cancelling...",
+            "errors": 0,
+            "moved": 3,
+        }
+
+        response = test_client.post(
+            "/api/batch-move",
+            json={
+                "generators": ["unknown"],
+                "destination_folder": str(tmp_path),
+            },
+        )
+
+        assert response.status_code == 409
+        data = response.json()
+        assert (data.get("detail") or data.get("error")) == "Batch move already in progress"

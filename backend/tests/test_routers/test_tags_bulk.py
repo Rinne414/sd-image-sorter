@@ -174,6 +174,100 @@ def test_bulk_filter_contract_preserves_full_gallery_scope(test_client, tmp_path
     assert payload["sample_changes"][0]["image_id"] == keep_id
 
 
+def test_bulk_remove_filter_scope_covers_all_images_when_scope_matches_mutated_tag(monkeypatch, test_client, tmp_path):
+    """Filters scope must not skip images when the filter matches the tag being removed.
+
+    Offset pagination re-runs the filtered query between chunks. Removing tag X
+    from a tag-X scope shrinks the matching set after every committed chunk, so
+    without a pre-mutation ID snapshot roughly half the images are silently
+    skipped (1000 matches / chunk 500 -> only 500 processed).
+    """
+    import database as db
+    import routers.tags_bulk as tags_bulk
+
+    image_ids = []
+    for index in range(5):
+        image_path = tmp_path / f"bulk-self-mutate-{index}.png"
+        image_path.write_bytes(b"not a real image")
+        image_id = db.add_image(path=str(image_path), filename=image_path.name)
+        db.add_tags(image_id, [{"tag": "self_mutate_tag", "confidence": 0.9}])
+        image_ids.append(image_id)
+
+    monkeypatch.setattr(tags_bulk, "BULK_TAG_ID_CHUNK_SIZE", 2)
+
+    response = test_client.post("/api/tags/bulk/remove", json={
+        "filters": {
+            "tags": ["self_mutate_tag"],
+            "sortBy": "oldest",
+        },
+        "tags": ["self_mutate_tag"],
+        "dry_run": False,
+    })
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_images_checked"] == 5
+    assert payload["affected_images"] == 5
+    assert payload["total_tags_removed"] == 5
+    for image_id in image_ids:
+        assert db.get_image_tags(image_id) == []
+
+
+def test_bulk_remove_token_scope_covers_all_images_when_scope_matches_mutated_tag(monkeypatch, test_client, tmp_path):
+    """Selection-token scope is the same offset iterator; it needs the same snapshot."""
+    import database as db
+    import routers.tags_bulk as tags_bulk
+
+    image_ids = []
+    for index in range(5):
+        image_path = tmp_path / f"bulk-token-self-mutate-{index}.png"
+        image_path.write_bytes(b"not a real image")
+        image_id = db.add_image(path=str(image_path), filename=image_path.name)
+        db.add_tags(image_id, [{"tag": "token_mutate_tag", "confidence": 0.9}])
+        image_ids.append(image_id)
+
+    token_response = test_client.post("/api/images/selection-token", json={
+        "tags": ["token_mutate_tag"],
+        "sortBy": "oldest",
+    })
+    assert token_response.status_code == 200
+
+    monkeypatch.setattr(tags_bulk, "BULK_TAG_ID_CHUNK_SIZE", 2)
+
+    response = test_client.post("/api/tags/bulk/remove", json={
+        "selection_token": token_response.json()["selection_token"],
+        "tags": ["token_mutate_tag"],
+        "dry_run": False,
+    })
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_images_checked"] == 5
+    assert payload["affected_images"] == 5
+    assert payload["total_tags_removed"] == 5
+    for image_id in image_ids:
+        assert db.get_image_tags(image_id) == []
+
+
+def test_bulk_scope_malformed_selection_token_returns_400(test_client):
+    """A token with a non-numeric filter value must 400, not 500 inside SQL builders."""
+    import base64
+    import json
+
+    payload = {"v": 2, "filters": {"minUserRating": "abc", "sortBy": "newest"}}
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    token = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+    response = test_client.post("/api/tags/bulk/remove", json={
+        "selection_token": token,
+        "tags": ["whatever"],
+        "dry_run": True,
+    })
+
+    assert response.status_code == 400
+    assert "selection token" in response.json()["error"].lower()
+
+
 def test_find_replace_empty_replace_deletes_matching_tag(test_client, tmp_path):
     """Find & Replace with an empty replacement is the UI's delete operation."""
     import database as db

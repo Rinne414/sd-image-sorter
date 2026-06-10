@@ -54,6 +54,72 @@ _debug_chat_events: List[Dict[str, Any]] = []
 _debug_chat_next_id = 1
 _DEBUG_CHAT_LIMIT = 80
 
+# Strong references to fire-and-forget asyncio tasks. The event loop only
+# keeps weak references, so without these a garbage-collected task would
+# silently stop mid-run and leave running/pulling flags stuck True forever.
+_batch_task: Optional["asyncio.Task"] = None
+_pull_task: Optional["asyncio.Task"] = None
+
+
+def is_caption_batch_active() -> bool:
+    """Narrow probe for the unified tagging coordinator.
+
+    Exposed so services/tagging_pipeline_service.py can mutually exclude the
+    VLM caption batch against Smart Tag / AI Tag without reaching into this
+    router's internal batch state.
+    """
+    with _batch_state_lock:
+        return bool(_batch_state.get("running"))
+
+
+def _set_batch_task(task: Optional["asyncio.Task"]) -> None:
+    """Retain the caption-batch task so it cannot be garbage-collected."""
+    global _batch_task
+    _batch_task = task
+    if task is not None and hasattr(task, "add_done_callback"):
+        task.add_done_callback(_on_batch_task_done)
+
+
+def _on_batch_task_done(task: "asyncio.Task") -> None:
+    global _batch_task
+    _batch_task = None
+    exc = None if task.cancelled() else task.exception()
+    if exc is None and not task.cancelled():
+        return
+    if exc is not None:
+        logger.error("VLM caption batch task crashed: %s", exc)
+    # The batch coroutine died before its completion block ran; release the
+    # running flag so the next start is not wedged behind a ghost batch.
+    with _batch_state_lock:
+        if _batch_state.get("running"):
+            _batch_state["running"] = False
+            _batch_state["current_image"] = ""
+            _batch_state["active_requests"] = 0
+            _batch_state["api_status"] = "error"
+            _batch_state["api_message"] = "VLM batch task stopped unexpectedly"
+            if exc is not None:
+                _batch_state["last_api_error"] = str(exc)
+
+
+def _set_pull_task(task: Optional["asyncio.Task"]) -> None:
+    """Retain the Ollama pull task so it cannot be garbage-collected."""
+    global _pull_task
+    _pull_task = task
+    if task is not None and hasattr(task, "add_done_callback"):
+        task.add_done_callback(_on_pull_task_done)
+
+
+def _on_pull_task_done(task: "asyncio.Task") -> None:
+    global _pull_task
+    _pull_task = None
+    exc = None if task.cancelled() else task.exception()
+    if exc is None and not task.cancelled():
+        return
+    if exc is not None:
+        logger.error("Ollama pull task crashed: %s", exc)
+        _pull_state["status"] = f"error: {exc}"
+    _pull_state["pulling"] = False
+
 
 def _load_vlm_settings() -> Dict[str, Any]:
     if not VLM_SETTINGS_PATH.exists():
@@ -512,10 +578,15 @@ def _build_batch_image_source(request: "BatchCaptionRequest") -> _BatchImageSour
 
         selection_token = request.selection_token
         total = count_selection_token_ids(selection_token)
+        # snapshot=True: workers persist captions AND merged VLM tags while
+        # the producer is still iterating. A token filtering on tags/excludeTags
+        # the batch rewrites would otherwise skip images mid-run.
         return _BatchImageSource(
             source_type="selection_token",
             total=total,
-            iter_chunks=lambda: iter_selection_token_id_chunks(selection_token, chunk_size=_BATCH_ID_CHUNK_SIZE),
+            iter_chunks=lambda: iter_selection_token_id_chunks(
+                selection_token, chunk_size=_BATCH_ID_CHUNK_SIZE, snapshot=True
+            ),
         )
 
     token_payload = _create_selection_token_from_filters(request.filters or {})
@@ -527,7 +598,10 @@ def _build_batch_image_source(request: "BatchCaptionRequest") -> _BatchImageSour
     return _BatchImageSource(
         source_type="filters",
         total=total,
-        iter_chunks=lambda: iter_selection_token_id_chunks(selection_token, chunk_size=_BATCH_ID_CHUNK_SIZE),
+        # snapshot=True for the same self-mutation reason as the token branch.
+        iter_chunks=lambda: iter_selection_token_id_chunks(
+            selection_token, chunk_size=_BATCH_ID_CHUNK_SIZE, snapshot=True
+        ),
     )
 
 
@@ -553,33 +627,58 @@ class BatchCaptionRequest(BaseModel):
 @router.post("/caption-batch")
 async def caption_batch(request: BatchCaptionRequest):
     """Start batch captioning. Returns immediately; poll /caption-batch/progress."""
-    config = _build_config()
-    with _batch_state_lock:
-        if _batch_state["running"]:
-            raise HTTPException(409, "Batch captioning already in progress")
-    image_source = _build_batch_image_source(request)
-    _reset_debug_chat_events()
-    with _batch_state_lock:
-        _batch_state.update({
-            "running": True,
-            "cancel_requested": False,
-            "total": image_source.total,
-            "completed": 0,
-            "failed": 0,
-            "tokens_used": 0,
-            "errors": [],
-            "current_image": "",
-            "active_requests": 0,
-            "api_status": "queued" if image_source.total else "idle",
-            "api_message": "Waiting to send images to the VLM API" if image_source.total else "No images queued",
-            "api_ok": 0,
-            "api_error": 0,
-            "last_api_latency_ms": None,
-            "last_api_error": "",
-            "output_format": config.output_format,
-        })
+    from routers.tags import get_tagging_service
+    from services.tagging_pipeline_service import get_tagging_pipeline_service
 
-    asyncio.create_task(_run_batch(image_source))
+    config = _build_config()
+
+    def _claim_batch_slot() -> None:
+        with _batch_state_lock:
+            if _batch_state["running"]:
+                raise HTTPException(409, "Batch captioning already in progress")
+            # Claim only the running flag here; the full progress payload is
+            # filled in below once the image source has been resolved.
+            _batch_state["running"] = True
+            _batch_state["cancel_requested"] = False
+
+    # Mutual exclusion with Smart Tag / gallery AI Tag: the coordinator runs
+    # the claim under its shared start lock so no other tagging job can start
+    # between these checks and the running flag being set.
+    get_tagging_pipeline_service().claim_vlm_caption_batch(
+        _claim_batch_slot,
+        legacy_service=get_tagging_service(),
+    )
+
+    try:
+        image_source = _build_batch_image_source(request)
+        _reset_debug_chat_events()
+        with _batch_state_lock:
+            _batch_state.update({
+                "running": True,
+                "cancel_requested": False,
+                "total": image_source.total,
+                "completed": 0,
+                "failed": 0,
+                "tokens_used": 0,
+                "errors": [],
+                "current_image": "",
+                "active_requests": 0,
+                "api_status": "queued" if image_source.total else "idle",
+                "api_message": "Waiting to send images to the VLM API" if image_source.total else "No images queued",
+                "api_ok": 0,
+                "api_error": 0,
+                "last_api_latency_ms": None,
+                "last_api_error": "",
+                "output_format": config.output_format,
+            })
+    except BaseException:
+        # Source resolution failed after the slot was claimed; release it so
+        # the next start is not rejected by a ghost batch.
+        with _batch_state_lock:
+            _batch_state["running"] = False
+        raise
+
+    _set_batch_task(asyncio.create_task(_run_batch(image_source)))
     return {
         "status": "started",
         "total": image_source.total,
@@ -866,7 +965,7 @@ async def pull_model(request: PullModelRequest):
             raise HTTPException(503, start_result.get("error", "Cannot start Ollama"))
 
     _pull_state.update({"pulling": True, "model": request.model, "percent": 0, "status": "starting"})
-    asyncio.create_task(_do_pull(request.model))
+    _set_pull_task(asyncio.create_task(_do_pull(request.model)))
     return {"status": "started", "model": request.model}
 
 

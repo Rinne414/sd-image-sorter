@@ -907,13 +907,19 @@ def test_coerce_request_accepts_dataset_scan_token_alias(monkeypatch) -> None:
 
 def test_run_pipeline_streams_selection_token_id_chunks(monkeypatch) -> None:
     observed_resolve_chunks = []
+    observed_snapshot_flags = []
     persisted_ids = []
 
     monkeypatch.setattr(smart_tag_service, "SMART_TAG_ID_CHUNK_SIZE", 2)
+
+    def fake_iter_selection_token_id_chunks(token, chunk_size, snapshot=False):
+        observed_snapshot_flags.append(snapshot)
+        return iter([[1, 2], [3, 4], [5]])
+
     monkeypatch.setattr(
         smart_tag_service,
         "iter_selection_token_id_chunks",
-        lambda token, chunk_size: iter([[1, 2], [3, 4], [5]]),
+        fake_iter_selection_token_id_chunks,
     )
 
     def fake_resolve(ids):
@@ -943,6 +949,9 @@ def test_run_pipeline_streams_selection_token_id_chunks(monkeypatch) -> None:
     _run_pipeline(job, req)
 
     assert observed_resolve_chunks == [[1, 2], [3, 4], [5]]
+    # The pipeline persists tags per window, so the token source must request
+    # a pre-mutation ID snapshot or tag-filtered tokens skip images mid-run.
+    assert observed_snapshot_flags == [True]
     assert persisted_ids == [1, 2, 3, 4, 5]
     assert job.status == "completed"
     assert job.total == 5
@@ -1638,3 +1647,65 @@ def test_multi_tagger_pipeline_batches_and_runs_vlm_concurrently(monkeypatch) ->
     assert all(t.single_calls == 0 for t in batch_taggers)
     # VLM ran concurrently in the consensus phase.
     assert vlm.max_in_flight >= 2
+
+
+# ---------------------------------------------------------------------------
+# Job hygiene: registry pruning + results-file cleanup + total-failure handling
+# ---------------------------------------------------------------------------
+
+
+def test_start_smart_tag_job_prunes_finished_jobs_and_results_files(monkeypatch, tmp_path) -> None:
+    """Starting a new job must evict old finished jobs (keeping the newest
+    SMART_TAG_FINISHED_JOBS_KEPT) and delete their on-disk caption-results
+    jsonl files so the registry and data/smart-tag-results/ stop growing
+    unboundedly over the life of the process."""
+    monkeypatch.setattr(smart_tag_service, "_run_pipeline", lambda job, req: None)
+    monkeypatch.setattr(smart_tag_service, "_jobs", {})
+    monkeypatch.setattr(smart_tag_service, "_active_job_id", None)
+
+    keep = smart_tag_service.SMART_TAG_FINISHED_JOBS_KEPT
+    overflow = 3
+    result_files = []
+    for index in range(keep + overflow):
+        results = tmp_path / f"old-{index}.jsonl"
+        results.write_text('{"path": "synthetic.png", "caption": "synthetic"}\n', encoding="utf-8")
+        job = SmartTagJobState(job_id=f"old-{index}", status="completed")
+        job.finished_at = 1000.0 + index  # old-0 is the oldest
+        job.caption_results_path = str(results)
+        smart_tag_service._jobs[job.job_id] = job
+        result_files.append(results)
+
+    snapshot = smart_tag_service.start_smart_tag_job({
+        "image_ids": [1],
+        "enable_vlm": False,
+    })
+
+    # The oldest `overflow` jobs are evicted along with their jsonl files...
+    for index in range(overflow):
+        assert f"old-{index}" not in smart_tag_service._jobs
+        assert not result_files[index].exists()
+    # ...the newest `keep` finished jobs (and their files) survive.
+    for index in range(overflow, keep + overflow):
+        assert f"old-{index}" in smart_tag_service._jobs
+        assert result_files[index].exists()
+    assert snapshot["job_id"] in smart_tag_service._jobs
+
+
+def test_run_pipeline_failure_while_resolving_total_lands_in_failed_state(monkeypatch) -> None:
+    """A crash while computing the request total must mark the job failed and
+    release the active slot instead of wedging the service until restart."""
+    def _boom(req):
+        raise RuntimeError("selection token backend exploded")
+
+    monkeypatch.setattr(smart_tag_service, "_request_total", _boom)
+    monkeypatch.setattr(smart_tag_service, "_active_job_id", "total-fail")
+
+    job = SmartTagJobState(job_id="total-fail")
+    req = SmartTagRequest(image_ids=[1], enable_wd14=False, enable_vlm=False)
+
+    smart_tag_service._run_pipeline(job, req)
+
+    assert job.status == "failed"
+    assert "selection token backend exploded" in job.message
+    assert job.finished_at is not None
+    assert smart_tag_service._active_job_id is None

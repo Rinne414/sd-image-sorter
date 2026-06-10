@@ -1219,3 +1219,50 @@ def test_tag_category_copy_and_promptlab_board_are_wired():
     ]:
         assert key in en_source
         assert key in zh_source
+
+
+def test_sorting_payloads_carry_v33x_gallery_scope_filters():
+    """Regression: Auto-Separate batch-move and Manual Sort session starts must
+    send the v3.3.x gallery-scope fields (collection/folder/star-rating/
+    exclude-prompts/colors/brightness). Before this fix the serializers and
+    API payload builders silently dropped them, so "Copy from Gallery" moved
+    or sorted a WIDER set than the gallery displayed."""
+    repo_root = Path(__file__).resolve().parents[2]
+    app_source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    autosep_source = (repo_root / "frontend" / "js" / "autosep.js").read_text(encoding="utf-8")
+    manual_sort_source = (repo_root / "frontend" / "js" / "manual-sort.js").read_text(encoding="utf-8")
+
+    # API.batchMove AND API.startSortSession must put every scope field on the
+    # wire (snake_case payload keys, hence count >= 2 across the two builders).
+    for wire_key in (
+        "exclude_prompts:",
+        "exclude_colors:",
+        "min_user_rating:",
+        "brightness_min:",
+        "brightness_max:",
+        "color_temperature:",
+        "brightness_distribution:",
+        "collection_id:",
+        "has_metadata:",
+    ):
+        assert app_source.count(wire_key) >= 2, f"app.js payload builders miss {wire_key}"
+
+    # Auto-Separate's serializer keeps the fields when copying gallery filters,
+    # so the saved scope, the preview query, and the executed move all match.
+    for field in (
+        "excludePrompts:",
+        "excludeColors:",
+        "minUserRating:",
+        "brightnessMin:",
+        "brightnessMax:",
+        "colorTemperature:",
+        "brightnessDistribution:",
+        "collectionId:",
+        "hasMetadata:",
+    ):
+        assert field in autosep_source, f"serializeAutoSepFilters misses {field}"
+
+    # Manual Sort routes the same scope bundle through every start path
+    # (slot/bracket/cull) and the minimap preview query.
+    assert "function buildManualSortScopeFilters" in manual_sort_source
+    assert manual_sort_source.count("buildManualSortScopeFilters(f)") >= 4

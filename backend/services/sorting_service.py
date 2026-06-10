@@ -175,6 +175,25 @@ class SortFilterRequest(BaseModel):
     exclude_ratings: Optional[List[str]] = Field(default=None)
     exclude_checkpoints: Optional[List[str]] = Field(default=None)
     exclude_loras: Optional[List[str]] = Field(default=None)
+    # v3.3.x gallery-scope parity (matches /api/images and the selection-token
+    # filter contract). These were silently dropped on the sorting path before,
+    # so "Copy from Gallery" widened the moved/sorted set beyond what the
+    # gallery displayed (collection/folder/star-rating/exclude scopes lost).
+    min_user_rating: Optional[int] = Field(default=None, ge=0, le=5)
+    # v3.2.1 brightness/color filters
+    brightness_min: Optional[float] = Field(default=None, ge=0, le=255)
+    brightness_max: Optional[float] = Field(default=None, ge=0, le=255)
+    color_temperature: Optional[str] = Field(default=None, max_length=16)
+    brightness_distribution: Optional[str] = Field(default=None, max_length=32)
+    # v3.3.0 exclude filters
+    exclude_prompts: Optional[List[str]] = Field(default=None)
+    exclude_colors: Optional[List[str]] = Field(default=None)
+    # v3.3.1 collection scope
+    collection_id: Optional[int] = Field(default=None, ge=1)
+    # v3.3.2 Library Navigation: recursive folder-subtree scope
+    folder: Optional[str] = Field(default=None, max_length=PATH_MAX_LENGTH)
+    # v3.3.2: "has SD generation parameters" scope (True/False; None = all)
+    has_metadata: Optional[bool] = None
 
     @field_validator('aspect_ratio')
     @classmethod
@@ -253,11 +272,20 @@ class BatchMoveRequest(SortFilterRequest):
             self.exclude_tags, self.exclude_generators,
             self.exclude_ratings, self.exclude_checkpoints,
             self.exclude_loras,
+            self.exclude_prompts, self.exclude_colors,
             self.artist, self.search,
             self.min_width, self.max_width,
             self.min_height, self.max_height,
             self.aspect_ratio,
             self.min_aesthetic, self.max_aesthetic,
+            # v3.3.x scope fields. min_user_rating is only a real filter when
+            # >= 1 (0/None means "show all", mirroring the DB layer), so a
+            # bare min_user_rating=0 must NOT unlock a whole-library move.
+            self.min_user_rating if (self.min_user_rating or 0) > 0 else None,
+            self.brightness_min, self.brightness_max,
+            self.color_temperature, self.brightness_distribution,
+            self.collection_id, self.folder,
+            self.has_metadata,
         )
         # ``self.aspect_ratio`` is acceptable as a filter even though it has
         # only 3 valid values (square / landscape / portrait); ``ratings``
@@ -1962,7 +1990,9 @@ class SortingService:
             raise HTTPException(status_code=400, detail=error or "Invalid destination folder")
 
         with self._batch_move_lock:
-            if self._batch_move_progress["status"] == "running":
+            # "cancelling" is still busy: the worker is alive and draining; a
+            # second start would race it for the shared progress/cancel state.
+            if self._batch_move_progress["status"] in {"running", "cancelling"}:
                 raise HTTPException(status_code=409, detail="Batch move already in progress")
 
         generators = request.generators if request.generators else None
@@ -1980,6 +2010,17 @@ class SortingService:
         exclude_ratings = request.exclude_ratings if request.exclude_ratings else None
         exclude_checkpoints = request.exclude_checkpoints if request.exclude_checkpoints else None
         exclude_loras = request.exclude_loras if request.exclude_loras else None
+        # v3.3.x gallery-scope parity (None preserves pre-existing behavior)
+        exclude_prompts = request.exclude_prompts if request.exclude_prompts else None
+        exclude_colors = request.exclude_colors if request.exclude_colors else None
+        min_user_rating = request.min_user_rating
+        brightness_min = request.brightness_min
+        brightness_max = request.brightness_max
+        color_temperature = request.color_temperature.strip() if request.color_temperature else None
+        brightness_distribution = request.brightness_distribution.strip() if request.brightness_distribution else None
+        collection_id = request.collection_id
+        folder_scope = request.folder.strip() if request.folder else None
+        has_metadata = request.has_metadata
 
         total_count = db.get_filtered_image_count(
             generators=generators,
@@ -2004,6 +2045,16 @@ class SortingService:
             exclude_ratings=exclude_ratings,
             exclude_checkpoints=exclude_checkpoints,
             exclude_loras=exclude_loras,
+            exclude_prompts=exclude_prompts,
+            exclude_colors=exclude_colors,
+            min_user_rating=min_user_rating,
+            brightness_min=brightness_min,
+            brightness_max=brightness_max,
+            color_temperature=color_temperature,
+            brightness_distribution=brightness_distribution,
+            collection_id=collection_id,
+            folder=folder_scope,
+            has_metadata=has_metadata,
         )
 
         if total_count == 0:
@@ -2101,6 +2152,16 @@ class SortingService:
                     exclude_ratings=exclude_ratings,
                     exclude_checkpoints=exclude_checkpoints,
                     exclude_loras=exclude_loras,
+                    exclude_prompts=exclude_prompts,
+                    exclude_colors=exclude_colors,
+                    min_user_rating=min_user_rating,
+                    brightness_min=brightness_min,
+                    brightness_max=brightness_max,
+                    color_temperature=color_temperature,
+                    brightness_distribution=brightness_distribution,
+                    collection_id=collection_id,
+                    folder=folder_scope,
+                    has_metadata=has_metadata,
                 ))
                 saw_any_ids = False
                 try:
@@ -2289,6 +2350,18 @@ class SortingService:
         collection_slots: Optional[Any] = None,
         # v3.3.2 Workbench: which culling/sorting mode to run ("slot" = WASD).
         mode: str = SORT_MODE_DEFAULT,
+        # v3.3.x gallery-scope parity (trailing kwargs keep positional callers
+        # working; None preserves pre-existing behavior exactly).
+        min_user_rating: Optional[int] = None,
+        brightness_min: Optional[float] = None,
+        brightness_max: Optional[float] = None,
+        color_temperature: Optional[str] = None,
+        brightness_distribution: Optional[str] = None,
+        exclude_prompts: Optional[Any] = None,
+        exclude_colors: Optional[Any] = None,
+        collection_id: Optional[int] = None,
+        folder: Optional[str] = None,
+        has_metadata: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """Start a manual sort session."""
         operation_mode = self._validate_file_operation(operation_mode)
@@ -2359,6 +2432,16 @@ class SortingService:
             exclude_ratings=self._coerce_sort_filter_values(exclude_ratings),
             exclude_checkpoints=self._coerce_sort_filter_values(exclude_checkpoints),
             exclude_loras=self._coerce_sort_filter_values(exclude_loras),
+            exclude_prompts=self._coerce_sort_filter_values(exclude_prompts),
+            exclude_colors=self._coerce_sort_filter_values(exclude_colors),
+            min_user_rating=min_user_rating,
+            brightness_min=brightness_min,
+            brightness_max=brightness_max,
+            color_temperature=color_temperature.strip() if color_temperature else None,
+            brightness_distribution=brightness_distribution.strip() if brightness_distribution else None,
+            collection_id=collection_id,
+            folder=folder.strip() if folder else None,
+            has_metadata=has_metadata,
         )
         # DB-level filter already excludes images marked unreadable.
         # Per-image verification runs lazily in get_current_sort_image so

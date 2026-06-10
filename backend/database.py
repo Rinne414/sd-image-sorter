@@ -23,6 +23,7 @@ import os
 import json
 import logging
 import re
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple, Union, Iterator
@@ -378,6 +379,56 @@ def iter_filtered_image_id_chunks(
         if len(chunk) < normalized_chunk_size:
             break
         offset += len(chunk)
+
+
+def iter_id_snapshot_chunks(
+    id_chunks: Iterator[List[int]],
+    *,
+    chunk_size: int = 500,
+) -> Iterator[List[int]]:
+    """Materialize ``id_chunks`` into a temp-file snapshot before yielding.
+
+    ``iter_filtered_image_id_chunks`` re-runs its filtered query with an
+    advancing offset between chunks. When the consumer mutates rows the filter
+    matches (bulk-removing tag X from a tag-X scope, smart-tag/VLM writes
+    against a tag-filtered selection token, ...), every committed chunk
+    shrinks the matching set while the offset advances, silently skipping
+    about half the images. Draining the source iterator into a temp file
+    BEFORE yielding the first chunk pins the worklist to the pre-mutation
+    state without holding 100k+ IDs in memory (mirrors the snapshot pattern
+    used by ``SortingService._write_id_snapshot`` and
+    ``ImageService._iter_selection_token_snapshot_chunks``). The temp file is
+    removed when iteration finishes, errors out, or the consumer abandons the
+    generator.
+    """
+    normalized_chunk_size = max(1, int(chunk_size or 500))
+    snapshot_path: Optional[str] = None
+    try:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+            snapshot_path = handle.name
+            for id_chunk in id_chunks:
+                for image_id in id_chunk:
+                    handle.write(f"{int(image_id)}\n")
+
+        batch: List[int] = []
+        with open(snapshot_path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    image_id = int(line.strip())
+                except ValueError:
+                    continue
+                batch.append(image_id)
+                if len(batch) >= normalized_chunk_size:
+                    yield batch
+                    batch = []
+        if batch:
+            yield batch
+    finally:
+        if snapshot_path:
+            try:
+                os.unlink(snapshot_path)
+            except OSError:
+                logger.debug("Failed to remove ID snapshot temp file: %s", snapshot_path)
 
 
 # NOTE: init_db() is called by the lifespan handler in main.py.

@@ -283,6 +283,52 @@ def test_pose_v_rule_does_not_overmatch_clothing_necklines():
     assert categorize_tag("v-neck") != "pose"
 
 
+# v3.4.0 regression guard for the v3.3.3/v3.3.4 categorize_tag reorder bug:
+# generic object nouns in BACKGROUND_DETAIL_TOKENS / BACKGROUND_OBJECT_KEYWORDS
+# (tank, pencil, key, shell, egg, moon, winter, summer, frog, cherry, ...)
+# must not steal garment/action/body tags from their categories.
+def test_generic_object_nouns_do_not_steal_outfit_tags():
+    expected_outfit = [
+        "tank_top", "pencil_skirt", "key_necklace", "shell_bikini",
+        "winter_coat", "summer_uniform", "moon_print", "cherry_blossom_print",
+        "winter_clothes",
+    ]
+    for tag in expected_outfit:
+        assert categorize_tag(tag) == "outfit", f"{tag} -> {categorize_tag(tag)} (expected outfit)"
+
+
+def test_generic_object_nouns_do_not_steal_action_and_body_tags():
+    assert categorize_tag("holding_egg") == "action"
+    assert categorize_tag("egg_hair_ornament") == "body"
+    assert categorize_tag("frog_hair_ornament") == "body"
+
+
+def test_genuine_background_tags_stay_background():
+    """The outfit/body/action precedence fix must not overcorrect: genuine
+    scenery/object tags keep their background classification."""
+    expected_background = [
+        # exact scenery/object tags
+        "house", "indoors", "outdoors", "cityscape", "tank", "winter",
+        "summer", "egg", "pencil", "key", "shell", "moon",
+        # suffix / token / keyword rules
+        "forest_background", "night_sky", "wooden_floor", "full_moon",
+        # "bra" in OUTFIT_KEYWORDS must not veto "branch"/"branches"
+        "branch", "branches", "tree", "scenery",
+    ]
+    for tag in expected_background:
+        assert categorize_tag(tag) == "background", f"{tag} -> {categorize_tag(tag)} (expected background)"
+
+
+def test_shot_suffix_rule_only_matches_underscore_shot():
+    """endswith("shot") misrouted screenshots into "angle" (v3.3.4)."""
+    assert categorize_tag("cowboy_shot") == "angle"
+    assert categorize_tag("wide_shot") == "angle"
+    assert categorize_tag("pantyshot") == "angle"
+    assert categorize_tag("anime_screenshot") == "meta"
+    assert categorize_tag("screenshot") == "meta"
+    assert categorize_tag("game_screenshot") == "meta"
+
+
 def test_all_local_tagger_csv_tags_are_categorized():
     repo_root = Path(__file__).resolve().parents[2]
     csv_paths = []

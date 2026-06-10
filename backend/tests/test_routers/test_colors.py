@@ -12,6 +12,37 @@ def test_colors_analyze_rejects_invalid_limit(test_client):
     assert "limit" in response.text
 
 
+def test_colors_analyze_rejects_second_start_while_running(test_client):
+    import routers.colors as colors_router
+
+    with colors_router._state_lock:
+        original_running = colors_router._state["running"]
+        colors_router._state["running"] = True
+    try:
+        response = test_client.post("/api/colors/analyze", json={"image_ids": [1]})
+        assert response.status_code == 409
+    finally:
+        with colors_router._state_lock:
+            colors_router._state["running"] = original_running
+
+
+def test_colors_analyze_releases_slot_when_id_resolution_fails(monkeypatch, test_client):
+    from fastapi import HTTPException
+
+    import routers.colors as colors_router
+
+    def boom(request):
+        raise HTTPException(400, "selection token no longer decodes")
+
+    monkeypatch.setattr(colors_router, "_resolve_target_ids", boom)
+
+    response = test_client.post("/api/colors/analyze", json={"selection_token": "tok"})
+
+    assert response.status_code == 400
+    progress = test_client.get("/api/colors/progress").json()
+    assert progress["running"] is False
+
+
 def test_colors_analyze_single_resolves_indexed_path(monkeypatch, test_client, tmp_path: Path):
     import database as db
     import routers.colors as colors_router
