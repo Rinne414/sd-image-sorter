@@ -371,6 +371,14 @@
                     { count: localSkipped });
             }
             this._toast(msg, 'success', 6000);
+            // Attach the shared tagging progress UI (the floating bar at the
+            // top of the screen + completion refresh) to the job we just
+            // started — the same poll loop the gallery Start-Tag button uses.
+            // Without this the toast above points at a progress bar that
+            // never appears.
+            if (typeof window.App?.beginTaggingProgress === 'function') {
+                window.App.beginTaggingProgress();
+            }
         } catch (e) {
             this._toast(`Tagging failed: ${e.message}`, 'error');
         }
@@ -705,18 +713,61 @@
     };
 
     DM._pollExportJob = async function (jobId) {
+        let fetchFailures = 0;   // consecutive network / HTTP errors
+        let lostJobCount = 0;    // consecutive idle / 404 "no such job" reads
         while (true) {
-            const qs = jobId ? `?job_id=${encodeURIComponent(jobId)}` : '';
-            const r = await fetch(`/api/dataset/export/progress${qs}`);
-            if (!r.ok) {
-                const body = await r.text();
-                throw new Error(body.slice(0, 300) || `Progress failed: ${r.status}`);
+            let progress;
+            try {
+                const qs = jobId ? `?job_id=${encodeURIComponent(jobId)}` : '';
+                const r = await fetch(`/api/dataset/export/progress${qs}`);
+                if (r.status === 404) {
+                    // No such job — e.g. the backend restarted mid-export.
+                    // Allow a short grace window before declaring it lost.
+                    lostJobCount += 1;
+                    if (lostJobCount >= 3) {
+                        return {
+                            status: 'failed',
+                            recent_errors: [this._t('dataset.exportJobLost',
+                                'The export job no longer exists on the backend (it may have restarted). Check the output folder, then re-run the export if files are missing.')],
+                        };
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 350));
+                    continue;
+                }
+                if (!r.ok) {
+                    const body = await r.text();
+                    throw new Error(body.slice(0, 300) || `Progress failed: ${r.status}`);
+                }
+                progress = await r.json();
+                fetchFailures = 0;
+            } catch (e) {
+                // Transient fetch errors must not produce a fake "export
+                // failed" modal — the backend job usually keeps running.
+                // Retry, then give up after 3 consecutive failures.
+                fetchFailures += 1;
+                if (fetchFailures >= 3) throw e;
+                await new Promise(resolve => setTimeout(resolve, 350));
+                continue;
             }
-            const progress = await r.json();
             this._renderExportProgress(progress);
 
             if (['done', 'failed', 'cancelled'].includes(progress.status)) {
                 return progress;
+            }
+            if (progress.status === 'idle') {
+                // Idle is the backend's "no job" state (e.g. after a restart).
+                // Treat it as terminal after a short grace window so the loop
+                // can't spin at 350ms forever.
+                lostJobCount += 1;
+                if (lostJobCount >= 3) {
+                    return {
+                        status: 'failed',
+                        recent_errors: [this._t('dataset.exportJobLost',
+                            'The export job no longer exists on the backend (it may have restarted). Check the output folder, then re-run the export if files are missing.')],
+                    };
+                }
+            } else {
+                lostJobCount = 0;
             }
             await new Promise(resolve => setTimeout(resolve, 350));
         }

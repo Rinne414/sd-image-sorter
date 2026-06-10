@@ -541,6 +541,17 @@ const ArtistIdent = {
         const allUndefined = results.length > 0 && results.every(result => String(result?.artist || '').toLowerCase() === 'undefined');
         const targetCount = requestedCount || Number(progress?.total || 0) || results.length;
 
+        // Whole-batch crash: the backend reports step='error' + message
+        // WITHOUT bumping the per-image error count, so check it before the
+        // count-based paths or a crashed run shows a success toast.
+        if (String(progress?.step || '') === 'error') {
+            return {
+                level: 'error',
+                message: String(progress?.message || '').trim()
+                    || this.tText('Artist identification failed.', '画师识别失败。'),
+            };
+        }
+
         if (errors > 0) {
             return {
                 level: 'warning',

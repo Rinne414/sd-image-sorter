@@ -4,9 +4,9 @@
  * Two pieces of UI in one file:
  *   1. ``.dataset-stepper`` — the 5-step header. Each pill scrolls to a
  *      labelled anchor inside the Dataset Maker view.
- *   2. ``#dataset-step-audit`` — the LoRA-readiness audit panel. Default
- *      collapsed. User opens it, fills the thresholds they care about
- *      (all optional), runs the audit, sees badge counts they can click
+ *   2. The LoRA-readiness audit panel (``#dataset-audit-status`` and
+ *      friends). User fills the thresholds they care about (all
+ *      optional), runs the audit, sees badge counts they can click
  *      to filter the queue.
  */
 (function () {
@@ -29,10 +29,6 @@
                 for (const t of tabs) {
                     t.setAttribute('aria-selected',
                         t.getAttribute('data-tab-target') === target ? 'true' : 'false');
-                }
-                if (target === 'audit') {
-                    const det = document.getElementById('dataset-step-audit');
-                    if (det && 'open' in det) det.open = true;
                 }
             });
         }

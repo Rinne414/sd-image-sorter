@@ -1456,7 +1456,36 @@ const API = {
 
     getThumbnailUrl(id, size = null) {
         const actualSize = size || (AppState.viewMode === 'large' ? 512 : AppState.viewMode === 'waterfall' ? 384 : 256);
-        return `${API_BASE}/api/image-thumbnail/${id}?size=${actualSize}`;
+        // Thumbnail responses are browser-cached for 24h (Cache-Control
+        // max-age=86400), which kept serving pre-censor pixels after an
+        // overwrite. Version the URL with the image's source mtime: the
+        // censor save/reconcile path bumps source_mtime_ns in the DB, so the
+        // post-save gallery refresh produces a new URL and busts the cache.
+        const version = this._getThumbnailVersion(id);
+        const versionSuffix = version ? `&v=${encodeURIComponent(version)}` : '';
+        return `${API_BASE}/api/image-thumbnail/${id}?size=${actualSize}${versionSuffix}`;
+    },
+
+    _thumbVersionCache: null,
+
+    _getThumbnailVersion(id) {
+        const images = AppState.images;
+        if (!Array.isArray(images) || images.length === 0) return '';
+        // Gallery refreshes replace AppState.images with a new array, so the
+        // array identity (plus length, guarding in-place appends) is a cheap
+        // staleness key for the id → mtime lookup map.
+        let cache = this._thumbVersionCache;
+        if (!cache || cache.source !== images || cache.size !== images.length) {
+            const map = new Map();
+            for (const image of images) {
+                if (image?.id == null) continue;
+                const version = image.source_mtime_ns ?? image.source_file_mtime;
+                if (version != null && version !== '') map.set(Number(image.id), String(version));
+            }
+            cache = { source: images, size: images.length, map };
+            this._thumbVersionCache = cache;
+        }
+        return cache.map.get(Number(id)) || '';
     },
 
     // Tags & Generators
@@ -1787,7 +1816,7 @@ const API = {
         return this.post(`/api/collections/${collectionId}/items`, { image_id: imageId, member });
     },
 
-    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operation = 'move', artist = null, promptMatchMode = 'exact', tagMode = 'and', excludeFilters = null) {
+    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operation = 'move', artist = null, promptMatchMode = 'exact', tagMode = 'and', excludeFilters = null, scopeFilters = null) {
         return this.post('/api/batch-move', {
             generators,
             tags,
@@ -1811,13 +1840,27 @@ const API = {
             exclude_ratings: excludeFilters?.ratings || null,
             exclude_checkpoints: excludeFilters?.checkpoints || null,
             exclude_loras: excludeFilters?.loras || null,
+            // v3.3.x gallery-scope parity: without these, a collection/folder/
+            // star-rating/exclude-scoped gallery copied into Auto-Separate moved
+            // a WIDER set than displayed. `|| null` keeps 0/'' off the wire
+            // (0-star and empty scopes mean "no restriction", matching getImages).
+            exclude_prompts: scopeFilters?.excludePrompts?.length ? scopeFilters.excludePrompts : null,
+            exclude_colors: scopeFilters?.excludeColors?.length ? scopeFilters.excludeColors : null,
+            min_user_rating: scopeFilters?.minUserRating || null,
+            brightness_min: scopeFilters?.brightnessMin ?? null,
+            brightness_max: scopeFilters?.brightnessMax ?? null,
+            color_temperature: scopeFilters?.colorTemperature || null,
+            brightness_distribution: scopeFilters?.brightnessDistribution || null,
+            collection_id: scopeFilters?.collectionId || null,
+            folder: scopeFilters?.folder || null,
+            has_metadata: typeof scopeFilters?.hasMetadata === 'boolean' ? scopeFilters.hasMetadata : null,
             destination_folder: destinationFolder,
             operation,
         });
     },
 
     // Manual Sort
-    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'copy', artist = null, replaceExisting = false, promptMatchMode = 'exact', tagMode = 'and', excludeFilters = null, collectionSlots = null, mode = 'slot') {
+    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'copy', artist = null, replaceExisting = false, promptMatchMode = 'exact', tagMode = 'and', excludeFilters = null, collectionSlots = null, mode = 'slot', scopeFilters = null) {
         return this.post('/api/sort/start', {
             generators,
             tags,
@@ -1846,6 +1889,19 @@ const API = {
             exclude_ratings: excludeFilters?.ratings || null,
             exclude_checkpoints: excludeFilters?.checkpoints || null,
             exclude_loras: excludeFilters?.loras || null,
+            // v3.3.x gallery-scope parity: manual sort sessions started "from
+            // gallery filters" must honor collection/folder/star-rating/exclude
+            // scopes or the WASD queue is WIDER than what the gallery showed.
+            exclude_prompts: scopeFilters?.excludePrompts?.length ? scopeFilters.excludePrompts : null,
+            exclude_colors: scopeFilters?.excludeColors?.length ? scopeFilters.excludeColors : null,
+            min_user_rating: scopeFilters?.minUserRating || null,
+            brightness_min: scopeFilters?.brightnessMin ?? null,
+            brightness_max: scopeFilters?.brightnessMax ?? null,
+            color_temperature: scopeFilters?.colorTemperature || null,
+            brightness_distribution: scopeFilters?.brightnessDistribution || null,
+            collection_id: scopeFilters?.collectionId || null,
+            folder: scopeFilters?.folder || null,
+            has_metadata: typeof scopeFilters?.hasMetadata === 'boolean' ? scopeFilters.hasMetadata : null,
             // v3.3.1: per-slot collection ids ({ key: collectionId|null }).
             collection_slots: (collectionSlots && typeof collectionSlots === 'object') ? collectionSlots : null,
             // v3.3.2 WB-S3: session mode. "slot" = WASD folder sort (default);
@@ -4810,6 +4866,11 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
                         .replace('{operation}', operationLabel.toLowerCase()),
                     'error'
                 );
+                // Files moved before the failure are gone from their source —
+                // reload so the gallery doesn't keep showing stale rows.
+                resetSelectionDataCache();
+                await loadImages();
+                await loadStats();
                 return;
             }
             const results = Array.isArray(finalProgress?.results) ? finalProgress.results : [];
@@ -5044,12 +5105,19 @@ async function pollRemoveProgressUntilDone() {
 // no per-chunk advance, no mid-run cancel.
 async function pollExportProgressUntilDone() {
     const TERMINAL = new Set(['done', 'cancelled', 'error', 'idle']);
+    let fetchFailures = 0;
     // eslint-disable-next-line no-constant-condition
     while (true) {
         let progress;
         try {
             progress = await API.getExportProgress();
+            fetchFailures = 0;
         } catch (e) {
+            // Tolerate transient fetch errors, but stop after 3 consecutive
+            // failures instead of polling forever — the caller's catch turns
+            // the throw into a visible error toast.
+            fetchFailures += 1;
+            if (fetchFailures >= 3) throw e;
             await new Promise((resolve) => setTimeout(resolve, 300));
             continue;
         }
@@ -5224,9 +5292,13 @@ function setupNavToolsMenu() {
     const open = () => {
         menu.hidden = false;
         // Position the fixed menu under the toggle, right-aligned to it.
+        // getBoundingClientRect returns visual px while the root zoom
+        // (ui-scale.js) makes fixed offsets CSS px — divide by the UI scale
+        // like gallery.js _positionContextMenu / tag-category-copy.js do.
+        const uiScale = Math.max(0.1, window.UiScale?.get?.() || parseFloat(document.documentElement.style.zoom) || 1);
         const r = toggle.getBoundingClientRect();
-        menu.style.top = `${Math.round(r.bottom + 8)}px`;
-        menu.style.right = `${Math.round(window.innerWidth - r.right)}px`;
+        menu.style.top = `${Math.round((r.bottom + 8) / uiScale)}px`;
+        menu.style.right = `${Math.round((window.innerWidth - r.right) / uiScale)}px`;
         toggle.setAttribute('aria-expanded', 'true');
         toggle.classList.add('menu-open');
     };
@@ -7532,7 +7604,12 @@ async function pollScanProgress(retryCount = 0, generation = _scanPollGeneration
             _scanLastAutoRefreshAt = 0;
             _hideBgScanProgress();
             updateScanDiagnosticsCard(null);
-        } else if (progress.status === 'running') {
+        } else if (progress.status === 'running' || progress.status === 'starting') {
+            // The backend sets status='starting' synchronously when the scan is
+            // requested and only flips to 'running' once the BackgroundTask
+            // actually executes. Treat it like 'running' so a first poll that
+            // lands in that window keeps the loop alive instead of silently
+            // dying with a frozen progress bar.
             setScanCancelButtonState('running');
             setTimeout(() => pollScanProgress(0, generation), 500);
         } else if (progress.status === 'cancelling') {
@@ -7540,7 +7617,7 @@ async function pollScanProgress(retryCount = 0, generation = _scanPollGeneration
             setTimeout(() => pollScanProgress(0, generation), 250);
         } else if (progress.status === 'idle' && retryCount < 10) {
             // Allow a brief idle window when attaching to an in-flight background task.
-            setTimeout(() => pollScanProgress(0, generation), 500);
+            setTimeout(() => pollScanProgress(retryCount + 1, generation), 500);
         } else if (progress.status === 'idle') {
             $('#scan-progress-container').style.display = 'none';
             $('#btn-start-scan').disabled = false;
@@ -7551,6 +7628,11 @@ async function pollScanProgress(retryCount = 0, generation = _scanPollGeneration
             _scanLastAutoRefreshAt = 0;
             _hideBgScanProgress();
             updateScanDiagnosticsCard(null);
+        } else {
+            // Unknown / transitional status: keep polling instead of silently
+            // dropping the loop. This future-proofs the poller against any new
+            // backend statuses — the terminal branches above still win.
+            setTimeout(() => pollScanProgress(0, generation), 500);
         }
     } catch (error) {
         if (generation !== _scanPollGeneration) return;
@@ -7647,9 +7729,9 @@ function clearTagProgressTimer() {
     }
 }
 
-function scheduleTagProgressPoll(delay = 500) {
+function scheduleTagProgressPoll(delay = 500, retryCount = 0) {
     clearTagProgressTimer();
-    _tagProgressTimer = setTimeout(() => pollTagProgress(), delay);
+    _tagProgressTimer = setTimeout(() => pollTagProgress(retryCount), delay);
 }
 
 function resetTagUiProgressState() {
@@ -7951,7 +8033,7 @@ async function startTagging() {
     }
 }
 
-async function pollTagProgress() {
+async function pollTagProgress(retryCount = 0) {
     if (!_tagPollingActive) return;
 
     try {
@@ -8098,6 +8180,14 @@ async function pollTagProgress() {
             scheduleTagProgressPoll(500);
         }
     } catch (error) {
+        // A single transient fetch failure must not tear down the whole
+        // tagging UI — the backend job keeps running regardless. Mirror the
+        // scan poller: retry up to 3 consecutive times, then surface the error.
+        if (retryCount < 3) {
+            Logger.warn('Tag progress poll failed, retrying:', error);
+            scheduleTagProgressPoll(1000, retryCount + 1);
+            return;
+        }
         window.__liveTagProgress = null;
         _tagPollingActive = false;
         clearTagProgressTimer();
@@ -8408,6 +8498,23 @@ async function pollAestheticProgress() {
 
         if (running) {
             _aestheticProgressTimer = setTimeout(pollAestheticProgress, 1200);
+            return;
+        }
+
+        // The backend writes progress.error when the whole batch crashed
+        // (model load / CUDA failure). Surface that instead of the success
+        // toast the run would otherwise fake.
+        const batchError = String(progress?.error || '').trim();
+        if (batchError) {
+            showToast(
+                appT('gallery.aestheticFailed', 'Aesthetic scoring failed: {error}').replace('{error}', batchError),
+                'error'
+            );
+            if (completed > 0) {
+                // Partial scores may have landed before the crash.
+                await loadImages();
+                await loadStats();
+            }
             return;
         }
 
@@ -11266,10 +11373,16 @@ function renderModelManager(models = []) {
             }
 
             let finished = false;
-            let pollCount = 0;
             let pollErrorStreak = 0;
-            const MAX_POLL_COUNT = 300; // ~4 minutes at 800ms intervals
             const MAX_POLL_ERROR_STREAK = 8; // ~6s of consecutive poll failures before giving up
+            // Stall detection is progress-based, not time-capped: a 5GB model
+            // legitimately downloads for far longer than any fixed cutoff. Only
+            // warn (informationally, polling continues) after this long with no
+            // change in downloaded bytes.
+            const STALL_WARNING_MS = 3 * 60 * 1000;
+            let lastProgressSignature = null;
+            let lastProgressAt = Date.now();
+            let stallWarned = false;
 
             // Insert a cancel button next to the prepare button
             let cancelBtn = button.parentElement.querySelector('.btn-cancel-download');
@@ -11289,18 +11402,20 @@ function renderModelManager(models = []) {
             };
 
             const pollProgress = async () => {
-                pollCount++;
-                if (pollCount > MAX_POLL_COUNT && !finished) {
-                    finished = true;
-                    cancelBtn.style.display = 'none';
-                    showToast(appT('models.downloadStalled', 'Download may have stalled. Check your network connection and try again.'), 'warning');
-                    button.disabled = false;
-                    button.textContent = originalLabel;
-                    return;
-                }
                 try {
                     const p = await API.get('/api/models/download-progress');
                     pollErrorStreak = 0; // a successful read clears the transient-failure streak
+                    const progressSignature = p?.active ? `${p.filename || ''}:${p.downloaded || 0}` : null;
+                    if (progressSignature !== lastProgressSignature) {
+                        lastProgressSignature = progressSignature;
+                        lastProgressAt = Date.now();
+                        stallWarned = false;
+                    } else if (!stallWarned && Date.now() - lastProgressAt > STALL_WARNING_MS) {
+                        // Informational only — keep polling; large downloads can
+                        // pause on slow mirrors and resume on their own.
+                        stallWarned = true;
+                        showToast(appT('models.downloadStalled', 'Download may have stalled. Check your network connection and try again.'), 'warning');
+                    }
                     if (p?.active && p.total > 0) {
                         const pct = Math.round((p.downloaded / p.total) * 100);
                         const mb = (p.downloaded / 1048576).toFixed(0);
@@ -12987,6 +13102,10 @@ function openPromptBuildFromImage(imageId) {
     buildTab?.click();
     const buildSource = document.getElementById('pl-build-source');
     if (buildSource) {
+        // The Build catalog only lists the newest 200 images; a handoff can
+        // target one outside it. Insert the option first, or `value = id`
+        // silently resets to '' and loadBuildSource just hides the editor.
+        window.PromptLab?.ensureBuildSourceOption?.(normalizedId);
         buildSource.value = String(normalizedId);
         buildSource.dispatchEvent(new Event('change', { bubbles: true }));
         return true;
@@ -13050,6 +13169,11 @@ function buildAppContext() {
         formatSize,
         loadImages,
         loadStats,
+        // Attach the shared tagging progress UI (modal container + floating
+        // top bar) to a tagging job started by another module (e.g. Dataset
+        // Maker "Tag all"). Probes /api/tag/progress and re-uses the exact
+        // same poll loop as the gallery Start-Tag button.
+        beginTaggingProgress: resumeTaggingProgress,
         refreshAestheticStatus,
         updateSelectionUI,
         emitSelectionStateChanged,

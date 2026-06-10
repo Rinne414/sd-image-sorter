@@ -459,6 +459,14 @@
                     window.App?.showToast?.(t('tagCategory.noneFound', 'No tags found for that category.'), 'warning');
                     return;
                 }
+                // View-switching handoffs close the image modal first (see
+                // gallery.js _handleModalHandoff) — otherwise the fixed
+                // z-index 3000 modal keeps covering the category board.
+                const imageModal = document.getElementById('image-modal');
+                if (imageModal?.classList.contains('visible')) {
+                    const closeModal = window.App?.closeModal || window.closeModal;
+                    closeModal?.('image-modal');
+                }
                 window.App?.switchView?.('promptlab');
                 window.PromptLab.openCategoryBoard(classified.tags);
                 removeMenu();

@@ -230,6 +230,15 @@
             if (justFinished && data.completed > 0) {
                 this._showDoneBanner(data);
                 try { window.dispatchEvent(new CustomEvent("colorAnalysisCompleted")); } catch (_e) {}
+            } else if (justFinished && Number(data.failed || 0) > 0) {
+                // Every image failed — say so instead of ending silently.
+                this._toast(
+                    this.t(
+                        `Color analysis finished, but all ${Number(data.failed).toLocaleString()} image(s) failed. Check the backend log for details.`,
+                        `色彩分析结束，但 ${Number(data.failed).toLocaleString()} 张图全部失败。详情请查看后端日志。`,
+                    ),
+                    "error",
+                );
             }
 
             this._renderChip(data);

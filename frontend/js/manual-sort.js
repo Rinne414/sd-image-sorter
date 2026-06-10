@@ -471,6 +471,18 @@ function serializeManualSortFilters(filters) {
         excludeRatings: [...(source.excludeRatings || [])],
         excludeCheckpoints: [...(source.excludeCheckpoints || [])],
         excludeLoras: [...(source.excludeLoras || [])],
+        // v3.3.x gallery-scope parity (mirror App.cloneFilterState so the
+        // no-App fallback can't silently drop scope fields).
+        excludePrompts: [...(source.excludePrompts || [])],
+        excludeColors: [...(source.excludeColors || [])],
+        minUserRating: source.minUserRating ?? null,
+        brightnessMin: source.brightnessMin ?? null,
+        brightnessMax: source.brightnessMax ?? null,
+        colorTemperature: source.colorTemperature || '',
+        brightnessDistribution: source.brightnessDistribution || '',
+        collectionId: source.collectionId ?? null,
+        folder: source.folder ? String(source.folder).trim() : null,
+        hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
     };
 }
 
@@ -512,6 +524,25 @@ function buildManualSortFilterContract(filters) {
             .filter(Boolean),
         artist: source.artist ? String(source.artist).trim() : null,
         search: source.search || '',
+    };
+}
+
+// v3.3.x gallery-scope parity: bundle the scope fields (collection/folder/
+// star-rating/exclude-prompts/colors/brightness) that the legacy positional
+// startSortSession args never carried, so the WASD/bracket/cull session set
+// equals what the gallery showed. Shared by all three start paths.
+function buildManualSortScopeFilters(contract) {
+    return {
+        excludePrompts: contract.excludePrompts?.length > 0 ? contract.excludePrompts : null,
+        excludeColors: contract.excludeColors?.length > 0 ? contract.excludeColors : null,
+        minUserRating: contract.minUserRating || null,
+        brightnessMin: contract.brightnessMin ?? null,
+        brightnessMax: contract.brightnessMax ?? null,
+        colorTemperature: contract.colorTemperature || null,
+        brightnessDistribution: contract.brightnessDistribution || null,
+        collectionId: contract.collectionId || null,
+        folder: contract.folder || null,
+        hasMetadata: typeof contract.hasMetadata === 'boolean' ? contract.hasMetadata : null,
     };
 }
 
@@ -615,6 +646,18 @@ function getManualSortScopeSignature(filters) {
         excludeRatings: contract.excludeRatings || [],
         excludeCheckpoints: contract.excludeCheckpoints || [],
         excludeLoras: contract.excludeLoras || [],
+        // v3.3.x scope fields — keep the fallback signature honest about
+        // collection/folder/rating/exclude differences vs the gallery.
+        excludePrompts: contract.excludePrompts || [],
+        excludeColors: contract.excludeColors || [],
+        minUserRating: contract.minUserRating ?? null,
+        brightnessMin: contract.brightnessMin ?? null,
+        brightnessMax: contract.brightnessMax ?? null,
+        colorTemperature: contract.colorTemperature || '',
+        brightnessDistribution: contract.brightnessDistribution || '',
+        collectionId: contract.collectionId ?? null,
+        folder: contract.folder || null,
+        hasMetadata: contract.hasMetadata ?? null,
     });
 }
 
@@ -1265,6 +1308,8 @@ async function startSorting() {
                 loras: f.excludeLoras?.length > 0 ? f.excludeLoras : null,
             },
             collectionSlots,
+            'slot',
+            buildManualSortScopeFilters(f),
         );
 
         if (result.total_images === 0) {
@@ -1307,6 +1352,9 @@ async function startSorting() {
                 excludeRatings: f.excludeRatings?.length > 0 ? f.excludeRatings : null,
                 excludeCheckpoints: f.excludeCheckpoints?.length > 0 ? f.excludeCheckpoints : null,
                 excludeLoras: f.excludeLoras?.length > 0 ? f.excludeLoras : null,
+                // v3.3.x gallery-scope parity: the minimap preview must show
+                // the same set the session will actually iterate.
+                ...buildManualSortScopeFilters(f),
                 limit: remainingPreviewSlots,
                 cursor: previewCursor
             });
@@ -1631,6 +1679,7 @@ async function startBracketSorting() {
             },
             null, // collection slots
             'bracket',
+            buildManualSortScopeFilters(f),
         );
 
         const totalImages = Number(result?.total_images ?? 0);
@@ -2191,6 +2240,7 @@ async function startCullSorting() {
             },
             null, // collection slots
             'cull',
+            buildManualSortScopeFilters(f),
         );
 
         const totalImages = Number(result?.total_images ?? 0);

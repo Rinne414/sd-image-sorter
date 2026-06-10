@@ -3376,7 +3376,19 @@ ${String(value)}`)
         };
     },
 
+    _cancelModalInfoScrollRestore() {
+        const pending = this._modalInfoScrollRestore;
+        if (!pending) return;
+        this._modalInfoScrollRestore = null;
+        if (pending.rafId) cancelAnimationFrame(pending.rafId);
+        if (pending.timerId) window.clearTimeout(pending.timerId);
+        pending.detach();
+    },
+
     _restoreModalInfoScrollState(scrollState) {
+        // A new restore supersedes any still-pending one so rapid prev/next
+        // navigation cannot replay a stale snapshot.
+        this._cancelModalInfoScrollRestore();
         const info = this._getModalInfoScroller();
         if (!info || !scrollState) return;
         const apply = () => {
@@ -3385,8 +3397,28 @@ ${String(value)}`)
             const targetTop = Math.max(scrollState.top || 0, (scrollState.ratio || 0) * maxScroll);
             info.scrollTop = Math.min(maxScroll, targetTop);
         };
-        requestAnimationFrame(() => requestAnimationFrame(apply));
-        window.setTimeout(apply, 120);
+        // Cancel the delayed re-apply as soon as the user scrolls on their
+        // own — otherwise the 120ms timer snaps their position back.
+        const userScrollEvents = ['wheel', 'touchstart', 'mousedown'];
+        const onUserScroll = () => this._cancelModalInfoScrollRestore();
+        userScrollEvents.forEach((type) => info.addEventListener(type, onUserScroll, { passive: true }));
+        const pending = {
+            rafId: 0,
+            timerId: 0,
+            detach: () => userScrollEvents.forEach((type) => info.removeEventListener(type, onUserScroll)),
+        };
+        this._modalInfoScrollRestore = pending;
+        pending.rafId = requestAnimationFrame(() => {
+            pending.rafId = requestAnimationFrame(() => {
+                pending.rafId = 0;
+                apply();
+            });
+        });
+        pending.timerId = window.setTimeout(() => {
+            pending.timerId = 0;
+            apply();
+            this._cancelModalInfoScrollRestore();
+        }, 120);
     },
 
     _closeModalCopyMenu() {

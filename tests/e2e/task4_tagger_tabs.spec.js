@@ -58,11 +58,13 @@ const BASE = process.env.BASE_URL || 'http://127.0.0.1:8488';
         });
     });
     let progressPolls = 0;
+    let batchStarted = false;
     await page.route('**/api/vlm/caption-batch', async (route) => {
         if (route.request().method() !== 'POST') return route.fallback();
         let body = {};
         try { body = route.request().postDataJSON(); } catch (_e) {}
         vlmCalls.push({ type: 'batch', body });
+        batchStarted = true;
         await route.fulfill({
             status: 200,
             contentType: 'application/json',
@@ -70,6 +72,17 @@ const BASE = process.env.BASE_URL || 'http://127.0.0.1:8488';
         });
     });
     await page.route('**/api/vlm/caption-batch/progress', async (route) => {
+        // Idle until the batch POST lands — matches the real backend and keeps
+        // the init-time reload-resume probe (vlm-caption.js resumeActiveBatch)
+        // from consuming the scripted running->done poll sequence below.
+        if (!batchStarted) {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({ running: false, total: 0, completed: 0, failed: 0, tokens_used: 0, errors: [] }),
+            });
+            return;
+        }
         progressPolls += 1;
         const running = progressPolls < 2;
         await route.fulfill({

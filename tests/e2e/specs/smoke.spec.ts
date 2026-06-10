@@ -1912,6 +1912,94 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#bg-tag-progress')).toBeHidden({ timeout: 10000 })
   })
 
+  test('scan poller should survive the backend starting status window', async ({ page }) => {
+    // Regression: the backend sets status='starting' synchronously when a scan
+    // is requested and only flips to 'running' once the BackgroundTask runs.
+    // pollScanProgress used to have no branch for 'starting', so a first poll
+    // landing in that window silently killed the loop (frozen progress bar,
+    // Start button stuck disabled, F5 the only recovery).
+    let started = false
+    let progressPolls = 0
+
+    await page.route('**/api/scan', async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      started = true
+      progressPolls = 0
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'started' }),
+      })
+    })
+
+    await page.route('**/api/scan/progress', async (route) => {
+      if (!started) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'idle', current: 0, total: 0, message: '' }),
+        })
+        return
+      }
+
+      progressPolls += 1
+      if (progressPolls <= 2) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'starting', current: 0, total: 0, message: 'Starting...' }),
+        })
+        return
+      }
+      if (progressPolls <= 4) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'running', current: 5, total: 10, processed: 5, message: 'Importing images...' }),
+        })
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'done',
+          current: 10,
+          total: 10,
+          processed: 10,
+          new: 10,
+          errors: 0,
+          message: 'Import complete',
+        }),
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await page.locator('#btn-scan').click()
+    await expect(page.locator('#scan-modal.visible')).toBeVisible()
+    await page.locator('#scan-folder-path').fill('C:/fake/scan-poller-regression')
+
+    const autoTag = page.locator('#scan-auto-tag')
+    if (await autoTag.isChecked().catch(() => false)) {
+      await page.locator('label:has(#scan-auto-tag) .checkbox-custom').click()
+      await expect(autoTag).not.toBeChecked()
+    }
+
+    await page.locator('#btn-start-scan').click()
+
+    // The poll loop must keep going through the 'starting' polls and reach the
+    // mocked terminal 'done' state instead of dying after the first response.
+    await expect.poll(() => progressPolls, {
+      message: 'Expected the scan poll loop to survive the starting status and keep polling to done',
+      timeout: 15000,
+    }).toBeGreaterThanOrEqual(5)
+
+    await expect(page.locator('#scan-modal.visible')).toHaveCount(0)
+    await expect(page.locator('#btn-start-scan')).toBeEnabled()
+  })
+
   test('should keep a custom tagger run on CPU when GPU stays off', async ({ page }) => {
     let capturedPayload: Record<string, unknown> | null = null
 

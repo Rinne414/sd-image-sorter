@@ -283,7 +283,19 @@
             });
         },
 
+        _cancelReaderScrollRestore() {
+            const pending = this._readerScrollRestore;
+            if (!pending) return;
+            this._readerScrollRestore = null;
+            if (pending.rafId) cancelAnimationFrame(pending.rafId);
+            if (pending.timerId) window.clearTimeout(pending.timerId);
+            pending.detach();
+        },
+
         _restoreReaderScrollState(scrollState) {
+            // A new restore supersedes any still-pending one so back-to-back
+            // opens cannot replay a stale snapshot.
+            this._cancelReaderScrollRestore();
             if (!Array.isArray(scrollState) || scrollState.length === 0) return;
             const apply = () => {
                 scrollState.forEach((snapshot) => {
@@ -295,8 +307,31 @@
                     element.scrollTop = Math.min(maxScroll, targetTop);
                 });
             };
-            requestAnimationFrame(() => requestAnimationFrame(apply));
-            window.setTimeout(apply, 120);
+            // Cancel the delayed re-apply as soon as the user scrolls on
+            // their own — otherwise the 120ms timer snaps their position back.
+            const userScrollEvents = ['wheel', 'touchstart', 'mousedown'];
+            const onUserScroll = () => this._cancelReaderScrollRestore();
+            const targets = scrollState
+                .map((snapshot) => snapshot?.element)
+                .filter((element) => element && element.isConnected);
+            targets.forEach((element) => userScrollEvents.forEach((type) => element.addEventListener(type, onUserScroll, { passive: true })));
+            const pending = {
+                rafId: 0,
+                timerId: 0,
+                detach: () => targets.forEach((element) => userScrollEvents.forEach((type) => element.removeEventListener(type, onUserScroll))),
+            };
+            this._readerScrollRestore = pending;
+            pending.rafId = requestAnimationFrame(() => {
+                pending.rafId = requestAnimationFrame(() => {
+                    pending.rafId = 0;
+                    apply();
+                });
+            });
+            pending.timerId = window.setTimeout(() => {
+                pending.timerId = 0;
+                apply();
+                this._cancelReaderScrollRestore();
+            }, 120);
         },
 
         _isReaderTempSourcePath(path) {
@@ -1333,7 +1368,12 @@
             this._updateFormatButton();
             const clipboardMetadataMissing = this._clipboardMetadataMissing(result, options.sourceKind || this._currentSourceKind);
             this._renderPromptSection(result, { clipboardMetadataMissing });
-            this._renderReaderCategoryTags(result);
+            // Library opens render category tags from openLibraryImage instead,
+            // after _currentLibraryImageId/_currentReaderTags are set — rendering
+            // here too would POST /api/prompts/categorize twice per open.
+            if (options.sourceKind !== 'library') {
+                this._renderReaderCategoryTags(result);
+            }
 
             // Checkpoint — strip path, show clean name, tooltip for full path
             const cpRaw = result.checkpoint || gp.model || '';

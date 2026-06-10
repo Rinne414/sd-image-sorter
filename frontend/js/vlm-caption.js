@@ -5,6 +5,8 @@
 
 const VLMCaption = {
     isRunning: false,
+    // True while a start request is awaiting its response (double-click guard).
+    _startInFlight: false,
     pollInterval: null,
     settings: {},
     lastProgress: null,
@@ -17,6 +19,25 @@ const VLMCaption = {
     async init() {
         this.bindEvents();
         await this.loadSettings();
+        // Reload-resume: a batch started before an F5 keeps running on the
+        // backend. Re-attach the progress UI + polling so it stays visible
+        // and cancellable instead of only surfacing as a 409 on re-start.
+        await this.resumeActiveBatch();
+    },
+
+    async resumeActiveBatch() {
+        try {
+            const resp = await fetch('/api/vlm/caption-batch/progress');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            if (!data?.running) return;
+            this.isRunning = true;
+            this.lastProgress = data;
+            this._showBatchUI(true);
+            this._updateProgressUI(data);
+            this._showStatus('vlm-batch-status', this._t('vlm.captionRunning', 'Captioning images...'), 'info');
+            this.startPolling();
+        } catch (e) { /* no active job or backend unreachable */ }
     },
 
     bindEvents() {
@@ -27,7 +48,6 @@ const VLMCaption = {
         document.getElementById('btn-vlm-fetch-models')?.addEventListener('click', () => this.fetchModels());
         document.getElementById('btn-vlm-save-settings')?.addEventListener('click', () => this.saveSettings());
         document.getElementById('vlm-preset-select')?.addEventListener('change', (e) => this.applyPreset(e.target.value));
-        document.getElementById('btn-vlm-pull-model')?.addEventListener('click', () => this.pullModel());
         document.getElementById('btn-vlm-retry-failed')?.addEventListener('click', () => this.retryFailedImages());
         document.addEventListener('click', (event) => {
             const trigger = event.target?.closest?.('[data-vlm-debug-chat]');
@@ -313,16 +333,21 @@ const VLMCaption = {
     // --- Batch Captioning ---
 
     async startBatchCaption(imageIdsOverride = null) {
-        const batchTarget = Array.isArray(imageIdsOverride)
-            ? this._buildImageIdsBatchTarget(imageIdsOverride)
-            : this._getBatchTarget();
-        if (!batchTarget || !batchTarget.count) {
-            this._showBatchUI(false, { keepPanel: true });
-            this._showStatus('vlm-batch-status', 'No images to caption. Select images or use current view.', 'error');
-            return;
-        }
-
+        // Double-click guard: isRunning only flips after the POST resolves,
+        // so a second click in that window would fire a duplicate request
+        // (and bounce off the backend's 409 with a confusing error).
+        if (this.isRunning || this._startInFlight) return;
+        this._startInFlight = true;
         try {
+            const batchTarget = Array.isArray(imageIdsOverride)
+                ? this._buildImageIdsBatchTarget(imageIdsOverride)
+                : this._getBatchTarget();
+            if (!batchTarget || !batchTarget.count) {
+                this._showBatchUI(false, { keepPanel: true });
+                this._showStatus('vlm-batch-status', 'No images to caption. Select images or use current view.', 'error');
+                return;
+            }
+
             const resp = await fetch('/api/vlm/caption-batch', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -347,6 +372,8 @@ const VLMCaption = {
         } catch (e) {
             this._showBatchUI(false, { keepPanel: true });
             this._showStatus('vlm-batch-status', `Error: ${e.message}`, 'error');
+        } finally {
+            this._startInFlight = false;
         }
     },
 
@@ -400,7 +427,14 @@ const VLMCaption = {
                     // v3.2.2: if the image detail modal is open, re-fetch so
                     // the user sees the new ai_caption immediately without
                     // having to close and reopen the modal.
-                    if (window.Gallery?.currentPreviewRequestId && window.Gallery?.openPreview) {
+                    // Note: check the modal's actual DOM state, NOT
+                    // currentPreviewRequestId — that is a monotonically
+                    // increasing counter that is never reset on close, so
+                    // using it as an "is open" signal reopened the modal by
+                    // itself after the user had closed it.
+                    const previewModalOpen = document.getElementById('image-modal')
+                        ?.classList.contains('visible');
+                    if (previewModalOpen && window.Gallery?.openPreview) {
                         const currentId = window.Gallery.images?.[window.Gallery.currentPreviewIndex]?.id;
                         if (currentId) window.Gallery.openPreview(currentId);
                     }
@@ -734,6 +768,23 @@ const VLMCaption = {
             .map((item) => Number(item?.id))
             .filter((id) => Number.isFinite(id) && id > 0)
             .slice(0, 1000000);
+
+        // "Current view" must mean the whole filtered set — the same scope the
+        // WD14 path behind this button uses — not just the page the gallery
+        // happens to have loaded (e.g. 60 of 5000). Send the active filters
+        // and let the backend expand them server-side.
+        const buildFilters = window.App?.buildSelectionFilterRequest;
+        if (loadedIds.length && typeof buildFilters === 'function') {
+            // pagination.total can be the -1 "count skipped" sentinel; only
+            // trust positive values, otherwise fall back to the loaded count
+            // (count just gates the empty check — the backend computes the
+            // real total when it expands the filters).
+            const reportedTotal = Number(state.pagination?.total || 0);
+            return {
+                count: reportedTotal > 0 ? reportedTotal : loadedIds.length,
+                payload: { filters: buildFilters() },
+            };
+        }
         return this._buildImageIdsBatchTarget(loadedIds);
     },
 

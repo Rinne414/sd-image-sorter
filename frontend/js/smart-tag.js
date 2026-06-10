@@ -26,6 +26,8 @@
 
     /** Shared timer handle for the progress poll loop. */
     let progressTimer = null;
+    /** Consecutive poll failures — reset on every successful poll. */
+    let pollFailureCount = 0;
     let activeJobId = null;
     let taggerModelCatalog = [];
     let taggerModelDefault = '';
@@ -297,6 +299,12 @@
         // every openModal lets a user who fixes Ollama mid-session
         // see the cleared state without reloading the app.
         refreshOllamaWarning();
+
+        // Reload-resume: after an F5 (or close/reopen of this modal) a job
+        // started earlier may still be running on the backend. Re-attach the
+        // progress bar + cancel button instead of leaving the run invisible
+        // and a re-start to bounce off the backend's 409.
+        resumeActiveSmartTagJob();
 
         // Use the project-wide showModal helper so Escape, focus-trap,
         // focus-restore, and aria semantics all work the same way as
@@ -678,8 +686,32 @@
         }
     }
 
+    /**
+     * Probe the backend once for an in-flight Smart Tag job and, if one is
+     * active, rebuild the progress UI (bar + cancel button) and resume the
+     * poll loop. Used on modal open so a page reload doesn't strand a
+     * running job with no visible progress and no way to cancel it.
+     */
+    async function resumeActiveSmartTagJob() {
+        if (progressTimer) return; // already attached to a live poll loop
+        try {
+            const snap = await getJson('/api/smart-tag/progress');
+            const isActive = snap?.active === true
+                || snap?.status === 'queued'
+                || snap?.status === 'running';
+            if (!isActive) return;
+            activeJobId = snap.job_id || activeJobId;
+            showProgress(true);
+            renderSnapshot(snap);
+            startProgressPolling();
+        } catch (_err) {
+            // idle / 404 / unreachable backend — nothing to resume.
+        }
+    }
+
     function startProgressPolling() {
         stopProgressPolling();
+        pollFailureCount = 0;
         progressTimer = setInterval(pollProgressOnce, 1000);
     }
 
@@ -689,14 +721,29 @@
                 ? `/api/smart-tag/progress?job_id=${encodeURIComponent(activeJobId)}`
                 : '/api/smart-tag/progress';
             const snap = await getJson(url);
+            pollFailureCount = 0;
             renderSnapshot(snap);
             if (!snap.active && snap.status !== 'queued' && snap.status !== 'running') {
                 stopProgressPolling();
                 await onJobFinished(snap);
             }
         } catch (err) {
-            // 404 is the "no such job" response — stop polling silently.
+            // A transient fetch failure (server busy, network blip) must not
+            // kill the poll loop — the backend job keeps running either way.
+            // Mirror the scan poller: retry, and only stop + surface an error
+            // after 3 consecutive failures.
+            pollFailureCount += 1;
+            if (pollFailureCount < 3) return;
+            pollFailureCount = 0;
             stopProgressPolling();
+            showProgress(false);
+            const msg = err?.message || String(err);
+            if (typeof window.showToast === 'function') {
+                window.showToast(
+                    `${t('smartTag.progressCheckFailed', 'Smart Tag progress check failed')}: ${msg}`,
+                    'error'
+                );
+            }
         }
     }
 

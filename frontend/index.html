@@ -412,39 +412,42 @@
                             <!-- Active Filter Summary -->
                             <div class="filter-summary" id="filter-summary">
                                 <div class="summary-row">
-                                    <span class="summary-label" data-i18n="summary.generators">Generators:</span>
+                                    <!-- Colons live outside the data-i18n node: i18n.js replaces
+                                         textContent wholesale and the summary.* values have no colon
+                                         (ui-refresh.js _setSummaryStrongs appends its own ':'). -->
+                                    <span class="summary-label"><span data-i18n="summary.generators">Generators</span>:</span>
                                     <span class="summary-value" id="summary-generators" data-i18n="common.all">All</span>
                                 </div>
                                 <div class="summary-row">
-                                    <span class="summary-label" data-i18n="summary.ratings">Ratings:</span>
+                                    <span class="summary-label"><span data-i18n="summary.ratings">Ratings</span>:</span>
                                     <span class="summary-value" id="summary-ratings" data-i18n="common.all">All</span>
                                 </div>
                                 <div class="summary-row">
-                                    <span class="summary-label" data-i18n="summary.tags">Tags:</span>
+                                    <span class="summary-label"><span data-i18n="summary.tags">Tags</span>:</span>
                                     <span class="summary-value" id="summary-tags" data-i18n="common.none">None</span>
                                 </div>
                                 <div class="summary-row">
-                                    <span class="summary-label" data-i18n="summary.checkpoints">Checkpoints:</span>
+                                    <span class="summary-label"><span data-i18n="summary.checkpoints">Checkpoints</span>:</span>
                                     <span class="summary-value" id="summary-checkpoints" data-i18n="common.none">None</span>
                                 </div>
                                 <div class="summary-row">
-                                    <span class="summary-label" data-i18n="summary.loras">Loras:</span>
+                                    <span class="summary-label"><span data-i18n="summary.loras">LoRAs</span>:</span>
                                     <span class="summary-value" id="summary-loras" data-i18n="common.none">None</span>
                                 </div>
                                 <div class="summary-row">
-                                    <span class="summary-label" data-i18n="summary.prompt">Prompt:</span>
+                                    <span class="summary-label"><span data-i18n="summary.prompt">Prompt</span>:</span>
                                     <span class="summary-value" id="summary-prompt">-</span>
                                 </div>
                                 <div class="summary-row">
-                                    <span class="summary-label" data-i18n="summary.search">Search:</span>
+                                    <span class="summary-label"><span data-i18n="summary.search">Search</span>:</span>
                                     <span class="summary-value" id="summary-search" data-i18n="common.none">None</span>
                                 </div>
                                 <div class="summary-row">
-                                    <span class="summary-label" data-i18n="filter.colors">Colors:</span>
+                                    <span class="summary-label"><span data-i18n="filter.colors">Colors</span>:</span>
                                     <span class="summary-value" id="summary-colors" data-i18n="filter.any">Any</span>
                                 </div>
                                 <div class="summary-row" id="artist-filter-row" style="display: none;">
-                                    <span class="summary-label" data-i18n="summary.artist">Artist:</span>
+                                    <span class="summary-label"><span data-i18n="summary.artist">Artist</span>:</span>
                                     <span class="summary-value" id="summary-artist">-</span>
                                     <button class="btn-clear-filter" id="btn-clear-artist" title="Clear artist filter" aria-label="Clear artist filter">
                                         <span aria-hidden="true">✕</span>
@@ -4170,7 +4173,7 @@
                     <label for="scan-folder-path" id="scan-folder-path-label" data-i18n="modal.folderPath">Image Folder</label>
                     <div class="folder-path-row">
                         <input type="text" id="scan-folder-path" class="input-field" placeholder="D:\images\outputs" aria-describedby="scan-folder-path-label scan-folder-feedback">
-                        <button type="button" class="btn-browse" id="btn-browse-folder" aria-label="Browse for folder" title="Browse folders" onmousedown="if (window.showFolderBrowser) { window.showFolderBrowser(document.getElementById('scan-folder-path')); }" onclick="if (window.showFolderBrowser) { window.showFolderBrowser(document.getElementById('scan-folder-path')); } return false;" data-i18n="scan.browse">Browse</button>
+                        <button type="button" class="btn-browse" id="btn-browse-folder" aria-label="Browse for folder" title="Browse folders" data-i18n="scan.browse">Browse</button>
                     </div>
                     <small id="scan-folder-feedback" class="validation-feedback" aria-live="polite"></small>
                     <div id="folder-browser-container"></div>

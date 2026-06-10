@@ -293,20 +293,12 @@ function updateAutoSepPreviewScopeSummary() {
 
 function updateAutoSepScopeStatus() {
     const card = document.getElementById('autosep-scope-status');
-    const badge = document.getElementById('autosep-scope-badge');
-    const meta = document.getElementById('autosep-scope-meta');
-    const detail = document.getElementById('autosep-scope-detail');
     const useBtn = document.getElementById('btn-autosep-use-gallery-scope');
     const resyncBtn = document.getElementById('btn-autosep-resync-scope');
     const keepBtn = document.getElementById('btn-autosep-keep-scope');
     if (!card || !useBtn || !resyncBtn || !keepBtn) return;
 
     const status = getAutoSepScopeStatus();
-
-    // Simplified: only show relevant buttons
-    if (badge) badge.textContent = '';
-    if (meta) meta.textContent = '';
-    if (detail) detail.textContent = '';
 
     useBtn.hidden = Boolean(status.lastSyncedAt);
     resyncBtn.hidden = !Boolean(status.lastSyncedAt) || status.matchesGallery;
@@ -521,6 +513,21 @@ function serializeAutoSepFilters(filters) {
         excludeRatings: [...(source.excludeRatings || [])],
         excludeCheckpoints: [...(source.excludeCheckpoints || [])],
         excludeLoras: [...(source.excludeLoras || [])],
+        // v3.3.x gallery-scope parity: these fields were silently dropped when
+        // copying AppState.filters, so "Copy from Gallery" produced a WIDER
+        // move/copy scope than the gallery displayed (collection/folder/
+        // star-rating/exclude-prompts/colors/brightness lost). Keep this list
+        // in sync with App.buildSelectionFilterRequest (app.js).
+        excludePrompts: [...(source.excludePrompts || [])],
+        excludeColors: [...(source.excludeColors || [])],
+        minUserRating: source.minUserRating ?? null,
+        brightnessMin: source.brightnessMin ?? null,
+        brightnessMax: source.brightnessMax ?? null,
+        colorTemperature: source.colorTemperature || '',
+        brightnessDistribution: source.brightnessDistribution || '',
+        collectionId: source.collectionId ?? null,
+        folder: source.folder ? String(source.folder).trim() : null,
+        hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
     };
 }
 
@@ -1033,6 +1040,18 @@ function getAutoSepFilterSignature(filters) {
         excludeRatings: contract.excludeRatings || [],
         excludeCheckpoints: contract.excludeCheckpoints || [],
         excludeLoras: contract.excludeLoras || [],
+        // v3.3.x scope fields — without them this fallback signature reported
+        // "matches gallery" even when collection/folder/rating/exclude differed.
+        excludePrompts: contract.excludePrompts || [],
+        excludeColors: contract.excludeColors || [],
+        minUserRating: contract.minUserRating ?? null,
+        brightnessMin: contract.brightnessMin ?? null,
+        brightnessMax: contract.brightnessMax ?? null,
+        colorTemperature: contract.colorTemperature || '',
+        brightnessDistribution: contract.brightnessDistribution || '',
+        collectionId: contract.collectionId ?? null,
+        folder: contract.folder || null,
+        hasMetadata: contract.hasMetadata ?? null,
     });
 }
 
@@ -1169,6 +1188,18 @@ function _buildAutoSepImageQuery(filters, cursor = null, limit = 500) {
         excludeRatings: contract.excludeRatings?.length > 0 ? contract.excludeRatings : null,
         excludeCheckpoints: contract.excludeCheckpoints?.length > 0 ? contract.excludeCheckpoints : null,
         excludeLoras: contract.excludeLoras?.length > 0 ? contract.excludeLoras : null,
+        // v3.3.x gallery-scope parity: preview/overflow must count the same
+        // set the batch move/copy will actually touch.
+        excludePrompts: contract.excludePrompts?.length > 0 ? contract.excludePrompts : null,
+        excludeColors: contract.excludeColors?.length > 0 ? contract.excludeColors : null,
+        minUserRating: contract.minUserRating || null,
+        brightnessMin: contract.brightnessMin ?? null,
+        brightnessMax: contract.brightnessMax ?? null,
+        colorTemperature: contract.colorTemperature || null,
+        brightnessDistribution: contract.brightnessDistribution || null,
+        collectionId: contract.collectionId || null,
+        folder: contract.folder || null,
+        hasMetadata: typeof contract.hasMetadata === 'boolean' ? contract.hasMetadata : null,
         limit,
         cursor,
     };
@@ -1315,7 +1346,20 @@ async function updateAutoSepPreview() {
         Boolean(filters.artist?.trim?.()) ||
         Boolean(filters.search?.trim()) ||
         filters.minWidth || filters.maxWidth || filters.minHeight || filters.maxHeight ||
-        filters.aspectRatio || filters.minAesthetic != null || filters.maxAesthetic != null;
+        filters.aspectRatio || filters.minAesthetic != null || filters.maxAesthetic != null ||
+        // v3.3.x scope fields (collection/folder/rating/exclude/brightness)
+        (filters.excludeTags?.length > 0) ||
+        (filters.excludeGenerators?.length > 0) ||
+        (filters.excludeRatings?.length > 0) ||
+        (filters.excludeCheckpoints?.length > 0) ||
+        (filters.excludeLoras?.length > 0) ||
+        (filters.excludePrompts?.length > 0) ||
+        (filters.excludeColors?.length > 0) ||
+        Boolean(filters.minUserRating) ||
+        filters.brightnessMin != null || filters.brightnessMax != null ||
+        Boolean(filters.colorTemperature) || Boolean(filters.brightnessDistribution) ||
+        Boolean(filters.collectionId) || Boolean(filters.folder) ||
+        typeof filters.hasMetadata === 'boolean';
 
     // When no filters are set, still allow preview (matches ALL images)
     // but mark the state so the UI can show a warning
@@ -1837,6 +1881,21 @@ async function executeAutoSeparateWithProgress() {
                         ratings: contract.excludeRatings?.length > 0 ? contract.excludeRatings : null,
                         checkpoints: contract.excludeCheckpoints?.length > 0 ? contract.excludeCheckpoints : null,
                         loras: contract.excludeLoras?.length > 0 ? contract.excludeLoras : null,
+                    },
+                    // v3.3.x gallery-scope parity: collection/folder/star-rating/
+                    // exclude-prompts/colors/brightness must constrain the move
+                    // exactly like they constrained the previewed gallery view.
+                    {
+                        excludePrompts: contract.excludePrompts,
+                        excludeColors: contract.excludeColors,
+                        minUserRating: contract.minUserRating,
+                        brightnessMin: contract.brightnessMin,
+                        brightnessMax: contract.brightnessMax,
+                        colorTemperature: contract.colorTemperature,
+                        brightnessDistribution: contract.brightnessDistribution,
+                        collectionId: contract.collectionId,
+                        folder: contract.folder,
+                        hasMetadata: contract.hasMetadata,
                     },
                 );
 

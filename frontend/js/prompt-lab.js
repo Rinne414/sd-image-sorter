@@ -2118,11 +2118,41 @@ const PromptLab = {
             `<option value="${img.id}">${escapeHtml(img.filename)}${img.aesthetic_score != null ? ' ★' + img.aesthetic_score.toFixed(1) : ''}</option>`
         ).join('');
         const el = document.getElementById('pl-build-source');
-        if (el) el.innerHTML = `<option value="">${this._t('promptlab.selectTemplate', 'Select an image as template...')}</option>` + options;
+        if (el) {
+            const previousValue = el.value;
+            el.innerHTML = `<option value="">${this._t('promptlab.selectTemplate', 'Select an image as template...')}</option>` + options;
+            // innerHTML resets the selection; keep the current template alive
+            // across the async catalog rebuild (including out-of-catalog
+            // handoff options inserted by ensureBuildSourceOption).
+            if (previousValue) {
+                this.ensureBuildSourceOption(previousValue);
+                el.value = previousValue;
+            }
+        }
         this._renderImagePreviewCard('pl-build-preview', el?.value || '', 'promptlab.buildPreviewEmpty', 'Choose a template image to see it here before loading the prompt.');
         if (!this.imageCatalogLoaded) {
             this._ensureImageCatalog().then(() => this.populateBuildSelector()).catch(() => {});
         }
+    },
+
+    // The Build template <select> only lists the newest-200 catalog, but
+    // gallery/modal/similar handoffs can reference any library image. Insert
+    // a one-off option so `select.value = id` does not silently reset to ''
+    // (which hides the Build editor instead of loading the image).
+    ensureBuildSourceOption(imageId, label = '') {
+        const select = document.getElementById('pl-build-source');
+        const numericId = Number(imageId);
+        if (!select || !Number.isFinite(numericId) || numericId <= 0) return false;
+        const value = String(numericId);
+        if (Array.from(select.options).some((option) => option.value === value)) return true;
+        const option = document.createElement('option');
+        option.value = value;
+        const record = this._getImageRecord(numericId);
+        option.textContent = label
+            || record?.filename
+            || this._t('promptlab.imageOptionFallback', 'Image #{id}', { id: value }).replace('{id}', value);
+        select.appendChild(option);
+        return true;
     },
 
     _openBuildFromImageId(imageId) {
