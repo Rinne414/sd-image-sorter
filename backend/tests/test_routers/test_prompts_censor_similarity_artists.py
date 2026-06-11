@@ -1109,6 +1109,173 @@ class TestCensorRouterValidation:
         assert preview_image.size == (12, 18)
         assert preview_image.getpixel((6, 9))[3] > 0
 
+    def test_batch_refine_mask_threads_slider_confidence_to_refiner(self, test_client, monkeypatch, tmp_path):
+        """The sam3_confidence the frontend sends on every batch refine must
+        reach SAM3's refine_box as confidence_threshold (it used to be a dead
+        knob that batch_refine_mask never read)."""
+        from services import censor_service as censor_service_module
+
+        image_path = tmp_path / "refine-batch.png"
+        Image.new("RGB", (64, 64), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename="refine-batch.png",
+            metadata_json="{}",
+        )
+
+        captured = []
+
+        class FakeRefiner:
+            def refine_box(self, image, box, text_prompt=None, confidence_threshold=None):
+                captured.append({
+                    "box": box,
+                    "text_prompt": text_prompt,
+                    "confidence_threshold": confidence_threshold,
+                })
+                mask = np.zeros((64, 64), dtype=np.uint8)
+                mask[12:48, 20:44] = 1
+                return mask
+
+        monkeypatch.setattr(
+            censor_service_module,
+            "get_model_health",
+            lambda: {"censor": {"sam3": {"available": True, "message": "ready"}}},
+        )
+        monkeypatch.setitem(
+            sys.modules,
+            "sam3_refiner",
+            type("FakeSam3Module", (), {"get_sam3_refiner": staticmethod(lambda: FakeRefiner())})(),
+        )
+
+        response = test_client.post(
+            "/api/censor/batch-refine-mask",
+            json={
+                "items": [
+                    {"image_id": image_id, "box": [1, 2, 30, 40]},
+                    {"image_id": image_id, "box": [2, 3, 31, 41], "sam3_confidence": 0.2},
+                ],
+                "sam3_confidence": 0.85,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["refined"] == 2
+        assert data["fallback"] == 0
+        # Batch-level slider value is the default for every item...
+        assert captured[0]["confidence_threshold"] == pytest.approx(0.85)
+        # ...but an explicit per-item value wins.
+        assert captured[1]["confidence_threshold"] == pytest.approx(0.2)
+        # Response shape is unchanged by the new gating.
+        first = data["results"][0]
+        assert first["status"] == "ok"
+        assert first["mask"].startswith("data:image/png;base64,")
+        assert first["mask_bounds"] == [20, 12, 44, 48]
+
+    def test_batch_refine_mask_defaults_confidence_to_half_when_omitted(self, test_client, monkeypatch, tmp_path):
+        from services import censor_service as censor_service_module
+
+        image_path = tmp_path / "refine-default.png"
+        Image.new("RGB", (64, 64), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename="refine-default.png",
+            metadata_json="{}",
+        )
+
+        captured = {}
+
+        class FakeRefiner:
+            def refine_box(self, image, box, text_prompt=None, confidence_threshold=None):
+                captured["confidence_threshold"] = confidence_threshold
+                return None  # exercises the fallback branch too
+
+        monkeypatch.setattr(
+            censor_service_module,
+            "get_model_health",
+            lambda: {"censor": {"sam3": {"available": True, "message": "ready"}}},
+        )
+        monkeypatch.setitem(
+            sys.modules,
+            "sam3_refiner",
+            type("FakeSam3Module", (), {"get_sam3_refiner": staticmethod(lambda: FakeRefiner())})(),
+        )
+
+        response = test_client.post(
+            "/api/censor/batch-refine-mask",
+            json={"items": [{"image_id": image_id, "box": [1, 2, 30, 40]}]},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["refined"] == 0
+        assert data["fallback"] == 1
+        assert captured["confidence_threshold"] == pytest.approx(0.5)
+
+    def test_refine_mask_single_endpoint_passes_optional_confidence(self, test_client, monkeypatch, tmp_path):
+        """Single refine: omitted -> None (refiner defaults, backward
+        compatible); provided -> threaded through."""
+        from services import censor_service as censor_service_module
+
+        image_path = tmp_path / "refine-single.png"
+        Image.new("RGB", (64, 64), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename="refine-single.png",
+            metadata_json="{}",
+        )
+
+        captured = []
+
+        class FakeRefiner:
+            def refine_box(self, image, box, text_prompt=None, confidence_threshold=None):
+                captured.append(confidence_threshold)
+                mask = np.zeros((64, 64), dtype=np.uint8)
+                mask[12:48, 20:44] = 1
+                return mask
+
+        monkeypatch.setattr(
+            censor_service_module,
+            "get_model_health",
+            lambda: {"censor": {"sam3": {"available": True, "message": "ready"}}},
+        )
+        monkeypatch.setitem(
+            sys.modules,
+            "sam3_refiner",
+            type("FakeSam3Module", (), {"get_sam3_refiner": staticmethod(lambda: FakeRefiner())})(),
+        )
+
+        legacy = test_client.post(
+            "/api/censor/refine-mask",
+            json={"image_id": image_id, "box": [1, 2, 30, 40]},
+        )
+        assert legacy.status_code == 200
+        assert legacy.json()["status"] == "ok"
+        assert captured[-1] is None
+
+        gated = test_client.post(
+            "/api/censor/refine-mask",
+            json={"image_id": image_id, "box": [1, 2, 30, 40], "sam3_confidence": 0.7},
+        )
+        assert gated.status_code == 200
+        assert gated.json()["status"] == "ok"
+        assert captured[-1] == pytest.approx(0.7)
+
+    @pytest.mark.parametrize(
+        "endpoint,payload",
+        [
+            ("/api/censor/refine-mask", {"image_id": 1, "box": [1, 2, 3, 4], "sam3_confidence": 1.5}),
+            ("/api/censor/refine-mask", {"image_id": 1, "box": [1, 2, 3, 4], "sam3_confidence": -0.1}),
+            ("/api/censor/batch-refine-mask", {"items": [{"image_id": 1, "box": [1, 2, 3, 4]}], "sam3_confidence": 1.5}),
+            ("/api/censor/batch-refine-mask", {"items": [{"image_id": 1, "box": [1, 2, 3, 4], "sam3_confidence": -0.1}]}),
+        ],
+    )
+    def test_refine_endpoints_reject_out_of_range_confidence(self, test_client, endpoint, payload):
+        # main.py remaps FastAPI validation errors (422) to 400 app-wide.
+        response = test_client.post(endpoint, json=payload)
+        assert response.status_code == 400
+
     def test_censor_models_returns_recommended_backend(self, test_client):
         response = test_client.get("/api/censor/models")
 

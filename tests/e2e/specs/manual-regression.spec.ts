@@ -1019,6 +1019,23 @@ test('censor queue warning should fire once even after re-entering the tab', asy
   }).toBe(1)
 })
 
+test('quick auto censor button should be visible and wired to the batch flow', async ({ page }) => {
+  await openMainPage(page)
+  await openView(page, 'censor')
+  await expect(page.locator('#view-censor.active')).toBeVisible()
+
+  // v3.4.1: #btn-run-auto-censor was bound in censor-edit.js but the element
+  // never existed, leaving the whole Quick Auto Censor flow unreachable.
+  const quickButton = page.locator('#btn-run-auto-censor')
+  await expect(quickButton).toBeVisible()
+  await expect(quickButton).toContainText('Quick Auto Censor')
+
+  // Fresh page -> empty queue. Clicking must reach runAutoCensorBatch, whose
+  // first gate is the queue-empty toast (proves the binding is live again).
+  await quickButton.click()
+  await expect(page.locator('#toast-container')).toContainText('Queue is empty')
+})
+
 test('censor settings should open, explain model roles, and allow typing the pro prompt', async ({ page }) => {
   await openMainPage(page)
 

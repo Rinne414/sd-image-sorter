@@ -62,6 +62,11 @@ class MaskRefineRequest(BaseModel):
     image_id: int = Field(..., ge=1)
     box: List[int] = Field(..., min_length=4, max_length=4)
     text_prompt: Optional[str] = None
+    # SAM3 confidence gate for this refinement (mask-score floor; also the
+    # presence gate when a text prompt is given). None -> the refiner's
+    # built-in defaults on the single endpoint, or the batch-level
+    # ``sam3_confidence`` when nested inside a BatchMaskRefineRequest.
+    sam3_confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
 
 
 class TextSegmentRequest(BaseModel):
@@ -78,6 +83,9 @@ class BatchMaskRefineRequest(BaseModel):
     # No hard cap: batch_refine_mask runs sequentially and GC/empty_cache()s
     # every 4 items, so a large batch is slow but not a crash risk.
     items: List[MaskRefineRequest] = Field(..., min_length=1)
+    # Confidence gate applied to every item that doesn't set its own
+    # ``sam3_confidence``. The frontend slider (sidebar + detect modal)
+    # sends this on every batch refine.
     sam3_confidence: float = Field(0.5, ge=0.0, le=1.0)
 
 
@@ -1668,6 +1676,7 @@ class CensorService:
                 image,
                 request.box,
                 text_prompt=request.text_prompt,
+                confidence_threshold=request.sam3_confidence,
             )
 
             if mask is None:
@@ -1781,10 +1790,19 @@ class CensorService:
                 if refiner is None:
                     refiner = get_sam3_refiner()
 
+                # Per-item confidence wins; otherwise the batch-level slider
+                # value gates how confident SAM3 must be before a box is
+                # accepted as a refined mask (low-confidence -> "fallback").
+                item_confidence = (
+                    item.sam3_confidence
+                    if item.sam3_confidence is not None
+                    else request.sam3_confidence
+                )
                 mask = refiner.refine_box(
                     image,
                     item.box,
                     text_prompt=item.text_prompt,
+                    confidence_threshold=item_confidence,
                 )
 
                 if mask is None:

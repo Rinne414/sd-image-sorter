@@ -12,7 +12,7 @@ supports text and box prompting natively.
 Public surface (preserved for callers):
 - ``SAM3Refiner.is_available()``
 - ``SAM3Refiner.load()``
-- ``SAM3Refiner.refine_box(image, box, text_prompt=None)``
+- ``SAM3Refiner.refine_box(image, box, text_prompt=None, confidence_threshold=None)``
 - ``SAM3Refiner.refine_boxes(image, detections)``
 - ``SAM3Refiner.segment_by_text(image, text)``
 - ``SAM3Refiner.detect_privacy_regions(image, conf_threshold, prompts)``
@@ -401,9 +401,29 @@ class SAM3Refiner:
         image: Image.Image,
         box: List[int],
         text_prompt: Optional[str] = None,
+        confidence_threshold: Optional[float] = None,
     ) -> Optional[np.ndarray]:
+        """Refine a bounding box into a pixel mask, optionally confidence-gated.
+
+        ``confidence_threshold`` (0..1) gates mask acceptance the same way the
+        text-segmentation path uses ``presence_threshold``:
+
+        - the chosen mask's per-query score must reach the threshold (floored
+          at ``_DEFAULT_SCORE_FLOOR`` so a slider at 0 still rejects raw noise),
+        - and when ``text_prompt`` is given, the text-conditioned presence gate
+          uses the same value (``_run_segmentation`` skips presence for
+          box-only prompting, where presence_logits are meaningless).
+
+        ``None`` preserves the historical defaults (score floor 0.05; presence
+        gate 0.5 for text prompts).
+        """
+        gate_kwargs: Dict[str, Any] = {}
+        if confidence_threshold is not None:
+            gate = max(0.0, min(1.0, float(confidence_threshold)))
+            gate_kwargs["score_threshold"] = max(gate, _DEFAULT_SCORE_FLOOR)
+            gate_kwargs["presence_threshold"] = gate
         try:
-            return self._run_segmentation(image, text=text_prompt, box=box)
+            return self._run_segmentation(image, text=text_prompt, box=box, **gate_kwargs)
         except Exception as exc:
             logger.error("SAM3 box refinement failed: %s", exc)
             return None

@@ -251,6 +251,86 @@ def test_check_sam3_available_caches_import_failure(monkeypatch):
     assert sam3_refiner._check_sam3_available() is False
 
 
+# ---------- refine_box confidence threading (sam3_confidence slider) ---------
+
+
+def test_refine_box_threads_confidence_into_both_gates(fake_refiner, monkeypatch):
+    """The slider value must reach _run_segmentation as BOTH the mask-score
+    floor and the text-conditioned presence gate (the box-only path simply
+    ignores presence inside _run_segmentation)."""
+    captured = {}
+
+    def spy(image, text=None, box=None, **kwargs):
+        captured.update(kwargs)
+        return None
+
+    monkeypatch.setattr(fake_refiner, "_run_segmentation", spy)
+
+    fake_refiner.refine_box(
+        Image.new("RGB", (8, 8)), [1, 1, 4, 4], confidence_threshold=0.7
+    )
+
+    assert captured["score_threshold"] == pytest.approx(0.7)
+    assert captured["presence_threshold"] == pytest.approx(0.7)
+
+
+def test_refine_box_without_confidence_preserves_default_gates(fake_refiner, monkeypatch):
+    """No confidence (legacy callers) -> no gate kwargs, so _run_segmentation
+    keeps its historical defaults (score floor 0.05, presence 0.5)."""
+    captured = {}
+
+    def spy(image, text=None, box=None, **kwargs):
+        captured["kwargs"] = kwargs
+        return None
+
+    monkeypatch.setattr(fake_refiner, "_run_segmentation", spy)
+
+    fake_refiner.refine_box(Image.new("RGB", (8, 8)), [1, 1, 4, 4])
+
+    assert captured["kwargs"] == {}
+
+
+def test_refine_box_confidence_is_clamped_and_score_floored(fake_refiner, monkeypatch):
+    """Slider at 0 still rejects raw noise (score floor); out-of-range values
+    are clamped to [0, 1]."""
+    captured = {}
+
+    def spy(image, text=None, box=None, **kwargs):
+        captured.clear()
+        captured.update(kwargs)
+        return None
+
+    monkeypatch.setattr(fake_refiner, "_run_segmentation", spy)
+    image = Image.new("RGB", (8, 8))
+
+    fake_refiner.refine_box(image, [1, 1, 4, 4], confidence_threshold=0.0)
+    assert captured["score_threshold"] == sam3_refiner._DEFAULT_SCORE_FLOOR
+    assert captured["presence_threshold"] == 0.0
+
+    fake_refiner.refine_box(image, [1, 1, 4, 4], confidence_threshold=5.0)
+    assert captured["score_threshold"] == 1.0
+    assert captured["presence_threshold"] == 1.0
+
+
+def test_refine_box_confidence_gates_low_score_masks(fake_refiner):
+    """Semantic gate: a 0.3-score mask passes with no confidence (back-compat)
+    but is refused once the slider demands 0.5 -- the previously-dead knob now
+    rejects low-confidence refinements."""
+    fake_refiner._model.return_value = SimpleNamespace(
+        presence_logits=torch.tensor([[-5.0]]),  # irrelevant for box-only prompts
+    )
+    masks = torch.zeros((1, 8, 8), dtype=torch.bool)
+    masks[0, 1:3, 1:3] = True
+    fake_refiner._processor.post_process_instance_segmentation.return_value = _processed_results(
+        torch.tensor([0.3]), masks
+    )
+
+    image = Image.new("RGB", (8, 8))
+
+    assert fake_refiner.refine_box(image, [1, 1, 4, 4]) is not None
+    assert fake_refiner.refine_box(image, [1, 1, 4, 4], confidence_threshold=0.5) is None
+
+
 # ---------- segment_by_text decoupled presence threshold ---------------------
 
 
