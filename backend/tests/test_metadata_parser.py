@@ -2208,6 +2208,195 @@ class TestPromptNodesExtraction:
             assert len(prompt_nodes) >= 1
 
 
+def _build_vlm_danbooru_workflow(selection_data: str,
+                                 stale_cache: str = "STALE WRONG PROMPT, 1girl, prika (nikke)") -> dict:
+    """Trimmed copy of the real runtime-VLM workflow.
+
+    DanbooruGalleryNode(51) --image--> QwenTE_ImageInfer(145, Qwen3-VL)
+      --text--> ShowText|pysssss(52) --text--> CLIPTextEncode(11) --> KSampler(19).positive
+
+    ComfyUI serializes widget values at QUEUE time, so ShowText's ``text_0``
+    is a stale display cache from a PREVIOUS run, while the DanbooruGallery
+    ``selection_data`` literal reflects the CURRENT run.
+    """
+    return {
+        "19": {
+            "class_type": "KSampler",
+            "inputs": {
+                "seed": 1, "steps": 36, "cfg": 4.0,
+                "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0,
+                "model": ["66", 0],
+                "positive": ["11", 0],
+                "negative": ["12", 0],
+                "latent_image": ["28", 0],
+            },
+        },
+        "11": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"text": ["52", 0], "clip": ["66", 1]},
+        },
+        "12": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "text": "low resolution,worst quality, low quality, normal quality, lowres",
+                "clip": ["66", 1],
+            },
+        },
+        "52": {
+            "class_type": "ShowText|pysssss",
+            "inputs": {"text_0": stale_cache, "text": ["145", 0]},
+        },
+        "145": {
+            "class_type": "QwenTE_ImageInfer",
+            "inputs": {
+                "输入模式": "图片",
+                "提示词": "Analyze this image and write a danbooru tag prompt",
+                "系统提示词": "在tag中添加artists: @satou kibi",
+                "图片": ["51", 0],
+            },
+        },
+        "51": {
+            "class_type": "DanbooruGalleryNode",
+            "inputs": {
+                "selection_data": selection_data,
+                "filter_data": "{\"startTime\":null,\"endTime\":null,\"startPage\":null}",
+                "danbooru_gallery_widget": "",
+            },
+        },
+        "66": {
+            "class_type": "CheckpointLoaderSimple",
+            "inputs": {"ckpt_name": "model.safetensors"},
+        },
+        "28": {
+            "class_type": "EmptyLatentImage",
+            "inputs": {"width": 512, "height": 512},
+        },
+    }
+
+
+_SPARKLE_SELECTION_DATA = json.dumps({
+    "selections": [{
+        "post_id": "11555190",
+        "prompt": ("honkai: star rail, honkai \\(series\\), "
+                   "sparkle \\(honkai: star rail\\), 1girl, bare shoulders, bell"),
+    }],
+})
+
+
+class TestComfyUIRuntimeVlmPromptTrace:
+    """Runtime-VLM workflows: stale ShowText caches vs queue-time danbooru literals."""
+
+    def test_showtext_stale_cache_bypassed_when_upstream_danbooru_resolves(self, tmp_path: Path):
+        """ShowText text_0 is a stale display cache; upstream danbooru selection must win."""
+        workflow = _build_vlm_danbooru_workflow(_SPARKLE_SELECTION_DATA)
+        img_path = _write_comfyui_prompt_png(tmp_path, "vlm_danbooru.png", workflow)
+
+        result = parse_image(str(img_path))
+
+        prompt = result["prompt"] or ""
+        assert "sparkle" in prompt
+        assert "honkai: star rail" in prompt
+        # Stale cache must be REPLACED, not concatenated.
+        assert "STALE WRONG PROMPT" not in prompt
+        assert "prika" not in prompt
+        assert "nikke" not in prompt
+        # VLM instruction / system-prompt text must never leak into the prompt.
+        assert "Analyze this image" not in prompt
+        assert "在tag中添加" not in prompt
+
+    def test_negative_prompt_literal_unaffected_by_vlm_trace(self, tmp_path: Path):
+        """Node-12 literal negative prompt must remain extracted as-is."""
+        workflow = _build_vlm_danbooru_workflow(_SPARKLE_SELECTION_DATA)
+        img_path = _write_comfyui_prompt_png(tmp_path, "vlm_negative.png", workflow)
+
+        result = parse_image(str(img_path))
+
+        assert result["negative_prompt"] == (
+            "low resolution,worst quality, low quality, normal quality, lowres"
+        )
+
+    def test_prompt_nodes_breakdown_resolves_danbooru_source(self, tmp_path: Path):
+        """The with-source trace variant must also resolve the danbooru selection."""
+        workflow = _build_vlm_danbooru_workflow(_SPARKLE_SELECTION_DATA)
+        img_path = _write_comfyui_prompt_png(tmp_path, "vlm_prompt_nodes.png", workflow)
+
+        result = parse_image(str(img_path))
+
+        prompt_nodes = result["metadata"]["_parsed"].get("prompt_nodes") or []
+        positives = [n for n in prompt_nodes if n.get("role") == "positive"]
+        assert positives, f"Expected a positive prompt node, got {prompt_nodes}"
+        assert "sparkle" in positives[0]["text"]
+        assert "STALE WRONG PROMPT" not in positives[0]["text"]
+        assert positives[0]["source_class_type"] == "DanbooruGalleryNode"
+        assert positives[0]["source_key"] == "selection_data"
+
+    def test_showtext_cache_used_when_upstream_unresolvable(self, tmp_path: Path):
+        """Pure VLM dead-end (no danbooru): cached text_0 is the only recoverable text."""
+        cached = "1girl, cached vlm output, blue eyes, smile"
+        workflow = _build_vlm_danbooru_workflow("{}", stale_cache=cached)
+        # Replace the danbooru source with a plain image loader: nothing recoverable.
+        workflow["51"] = {
+            "class_type": "LoadImage",
+            "inputs": {"image": "input.png", "upload": "image"},
+        }
+        img_path = _write_comfyui_prompt_png(tmp_path, "vlm_dead_end.png", workflow)
+
+        result = parse_image(str(img_path))
+
+        assert result["prompt"] == cached
+
+    def test_showtext_concat_literal_chain_bypasses_stale_cache(self, tmp_path: Path):
+        """Concat-of-literals upstream of ShowText must beat the stale cache."""
+        workflow = _build_vlm_danbooru_workflow(_SPARKLE_SELECTION_DATA)
+        workflow["52"]["inputs"] = {"text_0": "STALE WRONG PROMPT", "text": ["53", 0]}
+        workflow["53"] = {
+            "class_type": "CR Text Concatenate",
+            "inputs": {"separator": "", "text1": "part one tags", "text2": "part two tags"},
+        }
+        img_path = _write_comfyui_prompt_png(tmp_path, "showtext_concat.png", workflow)
+
+        result = parse_image(str(img_path))
+
+        prompt = result["prompt"] or ""
+        assert "part one tags" in prompt
+        assert "part two tags" in prompt
+        assert "STALE WRONG PROMPT" not in prompt
+
+    def test_danbooru_gallery_multiple_selections_joined(self, tmp_path: Path):
+        """Multiple danbooru selections join with ', '."""
+        selection = json.dumps({
+            "selections": [
+                {"post_id": "1", "prompt": "first post tags, 1girl"},
+                {"post_id": "2", "prompt": "second post tags, 2girls"},
+            ],
+        })
+        workflow = _build_vlm_danbooru_workflow(selection)
+        img_path = _write_comfyui_prompt_png(tmp_path, "danbooru_multi.png", workflow)
+
+        result = parse_image(str(img_path))
+
+        assert result["prompt"] == "first post tags, 1girl, second post tags, 2girls"
+
+    @pytest.mark.parametrize("bad_selection_data", [
+        "{not valid json",
+        '{"selections": {}}',
+        '{"selections": [{"post_id": "1"}]}',
+        '"just a string"',
+        "",
+    ])
+    def test_danbooru_gallery_malformed_selection_data_falls_back_to_cache(
+            self, tmp_path: Path, bad_selection_data: str):
+        """Malformed selection_data: no exception, ShowText cache used as fallback."""
+        cached = "1girl, fallback cached prompt, red hair"
+        workflow = _build_vlm_danbooru_workflow(bad_selection_data, stale_cache=cached)
+        img_path = _write_comfyui_prompt_png(tmp_path, "danbooru_malformed.png", workflow)
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "comfyui"
+        assert result["prompt"] == cached
+
+
 class TestAlternateGenerators:
     """Tests for alternate / less-common generator detection.
 

@@ -141,6 +141,13 @@ class MetadataParser:
         "SamplerCustomAdvanced",
     }
 
+    # Image-typed link inputs used to bridge across runtime VLM/inference
+    # nodes (e.g. QwenTE_ImageInfer) whose own text output is generated at
+    # RUNTIME and therefore not recoverable from the serialized graph.
+    # Instruction/system inputs (e.g. "提示词", "系统提示词", "system") are
+    # deliberately NOT in this list and are never followed on that path.
+    COMFYUI_IMAGE_BRIDGE_KEYS = ("图片", "image", "images", "img")
+
     COMFYUI_MODEL_FILE_EXTENSIONS = (
         ".safetensors",
         ".ckpt",
@@ -3619,6 +3626,36 @@ class MetadataParser:
 
         return (pos_result, neg_result)
 
+    @staticmethod
+    def _extract_danbooru_gallery_text(inputs: dict) -> Optional[str]:
+        """Parse DanbooruGallery ``selection_data`` into a prompt string.
+
+        ``selection_data`` is serialized at QUEUE time, so it reflects the
+        CURRENT run: ``{"selections": [{"post_id": ..., "prompt": ...}]}``.
+        Multiple selections are joined with ", ". Malformed payloads yield
+        ``None`` (never raise).
+        """
+        raw = inputs.get("selection_data")
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        try:
+            data = json.loads(raw)
+        except (ValueError, TypeError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        selections = data.get("selections")
+        if not isinstance(selections, list):
+            return None
+        prompts = []
+        for item in selections:
+            if not isinstance(item, dict):
+                continue
+            prompt = item.get("prompt")
+            if isinstance(prompt, str) and prompt.strip():
+                prompts.append(prompt.strip())
+        return ", ".join(prompts) if prompts else None
+
     def _trace_to_text(self, ref: Any, nodes: Dict[str, dict], visited: Set[str], depth: int = 0) -> List[str]:
         """
         Recursively trace a node reference back to find text content.
@@ -3717,18 +3754,33 @@ class MetadataParser:
                     sub_texts = self._trace_to_text(val, nodes, visited, depth + 1)
                     texts.extend(sub_texts)
 
-        # ShowText nodes (pysssss etc.) - text_0 has the cached output text
+        # ShowText nodes (pysssss etc.) - text_0 is a display cache serialized
+        # at QUEUE time, so it can hold STALE output from a PREVIOUS run when
+        # the text is generated at runtime (e.g. by a VLM). When the live
+        # text input is a link, trace upstream FIRST; fall back to the cached
+        # literal only when upstream derivation yields nothing.
         elif "ShowText" in class_type:
-            for key in ["text_0", "text", "string"]:
+            upstream_texts: List[str] = []
+            for key in ["text", "string"]:
                 val = inputs.get(key)
-                if val is None:
-                    continue
-                if isinstance(val, str) and val.strip():
-                    texts.append(val)
-                    break  # text_0 has the actual text, don't follow text connection
-                elif isinstance(val, (list, tuple)):
-                    sub_texts = self._trace_to_text(val, nodes, visited, depth + 1)
-                    texts.extend(sub_texts)
+                if isinstance(val, (list, tuple)):
+                    upstream_texts.extend(self._trace_to_text(val, nodes, visited, depth + 1))
+            if upstream_texts:
+                texts.extend(upstream_texts)
+            else:
+                for key in ["text_0", "text", "string"]:
+                    val = inputs.get(key)
+                    if isinstance(val, str) and val.strip():
+                        texts.append(val)
+                        break
+
+        # DanbooruGallery nodes - selection_data is a QUEUE-TIME literal, so
+        # it reflects the CURRENT run's selected post(s) (unlike ShowText
+        # display caches).
+        elif "DanbooruGallery" in class_type:
+            danbooru_text = self._extract_danbooru_gallery_text(inputs)
+            if danbooru_text:
+                texts.append(danbooru_text)
 
         # StringFunction nodes (pysssss) - have text_a/text_b/text_c inputs
         # and a 'result' cached output. Prefer result if available, else trace inputs.
@@ -3799,6 +3851,22 @@ class MetadataParser:
                     sub_texts = self._trace_to_text(val, nodes, visited, depth + 1)
                     texts.extend(sub_texts)
 
+        # VLM/image-inference dead-end bridging: nodes whose text output is
+        # generated at RUNTIME (e.g. QwenTE_ImageInfer) carry no recoverable
+        # text in the serialized graph. Follow their image input upstream —
+        # it can reach a node whose queue-time literal IS recoverable (e.g.
+        # DanbooruGallery). Only image-typed links are followed here; VLM
+        # instruction ("提示词") and system ("系统提示词"/"system") inputs are
+        # never extracted on this bridging path.
+        if not texts:
+            for key in self.COMFYUI_IMAGE_BRIDGE_KEYS:
+                val = inputs.get(key)
+                if isinstance(val, (list, tuple)) and len(val) >= 2:
+                    sub_texts = self._trace_to_text(val, nodes, visited, depth + 1)
+                    if sub_texts:
+                        texts.extend(sub_texts)
+                        break
+
         return texts
 
     def _extract_text_from_node_with_source(self, node_id: str, nodes: Dict[str, dict], visited: Set[str], depth: int = 0) -> List[Dict[str, Any]]:
@@ -3812,6 +3880,40 @@ class MetadataParser:
 
         class_type = node.get("class_type", "")
         inputs = node.get("inputs", {})
+
+        # DanbooruGallery nodes - selection_data is a QUEUE-TIME literal that
+        # reflects the CURRENT run's selected post(s).
+        if "DanbooruGallery" in class_type:
+            danbooru_text = self._extract_danbooru_gallery_text(inputs)
+            if danbooru_text:
+                return [{
+                    "text": danbooru_text,
+                    "source_node_id": node_id,
+                    "source_class_type": class_type,
+                    "source_key": "selection_data",
+                }]
+
+        # ShowText display caches (text_0) are serialized at QUEUE time and
+        # can be STALE; prefer the live upstream link, cache as fallback only.
+        if "ShowText" in class_type:
+            nested_visited = set(visited)
+            nested_visited.add(node_id)
+            for key in ["text", "string"]:
+                val = inputs.get(key)
+                if isinstance(val, (list, tuple)):
+                    traced = self._trace_to_text_with_source(val, nodes, nested_visited, depth + 1)
+                    if traced:
+                        return traced
+            for key in ["text_0", "text", "string"]:
+                val = inputs.get(key)
+                if isinstance(val, str) and val.strip():
+                    return [{
+                        "text": val,
+                        "source_node_id": node_id,
+                        "source_class_type": class_type,
+                        "source_key": key,
+                    }]
+            return []
 
         # Join/Concat nodes use numbered keys (string_1, string_2, …)
         if any(kw in class_type for kw in ["Concatenate", "Concat", "JoinString", "Join"]):
@@ -3851,6 +3953,18 @@ class MetadataParser:
                 nested_visited = set(visited)
                 nested_visited.add(node_id)
                 traced = self._trace_to_text_with_source(value, nodes, nested_visited, depth + 1)
+                if traced:
+                    return traced
+
+        # VLM/image-inference dead-end bridging: follow image-typed links only
+        # (see _extract_text_from_node for rationale); instruction/system
+        # inputs are never followed here.
+        bridge_visited = set(visited)
+        bridge_visited.add(node_id)
+        for key in self.COMFYUI_IMAGE_BRIDGE_KEYS:
+            val = inputs.get(key)
+            if isinstance(val, (list, tuple)) and len(val) >= 2:
+                traced = self._trace_to_text_with_source(val, nodes, bridge_visited, depth + 1)
                 if traced:
                     return traced
 
