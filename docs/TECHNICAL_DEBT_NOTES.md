@@ -1095,3 +1095,26 @@ These are deferred from the v3.2.1 stability sweep and tracked for the next rele
 5. Tests: lifecycle test asserting Smart Tag in path-mode produces captions but never adds a row to the main DB.
 
 **Workaround for v3.2.2 users:** local items can be manually captioned in the editor or run the regular WD14 / Tag-Images flow after first scanning the folder into the main library.
+
+---
+
+## TODO After v3.4.1 (recorded 2026-06-11)
+
+v3.4.1 shipped the HIGH fake-function fixes (SAM3 confidence slider, Quick Auto Censor button, Analytics tag-click) plus Smart Tag `skip_existing` and the ComfyUI runtime-prompt fix. Remaining known items, in rough priority order. **Verify each against current code before acting — these notes age.**
+
+### Needs owner decision
+
+- [ ] **Clear Gallery button placement** — owner asked "Where is my clear gallery button???"; it was relocated in v3.3.3 to 導入圖片 → 高级选项 → danger zone (`#btn-clear-db`, handler in `frontend/js/app.js` ~5638). Owner never confirmed whether the new location is acceptable or wants it moved back/elsewhere.
+
+### Remaining fake-functions (MEDIUM/LOW, from the v3.4.x sweep)
+
+- [ ] **Filter presets UI** (MEDIUM) — preset save/load referenced in copy/docs but not functional. Implement or remove the promise.
+- [ ] **Prompts `count` parameter** (MEDIUM/LOW) — accepted by the prompt-generation API but not honored. Implement or strip from schema/docs.
+- [ ] **`/api/dataset/translate` doc** (LOW) — documented behavior doesn't match implementation; doc-only rewrite.
+- [ ] **WASD sort combo counter** (LOW) — UI element and logic disagree (`frontend/js/manual-sort.js`); wire it or remove it.
+
+### Roadmap (briefs above in this file: Debt-16, Debt-17)
+
+- [ ] **ANN index for CLIP similarity** — search is still linear-scan; matters above ~50k images. See Debt-17.
+- [ ] **AI job scheduler** — v3.4.0's three-way 409 coordinator is the stopgap; a real queue would run jobs back-to-back unattended. See Debt-16.
+- [ ] **VLM token count off the event loop** (LOW, pre-existing) — token counting blocks the loop under heavy VLM batches; move to an executor.
