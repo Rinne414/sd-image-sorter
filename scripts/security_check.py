@@ -40,6 +40,16 @@ IGNORED_VULN_IDS: tuple[str, ...] = (
     # which is a breaking upgrade for the pinned FastAPI. Advisory is Host-header
     # path injection; mitigated by the loopback-only middleware in backend/main.py.
     "PYSEC-2026-161",
+    # torch 2.11.0 (AI runtime pin). CVE-2025-3000: memory corruption in
+    # torch.jit.script with a LOCAL attack vector (CVSS4 AV:L, low C/I/A) and
+    # NO fixed release published (pip-audit Fix Versions is empty). Reviewed
+    # 2026-06-11: this codebase never calls torch.jit.* (grep: zero matches —
+    # taggers run via ONNX Runtime; torch only does direct inference on
+    # bundled/vetted model weights), and a local attacker able to feed
+    # TorchScript to torch.jit.script can already run arbitrary code as that
+    # user. Residual risk for this localhost-only tool: none beyond baseline.
+    # Remove when a fixed torch version compatible with the CUDA runtime ships.
+    "CVE-2025-3000",
 )
 
 
