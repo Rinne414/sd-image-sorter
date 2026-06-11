@@ -9538,26 +9538,12 @@ function applyAnalyticsFilter(type, value) {
             updateAppFilters((filters) => {
                 filters.tags = [...filters.tags, value];
             });
-            addTagToUI(value);
+            renderActiveTagFilters();
         }
     }
     hideModal('analytics-modal');
     loadImages();
     showToast(appT('filter.appliedValue', 'Filter applied: {value}', { value }), 'success');
-}
-
-function addTagToUI(tag) {
-    const container = $('#active-tags');
-    const tagEl = document.createElement('span');
-    tagEl.className = 'active-tag';
-    tagEl.appendChild(document.createTextNode(`${tag} `));
-    const removeEl = document.createElement('span');
-    removeEl.className = 'remove-tag';
-    removeEl.dataset.tag = tag;
-    removeEl.textContent = '×';
-    removeEl.addEventListener('click', () => removeTagFilter(tag));
-    tagEl.appendChild(removeEl);
-    container.appendChild(tagEl);
 }
 
 
