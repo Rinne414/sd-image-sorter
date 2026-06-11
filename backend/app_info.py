@@ -3,7 +3,7 @@ Application metadata shared by runtime services and release tooling.
 """
 
 APP_NAME = "SD Image Sorter"
-APP_VERSION = "3.4.0"
+APP_VERSION = "3.4.1"
 
 GITHUB_OWNER = "peter119lee"
 GITHUB_REPO = "sd-image-sorter"

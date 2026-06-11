@@ -5,6 +5,30 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.1] - 2026-06-11
+
+Smart Tag now honors "skip images that already have AI tags": a new default-on checkbox skips already-tagged gallery images (no tagger call, no VLM caption), shows a skipped count in progress and the completion message, and can be unchecked to re-tag. Previously the documented `skip_existing` option was accepted but never applied. Also fixes three non-functional UI surfaces: the SAM3 confidence slider, the Quick Auto Censor button, and Analytics tag clicks.
+
+Smart Tag 现在真正支持"跳过已有 AI 标签的图片"：新增默认勾选的选项，已标记的图库图片会被直接跳过（不跑 tagger、不跑 VLM），进度与完成信息显示跳过数量；想重新打标取消勾选即可。此前文档中的 `skip_existing` 参数虽被接受但从未生效。同时修复三处"假功能"界面：SAM3 置信度滑块、一键自动打码按钮、统计面板标签点击。
+
+### Added / 新增
+- **Smart Tag skip-existing**: skips DB images whose `tagged_at` marker is set (same definition as the gallery's untagged filter — an image tagged with zero matches still counts as tagged). Applies to both selected images and filter/selection scopes; Dataset Maker local-file sources are never skipped. Progress payload gains a `skipped` count. On a tag-state lookup failure the run fails open and processes everything rather than silently dropping work.
+  - **Smart Tag 跳过已标记**：以 `tagged_at` 标记判定（与图库"未标记"筛选同一定义；打过标但零命中的图也算已标记）。选中图片与筛选范围都生效；数据集制作的本地文件来源不受影响。进度新增 `skipped` 计数；查询失败时宁可全量重打也不静默丢图。
+
+### Fixed / 修复
+- **ComfyUI runtime-generated prompts**: workflows that build the positive prompt at runtime (e.g. a VLM like Qwen3-VL feeding CLIPTextEncode through ShowText) no longer extract a stale cached prompt from a previous run — queuing 5 runs in a batch used to stamp all 5 images with the prompt of an older, different image. The parser now resolves current-run literals upstream first (including DanbooruGallery selections, the actual source post of the run) and only falls back to display caches when nothing else is recoverable. Re-parse affected images via the preview window's "Re-read info" or by rescanning the folder.
+  - **ComfyUI 运行时生成的提示词**：正向提示词在运行时生成的工作流（如 Qwen3-VL 经 ShowText 接入 CLIPTextEncode）不再抽到上一轮的陈旧缓存——以前一次排队 5 张会让 5 张全部带上更早另一张图的提示词。解析器现在优先回溯本轮的字面值（包括 DanbooruGallery 的本轮选图），全部不可得时才退回显示缓存。受影响的图片可用预览窗"重新读取信息"或重新扫描该文件夹刷新。
+- **SAM3 confidence slider now works**: the censor editor's confidence slider was sent to the API but never consumed — every refinement ran at fixed thresholds regardless of the slider. The value now gates both the mask score and the text-prompt presence check; low-confidence refinements fall back to bounding-box censoring (counted separately in the UI). `/api/censor/refine-mask` and per-item batch overrides accept the new optional `sam3_confidence` field.
+  - **SAM3 置信度滑块真正生效**：打码编辑器的置信度滑块此前虽随请求发送但后端从未使用——无论怎么调，细化都按固定阈值跑。现在滑块同时控制掩码得分与文本提示存在性两道门槛；低置信度的细化会退回边界框打码（UI 单独计数）。`/api/censor/refine-mask` 与批量逐项覆盖均支持新增的可选 `sam3_confidence` 字段。
+- **Quick Auto Censor button restored**: the one-click "detect + censor the whole queue" flow had a live handler and help copy but the button itself was missing from the page, making the documented feature unreachable. The button is back in the censor sidebar's Auto Detect card; the underlying pipeline was audited end-to-end and needed no repairs.
+  - **一键自动打码按钮恢复**：「检测+打码整个队列」的一键流程有完整的处理逻辑和帮助文案，但页面上的按钮本身丢失，文档承诺的功能无法触达。按钮已恢复到打码侧栏的自动检测卡片中；底层流程经逐行审计无需修复。
+- **Analytics tag click no longer crashes**: clicking a tag in the Analytics panel threw a silent error against a removed DOM element — the filter was applied internally but the modal never closed, the gallery never reloaded, and the active-tag chip never appeared. Tag clicks now use the same renderer as the rest of the tag filter UI.
+  - **统计面板标签点击不再崩溃**：在统计面板点击标签会对一个已被移除的 DOM 元素抛出静默错误——筛选内部已生效，但弹窗不关闭、图库不刷新、标签条也不出现。现在与其余标签筛选 UI 使用同一渲染路径。
+
+### Upgrading / 升级注意
+- No database migration. If you routinely re-tag existing images, uncheck the new "Skip images that already have AI tags" box in the Smart Tag dialog.
+  - 不含数据库迁移。如果你习惯对已标记图片重新打标，请在 Smart Tag 对话框中取消勾选"跳过已有 AI 标签的图片"。
+
 ## [3.4.0] - 2026-06-10
 
 Full-pipeline reliability release driven by a three-track audit (frontend UI/UX, backend, end-to-end pipeline). Tag categories are correct again (clothing tags no longer leak into "background", protecting LoRA caption exports), bulk tag operations and AI jobs now cover exactly the scope you filtered, long-running jobs report real errors instead of fake success and survive page reloads, and censored images refresh their thumbnails immediately.

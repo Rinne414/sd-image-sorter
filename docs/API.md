@@ -1,6 +1,6 @@
 ﻿# SD Image Sorter API Documentation
 
-**Version:** 3.4.0
+**Version:** 3.4.1
 **Base URL:** `http://127.0.0.1:8487` (default; configurable via `SD_IMAGE_SORTER_PORT`)
 **Interactive Docs:** `http://127.0.0.1:8487/docs` (Swagger UI, same port as runtime)
 
@@ -783,8 +783,12 @@ Save a non-destructive edit operation list on top of the original image.
 #### POST /api/censor/refine-mask
 Refine mask with SAM3.
 
+Optional `sam3_confidence` (float 0.0–1.0): rejects low-confidence refinements — applied as both the mask score threshold and the text-prompt presence gate. Omitted = legacy thresholds. Rejected boxes return `status: "fallback"` (bounding-box censor).
+
 #### POST /api/censor/batch-refine-mask
 Refine multiple masks with SAM3.
+
+Accepts the same optional `sam3_confidence` at the batch level (the censor editor's confidence slider sends this); each item may override it with its own `sam3_confidence`.
 
 #### POST /api/censor/segment-text
 Segment via text prompt with SAM3.
