@@ -958,6 +958,144 @@ def test_run_pipeline_streams_selection_token_id_chunks(monkeypatch) -> None:
     assert job.processed == 5
 
 
+def test_skip_existing_drops_already_tagged_images_and_counts_them(monkeypatch) -> None:
+    persisted_ids = []
+    looked_up_chunks = []
+
+    def fake_already_tagged(ids):
+        looked_up_chunks.append(list(ids))
+        return {1, 3}
+
+    monkeypatch.setattr(smart_tag_service, "_already_tagged_ids", fake_already_tagged)
+    monkeypatch.setattr(
+        smart_tag_service,
+        "_resolve_image_paths",
+        lambda ids: {int(i): f"/tmp/image-{i}.png" for i in ids},
+    )
+    monkeypatch.setattr(
+        smart_tag_service,
+        "_persist_result",
+        lambda image_id, result, merge_strategy: persisted_ids.append(image_id),
+    )
+
+    job = SmartTagJobState(job_id="skip-existing-job")
+    req = SmartTagRequest(
+        image_ids=[1, 2, 3, 4],
+        enable_wd14=False,
+        enable_vlm=False,
+        skip_existing=True,
+    )
+
+    _run_pipeline(job, req)
+
+    assert looked_up_chunks == [[1, 2, 3, 4]]
+    assert persisted_ids == [2, 4]
+    assert job.status == "completed"
+    assert job.skipped == 2
+    assert job.succeeded == 2
+    # Skipped images count into processed so N/M progress still completes.
+    assert job.total == 4
+    assert job.processed == 4
+    assert "2 skipped (already tagged)" in job.message
+    assert job.snapshot()["skipped"] == 2
+
+
+def test_skip_existing_false_processes_already_tagged_images(monkeypatch) -> None:
+    persisted_ids = []
+    lookup_calls = []
+
+    monkeypatch.setattr(
+        smart_tag_service,
+        "_already_tagged_ids",
+        lambda ids: lookup_calls.append(list(ids)) or {1, 2, 3, 4},
+    )
+    monkeypatch.setattr(
+        smart_tag_service,
+        "_resolve_image_paths",
+        lambda ids: {int(i): f"/tmp/image-{i}.png" for i in ids},
+    )
+    monkeypatch.setattr(
+        smart_tag_service,
+        "_persist_result",
+        lambda image_id, result, merge_strategy: persisted_ids.append(image_id),
+    )
+
+    job = SmartTagJobState(job_id="no-skip-job")
+    req = SmartTagRequest(
+        image_ids=[1, 2, 3, 4],
+        enable_wd14=False,
+        enable_vlm=False,
+        skip_existing=False,
+    )
+
+    _run_pipeline(job, req)
+
+    assert lookup_calls == []  # disabled -> no DB lookup at all
+    assert persisted_ids == [1, 2, 3, 4]
+    assert job.skipped == 0
+    assert job.processed == 4
+    assert "skipped" not in job.message
+
+
+def test_skip_existing_fails_open_when_tagged_lookup_raises(monkeypatch) -> None:
+    persisted_ids = []
+
+    def boom(ids):
+        raise RuntimeError("db unavailable")
+
+    monkeypatch.setattr(smart_tag_service, "_already_tagged_ids", boom)
+    monkeypatch.setattr(
+        smart_tag_service,
+        "_resolve_image_paths",
+        lambda ids: {int(i): f"/tmp/image-{i}.png" for i in ids},
+    )
+    monkeypatch.setattr(
+        smart_tag_service,
+        "_persist_result",
+        lambda image_id, result, merge_strategy: persisted_ids.append(image_id),
+    )
+
+    job = SmartTagJobState(job_id="fail-open-job")
+    req = SmartTagRequest(
+        image_ids=[1, 2],
+        enable_wd14=False,
+        enable_vlm=False,
+        skip_existing=True,
+    )
+
+    _run_pipeline(job, req)
+
+    # Fail-open: worst case is re-tagging, never silently dropping work.
+    assert persisted_ids == [1, 2]
+    assert job.skipped == 0
+    assert job.status == "completed"
+
+
+def test_skip_existing_never_checks_path_only_sources(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(smart_tag_service, "_get_caption_results_dir", lambda: tmp_path)
+    lookup_calls = []
+    monkeypatch.setattr(
+        smart_tag_service,
+        "_already_tagged_ids",
+        lambda ids: lookup_calls.append(list(ids)) or set(),
+    )
+
+    job = SmartTagJobState(job_id="path-skip-job")
+    req = SmartTagRequest(
+        image_paths=[f"/tmp/local-{index}.png" for index in range(3)],
+        enable_wd14=False,
+        enable_vlm=False,
+        skip_existing=True,
+    )
+
+    _run_pipeline(job, req)
+
+    # Dataset Maker local files have no DB tag state -> nothing to look up.
+    assert lookup_calls == []
+    assert job.caption_result_count == 3
+    assert job.skipped == 0
+
+
 def test_path_caption_results_are_paged_from_file_not_kept_in_memory(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(smart_tag_service, "_get_caption_results_dir", lambda: tmp_path)
     # No _process_one_image mock: the windowed pipeline assembles the caption and

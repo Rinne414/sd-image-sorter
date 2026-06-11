@@ -626,6 +626,7 @@
             trigger_word: ($('#smart-tag-trigger')?.value || '').trim(),
             merge_strategy: $('#smart-tag-merge')?.value || 'replace',
             auto_strip_noise: !!$('#smart-tag-strip-noise')?.checked,
+            skip_existing: !!$('#smart-tag-skip-existing')?.checked,
             enable_wd14: booruEnabled,
             enable_vlm: naturalEnabled,
             natural_language_mode: $('#smart-tag-nl-mode')?.value || 'vlm',

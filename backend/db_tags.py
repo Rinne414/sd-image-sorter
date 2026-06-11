@@ -155,6 +155,33 @@ def get_image_tags_map(image_ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
     return result
 
 
+def get_image_ids_already_tagged(image_ids: List[int]) -> set:
+    """Return the subset of ``image_ids`` whose images are already AI-tagged.
+
+    "Tagged" means ``images.tagged_at IS NOT NULL`` — the same marker
+    ``_mark_image_tagged`` stamps on every tag write, and the same definition
+    the gallery's untagged filter uses (``get_untagged_image_ids``). An image
+    that was tagged but matched zero tags still counts as tagged.
+    """
+    ids = [int(image_id) for image_id in (image_ids or []) if int(image_id) > 0]
+    if not ids:
+        return set()
+
+    tagged: set = set()
+    batch_size = 500
+    with get_db() as conn:
+        cursor = conn.cursor()
+        for i in range(0, len(ids), batch_size):
+            batch = ids[i:i + batch_size]
+            placeholders = ",".join("?" * len(batch))
+            cursor.execute(
+                f"SELECT id FROM images WHERE id IN ({placeholders}) AND tagged_at IS NOT NULL",
+                batch,
+            )
+            tagged.update(int(row[0]) for row in cursor.fetchall())
+    return tagged
+
+
 def get_all_tags() -> List[Dict[str, Any]]:
     """Get all unique tags with their counts.
 

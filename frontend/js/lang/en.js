@@ -3221,6 +3221,7 @@ window.I18nLang_en = {
     'smartTag.mergeReplace': 'Replace (recommended) — discard previous caption',
     'smartTag.mergeAppend': 'Append — glue new caption onto previous',
     'smartTag.stripNoise': 'Auto-strip noise tags (masterpiece / score_9 / anime / monochrome / ...)',
+    'smartTag.skipExisting': 'Skip images that already have AI tags (uncheck to re-tag)',
     'smartTag.enableWd14': 'Run booru taggers',
     'smartTag.enableVlm': 'Run natural-language captioner',
     'smartTag.useGpu': 'Use GPU for local models if available',

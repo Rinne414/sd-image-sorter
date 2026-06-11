@@ -205,6 +205,7 @@ from db_tags import (
     add_tags_batch,
     get_image_tags,
     get_image_tags_map,
+    get_image_ids_already_tagged,
     get_all_tags,
     _facet_search_rank_params,
     _facet_search_rank_sql,

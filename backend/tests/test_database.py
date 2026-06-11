@@ -2307,6 +2307,25 @@ class TestAddTagsBatch:
         image = db.get_image_by_id(image_id)
         assert image["tagged_at"] is not None
 
+    def test_get_image_ids_already_tagged_partitions_by_tagged_at(self, test_db):
+        """Only IDs whose images carry tagged_at should come back, even when
+        the tag write matched zero tags (tagged_at is the canonical marker)."""
+        tagged_id = db.add_image(path="/test/skip_tagged.png", filename="skip_tagged.png")
+        zero_tag_id = db.add_image(path="/test/skip_zero.png", filename="skip_zero.png")
+        untagged_id = db.add_image(path="/test/skip_untagged.png", filename="skip_untagged.png")
+
+        db.add_tags_batch([
+            {"image_id": tagged_id, "tags": [{"tag": "cat", "confidence": 0.9}]},
+            # A run that found nothing above threshold still stamps tagged_at.
+            {"image_id": zero_tag_id, "tags": []},
+        ])
+
+        result = db.get_image_ids_already_tagged([tagged_id, zero_tag_id, untagged_id, 999999])
+
+        assert result == {tagged_id, zero_tag_id}
+        assert db.get_image_ids_already_tagged([]) == set()
+        assert db.get_image_ids_already_tagged([untagged_id]) == set()
+
 
 class TestGetImagesByIdsChunking:
     """Tests for get_images_by_ids() with large ID lists."""

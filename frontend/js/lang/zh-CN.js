@@ -3221,6 +3221,7 @@ window.I18nLang_zhCN = {
     'smartTag.mergeReplace': '替换（推荐）— 直接覆盖旧 caption',
     'smartTag.mergeAppend': '追加 — 接在旧 caption 后面',
     'smartTag.stripNoise': '自动剔除噪音 tag (masterpiece / score_9 / anime / monochrome / ...)',
+    'smartTag.skipExisting': '跳过已有 AI 标签的图片（想重新打标请取消勾选）',
     'smartTag.enableWd14': '跑 booru tagger',
     'smartTag.enableVlm': '跑自然语言 captioner',
     'smartTag.useGpu': '本地模型优先用 GPU',

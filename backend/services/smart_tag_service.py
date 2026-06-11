@@ -4,8 +4,9 @@ This module runs an automated "smart caption" pipeline against a list of
 image IDs already in our gallery DB. The pipeline is:
 
     1. For each image, run a local tagger (WD14 / OppaiOracle / Camie / etc)
-       to produce booru-style tags. If the image already has tags in the DB
-       and skip_existing is True, skip the tagger call.
+       to produce booru-style tags. If the image is already tagged in the DB
+       (images.tagged_at set) and skip_existing is True, the whole image is
+       skipped (no tagger call, no VLM caption) and counted as "skipped".
     2. Strip "noise" tags (quality / score / safety / meta / time markers)
        from the WD14 output before they go anywhere near the VLM. These are
        the tags LoRA trainers explicitly want to *anchor*, not have the VLM
@@ -613,6 +614,10 @@ class SmartTagJobState:
     processed: int = 0
     succeeded: int = 0
     failed: int = 0
+    # skip_existing: DB-backed images dropped because they were already
+    # tagged (images.tagged_at set). Counted into ``processed`` so N/M
+    # progress still completes; surfaced separately for the UI.
+    skipped: int = 0
     message: str = ""
     started_at: float = field(default_factory=time.time)
     finished_at: Optional[float] = None
@@ -643,6 +648,7 @@ class SmartTagJobState:
             "processed": self.processed,
             "succeeded": self.succeeded,
             "failed": self.failed,
+            "skipped": self.skipped,
             "message": self.message,
             "started_at": self.started_at,
             "finished_at": self.finished_at,
@@ -1497,20 +1503,25 @@ def _toriigate_nl_text(nl_tagger, image_path: str, image_id: int) -> str:
         return ""
 
 
-def _iter_request_sources(req: "SmartTagRequest") -> Iterator[Tuple[str, int, str]]:
+def _iter_request_sources(
+    req: "SmartTagRequest",
+    job: Optional[SmartTagJobState] = None,
+) -> Iterator[Tuple[str, int, str]]:
     """Flatten the chunked source stream into individual (key, id, path) items."""
-    for source_chunk in _iter_request_source_chunks(req):
+    for source_chunk in _iter_request_source_chunks(req, job):
         for source in source_chunk:
             yield source
 
 
 def _iter_windows(
-    req: "SmartTagRequest", window_size: int
+    req: "SmartTagRequest",
+    window_size: int,
+    job: Optional[SmartTagJobState] = None,
 ) -> Iterator[List[Tuple[str, int, str]]]:
     """Yield source items in fixed-size windows for the booru->VLM pipeline."""
     size = max(1, int(window_size or 1))
     window: List[Tuple[str, int, str]] = []
-    for source in _iter_request_sources(req):
+    for source in _iter_request_sources(req, job):
         window.append(source)
         if len(window) >= size:
             yield window
@@ -1734,9 +1745,61 @@ def _request_total(req: SmartTagRequest) -> int:
     return total
 
 
-def _iter_request_source_chunks(req: SmartTagRequest) -> Iterator[List[Tuple[str, int, str]]]:
+def _already_tagged_ids(image_ids: List[int]) -> set:
+    """Seam over the DB lookup so tests can fake it without a real database."""
+    import database as db
+
+    return db.get_image_ids_already_tagged(image_ids)
+
+
+def _apply_skip_existing(
+    sources: List[Tuple[str, int, str]],
+    req: SmartTagRequest,
+    job: Optional[SmartTagJobState],
+) -> List[Tuple[str, int, str]]:
+    """Drop DB-backed sources that are already tagged when skip_existing is on.
+
+    Path-only sources (image_id == 0, Dataset Maker local files) are never
+    skipped — they have no DB tag state to check. On lookup failure the chunk
+    is processed in full (fail-open: worst case is re-tagging, never silently
+    dropping requested work). Skipped images are counted into ``processed``
+    so N/M progress still reaches M.
+    """
+    if not req.skip_existing:
+        return sources
+    db_ids = [image_id for (_key, image_id, _path) in sources if image_id > 0]
+    if not db_ids:
+        return sources
+    try:
+        tagged_ids = _already_tagged_ids(db_ids)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "skip_existing: tagged-state lookup failed, processing all %d image(s): %s",
+            len(db_ids), exc,
+        )
+        return sources
+    if not tagged_ids:
+        return sources
+    kept = [source for source in sources if not (source[1] > 0 and source[1] in tagged_ids)]
+    skipped = len(sources) - len(kept)
+    if skipped and job is not None:
+        job.skipped += skipped
+        job.processed += skipped
+        if job.total > 0:
+            job.phase_completion = min(1.0, job.processed / job.total)
+    return kept
+
+
+def _iter_request_source_chunks(
+    req: SmartTagRequest,
+    job: Optional[SmartTagJobState] = None,
+) -> Iterator[List[Tuple[str, int, str]]]:
     for id_chunk in _iter_chunks(req.image_ids, SMART_TAG_ID_CHUNK_SIZE):
-        yield _sources_from_image_id_chunk([int(image_id) for image_id in id_chunk])
+        yield _apply_skip_existing(
+            _sources_from_image_id_chunk([int(image_id) for image_id in id_chunk]),
+            req,
+            job,
+        )
 
     if req.selection_token:
         # snapshot=True: the windowed pipeline persists tags/captions per
@@ -1746,7 +1809,11 @@ def _iter_request_source_chunks(req: SmartTagRequest) -> Iterator[List[Tuple[str
         for id_chunk in iter_selection_token_id_chunks(
             req.selection_token, chunk_size=SMART_TAG_ID_CHUNK_SIZE, snapshot=True
         ):
-            yield _sources_from_image_id_chunk([int(image_id) for image_id in id_chunk])
+            yield _apply_skip_existing(
+                _sources_from_image_id_chunk([int(image_id) for image_id in id_chunk]),
+                req,
+                job,
+            )
 
     for path_chunk in _iter_chunks(req.image_paths, SMART_TAG_PATH_CHUNK_SIZE):
         yield [(str(path), 0, str(path)) for path in path_chunk]
@@ -1760,6 +1827,17 @@ def _record_job_error(job: SmartTagJobState, source_key: str, message: str) -> N
     job.errors.append({"image_id": str(source_key), "error": message})
     if len(job.errors) > SMART_TAG_MAX_ERRORS:
         del job.errors[:-SMART_TAG_MAX_ERRORS]
+
+
+def _completion_message(job: SmartTagJobState) -> str:
+    """Terminal success message, mentioning skip_existing drops when any."""
+    message = f"Done. {job.succeeded} ok, {job.failed} failed."
+    if job.skipped:
+        message = (
+            f"Done. {job.succeeded} ok, {job.failed} failed, "
+            f"{job.skipped} skipped (already tagged)."
+        )
+    return message
 
 
 def _get_caption_results_dir() -> Path:
@@ -2040,7 +2118,7 @@ def _run_windowed_pipeline(
     else:
         job.message = f"Smart-tagging {job.total} image(s)..."
 
-    for window in _iter_windows(req, SMART_TAG_PIPELINE_WINDOW):
+    for window in _iter_windows(req, SMART_TAG_PIPELINE_WINDOW, job):
         if job.cancel_requested:
             break
         valid = [(sk, iid, p) for (sk, iid, p) in window if p]
@@ -2079,7 +2157,7 @@ def _run_windowed_pipeline(
         job.message = "Cancelled by user."
     elif job.status == "running":
         job.status = "completed"
-        job.message = f"Done. {job.succeeded} ok, {job.failed} failed."
+        job.message = _completion_message(job)
 
 
 def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
@@ -2157,13 +2235,15 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
             job.stage = "tagging"
             # Collect all source items first so we can iterate them per-tagger.
             all_sources: List[Tuple[str, int, str]] = []
-            for source_chunk in _iter_request_source_chunks(req):
+            for source_chunk in _iter_request_source_chunks(req, job):
                 all_sources.extend(source_chunk)
             # Fix M1: keep ``total`` as the image count throughout the job so
             # "Cancelled at N/M" reads as N/M images. ``phase_completion``
             # tracks 0.0->1.0 within the active phase for a smooth bar.
-            job.total = len(all_sources)
-            job.processed = 0
+            # skip_existing drops stay counted: total includes them and
+            # ``processed`` starts at the skipped count so N/M reaches M.
+            job.total = len(all_sources) + job.skipped
+            job.processed = job.skipped
             job.phase_completion = 0.0
 
             # per_image_outputs[i] = list of per-tagger output dicts for image i
@@ -2235,7 +2315,7 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                     images_done = min(len(all_sources), win_start + len(window))
                     steps_done = images_done + (tagger_idx * len(all_sources))
                     job.phase_completion = min(1.0, steps_done / total_tagger_steps)
-                    job.processed = min(len(all_sources), steps_done // tagger_count)
+                    job.processed = job.skipped + min(len(all_sources), steps_done // tagger_count)
                     job.message = f"Tagging ({model_name}) {images_done}/{len(all_sources)}"
 
             if job.cancel_requested:
@@ -2250,8 +2330,9 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                 ctx = _build_caption_phase(req, vlm_provider, nl_tagger)
                 job.stage = "vlm" if ctx.nl_active else "tagging"
                 # Fix M1: total stays at the image count; processed resets so
-                # the second phase counts images cleanly.
-                job.processed = 0
+                # the second phase counts images cleanly (skipped images stay
+                # counted so N/M still reaches M).
+                job.processed = job.skipped
                 job.phase_completion = 0.0
                 job.message = "Running consensus + VLM..." if ctx.nl_active else "Running consensus..."
 
@@ -2283,7 +2364,7 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                     job.message = "Cancelled by user."
                 elif job.status == "running":
                     job.status = "completed"
-                    job.message = f"Done. {job.succeeded} ok, {job.failed} failed."
+                    job.message = _completion_message(job)
         else:
             # Single-tagger / no-tagger path: GPU-batched booru tagging +
             # concurrent VLM captioning (see _run_windowed_pipeline). It sets
