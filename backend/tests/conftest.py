@@ -289,12 +289,24 @@ def test_client(test_db):
         censor.set_censor_service(censor_svc)
         similarity.set_similarity_service(similarity_svc)
 
+        # Fresh AI-job pipeline coordinator per test: the queue is stateful
+        # (v3.4.1 FIFO queue), so reuse across tests would leak queued
+        # entries. auto_dispatch=False keeps router tests deterministic —
+        # no background dispatcher thread can start a queued job mid-test;
+        # tests drive dispatch via dispatch_pending_once().
+        from services.tagging_pipeline_service import (
+            TaggingPipelineService,
+            set_tagging_pipeline_service,
+        )
+        set_tagging_pipeline_service(TaggingPipelineService(auto_dispatch=False))
+
         client = TestClient(app)
         client.test_db = db
 
         yield client
 
         # Cleanup
+        set_tagging_pipeline_service(None)
         db.DATABASE_PATH = original_path
         db._pragmas_initialized = set()
         try:

@@ -91,9 +91,11 @@ def start(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
-        # An active job already exists. 409 conflict is the right code so
-        # the frontend can show "another run is in progress" without
-        # treating it as a server error.
+        # v3.4.1: a busy AI runtime now QUEUES the job (the snapshot above
+        # carries status="queued" + pipeline_queued=true). RuntimeError only
+        # remains for the fail-closed path — a sibling job's status was
+        # unknowable, so the start was refused. 409 keeps that visible
+        # without treating it as a server error.
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         logger.exception("smart-tag start failed")

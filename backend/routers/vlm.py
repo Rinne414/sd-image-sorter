@@ -72,6 +72,34 @@ def is_caption_batch_active() -> bool:
         return bool(_batch_state.get("running"))
 
 
+def claim_caption_batch_slot() -> None:
+    """Atomically claim the caption-batch slot (check-and-set).
+
+    Raises HTTPException(409) if a caption batch is already running,
+    otherwise marks the batch state as running. Only the unified tagging
+    coordinator calls this (under its shared start lock), for both the
+    HTTP start path and queued-job dispatch, so no other tagging job can
+    interleave between the check and the claim.
+    """
+    with _batch_state_lock:
+        if _batch_state["running"]:
+            raise HTTPException(409, "Batch captioning already in progress")
+        # Claim only the running flag here; the full progress payload is
+        # filled in once the image source has been resolved.
+        _batch_state["running"] = True
+        _batch_state["cancel_requested"] = False
+
+
+def release_caption_batch_slot(error: str = "") -> None:
+    """Release a claimed batch slot without running a batch (failed start)."""
+    with _batch_state_lock:
+        _batch_state["running"] = False
+        if error:
+            _batch_state["api_status"] = "error"
+            _batch_state["api_message"] = "VLM batch failed to start"
+            _batch_state["last_api_error"] = str(error)
+
+
 def _set_batch_task(task: Optional["asyncio.Task"]) -> None:
     """Retain the caption-batch task so it cannot be garbage-collected."""
     global _batch_task
@@ -624,33 +652,25 @@ class BatchCaptionRequest(BaseModel):
         return self
 
 
-@router.post("/caption-batch")
-async def caption_batch(request: BatchCaptionRequest):
-    """Start batch captioning. Returns immediately; poll /caption-batch/progress."""
-    from routers.tags import get_tagging_service
-    from services.tagging_pipeline_service import get_tagging_pipeline_service
+async def _start_claimed_caption_batch(
+    request: BatchCaptionRequest,
+    config: Optional[VLMConfig] = None,
+) -> Dict[str, Any]:
+    """Resolve the image source and launch the batch task.
 
-    config = _build_config()
-
-    def _claim_batch_slot() -> None:
-        with _batch_state_lock:
-            if _batch_state["running"]:
-                raise HTTPException(409, "Batch captioning already in progress")
-            # Claim only the running flag here; the full progress payload is
-            # filled in below once the image source has been resolved.
-            _batch_state["running"] = True
-            _batch_state["cancel_requested"] = False
-
-    # Mutual exclusion with Smart Tag / gallery AI Tag: the coordinator runs
-    # the claim under its shared start lock so no other tagging job can start
-    # between these checks and the running flag being set.
-    get_tagging_pipeline_service().claim_vlm_caption_batch(
-        _claim_batch_slot,
-        legacy_service=get_tagging_service(),
-    )
+    The batch slot MUST already be claimed (claim_caption_batch_slot)
+    before calling this — both the HTTP start path and the queued-job
+    dispatch path funnel through here.
+    """
+    if config is None:
+        config = _build_config()
 
     try:
-        image_source = _build_batch_image_source(request)
+        # Selection-token / filters sources run a filtered COUNT over the whole
+        # library (count_selection_token_ids / create_selection_token) — a slow
+        # synchronous SQLite query on large libraries. Resolve it in a worker
+        # thread so the event loop stays free (same idiom as colors.start_analysis).
+        image_source = await asyncio.to_thread(_build_batch_image_source, request)
         _reset_debug_chat_events()
         with _batch_state_lock:
             _batch_state.update({
@@ -687,10 +707,83 @@ async def caption_batch(request: BatchCaptionRequest):
     }
 
 
+def start_caption_batch_from_queue(
+    payload: Dict[str, Any],
+    loop: Optional["asyncio.AbstractEventLoop"],
+) -> None:
+    """Start a queued caption batch from the pipeline dispatcher thread.
+
+    The dispatcher claims the batch slot first (under the pipeline start
+    lock), then calls this to schedule the actual start on the server
+    event loop captured when the batch was enqueued. A failure inside the
+    scheduled start releases the slot and surfaces in
+    /api/vlm/caption-batch/progress (api_status="error") instead of dying
+    silently, so the queue keeps draining.
+    """
+    if loop is None or loop.is_closed():
+        raise RuntimeError("No usable event loop to start the queued VLM caption batch")
+
+    request = BatchCaptionRequest(**payload)
+
+    async def _runner() -> None:
+        try:
+            await _start_claimed_caption_batch(request)
+        except BaseException as exc:  # noqa: BLE001 — surface, never die silently
+            detail = str(getattr(exc, "detail", None) or exc) or exc.__class__.__name__
+            logger.error("Queued VLM caption batch failed to start: %s", detail)
+            with _batch_state_lock:
+                _batch_state["api_status"] = "error"
+                _batch_state["api_message"] = "Queued VLM batch failed to start"
+                _batch_state["last_api_error"] = detail
+
+    asyncio.run_coroutine_threadsafe(_runner(), loop)
+
+
+@router.post("/caption-batch")
+async def caption_batch(request: BatchCaptionRequest):
+    """Start batch captioning, or queue it behind a running AI job.
+
+    Returns {"status": "started", ...} immediately when the batch starts
+    now, or {"status": "queued", "queue_position": N, ...} when another AI
+    job (gallery AI Tag / Smart Tag / VLM batch) is running and the batch
+    was added to the unified in-memory FIFO queue (auto-starts when the
+    running job finishes; the queue does not survive a restart). Poll
+    /caption-batch/progress either way.
+    """
+    from routers.tags import get_tagging_service
+    from services.tagging_pipeline_service import get_tagging_pipeline_service
+
+    config = _build_config()
+
+    # Mutual exclusion with Smart Tag / gallery AI Tag: the coordinator runs
+    # the claim under its shared start lock so no other tagging job can start
+    # between these checks and the running flag being set. When another AI
+    # job is active the request is queued instead of rejected with 409.
+    queued = get_tagging_pipeline_service().start_vlm_caption_batch(
+        claim_caption_batch_slot,
+        payload=request.model_dump(),
+        loop=asyncio.get_running_loop(),
+        legacy_service=get_tagging_service(),
+    )
+    if queued is not None:
+        return queued
+
+    return await _start_claimed_caption_batch(request, config)
+
+
 @router.get("/caption-batch/progress")
 async def batch_progress():
+    from services.tagging_pipeline_service import KIND_VLM, get_tagging_pipeline_service
+
+    # Read the queue BEFORE the batch state: if the dispatcher starts a
+    # queued batch between the two reads the response shows running=True
+    # with an already-empty queue (harmless) instead of "idle + empty
+    # queue" for a batch that is actually starting.
+    queue_info = get_tagging_pipeline_service().queue_snapshot(KIND_VLM)
     with _batch_state_lock:
-        return dict(_batch_state)
+        payload = dict(_batch_state)
+    payload["pipeline_queue"] = queue_info
+    return payload
 
 
 @router.get("/caption-batch/debug-chat")
@@ -705,13 +798,20 @@ async def batch_debug_chat():
 
 @router.post("/caption-batch/cancel")
 async def batch_cancel():
+    from services.tagging_pipeline_service import KIND_VLM, get_tagging_pipeline_service
+
+    # Queued-job cancellation: the existing cancel endpoint also clears any
+    # queued (not-yet-started) VLM caption batches.
+    removed = get_tagging_pipeline_service().remove_queued_jobs(KIND_VLM)
     with _batch_state_lock:
         if not _batch_state["running"]:
+            if removed > 0:
+                return {"status": "queue_cleared", "removed_queued": removed}
             raise HTTPException(400, "No batch in progress")
         _batch_state["cancel_requested"] = True
         _batch_state["api_status"] = "cancelling"
         _batch_state["api_message"] = "Cancel requested; waiting for active API calls to finish"
-    return {"status": "cancel_requested"}
+    return {"status": "cancel_requested", "removed_queued": removed}
 
 
 async def _run_batch(image_source: _BatchImageSource) -> None:

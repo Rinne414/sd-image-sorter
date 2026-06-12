@@ -446,11 +446,12 @@ def test_vlm_caption_single_resolves_indexed_path(monkeypatch, test_client, tmp_
     assert seen_paths == [str(runtime_path)]
 
 
-def test_vlm_caption_batch_rejected_with_409_while_smart_tag_active(monkeypatch, test_client):
+def test_vlm_caption_batch_queued_while_smart_tag_active(monkeypatch, test_client):
     from types import SimpleNamespace
 
     import routers.vlm as vlm_router
     from services import tagging_pipeline_service
+    from services.tagging_pipeline_service import KIND_VLM, get_tagging_pipeline_service
 
     monkeypatch.setattr(
         tagging_pipeline_service.smart_tag_service,
@@ -460,14 +461,19 @@ def test_vlm_caption_batch_rejected_with_409_while_smart_tag_active(monkeypatch,
 
     response = test_client.post("/api/vlm/caption-batch", json={"image_ids": [1]})
 
-    assert response.status_code == 409
-    assert "Smart Tag" in response.text
-    # The rejected start must not leave the batch slot claimed.
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "queued"
+    assert body["pipeline_queued"] is True
+    assert body["queue_position"] == 1
+    # A queued start must not claim the batch slot.
     assert vlm_router.is_caption_batch_active() is False
+    assert get_tagging_pipeline_service().remove_queued_jobs(KIND_VLM) == 1
 
 
-def test_smart_tag_start_rejected_with_409_while_vlm_batch_active(test_client):
+def test_smart_tag_start_queued_while_vlm_batch_active(test_client):
     import routers.vlm as vlm_router
+    from services.tagging_pipeline_service import KIND_SMART, get_tagging_pipeline_service
 
     with vlm_router._batch_state_lock:
         original_running = vlm_router._batch_state["running"]
@@ -477,26 +483,128 @@ def test_smart_tag_start_rejected_with_409_while_vlm_batch_active(test_client):
             "/api/smart-tag/start",
             json={"image_ids": [1], "enable_vlm": False},
         )
-        assert response.status_code == 409
-        assert "VLM" in response.text
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "queued"
+        assert body["pipeline_queued"] is True
     finally:
         with vlm_router._batch_state_lock:
             vlm_router._batch_state["running"] = original_running
+        get_tagging_pipeline_service().remove_queued_jobs(KIND_SMART)
 
 
-def test_gallery_tag_start_rejected_with_409_while_vlm_batch_active(test_client):
+def test_gallery_tag_start_queued_while_vlm_batch_active(test_client):
     import routers.vlm as vlm_router
+    from services.tagging_pipeline_service import KIND_GALLERY, get_tagging_pipeline_service
 
     with vlm_router._batch_state_lock:
         original_running = vlm_router._batch_state["running"]
         vlm_router._batch_state["running"] = True
     try:
         response = test_client.post("/api/tag/start", json={"image_ids": [1]})
-        assert response.status_code == 409
-        assert "VLM" in response.text
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "queued"
+        assert body["pipeline_queued"] is True
+        assert body["pipeline_mode"] == "gallery-tag"
     finally:
         with vlm_router._batch_state_lock:
             vlm_router._batch_state["running"] = original_running
+        get_tagging_pipeline_service().remove_queued_jobs(KIND_GALLERY)
+
+
+def test_vlm_batch_progress_reports_queued_entry(monkeypatch, test_client):
+    from types import SimpleNamespace
+
+    from services import tagging_pipeline_service
+    from services.tagging_pipeline_service import KIND_VLM, get_tagging_pipeline_service
+
+    monkeypatch.setattr(
+        tagging_pipeline_service.smart_tag_service,
+        "get_active_job",
+        lambda: SimpleNamespace(job_id="smart-active", status="running"),
+    )
+    enqueue = test_client.post("/api/vlm/caption-batch", json={"image_ids": [42]})
+    assert enqueue.status_code == 200
+    assert enqueue.json()["status"] == "queued"
+
+    try:
+        progress = test_client.get("/api/vlm/caption-batch/progress")
+        assert progress.status_code == 200
+        queue_info = progress.json()["pipeline_queue"]
+        assert queue_info["total_queued"] == 1
+        assert queue_info["queued"][0]["kind"] == "vlm-caption-batch"
+        assert queue_info["queued"][0]["position"] == 1
+    finally:
+        get_tagging_pipeline_service().remove_queued_jobs(KIND_VLM)
+
+
+def test_vlm_batch_cancel_clears_queued_entries(monkeypatch, test_client):
+    from types import SimpleNamespace
+
+    from services import tagging_pipeline_service
+
+    monkeypatch.setattr(
+        tagging_pipeline_service.smart_tag_service,
+        "get_active_job",
+        lambda: SimpleNamespace(job_id="smart-active", status="running"),
+    )
+    enqueue = test_client.post("/api/vlm/caption-batch", json={"image_ids": [7]})
+    assert enqueue.status_code == 200
+    assert enqueue.json()["status"] == "queued"
+
+    cancel = test_client.post("/api/vlm/caption-batch/cancel")
+    assert cancel.status_code == 200
+    body = cancel.json()
+    assert body["status"] == "queue_cleared"
+    assert body["removed_queued"] == 1
+
+    # Nothing running and nothing queued anymore → the old 400 contract.
+    second = test_client.post("/api/vlm/caption-batch/cancel")
+    assert second.status_code == 400
+
+
+def test_start_caption_batch_from_queue_starts_claimed_batch(monkeypatch):
+    """The queued-dispatch entry point schedules the batch on the captured loop."""
+    import asyncio
+    import threading
+
+    import routers.vlm as vlm_router
+
+    started = threading.Event()
+
+    async def fake_run_batch(image_source):
+        with vlm_router._batch_state_lock:
+            vlm_router._batch_state["running"] = False
+        started.set()
+
+    monkeypatch.setattr(vlm_router, "_run_batch", fake_run_batch)
+    monkeypatch.setattr(
+        vlm_router,
+        "_build_batch_image_source",
+        lambda request: vlm_router._BatchImageSource(
+            source_type="image_ids", total=1, iter_chunks=lambda: iter([[1]])
+        ),
+    )
+    monkeypatch.setattr(
+        vlm_router,
+        "_build_config",
+        lambda overrides=None: vlm_router.VLMConfig(endpoint="https://example.test/v1", model="m"),
+    )
+
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=loop.run_forever, daemon=True)
+    thread.start()
+    try:
+        vlm_router.claim_caption_batch_slot()
+        vlm_router.start_caption_batch_from_queue({"image_ids": [1]}, loop)
+        assert started.wait(5.0), "queued batch never started on the captured loop"
+    finally:
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(timeout=2.0)
+        loop.close()
+        with vlm_router._batch_state_lock:
+            vlm_router._batch_state["running"] = False
 
 
 def test_vlm_caption_batch_releases_slot_when_source_resolution_fails(monkeypatch, test_client):
@@ -513,3 +621,46 @@ def test_vlm_caption_batch_releases_slot_when_source_resolution_fails(monkeypatc
 
     assert response.status_code == 400
     assert vlm_router.is_caption_batch_active() is False
+
+
+def test_vlm_caption_batch_resolves_selection_count_off_event_loop(monkeypatch, test_client):
+    """Selection-token source resolution must not run on the event loop.
+
+    count_selection_token_ids runs a filtered COUNT over the whole library —
+    a slow synchronous SQLite query on 80k+ libraries. caption_batch must
+    resolve the image source in a worker thread (same idiom as
+    colors.start_analysis), keeping the loop free for progress polls.
+    """
+    import routers.vlm as vlm_router
+    from services import tag_export_service
+
+    observed: dict = {}
+
+    def fake_count(selection_token):
+        # Inside a worker thread there is no running loop; on the event loop
+        # thread get_running_loop() succeeds.
+        try:
+            asyncio.get_running_loop()
+            observed["ran_on_event_loop"] = True
+        except RuntimeError:
+            observed["ran_on_event_loop"] = False
+        return 0
+
+    monkeypatch.setattr(tag_export_service, "count_selection_token_ids", fake_count)
+
+    scheduled = []
+    monkeypatch.setattr(vlm_router.asyncio, "create_task", lambda coro: scheduled.append(coro))
+
+    try:
+        response = test_client.post(
+            "/api/vlm/caption-batch", json={"selection_token": "token-off-loop"}
+        )
+        assert response.status_code == 200
+        assert response.json()["source"] == "selection_token"
+    finally:
+        for coro in scheduled:
+            coro.close()
+        with vlm_router._batch_state_lock:
+            vlm_router._batch_state["running"] = False
+
+    assert observed["ran_on_event_loop"] is False
