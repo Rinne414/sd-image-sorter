@@ -734,7 +734,7 @@ Quality bar:
 
 ### Debt-16: AI runtime guard is coarse and not yet a real scheduler
 
-- Status: partially mitigated
+- Status: largely resolved (v3.4.2). The three user-facing AI job kinds (gallery tagging, Smart Tag, VLM caption batch) now share a FIFO queue at the `TaggingPipelineService` coordinator: a busy runtime enqueues instead of returning 409, the queue drains automatically after success/error/cancel, duplicate consecutive submits merge, queued entries are cancellable, progress endpoints expose `pipeline_queue`, and the frontend renders "Queued #N" with F5 re-attach. Remaining (still open, lower priority): the queue is in-memory only (lost on restart), there are no priority levels or per-model VRAM budgets, and non-job heavyweight paths (model-health probes, similarity embedding builds) still rely on the coarse `ai_runtime_guard` gate rather than the queue.
 - Type: runtime stability / performance debt
 - Impact: high
 - Risk if ignored:
@@ -763,13 +763,12 @@ Quality bar:
 
 ### Debt-17: Similarity search is bounded and chunked but still linear-scan
 
-- Status: partially mitigated
+- Status: largely resolved (v3.3.2 Phase 1; verified 2026-06-12). The exact paginated search now runs as a single vectorized matmul over a persisted, signature-invalidated vector cache (`STATE_DIR/similarity-index/`, ~13ms at 50k images measured), with the chunked streaming scan retained as the always-available fallback. The top-k `/api/similarity/near` path additionally uses an optional persisted hnswlib ANN index (`similarity_ann.py`) with exact re-scoring; it silently falls back to the exact matmul when hnswlib is absent. Remaining: (1) hnswlib is in `requirements.txt` but NOT in `requirements-core.txt` or the `clip` Prepare group, so default installs never get the ANN accelerator (deliberate — wheel availability is not guaranteed on every platform and the exact path is already fast); (2) `find_duplicates` is still bounded all-pairs O(n²) capped at `DUPLICATE_SYNC_MAX_EMBEDDINGS=5000` and would need an ANN k-NN-graph redesign to scale.
 - Type: performance / scalability debt
-- Impact: medium to high
-- Risk if ignored:
-  Very large libraries will no longer build one giant embedding matrix, but every search still scans all candidate embeddings in chunks. Latency will grow with library size, and duplicate search remains a bounded synchronous all-pairs style workflow.
+- Impact: low (was medium-high before the v3.3.2 vector cache + ANN work)
 - Related files:
   `backend/similarity.py`
+  `backend/similarity_ann.py`
   `backend/services/similarity_service.py`
   `backend/tests/test_resource_safety.py`
 - Observed problem:
@@ -1098,23 +1097,23 @@ These are deferred from the v3.2.1 stability sweep and tracked for the next rele
 
 ---
 
-## TODO After v3.4.1 (recorded 2026-06-11)
+## TODO After v3.4.1 (recorded 2026-06-11) — ALL RESOLVED in v3.4.2 (2026-06-12)
 
-v3.4.1 shipped the HIGH fake-function fixes (SAM3 confidence slider, Quick Auto Censor button, Analytics tag-click) plus Smart Tag `skip_existing` and the ComfyUI runtime-prompt fix. Remaining known items, in rough priority order. **Verify each against current code before acting — these notes age.**
+v3.4.1 shipped the HIGH fake-function fixes (SAM3 confidence slider, Quick Auto Censor button, Analytics tag-click) plus Smart Tag `skip_existing` and the ComfyUI runtime-prompt fix. Every remaining item below was closed in v3.4.2:
 
 ### Needs owner decision
 
-- [ ] **Clear Gallery button placement** — owner asked "Where is my clear gallery button???"; it was relocated in v3.3.3 to 導入圖片 → 高级选项 → danger zone (`#btn-clear-db`, handler in `frontend/js/app.js` ~5638). Owner never confirmed whether the new location is acceptable or wants it moved back/elsewhere.
+- [x] **Clear Gallery button placement** — owner decided 2026-06-12: "It must in a clear place that can be seen in the gallery page." Moved to the right end of the gallery toolbar (always visible, danger-styled, separated from everyday controls); removed from the Import modal's advanced panel. E2E locks the placement.
 
 ### Remaining fake-functions (MEDIUM/LOW, from the v3.4.x sweep)
 
-- [ ] **Filter presets UI** (MEDIUM) — preset save/load referenced in copy/docs but not functional. Implement or remove the promise.
-- [ ] **Prompts `count` parameter** (MEDIUM/LOW) — accepted by the prompt-generation API but not honored. Implement or strip from schema/docs.
-- [ ] **`/api/dataset/translate` doc** (LOW) — documented behavior doesn't match implementation; doc-only rewrite.
-- [ ] **WASD sort combo counter** (LOW) — UI element and logic disagree (`frontend/js/manual-sort.js`); wire it or remove it.
+- [x] **Filter presets UI** (MEDIUM) — verified: full JS logic existed with ZERO UI entry point. Presets bar added to the filter editor (save/load/delete); e2e round-trip test added.
+- [x] **Prompts `count` parameter** (MEDIUM/LOW) — verified fake (generator never read it). Implemented: 1-20, reproducible seed+i batch in `prompts[]`, top-level single-prompt contract unchanged.
+- [x] **`/api/dataset/translate` doc** (LOW) — docs described fields/semantics that never existed; rewritten to the real VLM/external provider contract (doc-only).
+- [x] **WASD sort combo counter** (LOW) — verified: JS counted correctly but the `#combo-display` element was dropped in the v2.6.0 markup restructure; element restored, e2e added.
 
 ### Roadmap (briefs above in this file: Debt-16, Debt-17)
 
-- [ ] **ANN index for CLIP similarity** — search is still linear-scan; matters above ~50k images. See Debt-17.
-- [ ] **AI job scheduler** — v3.4.0's three-way 409 coordinator is the stopgap; a real queue would run jobs back-to-back unattended. See Debt-16.
-- [ ] **VLM token count off the event loop** (LOW, pre-existing) — token counting blocks the loop under heavy VLM batches; move to an executor.
+- [x] **ANN index for CLIP similarity** — STALE note: already shipped in v3.3.2 (hnswlib top-k bypass + persisted vector cache; 50k exact search ≈13ms measured). See updated Debt-17. Deliberately NOT added to default installs (wheel availability risk vs ~zero benefit at current scales).
+- [x] **AI job scheduler** — shipped in v3.4.2: FIFO queue replaces 409 for the three AI start endpoints (auto-start after success/error/cancel, duplicate merge, queued-cancel, queued progress text, F5 re-attach). In-memory only; see updated Debt-16.
+- [x] **VLM token count off the event loop** (LOW) — verified true (selection-count COUNT query ran on the loop at batch start); moved to `asyncio.to_thread` with a regression test.

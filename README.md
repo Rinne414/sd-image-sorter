@@ -15,20 +15,20 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.4.1-ff8a00" alt="Version">
+  <img src="https://img.shields.io/badge/version-3.4.2-ff8a00" alt="Version">
   <img src="https://img.shields.io/badge/python-3.12%20%7C%203.13-3776AB" alt="Python">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-4B5563" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-22C55E" alt="License">
 </p>
 
 <p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.1-windows-portable.zip"><b>Download for Windows</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.2-windows-portable.zip"><b>Download for Windows</b></a>
   ·
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.1-linux-portable-x86_64.tar.gz"><b>Linux x86_64 (portable)</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.2-linux-portable-x86_64.tar.gz"><b>Linux x86_64 (portable)</b></a>
   ·
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.1-linux-portable-aarch64.tar.gz"><b>Linux aarch64 (portable)</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.2-linux-portable-aarch64.tar.gz"><b>Linux aarch64 (portable)</b></a>
   ·
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.1-linux.tar.gz">Linux (source)</a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.2-linux.tar.gz">Linux (source)</a>
   ·
   <a href="#quick-start">Quick Start</a>
 </p>
@@ -198,7 +198,7 @@
 
 ### Windows
 
-1. 下载 [sd-image-sorter-v3.4.1-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.1-windows-portable.zip)
+1. 下载 [sd-image-sorter-v3.4.2-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.2-windows-portable.zip)
 2. 解压到任意目录
 3. 双击 `run-portable.bat`
 4. 浏览器会自动打开 `http://localhost:8487`
@@ -211,15 +211,15 @@
 按 CPU 架构挑一个：
 
 - **x86_64**（一般 PC、Intel/AMD 桌面/笔电、Steam Deck、传统 x86 服务器）
-  下载 [sd-image-sorter-v3.4.1-linux-portable-x86_64.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.1-linux-portable-x86_64.tar.gz)（约 80 MB）
+  下载 [sd-image-sorter-v3.4.2-linux-portable-x86_64.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.2-linux-portable-x86_64.tar.gz)（约 80 MB）
 - **aarch64 / arm64**（Raspberry Pi 4 / 5、ARM Linux 服务器、AWS Graviton、Apple Silicon 在 Linux 下）
-  下载 [sd-image-sorter-v3.4.1-linux-portable-aarch64.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.1-linux-portable-aarch64.tar.gz)（约 75 MB）
+  下载 [sd-image-sorter-v3.4.2-linux-portable-aarch64.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.2-linux-portable-aarch64.tar.gz)（约 75 MB）
 
 解压并执行（指令一样，看你下哪个 tarball）：
 
 ```bash
 # 例如 x86_64
-tar xzf sd-image-sorter-v3.4.1-linux-portable-x86_64.tar.gz
+tar xzf sd-image-sorter-v3.4.2-linux-portable-x86_64.tar.gz
 cd sd-image-sorter
 chmod +x run-portable.sh
 ./run-portable.sh
@@ -229,11 +229,11 @@ chmod +x run-portable.sh
 
 **源码版（需要自己装 Python 3.12+）：**
 
-1. 下载 [sd-image-sorter-v3.4.1-linux.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.1-linux.tar.gz)
+1. 下载 [sd-image-sorter-v3.4.2-linux.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.2-linux.tar.gz)
 2. 解压并执行：
 
 ```bash
-tar xzf sd-image-sorter-v3.4.1-linux.tar.gz
+tar xzf sd-image-sorter-v3.4.2-linux.tar.gz
 cd sd-image-sorter
 chmod +x run.sh
 ./run.sh
@@ -571,7 +571,7 @@ It scans folders, reads SD metadata, tags images with WD14 models, finds similar
 
 #### Windows Portable
 
-1. Download [sd-image-sorter-v3.4.1-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.1-windows-portable.zip)
+1. Download [sd-image-sorter-v3.4.2-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.4.2-windows-portable.zip)
 2. Extract it anywhere
 3. Double-click `run-portable.bat`
 4. Your browser opens `http://localhost:8487`
@@ -590,7 +590,7 @@ Pick the right tarball for your CPU:
 
 ```bash
 # x86_64 example (commands identical for aarch64; just download the matching tarball)
-tar xzf sd-image-sorter-v3.4.1-linux-portable-x86_64.tar.gz
+tar xzf sd-image-sorter-v3.4.2-linux-portable-x86_64.tar.gz
 cd sd-image-sorter
 chmod +x run-portable.sh
 ./run-portable.sh
@@ -601,7 +601,7 @@ Works on every modern Linux distro on either architecture, including ones whose 
 **Source (bring your own Python 3.12 / 3.13):**
 
 ```bash
-tar xzf sd-image-sorter-v3.4.1-linux.tar.gz
+tar xzf sd-image-sorter-v3.4.2-linux.tar.gz
 cd sd-image-sorter
 chmod +x run.sh
 ./run.sh

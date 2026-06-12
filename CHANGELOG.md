@@ -5,6 +5,42 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.2] - 2026-06-12
+
+AI jobs now queue instead of failing: starting tagging / Smart Tag / VLM captioning while another AI job runs enqueues it (FIFO) and it auto-starts when the current job finishes — no more 409 "busy, come back later". The Clear Library button is back on the gallery page where you can see it. Filter presets finally have their UI, the WASD combo counter is visible again, and `/api/prompts/generate` honors `count`.
+
+AI 任务现在会排队而不是报错：当另一个 AI 任务在跑时启动打标 / Smart Tag / VLM 描述，会自动加入队列（先进先出），当前任务结束后自动开始——不再弹 409"忙碌请稍后"。清空图库按钮回到图库页面一眼可见的位置。筛选预设终于有了界面入口，WASD 连击计数重新可见，`/api/prompts/generate` 的 `count` 参数真正生效。
+
+### Added / 新增
+- **AI job queue / AI 任务队列**: gallery tagging, Smart Tag, and VLM caption batches share a FIFO queue. A busy runtime returns `{"status": "queued", "queue_position": N}` (duplicate consecutive submits are merged with `duplicate: true`); the queue drains automatically after success, error, or cancel; each kind's cancel endpoint also removes its queued entries; pollers show "Queued #N / 排队中 #N" and an F5 while queued re-attaches the progress UI. The queue is in-memory and does not survive a restart. 409 remains only for the fail-closed sibling-status-unknown case.
+  - 图库打标、Smart Tag、VLM 批量描述共用一个先进先出队列。运行中再启动会返回排队状态（连续重复提交自动合并）；当前任务成功、出错或取消后队列自动继续；各自的取消接口同时清掉排队中的同类任务；进度条显示"排队中 #N"，排队期间 F5 后进度界面自动恢复。队列在内存中，重启服务后不保留。仅"无法确认兄弟任务状态"的保守拒绝场景仍返回 409。
+- **Filter presets UI / 筛选预设界面**: the save/load/delete preset logic existed since earlier versions but had no buttons — the filter editor now has a presets bar (name input, save button, preset chips with load/delete).
+  - 保存/载入/删除筛选预设的逻辑早已存在但一直没有入口按钮——筛选编辑器现在有了预设栏（命名、保存、点击载入、删除）。
+
+### Fixed / 修复
+- **Clear Library button visible on the gallery page / 清空图库按钮回到图库页面**: it was hidden inside the Import modal's collapsed "Advanced options" where nobody could find it. It now sits at the right end of the gallery toolbar — always visible, danger-styled, separated from everyday controls, with the same double-confirmation flow.
+  - 此前藏在导入弹窗折叠的"高级选项"里根本找不到。现在固定显示在图库工具栏最右端——红色危险样式、与常用按钮保持距离，确认弹窗流程不变。
+- **Prompts `count` honored / Prompt 生成 count 参数生效**: `/api/prompts/generate` accepted `count` (1-20) but always returned one prompt. It now returns a reproducible `prompts[]` batch (fixed seed gives seed+i per slot); the single-prompt top-level response shape is unchanged for existing callers.
+  - `/api/prompts/generate` 此前接受 `count`（1-20）却永远只回一条。现在返回可复现的 `prompts[]` 批量（固定 seed 时第 i 条用 seed+i）；顶层单条响应结构保持不变。
+- **WASD combo counter visible again / WASD 连击计数重新可见**: the combo kept counting after every successful sort action, but its display element was accidentally dropped in the v2.6.0 markup restructure — restored.
+  - 连击其实一直在计数，但其显示元素在 v2.6.0 重构时被误删——已恢复。
+- **VLM batch start no longer blocks the server / VLM 批量启动不再阻塞服务器**: counting a large filtered selection at batch start ran on the event loop; it now runs in a worker thread.
+  - 批量启动时统计大筛选集的查询此前跑在事件循环上，现已移入工作线程。
+- **/api/dataset/translate docs match reality / 翻译接口文档与实现一致**: the docs described request fields and per-item error semantics that never existed; rewritten to the real VLM/external provider contract (no behavior change).
+  - 文档此前描述了从不存在的请求字段与逐条错误语义；已按真实的 VLM/外部翻译提供方契约重写（行为无变化）。
+- **Model Manager manual-upgrade hint / 模型管理器升级提示**: a static hint now explains that downloaded models live in the old folder's `data` directory when upgrading by unzipping into a new folder — nothing is lost, copy the folder over.
+  - 模型管理器新增固定提示：手动解压新版本到新文件夹后模型"全部缺失"时，模型其实都在旧文件夹的 `data` 目录里，整个复制过来即可恢复。
+
+### Upgrading / 升级注意
+- No database migration. The AI-job 409 "busy" contract is gone for the three start endpoints — third-party scripts (if any) should treat `{"status": "queued"}` as success-pending instead of retrying.
+  - 不含数据库迁移。三个 AI 启动接口不再返回 409"忙碌"——如有第三方脚本，请把 `{"status": "queued"}` 当作"已受理待执行"处理，无需重试。
+- **Manual upgraders / 手动升级用户**: if you unzip a new release into a NEW folder, copy the old folder's entire `data` directory into it first — it holds your library database AND all downloaded models. Skipping this makes every model show "missing" (nothing is actually lost).
+  - 如果你是解压新 zip 到**新文件夹**升级：请先把旧文件夹的整个 `data` 目录复制过去——里面有你的图库数据库和所有已下载模型。不复制的话所有模型会显示"缺失"（其实什么都没丢）。
+
+### Verified, no change needed / 验证无需修改
+- The CLIP similarity ANN index roadmap item was already shipped in v3.3.2 (hnswlib top-k bypass with exact re-scoring + persisted vector cache; 50k-image exact search measured at ~13ms). The optional hnswlib accelerator stays out of the default install on purpose — wheels are not guaranteed on every platform and the exact path is already fast.
+  - CLIP 相似度 ANN 索引这一路线图项目其实在 v3.3.2 已上线（hnswlib top-k 加速 + 精确重打分 + 持久化向量缓存；5 万图精确搜索实测约 13ms）。可选的 hnswlib 加速器刻意不进默认安装——并非所有平台都有预编译包，且精确路径已经够快。
+
 ## [3.4.1] - 2026-06-11
 
 Smart Tag now honors "skip images that already have AI tags": a new default-on checkbox skips already-tagged gallery images (no tagger call, no VLM caption), shows a skipped count in progress and the completion message, and can be unchecked to re-tag. Previously the documented `skip_existing` option was accepted but never applied. Also fixes three non-functional UI surfaces: the SAM3 confidence slider, the Quick Auto Censor button, and Analytics tag clicks.

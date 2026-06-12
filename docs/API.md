@@ -1,6 +1,6 @@
 ﻿# SD Image Sorter API Documentation
 
-**Version:** 3.4.1
+**Version:** 3.4.2
 **Base URL:** `http://127.0.0.1:8487` (default; configurable via `SD_IMAGE_SORTER_PORT`)
 **Interactive Docs:** `http://127.0.0.1:8487/docs` (Swagger UI, same port as runtime)
 
@@ -481,6 +481,8 @@ Get available tagger models and runtime guidance. Each model item includes defau
 #### POST /api/tag/start
 Start background tagging (alias for POST /api/tag).
 
+**AI job queue (v3.4.2):** gallery tagging, Smart Tag, and VLM caption batches share one runtime. Starting any of them while another AI job is running no longer returns 409 — the job is enqueued (FIFO) and auto-starts when the current job finishes (including after an error or cancel). The start endpoint then returns `{"status": "queued", "pipeline_queued": true, "queue_id": "qN", "queue_position": N, "queue_length": N, "message": ..., "pipeline_owner": ..., "pipeline_mode": ...}` instead of the started-now shape. Re-submitting an identical request while it is already last in the queue returns the same shape with `"duplicate": true` instead of enqueueing twice. The queue is in-memory and does not survive a server restart. 409 is still returned for the fail-closed case (a sibling job's status could not be determined) and for validation errors. Each kind's cancel endpoint also removes that kind's queued entries (`removed_queued` count in the response).
+
 #### POST /api/tag
 Start background tagging.
 
@@ -506,6 +508,8 @@ The response now includes truthful runtime fields so the UI can distinguish targ
 - `runtime_backend_actual`
 - `runtime_backend_reason`
 - `memory_pressure_warning`
+
+**v3.4.2:** the progress snapshot additionally carries `pipeline_queue`: `{"total_queued": N, "queued": [{"queue_id", "kind", "position", "enqueued_at"}], "last_start_error"}` so pollers can render "Queued #N" before the job starts. The same field appears on the Smart Tag and VLM batch progress endpoints.
 
 #### POST /api/tag/reset
 Reset stuck tagging task.
@@ -872,7 +876,7 @@ Create or update an exclusion rule.
 Delete an exclusion rule.
 
 #### POST /api/prompts/generate
-Generate prompt.
+Generate one or more prompts.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -885,11 +889,16 @@ Generate prompt.
 | `style` | string | null | Art style |
 | `artist` | string | null | Artist style |
 | `body` | string | null | Body features |
-| `quality_preset` | string | "high" | Quality level (high/medium/low) |
+| `quality_preset` | string | "high" | Quality level (high/medium/low/none) |
 | `count_tag` | string | "1girl" | Character count tag |
 | `nsfw` | bool | false | Include NSFW tags |
 | `include_negative` | bool | true | Generate negative prompt |
 | `seed` | int | null | Random seed for reproducibility |
+| `count` | int | 1 | Number of prompts to generate (1-20) |
+| `categories` | object | {} | Manual Prompt Lab slots: `{<category>: {tags, weight, locked}}` |
+| `tag_sets` | array | [] | Tag set ids/names to apply |
+
+Response: `positive_prompt`, `negative_prompt`, `prompt` (alias of `positive_prompt`), `tags_used`, `exclusions_applied`, and `warnings` describe the first generated prompt, plus `count` (prompts actually generated) and `prompts` (array of per-prompt objects with the same fields, length == `count`). With a fixed `seed` and `count > 1`, prompt slot `i` uses `seed + i`, so the batch is varied but reproducible.
 
 #### POST /api/prompts/validate
 Validate prompt conflicts.
@@ -1153,6 +1162,7 @@ Caption a single image. Body: `{image_id, override_settings?}`. Returns `{captio
 
 #### POST /api/vlm/caption-batch
 Start a concurrency-controlled batch caption job. Body: `{image_ids|filter, concurrency, retries, retry_delay, output_format, prompt_preset?}`.
+While another AI job is running the batch is queued instead of rejected — see the AI job queue notes under `POST /api/tag/start` (v3.4.2). The cancel endpoint also removes queued VLM entries.
 
 #### GET /api/vlm/caption-batch/progress
 Live progress for the running batch: `{state, total, completed, failed, tokens_used, current_image, started_at, errors: [{image_id, error, type}]}` (errors list capped at 50).
@@ -1322,19 +1332,29 @@ Returns `{items[], skipped_unreadable}`. Each item carries `{ds_id, abs_path, fi
 
 #### POST /api/dataset/translate
 
-Translate a list of caption / tag strings between languages (typically English ↔ Chinese) using a chain of free translation providers (google_free / mymemory_free / bing_free / baidu_free / ...) so users can localize a LoRA training set's captions without an API key. The server tries providers in fallback order until one succeeds; failed providers are surfaced via the per-item `provider` and `error` fields.
+Translate a list of Dataset Maker caption / tag strings for human review (typically English → Chinese). Translation output is advisory only — the frontend never writes it back into training captions unless the user explicitly asks. Two provider modes:
+
+- `provider_mode: "vlm"` (**default**) — uses the configured VLM endpoint (Settings → VLM) with a strict JSON-array translation prompt. Returns 400 if no VLM endpoint is configured. `prompt` optionally overrides the translation instruction.
+- any other `provider_mode` value (the frontend sends `"external"`) — uses no-key web translation providers selected via `external_provider`: a single provider name, or a fallback chain keyword — `auto` / `free` / `auto_global` (global chain: google_free → mymemory_free → bing_free → itranslate_free → ...) or `auto_cn` / `mainland` / `china` / `physton` (mainland chain: baidu_free → alibaba_free → sogou_free → ...). Chain keywords try providers in order until one returns non-empty output; a single named provider fails fast without fallback.
 
 Body:
 ```json
 {
   "texts": ["1girl, solo, looking_at_viewer"],
-  "source_lang": "auto",
+  "mode": "tags",
+  "source_lang": "en",
   "target_lang": "zh-CN",
-  "providers": ["google_free", "mymemory_free"]
+  "provider_mode": "external",
+  "external_provider": "auto",
+  "prompt": null
 }
 ```
 
-`providers` is optional; omit it to use the default free-provider chain. Returns `{results: [{text, translated, provider, error}], errors: int}`.
+Field notes: `texts` max 200 items. `mode: "tags"` (default) splits comma-separated tag lists, dedupes tokens, and translates unique terms through an on-disk translation cache; other values translate whole lines — but inputs that all look like tag lists are auto-treated as tags. `external_provider` is ignored in VLM mode; `prompt` is ignored in external mode. `source_lang` defaults to `en` (`auto` accepted).
+
+Returns `{translations: [...]}` — same length and order as `texts` — plus provider metadata. VLM mode adds `provider_mode: "vlm"`, `provider`, `model`, `tokens_used`. External mode adds `provider_mode: "external"`, `provider` (the provider that actually succeeded), `source_lang`, `target_lang`, `mode`, `cache_hits`, `cache_misses`, `unique_terms`. There are no per-item `provider`/`error` fields: failures are HTTP errors — 400 when no VLM endpoint is configured, 502 with detail `{error, error_type, provider}` (and `model` in VLM mode) when the provider — or every provider in an auto chain — fails or returns empty output.
+
+Supported external provider names (`*_free` aliases and spelling variants accepted): `google_free`, `mymemory_free`, and `baidu_free`-style Baidu tag lookup run on built-in HTTP clients; `bing_free`, `itranslate_free`, `lingvanex_free`, `modernmt_free`, `systran_free`, `translatecom_free`, `argos_free`, `papago_free`, `reverso_free`, `translateme_free`, `elia_free`, `judic_free`, `alibaba_free`, `sogou_free`, `qqtransmart_free`, `qqfanyi`, `youdao_free`, `iciba_free`, `cloudyi_free`, `caiyun_free` require the optional `translators` runtime (auto-installed on first use). Two keyed providers also exist: `bing` (env `SD_IMAGE_SORTER_TRANSLATE_BING_KEY` / `..._BING_REGION`) and `custom` (env `SD_IMAGE_SORTER_TRANSLATE_CUSTOM_URL` / `..._CUSTOM_KEY` / `..._CUSTOM_KEY_HEADER`).
 
 ---
 
@@ -1363,7 +1383,7 @@ Body:
 
 `training_purpose` accepts `style` / `character` / `general` / `concept` (plus aliases `style_lora` / `character_lora` / `concept_lora` / `nsfw` / `nsfw_lora`). Each picks a different VLM prompt: STYLE describes medium / lighting / composition only, CHARACTER describes pose / framing / mood and explicitly avoids hair / eye / signature outfit, GENERAL covers full subject / pose / clothing / scene.
 
-Returns 409 if another Smart Tag job is already running on the same backend.
+Since v3.4.2 a busy AI runtime (another Smart Tag, gallery tagging, or VLM batch run) queues the job instead of returning 409 — see the AI job queue notes under `POST /api/tag/start`. 409 remains only for validation errors and the fail-closed case where a sibling job's status could not be determined. The progress snapshot includes `pipeline_queue` while entries are waiting.
 
 #### GET /api/smart-tag/progress
 
