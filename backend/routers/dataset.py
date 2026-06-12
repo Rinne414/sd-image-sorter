@@ -1163,8 +1163,35 @@ async def _translate_external_texts(payload: DatasetTranslateRequest, texts: Lis
 @router.post(
     "/dataset/translate",
     summary="Translate Dataset Maker caption/tag text for Chinese review",
+    description=(
+        "Translate up to 200 caption/tag strings for human review. "
+        "`provider_mode='vlm'` (default) uses the configured VLM endpoint "
+        "(400 if none configured); any other value uses no-key web providers "
+        "selected via `external_provider` — a single provider name fails fast, "
+        "while chain keywords (`auto`/`free`/`auto_global`, or "
+        "`auto_cn`/`mainland`/`china`/`physton`) try providers in fallback "
+        "order until one returns non-empty output. `mode='tags'` dedupes "
+        "comma-separated tags and translates unique tokens through an on-disk "
+        "cache. Returns `{translations: [...]}` (same length/order as `texts`) "
+        "plus provider metadata; provider failures raise HTTP 502 with "
+        "`{error, error_type, provider}` detail — there are no per-item error "
+        "fields."
+    ),
 )
 async def post_dataset_translate(payload: DatasetTranslateRequest) -> Dict[str, Any]:
+    """Translate Dataset Maker texts via the configured VLM or free web providers.
+
+    Response contract:
+    - Always: ``translations`` — list aligned 1:1 with ``payload.texts``.
+    - VLM mode adds ``provider_mode='vlm'``, ``provider``, ``model``,
+      ``tokens_used``.
+    - External mode adds ``provider_mode='external'``, ``provider`` (the one
+      that actually succeeded), ``source_lang``, ``target_lang``, ``mode``,
+      ``cache_hits``, ``cache_misses``, ``unique_terms``.
+    - Errors: 400 when VLM mode has no endpoint configured; 502 with
+      ``{error, error_type, provider}`` detail when the provider (or every
+      provider in an auto chain) fails or returns empty output.
+    """
     texts = [str(text or "").strip() for text in payload.texts]
     if not texts:
         return {"translations": [], "provider_mode": payload.provider_mode}

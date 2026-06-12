@@ -255,9 +255,29 @@ class PromptService:
 
     def generate_prompt(self, config: Dict[str, Any]) -> Dict[str, Any]:
         gen = self._generator()
-        result = gen.generate(config)
-        result.setdefault("prompt", result.get("positive_prompt", ""))
-        return result
+
+        try:
+            count = int(config.get("count") or 1)
+        except (TypeError, ValueError):
+            count = 1
+        count = max(1, min(count, 20))
+        base_seed = config.get("seed")
+
+        results: List[Dict[str, Any]] = []
+        for index in range(count):
+            iteration_config = dict(config)
+            if base_seed is not None:
+                # Vary the seed per slot so a fixed seed still yields distinct
+                # prompts, while the whole batch stays reproducible.
+                iteration_config["seed"] = base_seed + index
+            result = gen.generate(iteration_config)
+            result.setdefault("prompt", result.get("positive_prompt", ""))
+            results.append(result)
+
+        response = dict(results[0])
+        response["count"] = len(results)
+        response["prompts"] = results
+        return response
 
     def validate_prompt(self, tags: List[str]) -> Dict[str, Any]:
         gen = self._generator()

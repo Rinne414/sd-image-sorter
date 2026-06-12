@@ -298,23 +298,38 @@ async def delete_exclusion_rule(
     "/generate",
     summary="Generate random prompt",
     description="""
-Generate a random prompt based on provided configuration.
+Generate one or more random prompts based on provided configuration.
 
 The generator randomly selects tags from each specified category
 while respecting exclusion rules (e.g., no swimsuit with school uniform).
 
-Set a `seed` for reproducible prompt generation.
+Set a `seed` for reproducible prompt generation. Set `count` (1-20) to
+generate multiple prompts in one call; with a fixed `seed`, slot `i` uses
+`seed + i` so the batch is varied but reproducible.
     """,
     responses={
         200: {
-            "description": "Generated prompt",
+            "description": "Generated prompt(s)",
             "content": {
                 "application/json": {
                     "example": {
-                        "prompt": "1girl, solo, masterpiece, best quality, dress, standing, smile",
+                        "positive_prompt": "masterpiece, best_quality, 1girl, solo, dress, standing, smile",
                         "negative_prompt": "lowres, bad anatomy, bad hands",
-                        "seed": 12345,
-                        "config": {}
+                        "prompt": "masterpiece, best_quality, 1girl, solo, dress, standing, smile",
+                        "tags_used": [{"tag": "dress", "category": "outfit"}],
+                        "exclusions_applied": [],
+                        "warnings": [],
+                        "count": 1,
+                        "prompts": [
+                            {
+                                "positive_prompt": "masterpiece, best_quality, 1girl, solo, dress, standing, smile",
+                                "negative_prompt": "lowres, bad anatomy, bad hands",
+                                "prompt": "masterpiece, best_quality, 1girl, solo, dress, standing, smile",
+                                "tags_used": [{"tag": "dress", "category": "outfit"}],
+                                "exclusions_applied": [],
+                                "warnings": []
+                            }
+                        ]
                     }
                 }
             }
@@ -326,7 +341,7 @@ async def generate_prompt(
     service: PromptService = Depends(get_prompt_service),
 ):
     """
-    Generate a random prompt based on configuration.
+    Generate one or more random prompts based on configuration.
 
     Randomly selects tags from each specified category and combines
     them into a complete prompt. Applies exclusion rules to prevent
@@ -348,13 +363,18 @@ async def generate_prompt(
             - nsfw: Include NSFW tags
             - include_negative: Generate negative prompt
             - seed: Random seed for reproducibility
+            - count: Number of prompts to generate (1-20, default 1)
+            - categories / tag_sets: Manual Prompt Lab slot selections
 
     Returns:
         Dict containing:
-        - prompt: Generated positive prompt
-        - negative_prompt: Generated negative prompt (if enabled)
-        - seed: Seed used for generation
-        - config: Effective configuration used
+        - positive_prompt / prompt: First generated positive prompt
+        - negative_prompt: First generated negative prompt (if enabled)
+        - tags_used: Tags chosen for the first prompt
+        - exclusions_applied: Exclusion-rule tags applied to the first prompt
+        - warnings: Conflict warnings for the first prompt
+        - count: Number of prompts actually generated
+        - prompts: List of per-prompt result objects (length == count)
     """
     return service.generate_prompt(config.model_dump())
 

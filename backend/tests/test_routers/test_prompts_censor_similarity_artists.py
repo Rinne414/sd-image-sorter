@@ -127,6 +127,81 @@ class TestPromptsRouter:
         assert data["seed"] == 12345
         assert data["config"]["categories"]["style"]["locked"] is True
 
+    def test_generate_prompt_honors_count_parameter(self, test_client, monkeypatch):
+        """count=N must return N generated prompts, not silently one."""
+        from routers import prompts as prompts_router
+
+        class FakeGenerator:
+            def __init__(self):
+                self.calls = []
+
+            def generate(self, config):
+                self.calls.append(dict(config))
+                return {
+                    "positive_prompt": f"prompt-{len(self.calls)}",
+                    "negative_prompt": "lowres",
+                    "tags_used": [],
+                    "exclusions_applied": [],
+                    "warnings": [],
+                }
+
+        fake = FakeGenerator()
+        monkeypatch.setattr(prompts_router, "get_generator", lambda _db: fake)
+
+        response = test_client.post(
+            "/api/prompts/generate",
+            json={"seed": 100, "count": 3, "count_tag": "", "quality_preset": "none"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["count"] == 3
+        assert [item["positive_prompt"] for item in data["prompts"]] == [
+            "prompt-1",
+            "prompt-2",
+            "prompt-3",
+        ]
+        # A fixed seed must still produce *distinct* prompts per slot, varied
+        # deterministically so the same request reproduces the same batch.
+        assert [call.get("seed") for call in fake.calls] == [100, 101, 102]
+        # Single-prompt top-level contract stays intact for existing callers
+        # (prompt-lab.js reads result.positive_prompt || result.prompt).
+        assert data["positive_prompt"] == "prompt-1"
+        assert data["prompt"] == "prompt-1"
+
+    def test_generate_prompt_count_one_keeps_single_prompt_contract(self, test_client, monkeypatch):
+        """Default count=1 performs exactly one generation and echoes it."""
+        from routers import prompts as prompts_router
+
+        class FakeGenerator:
+            def __init__(self):
+                self.calls = 0
+
+            def generate(self, config):
+                self.calls += 1
+                return {
+                    "positive_prompt": "solo prompt",
+                    "negative_prompt": "",
+                    "tags_used": [],
+                    "exclusions_applied": [],
+                    "warnings": [],
+                }
+
+        fake = FakeGenerator()
+        monkeypatch.setattr(prompts_router, "get_generator", lambda _db: fake)
+
+        response = test_client.post(
+            "/api/prompts/generate",
+            json={"count_tag": "", "quality_preset": "none"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert fake.calls == 1
+        assert data["count"] == 1
+        assert len(data["prompts"]) == 1
+        assert data["positive_prompt"] == "solo prompt"
+
     def test_validate_prompt_uses_generator_output(self, test_client, monkeypatch):
         from routers import prompts as prompts_router
 
