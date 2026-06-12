@@ -360,6 +360,19 @@
                 this._toast(`Tagging failed: ${body.slice(0, 120)}`, 'error');
                 return;
             }
+            const startData = await r.json().catch(() => ({}));
+            if (startData?.status === 'queued' && startData?.pipeline_queued === true) {
+                // v3.4.1 AI job queue: another AI job is running; this one
+                // was queued and auto-starts when the current job finishes.
+                this._toast(startData.duplicate
+                    ? this._t('aiQueue.duplicateToast', 'An identical job is already queued')
+                    : this._t('aiQueue.queuedToast', 'Queued — starts automatically after the current AI job finishes'),
+                    'info', 6000);
+                if (typeof window.App?.beginTaggingProgress === 'function') {
+                    window.App.beginTaggingProgress();
+                }
+                return;
+            }
             const startedKey = retagAll ? 'dataset.tagAllStartedRetag' : 'dataset.tagAllStartedSkip';
             const startedFb = retagAll
                 ? 'Tagging started (retagging EVERY image). Progress is at the top of the screen.'

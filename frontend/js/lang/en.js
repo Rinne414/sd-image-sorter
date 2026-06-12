@@ -432,6 +432,10 @@ window.I18nLang_en = {
     'filter.appliedToast': 'Filters applied',
     'filter.clearedToast': 'Filters cleared',
     'filter.presetNameRequired': 'Please enter a preset name',
+    'filter.presets': 'Presets',
+    'filter.savePreset': 'Save preset',
+    'filter.presetNamePlaceholder': 'Preset name',
+    'filter.presetSaveHint': 'Saves the currently applied filters as a named preset',
     'filter.presetSaved': 'Preset "{name}" saved',
     'filter.presetLoaded': 'Preset "{name}" loaded',
     'filter.presetDeleted': 'Preset "{name}" deleted',
@@ -1918,6 +1922,7 @@ window.I18nLang_en = {
     'models.bulkDownload': 'Download all recommended models',
     'models.bulkDownloadTitle': 'Download every recommended model in one go (skips Wenaka Privacy YOLO and ToriiGate; uses default WD14 only)',
     'models.bulkDownloadHelp': 'Pulls every Setup-required model the app uses (default WD14 tagger, NudeNet, CLIP, Aesthetic, Artist ID, SAM 3). Skips the opt-in Wenaka Privacy YOLO and the heavy ToriiGate alternative tagger. You will see a disk-space estimate before anything starts.',
+    'models.manualUpgradeHint': 'Models suddenly missing after upgrading to a new folder? Your downloads live in the old folder\'s "data" directory — copy that whole folder into the new installation and restart. Nothing was deleted.',
     'models.bulkConfirmTitle': 'Are you sure? Download all recommended models',
     'models.bulkConfirmIntro': 'About to download {count} model(s). Estimated disk space needed: {size}.',
     'models.bulkConfirmTotalLabel': 'Total to download',
@@ -2722,6 +2727,12 @@ window.I18nLang_en = {
     'tagger.bgDetails': 'Details',
     'tagger.bgDetailsTitle': 'Open tagger modal',
     'censor.queueCleared': 'Queue cleared',
+
+    // AI job queue (v3.4.1: tag / smart-tag / VLM batch queue instead of 409)
+    'aiQueue.queuedToast': 'Queued — starts automatically after the current AI job finishes',
+    'aiQueue.duplicateToast': 'An identical job is already queued',
+    'aiQueue.queuedProgress': 'Queued #{position} — waiting for the current AI job to finish',
+    'aiQueue.startFailed': 'Queued job failed to start: {error}',
 
     // ========================
     // Image Reader

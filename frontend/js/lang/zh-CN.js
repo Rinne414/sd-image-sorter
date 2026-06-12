@@ -434,6 +434,10 @@ window.I18nLang_zhCN = {
     'filter.appliedToast': '已应用筛选',
     'filter.clearedToast': '已清空筛选',
     'filter.presetNameRequired': '请输入预设名称',
+    'filter.presets': '筛选预设',
+    'filter.savePreset': '保存预设',
+    'filter.presetNamePlaceholder': '预设名称',
+    'filter.presetSaveHint': '将当前已应用的筛选条件保存为预设',
     'filter.presetSaved': '预设“{name}”已保存',
     'filter.presetLoaded': '已加载预设“{name}”',
     'filter.presetDeleted': '预设“{name}”已删除',
@@ -2093,6 +2097,7 @@ window.I18nLang_zhCN = {
     'models.bulkDownload': '一键下载推荐模型',
     'models.bulkDownloadTitle': '一次性下载所有推荐模型（跳过 Wenaka Privacy YOLO、跳过 ToriiGate；WD14 只下默认的那个）',
     'models.bulkDownloadHelp': '一次性下载本机会用到的所有推荐模型：WD14（只下默认的 swinv2 那个）、NudeNet、CLIP、美学评分、画师识别、SAM 3。会跳过自选才下载的 Wenaka Privacy YOLO，也会跳过体积特别大的 ToriiGate 备选打标。点击之后会先弹出确认窗，告诉你大约要下多少 GB。',
+    'models.manualUpgradeHint': '升级到新文件夹后模型突然全部"缺失"？你下载过的模型都在旧文件夹的 "data" 目录里——把整个 data 文件夹复制到新安装目录再重启即可恢复，什么都没有丢。',
     'models.bulkConfirmTitle': '确定要下吗？一次下完所有推荐模型',
     'models.bulkConfirmIntro': '即将下载 {count} 个模型。预计要占用磁盘空间约：{size}。',
     'models.bulkConfirmTotalLabel': '总下载量',
@@ -2888,6 +2893,12 @@ window.I18nLang_zhCN = {
     'tagger.bgDetails': '详情',
     'tagger.bgDetailsTitle': '打开打标窗口',
     'censor.queueCleared': '队列已清空',
+
+    // AI 任务队列（v3.4.1：打标 / 智能打标 / VLM 批量改为排队而非 409）
+    'aiQueue.queuedToast': '已加入队列，当前任务完成后自动开始',
+    'aiQueue.duplicateToast': '相同任务已在队列中',
+    'aiQueue.queuedProgress': '排队中 #{position} — 等待当前 AI 任务完成',
+    'aiQueue.startFailed': '排队任务启动失败：{error}',
 
     // ========================
     // 图片读取

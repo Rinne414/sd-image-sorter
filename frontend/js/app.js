@@ -5793,6 +5793,27 @@ function initEventListeners() {
     // --- Unified Filter Modal ---
     $('#btn-open-filters').addEventListener('click', openFilterModal);
 
+    // Filter presets (FIX 2026-06-12): the preset functions (saveFilterPreset /
+    // loadFilterPreset / deleteFilterPreset / renderFilterPresets) existed and
+    // were exposed on window, but NOTHING in the UI ever called them and
+    // #filter-presets-list did not exist in the DOM. These bindings + the
+    // .filter-presets-bar markup in the filter modal are the missing entry point.
+    const savePresetFromInput = () => {
+        const input = $('#filter-preset-name');
+        if (!input) return;
+        if (saveFilterPreset(input.value)) {
+            input.value = '';
+            renderFilterPresets();
+        }
+    };
+    $('#btn-save-filter-preset')?.addEventListener('click', savePresetFromInput);
+    $('#filter-preset-name')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            savePresetFromInput();
+        }
+    });
+
     // --- UI Desktop Sidebar Toggle ---
     const btnCollapseDesktop = $('#btn-collapse-desktop-sidebar');
     const btnRestoreDesktop = $('#btn-restore-desktop-sidebar');
@@ -7699,6 +7720,12 @@ let _tagPollingActive = false;
 // double-click would fire two concurrent start requests.
 let _tagStartInFlight = false;
 let _tagMinimizedToBackground = false;
+// v3.4.1 AI job queue: true while our gallery-tag start sits in the unified
+// pipeline queue (backend returned {"status":"queued"}). _tagQueuedSince
+// timestamps the enqueue so a stale pipeline_queue.last_start_error from an
+// older run is never mistaken for ours.
+let _tagQueuedWaiting = false;
+let _tagQueuedSince = 0;
 let _tagLastProgressPercent = 0;
 let _tagLastProgressText = '';
 let _tagLastCurrent = 0;
@@ -8005,7 +8032,21 @@ async function startTagging() {
 
     try {
         _tagStartInFlight = true;
-        await API.startTagging(options);
+        const startResp = await API.startTagging(options);
+        // v3.4.1 AI job queue: another AI job is running, so the backend
+        // queued this one (200 + status:"queued") instead of failing with
+        // 409. The normal poll loop below renders the queued state and
+        // hands over to the running state automatically.
+        const isQueued = !!(startResp && startResp.status === 'queued' && startResp.pipeline_queued === true);
+        if (isQueued) {
+            _tagQueuedWaiting = true;
+            _tagQueuedSince = Date.now();
+            showToast(startResp.duplicate
+                ? appT('aiQueue.duplicateToast', 'An identical job is already queued')
+                : appT('aiQueue.queuedToast', 'Queued — starts automatically after the current AI job finishes'), 'info');
+        } else {
+            _tagQueuedWaiting = false;
+        }
 
         _tagPollingActive = true;
         _tagStartInFlight = false;
@@ -8016,11 +8057,16 @@ async function startTagging() {
         lockLiveProgressText('#tag-progress-text');
         $('#tag-progress-fill').style.width = '0%';
         _tagLastProgressPercent = 0;
-        _tagLastProgressText = gpuLocked
-            ? t('tag.preparingMaxQuality', 'Preparing Max Quality model on CPU...')
-            : (options.useGpu
-                ? t('tag.preparingGpu', 'Preparing model on GPU...')
-                : t('tag.preparingCpu', 'Preparing model on CPU...'));
+        if (isQueued) {
+            _tagLastProgressText = appT('aiQueue.queuedProgress', 'Queued #{position} — waiting for the current AI job to finish')
+                .replace('{position}', String(startResp.queue_position || 1));
+        } else {
+            _tagLastProgressText = gpuLocked
+                ? t('tag.preparingMaxQuality', 'Preparing Max Quality model on CPU...')
+                : (options.useGpu
+                    ? t('tag.preparingGpu', 'Preparing model on GPU...')
+                    : t('tag.preparingCpu', 'Preparing model on CPU...'));
+        }
         $('#tag-progress-text').textContent = _tagLastProgressText;
         setTaggingUiState(true);
 
@@ -8040,6 +8086,55 @@ async function pollTagProgress(retryCount = 0) {
         const progress = await API.getTagProgress();
         window.__liveTagProgress = progress;
         syncTaggerModelUi();
+
+        // v3.4.1 AI job queue: while our start sits in the pipeline queue the
+        // legacy status is still idle/done from a previous run. Render the
+        // queued state and keep polling; when the dispatcher starts the job
+        // the status flips to running and the normal flow takes over.
+        const _queueInfo = progress.pipeline_queue || null;
+        const _queuedEntries = (_queueInfo && Array.isArray(_queueInfo.queued)) ? _queueInfo.queued : [];
+        if (!['running', 'cancelling'].includes(progress.status)) {
+            if (_queuedEntries.length > 0) {
+                _tagQueuedWaiting = true;
+                const queuedText = appT('aiQueue.queuedProgress', 'Queued #{position} — waiting for the current AI job to finish')
+                    .replace('{position}', String(_queuedEntries[0].position || 1));
+                const queuedFill = $('#tag-progress-fill');
+                if (queuedFill) {
+                    queuedFill.classList.add('is-indeterminate');
+                    queuedFill.style.width = '';
+                }
+                $('#tag-progress-text').textContent = queuedText;
+                _tagLastProgressText = queuedText;
+                _updateBgTagProgress(0, queuedText, 'running');
+                scheduleTagProgressPoll(1000);
+                return;
+            }
+            if (_tagQueuedWaiting) {
+                // Our queued entry left the queue. Either it just started
+                // (status flips running on a later poll) or it failed to
+                // start — the coordinator records that per kind and clears
+                // it again on the next successful start.
+                _tagQueuedWaiting = false;
+                const startError = _queueInfo && _queueInfo.last_start_error;
+                const startErrorAt = startError ? Date.parse(startError.at || '') : NaN;
+                if (startError && Number.isFinite(startErrorAt) && startErrorAt >= (_tagQueuedSince - 2000)) {
+                    window.__liveTagProgress = null;
+                    _tagPollingActive = false;
+                    clearTagProgressTimer();
+                    _hideBgTagProgress();
+                    showToast(appT('aiQueue.startFailed', 'Queued job failed to start: {error}')
+                        .replace('{error}', String(startError.error || '')), 'error');
+                    $('#tag-progress-container').style.display = 'none';
+                    unlockLiveProgressText('#tag-progress-text', 'modal.tagLoadingModel', 'Loading model...');
+                    setTaggingUiState(false);
+                    resetTagUiProgressState();
+                    syncTaggerModelUi();
+                    return;
+                }
+            }
+        } else {
+            _tagQueuedWaiting = false;
+        }
 
         // UI-03: Improved progress display with ETA
         const current = (progress.processed ?? progress.current ?? 0);
@@ -8258,9 +8353,18 @@ function _initBgTagProgressButtons() {
 async function resumeTaggingProgress() {
     try {
         const progress = await API.getTagProgress();
-        if (!['running', 'cancelling'].includes(progress?.status)) {
+        // v3.4.1 AI job queue: an F5 while our start is still queued must
+        // re-attach the poller too, otherwise the queued job would start
+        // later with no visible progress and no way to cancel it.
+        const queuedEntries = progress?.pipeline_queue?.queued || [];
+        const isLive = ['running', 'cancelling'].includes(progress?.status);
+        if (!isLive && queuedEntries.length === 0) {
             _hideBgTagProgress();
             return;
+        }
+        if (!isLive && queuedEntries.length > 0) {
+            _tagQueuedWaiting = true;
+            _tagQueuedSince = Date.now();
         }
 
         _tagPollingActive = true;
@@ -10358,6 +10462,10 @@ async function openFilterModal(options = {}) {
     // Show active tags and prompts
     renderModalActiveTags();
     renderModalActivePrompts();
+
+    // FIX 2026-06-12: render the saved filter presets every time the modal
+    // opens (renderFilterPresets previously had no caller besides itself).
+    renderFilterPresets();
 
     // Load checkpoints and loras into modal lists
     await loadModalFilterLists();

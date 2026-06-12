@@ -30,12 +30,22 @@ const VLMCaption = {
             const resp = await fetch('/api/vlm/caption-batch/progress');
             if (!resp.ok) return;
             const data = await resp.json();
-            if (!data?.running) return;
+            // v3.4.1 AI job queue: also resume when a batch of ours is
+            // still waiting in the unified pipeline queue after an F5.
+            const queuedEntries = data?.pipeline_queue?.queued || [];
+            if (!data?.running && queuedEntries.length === 0) return;
             this.isRunning = true;
             this.lastProgress = data;
             this._showBatchUI(true);
-            this._updateProgressUI(data);
-            this._showStatus('vlm-batch-status', this._t('vlm.captionRunning', 'Captioning images...'), 'info');
+            if (!data.running) {
+                this._queuedSince = Date.now();
+                this._showStatus('vlm-batch-status',
+                    this._t('aiQueue.queuedProgress', 'Queued #{position} — waiting for the current AI job to finish')
+                        .replace('{position}', String(queuedEntries[0].position || 1)), 'info');
+            } else {
+                this._updateProgressUI(data);
+                this._showStatus('vlm-batch-status', this._t('vlm.captionRunning', 'Captioning images...'), 'info');
+            }
             this.startPolling();
         } catch (e) { /* no active job or backend unreachable */ }
     },
@@ -364,6 +374,22 @@ const VLMCaption = {
                 this._showStatus('vlm-batch-status', `Failed: ${err.detail || resp.statusText}`, 'error');
                 return;
             }
+            const startData = await resp.json().catch(() => ({}));
+            if (startData && startData.status === 'queued' && startData.pipeline_queued === true) {
+                // v3.4.1 AI job queue: another AI job is running, so this
+                // batch was queued (200) instead of rejected with 409. The
+                // poll loop renders the queued state until it auto-starts.
+                this._queuedSince = Date.now();
+                this.isRunning = true;
+                this.lastFailedImageIds = [];
+                this._showBatchUI(true);
+                this._showStatus('vlm-batch-status', startData.duplicate
+                    ? this._t('aiQueue.duplicateToast', 'An identical job is already queued')
+                    : this._t('aiQueue.queuedToast', 'Queued — starts automatically after the current AI job finishes'), 'info');
+                this.startPolling();
+                return;
+            }
+            this._queuedSince = 0;
             this.isRunning = true;
             this.lastFailedImageIds = [];
             this._showBatchUI(true);
@@ -415,6 +441,33 @@ const VLMCaption = {
             }
 
             if (!data.running) {
+                // v3.4.1 AI job queue: not running but still waiting in the
+                // unified pipeline queue — render the queued state and keep
+                // polling until the dispatcher starts the batch.
+                const queuedEntries = data.pipeline_queue?.queued || [];
+                if (queuedEntries.length > 0) {
+                    this._showBatchUI(true);
+                    this._showStatus('vlm-batch-status',
+                        this._t('aiQueue.queuedProgress', 'Queued #{position} — waiting for the current AI job to finish')
+                            .replace('{position}', String(queuedEntries[0].position || 1)), 'info');
+                    return;
+                }
+                // Queued entry left the queue without ever running: surface
+                // a failed queued start (recorded per kind by the backend).
+                const startError = data.pipeline_queue?.last_start_error;
+                const startErrorAt = startError ? Date.parse(startError.at || '') : NaN;
+                if (this._queuedSince && startError && Number.isFinite(startErrorAt)
+                    && startErrorAt >= (this._queuedSince - 2000)) {
+                    this._queuedSince = 0;
+                    this.stopPolling();
+                    this.isRunning = false;
+                    this._showBatchUI(false, { keepPanel: true });
+                    this._showStatus('vlm-batch-status',
+                        this._t('aiQueue.startFailed', 'Queued job failed to start: {error}')
+                            .replace('{error}', String(startError.error || '')), 'error');
+                    return;
+                }
+                this._queuedSince = 0;
                 this.stopPolling();
                 this.isRunning = false;
                 this._showBatchSummary(data);

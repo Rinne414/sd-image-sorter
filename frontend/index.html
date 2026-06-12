@@ -663,6 +663,18 @@
                             </div>
                         </div>
 
+                        <!-- NOISE-05 (superseded 2026-06-12, owner directive): Clear Library
+                             MUST be visible at a glance on the gallery page — it previously
+                             hid inside the Import modal's advanced options and the owner
+                             couldn't find it. It sits at the far-right END of the gallery
+                             header, OUTSIDE .view-options, with distinct danger styling and
+                             extra separation so it stays far from everyday controls (view
+                             toggles / sort / aspect). Same #btn-clear-db id so the existing
+                             handler + busy-guard (app.js) keep working unchanged. -->
+                        <button id="btn-clear-db" class="btn btn-ghost btn-small danger gallery-clear-button" type="button" title="Remove all images from the current library (files stay on disk)" data-i18n-title="action.clearGalleryTooltip" aria-label="Clear Current Library" data-i18n-aria="action.clearGallery">
+                            <span aria-hidden="true">🗑️</span> <span data-i18n="action.clearGallery">Clear Current Library</span>
+                        </button>
+
                     </div>
                     <div id="color-backfill-banner" class="color-backfill-banner" hidden role="status" aria-live="polite">
                         <div class="color-backfill-banner-icon" aria-hidden="true">🎨</div>
@@ -1557,6 +1569,16 @@
                                         <div class="image-tags" id="current-image-tags"></div>
                                     </div>
                                 </div>
+                            </div>
+                            <!-- FIX 2026-06-12: #combo-display was dropped in the v2.6.0 markup
+                                 restructure (22aabac) while its JS (manual-sort.js updateCombo /
+                                 updateComboDisplay) and CSS (.combo-display in styles.css) were
+                                 kept — so the WASD combo counter incremented invisibly. Restored
+                                 in its original spot: absolute-positioned child of the relative
+                                 .sort-image-container, shown at combo >= 3. -->
+                            <div class="combo-display" id="combo-display" aria-hidden="true">
+                                <span class="combo-number">0</span>
+                                <span class="combo-text">COMBO</span>
                             </div>
                         </div>
 
@@ -3832,6 +3854,11 @@
                     </button>
                     <span class="model-manager-bulk-help" data-i18n="models.bulkDownloadHelp">Pulls every Setup-required model the app uses (default WD14 tagger, NudeNet, CLIP, Aesthetic, Artist ID, SAM3). Skips the Wenaka Privacy YOLO and the heavy ToriiGate alternative tagger. You will see disk-space estimate before anything starts.</span>
                 </div>
+                <!-- Manual-upgrade safety hint: downloaded models live in data/models.
+                     Users who unzip a new release into a fresh folder leave their
+                     models (and library DB) behind in the old folder's data\ —
+                     every model then shows "missing" even though nothing was lost. -->
+                <p class="model-manager-migrate-hint helper-text" data-i18n="models.manualUpgradeHint">Models suddenly missing after upgrading to a new folder? Your downloads live in the old folder's "data" directory — copy that whole folder into the new installation and restart.</p>
                 <div class="model-manager-grid" id="model-manager-grid"></div>
                 <section class="disk-usage-section" id="disk-usage-section" aria-labelledby="disk-usage-title">
                     <header class="disk-usage-header">
@@ -4224,16 +4251,11 @@
                                 <span class="checkbox-text" id="scan-auto-tag-label" data-i18n="scan.autoTagLabel">Auto-tag after import (slower)</span>
                             </label>
                         </div>
-                        <!-- NOISE-05: Clear-DB relocated here from the always-visible gallery
-                             toolbar (it sat next to the view toggles — a destructive action one
-                             slip away from everyday controls). Same #btn-clear-db id so the
-                             existing handler + busy-guard (app.js) keep working unchanged. -->
-                        <div class="scan-danger-zone">
-                            <button id="btn-clear-db" class="btn btn-ghost btn-small danger gallery-clear-button" type="button" aria-describedby="btn-clear-db-desc" data-i18n-title="action.clearGalleryTooltip" title="Remove all images from the current library (files stay on disk)">
-                                <span aria-hidden="true">🗑️</span> <span data-i18n="action.clearGallery">Clear Current Library</span>
-                            </button>
-                            <span id="btn-clear-db-desc" class="helper-text" data-i18n="action.clearGalleryTooltip">Remove all images from the current library (files stay on disk)</span>
-                        </div>
+                        <!-- NOISE-05 (superseded 2026-06-12): the Clear-DB danger zone moved
+                             from here back to the gallery header — owner directive: it must be
+                             visible at a glance on the gallery page itself, not buried in this
+                             modal. See #btn-clear-db inside .gallery-header. -->
+
                     </div>
                 </details>
                 <div class="progress-container" id="scan-progress-container" style="display: none;" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Scan progress">
@@ -5048,6 +5070,24 @@
                     <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.sizeRules">Size Rules</span><strong class="filter-stat-value" id="filter-modal-count-dimensions">Any</strong></div>
                     <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.aesthetic">Aesthetic</span><strong class="filter-stat-value" id="filter-modal-count-aesthetic">Any</strong></div>
                     <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.colors">Colors</span><strong class="filter-stat-value" id="filter-modal-count-colors">Any</strong></div>
+                </div>
+
+                <!-- 2026-06-12 FIX: filter presets had full JS support (app.js
+                     "Filter Presets" section: saveFilterPreset / loadFilterPreset /
+                     deleteFilterPreset / renderFilterPresets) but ZERO UI — nothing
+                     in the DOM had #filter-presets-list and nothing ever called
+                     saveFilterPreset. This bar is the missing entry point. Save
+                     captures the currently APPLIED gallery filters (AppState.filters,
+                     unchanged existing behavior); Load applies + closes the modal. -->
+                <div class="filter-presets-bar" id="filter-presets-bar">
+                    <span class="filter-presets-title" data-i18n="filter.presets">Presets</span>
+                    <div id="filter-presets-list" class="filter-presets-list" aria-live="polite"></div>
+                    <div class="filter-presets-save">
+                        <input type="text" id="filter-preset-name" class="input-field" maxlength="60" placeholder="Preset name" data-i18n-placeholder="filter.presetNamePlaceholder" title="Saves the currently applied filters as a named preset" data-i18n-title="filter.presetSaveHint">
+                        <button type="button" class="btn btn-secondary btn-small" id="btn-save-filter-preset" title="Saves the currently applied filters as a named preset" data-i18n-title="filter.presetSaveHint">
+                            💾 <span data-i18n="filter.savePreset">Save preset</span>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="filter-modal-grid">

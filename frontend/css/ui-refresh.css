@@ -1715,7 +1715,6 @@ textarea:focus,
 
 @media (min-width: 1800px) {
     #btn-reconnect-missing,
-    .gallery-clear-button,
     .gallery-header > .guide-btn {
         aspect-ratio: 1;
         flex: 0 0 42px;
@@ -1728,7 +1727,6 @@ textarea:focus,
     }
 
     #btn-reconnect-missing span:not([aria-hidden]),
-    .gallery-clear-button span:not([aria-hidden]),
     .gallery-header > .guide-btn span:last-child {
         display: none;
     }
@@ -1745,6 +1743,37 @@ textarea:focus,
 .gallery-clear-button:hover,
 .gallery-clear-button:focus-visible {
     outline: none;
+}
+
+/* 2026-06-12 owner directive: Clear Library must be visible at a glance on
+   the gallery page. It is the LAST gallery-header item, outside .view-options,
+   pushed apart from everyday controls (danger far from common ops) and styled
+   as a distinct red danger pill so it cannot be mistaken for a view toggle. */
+.gallery-header > .gallery-clear-button {
+    flex: 0 0 auto;
+    margin-left: 8px;
+    padding: 5px 12px;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    border-radius: 999px;
+    background: rgba(239, 68, 68, 0.08);
+    color: #f87171;
+    font-size: 12px;
+}
+
+.gallery-header > .gallery-clear-button:hover,
+.gallery-header > .gallery-clear-button:focus-visible {
+    background: rgba(239, 68, 68, 0.18);
+    border-color: rgba(239, 68, 68, 0.6);
+    color: #fecaca;
+}
+
+@media (max-width: 1500px) {
+    /* Small laptops (1280-1500px): keep the button VISIBLE but collapse the
+       text label so the crowded header never overflows. The accessible name
+       and tooltip stay via aria-label / title (action.clearGallery i18n). */
+    .gallery-header > .gallery-clear-button span:not([aria-hidden]) {
+        display: none;
+    }
 }
 
 .model-manager-summary {
@@ -4012,7 +4041,11 @@ textarea:focus,
 
 .filter-modal-shell {
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    /* Rows: hero / stat grid / presets bar (2026-06-12) / scrollable filter
+       grid (flexible) / sticky actions. Keep in sync with the children of
+       .filter-modal-shell in index.html — a mismatched template makes the
+       scrollable grid overlap its neighbors. */
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto;
     gap: 10px;
     max-height: min(92vh, 960px);
     overflow: hidden;
@@ -4099,6 +4132,65 @@ textarea:focus,
     display: grid;
     grid-template-columns: repeat(9, minmax(0, 1fr));
     gap: 8px;
+}
+
+/* 2026-06-12 FIX: filter-presets entry point (save/load saved filter sets).
+   The JS (saveFilterPreset & co.) predates this bar — it simply had no UI. */
+.filter-presets-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 8px;
+    padding: 8px 12px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(191, 219, 254, 0.08);
+}
+
+.filter-presets-title {
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    flex: 0 0 auto;
+}
+
+.filter-presets-list {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.filter-presets-list .preset-item {
+    gap: 6px;
+    padding: 3px 8px;
+    border: 1px solid rgba(191, 219, 254, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.filter-presets-list .presets-empty {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.filter-presets-save {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+.filter-presets-save .input-field {
+    width: 160px;
+    min-height: 30px;
+    padding: 4px 10px;
+    font-size: 12px;
 }
 
 .filter-stat-card {

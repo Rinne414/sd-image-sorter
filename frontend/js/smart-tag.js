@@ -29,6 +29,11 @@
     /** Consecutive poll failures — reset on every successful poll. */
     let pollFailureCount = 0;
     let activeJobId = null;
+    // v3.4.1 AI job queue: timestamp of our queued (not-yet-started) start.
+    // 0 when we are not waiting in the unified pipeline queue. Guards the
+    // pipeline_queue.last_start_error check against stale errors from
+    // older runs.
+    let pipelineQueuedSince = 0;
     let taggerModelCatalog = [];
     let taggerModelDefault = '';
     const LARGE_EXPLICIT_SOURCE_LIMIT = 5000;
@@ -697,13 +702,26 @@
         if (progressTimer) return; // already attached to a live poll loop
         try {
             const snap = await getJson('/api/smart-tag/progress');
-            const isActive = snap?.active === true
+            const queuedEntries = snap?.pipeline_queue?.queued || [];
+            const isLive = snap?.active === true
                 || snap?.status === 'queued'
                 || snap?.status === 'running';
-            if (!isActive) return;
+            // v3.4.1 AI job queue: also resume when our start is still
+            // waiting in the unified pipeline queue (e.g. after an F5).
+            if (!isLive && queuedEntries.length === 0) return;
             activeJobId = snap.job_id || activeJobId;
             showProgress(true);
-            renderSnapshot(snap);
+            if (!isLive && queuedEntries.length > 0) {
+                pipelineQueuedSince = Date.now();
+                setProgressUI({
+                    percent: 0,
+                    text: t('aiQueue.queuedProgress', 'Queued #{position} — waiting for the current AI job to finish')
+                        .replace('{position}', String(queuedEntries[0].position || 1)),
+                    preview: '',
+                });
+            } else {
+                renderSnapshot(snap);
+            }
             startProgressPolling();
         } catch (_err) {
             // idle / 404 / unreachable backend — nothing to resume.
@@ -723,8 +741,42 @@
                 : '/api/smart-tag/progress';
             const snap = await getJson(url);
             pollFailureCount = 0;
+            const isLive = snap.active === true || snap.status === 'queued' || snap.status === 'running';
+            const queuedEntries = snap?.pipeline_queue?.queued || [];
+            // v3.4.1 AI job queue: no live Smart Tag job yet, but ours is
+            // still waiting in the unified pipeline queue — render the
+            // queued state and keep polling.
+            if (!isLive && queuedEntries.length > 0) {
+                setProgressUI({
+                    percent: 0,
+                    text: t('aiQueue.queuedProgress', 'Queued #{position} — waiting for the current AI job to finish')
+                        .replace('{position}', String(queuedEntries[0].position || 1)),
+                    preview: '',
+                });
+                return;
+            }
+            if (isLive) pipelineQueuedSince = 0;
             renderSnapshot(snap);
             if (!snap.active && snap.status !== 'queued' && snap.status !== 'running') {
+                // Queued entry left the queue without going live: surface a
+                // failed queued start (recorded per kind by the backend).
+                const startError = snap?.pipeline_queue?.last_start_error;
+                const startErrorAt = startError ? Date.parse(startError.at || '') : NaN;
+                if (pipelineQueuedSince && startError && Number.isFinite(startErrorAt)
+                    && startErrorAt >= (pipelineQueuedSince - 2000)) {
+                    pipelineQueuedSince = 0;
+                    stopProgressPolling();
+                    showProgress(false);
+                    if (typeof window.showToast === 'function') {
+                        window.showToast(
+                            t('aiQueue.startFailed', 'Queued job failed to start: {error}')
+                                .replace('{error}', String(startError.error || '')),
+                            'error'
+                        );
+                    }
+                    return;
+                }
+                pipelineQueuedSince = 0;
                 stopProgressPolling();
                 await onJobFinished(snap);
             }
@@ -941,6 +993,28 @@
         setProgressUI({ percent: 0, text: 'Starting...', preview: '' });
         try {
             const snap = await postJson('/api/smart-tag/start', form);
+            if (snap && snap.pipeline_queued === true) {
+                // v3.4.1 AI job queue: another AI job is running, so this
+                // run was queued (200) instead of rejected with 409. The
+                // poll loop renders the queued state until the dispatcher
+                // starts the job.
+                pipelineQueuedSince = Date.now();
+                activeJobId = null;
+                if (typeof window.showToast === 'function') {
+                    window.showToast(snap.duplicate
+                        ? t('aiQueue.duplicateToast', 'An identical job is already queued')
+                        : t('aiQueue.queuedToast', 'Queued — starts automatically after the current AI job finishes'), 'info');
+                }
+                setProgressUI({
+                    percent: 0,
+                    text: t('aiQueue.queuedProgress', 'Queued #{position} — waiting for the current AI job to finish')
+                        .replace('{position}', String(snap.queue_position || 1)),
+                    preview: '',
+                });
+                startProgressPolling();
+                return;
+            }
+            pipelineQueuedSince = 0;
             activeJobId = snap.job_id || null;
             renderSnapshot(snap);
             startProgressPolling();
