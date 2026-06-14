@@ -249,6 +249,38 @@
             // Tag all
             document.getElementById('btn-dataset-tag-all')?.addEventListener('click', () => this._tagAll());
 
+            // Smart Tag button - opens the Smart Tag modal (reuses Gallery's modal)
+            document.getElementById('btn-dataset-smart-tag')?.addEventListener('click', () => {
+                if (typeof window.SmartTag?.open === 'function') {
+                    window.SmartTag.open();
+                } else {
+                    this._toast(this._t('dataset.smartTagUnavailable',
+                        'Smart Tag feature is not available.'), 'error', 3000);
+                }
+            });
+
+            // P10: Add to collection button
+            document.getElementById('btn-dataset-add-to-collection')?.addEventListener('click', () => {
+                if (this.imageIds.length === 0) {
+                    this._toast(this._t('dataset.queueEmptyHeadline', 'No images yet'), 'warning');
+                    return;
+                }
+                // Filter out local-source images (negative IDs) as they cannot be added to collections
+                const galleryIds = this.imageIds.filter((id) => !(this.isLocalId && this.isLocalId(id)));
+                if (galleryIds.length === 0) {
+                    this._toast(this._t('dataset.addToCollectionOnlyGallery',
+                        'Only gallery-source images can be added to collections. Scan the folder into the main library first.'),
+                        'warning', 6000);
+                    return;
+                }
+                if (typeof window.CollectionsUI?.openAddToCollectionPicker === 'function') {
+                    window.CollectionsUI.openAddToCollectionPicker(galleryIds);
+                } else {
+                    this._toast(this._t('dataset.addToCollectionUnavailable',
+                        'Collections feature is not available.'), 'error', 3000);
+                }
+            });
+
             // Quality-tags quick-fill: one click adds common LoRA quality
             // tags to the "Common tags" field. Also exposes a "use my
             // trigger word here" shortcut so users don't have to figure
@@ -381,6 +413,20 @@
                 const btn = document.getElementById('btn-dataset-quickfill-trigger');
                 if (btn) btn.disabled = !((document.getElementById('dataset-trigger')?.value || '').trim());
             });
+
+            // v3.4.3: the custom template survives page reloads — users keep
+            // one format and shouldn't retype it every session. Restore before
+            // wiring the recompute listeners; save on every edit.
+            const templateField = document.getElementById('dataset-template-override');
+            if (templateField) {
+                try {
+                    const storedTemplate = localStorage.getItem('datasetMaker.templateOverride');
+                    if (storedTemplate) templateField.value = storedTemplate;
+                } catch (_) { /* localStorage unavailable, keep HTML default */ }
+                templateField.addEventListener('input', () => {
+                    try { localStorage.setItem('datasetMaker.templateOverride', templateField.value); } catch (_) { /* noop */ }
+                });
+            }
 
             // Bulk caption ops -> recompute captions on the fly (debounced)
             for (const id of [

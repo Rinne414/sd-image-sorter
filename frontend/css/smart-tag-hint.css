@@ -66,6 +66,17 @@
     flex-shrink: 0;
 }
 
+.smart-tag-hint-banner.is-dismissed .smart-tag-hint-banner-copy span,
+.smart-tag-hint-banner.is-dismissed #btn-tag-modal-smart-tag-dismiss {
+    display: none;
+}
+
+.smart-tag-hint-banner.is-dismissed {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    margin-bottom: 10px;
+    padding-block: 9px;
+}
+
 #smart-tag-modal .smart-tag-modal-content {
     max-width: min(1080px, calc(100vw - 32px));
     max-height: calc(100vh - 40px);

@@ -307,20 +307,23 @@
             }
         },
 
-        async openAddToCollectionPicker(imageIds) {
+        async openAddToCollectionPicker(imageIds, options = {}) {
+            // A filtered-selection token ("Select all matching") stands in for
+            // an explicit id list, so the backend expands it server-side.
+            const selectionToken = options.selectionToken || null;
             const ids = (Array.isArray(imageIds) ? imageIds : [imageIds])
                 .map((id) => Number(id))
                 .filter((id) => Number.isFinite(id) && id > 0);
-            if (ids.length === 0) return;
+            if (ids.length === 0 && !selectionToken) return;
 
             // Make sure the cached list is fresh before showing the picker.
             if (this._collections.length === 0) {
                 await this.refresh();
             }
-            this._buildPickerMenu(ids);
+            this._buildPickerMenu(ids, selectionToken);
         },
 
-        _buildPickerMenu(ids) {
+        _buildPickerMenu(ids, selectionToken) {
             document.querySelector('.collections-picker-menu')?.remove();
 
             const menu = document.createElement('div');
@@ -340,7 +343,7 @@
                 const icon = collection.slug === FAVORITES_SLUG ? '♥' : '📁';
                 menu.appendChild(this._pickerItem(icon, name, () => {
                     menu.remove();
-                    this._addToCollection(collection.id, name, ids);
+                    this._addToCollection(collection.id, name, ids, selectionToken);
                 }));
             });
 
@@ -353,7 +356,7 @@
                 menu.remove();
                 const created = await this.createPrompt();
                 if (created?.id != null) {
-                    this._addToCollection(created.id, created.name || '', ids);
+                    this._addToCollection(created.id, created.name || '', ids, selectionToken);
                 }
             }));
 
@@ -386,47 +389,54 @@
             const pointer = window._lastPointerEvent || {};
             const x = Number.isFinite(pointer.clientX) ? pointer.clientX : Math.round(window.innerWidth / 2);
             const y = Number.isFinite(pointer.clientY) ? pointer.clientY : Math.round(window.innerHeight / 3);
-            menu.style.left = `${x}px`;
-            menu.style.top = `${y}px`;
-            const rect = menu.getBoundingClientRect();
-            if (rect.right > window.innerWidth) {
-                menu.style.left = `${window.innerWidth - rect.width - 8}px`;
-            }
-            if (rect.bottom > window.innerHeight) {
-                menu.style.top = `${window.innerHeight - rect.height - 8}px`;
-            }
+            window.PopupPosition?.place(menu, {
+                x,
+                y,
+                placement: 'point',
+                maxHeight: Math.min(420, Math.max(120, window.innerHeight - 16)),
+            });
         },
 
         _bindPickerDismiss(menu) {
             const close = () => {
                 menu.remove();
                 document.removeEventListener('click', close);
-                document.removeEventListener('keydown', onKey);
+                document.removeEventListener('keydown', onKey, true);
             };
             const onKey = (event) => {
-                if (event.key === 'Escape') close();
+                if (event.key !== 'Escape') return;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                close();
             };
-            // Defer so the originating click doesn't immediately close it.
+            document.addEventListener('keydown', onKey, true);
+            // Defer outside-click binding so the originating click doesn't immediately close it.
             setTimeout(() => {
                 document.addEventListener('click', close);
-                document.addEventListener('keydown', onKey);
             }, 0);
         },
 
-        async _addToCollection(collectionId, name, ids) {
+        async _addToCollection(collectionId, name, ids, selectionToken) {
             const app = appRef();
             try {
-                await Promise.all(ids.map((imageId) =>
-                    app.API?.setCollectionMembership?.(collectionId, imageId, true)));
+                // One bulk call (single transaction server-side) instead of a
+                // POST per image; a selection token covers ids the gallery
+                // never materialized client-side.
+                const result = await app.API?.setCollectionMembershipBulk?.(collectionId, {
+                    imageIds: ids,
+                    selectionToken,
+                    member: true,
+                });
+                const added = Number(result?.added ?? ids.length) || 0;
                 // Keep favorite hearts in sync if the picker targeted Favorites.
                 if (this._favoritesId != null && Number(collectionId) === Number(this._favoritesId)) {
                     window.Gallery?.hydrateFavorites?.();
                 }
                 const message = t('collections.addedToast', 'Added {count} image(s) to {name}', {
-                    count: ids.length,
+                    count: added,
                     name,
                 })
-                    .replace('{count}', String(ids.length))
+                    .replace('{count}', String(added))
                     .replace('{name}', name || '');
                 toast(message, 'success');
                 await this.refresh();
@@ -441,6 +451,15 @@
     // near the cursor even though it's triggered from a menu callback.
     document.addEventListener('pointerdown', (event) => {
         window._lastPointerEvent = { clientX: event.clientX, clientY: event.clientY };
+    }, true);
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        const menus = document.querySelectorAll('.collections-picker-menu');
+        if (menus.length === 0) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        menus.forEach((menu) => menu.remove());
     }, true);
 
     window.CollectionsUI = CollectionsUI;

@@ -84,7 +84,7 @@
 #view-dataset .dataset-workbench {
     flex: 1 1 auto;
     display: grid;
-    grid-template-columns: clamp(360px, 26vw, 520px) minmax(560px, 1fr) clamp(380px, 28vw, 520px);
+    grid-template-columns: clamp(300px, 19vw, 390px) minmax(720px, 1.65fr) clamp(300px, 20vw, 390px);
     gap: 12px;
     overflow: hidden;
     min-height: 0;
@@ -115,6 +115,40 @@
 }
 #view-dataset .dataset-pane-head strong {
     font-size: 14px;
+}
+
+#view-dataset .dataset-maker[data-active-tab="import"] .dataset-workbench {
+    grid-template-columns: minmax(360px, 0.72fr) minmax(560px, 1fr) minmax(320px, 0.58fr);
+}
+
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-workbench {
+    grid-template-columns: clamp(280px, 18vw, 360px) minmax(820px, 1.85fr) clamp(300px, 19vw, 370px);
+}
+
+#view-dataset .dataset-maker[data-active-tab="export"] .dataset-workbench {
+    grid-template-columns: clamp(280px, 18vw, 360px) minmax(520px, 0.95fr) minmax(460px, 1.1fr);
+}
+
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-pane {
+    padding: 14px;
+    border-color: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.18);
+}
+
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-export-pane {
+    padding: 10px;
+}
+
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-card {
+    padding: 10px 12px;
+}
+
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-card-help {
+    margin-bottom: 8px;
+}
+
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-vocab-panel,
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-card-details:not([open]) {
+    flex: 0 0 auto;
 }
 #view-dataset .dataset-queue-toolbar {
     flex: 0 0 auto;
@@ -156,6 +190,12 @@
     #view-dataset .dataset-editor-pane,
     #view-dataset .dataset-export-pane {
         max-height: 70vh;
+    }
+}
+
+@media (min-width: 1600px) {
+    #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-workbench {
+        grid-template-columns: clamp(300px, 17vw, 380px) minmax(920px, 2fr) clamp(300px, 18vw, 380px);
     }
 }
 
@@ -455,8 +495,8 @@
     background: rgba(0,0,0,0.25);
     border-radius: 8px;
     overflow: auto;
-    min-height: 0;
-    margin-bottom: 8px;
+    min-height: 180px;
+    margin-bottom: 10px;
     position: relative;
 }
 #view-dataset .dataset-editor-image {
@@ -502,8 +542,8 @@
 
 #view-dataset .dataset-editor-textarea {
     flex: 0 0 auto;
-    min-height: 110px;
-    max-height: 240px;
+    min-height: 130px;
+    max-height: 280px;
     width: 100%;
     background: rgba(255,255,255,0.04);
     border: 1px solid rgba(255,255,255,0.12);
@@ -582,8 +622,8 @@
 #view-dataset .dataset-box-label-nl { color: var(--accent-secondary, #67e8f9); }
 #view-dataset .dataset-editor-nl {
     flex: 0 0 auto;
-    min-height: 70px;
-    max-height: 200px;
+    min-height: 90px;
+    max-height: 240px;
     width: 100%;
     background: rgba(103, 232, 249, 0.05);
     border: 1px solid rgba(103, 232, 249, 0.20);
@@ -1393,99 +1433,99 @@
     transition: background 0.12s ease, border-color 0.12s ease;
     line-height: 1.4;
 }
-#view-dataset .dataset-tag-pill-category-quality {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-quality {
     background: rgba(59, 130, 246, 0.14);
     border-color: rgba(59, 130, 246, 0.45);
     color: #bfdbfe;
 }
-#view-dataset .dataset-tag-pill-category-identity {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-identity {
     background: rgba(244, 114, 182, 0.14);
     border-color: rgba(244, 114, 182, 0.45);
     color: #fbcfe8;
 }
-#view-dataset .dataset-tag-pill-category-appearance {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-appearance {
     background: rgba(255,255,255,0.07);
     border-color: rgba(255,255,255,0.24);
     color: var(--text-primary, #f8fafc);
 }
-#view-dataset .dataset-tag-pill-category-poses {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-poses {
     background: rgba(234, 179, 8, 0.16);
     border-color: rgba(234, 179, 8, 0.45);
     color: #fef3c7;
 }
-#view-dataset .dataset-tag-pill-category-copyright {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-copyright {
     background: rgba(34, 197, 94, 0.14);
     border-color: rgba(34, 197, 94, 0.45);
     color: #bbf7d0;
 }
-#view-dataset .dataset-tag-pill-category-natural {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-natural {
     background: rgba(239, 68, 68, 0.16);
     border-color: rgba(239, 68, 68, 0.48);
     color: #fecaca;
 }
 /* 14-category danbooru palette (mirrors backend tag_rules.categorize_tag).
    'quality' reuses the blue rule above; the rest are added here. */
-#view-dataset .dataset-tag-pill-category-meta {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-meta {
     background: rgba(100, 116, 139, 0.18);
     border-color: rgba(100, 116, 139, 0.5);
     color: #e2e8f0;
 }
-#view-dataset .dataset-tag-pill-category-rating {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-rating {
     background: rgba(239, 68, 68, 0.16);
     border-color: rgba(239, 68, 68, 0.48);
     color: #fecaca;
 }
-#view-dataset .dataset-tag-pill-category-character {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-character {
     background: rgba(244, 114, 182, 0.16);
     border-color: rgba(244, 114, 182, 0.5);
     color: #fbcfe8;
 }
-#view-dataset .dataset-tag-pill-category-body {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-body {
     background: rgba(251, 113, 133, 0.16);
     border-color: rgba(251, 113, 133, 0.48);
     color: #fecdd3;
 }
-#view-dataset .dataset-tag-pill-category-outfit {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-outfit {
     background: rgba(167, 139, 250, 0.16);
     border-color: rgba(167, 139, 250, 0.48);
     color: #ddd6fe;
 }
-#view-dataset .dataset-tag-pill-category-expression {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-expression {
     background: rgba(245, 158, 11, 0.16);
     border-color: rgba(245, 158, 11, 0.48);
     color: #fde68a;
 }
-#view-dataset .dataset-tag-pill-category-pose {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-pose {
     background: rgba(234, 179, 8, 0.16);
     border-color: rgba(234, 179, 8, 0.45);
     color: #fef3c7;
 }
-#view-dataset .dataset-tag-pill-category-action {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-action {
     background: rgba(249, 115, 22, 0.16);
     border-color: rgba(249, 115, 22, 0.48);
     color: #fed7aa;
 }
-#view-dataset .dataset-tag-pill-category-angle {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-angle {
     background: rgba(34, 211, 238, 0.15);
     border-color: rgba(34, 211, 238, 0.46);
     color: #a5f3fc;
 }
-#view-dataset .dataset-tag-pill-category-background {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-background {
     background: rgba(45, 212, 191, 0.15);
     border-color: rgba(45, 212, 191, 0.46);
     color: #99f6e4;
 }
-#view-dataset .dataset-tag-pill-category-style {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-style {
     background: rgba(129, 140, 248, 0.16);
     border-color: rgba(129, 140, 248, 0.48);
     color: #c7d2fe;
 }
-#view-dataset .dataset-tag-pill-category-artist {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-artist {
     background: rgba(217, 70, 239, 0.16);
     border-color: rgba(217, 70, 239, 0.48);
     color: #f5d0fe;
 }
-#view-dataset .dataset-tag-pill-category-unknown {
+:is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-unknown {
     background: rgba(255,255,255,0.07);
     border-color: rgba(255,255,255,0.24);
     color: var(--text-primary, #f8fafc);
@@ -1892,6 +1932,11 @@
     position: relative;
     margin-bottom: 6px;
 }
+/* Hide the add-tag input when the pills wrap only contains the empty state,
+   to avoid confusing "Add tag..." placeholder appearing above "No tags" */
+.dataset-tag-add-wrap:has(+ .dataset-tag-pills-wrap .dataset-tag-pills-empty) {
+    display: none;
+}
 .dataset-tag-add-input {
     width: 100%;
     padding: 4px 8px;
@@ -1996,39 +2041,162 @@
 
 
 /* ---------------- Split view ---------------- */
-#view-dataset .dataset-editor-image-wrap.split-active {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-}
 #view-dataset .dataset-split-panel {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    background: radial-gradient(circle at center, rgba(255,255,255,0.045), rgba(0,0,0,0.28) 58%), rgba(0,0,0,0.25);
-    border-radius: 8px;
-    padding: 8px;
-    min-height: 0;
+    gap: 12px;
+    min-height: 420px;
+    padding: 12px;
+    background: rgba(7, 15, 27, 0.72);
+    border: 1px solid var(--border-color, rgba(255,255,255,0.12));
+    border-radius: 12px;
     overflow: hidden;
 }
+#view-dataset .dataset-split-head,
+#view-dataset .dataset-split-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+#view-dataset .dataset-split-head {
+    justify-content: space-between;
+}
+#view-dataset .dataset-split-head > div:first-child {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+#view-dataset .dataset-split-head > div:first-child span {
+    color: var(--text-muted, #94a3b8);
+    font-size: 12px;
+}
+#view-dataset .dataset-split-head-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+#view-dataset .dataset-split-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+    flex: 1;
+    min-height: 0;
+}
+#view-dataset .dataset-split-card {
+    display: grid;
+    grid-template-rows: auto minmax(180px, 1fr) auto minmax(84px, auto) auto minmax(72px, auto);
+    gap: 7px;
+    min-width: 0;
+    min-height: 0;
+    padding: 10px;
+    background: rgba(15, 23, 42, 0.72);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 10px;
+    overflow-y: auto;
+}
+#view-dataset .dataset-split-position {
+    flex-shrink: 0;
+    padding: 3px 7px;
+    color: var(--accent-primary, #7c8bff);
+    background: rgba(124, 139, 255, 0.14);
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+#view-dataset .dataset-split-filename {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+}
+#view-dataset .dataset-split-image-frame {
+    display: grid;
+    place-items: center;
+    min-height: 220px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.28);
+    border-radius: 8px;
+}
 #view-dataset .dataset-split-image {
+    width: 100%;
+    height: 100%;
     max-width: 100%;
-    max-height: 200px;
     object-fit: contain;
-    border-radius: 6px;
+}
+#view-dataset .dataset-split-image-unavailable {
+    color: var(--text-muted, #94a3b8);
+    font-size: 12px;
+}
+#view-dataset .dataset-split-image-frame.is-unavailable img {
+    display: none;
+}
+#view-dataset .dataset-split-field-label {
+    color: var(--text-secondary, #cbd5e1);
+    font-size: 11px;
+    font-weight: 700;
 }
 #view-dataset .dataset-split-textarea {
-    flex: 1;
-    resize: none;
+    width: 100%;
+    min-height: 84px;
+    resize: vertical;
     background: rgba(15, 23, 42, 0.6);
     border: 1px solid var(--border-color, rgba(255,255,255,0.12));
     border-radius: 6px;
     color: var(--text-primary, #f1f5f9);
     padding: 8px;
     font-size: 13px;
-    min-height: 60px;
+    line-height: 1.45;
+}
+#view-dataset .dataset-split-textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary, #7c8bff);
+    box-shadow: 0 0 0 2px rgba(124, 139, 255, 0.14);
+}
+#view-dataset .dataset-split-mode > .dataset-zoom-toolbar,
+#view-dataset .dataset-split-mode > .dataset-editor-image-wrap,
+#view-dataset .dataset-split-mode > #dataset-caption-diff,
+#view-dataset .dataset-split-mode > .dataset-caption-type,
+#view-dataset .dataset-split-mode > .dataset-box-label,
+#view-dataset .dataset-split-mode > #dataset-editor-textarea,
+#view-dataset .dataset-split-mode > #dataset-tag-pills-section,
+#view-dataset .dataset-split-mode > #dataset-editor-nl,
+#view-dataset .dataset-split-mode > #dataset-confidence-panel,
+#view-dataset .dataset-split-mode > .dataset-editor-actions {
+    display: none !important;
 }
 #view-dataset #btn-dataset-split-view.active {
     background: rgba(124, 139, 255, 0.2);
     color: var(--accent-primary, #7c8bff);
+}
+@media (max-width: 1280px) {
+    #view-dataset .dataset-split-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* v3.4.3 UX polish: Step 2 should spend the vertical space on the
+   selected image and caption fields, not on empty chrome. Kept as scoped
+   overrides so the existing editor logic remains untouched. */
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-image-wrap {
+    flex: 1 1 clamp(340px, 48vh, 680px);
+    min-height: clamp(320px, 42vh, 560px);
+}
+
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-textarea {
+    min-height: clamp(170px, 20vh, 280px);
+}
+
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-nl {
+    min-height: clamp(120px, 15vh, 220px);
+}
+
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-split-panel {
+    min-height: clamp(620px, 76vh, 920px);
+}
+
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-split-image-frame {
+    min-height: clamp(280px, 36vh, 520px);
 }

@@ -706,8 +706,11 @@ def categorize_tag(tag: str) -> str:
     if tag_lower in STYLE_TAGS:
         return "style"
 
-    # Artist detection (prompt convention: "artist:name" or "(artist_name:weight)")
+    # Artist detection (prompt conventions: SDXL "artist:name" /
+    # "(artist_name:weight)", and Anima-style "@name" style triggers).
     if tag_lower.startswith("artist:") or tag_lower.startswith("artist_"):
+        return "artist"
+    if tag_lower.startswith("@") and len(tag_lower) > 1:
         return "artist"
 
     booru_categories = _load_booru_tag_categories()

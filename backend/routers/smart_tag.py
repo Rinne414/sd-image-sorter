@@ -74,6 +74,10 @@ class SmartTagStartRequest(BaseModel):
     consensus_skip_categories: List[str] = Field(
         default_factory=lambda: ["character", "copyright"]
     )
+    # v3.4.3: ToriiGate generation parameters.
+    toriigate_caption_length: str = Field(default="detailed", pattern="^(brief|detailed)$")
+    toriigate_max_new_tokens: int = Field(default=0, ge=0, le=1024)
+    toriigate_grounding: bool = True
 
 
 @router.post("/start")

@@ -190,6 +190,7 @@ from db_collections import (
     delete_collection,
     collection_exists,
     set_collection_membership,
+    set_collection_membership_bulk,
     get_collection_image_ids,
 )
 from db_library_roots import (

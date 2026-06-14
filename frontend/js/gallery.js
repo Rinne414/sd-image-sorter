@@ -3930,6 +3930,7 @@ ${String(value)}`)
     _showContextMenu(e, image) {
         // Remove existing menu
         document.querySelector('.gallery-context-menu')?.remove();
+        document.querySelector('.collections-picker-menu')?.remove();
         const t = (key, fallback, params) => { const v = window.I18n?.t?.(key, params); return (v && v !== key) ? v : fallback; };
         const app = window.App || {};
         const imageId = Number(image?.id);
@@ -4094,16 +4095,6 @@ ${String(value)}`)
 
     _positionContextMenu(menu, clientX, clientY, anchorElement = null) {
         if (!menu) return;
-        const margin = 8;
-        const gap = 6;
-        const viewportWidth = document.documentElement.clientWidth || window.innerWidth || 0;
-        const viewportHeight = document.documentElement.clientHeight || window.innerHeight || 0;
-        const availableWidth = Math.max(1, viewportWidth - margin * 2);
-        const availableHeight = Math.max(1, viewportHeight - margin * 2);
-        const maxMenuHeight = Math.min(420, availableHeight);
-        const uiScale = Math.max(0.1, window.UiScale?.get?.() || parseFloat(document.documentElement.style.zoom) || 1);
-        const toCssPx = (value) => value / uiScale;
-        const clamp = (value, min, max) => Math.min(Math.max(value, min), Math.max(min, max));
         const anchorRect = anchorElement?.getBoundingClientRect?.() || null;
         const rawX = Number.isFinite(clientX) ? clientX : anchorRect?.right;
         const rawY = Number.isFinite(clientY) ? clientY : anchorRect?.top;
@@ -4112,35 +4103,32 @@ ${String(value)}`)
             && rawX <= anchorRect.right + 1
             && rawY >= anchorRect.top - 1
             && rawY <= anchorRect.bottom + 1;
+        const clamp = (value, min, max) => Math.min(Math.max(value, min), Math.max(min, max));
         const x = anchorRect && !pointerInsideAnchor
             ? clamp(rawX ?? anchorRect.right, anchorRect.left, anchorRect.right)
-            : (rawX ?? margin);
+            : (rawX ?? 8);
         const y = anchorRect && !pointerInsideAnchor
             ? clamp(rawY ?? anchorRect.top, anchorRect.top, anchorRect.bottom)
-            : (rawY ?? margin);
-
-        menu.style.maxWidth = `${toCssPx(availableWidth)}px`;
-        menu.style.maxHeight = `${toCssPx(maxMenuHeight)}px`;
-        menu.style.left = '0px';
-        menu.style.top = '0px';
-
-        const rect = menu.getBoundingClientRect();
-        const menuWidth = Math.min(rect.width || 0, availableWidth);
-        const menuHeight = Math.min(rect.height || 0, maxMenuHeight);
-        let left = x;
-        let top = y;
-
-        if (left + menuWidth + margin > viewportWidth) {
-            left = anchorRect ? anchorRect.left - menuWidth - gap : x - menuWidth;
-        }
-        if (top + menuHeight + margin > viewportHeight) {
-            top = anchorRect ? anchorRect.bottom - menuHeight : y - menuHeight;
+            : (rawY ?? 8);
+        if (anchorRect && window.PopupPosition?.place) {
+            const placement = anchorRect.right + 8 > window.innerWidth - 260
+                ? 'left'
+                : 'right';
+            window.PopupPosition.place(menu, {
+                anchor: anchorElement,
+                placement,
+                gap: 8,
+                maxHeight: Math.min(420, Math.max(120, window.innerHeight - 16)),
+            });
+            return;
         }
 
-        left = clamp(left, margin, viewportWidth - menuWidth - margin);
-        top = clamp(top, margin, viewportHeight - menuHeight - margin);
-        menu.style.left = `${Math.round(toCssPx(left))}px`;
-        menu.style.top = `${Math.round(toCssPx(top))}px`;
+        window.PopupPosition?.place(menu, {
+            x,
+            y,
+            placement: 'point',
+            maxHeight: Math.min(420, Math.max(120, window.innerHeight - 16)),
+        });
     },
 
     // Cleanup when switching views

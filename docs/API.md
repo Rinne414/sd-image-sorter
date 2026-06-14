@@ -1,6 +1,6 @@
 ﻿# SD Image Sorter API Documentation
 
-**Version:** 3.4.2
+**Version:** 3.4.3
 **Base URL:** `http://127.0.0.1:8487` (default; configurable via `SD_IMAGE_SORTER_PORT`)
 **Interactive Docs:** `http://127.0.0.1:8487/docs` (Swagger UI, same port as runtime)
 
@@ -704,6 +704,9 @@ List the image ids that are members of the collection.
 
 #### POST /api/collections/{collection_id}/items
 Set collection membership for one image. Body carries `image_id` and a `member` flag (add when true, remove when false). Uses the reference model — no image files are copied. Returns `{ "member": bool }`.
+
+#### POST /api/collections/{collection_id}/items/bulk
+Set collection membership for many images in one call. Body carries either `image_ids` (explicit list) or `selection_token` (a token from `POST /api/images/selection-token` covering a filtered scope), plus a `member` flag. Favorites membership is diverted to the path-anchored favorites store. Returns `{ "success": bool, "added": int, "removed": int, "requested": int }`.
 
 #### GET /api/collections/favorites/ids
 List the ids of all favorited images (plus `count`) for fast client-side heart-state hydration.

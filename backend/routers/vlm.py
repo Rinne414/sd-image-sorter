@@ -346,6 +346,8 @@ def _build_config(overrides: Optional[Dict[str, Any]] = None) -> VLMConfig:
         max_image_size=_coerce_int_setting(settings.get("max_image_size"), 1024, minimum=128, maximum=4096),
         nsfw_retry_prompt=settings.get("nsfw_retry_prompt", ""),
         output_format=settings.get("output_format", "nl_caption"),
+        caption_max_tokens=_coerce_int_setting(settings.get("caption_max_tokens"), 1024, minimum=64, maximum=8192),
+        caption_temperature=_coerce_float_setting(settings.get("caption_temperature"), 0.3, minimum=0.0, maximum=2.0),
         http_proxy=settings.get("http_proxy", ""),
         https_proxy=settings.get("https_proxy", ""),
         socks_proxy=settings.get("socks_proxy", ""),
@@ -408,6 +410,8 @@ class SaveSettingsRequest(BaseModel):
     max_image_size: Optional[int] = Field(default=None, ge=128, le=4096)
     nsfw_retry_prompt: Optional[str] = None
     output_format: Optional[str] = None
+    caption_max_tokens: Optional[int] = Field(default=None, ge=64, le=8192)
+    caption_temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
     http_proxy: Optional[str] = None
     https_proxy: Optional[str] = None
     socks_proxy: Optional[str] = None

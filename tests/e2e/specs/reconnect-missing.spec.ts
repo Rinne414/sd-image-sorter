@@ -156,6 +156,14 @@ test('find moved images reconnects a file through the real gallery UI', async ({
   expect(fsSync.existsSync(oldImagePath)).toBe(false)
   expect(fsSync.existsSync(newImagePath)).toBe(true)
 
+  // The scan-done "what's next" CTA banner floats over the gallery toolbar
+  // (since v3.4.3 it carries a third "Create collection" action, wide enough
+  // to cover #btn-reconnect-missing at this viewport). Dismiss it the way a
+  // real user would before reaching for the toolbar underneath.
+  await expect(page.locator('#pipeline-next-step.visible')).toBeVisible({ timeout: 15000 })
+  await page.locator('#pipeline-next-step .pns-dismiss').click()
+  await expect(page.locator('#pipeline-next-step.visible')).toHaveCount(0)
+
   await page.locator('#btn-reconnect-missing').click()
   await expect(page.locator('#reconnect-modal.visible')).toBeVisible()
   await page.locator('#reconnect-folder-path').fill(newRoot)

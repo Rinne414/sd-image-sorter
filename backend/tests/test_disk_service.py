@@ -81,7 +81,7 @@ def test_request_core_runtime_rebuild_writes_marker_without_deleting_venv(monkey
     assert "backend_venv" in marker.read_text(encoding="utf-8")
 
 
-def test_runtime_environment_size_scan_is_limited(monkeypatch, tmp_path):
+def test_runtime_environment_size_scan_is_exact(monkeypatch, tmp_path):
     state_dir = tmp_path / "data" / "state"
     venv_dir = tmp_path / "backend" / "venv"
     venv_dir.mkdir(parents=True)
@@ -90,13 +90,22 @@ def test_runtime_environment_size_scan_is_limited(monkeypatch, tmp_path):
 
     monkeypatch.setattr(config, "STATE_DIR", state_dir)
     monkeypatch.setattr(disk_service, "_package_root", lambda: tmp_path)
-    monkeypatch.setattr(disk_service, "_dir_size_bytes_limited", lambda path: (None, False))
-
     runtime = disk_service.get_runtime_environment_status()
 
     assert runtime["venv_exists"] is True
-    assert runtime["venv_size_bytes"] is None
-    assert runtime["venv_size_complete"] is False
+    assert runtime["venv_size_bytes"] == 6
+    assert runtime["venv_size_complete"] is True
+
+
+def test_exact_size_scanner_counts_nested_files(tmp_path):
+    root = tmp_path / "runtime"
+    nested = root / "Lib" / "site-packages" / "package"
+    nested.mkdir(parents=True)
+    (root / "python.exe").write_bytes(b"x" * 11)
+    (nested / "weights.bin").write_bytes(b"y" * 123)
+
+    assert disk_service._dir_size_bytes(root) == 134
+    assert disk_service._dir_size_bytes_many([root, tmp_path / "missing"]) == 134
 
 def test_cleanup_pip_cache_ignores_external_env_path(monkeypatch, tmp_path):
     data_dir = tmp_path / "data"

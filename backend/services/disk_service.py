@@ -84,7 +84,11 @@ def _dir_size_bytes_limited(path: Path, *, max_files: int = 5000, max_seconds: f
 
     venv/model/cache folders can contain tens of thousands of files on old full-AI
     installs. A full recursive size scan would make Feature Setup feel hung, so
-    this helper returns ``(None, False)`` once the scan is too expensive.
+    this helper stops early but returns the partial size scanned so far.
+
+    Returns:
+        (size_bytes, complete): size_bytes is always an int (partial or full),
+        complete is True only if the entire directory was scanned.
     """
     if path.is_symlink():
         return 0, True
@@ -96,7 +100,8 @@ def _dir_size_bytes_limited(path: Path, *, max_files: int = 5000, max_seconds: f
     try:
         for entry in path.rglob("*"):
             if scanned >= max_files or time.monotonic() > deadline:
-                return None, False
+                # Return partial size instead of None
+                return total, False
             scanned += 1
             if entry.is_symlink():
                 continue
@@ -107,29 +112,33 @@ def _dir_size_bytes_limited(path: Path, *, max_files: int = 5000, max_seconds: f
                     pass
     except OSError as exc:
         logger.debug("Limited disk size scan failed under %s: %s", path, exc)
-        return None, False
+        # Return what we got so far, even on error
+        return total, False
     return total, True
 
 
-def _dir_size_bytes_limited_many(paths: List[Path]) -> tuple[int | None, bool]:
+def _dir_size_bytes_limited_many(paths: List[Path]) -> tuple[int, bool]:
+    """Aggregate size across multiple paths, returning partial sum if incomplete.
+
+    Returns:
+        (size_bytes, complete): size_bytes is always an int (sum of partial scans),
+        complete is True only if all paths were fully scanned.
+    """
     total = 0
     complete = True
     for path in paths:
         size, path_complete = _dir_size_bytes_limited(path)
-        if size is None:
-            complete = False
-        else:
-            total += size
+        total += size
         complete = complete and path_complete
-    return (total if complete else None, complete)
+    return (total, complete)
 
 
 def get_runtime_environment_status() -> Dict[str, Any]:
-    """Return local Python runtime state without recursively blocking on huge installs."""
+    """Return local Python runtime state with an exact installed-size total."""
     descriptor = _runtime_environment_descriptor()
     runtime_path: Path = descriptor["path"]
     marker_path = _venv_rebuild_marker_path()
-    size_bytes, size_complete = _dir_size_bytes_limited_many(descriptor["size_paths"])
+    size_bytes = _dir_size_bytes_many(descriptor["size_paths"])
     backend_venv_path = _backend_venv_path()
     return {
         "runtime_kind": descriptor["kind"],
@@ -138,7 +147,7 @@ def get_runtime_environment_status() -> Dict[str, Any]:
         "venv_path": str(backend_venv_path),
         "venv_exists": runtime_path.exists(),
         "venv_size_bytes": size_bytes,
-        "venv_size_complete": size_complete,
+        "venv_size_complete": True,
         "rebuild_core_pending": marker_path.exists(),
         "rebuild_marker_path": str(marker_path),
     }
@@ -181,25 +190,34 @@ def request_core_runtime_rebuild() -> Dict[str, Any]:
 
 
 def _dir_size_bytes(path: Path) -> int:
-    """Sum the size of every regular file under ``path``. Best-effort."""
+    """Sum every regular file under ``path`` without following symlinks."""
     if path.is_symlink():
         return 0
     if not path.exists():
         return 0
     total = 0
-    try:
-        for entry in path.rglob("*"):
-            if entry.is_symlink():
-                continue
-            if entry.is_file():
-                try:
-                    total += entry.stat().st_size
-                except OSError:
-                    # Permission denied / file vanished mid-scan — skip silently.
-                    pass
-    except OSError as exc:
-        logger.debug("Disk size scan failed under %s: %s", path, exc)
+    pending = [os.fspath(path)]
+    while pending:
+        current = pending.pop()
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_symlink():
+                            continue
+                        if entry.is_file(follow_symlinks=False):
+                            total += entry.stat(follow_symlinks=False).st_size
+                        elif entry.is_dir(follow_symlinks=False):
+                            pending.append(entry.path)
+                    except OSError:
+                        pass
+        except OSError as exc:
+            logger.debug("Disk size scan failed under %s: %s", current, exc)
     return total
+
+
+def _dir_size_bytes_many(paths: List[Path]) -> int:
+    return sum(_dir_size_bytes(path) for path in paths)
 
 
 def _safe_to_clean_paths() -> Dict[str, Dict[str, Any]]:
@@ -296,33 +314,25 @@ def get_cache_status() -> Dict[str, Any]:
     safe_to_clean: List[Dict[str, Any]] = []
     for key, info in _safe_to_clean_paths().items():
         path: Path = info["path"]
-        size, complete = _dir_size_bytes_limited(path)
+        size = _dir_size_bytes(path)
         safe_to_clean.append({
             "key": key,
             "label_key": info["label_key"],
             "path": str(path),
             "size_bytes": size,
-            "size_complete": complete,
+            "size_complete": True,
             "exists": path.exists(),
         })
 
     preserved: List[Dict[str, Any]] = []
     for key, info in _preserved_paths().items():
-        total = 0
-        complete = True
-        for path in info["paths"]:
-            size, path_complete = _dir_size_bytes_limited(path)
-            if size is None:
-                complete = False
-            else:
-                total += size
-            complete = complete and path_complete
+        total = _dir_size_bytes_many(info["paths"])
         preserved.append({
             "key": key,
             "label_key": info["label_key"],
             "path": "; ".join(str(path) for path in info["paths"]),
-            "size_bytes": total if complete else None,
-            "size_complete": complete,
+            "size_bytes": total,
+            "size_complete": True,
         })
 
     from config import get_thumbnail_cache_max_mb

@@ -1816,6 +1816,14 @@ const API = {
         return this.post(`/api/collections/${collectionId}/items`, { image_id: imageId, member });
     },
 
+    async setCollectionMembershipBulk(collectionId, { imageIds = [], selectionToken = null, member = true } = {}) {
+        return this.post(`/api/collections/${collectionId}/items/bulk`, {
+            image_ids: selectionToken ? [] : imageIds,
+            selection_token: selectionToken,
+            member,
+        });
+    },
+
     async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operation = 'move', artist = null, promptMatchMode = 'exact', tagMode = 'and', excludeFilters = null, scopeFilters = null) {
         return this.post('/api/batch-move', {
             generators,
@@ -2812,10 +2820,13 @@ async function _showUpdatePopup(anchorBtn) {
         ${actionsHtml}
     </div>`;
 
-    const rect = anchorBtn.getBoundingClientRect();
-    popup.style.top = (rect.bottom + 8) + 'px';
-    popup.style.right = (window.innerWidth - rect.right) + 'px';
     popup.classList.add('visible');
+    window.PopupPosition?.place(popup, {
+        anchor: anchorBtn,
+        placement: 'bottom-end',
+        gap: 8,
+        maxHeight: Math.max(160, window.innerHeight - 24),
+    });
     // Single delegated handler — re-renders no longer accumulate listeners on
     // detached DOM nodes. We replace popup.onclick wholesale on each show so
     // closures captured by the previous render are eligible for GC.
@@ -5134,6 +5145,30 @@ async function moveOrCopySelectedGalleryImages(operation = 'move') {
 
 // v3.2.2 task #4: push the gallery selection into the Dataset Maker
 // queue and switch the user to that view.
+function addSelectionToCollectionPicker() {
+    const selectionToken = getActiveSelectionTokenForActions();
+    const ids = getSelectedGalleryIds();
+    if (!selectionToken && ids.length === 0) {
+        showToast(
+            appT('selection.emptyHint',
+                 'Select images, or choose all current filter matches.'),
+            'info'
+        );
+        return;
+    }
+    if (typeof window.CollectionsUI?.openAddToCollectionPicker !== 'function') {
+        showToast(
+            appT('collections.unavailable', 'Collections are still loading. Please try again.'),
+            'error'
+        );
+        return;
+    }
+    window.CollectionsUI.openAddToCollectionPicker(ids, { selectionToken }).catch((error) => {
+        Logger?.warn?.('Failed to open collection picker', error);
+        showToast(appT('collections.openFailed', 'Failed to open collections'), 'error');
+    });
+}
+
 async function sendSelectionToDatasetMaker() {
     const ids = getSelectedGalleryIds();
     const hasFilteredToken = Boolean(getActiveSelectionTokenForActions());
@@ -5206,7 +5241,8 @@ function updateNavigationOverflowState() {
         'nav-tabs-icon-only',
         'nav-tabs-compact-labels',
         'nav-tabs-compact-secondary',
-        'nav-tabs-compact-brand'
+        'nav-tabs-compact-brand',
+        'nav-priority-overflow'
     );
     if (forceMobileLayout) {
         navBar.classList.add('nav-tabs-overflow');
@@ -5230,9 +5266,15 @@ function updateNavigationOverflowState() {
         return false;
     }
 
-    // Desktop-first degradation: keep the pipeline labels readable before
-    // falling back to icon-only. Reader and Tools are secondary to the numbered
-    // pipeline, so they collapse first on laptop widths.
+    // Desktop-first degradation: show Prompt Helper / Style Finder directly
+    // when there is room, then move only those low-priority tools into More.
+    navBar.classList.add('nav-priority-overflow');
+    if (!needsOverflow()) {
+        closeMobileMenu();
+        return false;
+    }
+
+    // Keep the core pipeline labels readable before falling back to icon-only.
     navBar.classList.add('nav-tabs-compact-labels');
     if (!needsOverflow()) {
         closeMobileMenu();
@@ -5268,16 +5310,17 @@ function updateNavigationOverflowState() {
         'nav-tabs-icon-only',
         'nav-tabs-compact-labels',
         'nav-tabs-compact-secondary',
-        'nav-tabs-compact-brand'
+        'nav-tabs-compact-brand',
+        'nav-priority-overflow'
     );
     navBar.classList.add('nav-tabs-overflow');
     return true;
 }
 
-// v3.3.3 WS1: the "Tools ▾" dropdown holds Prompt Helper + Style Finder so the
-// six core pipeline tabs keep their labels on 1366px laptops. The menu items are
-// still ``.nav-tab`` buttons (so switchView + the click binding treat them like
-// any tab); this only wires the open/close toggle and outside-click/Escape close.
+// v3.4.3: Prompt Helper + Style Finder render as direct tabs when space allows.
+// The More dropdown is a responsive fallback for narrow windows / long labels.
+// Menu items stay .nav-tab buttons, so switchView and the shared click binding
+// continue to treat them like normal tabs.
 function setupNavToolsMenu() {
     const toggle = document.getElementById('nav-tools-toggle');
     const menu = document.getElementById('nav-tools-menu');
@@ -5291,14 +5334,11 @@ function setupNavToolsMenu() {
     };
     const open = () => {
         menu.hidden = false;
-        // Position the fixed menu under the toggle, right-aligned to it.
-        // getBoundingClientRect returns visual px while the root zoom
-        // (ui-scale.js) makes fixed offsets CSS px — divide by the UI scale
-        // like gallery.js _positionContextMenu / tag-category-copy.js do.
-        const uiScale = Math.max(0.1, window.UiScale?.get?.() || parseFloat(document.documentElement.style.zoom) || 1);
-        const r = toggle.getBoundingClientRect();
-        menu.style.top = `${Math.round((r.bottom + 8) / uiScale)}px`;
-        menu.style.right = `${Math.round((window.innerWidth - r.right) / uiScale)}px`;
+        window.PopupPosition?.place(menu, {
+            anchor: toggle,
+            placement: 'bottom-end',
+            gap: 8,
+        });
         toggle.setAttribute('aria-expanded', 'true');
         toggle.classList.add('menu-open');
     };
@@ -5330,9 +5370,23 @@ function setupNavToolsMenu() {
 // highlight would otherwise be invisible.
 function updateNavToolsActive(viewName) {
     const toggle = document.getElementById('nav-tools-toggle');
-    if (!toggle) return;
     const TOOL_VIEWS = ['promptlab', 'artist'];
-    toggle.classList.toggle('active', TOOL_VIEWS.includes(viewName));
+    if (toggle) toggle.classList.toggle('active', TOOL_VIEWS.includes(viewName));
+    document.querySelectorAll('.nav-tools-mirror').forEach((item) => {
+        const isActive = item.dataset.view === viewName;
+        item.classList.toggle('active', isActive);
+        item.setAttribute('aria-selected', String(isActive));
+    });
+}
+
+function syncGeneratorRailOverflow() {
+    const tabs = document.getElementById('generator-tabs');
+    const scroller = document.getElementById('generator-tabs-scroll');
+    if (!tabs || !scroller) return;
+    const canScroll = scroller.scrollWidth > scroller.clientWidth + 1;
+    const atEnd = scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 2;
+    tabs.classList.toggle('no-scroll', !canScroll);
+    tabs.style.setProperty('--generator-overflow-end', canScroll && !atEnd ? '1' : '0');
 }
 
 // ============== Event Listeners ==============
@@ -5546,8 +5600,12 @@ function initEventListeners() {
     $$('.gen-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             // Update active state
-            $$('.gen-tab').forEach(t => t.classList.remove('active'));
+            $$('.gen-tab').forEach(t => {
+                t.classList.remove('active');
+                t.setAttribute('aria-selected', 'false');
+            });
             tab.classList.add('active');
+            tab.setAttribute('aria-selected', 'true');
 
             const gen = tab.dataset.gen;
             if (gen === 'all') {
@@ -5581,9 +5639,17 @@ function initEventListeners() {
             });
 
             updateFilterSummary();
+            tab.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+            syncGeneratorRailOverflow();
             loadImages();
         });
     });
+
+    const generatorScroller = document.getElementById('generator-tabs-scroll');
+    if (generatorScroller && generatorScroller.dataset.overflowBound !== '1') {
+        generatorScroller.dataset.overflowBound = '1';
+        generatorScroller.addEventListener('scroll', syncGeneratorRailOverflow, { passive: true });
+    }
 
     // Gallery sort dropdown
     $('#gallery-sort').addEventListener('change', (e) => {
@@ -5743,6 +5809,10 @@ function initEventListeners() {
     // Color analysis is still available via the Tag Images modal's Color
     // tab, where most users actually trigger it.
     $('#btn-send-selection-to-dataset-maker')?.addEventListener('click', sendSelectionToDatasetMaker);
+    // v3.4.3 P4: batch "add to collection" from the selection panel. Filtered
+    // "Select all matching" selections pass their token so the backend expands
+    // the ids server-side instead of shipping tens of thousands of ids.
+    $('#btn-add-selected-to-collection')?.addEventListener('click', addSelectionToCollectionPicker);
     $('#btn-remove-selected-gallery')?.addEventListener('click', removeSelectedGalleryImages);
     $('#btn-delete-selected-files')?.addEventListener('click', deleteSelectedGalleryImages);
 
@@ -6962,6 +7032,49 @@ function validateScanFolderPath() {
     return true;
 }
 
+// v3.4.3: "one collection per imported dataset" CTA. Creates a collection
+// named after the scanned folder and bulk-adds every image under that folder
+// (selection token + bulk membership — handles tens of thousands of images
+// without shipping ID lists through the browser).
+async function createCollectionFromScanFolder(folderPath) {
+    const cleanPath = String(folderPath || '').trim();
+    if (!cleanPath) return;
+    const name = cleanPath.split(/[\\/]/).filter(Boolean).pop() || cleanPath;
+    try {
+        const created = await API.createCollection(name, cleanPath);
+        const collectionId = Number(created?.id);
+        if (!Number.isFinite(collectionId) || collectionId <= 0) {
+            throw new Error(created?.detail || 'collection id missing from response');
+        }
+        const tokenResponse = await API.createSelectionToken({
+            ...createDefaultFilterState(),
+            folder: cleanPath,
+        });
+        const selectionToken = tokenResponse?.selection_token || null;
+        let added = 0;
+        if (selectionToken) {
+            const result = await API.setCollectionMembershipBulk(collectionId, {
+                selectionToken,
+                member: true,
+            });
+            added = Number(result?.added || 0);
+        }
+        showToast(
+            appT('flow.collectionCreatedToast', 'Collection "{name}" created with {count} images.')
+                .replace('{name}', name)
+                .replace('{count}', String(added)),
+            'success'
+        );
+        try { window.CollectionsUI?.refresh?.(); } catch (_e) { /* sidebar refresh is best-effort */ }
+    } catch (err) {
+        showToast(
+            appT('flow.collectionCreateFailedToast', 'Could not create the collection: {error}')
+                .replace('{error}', err?.message || String(err)),
+            'error'
+        );
+    }
+}
+
 async function startScan() {
     const folderPath = $('#scan-folder-path')?.value?.trim() || '';
     if (!folderPath) {
@@ -6976,6 +7089,7 @@ async function startScan() {
 
     try {
         addRecentFolder(folderPath);
+        _scanLastFolderPath = folderPath;
         await API.startScan(folderPath, {
             recursive,
             quickImport,
@@ -7104,6 +7218,8 @@ function _refreshScanDrivenViews(force = false, options = {}) {
     if (AppState.currentView === 'gallery') {
         window.UnreadableBanner?.refresh?.(true);
     }
+    // P17: Refresh Folders tree after scan completes
+    window.FolderTreeUI?.refresh?.();
 }
 
 function getScanProgressMetrics(progress) {
@@ -7563,15 +7679,26 @@ async function pollScanProgress(retryCount = 0, generation = _scanPollGeneration
             } else if (_scanAutoTagOn) {
                 showToast(completionMessage, 'success');
             } else {
+                const _scanCtaActions = [
+                    { icon: '🏷️', label: appT('flow.ctaTag', 'Tag with AI'), action: 'modal:tag-modal' },
+                    { icon: '🗂️', label: appT('nav.sorting', 'Organize'), action: 'view:sorting' },
+                ];
+                // v3.4.3: one-click "collection per imported dataset" so scans
+                // of separate datasets don't blur together in the gallery.
+                if (_scanNewCount > 0 && _scanLastFolderPath) {
+                    const ctaFolder = _scanLastFolderPath;
+                    _scanCtaActions.push({
+                        icon: '📚',
+                        label: appT('flow.ctaCreateCollection', 'Create collection'),
+                        action: () => createCollectionFromScanFolder(ctaFolder),
+                    });
+                }
                 showPipelineNextStep({
                     icon: '✅',
                     title: _scanNewCount > 0
                         ? appT('flow.scanDoneTitle', 'Imported {count} images — what next?').replace('{count}', String(_scanNewCount))
                         : appT('flow.scanDoneTitleZero', 'Import complete — what next?'),
-                    actions: [
-                        { icon: '🏷️', label: appT('flow.ctaTag', 'Tag with AI'), action: 'modal:tag-modal' },
-                        { icon: '🗂️', label: appT('nav.sorting', 'Organize'), action: 'view:sorting' },
-                    ],
+                    actions: _scanCtaActions,
                 });
             }
             hideModal('scan-modal');
@@ -7739,6 +7866,9 @@ const SCAN_DIAGNOSTICS_HOLD_MS = 10000;
 let _scanDiagnosticsHoldUntil = 0;
 let _scanLibraryReadyHandled = false;
 let _scanLastAutoRefreshAt = 0;
+// v3.4.3: folder of the most recent scan, for the "Create collection" CTA —
+// lets users keep each imported dataset separated without manual selection.
+let _scanLastFolderPath = '';
 // v3.3.0 USR-2: pollScanProgress is a self-rescheduling setTimeout loop with no
 // cancellation token. A previous scan's loop could stay alive and keep
 // repainting the OLD folder's progress when a new scan started ("闪回/猛回头").
@@ -8440,12 +8570,23 @@ async function loadStats() {
             0
         );
         const countOthersEl = $('#count-others');
+        const othersTab = $('.gen-tab[data-gen="others"]');
+        const activeOtherGenerators = OTHERS_GENERATOR_BUNDLE
+            .filter((gen) => (genCounts[gen] || 0) > 0)
+            .map((gen) => `${formatGeneratorLabel(gen)} (${genCounts[gen]})`);
+        const othersHint = activeOtherGenerators.length > 0
+            ? appT('generator.othersActiveHint', 'Grouped generators: {generators}', {
+                generators: activeOtherGenerators.join(', '),
+            }).replace('{generators}', activeOtherGenerators.join(', '))
+            : appT('generator.othersHint', 'Groups uncommon generators');
         if (countOthersEl) {
             countOthersEl.textContent = countsResolving && othersCount === 0 ? '…' : String(othersCount);
             countOthersEl.title = countsResolving
                 ? appT('gallery.metadataResolvingTitle', 'Generator counts are still resolving while metadata is being read or scan import is still running.')
-                : '';
+                : othersHint;
         }
+        if (othersTab) othersTab.title = othersHint;
+        syncGeneratorRailOverflow();
 
         const metadataChip = $('#metadata-status-chip');
         if (metadataChip) {
@@ -9475,6 +9616,7 @@ function updateSelectionUI() {
         'btn-batch-export-tags',
         'btn-send-to-censor',
         'btn-send-selection-to-dataset-maker',
+        'btn-add-selected-to-collection',
         'btn-remove-selected-gallery',
         'btn-delete-selected-files'
     ];
@@ -10679,9 +10821,8 @@ function getThumbnailCacheSettings(data = {}) {
 
 async function requestCoreRuntimeRebuild() {
     const runtime = await API.getCacheStatus().then(data => data?.runtime_environment || {}).catch(() => ({}));
-    const venvSize = runtime.venv_size_complete === false
-        ? appT('disk.runtimeSizeUnknown', 'large / not fully scanned')
-        : _formatBytes(Number(runtime.venv_size_bytes || 0));
+    const venvSizeBytes = Number(runtime.venv_size_bytes || 0);
+    const venvSize = _formatBytes(venvSizeBytes);
     showConfirm(
         appT('disk.rebuildCoreConfirmTitle', 'Rebuild lightweight runtime on next start?'),
         appT('disk.rebuildCoreConfirmBody', 'This schedules the app-owned Python runtime to be rebuilt the next time you start the app, then core dependencies are reinstalled. User data, images.db, settings, caches, and downloaded models are not deleted. Current runtime size: {size}. Heavy AI Python packages must be prepared again later.', { size: venvSize }),
@@ -11769,9 +11910,9 @@ function renderDiskUsage(data) {
     const preserved = Array.isArray(data?.preserved) ? data.preserved : [];
 
     const safeRows = safe.map((entry) => {
-        const sizeUnknown = entry.size_complete === false;
         const checked = entry.size_bytes > 0 ? 'checked' : '';
-        const sizeText = sizeUnknown ? appT('disk.sizeNotFullyScanned', 'large / not fully scanned') : _formatBytes(entry.size_bytes);
+        const sizeBytes = Number(entry.size_bytes || 0);
+        const sizeText = _formatBytes(sizeBytes);
         return `
             <label class="disk-cache-row" data-key="${escapeHtml(entry.key)}">
                 <input type="checkbox" class="disk-cache-checkbox" data-key="${escapeHtml(entry.key)}" ${checked}>
@@ -11783,9 +11924,8 @@ function renderDiskUsage(data) {
     }).join('');
 
     const preservedRows = preserved.map((entry) => {
-        const sizeLabel = entry.size_complete === false
-            ? appT('disk.sizeNotFullyScanned', 'large / not fully scanned')
-            : _formatBytes(entry.size_bytes);
+        const sizeBytes = Number(entry.size_bytes || 0);
+        const sizeLabel = _formatBytes(sizeBytes);
         const pathHtml = entry.path
             ? `<span class="disk-preserved-path" title="${escapeHtml(entry.path)}">${escapeHtml(entry.path)}</span>`
             : '';
@@ -11798,41 +11938,25 @@ function renderDiskUsage(data) {
         `;
     }).join('');
 
-    const totalSafeComplete = safe.every(e => e.size_complete !== false);
-    const totalSafe = totalSafeComplete
-        ? safe.reduce((sum, e) => sum + Number(e.size_bytes || 0), 0)
-        : null;
-    const totalSafeText = totalSafeComplete
-        ? _formatBytes(totalSafe)
-        : appT('disk.sizeNotFullyScanned', 'large / not fully scanned');
-    const hasCleanableSafe = safe.some(e => e.exists && (e.size_complete === false || Number(e.size_bytes || 0) > 0));
-    const totalPreservedComplete = preserved.every(e => e.size_complete !== false);
-    const totalPreserved = totalPreservedComplete
-        ? preserved.reduce((sum, e) => sum + Number(e.size_bytes || 0), 0)
-        : null;
-    const totalPreservedText = totalPreservedComplete
-        ? _formatBytes(totalPreserved)
-        : appT('disk.sizeNotFullyScanned', 'large / not fully scanned');
+    const totalSafe = safe.reduce((sum, e) => sum + Number(e.size_bytes || 0), 0);
+    const totalSafeText = _formatBytes(totalSafe);
+    const hasCleanableSafe = safe.some(e => e.exists && Number(e.size_bytes || 0) > 0);
+    const totalPreserved = preserved.reduce((sum, e) => sum + Number(e.size_bytes || 0), 0);
+    const totalPreservedText = _formatBytes(totalPreserved);
     const thumbnailLimit = getThumbnailCacheSettings(data);
     const thumbnailStats = data?.thumbnail_cache || {};
     const runtime = data?.runtime_environment || {};
     const thumbnailSafeEntry = safe.find(entry => entry.key === 'thumbnails');
-    const thumbnailSizeKnown = thumbnailStats.total_size_bytes != null || thumbnailSafeEntry?.size_complete !== false;
     const thumbnailCurrent = Number(thumbnailStats.total_size_bytes ?? thumbnailSafeEntry?.size_bytes ?? 0);
-    const thumbnailCurrentText = thumbnailSizeKnown
-        ? _formatBytes(thumbnailCurrent)
-        : appT('disk.sizeNotFullyScanned', 'large / not fully scanned');
+    const thumbnailCurrentText = _formatBytes(thumbnailCurrent);
     const thumbnailLimitText = thumbnailLimit > 0
         ? appT('disk.thumbnailLimitStatus', '{current} used / {limit} limit', { current: thumbnailCurrentText, limit: `${thumbnailLimit} MB` })
         : appT('disk.thumbnailLimitDisabled', 'Persistent thumbnail cache is disabled.');
-    const runtimeSizeKnown = runtime.venv_size_complete !== false;
     const runtimeSize = Number(runtime.venv_size_bytes || 0);
     const rebuildPending = Boolean(runtime.rebuild_core_pending);
     const runtimeStatusText = rebuildPending
         ? appT('disk.rebuildPending', 'Rebuild scheduled for next start')
-        : runtimeSizeKnown
-            ? appT('disk.runtimeSizeStatus', '{size} currently used', { size: _formatBytes(runtimeSize) })
-            : appT('disk.runtimeSizeUnknownStatus', 'Large / not fully scanned');
+        : appT('disk.runtimeSizeStatus', '{size} currently used', { size: _formatBytes(runtimeSize) });
 
     bodyEl.innerHTML = `
         <div class="disk-section disk-settings-section">
@@ -12385,14 +12509,22 @@ function applyModalFilters() {
 function syncGenTabsWithFilters() {
     const gens = AppState.filters.generators;
     $$('.gen-tab').forEach(t => {
-        if (gens.length === 5) {
+        if (gens.length === ALL_GENERATORS.length) {
             t.classList.toggle('active', t.dataset.gen === 'all');
+        } else if (
+            gens.length === OTHERS_GENERATOR_BUNDLE.length
+            && OTHERS_GENERATOR_BUNDLE.every((gen) => gens.includes(gen))
+        ) {
+            t.classList.toggle('active', t.dataset.gen === 'others');
         } else if (gens.length === 1) {
             t.classList.toggle('active', t.dataset.gen === gens[0]);
         } else {
             t.classList.remove('active');
         }
+        t.setAttribute('aria-selected', t.classList.contains('active') ? 'true' : 'false');
     });
+    document.querySelector('.gen-tab.active')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    syncGeneratorRailOverflow();
 }
 
 // Reflect the current FilterStore aspectRatio on the gallery-header
@@ -13130,11 +13262,23 @@ document.addEventListener('DOMContentLoaded', () => {
         returnToGalleryBtn.addEventListener('click', () => switchView('gallery'));
     }
 
-    window.addEventListener('resize', _onGalleryScroll, { passive: true });
-    document.addEventListener('languageChanged', updateNavigationOverflowState);
+    window.addEventListener('resize', () => {
+        _onGalleryScroll();
+        updateNavigationOverflowState();
+        syncGeneratorRailOverflow();
+    }, { passive: true });
+    document.addEventListener('languageChanged', () => {
+        updateNavigationOverflowState();
+        syncGeneratorRailOverflow();
+    });
     updateNavigationOverflowState();
+    syncGeneratorRailOverflow();
     window.addEventListener('load', updateNavigationOverflowState, { once: true });
-    document.fonts?.ready?.then?.(() => updateNavigationOverflowState()).catch?.(() => {});
+    window.addEventListener('load', syncGeneratorRailOverflow, { once: true });
+    document.fonts?.ready?.then?.(() => {
+        updateNavigationOverflowState();
+        syncGeneratorRailOverflow();
+    }).catch?.(() => {});
     Promise.resolve(aestheticStatusReady).finally(() => {
         document.documentElement.dataset.appReady = '1';
         window.dispatchEvent(new Event('sd-image-sorter-ready'));

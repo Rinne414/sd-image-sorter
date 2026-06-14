@@ -12,7 +12,7 @@ const OnboardingTour = (function() {
     const FIRST_RUN_CHECK_KEY = 'sd-image-sorter-has-seen-images';
 
     // Current tour version - increment when adding new features
-    // v2 (v3.3.3): rewritten navigation step for the pipeline-ordered nav + Tools menu.
+    // v3 (v3.4.3): navigation step reflects direct advanced tabs with More fallback.
     const TOUR_VERSION = 2;
 
     // Tour step definitions (bilingual)
@@ -43,7 +43,7 @@ const OnboardingTour = (function() {
                     <li><strong>Find Similar</strong> - CLIP visual similarity &amp; duplicates</li>
                     <li><strong>Dataset</strong> - build a LoRA training set (caption + export)</li>
                 </ul>
-                <p>More tools (Prompt Helper, Style Finder) live under the <strong>Tools ▾</strong> menu.</p>`,
+                <p><strong>Prompt Helper</strong> and <strong>Style Finder</strong> appear directly when there is room, or under <strong>More ▾</strong> on narrower screens.</p>`,
             target: '.nav-tabs',
             position: 'bottom'
         },
@@ -319,10 +319,12 @@ const OnboardingTour = (function() {
 
         // Position highlight around target
         const padding = 8;
-        highlight.style.top = `${targetRect.top - padding}px`;
-        highlight.style.left = `${targetRect.left - padding}px`;
-        highlight.style.width = `${targetRect.width + padding * 2}px`;
-        highlight.style.height = `${targetRect.height + padding * 2}px`;
+        window.PopupPosition?.setFixedRect(highlight, {
+            top: targetRect.top - padding,
+            left: targetRect.left - padding,
+            width: targetRect.width + padding * 2,
+            height: targetRect.height + padding * 2,
+        });
 
         // Position tooltip
         const gap = 16;
@@ -363,8 +365,7 @@ const OnboardingTour = (function() {
             top = viewportHeight - tooltipRect.height - 20;
         }
 
-        tooltipEl.style.top = `${top}px`;
-        tooltipEl.style.left = `${left}px`;
+        window.PopupPosition?.setFixedRect(tooltipEl, { top, left });
         tooltipEl.style.transform = 'none';
 
         // Scroll target into view if needed

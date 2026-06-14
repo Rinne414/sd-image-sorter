@@ -12,28 +12,24 @@ image IDs already in our gallery DB. The pipeline is:
        the tags LoRA trainers explicitly want to *anchor*, not have the VLM
        describe back as scene-content.
     3. Pick a VLM prompt preset based on the user's chosen training purpose:
-        - style     -> describe medium / rendering / lighting / composition
-                       at a HIGH LEVEL, no clothing enumeration
+        - style     -> describe subject / scene variation while omitting the
+                       target style vocabulary
         - character -> describe pose / action / expression / framing,
                        explicitly NOT hair color / eye color / signature
                        outfit (those are baked into the latent)
         - general   -> 2-3 sentences covering subject / pose / clothing /
                        background / lighting
-        - concept   -> emphasise the concept being trained; describe how
-                       it appears in this specific image
+        - concept   -> describe the surrounding context without guessing which
+                       detected tag is the target concept
     4. Call the configured VLM with the assembled prompt.
     5. Build the final caption: [rating] [trigger] [general_tags] [NL_text].
     6. Inject trigger word at the front (if user supplied one).
     7. Write the result back to the DB via the existing tagging service plumb.
 
-The pipeline shape follows widely-used LoRA-training conventions
-(separate STYLE / CHARACTER / GENERAL caption strategies, danbooru-style
-quality / score / safety / meta tag families filtered out before the VLM
-sees the tag list). The prompt strings, noise-tag set, and per-purpose
-behaviours are written specifically for this project under MIT, not
-adapted from any other tool's source code; functional similarity is
-unavoidable because the underlying training recipes (Anima, Pony,
-NoobAI, Illustrious) are public domain best practice.
+Purpose presets are deliberately conservative. Training tools document how
+captions, shuffling, and kept tokens are consumed, but they do not prescribe a
+universal category-deletion table for each LoRA type. The service therefore
+removes only targets it can identify reliably and preserves the rest as context.
 
 This service is pure orchestration: it does not load models, it does not
 own the DB connection. It calls into ``tagger.get_tagger`` /
@@ -58,6 +54,7 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
 from config import ALLOWED_IMAGE_EXTENSIONS, DEFAULT_TAGGER_MODEL, TAGGER_MODELS
 from services.tag_export_service import count_selection_token_ids, iter_selection_token_id_chunks
+from tag_rules import categorize_tag
 from utils.path_validation import normalize_user_path
 
 logger = logging.getLogger(__name__)
@@ -327,17 +324,14 @@ def compute_consensus_tags(
 PROMPT_PRESETS: Dict[str, str] = {
     "style": (
         "Task: produce the natural-language portion of a LoRA training "
-        "caption that targets STYLE. The text encoder must learn the visual "
-        "style of this image, not its specific subject.\n\n"
+        "caption that targets STYLE. The target style should be carried by the "
+        "training image and trigger, not repeated as caption vocabulary.\n\n"
         "Output 2-3 plain English sentences that cover:\n"
-        "  - rendering medium and technique (linework weight, shading style, "
-        "screentone, painterly vs vector, palette saturation and temperature)\n"
-        "  - lighting and color mood (golden hour, neon, dramatic rim, overcast, etc.)\n"
+        "  - visible subject, pose or action, clothing, objects, and setting\n"
         "  - composition and framing (close portrait, full body, low angle, dynamic crop)\n"
-        "  - subject only at a high level (single figure in motion, group scene); "
-        "do not list clothing pieces, accessories, or character-specific traits\n\n"
-        "Rules: no leading trigger word or label, no headers, no empty praise like "
-        "\"stunning\" or \"gorgeous\".\n\n"
+        "  - scene lighting only when it is situational rather than a rendering style\n\n"
+        "Do not name or paraphrase the rendering medium, artist, linework, brushwork, "
+        "palette, or target style. No leading trigger word, headers, or praise.\n\n"
         "WD14 tags for grounding (do not parrot them back literally): {tags}"
     ),
     "character": (
@@ -364,15 +358,10 @@ PROMPT_PRESETS: Dict[str, str] = {
         "WD14 tags for grounding: {tags}"
     ),
     "concept": (
-        # CONCEPT LoRA: trains a non-character, non-style concept (an object,
-        # action, setting, or visual effect). The caption must center on that
-        # concept so the model learns to associate it with the trigger.
         "Task: write 2-3 plain English sentences for a CONCEPT LoRA caption. "
-        "Center the description on the concept being trained (the object, action, "
-        "setting, or visual effect that varies across the dataset) and how it "
-        "appears in this specific image. Cover composition, lighting, and just "
-        "enough subject context to anchor the concept. No headers, no labels, no "
-        "trigger word.\n\n"
+        "Describe the visible subject, action, setting, composition, and lighting "
+        "that vary around the target concept. Do not guess a hidden class name or "
+        "invent a concept label. No headers, no labels, no trigger word.\n\n"
         "WD14 tags for grounding: {tags}"
     ),
 }
@@ -493,6 +482,33 @@ def build_vlm_prompt(
         cleaned = []
     return template.replace("{tags}", ", ".join(cleaned))
 
+
+def filter_tags_by_training_purpose(
+    training_purpose: str,
+    general_tags: List[str],
+    copyright_tags: List[str],
+    character_tags: List[str],
+    trigger_word: str = "",
+) -> List[str]:
+    """Return the caption tags that can be filtered without guessing targets.
+
+    Style mode removes tags classified as style/artist so the target style is not
+    named in every caption. Character mode removes detected character names only
+    when a trigger word is present to carry that identity. Other modes preserve
+    context because the app cannot infer which detected tag is the user's target.
+    """
+    canonical = normalize_training_purpose(training_purpose)
+    all_tags = list(general_tags) + list(copyright_tags) + list(character_tags)
+
+    if canonical == "style":
+        filtered_general = [
+            tag for tag in general_tags
+            if categorize_tag(tag) not in {"style", "artist"}
+        ]
+        return filtered_general + list(copyright_tags) + list(character_tags)
+    if canonical == "character" and str(trigger_word or "").strip():
+        return list(general_tags) + list(copyright_tags)
+    return all_tags
 
 
 # ---------------------------------------------------------------------------
@@ -783,6 +799,13 @@ class SmartTagRequest:
     consensus_skip_categories: List[str] = field(
         default_factory=lambda: ["character", "copyright"]
     )
+    # ToriiGate generation parameters (v3.4.3). caption_length picks the
+    # prompt + token budget (brief→160, detailed→512); max_new_tokens 0 means
+    # "derive from length"; grounding feeds the WD14 tags to ToriiGate as
+    # reference input (official model usage, mirrors the VLM {tags} context).
+    toriigate_caption_length: str = "detailed"
+    toriigate_max_new_tokens: int = 0
+    toriigate_grounding: bool = True
 
 
 def _coerce_dataset_scan_token(payload: Dict[str, Any]) -> Optional[str]:
@@ -848,6 +871,17 @@ def _coerce_max_tags(raw: Any, default: int) -> int:
     except (TypeError, ValueError):
         return max(0, int(default or 0))
     return max(0, min(2000, value))
+
+
+def _coerce_toriigate_max_tokens(raw: Any) -> int:
+    """0 means "derive from caption_length"; explicit values clamp to [32, 1024]."""
+    try:
+        value = int(raw or 0)
+    except (TypeError, ValueError):
+        return 0
+    if value <= 0:
+        return 0
+    return max(32, min(1024, value))
 
 
 def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
@@ -1064,6 +1098,15 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
         taggers=cleaned_taggers,
         consensus_min=max(1, int(payload.get("consensus_min", 2) or 2)),
         consensus_skip_categories=skip_categories,
+        toriigate_caption_length=(
+            "brief"
+            if str(payload.get("toriigate_caption_length") or "").strip().lower() == "brief"
+            else "detailed"
+        ),
+        toriigate_max_new_tokens=_coerce_toriigate_max_tokens(
+            payload.get("toriigate_max_new_tokens")
+        ),
+        toriigate_grounding=bool(payload.get("toriigate_grounding", True)),
     )
 
 
@@ -1445,10 +1488,37 @@ def _assemble_result_dict(
     """Stage-3 of the pipeline: assemble the final caption + result payload from
     a tag partial and the natural-language text. Output shape matches what
     ``_persist_result`` / ``_append_caption_result`` consume."""
+    selected_tags = filter_tags_by_training_purpose(
+        req.training_purpose,
+        partial["general_names"],
+        partial["copyright_names"],
+        partial["character_names"],
+        req.trigger_word,
+    )
+    selected_keys = {
+        str(tag or "").strip().lower().replace(" ", "_")
+        for tag in selected_tags
+    }
+
+    def _selected_names(items: List[str]) -> List[str]:
+        return [
+            tag for tag in items
+            if str(tag or "").strip().lower().replace(" ", "_") in selected_keys
+        ]
+
+    def _selected_rows(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [
+            row for row in items
+            if str(row.get("tag") or "").strip().lower().replace(" ", "_") in selected_keys
+        ]
+
+    general_names = _selected_names(partial["general_names"])
+    copyright_names = _selected_names(partial["copyright_names"])
+    character_names = _selected_names(partial["character_names"])
     caption = assemble_caption(
         rating=partial["rating"],
-        general_tags=partial["general_names"] + partial["copyright_names"],
-        character_tags=partial["character_names"],
+        general_tags=general_names + copyright_names,
+        character_tags=character_names,
         nl_text=nl_text,
         trigger_word=req.trigger_word,
         auto_strip_noise=req.auto_strip_noise,
@@ -1456,12 +1526,12 @@ def _assemble_result_dict(
     return {
         "image_id": image_id,
         "caption": caption,
-        "general_tags": partial["general_names"],
-        "copyright_tags": partial["copyright_names"],
-        "character_tags": partial["character_names"],
-        "general_tag_rows": partial["general_rows"],
-        "copyright_tag_rows": partial["copyright_rows"],
-        "character_tag_rows": partial["character_rows"],
+        "general_tags": general_names,
+        "copyright_tags": copyright_names,
+        "character_tags": character_names,
+        "general_tag_rows": _selected_rows(partial["general_rows"]),
+        "copyright_tag_rows": _selected_rows(partial["copyright_rows"]),
+        "character_tag_rows": _selected_rows(partial["character_rows"]),
         "rating": partial["rating"],
         "nl_text": nl_text,
         "noise_stripped_count": partial["noise_stripped"],
@@ -1469,7 +1539,10 @@ def _assemble_result_dict(
 
 
 def _vlm_context_tags_for(
-    partial: Dict[str, Any], include_tags_as_context: bool
+    partial: Dict[str, Any],
+    include_tags_as_context: bool,
+    training_purpose: str = "general",
+    trigger_word: str = "",
 ) -> Optional[List[str]]:
     """Build the noise-filtered tag list passed to ``provider.caption_image``.
 
@@ -1481,20 +1554,31 @@ def _vlm_context_tags_for(
     """
     if not include_tags_as_context:
         return None
-    names = (
-        (partial.get("general_names") or [])
-        + (partial.get("copyright_names") or [])
-        + (partial.get("character_names") or [])
+    names = filter_tags_by_training_purpose(
+        training_purpose,
+        partial.get("general_names") or [],
+        partial.get("copyright_names") or [],
+        partial.get("character_names") or [],
+        trigger_word,
     )
     filtered, _stripped = filter_noise_tags(names)
     return filtered or None
 
 
-def _toriigate_nl_text(nl_tagger, image_path: str, image_id: int) -> str:
+def _toriigate_nl_text(
+    nl_tagger,
+    image_path: str,
+    image_id: int,
+    tags: Optional[List[str]] = None,
+) -> str:
     """Run a single ToriiGate natural-language caption (local model, serial)."""
     try:
-        out = nl_tagger.tag(image_path)
-        nl_text = str(out.get("raw_text") or "").strip()
+        # Only pass the kwarg when grounding tags exist so pre-v3.4.3 tagger
+        # doubles (tests, custom backends) without the kwarg keep working.
+        out = nl_tagger.tag(image_path, tags=tags) if tags else nl_tagger.tag(image_path)
+        # nl_text is the JSON-sanitized prose; raw_text may be a (truncated)
+        # JSON blob the model emitted and must never reach the caption.
+        nl_text = str(out.get("nl_text") or "").strip()
         if not nl_text:
             nl_text = ", ".join(_flatten_tag_names(out.get("general_tags") or []))
         return nl_text
@@ -1573,16 +1657,26 @@ def _process_one_image(
     # ------- Stage 2: VLM caption --------------------------------------
     nl_text = ""
     if req.enable_vlm and req.natural_language_mode == "toriigate" and nl_tagger is not None:
-        try:
-            out = nl_tagger.tag(image_path)
-            nl_text = str(out.get("raw_text") or "").strip()
-            if not nl_text:
-                nl_text = ", ".join(_flatten_tag_names(out.get("general_tags") or []))
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("ToriiGate natural-language caption failed for image %s: %s", image_id, exc)
-            nl_text = ""
+        nl_text = _toriigate_nl_text(
+            nl_tagger,
+            image_path,
+            image_id,
+            tags=_vlm_context_tags_for(
+                partial,
+                req.toriigate_grounding,
+                req.training_purpose,
+                req.trigger_word,
+            ),
+        )
     elif req.enable_vlm and vlm_provider is not None:
-        vlm_context_tags = general_names + copyright_names + character_names
+        # Filter tags by training purpose (LoRA training best practices)
+        vlm_context_tags = filter_tags_by_training_purpose(
+            req.training_purpose,
+            general_names,
+            copyright_names,
+            character_names,
+            req.trigger_word,
+        )
         include_tags_as_context = bool(
             getattr(getattr(vlm_provider, "config", None), "include_tags_as_context", True)
         )
@@ -1966,6 +2060,11 @@ def _build_caption_phase(req: "SmartTagRequest", vlm_provider, nl_tagger) -> "_C
         )
         config.user_prompt = template
         config.user_prompt_with_tags = template
+        # Smart Tag's VLM role is prose only (booru tags come from the local
+        # tagger), so force nl_caption regardless of the VLM Settings preset.
+        # Without this, a preset like anima_flux that stored output_format=
+        # "both"/"danbooru_tags" would skip the NL parse path entirely.
+        config.output_format = "nl_caption"
     return ctx
 
 
@@ -2051,7 +2150,12 @@ def _run_caption_phase(
                     async with sem:
                         if job.cancel_requested:
                             return
-                        tags = _vlm_context_tags_for(partial, ctx.include_tags_as_context)
+                        tags = _vlm_context_tags_for(
+                            partial,
+                            ctx.include_tags_as_context,
+                            req.training_purpose,
+                            req.trigger_word,
+                        )
                         res = await ctx.vlm_provider.caption_image(path, tags=tags)
                         nl_text = (getattr(res, "caption", "") or "").strip()
                 except Exception as exc:  # noqa: BLE001
@@ -2070,11 +2174,27 @@ def _run_caption_phase(
 
         asyncio.run(_caption_all())
     else:
+        captions_since_pressure_check = 0
         for source_key, image_id, path, partial in items:
             if job.cancel_requested:
                 break
+            if ctx.use_toriigate:
+                captions_since_pressure_check += 1
+                if captions_since_pressure_check >= TORIIGATE_PRESSURE_CHECK_INTERVAL:
+                    captions_since_pressure_check = 0
+                    _relieve_caption_pressure(job, ctx.nl_tagger)
             nl_text = (
-                _toriigate_nl_text(ctx.nl_tagger, path, image_id)
+                _toriigate_nl_text(
+                    ctx.nl_tagger,
+                    path,
+                    image_id,
+                    tags=_vlm_context_tags_for(
+                        partial,
+                        req.toriigate_grounding,
+                        req.training_purpose,
+                        req.trigger_word,
+                    ),
+                )
                 if ctx.use_toriigate
                 else ""
             )
@@ -2160,6 +2280,192 @@ def _run_windowed_pipeline(
         job.message = _completion_message(job)
 
 
+# How many serial ToriiGate captions between live memory-pressure checks.
+TORIIGATE_PRESSURE_CHECK_INTERVAL = 16
+
+
+def _relieve_caption_pressure(job: SmartTagJobState, nl_tagger) -> None:
+    """Live VRAM-pressure check for the serial ToriiGate caption loop.
+
+    The booru phase has had this for a while (_apply_memory_pressure); the
+    caption phase ran without any live check, so a long ToriiGate run could
+    creep into VRAM exhaustion with no relief valve.
+    """
+    try:
+        from hardware_monitor import check_memory_pressure
+
+        pressure = check_memory_pressure()
+    except Exception:  # pragma: no cover - hardware_monitor optional
+        return
+    if pressure.get("should_restart_session") and hasattr(nl_tagger, "_recreate_session"):
+        try:
+            nl_tagger._recreate_session()
+            job.message = "VRAM pressure detected — refreshed the ToriiGate session."
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("smart-tag: ToriiGate session refresh under pressure failed: %s", exc)
+
+
+def _release_booru_sessions(taggers: List[Any]) -> None:
+    """Release booru ONNX sessions (and CUDA cache) before ToriiGate loads.
+
+    The taggers are singletons that self-heal on next use (release_session
+    flips their loaded flag), so releasing here never breaks later jobs.
+    """
+    for tagger in taggers:
+        release = getattr(tagger, "release_session", None)
+        if callable(release):
+            try:
+                release()
+            except Exception:  # noqa: BLE001
+                logger.warning("Booru session release failed; continuing.", exc_info=True)
+    try:
+        from ai_runtime_guard import clear_torch_cuda_cache
+
+        clear_torch_cuda_cache()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _load_toriigate_for_phase2(job: SmartTagJobState, req: "SmartTagRequest"):
+    """Load ToriiGate after the booru phase (two-phase residency contract)."""
+    from toriigate_tagger import get_toriigate_tagger
+
+    job.message = "Loading ToriiGate natural-language model..."
+    nl_tagger = get_toriigate_tagger(
+        model_name="toriigate-0.5",
+        use_gpu=req.use_gpu,
+        force_reload=False,
+        caption_length=req.toriigate_caption_length,
+        max_new_tokens=req.toriigate_max_new_tokens,
+        allow_cpu_fallback=False,
+    )
+    if hasattr(nl_tagger, "load"):
+        nl_tagger.load()
+    return nl_tagger
+
+
+def _persist_booru_only(
+    job: SmartTagJobState,
+    req: "SmartTagRequest",
+    pending_items: List[Tuple[str, int, str, Dict[str, Any]]],
+) -> None:
+    """Persist tag-only captions for items whose NL phase could not run, so a
+    failed ToriiGate load doesn't throw away a completed booru pass."""
+    ctx = _build_caption_phase(req, None, None)
+    for win_start in range(0, len(pending_items), SMART_TAG_PIPELINE_WINDOW):
+        _run_caption_phase(
+            job,
+            req,
+            pending_items[win_start:win_start + SMART_TAG_PIPELINE_WINDOW],
+            ctx,
+        )
+
+
+def _run_two_phase_toriigate_pipeline(
+    job: SmartTagJobState,
+    req: "SmartTagRequest",
+    *,
+    tagger,
+) -> None:
+    """Two-phase Smart Tag for the local ToriiGate mode (v3.4.3).
+
+    Phase 1 tags EVERY window with the booru tagger, then the booru session is
+    fully released; only then is ToriiGate loaded for phase 2 captions. The
+    old single-pass pipeline kept WD14 (ONNX) and ToriiGate (a ~9.6 GB torch
+    model) co-resident for the whole job — on midrange machines that ended in
+    a GPU driver reset, or in a ~20 GB fp32 CPU fallback that exhausted system
+    RAM ("black screen" reports). The window structure is for the cloud-VLM
+    mode, which is just an HTTP client and keeps the interleaved pipeline.
+    Sets the terminal job status itself.
+    """
+    booru_batch_size = (
+        _recommended_tag_batch_size(
+            getattr(tagger, "model_name", "") or req.tagger_model or "", req.use_gpu
+        )
+        if (req.enable_wd14 and tagger is not None)
+        else SMART_TAG_TAG_BATCH_SIZE
+    )
+    job.stage = "tagging" if req.enable_wd14 else "vlm"
+    job.phase_completion = 0.0
+    job.message = f"Smart-tagging {job.total} image(s) (phase 1/2: booru tags)..."
+
+    pending_items: List[Tuple[str, int, str, Dict[str, Any]]] = []
+    total = max(1, int(job.total or 0))
+    for window in _iter_windows(req, SMART_TAG_PIPELINE_WINDOW, job):
+        if job.cancel_requested:
+            break
+        valid = [(sk, iid, p) for (sk, iid, p) in window if p]
+        for source_key, _iid, path in window:
+            if not path:
+                _fail_missing_source(job, source_key)
+        if not valid:
+            continue
+
+        if req.enable_wd14 and tagger is not None:
+            booru_batch_size = _apply_memory_pressure(job, tagger, booru_batch_size)
+            raw_results = _tag_batch_with_thresholds(
+                tagger,
+                [path for (_sk, _iid, path) in valid],
+                general_threshold=req.general_threshold,
+                character_threshold=req.character_threshold,
+                copyright_threshold=req.copyright_threshold,
+                preferred_batch_size=booru_batch_size,
+            )
+        else:
+            raw_results = [{} for _ in valid]
+
+        partials = [_booru_partial_from_tag_result(raw or {}, req) for raw in raw_results]
+        pending_items.extend(
+            (valid[i][0], valid[i][1], valid[i][2], partials[i])
+            for i in range(len(valid))
+        )
+        job.phase_completion = min(1.0, len(pending_items) / total)
+        job.message = f"Phase 1/2: tagged {len(pending_items)}/{total} image(s)..."
+
+    if job.cancel_requested:
+        job.status = "cancelled"
+        job.message = "Cancelled by user."
+        return
+
+    # Residency handoff: booru session out BEFORE ToriiGate hauls its weights in.
+    if tagger is not None:
+        _release_booru_sessions([tagger])
+
+    job.stage = "vlm"
+    job.processed = job.skipped
+    job.phase_completion = 0.0
+    try:
+        nl_tagger = _load_toriigate_for_phase2(job, req)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("ToriiGate load failed after the booru phase: %s", exc)
+        _persist_booru_only(job, req, pending_items)
+        job.status = "failed"
+        job.message = (
+            "Booru tags were saved, but the ToriiGate caption phase could not "
+            f"start: {exc}"
+        )
+        return
+
+    ctx = _build_caption_phase(req, None, nl_tagger)
+    job.message = f"Phase 2/2: captioning {len(pending_items)} image(s) with ToriiGate..."
+    for win_start in range(0, len(pending_items), SMART_TAG_PIPELINE_WINDOW):
+        if job.cancel_requested:
+            break
+        _run_caption_phase(
+            job,
+            req,
+            pending_items[win_start:win_start + SMART_TAG_PIPELINE_WINDOW],
+            ctx,
+        )
+
+    if job.cancel_requested:
+        job.status = "cancelled"
+        job.message = "Cancelled by user."
+    elif job.status == "running":
+        job.status = "completed"
+        job.message = _completion_message(job)
+
+
 def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
     """Body of the worker thread - drives the pipeline and updates job state."""
     global _active_job_id
@@ -2191,16 +2497,11 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                     tagger.load()
         if req.enable_vlm:
             if req.natural_language_mode == "toriigate":
-                job.message = "Loading ToriiGate natural-language model..."
-                from toriigate_tagger import get_toriigate_tagger
-
-                nl_tagger = get_toriigate_tagger(
-                    model_name="toriigate-0.5",
-                    use_gpu=req.use_gpu,
-                    force_reload=False,
-                )
-                if hasattr(nl_tagger, "load"):
-                    nl_tagger.load()
+                # v3.4.3 two-phase contract: ToriiGate (~9.6 GB) loads only
+                # AFTER the booru phase finishes and its session is released —
+                # never alongside WD14. See _run_two_phase_toriigate_pipeline /
+                # _load_toriigate_for_phase2. nl_tagger stays None here.
+                job.message = "ToriiGate will load after the booru tagging phase..."
             else:
                 job.message = "Loading VLM provider..."
                 try:
@@ -2250,6 +2551,7 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
             per_image_outputs: List[List[Dict[str, Any]]] = [[] for _ in all_sources]
             tagger_count = len(req.taggers)
             total_tagger_steps = max(1, len(all_sources) * tagger_count)
+            used_taggers: List[Any] = []
 
             for tagger_idx, entry in enumerate(req.taggers):
                 if job.cancel_requested:
@@ -2273,6 +2575,7 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                     )
                     if hasattr(one_tagger, "load"):
                         one_tagger.load()
+                    used_taggers.append(one_tagger)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("smart-tag: failed to load tagger %s: %s", model_name, exc)
                     continue
@@ -2327,15 +2630,6 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                 # single-tagger path uses, so the multi-tagger mode also gets
                 # VLM concurrency (config.concurrent_requests) instead of the
                 # old one-image-at-a-time asyncio.run.
-                ctx = _build_caption_phase(req, vlm_provider, nl_tagger)
-                job.stage = "vlm" if ctx.nl_active else "tagging"
-                # Fix M1: total stays at the image count; processed resets so
-                # the second phase counts images cleanly (skipped images stay
-                # counted so N/M still reaches M).
-                job.processed = job.skipped
-                job.phase_completion = 0.0
-                job.message = "Running consensus + VLM..." if ctx.nl_active else "Running consensus..."
-
                 pending_items: List[Tuple[str, int, str, Dict[str, Any]]] = []
                 for img_idx, (source_key, image_id, path) in enumerate(all_sources):
                     if not path:
@@ -2348,6 +2642,35 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                     )
                     partial = _booru_partial_from_tag_result(fused, req)
                     pending_items.append((source_key, image_id, path, partial))
+
+                # Two-phase residency contract (v3.4.3): the booru sessions go
+                # out before ToriiGate loads; a failed load still persists the
+                # finished booru pass instead of discarding it.
+                if req.enable_vlm and req.natural_language_mode == "toriigate":
+                    _release_booru_sessions(used_taggers)
+                    job.stage = "vlm"
+                    job.processed = job.skipped
+                    job.phase_completion = 0.0
+                    try:
+                        nl_tagger = _load_toriigate_for_phase2(job, req)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.error("ToriiGate load failed after the booru phase: %s", exc)
+                        _persist_booru_only(job, req, pending_items)
+                        job.status = "failed"
+                        job.message = (
+                            "Booru tags were saved, but the ToriiGate caption "
+                            f"phase could not start: {exc}"
+                        )
+                        return
+
+                ctx = _build_caption_phase(req, vlm_provider, nl_tagger)
+                job.stage = "vlm" if ctx.nl_active else "tagging"
+                # Fix M1: total stays at the image count; processed resets so
+                # the second phase counts images cleanly (skipped images stay
+                # counted so N/M still reaches M).
+                job.processed = job.skipped
+                job.phase_completion = 0.0
+                job.message = "Running consensus + VLM..." if ctx.nl_active else "Running consensus..."
 
                 for win_start in range(0, len(pending_items), SMART_TAG_PIPELINE_WINDOW):
                     if job.cancel_requested:
@@ -2365,6 +2688,11 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                 elif job.status == "running":
                     job.status = "completed"
                     job.message = _completion_message(job)
+        elif req.enable_vlm and req.natural_language_mode == "toriigate":
+            # Single-tagger + local ToriiGate: two-phase (tag all → release
+            # booru session → load ToriiGate → caption all) so the two heavy
+            # models are never resident together. Sets terminal status itself.
+            _run_two_phase_toriigate_pipeline(job, req, tagger=tagger)
         else:
             # Single-tagger / no-tagger path: GPU-batched booru tagging +
             # concurrent VLM captioning (see _run_windowed_pipeline). It sets

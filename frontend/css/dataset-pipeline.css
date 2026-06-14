@@ -136,6 +136,10 @@
 @media (max-width: 980px) {
     .dataset-import-actions {
         grid-template-columns: 1fr;
+        grid-template-areas:
+            "gallery"
+            "folder"
+            "audit";
     }
     .dataset-folder-bar {
         min-width: 0;
@@ -191,9 +195,96 @@
 
 .dataset-import-actions {
     display: grid;
-    grid-template-columns: minmax(220px, 320px) minmax(420px, 1fr) auto;
-    align-items: center;
+    grid-template-columns: minmax(260px, 0.9fr) minmax(520px, 1.6fr);
+    grid-template-areas:
+        "gallery folder"
+        "audit folder";
+    align-items: stretch;
     gap: 12px;
+}
+.dataset-import-card {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px;
+    border: 1px solid rgba(191, 219, 254, 0.10);
+    border-radius: 14px;
+    background:
+        linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.018)),
+        var(--surface-1, rgba(15, 23, 42, 0.5));
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+}
+.dataset-import-card-gallery { grid-area: gallery; }
+.dataset-import-card-folder { grid-area: folder; }
+.dataset-import-card-audit { grid-area: audit; }
+.dataset-import-card-folder {
+    background:
+        linear-gradient(135deg, rgba(var(--accent-primary-rgb, 124, 139, 255), 0.10), rgba(255,255,255,0.02)),
+        var(--surface-1, rgba(15, 23, 42, 0.5));
+}
+.dataset-import-card-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+}
+.dataset-import-card-kicker {
+    width: fit-content;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(var(--accent-secondary-rgb, 51, 214, 224), 0.12);
+    color: var(--accent-secondary, #33d6e0);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.dataset-import-card-copy strong {
+    color: var(--text-primary, #f8fafc);
+    font-size: 15px;
+}
+.dataset-import-card-copy p {
+    margin: 0;
+    color: var(--text-secondary, #94a3b8);
+    font-size: 12px;
+    line-height: 1.45;
+}
+.dataset-import-card-benefits {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 8px 0 auto;
+    padding: 0;
+    list-style: none;
+}
+.dataset-import-card-benefits li {
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(191, 219, 254, 0.10);
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.48);
+    color: var(--text-secondary, #94a3b8);
+    font-size: 12px;
+    line-height: 1.35;
+}
+.dataset-import-card-benefits li::before {
+    content: '✓';
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-right: 6px;
+    border-radius: 999px;
+    background: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.20);
+    color: var(--accent-primary, #7c8bff);
+    font-size: 10px;
+    font-weight: 800;
+}
+.dataset-import-card-folder .dataset-folder-bar {
+    min-height: 78px;
 }
 .dataset-import-actions .btn-large {
     min-height: 50px;
@@ -207,13 +298,13 @@
     flex-wrap: wrap;
     gap: 8px;
     padding: 8px 10px;
-    background: var(--surface-1, rgba(15, 23, 42, 0.5));
+    background: rgba(15, 23, 42, 0.55);
     border: 1px solid var(--border-color, rgba(255,255,255,0.12));
     border-radius: 8px;
-    min-width: 300px;
+    min-width: 0;
 }
 .dataset-import-audit-button {
-    justify-self: end;
+    justify-self: stretch;
     white-space: nowrap;
 }
 .dataset-folder-bar-icon { font-size: 16px; flex-shrink: 0; }
@@ -235,6 +326,19 @@
     color: var(--text-secondary);
     white-space: nowrap;
     cursor: pointer;
+}
+
+@media (max-width: 980px) {
+    .dataset-import-actions {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "gallery"
+            "folder"
+            "audit";
+    }
+    .dataset-import-card-benefits {
+        grid-template-columns: 1fr;
+    }
 }
 
 .dataset-large-import-reminder {

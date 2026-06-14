@@ -3427,22 +3427,13 @@ function _showSam3CommonWordsPopup() {
     popup.innerHTML = html;
     document.body.appendChild(popup);
 
-    // Anchor the popup to the trigger button. Prefer dropping below; if
-    // there isn't enough room, drop above. Constrain horizontally so it
-    // never overflows the viewport.
-    const padding = 8;
     const reposition = () => {
-        const r = btn.getBoundingClientRect();
-        const pr = popup.getBoundingClientRect();
-        let top = r.bottom + padding;
-        if (top + pr.height > window.innerHeight - padding) {
-            const above = r.top - padding - pr.height;
-            top = above >= padding ? above : Math.max(padding, window.innerHeight - pr.height - padding);
-        }
-        let left = Math.min(r.right - pr.width, window.innerWidth - pr.width - padding);
-        left = Math.max(padding, left);
-        popup.style.top = `${top}px`;
-        popup.style.left = `${left}px`;
+        window.PopupPosition?.place(popup, {
+            anchor: btn,
+            placement: 'bottom-end',
+            gap: 8,
+            maxHeight: Math.min(420, Math.max(160, window.innerHeight - 24)),
+        });
     };
     reposition();
 

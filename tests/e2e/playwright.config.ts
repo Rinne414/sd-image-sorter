@@ -6,6 +6,7 @@ import { defineConfig, devices } from '@playwright/test'
 
 const defaultPort = process.env.PW_WEB_SERVER_PORT || process.env.SD_IMAGE_SORTER_PORT || '19087'
 const baseURL = process.env.BASE_URL || `http://127.0.0.1:${defaultPort}`
+const browserChannel = process.env.PW_BROWSER_CHANNEL || ''
 const basePort = Number(new URL(baseURL).port || defaultPort)
 const repoRoot = path.resolve(__dirname, '..', '..')
 const backendPythonCandidates = process.platform === 'win32' ? [
@@ -190,7 +191,10 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        ...(browserChannel ? { channel: browserChannel } : {}),
+      },
     },
   ],
   webServer: {

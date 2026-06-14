@@ -89,9 +89,14 @@ export class PromptLabPage {
    */
   async goto() {
     await this.page.goto('/')
-    // v3.3.3: Prompt Lab now lives under the "Tools ▾" dropdown.
-    await this.page.locator('#nav-tools-toggle').click()
-    await this.page.locator('#nav-tools-menu [data-view="promptlab"]').click()
+    const directTab = this.page.locator('#nav-tab-promptlab')
+    const directBox = await directTab.boundingBox().catch(() => null)
+    if (directBox && directBox.width > 0 && directBox.height > 0) {
+      await directTab.click({ force: true })
+    } else {
+      await this.page.locator('#nav-tools-toggle').click({ force: true })
+      await this.page.locator('#nav-tools-menu [data-view="promptlab"]').click({ force: true })
+    }
     await this.page.waitForLoadState('networkidle')
   }
 

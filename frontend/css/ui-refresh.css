@@ -1618,15 +1618,67 @@ textarea:focus,
 }
 
 .generator-tabs {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
     flex-wrap: nowrap;
     gap: 6px;
-    overflow-x: auto;
-    scrollbar-width: none;
     min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    isolation: isolate;
 }
 
-.generator-tabs::-webkit-scrollbar {
-    display: none;
+.generator-tabs-pinned {
+    display: flex;
+    flex: 0 0 auto;
+    min-width: 0;
+    z-index: 1;
+}
+
+.generator-tabs-scroll {
+    display: flex;
+    min-width: 0;
+    gap: 6px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+    padding-right: 18px;
+}
+
+.generator-tabs-scroll:focus-visible {
+    outline: 2px solid rgba(var(--accent-primary-rgb, 124, 139, 255), 0.75);
+    outline-offset: 3px;
+    border-radius: 999px;
+}
+
+.generator-tabs-scroll::-webkit-scrollbar {
+    height: 6px;
+}
+
+.generator-tabs-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.generator-tabs-scroll::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.35);
+    border-radius: 999px;
+}
+
+.generator-tabs::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 28px;
+    pointer-events: none;
+    background: linear-gradient(90deg, rgba(15, 23, 42, 0), rgba(15, 23, 42, 0.84));
+    opacity: var(--generator-overflow-end, 0);
+    transition: opacity 120ms ease;
+    z-index: 2;
 }
 
 .gen-tab,
@@ -8760,16 +8812,25 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 
 /* ============================================================
-   v3.3.3 WS1 — "Tools ▾" nav dropdown
-   Demotes Prompt Helper + Style Finder out of the main bar so the six
-   core pipeline tabs keep their labels on 1366px laptops. The toggle
-   mirrors .nav-tab styling; the menu is a glass popover.
+   v3.4.3 — responsive "More" nav fallback
+   Prompt Helper + Style Finder stay in the main bar when there is
+   room. More appears only when the direct advanced tabs would make
+   the navigation overflow in long translations or narrow windows.
    ============================================================ */
 .nav-tools {
     position: relative;
-    display: inline-flex;
+    display: none;
     align-items: stretch;
     flex-shrink: 0;
+}
+
+.nav-bar.nav-priority-overflow .nav-tools {
+    display: inline-flex;
+}
+
+.nav-bar.nav-priority-overflow .nav-priority-advanced,
+.nav-bar.nav-priority-overflow .nav-advanced-divider {
+    display: none !important;
 }
 
 .nav-tools-toggle {
@@ -8849,6 +8910,11 @@ html.lang-zh #view-censor .queue-action-btn span {
     border-radius: 8px;
     background: rgba(255, 184, 92, 0.16);
     color: #ffce8a;
+}
+
+.nav-tools-mirror.active {
+    background: rgba(124, 139, 255, 0.14);
+    color: #ffd7b5;
 }
 
 /* ==========================================================================

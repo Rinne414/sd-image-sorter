@@ -206,7 +206,14 @@ class GeminiProvider(VLMProvider):
         model = self.config.model or "gemini-2.0-flash"
         endpoint = self.config.endpoint.rstrip("/") or "https://generativelanguage.googleapis.com"
         url = f"{endpoint}/v1beta/models/{model}:generateContent?key={self.config.api_key}"
-        return await self._do_request(url, image_b64, user_message, headers={})
+        return await self._do_request(
+            url,
+            image_b64,
+            user_message,
+            headers={},
+            max_tokens=self.config.caption_max_tokens,
+            temperature=self.config.caption_temperature,
+        )
 
     async def _public_text_request(
         self,
@@ -242,7 +249,14 @@ class GeminiProvider(VLMProvider):
         )
         token = await _get_vertex_access_token(self.config)
         headers = {"Authorization": f"Bearer {token}"}
-        return await self._do_request(url, image_b64, user_message, headers=headers)
+        return await self._do_request(
+            url,
+            image_b64,
+            user_message,
+            headers=headers,
+            max_tokens=self.config.caption_max_tokens,
+            temperature=self.config.caption_temperature,
+        )
 
     async def _vertex_text_request(
         self,

@@ -988,3 +988,23 @@ def test_pixai_config_uses_prediction_output_index():
     assert TAGGER_MODELS["pixai-tagger-v0.9"].get("output_activation") == "identity"
     assert TAGGER_MODELS["pixai-tagger-v0.9"].get("output_index") == 2
     assert TAGGER_MODELS["camie-tagger-v2"].get("output_activation") == "sigmoid"
+
+
+def test_release_session_resets_state_and_is_idempotent(monkeypatch):
+    """release_session must drop the ONNX session and flip _loaded so the
+    next tag_batch/load call self-heals; releasing twice must not raise.
+    (Two-phase Smart Tag releases the booru session before ToriiGate loads.)"""
+    tagger = _make_score_tagger(monkeypatch)
+    tagger._loaded = True
+    tagger.session = object()
+    tagger._images_since_session_create = 42
+
+    tagger.release_session()
+
+    assert tagger.session is None
+    assert tagger._loaded is False
+    assert tagger._images_since_session_create == 0
+
+    tagger.release_session()  # idempotent: nothing to release, no error
+    assert tagger.session is None
+    assert tagger._loaded is False

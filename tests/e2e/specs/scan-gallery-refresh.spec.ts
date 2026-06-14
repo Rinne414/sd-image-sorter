@@ -42,7 +42,12 @@ async function installFetchLog(page: Page) {
     const originalFetch = window.fetch.bind(window)
     window.fetch = async (...args) => {
       const url = String(args[0] ?? '')
-      if (url.includes('/api/images') || url.includes('/api/stats') || url.includes('/api/scan/progress')) {
+      if (
+        url.includes('/api/images')
+        || url.includes('/api/stats')
+        || url.includes('/api/scan/progress')
+        || url.includes('/api/folders')
+      ) {
         ;(window as any).__scanFetchLog.push({ ts: Date.now(), url })
       }
       return originalFetch(...args)
@@ -153,6 +158,7 @@ test.describe('Scan gallery refresh stability', () => {
 
     const fetchLog = await page.evaluate(() => (window as any).__scanFetchLog || [])
     const imageFetches = fetchLog.filter((entry: { url: string }) => entry.url.includes('/api/images?'))
+    const folderFetches = fetchLog.filter((entry: { url: string }) => entry.url.includes('/api/folders'))
     const runningSamples = samples.filter((entry) => entry.progress?.status === 'running')
     const postReadyPopulatedSamples = runningSamples.filter(
       (entry) => entry.progress?.library_ready && entry.dom.realItems > 0,
@@ -171,6 +177,7 @@ test.describe('Scan gallery refresh stability', () => {
     expect(steadyGallerySamples.filter((entry) => entry.loadingVisible)).toHaveLength(0)
     expect(steadyGallerySamples.filter((entry) => entry.skeletons > 0)).toHaveLength(0)
     expect(steadyGallerySamples.every((entry) => entry.realItems > 0)).toBeTruthy()
+    expect(folderFetches.length).toBeGreaterThan(0)
     // Loosened from 2 to 8: this assertion is a perf-optimization signal
     // (gallery shouldn't spam /api/images after a scan), not a correctness
     // invariant. Strict ``<= 2`` false-positives on busy Linux CI runners

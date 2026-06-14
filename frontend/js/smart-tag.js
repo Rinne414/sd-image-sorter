@@ -562,6 +562,8 @@
         }
         const settingsBtn = $('#btn-smart-tag-vlm-settings');
         if (settingsBtn) settingsBtn.disabled = !naturalEnabled || nlMode !== 'vlm';
+        const toriiOptions = $('#smart-tag-torii-options');
+        if (toriiOptions) toriiOptions.hidden = nlMode !== 'toriigate';
     }
 
     async function loadSmartTaggerModels() {
@@ -636,6 +638,10 @@
             enable_vlm: naturalEnabled,
             natural_language_mode: $('#smart-tag-nl-mode')?.value || 'vlm',
             use_gpu: !!$('#smart-tag-use-gpu')?.checked,
+            toriigate_caption_length: $('#smart-tag-torii-length')?.value || 'detailed',
+            toriigate_grounding: $('#smart-tag-torii-grounding')
+                ? !!$('#smart-tag-torii-grounding').checked
+                : true,
             general_threshold: primaryThresholds.general_threshold,
             character_threshold: primaryThresholds.character_threshold,
             copyright_threshold: primaryThresholds.copyright_threshold,
@@ -1054,9 +1060,6 @@
     }
 
     function bindHandlers() {
-        const openBtn = $('#btn-dataset-smart-tag');
-        if (openBtn) openBtn.addEventListener('click', openModal);
-
         const closeBtn = $('#btn-smart-tag-close');
         if (closeBtn) closeBtn.addEventListener('click', closeModal);
         const cancelModalBtn = $('#btn-smart-tag-cancel-modal');
@@ -1117,9 +1120,10 @@
             if (backdrop) backdrop.addEventListener('click', closeModal);
         }
 
-        // -------- v3.2.2 task #5: Tag Images modal hint banner --------
-        // The banner inside #tag-modal points returning users at the
-        // Smart Tag wizard. localStorage flag persists dismissal.
+        // -------- Tag Images modal Smart Tag entry --------
+        // Keep Smart Tag available inside #tag-modal instead of sending users
+        // to Dataset Maker first. Dismiss only hides the helper copy for this
+        // returning user; the Gallery AI Auto Tagging workflow remains intact.
         const HINT_DISMISSED_KEY = 'sd-image-sorter-tag-modal-smart-tag-hint-dismissed';
 
         const tagModal = document.getElementById('tag-modal');
@@ -1130,7 +1134,7 @@
                 catch { return false; }
             };
             const refreshHintVisibility = () => {
-                hintBanner.hidden = isDismissed();
+                hintBanner.classList.toggle('is-dismissed', isDismissed());
             };
             // Initial state.
             refreshHintVisibility();
@@ -1149,25 +1153,19 @@
             const goBtn = document.getElementById('btn-tag-modal-smart-tag-go');
             if (goBtn) {
                 goBtn.addEventListener('click', () => {
-                    // Close Tag modal, switch to Dataset Maker view, open
-                    // the Smart Tag modal so the user lands in the right
-                    // workflow without extra clicks.
                     if (typeof window.hideModal === 'function') {
                         try { window.hideModal('tag-modal'); } catch (_e) {}
                     }
-                    if (typeof window.switchView === 'function') {
-                        try { window.switchView('dataset'); } catch (_e) {}
-                    }
                     setTimeout(() => {
                         try { openModal(); } catch (_e) {}
-                    }, 220);
+                    }, 120);
                 });
             }
             const dismissBtn = document.getElementById('btn-tag-modal-smart-tag-dismiss');
             if (dismissBtn) {
                 dismissBtn.addEventListener('click', () => {
                     try { localStorage.setItem(HINT_DISMISSED_KEY, '1'); } catch {}
-                    hintBanner.hidden = true;
+                    hintBanner.classList.add('is-dismissed');
                 });
             }
         }

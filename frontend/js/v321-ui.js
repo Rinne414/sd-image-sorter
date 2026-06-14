@@ -1045,6 +1045,11 @@ const V321Integration = {
         // Click outside the modal-content (on the backdrop) closes the editor.
         document.querySelector('#caption-editor-modal .modal-backdrop')?.addEventListener('click', () => this.closeCaptionEditor());
 
+        // Content-mode changes what the preview renders (tags / NL / both…) —
+        // refresh immediately so the editor never shows a stale tags-only
+        // render after the user switches to an NL-bearing mode.
+        document.getElementById('batch-export-content-mode')?.addEventListener('change', () => this.refreshPreview());
+
         // Refresh when trigger / template changes
         const watchIds = ['lora-trigger-word', 'lora-template-override', 'lora-max-tags',
             'lora-append-text', 'batch-export-prefix', 'batch-export-blacklist'];
@@ -1057,6 +1062,21 @@ const V321Integration = {
                     timer = setTimeout(() => this.refreshPreview(), 600);
                 });
             }
+        }
+
+        // v3.4.3: persist the custom template across page reloads — users keep
+        // one format and shouldn't retype it every session. Stored on input,
+        // restored only when the field is still empty (never clobbers HTML or
+        // user-typed state).
+        const templateOverride = document.getElementById('lora-template-override');
+        if (templateOverride) {
+            try {
+                const storedTemplate = localStorage.getItem('batchExport.templateOverride');
+                if (storedTemplate && !templateOverride.value) templateOverride.value = storedTemplate;
+            } catch (_) { /* localStorage unavailable, keep default */ }
+            templateOverride.addEventListener('input', () => {
+                try { localStorage.setItem('batchExport.templateOverride', templateOverride.value); } catch (_) { /* noop */ }
+            });
         }
 
         // v3.2.1 follow-up: refresh preview immediately when the user toggles
@@ -2093,6 +2113,30 @@ const V321Integration = {
         return changed;
     },
 
+    // Danbooru category coloring for caption-editor chips. Delegates to the
+    // Dataset Maker's category cache (backend /api/prompts/categorize) so the
+    // editor and the dataset pills always agree; degrades to uncolored chips
+    // when that module is unavailable.
+    _applyTokenCategoryClass(chip, token) {
+        const dm = window.DatasetMaker;
+        if (!dm || typeof dm._classifyTagCategory !== 'function') return;
+        const category = String(dm._classifyTagCategory(token) || 'unknown');
+        chip.classList.add(`dataset-tag-pill-category-${category}`);
+    },
+
+    _recolorTokensWhenCategorized(tokens) {
+        const dm = window.DatasetMaker;
+        if (!dm || typeof dm._ensureTagCategories !== 'function') return;
+        if (!Array.isArray(tokens) || !tokens.length) return;
+        Promise.resolve(dm._ensureTagCategories(tokens))
+            .then((gained) => {
+                // Re-render once the backend categories land; _ensureTagCategories
+                // returns false on cache hits, so this cannot loop.
+                if (gained) this._renderPreviewWorkbench();
+            })
+            .catch(() => {});
+    },
+
     _buildPreviewEditor() {
         const item = this._getPreviewItem();
         const panel = document.createElement('div');
@@ -2142,18 +2186,21 @@ const V321Integration = {
 
         const chips = document.createElement('div');
         chips.className = 'export-preview-token-list';
-        for (const token of this._splitCaptionTokens(caption)) {
+        const captionTokens = this._splitCaptionTokens(caption);
+        for (const token of captionTokens) {
             const chip = document.createElement('button');
             chip.type = 'button';
             chip.className = 'export-preview-token';
             chip.title = this._i18n('batchExport.removeFromCurrent', 'Remove from current');
             chip.textContent = `${token} ×`;
+            this._applyTokenCategoryClass(chip, token);
             chip.addEventListener('click', () => {
                 this._applyTokenToCaption(id, token, 'remove');
                 this._renderPreviewWorkbench();
             });
             chips.appendChild(chip);
         }
+        this._recolorTokensWhenCategorized(captionTokens);
 
         const actions = document.createElement('div');
         actions.className = 'export-preview-editor-actions';
@@ -2198,6 +2245,7 @@ const V321Integration = {
             chip.title = this._i18n('batchExport.addToCurrent', 'Add to current');
             chip.innerHTML = `<span></span><small>${item.count}</small>`;
             chip.querySelector('span').textContent = item.token;
+            this._applyTokenCategoryClass(chip, item.token);
             chip.addEventListener('click', () => {
                 const active = this._getPreviewItem();
                 if (!active) return;
@@ -2206,6 +2254,7 @@ const V321Integration = {
             });
             commonList.appendChild(chip);
         }
+        this._recolorTokensWhenCategorized(common.map((item) => item.token));
         if (!common.length) {
             const empty = document.createElement('p');
             empty.className = 'export-preview-empty-tools';

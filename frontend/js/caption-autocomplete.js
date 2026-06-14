@@ -182,11 +182,15 @@
             });
             dd.appendChild(item);
         });
-        const rect = textarea.getBoundingClientRect();
-        dd.style.left = `${rect.left + window.scrollX}px`;
-        dd.style.top = `${rect.bottom + window.scrollY + 4}px`;
-        dd.style.width = `${Math.min(rect.width, 320)}px`;
         dd.hidden = false;
+        const rect = textarea.getBoundingClientRect();
+        window.PopupPosition?.place(dd, {
+            anchor: textarea,
+            placement: 'bottom-start',
+            gap: 4,
+            width: Math.min(rect.width, 320),
+            maxHeight: 280,
+        });
     }
 
     function accept(textarea, suggestionIdx) {

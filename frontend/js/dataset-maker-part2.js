@@ -827,6 +827,12 @@
     // ---------- Split view ----------
     DM._splitActive = false;
 
+    DM._closeSplitView = function () {
+        this._splitActive = false;
+        document.getElementById('btn-dataset-split-view')?.classList.remove('active');
+        this._applySplitView();
+    };
+
     DM._initSplitView = function () {
         const btn = document.getElementById('btn-dataset-split-view');
         if (!btn) return;
@@ -839,13 +845,14 @@
 
     DM._applySplitView = function () {
         const wrap = document.getElementById('dataset-editor-image-wrap');
+        const editorPane = document.querySelector('#view-dataset .dataset-editor-pane');
         if (!wrap) return;
-        // Remove existing split panel
         const existing = document.getElementById('dataset-split-panel');
         if (existing) existing.remove();
 
         if (!this._splitActive || this.activeId == null) {
             wrap.classList.remove('split-active');
+            editorPane?.classList.remove('dataset-split-mode');
             return;
         }
         const idx = this.imageIds.indexOf(Number(this.activeId));
@@ -857,34 +864,127 @@
             const btn = document.getElementById('btn-dataset-split-view');
             if (btn) btn.classList.remove('active');
             wrap.classList.remove('split-active');
+            editorPane?.classList.remove('dataset-split-mode');
             return;
         }
-        wrap.classList.add('split-active');
+        editorPane?.classList.add('dataset-split-mode');
         const nextId = this.imageIds[nextIdx];
-        const nextMeta = this.meta.get(nextId) || {};
-        const nextCaption = this.captionEdits.has(nextId)
-            ? this.captionEdits.get(nextId)
-            : (this.captions.get(nextId) || '');
-
         const panel = document.createElement('div');
         panel.id = 'dataset-split-panel';
         panel.className = 'dataset-split-panel';
-        const splitImg = document.createElement('img');
-        splitImg.className = 'dataset-split-image';
-        splitImg.src = this._thumbSrc(nextId, 512);
-        splitImg.alt = nextMeta.filename || '';
-        const splitTa = document.createElement('textarea');
-        splitTa.className = 'dataset-split-textarea';
-        splitTa.placeholder = 'caption...';
-        splitTa.value = nextCaption;
-        panel.append(splitImg, splitTa);
-        wrap.after(panel);
 
-        const ta = splitTa;
-        ta.addEventListener('input', () => {
-            this.captionEdits.set(nextId, ta.value);
-            this._refreshQueueItem(nextId);
-        });
+        const header = document.createElement('div');
+        header.className = 'dataset-split-head';
+        const headerCopy = document.createElement('div');
+        const title = document.createElement('strong');
+        title.textContent = this._t('dataset.splitTitle', 'Compare captions');
+        const hint = document.createElement('span');
+        hint.textContent = this._t('dataset.splitHint', 'Edit either image. Changes are saved automatically.');
+        headerCopy.append(title, hint);
+        const headerActions = document.createElement('div');
+        headerActions.className = 'dataset-split-head-actions';
+        const openNext = document.createElement('button');
+        openNext.type = 'button';
+        openNext.className = 'btn btn-secondary btn-small';
+        openNext.textContent = this._t('dataset.splitOpenNext', 'Open next');
+        openNext.addEventListener('click', () => this._setActive(nextId));
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'btn btn-ghost btn-small';
+        close.textContent = this._t('dataset.splitClose', 'Close comparison');
+        close.addEventListener('click', () => this._closeSplitView());
+        headerActions.append(openNext, close);
+        header.append(headerCopy, headerActions);
+
+        const grid = document.createElement('div');
+        grid.className = 'dataset-split-grid';
+        grid.append(
+            this._buildSplitCard(Number(this.activeId), this._t('dataset.splitCurrent', 'Current')),
+            this._buildSplitCard(nextId, this._t('dataset.splitNext', 'Next'))
+        );
+        panel.append(header, grid);
+        wrap.before(panel);
+    };
+
+    DM._buildSplitCard = function (id, positionLabel) {
+        const meta = this.meta.get(Number(id)) || {};
+        const filename = meta.filename || `#${id}`;
+        const booruText = typeof this._booruTextFor === 'function'
+            ? this._booruTextFor(id)
+            : (this.captionEdits.has(id) ? this.captionEdits.get(id) : (this.captions.get(id) || ''));
+        const nlText = typeof this._nlTextFor === 'function' ? this._nlTextFor(id) : '';
+
+        const card = document.createElement('section');
+        card.className = 'dataset-split-card';
+        card.dataset.imageId = String(id);
+
+        const cardHead = document.createElement('div');
+        cardHead.className = 'dataset-split-card-head';
+        const label = document.createElement('span');
+        label.className = 'dataset-split-position';
+        label.textContent = positionLabel;
+        const name = document.createElement('strong');
+        name.className = 'dataset-split-filename';
+        name.textContent = filename;
+        cardHead.append(label, name);
+
+        const imageFrame = document.createElement('div');
+        imageFrame.className = 'dataset-split-image-frame';
+        const image = document.createElement('img');
+        image.className = 'dataset-split-image';
+        image.src = this._thumbSrc(id, 768);
+        image.alt = filename;
+        const unavailable = document.createElement('span');
+        unavailable.className = 'dataset-split-image-unavailable';
+        unavailable.textContent = this._t('dataset.splitImageUnavailable', 'Image unavailable');
+        unavailable.hidden = true;
+        image.addEventListener('error', () => {
+            imageFrame.classList.add('is-unavailable');
+            unavailable.hidden = false;
+        }, { once: true });
+        imageFrame.append(image, unavailable);
+
+        const booruLabel = document.createElement('label');
+        booruLabel.className = 'dataset-split-field-label';
+        booruLabel.textContent = this._t('dataset.booruBoxLabel', 'Booru tags');
+        const booru = document.createElement('textarea');
+        booru.className = 'dataset-split-textarea';
+        booru.value = booruText || '';
+        booru.placeholder = this._t('dataset.captionPlaceholder', 'caption text...');
+        booru.addEventListener('input', () => this._updateSplitCaption(id, 'booru', booru.value));
+
+        const nlLabel = document.createElement('label');
+        nlLabel.className = 'dataset-split-field-label';
+        nlLabel.textContent = this._t('dataset.nlBoxLabel', 'Natural language');
+        const nl = document.createElement('textarea');
+        nl.className = 'dataset-split-textarea dataset-split-textarea-nl';
+        nl.value = nlText || '';
+        nl.placeholder = this._t('dataset.nlPlaceholder', 'natural-language caption...');
+        nl.addEventListener('input', () => this._updateSplitCaption(id, 'nl', nl.value));
+
+        card.append(cardHead, imageFrame, booruLabel, booru, nlLabel, nl);
+        return card;
+    };
+
+    DM._updateSplitCaption = function (id, kind, value) {
+        const numericId = Number(id);
+        if (kind === 'nl') {
+            this.nlEdits?.set(numericId, value);
+            if (Number(this.activeId) === numericId) {
+                const activeNl = document.getElementById('dataset-editor-nl');
+                if (activeNl) activeNl.value = value;
+            }
+        } else {
+            this.captionEdits.set(numericId, value);
+            if (Number(this.activeId) === numericId) {
+                const activeBooru = document.getElementById('dataset-editor-textarea');
+                if (activeBooru) activeBooru.value = value;
+                this._renderTagPills?.();
+            }
+        }
+        this._refreshQueueItem?.(numericId);
+        this._scheduleSaveSession?.();
+        this._refreshExportPreview?.();
     };
 
     // Patch _setActive to refresh split view
@@ -1138,6 +1238,9 @@
         // Synchronous best-effort fallback (first paint / offline). Character &
         // artist need the danbooru data sets, so locally they fall through to
         // 'unknown' and get corrected by the backend.
+        // Prompt-convention artist prefixes are unambiguous without data sets:
+        // Anima-style "@name" triggers and SDXL "artist:name".
+        if (normalized.length > 1 && (normalized.startsWith('@') || normalized.startsWith('artist:'))) return 'artist';
         if (QUALITY_RE.test(normalized)) return 'quality';
         if (RATING_RE.test(normalized)) return 'rating';
         if (META_RE.test(normalized)) return 'meta';

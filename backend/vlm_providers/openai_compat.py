@@ -86,7 +86,11 @@ class OpenAICompatProvider(VLMProvider):
 
         for attempt in range(self.config.max_retries + 1):
             try:
-                result = await self._request(messages)
+                result = await self._request(
+                    messages,
+                    max_tokens=self.config.caption_max_tokens,
+                    temperature=self.config.caption_temperature,
+                )
                 raw_text = result.get("caption", "").strip()
                 tokens = result.get("tokens", 0)
 

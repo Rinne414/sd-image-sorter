@@ -63,6 +63,11 @@
                 if (typeof window.closeMobileMenu === "function") window.closeMobileMenu();
                 this.openModal();
             });
+            // P16: Filter sidebar entry
+            document.getElementById("btn-filter-mass-tag-editor")?.addEventListener("click", () => this.openModal("filter"));
+            // P16: Selection panel entry
+            document.getElementById("btn-selection-mass-tag-editor")?.addEventListener("click", () => this.openModal("selection"));
+
             document.getElementById("btn-mass-tag-close")?.addEventListener("click", () => this.closeModal());
             document.querySelector("#mass-tag-modal .modal-backdrop")?.addEventListener("click", () => this.closeModal());
             document.querySelectorAll(".mass-tag-tab").forEach(tab => {
@@ -82,9 +87,14 @@
 
         // ---- Modal open / close ------------------------------------------
 
-        async openModal() {
+        async openModal(preferredScope = null) {
             this._resetResult();
             this._setStatus("");
+            const selectionToken = window.AppFilterAccess?.getActiveSelectionToken?.();
+            const selectionIds = window.AppFilterAccess?.getSelectedImageIds?.() || [];
+            const scope = preferredScope || (selectionToken || selectionIds.length ? "selection" : "filter");
+            const scopeRadio = document.querySelector(`input[name="mass-tag-scope"][value="${scope}"]`);
+            if (scopeRadio) scopeRadio.checked = true;
             await this.refreshScopeLabels();
             // v3.2.2: prefer the global showModal so this modal gets the
             // same Escape-key handler, focus trap, and focus restore as

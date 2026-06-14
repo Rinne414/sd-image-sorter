@@ -147,6 +147,13 @@ const VLMCaption = {
         this._setVal('vlm-max-retries', s.max_retries ?? 3);
         this._setVal('vlm-timeout', s.timeout_seconds ?? 60);
         this._setVal('vlm-concurrent', s.concurrent_requests ?? 2);
+        // v3.4.3: caption generation parameters (previously hardcoded 1024/0.3)
+        // plus backend-supported fields that never had UI.
+        this._setVal('vlm-caption-max-tokens', s.caption_max_tokens ?? 1024);
+        this._setVal('vlm-caption-temperature', s.caption_temperature ?? 0.3);
+        this._setVal('vlm-retry-delay', s.retry_delay_seconds ?? 2);
+        this._setVal('vlm-max-image-size', s.max_image_size ?? 1024);
+        this._setVal('vlm-nsfw-retry-prompt', s.nsfw_retry_prompt || '');
         this._setVal('vlm-system-prompt', s.system_prompt || '');
         this._setVal('vlm-user-prompt', s.user_prompt || '');
         this._currentPresetWithTags = s.user_prompt_with_tags || '';
@@ -211,6 +218,18 @@ const VLMCaption = {
             max_retries: parseInt(this._getVal('vlm-max-retries')) || 3,
             timeout_seconds: parseFloat(this._getVal('vlm-timeout')) || 60,
             concurrent_requests: parseInt(this._getVal('vlm-concurrent')) || 2,
+            caption_max_tokens: parseInt(this._getVal('vlm-caption-max-tokens')) || 1024,
+            // temperature 0 is a legitimate value — only fall back on NaN.
+            caption_temperature: (() => {
+                const v = parseFloat(this._getVal('vlm-caption-temperature'));
+                return Number.isFinite(v) ? v : 0.3;
+            })(),
+            retry_delay_seconds: (() => {
+                const v = parseFloat(this._getVal('vlm-retry-delay'));
+                return Number.isFinite(v) ? v : 2;
+            })(),
+            max_image_size: parseInt(this._getVal('vlm-max-image-size')) || 1024,
+            nsfw_retry_prompt: this._getVal('vlm-nsfw-retry-prompt'),
             system_prompt: this._getVal('vlm-system-prompt'),
             user_prompt: this._getVal('vlm-user-prompt'),
             user_prompt_with_tags: this._currentPresetWithTags || '',

@@ -5,6 +5,50 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.3] - 2026-06-12
+
+ToriiGate「详细NL」不再输出半截 JSON：模型原始 JSON 在写入点解析为纯句子，旧的脏数据由迁移自动清洗；WD14+ToriiGate 改为两阶段流水线（先全部打标→卸载→再描述），修复整机黑屏/崩溃。合集支持批量加入（多选面板按钮 + 扫描完成一键建合集），Dataset Maker 补上 Smart Tag 并重做 Split 比较编辑器，浮层定位和扫描刷新也完成修复。
+
+ToriiGate "detailed NL" captions no longer leak truncated raw JSON: model output is parsed to plain prose at the write point and a migration heals previously stored rows. WD14+ToriiGate now runs as a two-phase pipeline (tag everything, unload, then caption) — fixing whole-machine black screens. Collections gain bulk add (selection-panel button + one-click collection after scan), Dataset Maker gains Smart Tag and a rebuilt Split comparison editor, and popup positioning plus scan refresh behavior are fixed.
+
+### Fixed / 修复
+- **"Detailed NL" captions were truncated raw JSON / 「详细NL」输出半截 JSON**: ToriiGate is JSON-finetuned and often answers `{"description": ..., "tags": ...}`; the pipeline stored that raw text (cut off at 160 tokens) into `nl_caption`/`ai_caption`, so exports contained broken JSON. Output is now sanitized at the write point (full parse → truncated-string recovery → wrapper strip), prompts explicitly forbid JSON, the detailed token budget is 512, and the cloud-VLM `nl_caption` path parses JSON-shaped replies too. **Migration 019** cleans previously stored rows (idempotent, conservative — only JSON-shaped text is touched).
+  - ToriiGate 是 JSON 重度微调模型，常回 `{"description": ..., "tags": ...}`；流水线把这段原文（且在 160 token 处截断）直接存进 `nl_caption`/`ai_caption`，导出自然是烂的。现在写入点强制解析为纯句子（完整解析→半截字符串恢复→剥壳兜底），提示词明确禁止 JSON，详细模式 token 上限提到 512，云端 VLM 的 `nl_caption` 路径同样解析 JSON 形态回复。**迁移 019** 自动清洗历史脏数据（幂等、保守，只动 JSON 形态文本）。
+- **Whole-machine black screens during WD14+ToriiGate / WD14+ToriiGate 跑图整机黑屏**: both models used to load up front and stay resident together; on mid-VRAM cards ToriiGate's GPU load failed and fell back to CPU **float32 (~20+GB RAM)**, taking the whole OS down. The pipeline is now two-phase — WD14 tags everything, releases its session, only then does ToriiGate load with the full GPU. Plus three guards: a GPU pre-flight headroom check, a CPU dtype guard (fp32 only with ~24GB+ free RAM, bf16 with ~13GB+, otherwise a clear error instead of an OS crash), and periodic memory-pressure checks during captioning. Booru tags are persisted even if the caption phase fails to load. Thresholds tunable via `SD_TORIIGATE_*` env vars.
+  - 此前两个模型开跑就同时驻留；中等显存的卡上 ToriiGate GPU 加载失败后以 **float32 回退到 CPU（吃 20+GB 内存）**，直接把系统干崩。现在改为两阶段：WD14 全部打完标→释放会话→ToriiGate 独占全部显存再加载。另加三道防护：GPU 余量预检、CPU 精度守门（空闲内存 ~24GB+ 才用 fp32，~13GB+ 用 bf16，再不够给出明确报错而不是让系统崩溃）、描述阶段周期性内存压力检查。描述阶段加载失败时已打的 booru 标签照常落库。阈值可用 `SD_TORIIGATE_*` 环境变量调整。
+- **Caption editor: NL text missing, tag colors missing / 字幕编辑器看不到 NL、标签没颜色**: "Both"/"Natural Language" modes showed only tags because one seeding path ignored the stored `ai_caption` fallback; fixed. Tag chips in the caption editor now carry the 14-category danbooru colors (artist/character/copyright/...), and switching content mode refreshes the preview immediately.
+  - 「两者」/「自然语言」模式只显示标签——其中一条数据填充路径漏掉了 `ai_caption` 兜底，已修。字幕编辑器里的标签芯片现在带 14 类 danbooru 分类颜色，切换内容模式即时刷新预览。
+- **Popup positioning + collection picker / 浮层定位与加入合集**: selection-panel "Add to collection" now opens the picker, and Gallery right-click menus / collection pickers / Tools / update popups / autocomplete share one viewport-safe positioner that handles UI zoom and screen edges.
+  - 多选面板「加入合集」现在会打开选择器；图库右键菜单、合集选择器、Tools、更新弹窗、自动完成统一使用视窗安全定位，处理 UI 缩放与屏幕边界。
+- **Dataset Maker Split UI / Dataset Maker 分割比较界面**: Split is now a two-card comparison editor with image previews, separate Booru and natural-language fields, labels, open-next/close actions, and no overlap with the base editor controls.
+  - 「分割」改成双卡比较编辑器：图片预览、Booru 与自然语言独立字段、清楚标签、打开下一张/关闭操作，并且不会被原编辑器按钮遮挡。
+- **Disk usage and scan completion refresh / 磁盘占用与扫描完成刷新**: cache/runtime usage reports exact byte counts from an iterative `os.scandir` scan instead of "Large / not fully scanned"; completed scans refresh the folder tree automatically.
+  - 缓存/运行时占用改用迭代式 `os.scandir` 精确扫描并显示真实数值，不再显示「较大 / 未完整扫描」；扫描完成后 Folders 树自动刷新。
+- **Training-purpose tag filtering / 训练用途标签过滤**: Smart Tag purpose filtering now applies to the final caption and stored tag rows. The rule is conservative because official Kohya/Diffusers docs define caption mechanics, not a universal LoRA-purpose deletion table: Style removes only clearly style/artist-like general tags; Character removes detected character names only when a trigger word is set; General/Concept preserve context.
+  - Smart Tag「训练用途」现在真正作用到最终 caption 与落库 tag rows。规则保守，因为 Kohya/Diffusers 官方文档定义的是 caption 机制，不是 LoRA 用途删标表：Style 只移除明确像风格/画师的 general tags；Character 只有设置 trigger word 时才移除检测到的角色名；General/Concept 保留上下文。
+- **`@xxx` / `artist:xxx` recognized as artist tags / `@xxx`、`artist:xxx` 识别为画师标签**: Anima-style `@name` and SDXL-style `artist:name` prompts now categorize (and color) as artist/style instead of "general".
+  - Anima 的 `@名字`、SDXL 的 `artist:名字` 风格提示词现在归入画师分类并显示对应颜色，不再当普通标签。
+
+### Added / 新增
+- **ToriiGate options + tag grounding / ToriiGate 参数与标签辅助**: Smart Tag's ToriiGate mode gains a "description length" select (detailed by default, brief available) and a default-on "ground with booru tags" toggle that feeds phase-one WD14 tags into ToriiGate for more accurate descriptions.
+  - Smart Tag 的 ToriiGate 模式新增「描述长度」选择（默认详细，可选简短）和默认开启的「以 booru 标签辅助」开关——把第一阶段 WD14 的标签喂给 ToriiGate 做参照，描述更准。
+- **Bulk add to collection / 批量加入合集**: new `POST /api/collections/{id}/items/bulk` accepts explicit ids or a selection token (whole filtered scope); the multi-select panel gains an "Add to collection" button; the right-click picker now uses one bulk call instead of N requests.
+  - 新增批量接口，支持显式 id 列表或筛选范围 token；多选面板新增「加入合集」按钮；右键加入合集也改为一次批量调用。
+- **One-click collection after scan / 扫描完成一键建合集**: when a scan imports new images, the "what's next" banner offers "Create collection" — names it after the folder and bulk-adds everything just imported, so separate datasets stop blurring together in the gallery.
+  - 扫描导入新图后，完成横幅新增「建立合集」按钮——按文件夹命名并把刚导入的图片批量加入，不同数据集不再混在一起。
+- **VLM caption generation parameters in UI / VLM 描述生成参数进界面**: caption `max_tokens` (was hardcoded 1024) and `temperature` (was 0.3) are now configurable in VLM Advanced Settings, alongside previously backend-only `retry_delay`, `max_image_size`, and the NSFW retry prompt.
+  - 描述用的 `max_tokens`（此前写死 1024）和 `temperature`（0.3）现在可在 VLM 高级设置里调，同时补上后端早已支持但界面缺失的重试间隔、最大图片尺寸、NSFW 重试提示词。
+- **Multi-line, persistent custom templates / 自订模板多行+记忆**: export template override fields are now textareas — free words, spaces, and blank lines around `{placeholders}` survive rendering; the field content persists across reloads instead of resetting to default.
+  - 模板覆盖输入框改为多行——`{占位符}` 周围的自由文字、空格、空行都会保留进输出；内容跨刷新记忆，不再每次回到默认。
+- **Smart Tag VLM jobs force `nl_caption` output / Smart Tag 强制自然语言输出格式**: per-job VLM config now pins `output_format=nl_caption`, so presets configured for JSON analysis can't corrupt caption runs.
+  - 每个任务的 VLM 配置强制 `output_format=nl_caption`，为 JSON 分析配置的预设不会再污染描述任务。
+- **Dataset Maker Smart Tag + clearer entry points / Dataset Maker Smart Tag 与入口整理**: Dataset Maker's right side now exposes Smart Tag. Mass Tag Editor opens with the expected scope from its entry point (current selection from the selection panel, current filter from the filter modal), and Prompt Helper / Style Finder move under Tools to reduce navbar crowding.
+  - Dataset Maker 右侧补上 Smart Tag。Mass Tag Editor 会按入口使用预期范围（多选面板=当前选择、Filter 视窗=当前筛选），Prompt Helper / Style Finder 移入 Tools，减少导航栏拥挤。
+
+### Upgrading / 升级注意
+- Migration 019 runs automatically on first start and only rewrites JSON-shaped `nl_caption`/`ai_caption` text; clean rows are untouched. ToriiGate now defaults to **detailed** descriptions (~3× slower per image than before) — switch to "brief" in Smart Tag's ToriiGate options if you preferred the old speed.
+  - 迁移 019 首次启动自动执行，只改写 JSON 形态的描述文本，干净数据不动。ToriiGate 默认改为**详细**描述（单张比以前慢约 3 倍）——想要旧速度可在 Smart Tag 的 ToriiGate 选项里切回「简短」。
+
 ## [3.4.2] - 2026-06-12
 
 AI jobs now queue instead of failing: starting tagging / Smart Tag / VLM captioning while another AI job runs enqueues it (FIFO) and it auto-starts when the current job finishes — no more 409 "busy, come back later". The Clear Library button is back on the gallery page where you can see it. Filter presets finally have their UI, the WASD combo counter is visible again, and `/api/prompts/generate` honors `count`.

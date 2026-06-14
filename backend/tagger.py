@@ -972,6 +972,23 @@ class WD14Tagger:
             "attempted_gpu_backoff": attempted_gpu_backoff,
         }
     
+    def release_session(self) -> None:
+        """Fully release the ONNX session (and its device memory) until next use.
+
+        Used by the two-phase Smart Tag pipeline so the booru tagger does not
+        stay resident in VRAM while a local VLM (ToriiGate) owns the GPU.
+        ``load()`` / ``tag_batch`` lazily rebuild the session on the next call
+        via the ``_loaded`` flag, so a released tagger self-heals transparently.
+        """
+        with self._load_lock:
+            if self.session is not None:
+                del self.session
+                self.session = None
+            self._loaded = False
+            self._images_since_session_create = 0
+            gc.collect()
+        logger.info("ONNX session released for %s.", self.model_name)
+
     def _recreate_session(self) -> None:
         """
         Destroy and rebuild the ONNX inference session to release VRAM.

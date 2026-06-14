@@ -263,39 +263,11 @@
     }
 
     function clampMenuToViewport(menu, left, top) {
-        const margin = 8;
-        const viewportWidth = document.documentElement.clientWidth || window.innerWidth || 0;
-        const viewportHeight = document.documentElement.clientHeight || window.innerHeight || 0;
-        const availableWidth = Math.max(1, viewportWidth - margin * 2);
-        const availableHeight = Math.max(1, viewportHeight - margin * 2);
-        const uiScale = Math.max(0.1, window.UiScale?.get?.() || parseFloat(document.documentElement.style.zoom) || 1);
-        const toCssPx = (value) => value / uiScale;
-        const clamp = (value, min, max) => Math.min(Math.max(value, min), Math.max(min, max));
-
-        menu.style.maxWidth = `${toCssPx(availableWidth)}px`;
-        menu.style.maxHeight = `${toCssPx(availableHeight)}px`;
-        menu.style.left = '0px';
-        menu.style.top = '0px';
-
-        const rect = menu.getBoundingClientRect();
-        const menuWidth = Math.min(rect.width || 0, availableWidth);
-        const menuHeight = Math.min(rect.height || 0, availableHeight);
-        const x = Number.isFinite(left) ? left : margin;
-        const y = Number.isFinite(top) ? top : margin;
-        let nextLeft = x;
-        let nextTop = y;
-
-        if (nextLeft + menuWidth + margin > viewportWidth) {
-            nextLeft = x - menuWidth;
-        }
-        if (nextTop + menuHeight + margin > viewportHeight) {
-            nextTop = y - menuHeight;
-        }
-
-        nextLeft = clamp(nextLeft, margin, viewportWidth - menuWidth - margin);
-        nextTop = clamp(nextTop, margin, viewportHeight - menuHeight - margin);
-        menu.style.left = `${Math.round(toCssPx(nextLeft))}px`;
-        menu.style.top = `${Math.round(toCssPx(nextTop))}px`;
+        window.PopupPosition?.place(menu, {
+            x: left,
+            y: top,
+            placement: 'point',
+        });
     }
 
     function positionMenu(menu, options = {}) {

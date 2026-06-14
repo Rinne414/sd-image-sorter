@@ -365,6 +365,46 @@ def test_vlm_settings_preserve_prompt_with_tags(test_client, monkeypatch):
     assert config.user_prompt_with_tags == "Describe the image using these tags: {tags}"
 
 
+def test_vlm_caption_params_roundtrip_and_clamp(test_client, monkeypatch):
+    """v3.4.3: caption_max_tokens / caption_temperature flow save → get →
+    _build_config, with corrupt values clamped to safe bounds."""
+    import routers.vlm as vlm_router
+
+    saved = {}
+    monkeypatch.setattr(vlm_router, "_load_vlm_settings", lambda: dict(saved))
+    monkeypatch.setattr(vlm_router, "_save_vlm_settings", lambda settings: saved.update(settings))
+
+    response = test_client.post(
+        "/api/vlm/settings",
+        json={"caption_max_tokens": 2048, "caption_temperature": 0.7},
+    )
+    assert response.status_code == 200
+    assert saved["caption_max_tokens"] == 2048
+    assert saved["caption_temperature"] == 0.7
+
+    settings_response = test_client.get("/api/vlm/settings")
+    assert settings_response.json()["caption_max_tokens"] == 2048
+
+    config = vlm_router._build_config()
+    assert config.caption_max_tokens == 2048
+    assert config.caption_temperature == 0.7
+
+    # Corrupt stored values clamp instead of crashing.
+    saved.update({"caption_max_tokens": 1, "caption_temperature": 99})
+    config = vlm_router._build_config()
+    assert config.caption_max_tokens == 64
+    assert config.caption_temperature == 2.0
+
+
+def test_vlm_settings_reject_out_of_range_caption_params(test_client):
+    assert test_client.post(
+        "/api/vlm/settings", json={"caption_max_tokens": 10}
+    ).status_code == 400
+    assert test_client.post(
+        "/api/vlm/settings", json={"caption_temperature": 5.0}
+    ).status_code == 400
+
+
 def test_vlm_build_config_clamps_corrupt_concurrent_requests(monkeypatch):
     import routers.vlm as vlm_router
 

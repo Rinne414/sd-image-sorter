@@ -372,9 +372,27 @@ def render_template(template: str, context: TemplateContext) -> str:
                 return ""
         return resolved.get(var, "")
 
-    rendered = _TEMPLATE_VAR_PATTERN.sub(substitute, template)
-    cleaned = _cleanup_separators(rendered, context.separator)
-    return _dedup_tokens(cleaned, context.separator)
+    # Render line by line so literal prose and author-written line breaks
+    # survive (v3.4.3: custom templates may freely mix free text, blank
+    # lines and {variables}). Blank lines written in the template are
+    # preserved; lines that only became empty because every variable on
+    # them resolved empty are dropped. Separator cleanup and token dedup
+    # stay per-line, so single-line templates behave exactly as before.
+    out_lines: List[str] = []
+    for line in str(template or "").split("\n"):
+        if not line.strip():
+            out_lines.append("")
+            continue
+        rendered = _TEMPLATE_VAR_PATTERN.sub(substitute, line)
+        cleaned = _cleanup_separators(rendered, context.separator)
+        deduped = _dedup_tokens(cleaned, context.separator)
+        if deduped:
+            out_lines.append(deduped)
+    while out_lines and not out_lines[0]:
+        out_lines.pop(0)
+    while out_lines and not out_lines[-1]:
+        out_lines.pop()
+    return "\n".join(out_lines)
 
 
 def _dedup_tokens(text: str, separator: str) -> str:

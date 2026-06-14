@@ -46,6 +46,7 @@ from services.smart_tag_service import (  # noqa: E402
     build_vlm_prompt,
     compute_consensus_tags,
     filter_noise_tags,
+    filter_tags_by_training_purpose,
     get_caption_results_page,
     is_noise_tag,
     normalize_training_purpose,
@@ -160,17 +161,12 @@ def test_training_purpose_alias_table_is_complete() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_style_preset_targets_medium_lighting_composition() -> None:
+def test_style_preset_describes_content_without_naming_style() -> None:
     prompt = PROMPT_PRESETS["style"].lower()
-    # The whole point of the STYLE preset is that it teaches the text
-    # encoder the visual style, so these terms must appear.
-    for needle in ["medium", "lighting", "composition", "style"]:
+    for needle in ["subject", "clothing", "setting", "composition"]:
         assert needle in prompt, needle
-    # And the prompt must direct the VLM AWAY from enumerating clothing
-    # (that's character-LoRA territory). We allow any phrasing as long
-    # as the prompt says "don't" (or "do not") about clothing.
-    assert "clothing" in prompt
-    assert ("do not" in prompt) or ("don't" in prompt)
+    assert "do not name" in prompt
+    assert "rendering medium" in prompt
 
 
 def test_character_preset_excludes_fixed_identity_features() -> None:
@@ -207,6 +203,171 @@ def test_build_vlm_prompt_respects_alias_for_unknown_purpose() -> None:
     """Unknown training_purpose -> falls through to general preset."""
     prompt = build_vlm_prompt("totally_unknown", ["1girl"])
     assert prompt == build_vlm_prompt("general", ["1girl"])
+
+
+# ---------------------------------------------------------------------------
+# Training purpose tag filtering
+# ---------------------------------------------------------------------------
+
+
+def test_filter_tags_by_training_purpose_general_keeps_all() -> None:
+    """General purpose training keeps all tag categories."""
+    general = ["1girl", "blue_eyes", "outdoors"]
+    copyright = ["genshin_impact"]
+    character = ["raiden_shogun"]
+
+    result = filter_tags_by_training_purpose("general", general, copyright, character)
+
+    assert "1girl" in result
+    assert "blue_eyes" in result
+    assert "outdoors" in result
+    assert "genshin_impact" in result
+    assert "raiden_shogun" in result
+
+
+def test_filter_tags_by_training_purpose_style_removes_style_targets_only() -> None:
+    """Style mode preserves content context and removes identifiable style tags."""
+    general = ["1girl", "blue_eyes", "lineart", "outdoors"]
+    copyright = ["genshin_impact", "honkai_star_rail"]
+    character = ["raiden_shogun", "firefly_(honkai_star_rail)"]
+
+    result = filter_tags_by_training_purpose("style", general, copyright, character)
+
+    assert "1girl" in result
+    assert "blue_eyes" in result
+    assert "outdoors" in result
+    assert "lineart" not in result
+    assert "genshin_impact" in result
+    assert "honkai_star_rail" in result
+    assert "raiden_shogun" in result
+    assert "firefly_(honkai_star_rail)" in result
+
+
+def test_filter_tags_by_training_purpose_character_without_trigger_keeps_identity() -> None:
+    general = ["1girl", "blue_eyes", "long_hair", "outdoors"]
+    copyright = ["genshin_impact"]
+    character = ["raiden_shogun"]
+
+    result = filter_tags_by_training_purpose("character", general, copyright, character)
+
+    assert "raiden_shogun" in result
+    assert "1girl" in result
+    assert "blue_eyes" in result
+    assert "long_hair" in result
+    assert "outdoors" in result
+
+    assert "genshin_impact" in result
+
+
+def test_filter_tags_by_training_purpose_character_with_trigger_removes_character_name() -> None:
+    general = ["1girl", "blue_eyes", "outdoors"]
+    copyright = ["genshin_impact"]
+    character = ["raiden_shogun"]
+
+    result = filter_tags_by_training_purpose(
+        "character", general, copyright, character, trigger_word="my_character"
+    )
+
+    assert result == general + copyright
+
+
+def test_filter_tags_by_training_purpose_concept_preserves_context() -> None:
+    general = ["outdoors", "forest", "sunlight", "nature"]
+    copyright = ["genshin_impact"]
+    character = ["raiden_shogun"]
+
+    result = filter_tags_by_training_purpose("concept", general, copyright, character)
+
+    assert result == general + copyright + character
+
+
+def test_filter_tags_by_training_purpose_respects_aliases() -> None:
+    """Aliases (style_lora, character_lora, etc.) should map correctly."""
+    general = ["1girl", "lineart"]
+    copyright = ["original"]
+    character = ["test_character"]
+
+    # Test style aliases
+    for alias in ["style", "style_lora", "art", "art_style"]:
+        result = filter_tags_by_training_purpose(alias, general, copyright, character)
+        assert "1girl" in result
+        assert "lineart" not in result
+        assert "original" in result
+        assert "test_character" in result
+
+    # Test character aliases
+    for alias in ["character", "character_lora", "char"]:
+        result = filter_tags_by_training_purpose(
+            alias, general, copyright, character, trigger_word="trigger"
+        )
+        assert "test_character" not in result
+        assert "1girl" in result
+        assert "original" in result
+
+    # Test concept aliases
+    for alias in ["concept", "concept_lora"]:
+        result = filter_tags_by_training_purpose(alias, general, copyright, character)
+        assert "1girl" in result
+        assert "original" in result
+        assert "test_character" in result
+
+
+def test_filter_tags_by_training_purpose_unknown_falls_back_to_general() -> None:
+    """Unknown training_purpose should fall back to general behavior (keep all)."""
+    general = ["1girl"]
+    copyright = ["original"]
+    character = ["test_character"]
+
+    result = filter_tags_by_training_purpose("totally_unknown", general, copyright, character)
+
+    assert "1girl" in result
+    assert "original" in result
+    assert "test_character" in result
+
+
+def test_character_purpose_filters_final_caption_and_persisted_rows_with_trigger() -> None:
+    partial = {
+        "general_names": ["1girl", "outdoors"],
+        "copyright_names": ["genshin_impact"],
+        "character_names": ["raiden_shogun"],
+        "general_rows": [{"tag": "1girl"}, {"tag": "outdoors"}],
+        "copyright_rows": [{"tag": "genshin_impact"}],
+        "character_rows": [{"tag": "raiden_shogun"}],
+        "rating": None,
+        "noise_stripped": 0,
+    }
+    req = SmartTagRequest(
+        image_ids=[1], training_purpose="character", trigger_word="my_character"
+    )
+
+    result = smart_tag_service._assemble_result_dict(partial, "standing outside", 1, req)
+
+    assert result["character_tags"] == []
+    assert result["character_tag_rows"] == []
+    assert "raiden shogun" not in result["caption"]
+    assert "genshin impact" in result["caption"]
+    assert result["caption"].startswith("my_character")
+
+
+def test_style_purpose_filters_style_tag_from_final_output_but_keeps_context() -> None:
+    partial = {
+        "general_names": ["1girl", "lineart", "outdoors"],
+        "copyright_names": ["original"],
+        "character_names": ["test_character"],
+        "general_rows": [{"tag": "1girl"}, {"tag": "lineart"}, {"tag": "outdoors"}],
+        "copyright_rows": [{"tag": "original"}],
+        "character_rows": [{"tag": "test_character"}],
+        "rating": None,
+        "noise_stripped": 0,
+    }
+    req = SmartTagRequest(image_ids=[1], training_purpose="style")
+
+    result = smart_tag_service._assemble_result_dict(partial, "a person standing outside", 1, req)
+
+    assert "lineart" not in result["general_tags"]
+    assert "lineart" not in result["caption"]
+    assert result["copyright_tags"] == ["original"]
+    assert result["character_tags"] == ["test_character"]
 
 
 # ---------------------------------------------------------------------------
@@ -1300,6 +1461,43 @@ def test_coerce_request_allows_toriigate_without_vlm_endpoint(monkeypatch) -> No
     assert req.natural_language_mode == "toriigate"
 
 
+def test_coerce_request_normalizes_toriigate_params(monkeypatch) -> None:
+    """caption_length defaults to detailed (owner decision), junk values fall
+    back to detailed, explicit token counts clamp to [32, 1024]."""
+    monkeypatch.setattr("routers.vlm._build_config", lambda overrides=None: None)
+
+    defaults = _coerce_request({
+        "image_ids": [1],
+        "enable_vlm": True,
+        "natural_language_mode": "toriigate",
+    })
+    assert defaults.toriigate_caption_length == "detailed"
+    assert defaults.toriigate_max_new_tokens == 0  # 0 = derive from length
+    assert defaults.toriigate_grounding is True
+
+    explicit = _coerce_request({
+        "image_ids": [1],
+        "enable_vlm": True,
+        "natural_language_mode": "toriigate",
+        "toriigate_caption_length": "BRIEF",
+        "toriigate_max_new_tokens": 5000,
+        "toriigate_grounding": False,
+    })
+    assert explicit.toriigate_caption_length == "brief"
+    assert explicit.toriigate_max_new_tokens == 1024
+    assert explicit.toriigate_grounding is False
+
+    junk = _coerce_request({
+        "image_ids": [1],
+        "enable_vlm": True,
+        "natural_language_mode": "toriigate",
+        "toriigate_caption_length": "epic-novel",
+        "toriigate_max_new_tokens": "not-a-number",
+    })
+    assert junk.toriigate_caption_length == "detailed"
+    assert junk.toriigate_max_new_tokens == 0
+
+
 def test_coerce_request_allows_vlm_disabled_without_endpoint(monkeypatch) -> None:
     """enable_vlm=False short-circuits the endpoint check."""
     def _boom(overrides=None):
@@ -1398,6 +1596,251 @@ class _FakeBatchTagger:
             "character_tags": [],
             "rating": "general",
         }
+
+
+class _RecordingToriiTagger:
+    """Fake ToriiGate that records the grounding tags passed to tag()."""
+
+    def __init__(self) -> None:
+        self.calls = []
+
+    def tag(self, image_path, tags=None):
+        self.calls.append((image_path, tags))
+        return {
+            "general_tags": [],
+            "character_tags": [],
+            "rating": "general",
+            "all_tags": [],
+            "raw_text": '{"description": "raw"}',
+            "nl_text": "A girl stands in a field.",
+        }
+
+
+def test_caption_phase_passes_booru_tags_to_toriigate_as_grounding(monkeypatch) -> None:
+    """ToriiGate must receive the window's WD tags as grounding input (the
+    same noise-filtered context the cloud VLM path gets)."""
+    monkeypatch.setattr(
+        smart_tag_service, "_append_caption_result", lambda job, path, caption: None,
+    )
+
+    torii = _RecordingToriiTagger()
+    job = SmartTagJobState(job_id="torii-grounding-job")
+    job.total = 2
+    req = SmartTagRequest(
+        image_paths=["/tmp/img-0.png", "/tmp/img-1.png"],
+        enable_wd14=True,
+        enable_vlm=True,
+        natural_language_mode="toriigate",
+        toriigate_grounding=True,
+    )
+
+    smart_tag_service._run_windowed_pipeline(
+        job, req, tagger=_FakeBatchTagger(), vlm_provider=None, nl_tagger=torii,
+    )
+
+    assert len(torii.calls) == 2
+    for _path, tags in torii.calls:
+        assert tags == ["1girl"], "WD tags must reach ToriiGate as grounding"
+
+
+def test_caption_phase_omits_grounding_when_disabled(monkeypatch) -> None:
+    monkeypatch.setattr(
+        smart_tag_service, "_append_caption_result", lambda job, path, caption: None,
+    )
+
+    torii = _RecordingToriiTagger()
+    job = SmartTagJobState(job_id="torii-no-grounding-job")
+    job.total = 1
+    req = SmartTagRequest(
+        image_paths=["/tmp/img-0.png"],
+        enable_wd14=True,
+        enable_vlm=True,
+        natural_language_mode="toriigate",
+        toriigate_grounding=False,
+    )
+
+    smart_tag_service._run_windowed_pipeline(
+        job, req, tagger=_FakeBatchTagger(), vlm_provider=None, nl_tagger=torii,
+    )
+
+    assert torii.calls == [("/tmp/img-0.png", None)]
+
+
+class _ReleasableBatchTagger(_FakeBatchTagger):
+    """Batch tagger that records release ordering for the two-phase tests."""
+
+    def __init__(self, events) -> None:
+        super().__init__()
+        self.events = events
+
+    def tag_batch(self, image_paths, **kwargs):
+        self.events.append("tag_batch")
+        return super().tag_batch(image_paths, **kwargs)
+
+    def release_session(self):
+        self.events.append("release_booru")
+
+
+def test_two_phase_toriigate_releases_booru_before_loading(monkeypatch) -> None:
+    """The black-screen fix contract: every booru window is tagged first, the
+    booru session is released, and only then does ToriiGate load. The two
+    heavy models must never be resident together."""
+    events = []
+    persisted = []
+    monkeypatch.setattr(
+        smart_tag_service, "_append_caption_result",
+        lambda job, path, caption: persisted.append((path, caption)),
+    )
+    torii = _RecordingToriiTagger()
+
+    def _fake_phase2_load(job, req):
+        events.append("torii_load")
+        return torii
+
+    monkeypatch.setattr(smart_tag_service, "_load_toriigate_for_phase2", _fake_phase2_load)
+
+    tagger = _ReleasableBatchTagger(events)
+    job = SmartTagJobState(job_id="two-phase-job")
+    job.status = "running"
+    job.total = 3
+    req = SmartTagRequest(
+        image_paths=[f"/tmp/img-{i}.png" for i in range(3)],
+        enable_wd14=True,
+        enable_vlm=True,
+        natural_language_mode="toriigate",
+    )
+
+    smart_tag_service._run_two_phase_toriigate_pipeline(job, req, tagger=tagger)
+
+    assert events == ["tag_batch", "release_booru", "torii_load"]
+    assert len(torii.calls) == 3, "all images captioned in phase 2"
+    assert job.status == "completed"
+    assert len(persisted) == 3
+    assert all("A girl stands in a field." in caption for _p, caption in persisted)
+
+
+def test_two_phase_toriigate_persists_booru_tags_when_load_fails(monkeypatch) -> None:
+    """A failed ToriiGate load (e.g. the RAM guard) must not discard the
+    finished booru pass: tag-only captions persist and the job fails with a
+    clear message."""
+    persisted = []
+    monkeypatch.setattr(
+        smart_tag_service, "_append_caption_result",
+        lambda job, path, caption: persisted.append((path, caption)),
+    )
+
+    def _boom(job, req):
+        raise RuntimeError("ToriiGate CPU mode needs ~13 GB of available RAM")
+
+    monkeypatch.setattr(smart_tag_service, "_load_toriigate_for_phase2", _boom)
+
+    job = SmartTagJobState(job_id="two-phase-load-fail")
+    job.total = 2
+    req = SmartTagRequest(
+        image_paths=["/tmp/img-0.png", "/tmp/img-1.png"],
+        enable_wd14=True,
+        enable_vlm=True,
+        natural_language_mode="toriigate",
+    )
+
+    smart_tag_service._run_two_phase_toriigate_pipeline(
+        job, req, tagger=_FakeBatchTagger(),
+    )
+
+    assert job.status == "failed"
+    assert "Booru tags were saved" in job.message
+    assert len(persisted) == 2, "booru-only captions still persisted"
+    assert all("1girl" in caption for _p, caption in persisted)
+
+
+def test_phase2_toriigate_load_disables_cpu_fallback(monkeypatch) -> None:
+    """Smart Tag's GPU ToriiGate phase must not silently retry CPU fp32 after
+    WD14 is released; failure should stay explicit and preserve booru tags."""
+    captured = {}
+
+    class _FakeTorii:
+        def load(self):
+            captured["loaded"] = True
+
+    def _fake_get_toriigate_tagger(**kwargs):
+        captured.update(kwargs)
+        return _FakeTorii()
+
+    import toriigate_tagger as torii_module
+
+    monkeypatch.setattr(torii_module, "get_toriigate_tagger", _fake_get_toriigate_tagger)
+
+    job = SmartTagJobState(job_id="phase2-load-options")
+    req = SmartTagRequest(
+        image_paths=["/tmp/img-0.png"],
+        enable_wd14=True,
+        enable_vlm=True,
+        natural_language_mode="toriigate",
+        use_gpu=True,
+    )
+
+    smart_tag_service._load_toriigate_for_phase2(job, req)
+
+    assert captured["use_gpu"] is True
+    assert captured["allow_cpu_fallback"] is False
+    assert captured["loaded"] is True
+
+
+def test_run_pipeline_routes_toriigate_to_two_phase(monkeypatch) -> None:
+    """_run_pipeline must NOT load ToriiGate upfront anymore — the toriigate
+    mode routes to the two-phase pipeline."""
+    routed = {}
+
+    def _fake_two_phase(job, req, *, tagger):
+        routed["called"] = True
+        job.status = "completed"
+
+    monkeypatch.setattr(
+        smart_tag_service, "_run_two_phase_toriigate_pipeline", _fake_two_phase
+    )
+    monkeypatch.setattr(smart_tag_service, "_request_total", lambda req: 1)
+    monkeypatch.setattr(smart_tag_service, "_resolve_tagger", lambda req: _FakeBatchTagger())
+
+    def _no_upfront_load(*args, **kwargs):
+        raise AssertionError("ToriiGate must not load before the booru phase")
+
+    import toriigate_tagger as torii_module
+
+    monkeypatch.setattr(torii_module, "get_toriigate_tagger", _no_upfront_load)
+
+    job = SmartTagJobState(job_id="route-two-phase")
+    req = SmartTagRequest(
+        image_paths=["/tmp/img-0.png"],
+        enable_wd14=True,
+        enable_vlm=True,
+        natural_language_mode="toriigate",
+    )
+
+    smart_tag_service._run_pipeline(job, req)
+
+    assert routed.get("called") is True
+    assert job.status == "completed"
+
+
+def test_build_caption_phase_forces_nl_output_format() -> None:
+    """Smart Tag's VLM role is prose only — a stored preset with
+    output_format="both"/"danbooru_tags" must be overridden per job (the
+    provider instance is job-local, so VLM Settings are not mutated)."""
+    vlm = SimpleNamespace(
+        config=SimpleNamespace(
+            concurrent_requests=2,
+            include_tags_as_context=True,
+            user_prompt="",
+            user_prompt_with_tags="",
+            output_format="both",
+        )
+    )
+    req = SmartTagRequest(image_ids=[1], enable_vlm=True, natural_language_mode="vlm")
+
+    ctx = smart_tag_service._build_caption_phase(req, vlm, None)
+
+    assert ctx.use_vlm is True
+    assert vlm.config.output_format == "nl_caption"
 
 
 class _ConcurrencyTrackingVlm:

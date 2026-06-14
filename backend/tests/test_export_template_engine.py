@@ -111,6 +111,37 @@ def test_template_dedups_case_insensitive():
     assert tokens.count("masterpiece") == 1, f"masterpiece appeared {tokens.count('masterpiece')} times in {rendered!r}"
 
 
+def test_template_preserves_literal_text_newlines_and_blank_lines():
+    """v3.4.3: custom templates may freely mix literal words, blank lines and
+    {variables}; the rendered output must keep the author's layout."""
+    rendered = build_export_caption(
+        {"id": 1, "ai_caption": "A girl stands in a field."},
+        [{"tag": "1girl", "confidence": 0.9}, {"tag": "field", "confidence": 0.8}],
+        preset_id="custom",
+        template_override="my style notes: {trigger}, {tags:filtered}\n\nDescription: {nl_caption}",
+        trigger="my_oc",
+        underscore_to_space_override=False,
+    )
+    lines = rendered.split("\n")
+    assert lines[0] == "my style notes: my_oc, 1girl, field"
+    assert lines[1] == "", "author-written blank line must survive"
+    assert lines[2] == "Description: A girl stands in a field."
+
+
+def test_template_drops_lines_whose_variables_all_resolve_empty():
+    """A line that exists only to hold an empty variable should vanish instead
+    of leaving a stray label/blank in the export."""
+    rendered = build_export_caption(
+        {"id": 1, "ai_caption": ""},
+        [{"tag": "1girl", "confidence": 0.9}],
+        preset_id="custom",
+        template_override="{tags:filtered}\n{nl_caption}",
+        trigger="",
+        underscore_to_space_override=False,
+    )
+    assert rendered == "1girl"
+
+
 def test_template_preserves_distinct_tags():
     """Dedup must not eat distinct tags that just share a substring."""
     image = {"id": 1}

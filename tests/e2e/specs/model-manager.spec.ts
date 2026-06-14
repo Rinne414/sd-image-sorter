@@ -52,8 +52,8 @@ function diskUsagePayload(overrides: Record<string, unknown> = {}) {
         key: 'thumbnails',
         label_key: 'disk.cache.thumbnails',
         path: '/tmp/sd-image-sorter/thumbnails',
-        size_bytes: null,
-        size_complete: false,
+        size_bytes: 4 * 1024 * 1024,
+        size_complete: true,
         exists: true,
       },
       {
@@ -69,8 +69,8 @@ function diskUsagePayload(overrides: Record<string, unknown> = {}) {
       {
         key: 'models',
         label_key: 'disk.preserved.models',
-        size_bytes: null,
-        size_complete: false,
+        size_bytes: 256 * 1024 * 1024,
+        size_complete: true,
       },
     ],
     settings: { thumbnail_cache_max_mb: 500 },
@@ -86,8 +86,8 @@ function diskUsagePayload(overrides: Record<string, unknown> = {}) {
     runtime_environment: {
       venv_path: '/tmp/sd-image-sorter/backend/venv',
       venv_exists: true,
-      venv_size_bytes: null,
-      venv_size_complete: false,
+      venv_size_bytes: 8 * 1024 * 1024,
+      venv_size_complete: true,
       rebuild_core_pending: false,
       rebuild_marker_path: '/tmp/sd-image-sorter/data/state/rebuild-core-venv.json',
     },
@@ -187,7 +187,7 @@ test.describe('Model Manager', () => {
   })
 
 
-  test('disk usage explains cache tradeoff, handles incomplete large scans, and saves the cache limit', async ({ page }) => {
+  test('disk usage explains cache tradeoff, shows exact sizes, and saves the cache limit', async ({ page }) => {
     await mockMinimalModelStatus(page)
 
     let cachePayload = diskUsagePayload()
@@ -228,7 +228,8 @@ test.describe('Model Manager', () => {
 
     const diskBody = page.locator('#disk-usage-body')
     await expect(diskBody).toContainText(/Thumbnail cache limit|缩略图缓存上限/)
-    await expect(diskBody).toContainText(/large \/ not fully scanned|未完整扫描/i)
+    await expect(diskBody).toContainText(/4\.0 MB/)
+    await expect(diskBody).toContainText(/8\.0 MB/)
     await expect(diskBody).toContainText(/CPU\/?IO|CPU.*IO|CPU.*I\/O/i)
     await expect(page.locator('#thumbnail-cache-limit-input')).toHaveValue('500')
 
@@ -283,7 +284,7 @@ test.describe('Model Manager', () => {
     await expect(page.locator('#confirm-message')).toContainText(/caches|缓存/i)
     await expect(page.locator('#confirm-message')).toContainText(/downloaded models|已下载模型/i)
     await expect(page.locator('#confirm-message')).toContainText(/Heavy AI Python packages|重型 AI Python 包/i)
-    await expect(page.locator('#confirm-message')).toContainText(/large \/ not fully scanned|未完整扫描/i)
+    await expect(page.locator('#confirm-message')).toContainText(/8\.0 MB/)
 
     await page.locator('#btn-confirm-ok').click()
 
@@ -299,7 +300,20 @@ test.describe('Model Manager', () => {
     let cleanupRequests = 0
 
     await page.route('**/api/disk/cache-status', async (route) => {
-      await route.fulfill({ json: diskUsagePayload() })
+      await route.fulfill({
+        json: diskUsagePayload({
+          safe_to_clean: [
+            {
+              key: 'thumbnails',
+              label_key: 'disk.cache.thumbnails',
+              path: '/tmp/sd-image-sorter/thumbnails',
+              size_bytes: 4096,
+              size_complete: false,
+              exists: true,
+            },
+          ],
+        }),
+      })
     })
     await page.route('**/api/disk/cleanup', async (route) => {
       cleanupRequests += 1

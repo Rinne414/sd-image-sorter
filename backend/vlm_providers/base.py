@@ -146,6 +146,10 @@ class VLMConfig:
 
     # v3.2.1 additions
     output_format: str = OUTPUT_FORMAT_NL  # nl_caption | danbooru_tags | both
+    # v3.4.3: caption generation parameters, previously hardcoded per provider
+    # (1024 / 0.3). The analyze path keeps its own fixed 2048 / 0.1.
+    caption_max_tokens: int = 1024
+    caption_temperature: float = 0.3
     http_proxy: str = ""    # HTTP proxy URL (e.g., http://proxy:8080)
     https_proxy: str = ""   # HTTPS proxy URL
     socks_proxy: str = ""   # SOCKS proxy URL (e.g., socks5://localhost:1080)
@@ -426,7 +430,11 @@ class VLMProvider:
         text = raw_text.strip()
 
         if self.config.output_format == OUTPUT_FORMAT_NL:
-            result.caption = text
+            # Defensive: JSON-tuned models (and presets that pick nl_caption)
+            # sometimes answer with {"description": ..., "tags": ...} anyway —
+            # extract the prose instead of leaking raw JSON into captions.
+            jsonish_caption = _extract_caption_from_jsonish(text)
+            result.caption = text if jsonish_caption is None else jsonish_caption
             return result
 
         if self.config.output_format == OUTPUT_FORMAT_TAGS:
@@ -547,6 +555,43 @@ def _parse_tag_list(text: str) -> List[str]:
     return [t for t in raw_tags if t and not _looks_like_garbage_tag(t)]
 
 
+def _strip_json_fence(text: str) -> str:
+    """Remove a whole-response markdown code fence, if present."""
+    import re as _re
+
+    candidate = (text or "").strip()
+    fence = _re.match(r"^```[a-zA-Z0-9_-]*\s*\n?(.*?)\n?```\s*$", candidate, _re.DOTALL)
+    if fence:
+        return fence.group(1).strip()
+    return candidate
+
+
+def _looks_like_jsonish_payload(text: str) -> bool:
+    """Return True only for JSON-shaped model payloads, not ordinary prose.
+
+    Captions such as ``[wide shot] ...`` or text containing
+    ``"label": "value"`` must pass through unchanged. We only parse when the
+    whole response starts like an object, a JSON array, a fenced JSON block, or
+    a top-level caption/tag key without braces.
+    """
+    import re as _re
+
+    candidate = _strip_json_fence(text)
+    if not candidate:
+        return False
+    if candidate.startswith("{"):
+        return True
+    if _re.match(r'^\[\s*(?:\{|"|\])', candidate):
+        return True
+    return bool(
+        _re.match(
+            r'^"(?:description|caption|nl|nl_caption|natural_language|text|summary|tags|tag)"\s*:',
+            candidate,
+            _re.IGNORECASE,
+        )
+    )
+
+
 def _try_parse_json_hybrid(text: str) -> Optional[tuple[str, str]]:
     """Extract ``(nl, tags)`` from a JSON object the model may have emitted.
 
@@ -556,13 +601,8 @@ def _try_parse_json_hybrid(text: str) -> Optional[tuple[str, str]]:
     JSON object is present so the caller can try the next strategy.
     """
     import json as _json
-    import re as _re
 
-    candidate = (text or "").strip()
-    # Strip a leading ```json / ``` fence and trailing ``` if present.
-    fence = _re.match(r"^```[a-zA-Z0-9_-]*\s*\n?(.*?)\n?```\s*$", candidate, _re.DOTALL)
-    if fence:
-        candidate = fence.group(1).strip()
+    candidate = _strip_json_fence(text)
 
     start = candidate.find("{")
     end = candidate.rfind("}")
@@ -593,6 +633,57 @@ def _try_parse_json_hybrid(text: str) -> Optional[tuple[str, str]]:
     if nl or tags_str:
         return nl, tags_str
     return None
+
+
+def _extract_caption_from_jsonish(text: str) -> Optional[str]:
+    """Pull prose out of a JSON-shaped answer, or ``None`` if not JSON-shaped.
+
+    nl_caption-mode models occasionally ignore the prose instruction and emit
+    ``{"description": ..., "tags": ...}`` — sometimes truncated mid-string by
+    the token cap. Returns the extracted caption (``""`` when the JSON held no
+    prose, e.g. a tags-only object — booru tags come from the tagger, never
+    from here) or ``None`` when the text does not look like JSON at all.
+    """
+    import json as _json
+    import re as _re
+
+    candidate = _strip_json_fence(text)
+    if not _looks_like_jsonish_payload(candidate):
+        return None
+
+    parsed = _try_parse_json_hybrid(candidate)
+    if parsed is not None:
+        return parsed[0]
+
+    try:
+        parsed_json = _json.loads(candidate)
+    except Exception:
+        parsed_json = None
+    if isinstance(parsed_json, list):
+        strings = [
+            item.strip()
+            for item in parsed_json
+            if isinstance(item, str) and item.strip()
+        ]
+        return " ".join(strings)
+
+    # Truncated JSON: pull the (possibly unterminated) caption value.
+    match = _re.search(
+        r'"(?:description|caption|nl|nl_caption|natural_language|text|summary)"'
+        r'\s*:\s*"((?:[^"\\]|\\.)*)',
+        candidate,
+    )
+    if match:
+        value = match.group(1).rstrip("\\")
+        try:
+            value = _json.loads(f'"{value}"')
+        except Exception:
+            value = value.replace('\\"', '"').replace("\\n", " ")
+        return value.strip()
+
+    # JSON-shaped but nothing prose-like to salvage (e.g. truncated tags-only
+    # object): an empty caption beats leaking raw JSON into training data.
+    return ""
 
 
 def _heuristic_split_tags_prose(text: str) -> tuple[str, str]:

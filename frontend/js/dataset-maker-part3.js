@@ -272,7 +272,11 @@
                     // point 2/3: seed the natural-language baseline so the NL box
                     // and the per-image "both" default have a value on import.
                     // Don't clobber a user's NL edit; only set the baseline.
-                    const nlText = String(item.nl_caption || '').trim();
+                    // Fall back to the fused ai_caption for rows tagged before
+                    // the nl_caption split existed (same as _seedAiCaptions and
+                    // the backend's _compose_nl_caption) — without it, those
+                    // rows show an empty NL box in "NL"/"Both" mode.
+                    const nlText = String(item.nl_caption || item.ai_caption || '').trim();
                     if (nlText) this.nlCaptions.set(Number(item.image_id), nlText);
                     if (!this.meta.has(Number(item.image_id))) {
                         this.meta.set(Number(item.image_id), {

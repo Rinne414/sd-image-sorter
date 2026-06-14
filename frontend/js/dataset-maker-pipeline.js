@@ -1656,17 +1656,13 @@
 
         function positionList() {
             const rect = display.getBoundingClientRect();
-            const gap = 4;
-            const maxHeight = Math.min(220, Math.max(120, window.innerHeight - 24));
-            const spaceBelow = window.innerHeight - rect.bottom - gap;
-            const openUpward = spaceBelow < 140 && rect.top > spaceBelow;
-            const height = Math.min(maxHeight, openUpward ? rect.top - 12 : spaceBelow);
-            list.style.left = `${Math.max(8, rect.left)}px`;
-            list.style.width = `${Math.max(160, rect.width)}px`;
-            list.style.maxHeight = `${Math.max(120, height)}px`;
-            list.style.top = openUpward
-                ? `${Math.max(8, rect.top - Math.max(120, height) - gap)}px`
-                : `${Math.min(window.innerHeight - 8, rect.bottom + gap)}px`;
+            window.PopupPosition?.place(list, {
+                anchor: display,
+                placement: 'bottom-start',
+                gap: 4,
+                width: Math.max(160, rect.width),
+                maxHeight: Math.min(220, Math.max(120, window.innerHeight - 24)),
+            });
         }
 
         function buildOptions() {

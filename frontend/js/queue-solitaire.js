@@ -1466,11 +1466,12 @@
 
         img.src = getThumbUrl(id) + '&size=384';
         popup.classList.add('visible');
-
-        const x = Math.min(event.clientX + 16, window.innerWidth - 260);
-        const y = Math.min(event.clientY - 60, window.innerHeight - 260);
-        popup.style.left = x + 'px';
-        popup.style.top = y + 'px';
+        window.PopupPosition?.place(popup, {
+            x: event.clientX + 16,
+            y: event.clientY - 60,
+            placement: 'point',
+            margin: 8,
+        });
     }
 
     function hideHoverPreview() {

@@ -101,3 +101,62 @@ def test_nl_only_format_unaffected_by_commas():
     r = p.parse_output("A plain caption, with commas, stays whole.")
     assert r.caption == "A plain caption, with commas, stays whole."
     assert r.tags == []
+
+
+# ---------------------------------------------------------------------------
+# nl_caption format + JSON-shaped answers: presets like anima_flux set
+# output_format=nl_caption, but JSON-tuned models answer with
+# {"description": ..., "tags": ...} anyway — sometimes truncated by the token
+# cap. The prose must be extracted instead of leaking raw JSON into captions.
+# ---------------------------------------------------------------------------
+
+
+def _nl() -> VLMProvider:
+    return VLMProvider(VLMConfig(output_format=OUTPUT_FORMAT_NL))
+
+
+def test_nl_format_extracts_description_from_json_answer():
+    r = _nl().parse_output(
+        '{"description": "A girl stands in a field.", "tags": "1girl, solo, field"}'
+    )
+    assert r.caption == "A girl stands in a field."
+    assert "{" not in r.caption
+
+
+def test_nl_format_extracts_description_from_fenced_json():
+    r = _nl().parse_output(
+        '```json\n{"description": "Close-up portrait of a knight.", "tags": ["armor"]}\n```'
+    )
+    assert r.caption == "Close-up portrait of a knight."
+
+
+def test_nl_format_recovers_truncated_json_answer():
+    r = _nl().parse_output(
+        '{"description": "A close-up shot focuses on the torso of a woman.", '
+        '"tags": "1girl, solo, head_out_of_frame, cropped_head,'
+    )
+    assert r.caption == "A close-up shot focuses on the torso of a woman."
+    assert "1girl" not in r.caption
+
+
+def test_nl_format_tags_only_json_yields_empty_caption_not_raw_json():
+    r = _nl().parse_output('{"tags": "1girl, solo, long_hair"}')
+    assert r.caption == ""
+
+
+def test_nl_format_plain_prose_passes_through():
+    raw = "A lone tree on a grassy hill under a wide blue sky."
+    r = _nl().parse_output(raw)
+    assert r.caption == raw
+
+
+def test_nl_format_prose_with_inline_key_value_passes_through():
+    raw = 'A monitor overlay reads "status": "recording" while the subject stands still.'
+    r = _nl().parse_output(raw)
+    assert r.caption == raw
+
+
+def test_nl_format_bracketed_prose_passes_through():
+    raw = "[wide shot] A lone tree on a grassy hill under a wide blue sky."
+    r = _nl().parse_output(raw)
+    assert r.caption == raw

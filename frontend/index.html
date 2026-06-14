@@ -161,28 +161,36 @@
                         <span class="tab-icon" aria-hidden="true">📦</span>
                         <span class="tab-text" data-i18n="nav.dataset">Dataset</span>
                     </button>
-                    <span class="nav-divider" aria-hidden="true"></span>
-                    <!-- v3.3.3 WS1: Tools dropdown demotes the power/experimental tools
-                         (Prompt Helper + Style Finder) out of the main bar so the 6 core
-                         pipeline tabs keep their labels at 1366px (no icon-only collapse).
-                         Items stay .nav-tab so switchView + the click binding work
-                         unchanged; the toggle reflects .active when a tool view is open
-                         (see updateNavToolsActive). -->
+                    <span class="nav-divider nav-advanced-divider" aria-hidden="true"></span>
+                    <button class="nav-tab nav-priority-advanced" id="nav-tab-promptlab" data-view="promptlab" role="tab" aria-selected="false" aria-controls="view-promptlab"
+                            data-i18n-title="nav.promptlab" title="Prompt Helper">
+                        <span class="tab-icon" aria-hidden="true">🧪</span>
+                        <span class="tab-text" data-i18n="nav.promptlab">Prompt Helper</span>
+                    </button>
+                    <button class="nav-tab nav-priority-advanced" id="nav-tab-artist" data-view="artist" role="tab" aria-selected="false" aria-controls="view-artist"
+                            data-i18n-title="nav.artist" title="Style Finder">
+                        <span class="tab-icon" aria-hidden="true">🖌️</span>
+                        <span class="tab-text" data-i18n="nav.artist">Style Finder</span>
+                    </button>
+                    <!-- v3.4.3: Prompt Helper + Style Finder stay in the main bar
+                         when space allows. The More menu is only a responsive fallback
+                         for narrow windows and long translations. Items stay .nav-tab
+                         so switchView + the click binding work unchanged. -->
                     <div class="nav-tools" id="nav-tools">
                         <button class="nav-tools-toggle" id="nav-tools-toggle" type="button"
                                 aria-haspopup="true" aria-expanded="false" aria-controls="nav-tools-menu"
                                 data-i18n-title="nav.moreTools" title="More Tools">
                             <span class="tab-icon" aria-hidden="true">🧰</span>
-                            <span class="tab-text" data-i18n="nav.tools">Tools</span>
+                            <span class="tab-text" data-i18n="nav.more">More</span>
                             <span class="nav-tools-caret" aria-hidden="true">▾</span>
                         </button>
                         <div class="nav-tools-menu" id="nav-tools-menu" aria-label="More tools" hidden>
-                            <button class="nav-tab nav-tools-item" id="nav-tab-promptlab" data-view="promptlab" role="tab" aria-selected="false" aria-controls="view-promptlab"
+                            <button class="nav-tab nav-tools-item nav-tools-mirror" id="nav-tools-promptlab" data-view="promptlab" role="tab" aria-selected="false" aria-controls="view-promptlab"
                                     data-i18n-title="nav.promptlab" title="Prompt Helper">
                                 <span class="tab-icon" aria-hidden="true">🧪</span>
                                 <span class="tab-text" data-i18n="nav.promptlab">Prompt Helper</span>
                             </button>
-                            <button class="nav-tab nav-tools-item" id="nav-tab-artist" data-view="artist" role="tab" aria-selected="false" aria-controls="view-artist"
+                            <button class="nav-tab nav-tools-item nav-tools-mirror" id="nav-tools-artist" data-view="artist" role="tab" aria-selected="false" aria-controls="view-artist"
                                     data-i18n-title="nav.artist" title="Style Finder">
                                 <span class="tab-icon" aria-hidden="true">🖌️</span>
                                 <span class="tab-text" data-i18n="nav.artist">Style Finder</span>
@@ -530,6 +538,10 @@
                                 <button id="btn-send-to-censor" class="btn btn-primary full-width" title="Send to Censor Edit" data-i18n-title="gallery.contextSendToCensor"><span>🔳</span> <span data-i18n="selection.censorEdit">Censor Edit</span></button>
                                 <!-- v3.2.2 task #4: replaced Analyze Colors button with Send to Dataset Maker; color analysis still runs from the Tag Images modal -->
                                 <button id="btn-send-selection-to-dataset-maker" class="btn btn-secondary full-width" title="Push the selected images into the Dataset Maker queue (training set workspace)"><span>📦</span> <span data-i18n="selection.sendToDatasetMaker">To Dataset Maker</span></button>
+                                <!-- v3.4.3 P4: batch add-to-collection (reference, no file copy) -->
+                                <button id="btn-add-selected-to-collection" class="btn btn-secondary full-width" title="Add selected images to a collection (reference, no file copy)"><span>📚</span> <span data-i18n="selection.addToCollection">Add to collection…</span></button>
+                                <!-- P16: Mass Tag Editor entry from selection panel -->
+                                <button id="btn-selection-mass-tag-editor" class="btn btn-secondary full-width" title="Bulk tag operations on selected images" data-i18n-title="massTag.selectionTooltip"><span>🔧</span> <span data-i18n="massTag.selectionOpen">Edit Selected Tags</span></button>
                             </div>
                         </div>
                         <details class="selection-panel-section selection-panel-disclosure">
@@ -606,13 +618,18 @@
                             <span class="header-status-chip is-info metadata-status-chip" id="metadata-status-chip" aria-live="polite" style="display:none"></span>
                             <div class="divider-v" aria-hidden="true"></div>
                             <div class="generator-tabs" id="generator-tabs" role="tablist" aria-label="Filter by generator">
-                                <button class="gen-tab active" data-gen="all" role="tab" aria-selected="true"><span data-i18n="common.all">All</span> <span class="gen-count" id="count-all">0</span></button>
-                                <button class="gen-tab" data-gen="nai" role="tab" aria-selected="false">NovelAI <span class="gen-count" id="count-nai">0</span></button>
-                                <button class="gen-tab" data-gen="comfyui" role="tab" aria-selected="false">ComfyUI <span class="gen-count" id="count-comfyui">0</span></button>
-                                <button class="gen-tab" data-gen="forge" role="tab" aria-selected="false">Forge <span class="gen-count" id="count-forge">0</span></button>
-                                <button class="gen-tab" data-gen="webui" role="tab" aria-selected="false">WebUI <span class="gen-count" id="count-webui">0</span></button>
-                                <button class="gen-tab" data-gen="unknown" role="tab" aria-selected="false">Unknown <span class="gen-count" id="count-unknown">0</span></button>
-                                <button class="gen-tab" data-gen="others" role="tab" aria-selected="false">Others <span class="gen-count" id="count-others">0</span></button>
+                                <div class="generator-tabs-pinned">
+                                    <button class="gen-tab active" data-gen="all" role="tab" aria-selected="true"><span data-i18n="common.all">All</span> <span class="gen-count" id="count-all">0</span></button>
+                                </div>
+                                <div class="generator-tabs-scroll" id="generator-tabs-scroll" tabindex="0" aria-label="More generator filters">
+                                    <button class="gen-tab" data-gen="nai" role="tab" aria-selected="false">NovelAI <span class="gen-count" id="count-nai">0</span></button>
+                                    <button class="gen-tab" data-gen="comfyui" role="tab" aria-selected="false">ComfyUI <span class="gen-count" id="count-comfyui">0</span></button>
+                                    <button class="gen-tab" data-gen="forge" role="tab" aria-selected="false">Forge <span class="gen-count" id="count-forge">0</span></button>
+                                    <button class="gen-tab" data-gen="webui" role="tab" aria-selected="false">WebUI <span class="gen-count" id="count-webui">0</span></button>
+                                    <button class="gen-tab" data-gen="unknown" role="tab" aria-selected="false">Unknown <span class="gen-count" id="count-unknown">0</span></button>
+                                    <button class="gen-tab" data-gen="others" role="tab" aria-selected="false"
+                                            data-i18n-title="generator.othersHint" title="Groups uncommon generators">Others <span class="gen-count" id="count-others">0</span></button>
+                                </div>
                             </div>
                         </div>
                         <div class="view-options">
@@ -803,7 +820,7 @@
                                     <span aria-hidden="true" class="onboarding-step-icon">🧭</span>
                                     <div class="onboarding-step-copy">
                                         <strong data-i18n="onboarding.step4Title">Explore the tabs</strong>
-                                        <span data-i18n="onboarding.step4Hint">Use the top-left tabs for the core flow: Gallery, Reader, Sort, Censor Edit, Similar, and Dataset. Prompt Helper and Style Finder live under Tools.</span>
+                                        <span data-i18n="onboarding.step4Hint">Use the top-left tabs for the core flow: Gallery, Reader, Sort, Censor Edit, Similar, and Dataset. Prompt Helper and Style Finder appear directly when there is room, or under More on narrower screens.</span>
                                     </div>
                                 </li>
                             </ol>
@@ -2986,28 +3003,54 @@
                     <div class="dataset-tab-import-content" id="dataset-tab-import-content">
                         <!-- Import actions: big buttons + inline folder path -->
                         <div class="dataset-import-actions">
-                            <button class="btn btn-primary btn-large" id="btn-dataset-import-gallery">
-                                <span aria-hidden="true">🖼️</span>
-                                <span data-i18n="dataset.importFromGallery">Add from Gallery Selection</span>
-                            </button>
-                            <div class="dataset-folder-bar">
-                                <span class="dataset-folder-bar-icon" aria-hidden="true">📁</span>
-                                <input type="text" id="dataset-folder-import-path" class="form-input"
-                                       placeholder="Drag folder here or type path..."
-                                       data-folder-browser-container="dataset-folder-import-browser"
-                                       data-i18n-placeholder="dataset.folderBarPlaceholder">
-                                <label class="dataset-folder-bar-subfolder">
-                                    <input type="checkbox" id="dataset-folder-import-recursive" checked>
-                                    <span data-i18n="dataset.includeSubfolders">Subfolders</span>
-                                </label>
-                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-folder-import-browse"
-                                        data-i18n="common.browse">Browse</button>
-                                <button type="button" class="btn btn-primary btn-small" id="btn-dataset-folder-import-go"
-                                        data-i18n="dataset.folderImportGo">Scan</button>
-                                <div class="dataset-folder-browser-host" id="dataset-folder-import-browser"></div>
-                            </div>
-                            <button type="button" class="btn btn-ghost btn-small dataset-import-audit-button" id="btn-dataset-import-audit"
-                                    data-i18n="dataset.runAudit">Run Audit</button>
+                            <section class="dataset-import-card dataset-import-card-gallery">
+                                <div class="dataset-import-card-copy">
+                                    <span class="dataset-import-card-kicker" data-i18n="dataset.importGalleryKicker">Fast start</span>
+                                    <strong data-i18n="dataset.importGalleryTitle">Use current Gallery selection</strong>
+                                    <p data-i18n="dataset.importGalleryHelp">Send selected images straight into the dataset queue.</p>
+                                </div>
+                                <button class="btn btn-primary btn-large" id="btn-dataset-import-gallery">
+                                    <span aria-hidden="true">🖼️</span>
+                                    <span data-i18n="dataset.importFromGallery">Add from Gallery Selection</span>
+                                </button>
+                            </section>
+                            <section class="dataset-import-card dataset-import-card-folder">
+                                <div class="dataset-import-card-copy">
+                                    <span class="dataset-import-card-kicker" data-i18n="dataset.importFolderKicker">Large folders</span>
+                                    <strong data-i18n="dataset.importFolderTitle">Scan a folder path</strong>
+                                    <p data-i18n="dataset.importFolderHelp">Best for big training sets and nested folders.</p>
+                                </div>
+                                <ul class="dataset-import-card-benefits">
+                                    <li><span data-i18n="dataset.importFolderBenefitRecursive">Recursive scan by default</span></li>
+                                    <li><span data-i18n="dataset.importFolderBenefitCaptions">Reads same-name .txt captions</span></li>
+                                    <li><span data-i18n="dataset.importFolderBenefitReview">Review before tagging or export</span></li>
+                                </ul>
+                                <div class="dataset-folder-bar">
+                                    <span class="dataset-folder-bar-icon" aria-hidden="true">📁</span>
+                                    <input type="text" id="dataset-folder-import-path" class="form-input"
+                                           placeholder="Drag folder here or type path..."
+                                           data-folder-browser-container="dataset-folder-import-browser"
+                                           data-i18n-placeholder="dataset.folderBarPlaceholder">
+                                    <label class="dataset-folder-bar-subfolder">
+                                        <input type="checkbox" id="dataset-folder-import-recursive" checked>
+                                        <span data-i18n="dataset.includeSubfolders">Subfolders</span>
+                                    </label>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-folder-import-browse"
+                                            data-i18n="common.browse">Browse</button>
+                                    <button type="button" class="btn btn-primary btn-small" id="btn-dataset-folder-import-go"
+                                            data-i18n="dataset.folderImportGo">Scan</button>
+                                    <div class="dataset-folder-browser-host" id="dataset-folder-import-browser"></div>
+                                </div>
+                            </section>
+                            <section class="dataset-import-card dataset-import-card-audit">
+                                <div class="dataset-import-card-copy">
+                                    <span class="dataset-import-card-kicker" data-i18n="dataset.importAuditKicker">Quality check</span>
+                                    <strong data-i18n="dataset.importAuditTitle">Audit before editing</strong>
+                                    <p data-i18n="dataset.importAuditHelp">Find duplicates, missing captions, and risky files before export.</p>
+                                </div>
+                                <button type="button" class="btn btn-ghost btn-small dataset-import-audit-button" id="btn-dataset-import-audit"
+                                        data-i18n="dataset.runAudit">Run Audit</button>
+                            </section>
                         </div>
                         <!-- NOISE-06: the two always-visible import notices (100k+ reminder
                              + same-name .txt behaviour) stacked up and crowded the import tab.
@@ -3300,6 +3343,10 @@
                                 <p class="dataset-card-help" data-i18n="dataset.smartTagHelp" style="margin-top: 6px; font-size: 12px; opacity: 0.75;">
                                     Run one or two local taggers, optionally add a VLM sentence, clean noise tags, and write captions back to every image in this dataset.
                                 </p>
+                                <button class="btn btn-secondary full-width" id="btn-dataset-add-to-collection" style="margin-top: 8px;">
+                                    <span aria-hidden="true">📚</span>
+                                    <span data-i18n="collections.addTo">Add to collection</span>
+                                </button>
                             </section>
 
                             <!-- Section B: Captions polish (collapsed by default - novice users don't need this) -->
@@ -3414,9 +3461,8 @@
                                 <div id="dataset-template-options" class="dataset-template-options">
                                     <label class="form-label">
                                         <span data-i18n="batchExport.loraTemplate">Custom template</span>
-                                        <input type="text" id="dataset-template-override" class="form-input"
-                                               placeholder="{trigger}, {tags:filtered}, {append}"
-                                               value="{trigger}, {tags:filtered}, {append}">
+                                        <textarea id="dataset-template-override" class="form-input" rows="3"
+                                                  placeholder="{trigger}, {tags:filtered}, {append}">{trigger}, {tags:filtered}, {append}</textarea>
                                     </label>
                                     <label class="form-label">
                                         <span data-i18n="batchExport.loraReplace">Tag replacements (one per line: from-&gt;to)</span>
@@ -4353,14 +4399,14 @@
 
                 <!-- v3.2.2 task #5: Smart Tag wizard discoverability hint.
                      Returning users dismiss it once and never see it again. -->
-                <div class="smart-tag-hint-banner" id="tag-modal-smart-tag-hint" role="region" aria-labelledby="tag-modal-smart-tag-hint-title" hidden>
+                <div class="smart-tag-hint-banner smart-tag-hint-banner-primary" id="tag-modal-smart-tag-hint" role="region" aria-labelledby="tag-modal-smart-tag-hint-title">
                     <div class="smart-tag-hint-banner-icon" aria-hidden="true">✨</div>
                     <div class="smart-tag-hint-banner-copy">
-                        <strong id="tag-modal-smart-tag-hint-title" data-i18n="tagModal.smartTagHintTitle">Building a LoRA training set?</strong>
-                        <span data-i18n="tagModal.smartTagHintBody">Dataset Maker → Smart Tag bundles WD14 / OppaiOracle tagging, VLM descriptions, trigger word injection, and same-name caption export into one flow.</span>
+                        <strong id="tag-modal-smart-tag-hint-title" data-i18n="tagModal.smartTagTitle">Smart Tag: WD14 + VLM in one run</strong>
+                        <span data-i18n="tagModal.smartTagBody">Use the current Gallery selection or filtered scope. Smart Tag can generate Danbooru tags, natural-language captions, trigger words, and cleaned training captions together.</span>
                     </div>
                     <div class="smart-tag-hint-banner-actions">
-                        <button type="button" class="btn btn-primary btn-small" id="btn-tag-modal-smart-tag-go" data-i18n="tagModal.smartTagHintGo">Open Dataset Maker</button>
+                        <button type="button" class="btn btn-primary btn-small" id="btn-tag-modal-smart-tag-go" data-i18n="tagModal.smartTagGo">Open Smart Tag</button>
                         <button type="button" class="btn btn-ghost btn-small" id="btn-tag-modal-smart-tag-dismiss" aria-label="Don't show again" data-i18n="tagModal.smartTagHintDismiss">Don't show again</button>
                     </div>
                 </div>
@@ -4920,7 +4966,7 @@
                         <div style="padding-top:8px">
                             <div class="form-group">
                                 <label for="lora-template-override" data-i18n="batchExport.loraTemplate">Custom template (overrides preset)</label>
-                                <input type="text" id="lora-template-override" class="input-field" placeholder="{trigger}, {tags:filtered}, {append}" data-i18n-placeholder="batchExport.loraTemplatePlaceholder">
+                                <textarea id="lora-template-override" class="input-field" rows="3" placeholder="{trigger}, {tags:filtered}, {append}" data-i18n-placeholder="batchExport.loraTemplatePlaceholder"></textarea>
                                 <small class="helper-text" data-i18n="batchExport.loraTemplateHelper">Variables: {trigger} {tags} {tags:N} {tags:filtered} {nl_caption} {prompt} {rating} {count} {characters} {general} {quality} {safety} {append}</small>
                             </div>
                             <div class="form-group">
@@ -5394,6 +5440,10 @@
                                         </label>
                                     </div>
                                 </div>
+                                <!-- P16: Mass Tag Editor entry from filter sidebar -->
+                                <button id="btn-filter-mass-tag-editor" class="btn btn-secondary full-width" style="margin-top: 12px;" title="Bulk tag operations: find/replace, add, remove, cleanup" data-i18n-title="massTag.openTooltip">
+                                    <span>🔧</span> <span data-i18n="massTag.filterOpen">Batch Edit Tags</span>
+                                </button>
                             </div>
 
                             <div class="filter-section">
@@ -5728,6 +5778,7 @@
     <script src="/static/js/modules/utils/a11y.js"></script>
     <script src="/static/js/modules/utils/errors.js"></script>
     <script src="/static/js/modules/utils/filters.js"></script>
+    <script src="/static/js/modules/utils/popup-position.js"></script>
     <!-- Component modules (non-conflicting with app.js) -->
     <script src="/static/js/modules/components/skeleton.js"></script>
     <script src="/static/js/modules/components/onboarding.js"></script>
@@ -5842,11 +5893,12 @@
                     <label class="form-label">
                         <span data-i18n="smartTag.trainingPurpose">Training purpose</span>
                         <select id="smart-tag-purpose" class="form-input">
-                            <option value="style" data-i18n="smartTag.purposeStyle">Style LoRA — describe medium / lighting / composition (no clothing detail)</option>
-                            <option value="character" data-i18n="smartTag.purposeCharacter">Character LoRA — describe pose / framing only (no hair, eye, outfit)</option>
+                            <option value="style" data-i18n="smartTag.purposeStyle">Style LoRA — describe content, omit style / artist labels</option>
+                            <option value="character" data-i18n="smartTag.purposeCharacter">Character LoRA — describe variation; trigger replaces character name</option>
                             <option value="general" selected data-i18n="smartTag.purposeGeneral">General — full description: subject / pose / clothing / scene</option>
-                            <option value="concept" data-i18n="smartTag.purposeConcept">Concept LoRA — focus on the concept being trained</option>
+                            <option value="concept" data-i18n="smartTag.purposeConcept">Concept LoRA — preserve context without guessing the target tag</option>
                         </select>
+                        <span class="form-help" data-i18n="smartTag.purposeHelp">Style removes detected style/artist tags. Character removes detected character names only when a trigger word is set. Other context is preserved.</span>
                     </label>
 
                     <label class="form-label">
@@ -5950,6 +6002,19 @@
                         <label class="checkbox-label smart-tag-inline-toggle">
                             <input type="checkbox" id="smart-tag-use-gpu" checked>
                             <span data-i18n="smartTag.useGpu">Use GPU for local models if available</span>
+                        </label>
+                    </div>
+                    <div class="smart-tag-natural-grid" id="smart-tag-torii-options" hidden>
+                        <label class="form-label">
+                            <span data-i18n="smartTag.toriiLength">Description length</span>
+                            <select id="smart-tag-torii-length" class="form-input">
+                                <option value="detailed" selected data-i18n="smartTag.toriiLengthDetailed">Detailed (multi-sentence, slower)</option>
+                                <option value="brief" data-i18n="smartTag.toriiLengthBrief">Brief (short, fast)</option>
+                            </select>
+                        </label>
+                        <label class="checkbox-label smart-tag-inline-toggle">
+                            <input type="checkbox" id="smart-tag-torii-grounding" checked>
+                            <span data-i18n="smartTag.toriiGrounding">Feed booru tags to ToriiGate as reference</span>
                         </label>
                     </div>
                     <p class="form-help" data-i18n="smartTag.nlHelp">
@@ -6095,6 +6160,26 @@
                         <label for="vlm-concurrent" data-i18n="vlmSettings.concurrent">Concurrent</label>
                         <input type="number" id="vlm-concurrent" class="input-field" value="2" min="1" max="8">
                     </div>
+                    <div class="form-group">
+                        <label for="vlm-caption-max-tokens" data-i18n="vlmSettings.captionMaxTokens">Caption max tokens</label>
+                        <input type="number" id="vlm-caption-max-tokens" class="input-field" value="1024" min="64" max="8192" step="64">
+                    </div>
+                    <div class="form-group">
+                        <label for="vlm-caption-temperature" data-i18n="vlmSettings.captionTemperature">Temperature</label>
+                        <input type="number" id="vlm-caption-temperature" class="input-field" value="0.3" min="0" max="2" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label for="vlm-retry-delay" data-i18n="vlmSettings.retryDelay">Retry delay (sec)</label>
+                        <input type="number" id="vlm-retry-delay" class="input-field" value="2" min="0" max="60" step="0.5">
+                    </div>
+                    <div class="form-group">
+                        <label for="vlm-max-image-size" data-i18n="vlmSettings.maxImageSize">Max image size (px)</label>
+                        <input type="number" id="vlm-max-image-size" class="input-field" value="1024" min="128" max="4096" step="64">
+                    </div>
+                </div>
+                <div class="form-group" style="padding-top:8px">
+                    <label for="vlm-nsfw-retry-prompt" data-i18n="vlmSettings.nsfwRetryPrompt">NSFW retry prompt (used when the model refuses)</label>
+                    <input type="text" id="vlm-nsfw-retry-prompt" class="input-field" placeholder="" data-i18n-placeholder="vlmSettings.nsfwRetryPromptPlaceholder">
                 </div>
             </details>
 

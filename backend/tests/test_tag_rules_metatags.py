@@ -37,6 +37,17 @@ def test_score_prefix_does_not_overmatch_real_words():
     assert categorize_tag("scoreboard") != "quality"
 
 
+def test_artist_prompt_prefixes_are_artist():
+    # SDXL convention and Anima-style "@name" triggers are style/artist prompts.
+    assert categorize_tag("artist:wlop") == "artist"
+    assert categorize_tag("@xuyoudian") == "artist"
+    assert categorize_tag("@Some Artist") == "artist"
+
+
+def test_bare_at_sign_is_not_artist():
+    assert categorize_tag("@") != "artist"
+
+
 def test_common_tags_keep_expected_groups():
     expected = {
         "masterpiece": "quality",

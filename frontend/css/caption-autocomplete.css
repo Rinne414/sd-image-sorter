@@ -1,7 +1,7 @@
 /* SD Image Sorter — Caption autocomplete dropdown (v3.2.2 T-power-PR3 / I). */
 
 .caption-autocomplete-dropdown {
-    position: absolute;
+    position: fixed;
     z-index: 10000;
     background: var(--surface-1, #1a1a1a);
     border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.10));

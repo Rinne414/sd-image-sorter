@@ -496,22 +496,21 @@ async function mockArtistDiagnosticsReady(page) {
 }
 
 async function openView(page, view: string) {
-  // v3.3.3: Prompt Helper + Style Finder live under the "Tools ▾" dropdown.
+  const desktopTab = page.locator(`.nav-tabs [data-view="${view}"]`).first()
+  if (await desktopTab.count()) {
+    const box = await desktopTab.boundingBox()
+    if (box && box.width > 0 && box.height > 0) {
+      await desktopTab.click({ force: true })
+      return
+    }
+  }
+
   const toolItem = page.locator(`#nav-tools-menu [data-view="${view}"]`)
   if (await toolItem.count()) {
     const toggle = page.locator('#nav-tools-toggle')
     if (await toggle.isVisible().catch(() => false)) {
       await toggle.click({ force: true })
       await toolItem.click({ force: true })
-      return
-    }
-  }
-
-  const desktopTab = page.locator(`.nav-tabs [data-view="${view}"]`).first()
-  if (await desktopTab.count()) {
-    const box = await desktopTab.boundingBox()
-    if (box && box.width > 0 && box.height > 0) {
-      await desktopTab.click({ force: true })
       return
     }
   }
@@ -2284,6 +2283,114 @@ test.describe('Smoke Tests', () => {
     expect(clickY).toBeGreaterThanOrEqual(box!.y)
     expect(clickY).toBeLessThanOrEqual(box!.y + box!.height)
     await expect(menu).toHaveCSS('overflow-y', 'auto')
+  })
+
+  test('selection and right-click collection pickers should open inside the viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 2560, height: 1440 })
+    await page.route('**/api/collections', async (route) => {
+      await route.fulfill({
+        json: {
+          collections: [
+            { id: 1, name: 'Favorites', slug: 'favorites', item_count: 0 },
+            { id: 2, name: 'Training set', slug: 'training-set', item_count: 4 },
+          ],
+        },
+      })
+    })
+    await mockGalleryImages(page, [
+      { id: 155, filename: 'collection-edge.png', checkpoint: 'context-model.safetensors' },
+    ])
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await page.evaluate(() => (window as any).App.setSelectionMode(true))
+
+    const image = page.locator('#gallery-grid .gallery-item[data-id="155"]')
+    await image.click()
+    const selectionButton = page.locator('#btn-add-selected-to-collection')
+    await expect(selectionButton).toBeEnabled()
+    await selectionButton.click()
+    await expect(page.locator('.collections-picker-menu')).toBeVisible()
+    await page.keyboard.press('Escape')
+
+    await image.evaluate((element: HTMLElement) => {
+      Object.assign(element.style, {
+        position: 'fixed',
+        right: '12px',
+        bottom: '12px',
+        width: '220px',
+        height: '220px',
+        zIndex: '20',
+      })
+    })
+    const imageBox = await image.boundingBox()
+    expect(imageBox).toBeTruthy()
+    await image.evaluate((element, point) => {
+      element.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        button: 2,
+        clientX: point.x,
+        clientY: point.y,
+      }))
+    }, {
+      x: imageBox!.x + imageBox!.width - 4,
+      y: imageBox!.y + imageBox!.height - 4,
+    })
+    await page.getByRole('menuitem', { name: /Add to collection/i }).click()
+
+    const picker = page.locator('.collections-picker-menu')
+    await expect(picker).toBeVisible()
+    const pickerBox = await picker.boundingBox()
+    expect(pickerBox).toBeTruthy()
+    expect(pickerBox!.x).toBeGreaterThanOrEqual(7)
+    expect(pickerBox!.y).toBeGreaterThanOrEqual(7)
+    expect(pickerBox!.x + pickerBox!.width).toBeLessThanOrEqual(2553)
+    expect(pickerBox!.y + pickerBox!.height).toBeLessThanOrEqual(1433)
+  })
+
+  test('dataset split view should render two usable caption cards', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.route('**/api/image-thumbnail/**', async (route) => {
+      await route.fulfill({ status: 204 })
+    })
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await page.waitForFunction(() => typeof (window as any).DatasetMaker?._buildSplitCard === 'function')
+    await page.evaluate(() => {
+      const dm = (window as any).DatasetMaker
+      dm.imageIds = [301, 302, 303]
+      dm.meta.set(301, { filename: 'current.png' })
+      dm.meta.set(302, { filename: 'next.png' })
+      dm.meta.set(303, { filename: 'third.png' })
+      dm.captions.set(301, '1girl, standing')
+      dm.captions.set(302, '1girl, sitting')
+      dm.nlCaptions.set(301, 'A person is standing.')
+      dm.nlCaptions.set(302, 'A person is sitting.')
+      ;(window as any).App.switchView('dataset')
+      dm._setActive(301)
+    })
+
+    await page.locator('#dataset-tab-workbench').click()
+    await expect(page.locator('#btn-dataset-split-view')).toBeVisible()
+    await page.locator('#btn-dataset-split-view').click()
+    const panel = page.locator('#dataset-split-panel')
+    await expect(panel).toBeVisible()
+    await expect(panel.locator('.dataset-split-card')).toHaveCount(2)
+    await expect(panel).toContainText('current.png')
+    await expect(panel).toContainText('next.png')
+    const panelBox = await panel.boundingBox()
+    expect(panelBox).toBeTruthy()
+    expect(panelBox!.height).toBeGreaterThanOrEqual(400)
+
+    const nextBooru = panel.locator('.dataset-split-card').nth(1).locator('.dataset-split-textarea').first()
+    await nextBooru.fill('1girl, sitting, outdoors')
+    await expect.poll(async () => page.evaluate(() => {
+      return (window as any).DatasetMaker.captionEdits.get(302)
+    })).toBe('1girl, sitting, outdoors')
+
+    await panel.getByRole('button', { name: /Open next/i }).click()
+    await expect(panel).toContainText('third.png')
   })
 
   test('gallery category copy menu should copy clean purpose prompts', async ({ page }) => {
@@ -6015,6 +6122,152 @@ test.describe('Smoke Tests', () => {
 
     await expect(page.locator('#btn-apply-modal-filters')).toBeVisible()
     await expect(page.locator('#btn-reset-filters')).toBeVisible()
+  })
+
+  test('top navigation and generator rail should stay reachable in English and Chinese', async ({ page }) => {
+    await page.route('**/api/stats', async (route) => {
+      await route.fulfill({
+        json: {
+          total_images: 50008,
+          app_version: '3.4.3',
+          generators: [
+            { generator: 'nai', count: 419 },
+            { generator: 'comfyui', count: 864 },
+            { generator: 'forge', count: 482 },
+            { generator: 'webui', count: 380 },
+            { generator: 'unknown', count: 47838 },
+            { generator: 'fooocus', count: 10 },
+            { generator: 'invokeai', count: 6 },
+            { generator: 'gemini', count: 5 },
+          ],
+          checkpoints: [],
+          loras: [],
+          top_tags: [],
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    const cases = [
+      { width: 1366, height: 900, lang: 'en' },
+      { width: 1366, height: 900, lang: 'zh-CN' },
+      { width: 1920, height: 1080, lang: 'en' },
+      { width: 1920, height: 1080, lang: 'zh-CN' },
+    ]
+
+    for (const item of cases) {
+      await page.setViewportSize({ width: item.width, height: item.height })
+      await page.evaluate((lang) => {
+        ;(window as Window & { I18n?: { setLang?: (lang: string) => void } }).I18n?.setLang?.(lang)
+      }, item.lang)
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+
+      const fit = await page.evaluate(() => {
+        const nav = document.querySelector('.nav-bar')
+        const tabs = document.querySelector('.nav-tabs')
+        const generator = document.getElementById('generator-tabs')
+        const scroller = document.getElementById('generator-tabs-scroll')
+        const allTab = document.querySelector('.gen-tab[data-gen="all"]')
+        const more = document.getElementById('nav-tools-toggle')
+        const prompt = document.getElementById('nav-tab-promptlab')
+        const artist = document.getElementById('nav-tab-artist')
+        if (!nav || !tabs || !generator || !scroller || !allTab || !more || !prompt || !artist) return null
+        const rect = (element: Element) => {
+          const box = element.getBoundingClientRect()
+          return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height }
+        }
+        const navRect = rect(nav)
+        const visibleNavItems = Array.from(tabs.querySelectorAll<HTMLElement>('.nav-tab, .nav-tools-toggle'))
+          .filter((element) => {
+            const box = element.getBoundingClientRect()
+            const style = window.getComputedStyle(element)
+            return box.width > 0 && box.height > 0 && style.display !== 'none' && style.visibility !== 'hidden'
+          })
+          .map((element) => ({ id: element.id, box: rect(element) }))
+        return {
+          viewport: window.innerWidth,
+          classes: nav.className,
+          nav: navRect,
+          items: visibleNavItems,
+          generator: rect(generator),
+          scroller: rect(scroller),
+          allTab: rect(allTab),
+          scrollWidth: scroller.scrollWidth,
+          clientWidth: scroller.clientWidth,
+          moreVisible: rect(more).width > 0,
+          promptVisible: rect(prompt).width > 0,
+          artistVisible: rect(artist).width > 0,
+        }
+      })
+
+      expect(fit).not.toBeNull()
+      if (!fit) continue
+
+      for (const itemRect of fit.items) {
+        expect(itemRect.box.left).toBeGreaterThanOrEqual(fit.nav.left - 1)
+        expect(itemRect.box.right).toBeLessThanOrEqual(fit.nav.right + 1)
+      }
+      expect(fit.generator.left).toBeGreaterThanOrEqual(0)
+      expect(fit.generator.right).toBeLessThanOrEqual(fit.viewport + 1)
+      expect(fit.allTab.left).toBeGreaterThanOrEqual(fit.generator.left - 1)
+      expect(fit.allTab.right).toBeLessThanOrEqual(fit.generator.right + 1)
+      expect(fit.clientWidth).toBeGreaterThan(0)
+      expect(fit.scrollWidth).toBeGreaterThanOrEqual(fit.clientWidth)
+
+      if (fit.moreVisible) {
+        expect(fit.promptVisible).toBeFalsy()
+        expect(fit.artistVisible).toBeFalsy()
+      } else {
+        expect(fit.promptVisible).toBeTruthy()
+        expect(fit.artistVisible).toBeTruthy()
+      }
+
+      await page.evaluate(() => {
+        const scroller = document.getElementById('generator-tabs-scroll')
+        if (scroller) scroller.scrollLeft = scroller.scrollWidth
+      })
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
+      const othersFit = await page.evaluate(() => {
+        const scroller = document.getElementById('generator-tabs-scroll')
+        const others = document.querySelector('.gen-tab[data-gen="others"]')
+        if (!scroller || !others) return null
+        const s = scroller.getBoundingClientRect()
+        const o = others.getBoundingClientRect()
+        return { scrollerLeft: s.left, scrollerRight: s.right, othersLeft: o.left, othersRight: o.right }
+      })
+      expect(othersFit).not.toBeNull()
+      if (othersFit) {
+        expect(othersFit.othersLeft).toBeGreaterThanOrEqual(othersFit.scrollerLeft - 1)
+        expect(othersFit.othersRight).toBeLessThanOrEqual(othersFit.scrollerRight + 1)
+      }
+    }
+  })
+
+  test('AI Auto Tagging modal should open Smart Tag directly', async ({ page }) => {
+    await mockGalleryImages(page, [{ id: 701, filename: 'smart-tag-entry.png' }])
+    await mockTaggerCatalog(page)
+    await page.route('**/api/vlm/settings', async (route) => {
+      await route.fulfill({ json: { endpoint: 'https://example.invalid/v1', use_vertex: false } })
+    })
+    await page.route('**/api/smart-tag/progress**', async (route) => {
+      await route.fulfill({ json: { status: 'idle' } })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await page.locator('#btn-toggle-select').click()
+    await page.locator('#gallery-grid .gallery-item[data-id="701"]').click()
+    await expect(page.locator('#selection-actions')).toBeVisible()
+    await page.locator('#btn-tag').click()
+    await expect(page.locator('#tag-modal.visible')).toBeVisible()
+    await expect(page.locator('#btn-tag-modal-smart-tag-go')).toBeVisible()
+
+    await page.locator('#btn-tag-modal-smart-tag-go').click()
+    await expect(page.locator('#tag-modal.visible')).toHaveCount(0)
+    await expect(page.locator('#smart-tag-modal.visible')).toBeVisible()
+    await expect(page.locator('#smart-tag-image-count')).toHaveText('1')
   })
 
   test('API health check - images endpoint', async ({ request }) => {
