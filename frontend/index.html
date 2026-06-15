@@ -3236,6 +3236,13 @@
                             <!-- Active-image tag edit belongs next to the active caption, not in Step 3. -->
                             <div class="dataset-tag-pills-section dataset-tag-pills-section-inline" id="dataset-tag-pills-section" hidden>
                                 <h4 class="dataset-tag-pills-title" data-i18n="dataset.tagPillsTitle">Tags</h4>
+                                <!-- Color legend for the 14-class danbooru tag categories. Body rows
+                                     are injected by dataset-maker-cleanups.js (one source of truth for
+                                     the palette + labels, shared with the LoRA-prune checkboxes). -->
+                                <details class="dataset-tag-color-legend" id="dataset-tag-color-legend">
+                                    <summary data-i18n="dataset.tagColorLegendTitle">🎨 Tag color legend</summary>
+                                    <div class="dataset-tag-color-legend-body" id="dataset-tag-color-legend-body"></div>
+                                </details>
                                 <div class="dataset-tag-add-wrap">
                                     <input type="text" class="dataset-tag-add-input" id="dataset-tag-add-input"
                                            placeholder="Add tag..."
@@ -3401,46 +3408,40 @@
                                               data-i18n-placeholder="dataset.blacklistPlaceholder"></textarea>
                                 </label>
 
-                                <!-- Category cleanup uses the live dataset vocabulary and only appends tags
-                                     that currently exist in this Dataset Maker session. -->
-                                <div class="dataset-cleanup-row">
-                                    <small class="dataset-cleanup-label" data-i18n="dataset.cleanupLabel">Quick remove a category:</small>
-                                    <div class="dataset-cleanup-buttons">
-                                        <button type="button" class="btn btn-ghost btn-small"
-                                                id="btn-dataset-cleanup-quality"
-                                                data-i18n="dataset.cleanupQuality"
-                                                data-i18n-title="dataset.cleanupQualityTooltip"
-                                                title="Add common quality / score tags to the blacklist (masterpiece, best_quality, score_*, etc).">
-                                            🛡️ Quality
-                                        </button>
-                                        <button type="button" class="btn btn-ghost btn-small"
-                                                id="btn-dataset-cleanup-identity"
-                                                data-i18n="dataset.cleanupIdentity"
-                                                data-i18n-title="dataset.cleanupIdentityTooltip"
-                                                title="Add hair/eye/face identity tags to the blacklist. Recommended when training a character LoRA so the model learns the identity from your trigger word, not from explicit tags.">
-                                            👤 Identity
-                                        </button>
-                                        <button type="button" class="btn btn-ghost btn-small"
-                                                id="btn-dataset-cleanup-appearance"
-                                                data-i18n="dataset.cleanupAppearance"
-                                                data-i18n-title="dataset.cleanupAppearanceTooltip"
-                                                title="Add body / clothing appearance tags to the blacklist (e.g. school_uniform, long_sleeves, skirt). Recommended when those are constant across all your images.">
-                                            👁 Appearance
-                                        </button>
-                                        <button type="button" class="btn btn-ghost btn-small"
-                                                id="btn-dataset-cleanup-poses"
-                                                data-i18n="dataset.cleanupPoses"
-                                                data-i18n-title="dataset.cleanupPosesTooltip"
-                                                title="Add common pose / action tags to the blacklist (standing, sitting, looking_at_viewer, etc). Use only if you want the model to learn poses freely.">
-                                            🤸 Poses
-                                        </button>
-                                        <button type="button" class="btn btn-ghost btn-small"
-                                                id="btn-dataset-cleanup-copyright"
-                                                data-i18n="dataset.cleanupCopyright"
-                                                data-i18n-title="dataset.cleanupCopyrightTooltip"
-                                                title="Add common copyright / franchise / character-name tags to the blacklist (touhou, original, pokemon, hatsune_miku, etc). Recommended for any LoRA you intend to share.">
-                                            📚 Copyright
-                                        </button>
+                                <!-- LoRA-type tag pruning. Pick a training type to pre-tick the tag
+                                     CATEGORIES that type usually drops, then fine-tune. Categories use
+                                     the same 14-class danbooru classifier (and colors) as the caption
+                                     pills, so the checkbox row also acts as a color legend. Matched tags
+                                     from the live dataset vocabulary are appended to the blacklist above
+                                     (non-destructive — original DB tags are untouched). Checkboxes are
+                                     injected by dataset-maker-cleanups.js. -->
+                                <div class="dataset-lora-prune" id="dataset-lora-prune">
+                                    <div class="dataset-lora-prune-head">
+                                        <label class="dataset-lora-prune-type">
+                                            <span class="dataset-cleanup-label" data-i18n="dataset.loraPruneLabel">Prune tags for LoRA type:</span>
+                                            <select id="dataset-lora-type" class="form-input">
+                                                <option value="character" data-i18n="dataset.loraTypeCharacter">Character LoRA</option>
+                                                <option value="style" data-i18n="dataset.loraTypeStyle">Style LoRA</option>
+                                                <option value="outfit" data-i18n="dataset.loraTypeOutfit">Outfit / Clothing LoRA</option>
+                                                <option value="pose" data-i18n="dataset.loraTypePose">Pose / Action LoRA</option>
+                                                <option value="concept" data-i18n="dataset.loraTypeConcept">Concept LoRA</option>
+                                                <option value="general" data-i18n="dataset.loraTypeGeneral">General (noise only)</option>
+                                                <option value="custom" data-i18n="dataset.loraTypeCustom">Custom (pick below)</option>
+                                            </select>
+                                        </label>
+                                        <small class="dataset-lora-prune-hint" id="dataset-lora-type-hint"></small>
+                                    </div>
+                                    <div class="dataset-lora-prune-cats" id="dataset-lora-prune-cats" role="group"
+                                         aria-label="Tag categories to remove from captions"></div>
+                                    <div class="dataset-lora-prune-actions">
+                                        <!-- No data-i18n here: the label is dynamic ("Add N tags to blacklist"),
+                                             set by dataset-maker-cleanups.js. applyToDOM() would clobber the
+                                             count, so localization is handled in JS (incl. the languageChanged event). -->
+                                        <button type="button" class="btn btn-secondary btn-small" id="btn-dataset-lora-prune-apply">Add to blacklist</button>
+                                        <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-lora-prune-clear"
+                                                data-i18n="dataset.loraPruneClear"
+                                                data-i18n-title="dataset.loraPruneClearTooltip"
+                                                title="Untick all categories">Clear</button>
                                     </div>
                                 </div>
                                 <div class="dataset-dedupe-row">

@@ -1,237 +1,416 @@
 /**
- * Dataset Maker — category cleanup tag lists (Phase 2E).
+ * Dataset Maker — LoRA-type tag pruning (export blacklist, non-destructive).
  *
- * Curated category matchers for danbooru-style tags. Each click looks at
- * the live Dataset Maker vocabulary and only appends tags that are actually
- * present in the current captions.
+ * Replaces the old five fixed "quick remove a category" buttons. The user
+ * picks a LoRA training type, which pre-ticks the tag CATEGORIES that type
+ * usually wants dropped from captions; every category is then an independent
+ * checkbox so the quick default can be fine-tuned. Categories come from the
+ * same authoritative 14-class danbooru classifier the caption pills use
+ * (DM._classifyTagCategory / DM._ensureTagCategories, backed by
+ * POST /api/prompts/categorize), so the colors ticked here match the pill
+ * colors exactly — and the checkbox row doubles as an interactive color legend.
  *
- * The lists are deliberately conservative match targets, not blind
- * blacklist payloads. Power users can extend the blacklist textarea
- * afterwards. Lists target danbooru-style WD14 tag naming (underscores,
- * lower case); the underscore-to-space step in the export engine handles
- * both forms when matching.
+ * "Pruning" is NON-DESTRUCTIVE: matched tags are appended to the export
+ * blacklist textarea (#dataset-blacklist) and removed from the common-tags box.
+ * Original DB tags are untouched; the export engine drops blacklisted tags at
+ * caption-render time. Power users can still hand-edit the blacklist, or use
+ * the gallery filter's exclude-tags path for the same effect at query time.
  *
- * Why this lives in its own file: keeps the four parts of the dataset-maker
- * module under ~400 lines each so each chunk is reviewable.
+ * Why this lives in its own file: keeps the dataset-maker module chunks small
+ * and reviewable, and isolates the LoRA-type preset knowledge in one place.
  */
 (function () {
     'use strict';
     if (!window.DatasetMaker) return;
     const DM = window.DatasetMaker;
 
-    // ============== Curated tag lists per category ==============
-    const TAG_CATEGORIES = {
-        quality: [
-            // Anima / Pony / NoobAI score tags
-            'masterpiece', 'best_quality', 'high_quality', 'normal_quality', 'low_quality', 'worst_quality',
-            'score_9', 'score_8', 'score_7', 'score_6', 'score_5', 'score_4',
-            'score_9_up', 'score_8_up', 'score_7_up', 'score_6_up', 'score_5_up', 'score_4_up',
-            'highres', 'absurdres', 'lowres',
-            'detailed', 'extremely_detailed', 'highly_detailed',
-            'newest', 'recent', 'old', 'oldest',
-            // Generic style-grade tokens
-            'official_art', 'professional_lighting', 'depth_of_field',
-            'anatomically_correct', 'realistic',
-        ],
-        identity: [
-            // Hair color
-            'black_hair', 'white_hair', 'silver_hair', 'grey_hair', 'gray_hair',
-            'blonde_hair', 'yellow_hair', 'brown_hair', 'red_hair', 'orange_hair',
-            'pink_hair', 'purple_hair', 'blue_hair', 'green_hair',
-            'multicolored_hair', 'two-tone_hair', 'gradient_hair', 'streaked_hair',
-            // Eye color
-            'black_eyes', 'white_eyes', 'red_eyes', 'orange_eyes', 'yellow_eyes',
-            'green_eyes', 'blue_eyes', 'purple_eyes', 'pink_eyes', 'brown_eyes',
-            'heterochromia',
-            // Skin
-            'dark_skin', 'pale_skin', 'tan', 'tanned',
-            // Other identity markers
-            'freckles', 'mole', 'mole_under_eye', 'mole_under_mouth', 'beauty_mark',
-            'scar', 'scar_on_face', 'eyepatch',
-        ],
-        appearance: [
-            // Hair length / style
-            'long_hair', 'medium_hair', 'short_hair', 'very_long_hair', 'very_short_hair',
-            'twintails', 'ponytail', 'side_ponytail', 'braid', 'twin_braids',
-            'bangs', 'blunt_bangs', 'side_bangs', 'parted_bangs',
-            'hair_bun', 'double_bun', 'hair_ornament', 'hair_ribbon', 'hair_bow',
-            'ahoge', 'antenna_hair',
-            // Build / body
-            'large_breasts', 'medium_breasts', 'small_breasts', 'flat_chest', 'huge_breasts',
-            'thick_thighs', 'wide_hips', 'slim',
-            // Common clothing classes (clothes are a STYLE LoRA's friend, but
-            // most character LoRAs want the clothes to vary across the dataset)
-            'school_uniform', 'serafuku', 'sailor_collar',
-            'shirt', 't-shirt', 'sweater', 'hoodie', 'jacket', 'coat',
-            'skirt', 'pleated_skirt', 'miniskirt', 'long_skirt',
-            'dress', 'long_dress', 'short_dress',
-            'pants', 'shorts', 'jeans',
-            'thighhighs', 'pantyhose', 'stockings', 'socks',
-            'shoes', 'boots', 'sneakers',
-            'hat', 'cap', 'beret',
-            'gloves',
-        ],
-        poses: [
-            'standing', 'sitting', 'lying', 'on_back', 'on_stomach', 'on_side',
-            'kneeling', 'squatting', 'leaning', 'leaning_forward', 'leaning_back',
-            'crossed_legs', 'crossed_arms', 'arms_up', 'arms_behind_back',
-            'hands_up', 'hands_on_hips', 'hand_on_hip', 'hand_to_mouth', 'hand_to_face',
-            'looking_at_viewer', 'looking_away', 'looking_back', 'looking_up', 'looking_down', 'looking_to_the_side',
-            'open_mouth', 'closed_mouth', 'parted_lips',
-            'smile', 'closed_eyes', 'one_eye_closed',
-            'walking', 'running', 'jumping', 'falling', 'flying',
-            'holding', 'holding_phone', 'holding_book', 'holding_weapon',
-            'dynamic_pose', 'contrapposto',
-            'from_above', 'from_below', 'from_behind', 'from_side',
-            'close-up', 'cowboy_shot', 'full_body', 'upper_body',
-        ],
-        copyright: [
-            // Generic
-            'original', 'no_copyright', 'oc',
-            // Common franchise / IP tags (small representative set; if a
-            // user needs more they can paste them into the blacklist)
-            'touhou', 'kantai_collection', 'kancolle', 'fate_series', 'fate/grand_order', 'fate_(series)',
-            'idolmaster', 'idolm@ster', 'love_live!', 'lovelive', 'bang_dream!',
-            'azur_lane', 'arknights', 'genshin_impact', 'honkai_impact', 'honkai_(series)', 'honkai:_star_rail',
-            'blue_archive', 'pokemon', 'digimon', 'jojo_no_kimyou_na_bouken',
-            'bocchi_the_rock!', 'oshi_no_ko', 'spy_x_family', 'frieren',
-            'naruto', 'dragon_ball', 'one_piece', 'bleach', 'attack_on_titan', 'shingeki_no_kyojin',
-            'demon_slayer', 'kimetsu_no_yaiba', 'jujutsu_kaisen', 'chainsaw_man',
-            'persona_5', 'nier_automata', 'overwatch', 'league_of_legends', 'final_fantasy',
-            'voiceroid', 'vocaloid', 'hatsune_miku', 'kasane_teto', 'utau',
-            // Generic species / style markers that often pollute LoRA captions
-            'anime_coloring', 'anime_style',
-        ],
-    };
+    // The 14 danbooru categories, in caption order. 'unknown' is shown in the
+    // color legend but is NOT a prunable checkbox — we never blanket-drop
+    // unclassified tags. The color CLASS reused on each chip/checkbox/swatch is
+    // the same pill rule from frontend/css/dataset-maker.css, so there is one
+    // source of truth for the palette.
+    const CATEGORY_META = [
+        { key: 'quality',    emoji: '🛡️', i18n: 'dataset.cat.quality',    desc: 'dataset.cat.qualityDesc' },
+        { key: 'meta',       emoji: '🏷️', i18n: 'dataset.cat.meta',       desc: 'dataset.cat.metaDesc' },
+        { key: 'rating',     emoji: '🔞', i18n: 'dataset.cat.rating',     desc: 'dataset.cat.ratingDesc' },
+        { key: 'character',  emoji: '🪪', i18n: 'dataset.cat.character',  desc: 'dataset.cat.characterDesc' },
+        { key: 'body',       emoji: '👤', i18n: 'dataset.cat.body',       desc: 'dataset.cat.bodyDesc' },
+        { key: 'outfit',     emoji: '👗', i18n: 'dataset.cat.outfit',     desc: 'dataset.cat.outfitDesc' },
+        { key: 'expression', emoji: '😊', i18n: 'dataset.cat.expression', desc: 'dataset.cat.expressionDesc' },
+        { key: 'pose',       emoji: '🧍', i18n: 'dataset.cat.pose',       desc: 'dataset.cat.poseDesc' },
+        { key: 'action',     emoji: '🏃', i18n: 'dataset.cat.action',     desc: 'dataset.cat.actionDesc' },
+        { key: 'angle',      emoji: '🎥', i18n: 'dataset.cat.angle',      desc: 'dataset.cat.angleDesc' },
+        { key: 'background', emoji: '🏞️', i18n: 'dataset.cat.background', desc: 'dataset.cat.backgroundDesc' },
+        { key: 'style',      emoji: '🎨', i18n: 'dataset.cat.style',      desc: 'dataset.cat.styleDesc' },
+        { key: 'artist',     emoji: '🖌️', i18n: 'dataset.cat.artist',     desc: 'dataset.cat.artistDesc' },
+        { key: 'unknown',    emoji: '❓', i18n: 'dataset.cat.unknown',    desc: 'dataset.cat.unknownDesc' },
+    ];
+    const PRUNABLE = CATEGORY_META.filter((c) => c.key !== 'unknown');
+    const PRUNABLE_KEYS = new Set(PRUNABLE.map((c) => c.key));
 
-    // ============== Implementation ==============
+    // LoRA type -> default-ticked categories. QUICK DEFAULTS only: the user can
+    // tick/untick anything afterwards (which flips the type select to "custom").
+    // quality/meta/rating are training noise dropped for every type. The
+    // judgment-call extras (character LoRA also dropping `outfit`, style LoRA
+    // also dropping `background`) are deliberately LEFT OFF here and offered as
+    // optional ticks — the hint text points them out.
+    const LORA_TYPE_PRESETS = {
+        character: ['character', 'body', 'quality', 'meta', 'rating'],
+        style:     ['style', 'artist', 'meta', 'quality', 'rating'],
+        outfit:    ['outfit', 'quality', 'meta', 'rating'],
+        pose:      ['pose', 'action', 'angle', 'quality', 'meta', 'rating'],
+        concept:   ['quality', 'meta', 'rating'],
+        general:   ['quality', 'meta', 'rating'],
+        custom:    [],
+    };
+    const DEFAULT_TYPE = 'character';
+
+    let refreshInFlight = false;
+    let refreshQueued = false;
+
+    function t(key, fallback, params) {
+        return typeof DM._t === 'function' ? DM._t(key, fallback, params) : (fallback || key);
+    }
 
     function normTag(s) {
         return String(s).replace(/_/g, ' ').toLowerCase().trim();
     }
 
-    function getLiveCategoryTags(category) {
-        const matchers = new Set((TAG_CATEGORIES[category] || []).map(normTag));
-        if (matchers.size === 0) return [];
-        const vocab = typeof DM._getDatasetVocabItems === 'function'
-            ? DM._getDatasetVocabItems()
+    function vocabItems() {
+        return typeof DM._getDatasetVocabItems === 'function'
+            ? (DM._getDatasetVocabItems() || [])
             : [];
-        return (vocab || [])
-            .map((it) => ({
-                tag: String(it.tag || '').trim(),
-                count: Number(it.count || 0),
-            }))
-            .filter((it) => it.tag && matchers.has(normTag(it.tag)))
-            .sort((a, b) => (b.count - a.count) || a.tag.localeCompare(b.tag))
-            .map((it) => it.tag);
     }
 
-    function syncCleanupButtonCounts() {
-        const byId = {
-            'btn-dataset-cleanup-quality': 'quality',
-            'btn-dataset-cleanup-identity': 'identity',
-            'btn-dataset-cleanup-appearance': 'appearance',
-            'btn-dataset-cleanup-poses': 'poses',
-            'btn-dataset-cleanup-copyright': 'copyright',
-        };
-        for (const [id, category] of Object.entries(byId)) {
-            const btn = document.getElementById(id);
-            if (!btn) continue;
-            const count = getLiveCategoryTags(category).length;
-            btn.dataset.matchCount = String(count);
-            const base = btn.dataset.baseLabel || btn.textContent.trim();
-            btn.dataset.baseLabel = base;
-            btn.textContent = count > 0 ? `${base} (${count})` : base;
+    function classify(tag) {
+        return typeof DM._classifyTagCategory === 'function'
+            ? DM._classifyTagCategory(tag)
+            : 'unknown';
+    }
+
+    // Bucket the live vocabulary tag names by their 14-class category. Reads the
+    // cached backend classification (filled by _ensureTagCategories);
+    // _classifyTagCategory already falls back to the local regex first-paint
+    // guess when a tag isn't cached yet.
+    function tagsByCategory() {
+        const buckets = Object.create(null);
+        for (const meta of CATEGORY_META) buckets[meta.key] = [];
+        for (const it of vocabItems()) {
+            const tag = String(it.tag || '').trim();
+            if (!tag) continue;
+            let cat = classify(tag);
+            if (!buckets[cat]) cat = 'unknown';
+            buckets[cat].push({ tag, count: Number(it.count || 0) });
+        }
+        for (const key of Object.keys(buckets)) {
+            buckets[key].sort((a, b) => (b.count - a.count) || a.tag.localeCompare(b.tag));
+        }
+        return buckets;
+    }
+
+    function checkedCategories() {
+        return Array.from(document.querySelectorAll('#dataset-lora-prune-cats input[type="checkbox"]:checked'))
+            .map((el) => el.dataset.cat)
+            .filter((c) => PRUNABLE_KEYS.has(c));
+    }
+
+    function setCheckedCategories(cats) {
+        const want = new Set((cats || []).filter((c) => PRUNABLE_KEYS.has(c)));
+        document.querySelectorAll('#dataset-lora-prune-cats input[type="checkbox"]').forEach((el) => {
+            el.checked = want.has(el.dataset.cat);
+        });
+    }
+
+    // ---- UI construction ---------------------------------------------------
+
+    function buildCheckboxes() {
+        const host = document.getElementById('dataset-lora-prune-cats');
+        if (!host || host.dataset.built === '1') return;
+        host.innerHTML = '';
+        for (const meta of PRUNABLE) {
+            const label = document.createElement('label');
+            // Reusing the pill color class gives each checkbox the same hue as
+            // the matching caption pill, with zero palette duplication.
+            label.className = `dataset-lora-cat dataset-tag-pill-category-${meta.key}`;
+            label.title = t(meta.desc, '');
+
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            input.dataset.cat = meta.key;
+            input.addEventListener('change', onCheckboxChange);
+
+            const name = document.createElement('span');
+            name.className = 'dataset-lora-cat-name';
+            name.textContent = `${meta.emoji} ${t(meta.i18n, meta.key)}`;
+
+            const count = document.createElement('span');
+            count.className = 'dataset-lora-cat-count';
+            count.dataset.countFor = meta.key;
+            count.textContent = '';
+
+            label.append(input, name, count);
+            host.appendChild(label);
+        }
+        host.dataset.built = '1';
+    }
+
+    function renderColorLegend() {
+        const body = document.getElementById('dataset-tag-color-legend-body');
+        if (!body) return;
+        body.innerHTML = '';
+        for (const meta of CATEGORY_META) {
+            const row = document.createElement('div');
+            row.className = 'dataset-tag-legend-row';
+
+            const swatch = document.createElement('span');
+            swatch.className = `dataset-tag-legend-swatch dataset-tag-pill-category-${meta.key}`;
+            swatch.textContent = `${meta.emoji} ${t(meta.i18n, meta.key)}`;
+
+            const desc = document.createElement('span');
+            desc.className = 'dataset-tag-legend-desc';
+            desc.textContent = t(meta.desc, '');
+
+            row.append(swatch, desc);
+            body.appendChild(row);
         }
     }
 
-    async function appendToBlacklist(category) {
-        if (typeof DM._refreshVocab === 'function' && (!DM._getDatasetVocabItems || DM._getDatasetVocabItems().length === 0)) {
-            await DM._refreshVocab();
+    function applyTypeText(type) {
+        const sel = document.getElementById('dataset-lora-type');
+        if (sel && sel.value !== type) sel.value = type;
+        const hint = document.getElementById('dataset-lora-type-hint');
+        if (hint) {
+            hint.textContent = t(`dataset.loraTypeHint.${type}`,
+                t('dataset.loraTypeHint.custom',
+                  'Tick the tag categories to remove from every exported caption.'));
         }
+    }
+
+    // ---- Counts + apply-button label --------------------------------------
+
+    function updateCountsFromBuckets(buckets) {
+        for (const meta of PRUNABLE) {
+            const el = document.querySelector(`#dataset-lora-prune-cats [data-count-for="${meta.key}"]`);
+            if (!el) continue;
+            const n = (buckets[meta.key] || []).length;
+            el.textContent = n > 0 ? `(${n})` : '';
+        }
+        updateApplyButton(buckets);
+    }
+
+    function updateApplyButton(buckets) {
+        const btn = document.getElementById('btn-dataset-lora-prune-apply');
+        if (!btn) return;
+        const checked = checkedCategories();
+        const seen = new Set();
+        let total = 0;
+        for (const cat of checked) {
+            for (const it of (buckets[cat] || [])) {
+                const k = normTag(it.tag);
+                if (seen.has(k)) continue;
+                seen.add(k);
+                total += 1;
+            }
+        }
+        btn.dataset.pruneTotal = String(total);
+        btn.disabled = total === 0;
+        btn.textContent = total > 0
+            ? t('dataset.loraPruneApplyN', 'Add {count} tags to blacklist', { count: total })
+            : t('dataset.loraPruneApply', 'Add to blacklist');
+    }
+
+    // Resolve real backend categories for the current vocabulary, then refresh
+    // the per-category counts. Coalesces concurrent calls so a burst of
+    // vocab-refresh events only triggers one classify round.
+    async function refreshCounts() {
+        if (!document.getElementById('dataset-lora-prune-cats')) return;
+        if (refreshInFlight) { refreshQueued = true; return; }
+        refreshInFlight = true;
+        try {
+            const names = vocabItems()
+                .map((it) => String(it.tag || '').trim())
+                .filter(Boolean);
+            if (names.length && typeof DM._ensureTagCategories === 'function') {
+                try { await DM._ensureTagCategories(names); } catch (_e) { /* keep local fallback */ }
+            }
+            updateCountsFromBuckets(tagsByCategory());
+        } finally {
+            refreshInFlight = false;
+            if (refreshQueued) { refreshQueued = false; refreshCounts(); }
+        }
+    }
+
+    // ---- Blacklist mutation (non-destructive, export-time) ----------------
+
+    function appendTagsToBlacklist(tags) {
         const ta = document.getElementById('dataset-blacklist');
-        if (!ta) return 0;
-        const tagsToAdd = getLiveCategoryTags(category);
-        if (tagsToAdd.length === 0) return 0;
+        if (!ta || !tags.length) return 0;
 
-        const existing = (ta.value || '')
-            .split(',')
-            .map(s => s.trim())
-            .filter(Boolean);
-        // Normalise existing entries for comparison so we don't add
-        // duplicates that differ only by underscore vs space or case.
+        const existing = (ta.value || '').split(',').map((s) => s.trim()).filter(Boolean);
+        // Normalize for comparison so we never add a duplicate that differs only
+        // by underscore-vs-space or case.
         const seen = new Set(existing.map(normTag));
-
         const added = [];
-        for (const tag of tagsToAdd) {
-            if (seen.has(normTag(tag))) continue;
-            seen.add(normTag(tag));
+        for (const tag of tags) {
+            const k = normTag(tag);
+            if (!k || seen.has(k)) continue;
+            seen.add(k);
             added.push(tag);
         }
-        if (added.length === 0) return 0;
+        if (!added.length) return 0;
 
-        const merged = [...existing, ...added];
-        ta.value = merged.join(', ');
-        // Trigger input handlers (caption refresh, etc.)
+        ta.value = [...existing, ...added].join(', ');
         ta.dispatchEvent(new Event('input', { bubbles: true }));
 
+        // Anything we just blacklisted should leave the common-tags box, or the
+        // export engine would re-add it as a prepended common tag.
         const common = document.getElementById('dataset-common-tags');
         if (common) {
             const removeSet = new Set(added.map(normTag));
             const kept = (common.value || '')
-                .split(',')
-                .map(s => s.trim())
-                .filter(Boolean)
-                .filter(tag => !removeSet.has(normTag(tag)));
+                .split(',').map((s) => s.trim()).filter(Boolean)
+                .filter((tag) => !removeSet.has(normTag(tag)));
             if (kept.join(', ') !== (common.value || '').trim()) {
                 common.value = kept.join(', ');
                 common.dispatchEvent(new Event('input', { bubbles: true }));
             }
         }
-        syncCleanupButtonCounts();
         return added.length;
     }
 
-    DM._refreshCleanupButtons = syncCleanupButtonCounts;
+    async function applyPrune() {
+        const btn = document.getElementById('btn-dataset-lora-prune-apply');
+        const cats = checkedCategories();
+        if (!cats.length) {
+            DM._toast(t('dataset.loraPruneNoCategory',
+                'Tick at least one tag category to prune.'), 'warning', 3000);
+            return;
+        }
+        if (btn) btn.disabled = true;
+        try {
+            // Make sure counts reflect the freshest vocabulary classification
+            // before we collect the tags to drop.
+            if ((!DM._getDatasetVocabItems || DM._getDatasetVocabItems().length === 0)
+                && typeof DM._refreshVocab === 'function') {
+                await DM._refreshVocab();
+            }
+            const names = vocabItems().map((it) => String(it.tag || '').trim()).filter(Boolean);
+            if (names.length && typeof DM._ensureTagCategories === 'function') {
+                try { await DM._ensureTagCategories(names); } catch (_e) { /* local fallback */ }
+            }
+            const buckets = tagsByCategory();
+            const toAdd = [];
+            for (const cat of cats) {
+                for (const it of (buckets[cat] || [])) toAdd.push(it.tag);
+            }
+            const added = appendTagsToBlacklist(toAdd);
+            if (added === 0) {
+                DM._toast(t('dataset.loraPruneNothing',
+                    'No matching tags in the current dataset need blacklisting.'), 'info', 3000);
+            } else {
+                DM._toast(t('dataset.loraPruneAdded',
+                    'Added {count} tags to the blacklist.', { count: added }), 'success', 3000);
+            }
+            updateCountsFromBuckets(buckets);
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
 
-    DM._initCleanupButtons = function () {
-        const wire = (id, category) => {
-            const btn = document.getElementById(id);
-            if (!btn) return;
-            if (!btn.dataset.baseLabel) btn.dataset.baseLabel = btn.textContent.trim();
-            btn.addEventListener('click', async () => {
-                btn.disabled = true;
-                let added = 0;
-                try {
-                    added = await appendToBlacklist(category);
-                } finally {
-                    btn.disabled = false;
-                }
-                if (added === 0) {
-                    this._toast(this._t('dataset.cleanupAlreadyAdded',
-                        'No matching {category} tags from the current dataset need to be added.',
-                        { category: this._t(`dataset.cleanup${category[0].toUpperCase()}${category.slice(1)}Label`, category) }),
-                        'info', 3000);
-                } else {
-                    this._toast(this._t('dataset.cleanupAdded',
-                        'Added {count} {category} tags to the blacklist.',
-                        { count: added, category: this._t(`dataset.cleanup${category[0].toUpperCase()}${category.slice(1)}Label`, category) }),
-                        'success', 3000);
-                }
-            });
-        };
-        wire('btn-dataset-cleanup-quality', 'quality');
-        wire('btn-dataset-cleanup-identity', 'identity');
-        wire('btn-dataset-cleanup-appearance', 'appearance');
-        wire('btn-dataset-cleanup-poses', 'poses');
-        wire('btn-dataset-cleanup-copyright', 'copyright');
-        syncCleanupButtonCounts();
+    // ---- Event handlers ----------------------------------------------------
+
+    function onTypeChange() {
+        const sel = document.getElementById('dataset-lora-type');
+        const type = sel?.value || 'custom';
+        setCheckedCategories(LORA_TYPE_PRESETS[type] || []);
+        applyTypeText(type);
+        updateApplyButton(tagsByCategory());
+    }
+
+    function onCheckboxChange() {
+        // A manual tick/untick means the selection no longer matches a named
+        // preset — reflect that by switching the type label to "custom" unless
+        // the new set still equals the active preset exactly.
+        const sel = document.getElementById('dataset-lora-type');
+        const current = new Set(checkedCategories());
+        const active = sel?.value || 'custom';
+        const preset = new Set((LORA_TYPE_PRESETS[active] || []).filter((c) => PRUNABLE_KEYS.has(c)));
+        const sameAsPreset = current.size === preset.size
+            && [...current].every((c) => preset.has(c));
+        if (!sameAsPreset && active !== 'custom') applyTypeText('custom');
+        updateApplyButton(tagsByCategory());
+    }
+
+    function onClear() {
+        setCheckedCategories([]);
+        applyTypeText('custom');
+        updateApplyButton(tagsByCategory());
+    }
+
+    // The checkbox labels, legend, hint and apply button are built/written from
+    // JS (no data-i18n), so applyToDOM won't retranslate them on a language
+    // switch. Re-render their text when the app fires `languageChanged`,
+    // preserving the current checked state and counts.
+    function relocalize() {
+        for (const meta of PRUNABLE) {
+            const nameEl = document.querySelector(
+                `#dataset-lora-prune-cats input[data-cat="${meta.key}"]`
+            )?.parentElement?.querySelector('.dataset-lora-cat-name');
+            if (nameEl) nameEl.textContent = `${meta.emoji} ${t(meta.i18n, meta.key)}`;
+        }
+        renderColorLegend();
+        applyTypeText(document.getElementById('dataset-lora-type')?.value || 'custom');
+        updateApplyButton(tagsByCategory());
+    }
+
+    // ---- Init --------------------------------------------------------------
+
+    DM._initLoraPrune = function () {
+        const host = document.getElementById('dataset-lora-prune-cats');
+        if (!host) return;
+        buildCheckboxes();
+        renderColorLegend();
+
+        const sel = document.getElementById('dataset-lora-type');
+        if (sel && !sel.dataset.wired) {
+            sel.value = DEFAULT_TYPE;
+            sel.addEventListener('change', onTypeChange);
+            sel.dataset.wired = '1';
+        }
+        const applyBtn = document.getElementById('btn-dataset-lora-prune-apply');
+        if (applyBtn && !applyBtn.dataset.wired) {
+            applyBtn.addEventListener('click', applyPrune);
+            applyBtn.dataset.wired = '1';
+        }
+        const clearBtn = document.getElementById('btn-dataset-lora-prune-clear');
+        if (clearBtn && !clearBtn.dataset.wired) {
+            clearBtn.addEventListener('click', onClear);
+            clearBtn.dataset.wired = '1';
+        }
+
+        // Apply the quick default for the initial type, set the button label
+        // synchronously (so it is never the static HTML fallback), then fill
+        // counts from the backend classifier.
+        setCheckedCategories(LORA_TYPE_PRESETS[DEFAULT_TYPE] || []);
+        applyTypeText(DEFAULT_TYPE);
+        updateApplyButton(tagsByCategory());
+        refreshCounts();
+
+        if (!DM._loraPruneI18nBound) {
+            document.addEventListener('languageChanged', relocalize);
+            DM._loraPruneI18nBound = true;
+        }
     };
 
-    // Wire on view init (DM.init runs once when the view first becomes active)
+    // Keep the legacy name so the existing vocab-refresh call sites in
+    // dataset-maker-pipeline.js (DM._refreshCleanupButtons?.()) drive the new
+    // per-category counts without changing those modules.
+    DM._refreshCleanupButtons = refreshCounts;
+
+    // Wire on view init (DM.init runs once when the view first becomes active).
     const originalInit = DM.init;
     DM.init = function () {
         originalInit.call(this);
-        this._initCleanupButtons();
+        this._initLoraPrune();
     };
 })();

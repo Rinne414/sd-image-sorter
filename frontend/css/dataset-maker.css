@@ -1287,25 +1287,12 @@
 }
 
 
-/* Pro-LoRA-trainer cleanup buttons row (Phase 2E) */
-#view-dataset .dataset-cleanup-row {
-    margin: 4px 0 8px 0;
-}
+/* Shared small label for the blacklist / LoRA-prune controls. */
 #view-dataset .dataset-cleanup-label {
     display: block;
     font-size: 11px;
     color: var(--text-muted, rgba(255,255,255,0.55));
     margin-bottom: 4px;
-}
-#view-dataset .dataset-cleanup-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-}
-#view-dataset .dataset-cleanup-buttons > .btn {
-    padding: 4px 8px;
-    font-size: 11px;
-    line-height: 1.2;
 }
 
 
@@ -1545,6 +1532,129 @@
 #view-dataset .dataset-tag-pills-empty {
     font-size: 11px;
     color: var(--text-muted, rgba(255,255,255,0.55));
+}
+
+/* ---------------- Tag color legend (shared 14-class palette) ---------------- */
+/* The swatch + checkbox both borrow the .dataset-tag-pill-category-* color
+   rules above, so there is one source of truth for the palette. */
+#view-dataset .dataset-tag-color-legend {
+    margin: 4px 0 8px 0;
+    font-size: 11px;
+}
+#view-dataset .dataset-tag-color-legend > summary {
+    cursor: pointer;
+    color: var(--text-muted, rgba(255,255,255,0.6));
+    list-style: none;
+    user-select: none;
+    padding: 2px 0;
+}
+#view-dataset .dataset-tag-color-legend > summary:hover {
+    color: var(--text-primary, #f1f5f9);
+}
+#view-dataset .dataset-tag-color-legend-body {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 10px;
+    align-items: center;
+    margin-top: 6px;
+    padding: 8px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+}
+#view-dataset .dataset-tag-legend-row {
+    display: contents;
+}
+#view-dataset .dataset-tag-legend-swatch {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 8px;
+    border-radius: 999px;
+    /* background / border-color / text color come from the matching
+       .dataset-tag-pill-category-* rule above (it is the sole declarant, so
+       no equal-specificity override fight). Only own the border box here. */
+    border-width: 1px;
+    border-style: solid;
+    font-size: 11px;
+    white-space: nowrap;
+}
+#view-dataset .dataset-tag-legend-desc {
+    color: var(--text-muted, rgba(255,255,255,0.6));
+    font-size: 11px;
+}
+
+/* ---------------- LoRA-type tag pruning control ---------------- */
+#view-dataset .dataset-lora-prune {
+    margin: 6px 0 4px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+#view-dataset .dataset-lora-prune-head {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+#view-dataset .dataset-lora-prune-type {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+#view-dataset .dataset-lora-prune-type select {
+    width: auto;
+    min-width: 200px;
+    flex: 0 1 auto;
+}
+#view-dataset .dataset-lora-prune-hint {
+    color: var(--text-muted, rgba(255,255,255,0.6));
+    font-size: 11px;
+    line-height: 1.35;
+}
+#view-dataset .dataset-lora-prune-cats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+/* Each checkbox label borrows the matching pill color class for its hue. The
+   base rule owns ONLY layout + the border box — it must not declare
+   background / border-color / color, because the .dataset-tag-pill-category-*
+   rules have equal specificity (1,1,0) and sit earlier in the file, so any
+   color the base rule set here would win on source order and flatten every
+   chip to one gray. Leaving those props to the category rule keeps it the sole
+   declarant, so each chip paints its true category hue. */
+#view-dataset .dataset-lora-cat {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border-width: 1px;
+    border-style: solid;
+    font-size: 11px;
+    cursor: pointer;
+    user-select: none;
+    transition: filter 0.12s ease;
+}
+#view-dataset .dataset-lora-cat:hover {
+    filter: brightness(1.18);
+}
+#view-dataset .dataset-lora-cat input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+/* Dim an unticked category so the active prune set reads at a glance. */
+#view-dataset .dataset-lora-cat:not(:has(input:checked)) {
+    opacity: 0.5;
+}
+#view-dataset .dataset-lora-cat-count {
+    font-size: 10px;
+    opacity: 0.75;
+}
+#view-dataset .dataset-lora-prune-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
 }
 
 /* ---------------- Export preview pane (Phase 4) ---------------- */
