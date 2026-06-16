@@ -161,3 +161,63 @@ def test_template_preserves_distinct_tags():
     assert "long hair" in tokens
     assert "short hair" in tokens
     assert "blue hair" in tokens
+
+
+def test_template_blacklist_reapplied_after_replace():
+    """Bug 1: Blacklist must be re-applied after replacement.
+
+    Scenario: User replaces 'old_tag' → 'blocked_tag' where 'blocked_tag'
+    is in the blacklist. The old naive logic would emit 'blocked_tag' in
+    the final output because blacklist was only checked before replacement.
+    """
+    image = {"id": 1, "ai_caption": ""}
+    tags = [
+        {"tag": "old_tag", "confidence": 0.9},
+        {"tag": "keep_tag", "confidence": 0.85},
+    ]
+
+    rendered = build_export_caption(
+        image, tags,
+        preset_id="custom",
+        template_override="{tags:filtered}",
+        trigger="",
+        blacklist=["blocked_tag"],
+        replace_rules={"old_tag": "blocked_tag"},
+    )
+
+    # 'old_tag' was replaced with 'blocked_tag', but 'blocked_tag' is blacklisted
+    # So final output should only contain 'keep_tag'
+    assert "blocked_tag" not in rendered
+    assert "old_tag" not in rendered
+    assert "keep_tag" in rendered
+
+
+def test_template_replace_normalizes_consistently_with_blacklist():
+    """Bug 2: Replace rules must normalize keys the same way as blacklist.
+
+    Scenario: When underscore_to_space=True, both blacklist matching and
+    replace matching must treat 'tag_name' and 'tag name' as equivalent.
+    """
+    image = {"id": 1}
+    tags = [
+        {"tag": "multiple_girls", "confidence": 0.9},
+        {"tag": "keep_tag", "confidence": 0.85},
+    ]
+
+    # Replace rule uses underscore form, but underscore_to_space converts tags to space form
+    rendered = build_export_caption(
+        image, tags,
+        preset_id="custom",
+        template_override="{tags:filtered}",
+        trigger="",
+        replace_rules={"multiple_girls": "2girls"},  # underscore form
+        underscore_to_space_override=True,
+        preserve_underscore_prefixes_override=["score_"],
+    )
+
+    # Replacement should work even though tag internally becomes "multiple girls" (spaces)
+    assert "2girls" in rendered or "2 girls" in rendered
+    assert "multiple_girls" not in rendered
+    assert "multiple girls" not in rendered
+    assert "keep_tag" in rendered or "keep tag" in rendered
+

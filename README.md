@@ -50,6 +50,29 @@
 
 **SD Image Sorter：把“AI 图满盘爆炸、参数到处失踪、好图根本挑不出来、发出去前还得重新打码”的崩溃现场，硬生生压成“扫描、读取、打标、分拣、查重、炼词、识别、打码、加扰、评分”一套打完的本地工作流。**
 
+### 为什么选 SD Image Sorter？
+
+**SD Image Sorter — 唯一为 AI 画师打造的图片管理工具**
+
+通用图片管理器把 AI 生成图当照片处理，SD Image Sorter 从零开始为 Stable Diffusion 工作流设计。它理解你的元数据，说你的语言，提供匹配 AI 画师实际工作方式的工具。
+
+### 核心差异化
+
+| 对比维度 | SD Image Sorter | Allusion | TagStudio | DigiKam | Hydrus |
+|---------|----------------|----------|-----------|---------|--------|
+| **SD 元数据** | 原生支持 ComfyUI/NAI/WebUI/Forge | ❌ | ❌ | ❌ | ❌ |
+| **AI 自动打标** | WD14 全家桶（7 个模型） | ❌ | ❌ | 仅人脸识别 | 需插件 |
+| **VLM 描述** | 5 厂商 + Ollama | ❌ | ❌ | ❌ | ❌ |
+| **CLIP 相似搜索** | ✅ | ❌ | ❌ | ❌ | ✅（第三方） |
+| **键盘分拣** | WASD 四向 + 多模式 | ❌ | ❌ | ❌ | ❌ |
+| **打码工具** | YOLO + 画笔 + 批处理 | ❌ | ❌ | ❌ | ❌ |
+| **Prompt Lab** | ✅ 反推提示词 | ❌ | ❌ | ❌ | ❌ |
+| **LoRA 导出** | 模板引擎 + 预设 | ❌ | ❌ | ❌ | ❌ |
+| **部署方式** | 单文件便携版 | 安装程序 | 需要 Python | 完整 KDE 栈 | 复杂设置 |
+| **学习曲线** | 低-中 | 低 | 中 | 中 | 高 |
+
+详见 [Why Choose Us](docs/WHY_CHOOSE_US.md) 完整对比。
+
 ### 它到底解决什么问题
 
 如果你也经历过这些破事，这个工具就是给你做的：
@@ -109,6 +132,7 @@
 - 提取 prompt、negative prompt、steps、CFG、seed、checkpoint、LoRA、VAE、尺寸等信息
 - 按生成器、标签、评级、模型、LoRA、提示词关键字、尺寸、长宽比筛选
 - 按时间、文件名、提示词长度、标签数量等排序
+- **Library Roots 与文件夹树**：定义多个库根目录，侧边栏文件夹树导航，按路径筛选
 
 ### 2. AI Tagging 打标
 
@@ -117,42 +141,58 @@
 - 自动判定 General / Sensitive / Questionable / Explicit
 - 支持 EVA02、SwinV2、ConvNeXt、ViT、Camie、PixAI、ToriiGate 等模型
 - 后台持续打标，右下角进度跟踪，不会卡死整个界面
+- **后台任务队列**：统一管理 tagging、相似度、美学评分、画师识别等任务，实时进度跟踪
 
 ### 3. Sorting 排序
 
 - **Auto-Separate**：按筛选条件一键批量移动
-- **Manual Sort**：`W / A / S / D` 四路分拣，`Space` 跳过，`Z` 撤销
+- **Manual Sort 多模式**：
+  - **Slot Mode**（槽位模式）：`W / A / S / D` 四路分拣，`Space` 跳过，`Z` 撤销
+  - **Bracket Mode**（锦标赛模式）：两两对比排名，适合精选最佳作品
+  - **Cull Mode**（剔除模式）：保留 / 删除二分，快速清理低质量图片
 - 适合把收藏、精选、待删、NSFW、角色分类等工作压缩成几分钟
 
-### 4. Censor Edit 打码编辑
+### 4. Collections 整理
 
-- YOLO 自动检测敏感区域
+- 将图片组织到持久化的命名集合中
+- 按集合筛选，批量添加 / 移除
+- 集合感知的导航与管理
+
+### 5. Star Ratings 星级评分
+
+- 1-5 星评分系统，gallery 网格中可见
+- 按最小 / 最大星级筛选
+- 批量设置星级
+
+### 6. Censor Edit 打码编辑
+
+- YOLO / NudeNet / SAM3 自动检测敏感区域
 - 支持马赛克、高斯模糊、黑条、白条
 - 画笔、铅笔、橡皮、仿制图章一套齐
 - 队列式批量处理，适合做分享版、公开版、平台版素材
 
-### 5. Similar Images 相似图
+### 7. Similar Images 相似图
 
 - 基于 CLIP embedding 做视觉相似度搜索
 - 找近似重复图
 - 用库内图片搜相似图
 - 用外部图片搜图库里的相似结果
 
-### 6. Prompt Lab 提示词工坊
+### 8. Prompt Lab 提示词工坊
 
 - 从你自己的图库标签反推可复用 prompt
 - 自动处理部分互斥标签
 - 内置标签套装和负向 prompt 生成
 - 对小图库也有兜底标签池
 
-### 7. 其他实用模块
+### 9. 其他实用模块
 
 - **Artist Identification**：实验性画师 / 风格识别
 - **Image Reader**：拖放或选择原始 PNG，立刻读参数，不用先扫描图库；剪贴板图片会明确提示可能丢失 SD metadata
 - **Image Obfuscate**：图片加扰 / 解扰，适合带密码分享
 - **Aesthetic Score**：本地美学评分
 
-### 8. VLM 自然语言打标
+### 10. VLM 自然语言打标
 
 - 多厂商 VLM 打标：OpenAI / Anthropic / Gemini / Vertex AI / Ollama
 - 一键部署本地 Ollama 视觉模型（Gemma 3、Qwen 2.5 VL、MiniCPM-V 等）
@@ -160,7 +200,7 @@
 - VLM 也能输出 danbooru 结构化标签
 - 支持 HTTP / HTTPS / SOCKS 代理
 
-### 9. LoRA 训练导出
+### 11. LoRA 训练导出
 
 - 模板引擎：7 个内建 preset（Anima、Illustrious/Pony、NoobAI、FLUX、Kohya、自定义）
 - 14 个模板变量：`{trigger}`、`{tags}`、`{nl_caption}`、`{rating}`、`{count}` 等
@@ -169,19 +209,19 @@
 - 下划线转空格（保留 `score_*`），可手动关闭
 - 导出前 Live Preview
 
-### 10. 色彩分析
+### 12. 色彩分析
 
 - 提取主色、亮度、饱和度、色温
 - 按亮度 / 饱和度 / 亮度偏度排序
 - 按色温 / 亮度区间 / 分布形状筛选
 - 直方图形状分类（线稿 vs 照片）
 
-### 11. 批量标签编辑器
+### 13. 批量标签编辑器
 
 - 全库批量查找替换、添加、移除标签
 - 操作前预览影响范围
 
-### 12. Reader 元数据编辑
+### 14. Reader 元数据编辑
 
 - 编辑 prompt / negative / seed / sampler / steps / CFG / model / LoRA
 - 另存为新图（PNG / WebP / JPG）
@@ -514,6 +554,29 @@ License: [MIT](LICENSE)
 
 It scans folders, reads SD metadata, tags images with WD14 models, finds similar images with CLIP, sorts images with keyboard-speed workflows, and provides an AI-assisted censor editor for batch-safe sharing.
 
+### Why SD Image Sorter?
+
+**SD Image Sorter — The Only Image Manager Built for AI Artists**
+
+Unlike general-purpose image managers that treat AI-generated images like photos, SD Image Sorter is designed from the ground up for Stable Diffusion workflows.
+
+#### Key Differentiators
+
+| Feature | SD Image Sorter | Allusion | TagStudio | DigiKam | Hydrus |
+|---------|----------------|----------|-----------|---------|--------|
+| **SD Metadata** | Native ComfyUI/NAI/WebUI/Forge | ❌ | ❌ | ❌ | ❌ |
+| **AI Auto-Tagging** | WD14 family (7 models) | ❌ | ❌ | Face detect only | Via plugins |
+| **VLM Captioning** | 5 providers + Ollama | ❌ | ❌ | ❌ | ❌ |
+| **CLIP Similarity** | ✅ | ❌ | ❌ | ❌ | ✅ (third-party) |
+| **Keyboard Sorting** | WASD 4-way + multi-mode | ❌ | ❌ | ❌ | ❌ |
+| **Censor Tools** | YOLO + brush + batch | ❌ | ❌ | ❌ | ❌ |
+| **Prompt Lab** | ✅ Reverse-engineer prompts | ❌ | ❌ | ❌ | ❌ |
+| **LoRA Export** | Template engine + presets | ❌ | ❌ | ❌ | ❌ |
+| **Deployment** | Portable single-file | Installer | Python required | Full KDE stack | Complex setup |
+| **Learning Curve** | Low-Medium | Low | Medium | Medium | High |
+
+See [Why Choose Us](docs/WHY_CHOOSE_US.md) for detailed comparison.
+
 ### Promo Line
 
 **SD Image Sorter turns “my AI image folder is a landfill” into a fast local workflow for finding, filtering, tagging, sorting, comparing, and cleaning your best shots.**
@@ -521,9 +584,14 @@ It scans folders, reads SD metadata, tags images with WD14 models, finds similar
 ### Highlights
 
 - **Gallery built for SD workflows**: ComfyUI, NovelAI, WebUI / A1111, Forge metadata support
+- **Library Roots & Folder Tree**: Define multiple library root folders, sidebar folder tree navigation
 - **AI Tagging**: WD14 family, rating prediction, background jobs, adjustable thresholds
+- **Background Job Queue**: Unified queue for tagging, similarity, aesthetic, artist ID with live progress tracking
 - **Fast sorting**: Auto-Separate plus addictive `W / A / S / D` manual sorting
-- **Censor Edit**: YOLO detection, brush tools, queue workflow, batch save
+- **Manual Sort Multi-Mode**: Slot Mode (4-way), Bracket Mode (tournament ranking), Cull Mode (keep/delete)
+- **Collections System**: Organize images into persistent named collections
+- **Star Ratings**: 1-5 star rating system visible in gallery grid
+- **Censor Edit**: YOLO / NudeNet / SAM3 detection, brush tools, queue workflow, batch save
 - **Similar search**: CLIP embeddings for duplicates and near-matches
 - **Prompt Lab**: generate reusable prompts from your own library
 - **Extra tools**: Artist ID, Image Reader (original file / drag-drop is metadata-safe; clipboard images may lose SD PNG metadata), Image Obfuscate, Aesthetic Score

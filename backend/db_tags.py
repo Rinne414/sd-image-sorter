@@ -27,6 +27,30 @@ from db_helpers import (
 from db_images_write import _mark_image_tagged
 
 
+def _dedupe_tags(tags: List[Tuple[str, float]]) -> List[Tuple[str, float]]:
+    """Deduplicate tags (case-insensitive), keeping the one with highest confidence.
+
+    Args:
+        tags: List of (tag, confidence) tuples
+
+    Returns:
+        Deduplicated list, preserving order of first occurrence
+    """
+    seen = {}
+    result = []
+
+    for tag, conf in tags:
+        tag_lower = tag.lower()
+        if tag_lower not in seen or conf > seen[tag_lower][1]:
+            if tag_lower in seen:
+                # Remove old entry
+                result = [(t, c) for t, c in result if t.lower() != tag_lower]
+            seen[tag_lower] = (tag, conf)
+            result.append((tag, conf))
+
+    return result
+
+
 def add_tags(image_id: int, tags: List[Dict[str, Any]], content_fingerprint: Optional[str] = None) -> None:
     """REPLACE all tags for an image. Each tag dict should have 'tag' and optionally 'confidence'.
 
@@ -44,12 +68,15 @@ def add_tags(image_id: int, tags: List[Dict[str, Any]], content_fingerprint: Opt
         content_fingerprint = _ensure_content_fingerprint_value(cursor, image_id, content_fingerprint)
         # Clear existing tags
         cursor.execute("DELETE FROM tags WHERE image_id = ?", (image_id,))
-        # Batch insert new tags (N+1 fix: use executemany instead of loop)
-        tag_values = [
-            (image_id, tag_data.get("tag", ""), tag_data.get("confidence", 1.0))
+        # Extract tag tuples and deduplicate (Bug 3 fix)
+        tag_tuples = [
+            (tag_data.get("tag", ""), tag_data.get("confidence", 1.0))
             for tag_data in tags
             if tag_data.get("tag")
         ]
+        deduped = _dedupe_tags(tag_tuples)
+        # Batch insert new tags (N+1 fix: use executemany instead of loop)
+        tag_values = [(image_id, tag, conf) for tag, conf in deduped]
         if tag_values:
             cursor.executemany(
                 "INSERT INTO tags (image_id, tag, confidence) VALUES (?, ?, ?)",
@@ -89,12 +116,15 @@ def add_tags_batch(image_tags_list: List[Dict[str, Any]]) -> None:
             # Clear existing tags
             cursor.execute("DELETE FROM tags WHERE image_id = ?", (image_id,))
 
-            # Batch insert new tags
-            tag_values = [
-                (image_id, tag_data.get("tag", ""), tag_data.get("confidence", 1.0))
+            # Extract tag tuples and deduplicate (Bug 3 fix)
+            tag_tuples = [
+                (tag_data.get("tag", ""), tag_data.get("confidence", 1.0))
                 for tag_data in tags
                 if tag_data.get("tag")
             ]
+            deduped = _dedupe_tags(tag_tuples)
+            # Batch insert new tags
+            tag_values = [(image_id, tag, conf) for tag, conf in deduped]
             if tag_values:
                 cursor.executemany(
                     "INSERT INTO tags (image_id, tag, confidence) VALUES (?, ?, ?)",

@@ -1386,6 +1386,16 @@ const API = {
         return this.post(`/api/images/${id}/reparse`);
     },
 
+    async saveEditedMetadata(sourcePath, outputPath, format, metadata, allowOverwrite = true) {
+        return this.post('/api/image-metadata/save-edited', {
+            source_path: sourcePath,
+            output_path: outputPath,
+            format: format,
+            metadata: metadata,
+            allow_overwrite: allowOverwrite
+        });
+    },
+
     async openFolder(imageId) {
         return this.post('/api/open-folder', { image_id: imageId });
     },
@@ -2016,7 +2026,7 @@ function addRecentFolder(path) {
     localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(updated));
 }
 
-function showToast(message, type = 'info') {
+function showToast(message, type = 'info', options = {}) {
     let container = $('#toast-container');
 
     // Create container if it doesn't exist
@@ -2055,6 +2065,19 @@ function showToast(message, type = 'info') {
     `;
     toast.querySelector('.toast-message').textContent = message;
 
+    // Add action button if provided (e.g., Undo)
+    if (options.actionLabel && typeof options.onAction === 'function') {
+        const actionBtn = document.createElement('button');
+        actionBtn.className = 'toast-action-btn';
+        actionBtn.textContent = options.actionLabel;
+        actionBtn.onclick = (e) => {
+            e.stopPropagation();
+            options.onAction();
+            toast.remove();
+        };
+        toast.appendChild(actionBtn);
+    }
+
     container.appendChild(toast);
 
     // Announce to screen readers using A11y module
@@ -2063,11 +2086,23 @@ function showToast(message, type = 'info') {
         window.A11y.announce(message, priority);
     }
 
-    setTimeout(() => {
+    const duration = options.duration || 3000;
+    const timeoutId = setTimeout(() => {
         toast.style.opacity = '0';
         toast.style.transform = 'translateX(50px)';
         setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    }, duration);
+
+    // Allow manual dismissal and cancel timeout
+    if (options.dismissible !== false) {
+        toast.style.cursor = 'pointer';
+        toast.onclick = () => {
+            clearTimeout(timeoutId);
+            toast.remove();
+        };
+    }
+
+    return toast;
 }
 
 function createGuideOverlay({ id, title, description, steps = [], note = '', maxWidth = '520px', storageKey, closeLabel = 'Got it!' }) {
@@ -5574,6 +5609,53 @@ function initEventListeners() {
         });
     });
 
+    // Grid size slider control
+    const gridSizeSlider = $('#grid-size-slider');
+    const gridSizeDecrease = $('#grid-size-decrease');
+    const gridSizeIncrease = $('#grid-size-increase');
+    const galleryGrid = $('#gallery-grid');
+
+    if (gridSizeSlider && galleryGrid) {
+        // Load saved grid size from localStorage
+        const GRID_SIZE_KEY = 'sd-sorter:grid-size';
+        const savedSize = localStorage.getItem(GRID_SIZE_KEY);
+        if (savedSize) {
+            gridSizeSlider.value = savedSize;
+            galleryGrid.style.setProperty('--grid-item-size', `${savedSize}px`);
+            galleryGrid.style.setProperty('--waterfall-column-width', `${savedSize}px`);
+        }
+
+        // Update grid size function
+        function updateGridSize(size) {
+            const clampedSize = Math.max(120, Math.min(400, size));
+            gridSizeSlider.value = clampedSize;
+            galleryGrid.style.setProperty('--grid-item-size', `${clampedSize}px`);
+            galleryGrid.style.setProperty('--waterfall-column-width', `${clampedSize}px`);
+            localStorage.setItem(GRID_SIZE_KEY, clampedSize);
+        }
+
+        // Slider input event
+        gridSizeSlider.addEventListener('input', (e) => {
+            updateGridSize(parseInt(e.target.value, 10));
+        });
+
+        // Decrease button
+        if (gridSizeDecrease) {
+            gridSizeDecrease.addEventListener('click', () => {
+                const currentSize = parseInt(gridSizeSlider.value, 10);
+                updateGridSize(currentSize - 20);
+            });
+        }
+
+        // Increase button
+        if (gridSizeIncrease) {
+            gridSizeIncrease.addEventListener('click', () => {
+                const currentSize = parseInt(gridSizeSlider.value, 10);
+                updateGridSize(currentSize + 20);
+            });
+        }
+    }
+
     // Gallery-header aspect quick-toggle (FE-7). Drives the SAME FilterStore
     // `aspectRatio` field as the filter modal's aspect radios — no parallel
     // state. Clicking writes through updateAppFilters, then syncs the modal
@@ -6173,6 +6255,20 @@ function initEventListeners() {
         }
         switchView('censor');
         if (typeof window.initCensorEdit === 'function') window.initCensorEdit();
+    });
+
+    // Metadata editor modal
+    $('#btn-edit-metadata')?.addEventListener('click', () => {
+        if (window.Gallery && typeof window.Gallery.openMetadataEditor === 'function') {
+            window.Gallery.openMetadataEditor();
+        }
+    });
+    $('#meta-editor-close')?.addEventListener('click', () => hideModal('metadata-editor-modal'));
+    $('#btn-meta-edit-cancel')?.addEventListener('click', () => hideModal('metadata-editor-modal'));
+    $('#btn-meta-edit-save')?.addEventListener('click', () => {
+        if (window.Gallery && typeof window.Gallery.saveMetadataEdit === 'function') {
+            window.Gallery.saveMetadataEdit();
+        }
     });
 
     // --- Mobile Navigation ---

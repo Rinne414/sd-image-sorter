@@ -2310,3 +2310,93 @@
 #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-split-image-frame {
     min-height: clamp(280px, 36vh, 520px);
 }
+
+/* ============================================================
+ * Template variable reference panel & pipeline flow
+ * ============================================================ */
+
+/* Pipeline execution order flow */
+.dataset-pipeline-flow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    flex-wrap: wrap;
+}
+
+.flow-step {
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: 500;
+}
+
+.flow-arrow {
+    color: var(--accent-primary, #ff8a3d);
+    font-weight: bold;
+}
+
+/* Template variable reference panel */
+.dataset-template-help {
+    margin: 8px 0;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    border-left: 3px solid var(--accent-primary, #ff8a3d);
+}
+
+.dataset-template-help summary {
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--accent-primary, #ff8a3d);
+    user-select: none;
+}
+
+.dataset-template-help summary:hover {
+    color: var(--accent-hover, #ff9e5a);
+}
+
+.dataset-template-vars {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 12px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    font-size: 12px;
+    max-height: 240px;
+    overflow-y: auto;
+    margin-top: 8px;
+}
+
+.template-var-row {
+    display: contents;
+}
+
+.template-var-row code {
+    color: var(--accent-primary, #ff8a3d);
+    font-weight: 600;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.template-var-row span {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.dataset-template-hint {
+    display: block;
+    margin-top: 6px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 11px;
+}
+
+/* Form hint for inline explanations */
+.form-hint {
+    display: block;
+    margin-top: 2px;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 11px;
+    line-height: 1.4;
+}

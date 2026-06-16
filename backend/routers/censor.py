@@ -25,6 +25,7 @@ from services.censor_service import (
     CensorSaveRequest,
     CensorSaveDataRequest,
     CensorSaveOperationsRequest,
+    RemoveBackgroundRequest,
 )
 
 
@@ -204,6 +205,31 @@ async def segment_text(
     e.g. "exposed breasts", "person's face", "tattoo on arm".
     """
     return await run_in_threadpool(service.segment_text, request)
+
+
+@router.post("/remove-background")
+async def remove_background(
+    request: RemoveBackgroundRequest,
+    service: CensorService = Depends(get_censor_service),
+):
+    """
+    Remove background using SAM3 foreground detection.
+
+    Detects the main subject in the image and removes the background,
+    allowing user choice of transparent, white, or black fill.
+
+    **Fill modes:**
+    - `transparent`: PNG with alpha channel (recommended)
+    - `white`: White background fill
+    - `black`: Black background fill
+
+    **Edge threshold:**
+    Controls SAM3 detection sensitivity (0.0-1.0).
+    Higher = stricter detection, lower = more permissive.
+
+    Returns a base64-encoded preview image.
+    """
+    return await run_in_threadpool(service.remove_background, request)
 
 
 @router.get("/mask-cache/{mask_ref}")

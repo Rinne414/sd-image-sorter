@@ -663,6 +663,18 @@
                                 <span aria-hidden="true">▥</span>
                             </button>
                             <div class="divider-v" aria-hidden="true"></div>
+                            <div class="grid-size-control" role="group" aria-label="Adjust image size">
+                                <button class="grid-size-btn" id="grid-size-decrease" type="button" title="Decrease image size" aria-label="Decrease image size">
+                                    <span aria-hidden="true">−</span>
+                                </button>
+                                <input type="range" id="grid-size-slider" class="grid-size-slider"
+                                       min="120" max="400" value="200" step="20"
+                                       aria-label="Image size" title="Adjust image size">
+                                <button class="grid-size-btn" id="grid-size-increase" type="button" title="Increase image size" aria-label="Increase image size">
+                                    <span aria-hidden="true">+</span>
+                                </button>
+                            </div>
+                            <div class="divider-v" aria-hidden="true"></div>
                             <div class="aspect-quick-toggle" id="aspect-quick-toggle" role="group" aria-label="Filter by aspect ratio" data-i18n-aria="gallery.aspectToggle">
                                 <button class="aspect-quick-btn is-active" data-aspect="" type="button" aria-pressed="true" title="Any aspect ratio" data-i18n-title="gallery.aspectAll">
                                     <span aria-hidden="true">▦</span>
@@ -1977,6 +1989,11 @@
                                 <span class="tool-label"><span data-i18n="censor.clone">Clone</span> <kbd>G</kbd></span>
                             </button>
                             <div class="toolbar-divider"></div>
+                            <button class="tool-btn-v2" data-tool="remove-bg" title="Remove Background (R)">
+                                <span class="tool-icon-v2">🎭</span>
+                                <span class="tool-label"><span data-i18n="censor.removeBg">Remove BG</span> <kbd>R</kbd></span>
+                            </button>
+                            <div class="toolbar-divider"></div>
                             <!-- Censor Style Dropdown in Toolbar -->
                             <div class="toolbar-dropdown">
                                 <select id="censor-style" class="toolbar-select" title="Censor Style">
@@ -3239,7 +3256,7 @@
                                 <!-- Color legend for the 14-class danbooru tag categories. Body rows
                                      are injected by dataset-maker-cleanups.js (one source of truth for
                                      the palette + labels, shared with the LoRA-prune checkboxes). -->
-                                <details class="dataset-tag-color-legend" id="dataset-tag-color-legend">
+                                <details class="dataset-tag-color-legend" id="dataset-tag-color-legend" open>
                                     <summary data-i18n="dataset.tagColorLegendTitle">🎨 Tag color legend</summary>
                                     <div class="dataset-tag-color-legend-body" id="dataset-tag-color-legend-body"></div>
                                 </details>
@@ -3402,9 +3419,14 @@
                                     </button>
                                 </div>
                                 <label class="form-label">
-                                    <span data-i18n="dataset.blacklistLabel">Blacklist tags (removed from every caption)</span>
-                                    <textarea id="dataset-blacklist" class="form-input" rows="2"
-                                              placeholder="bad_anatomy, watermark"
+                                    <span>
+                                        <span data-i18n="dataset.blacklistLabel">Blacklist tags (removed from every caption)</span>
+                                        <small class="form-hint" data-i18n="dataset.blacklistHint">
+                                            Tags to exclude. Separate multiple tags with line breaks (not commas). Spaces in tags are OK.
+                                        </small>
+                                    </span>
+                                    <textarea id="dataset-blacklist" class="form-input" rows="3"
+                                              placeholder="watermark&#10;low quality&#10;bad anatomy"
                                               data-i18n-placeholder="dataset.blacklistPlaceholder"></textarea>
                                 </label>
 
@@ -3460,15 +3482,94 @@
                                            data-i18n-placeholder="batchExport.tagPrefix">
                                 </label>
                                 <div id="dataset-template-options" class="dataset-template-options">
+                                    <!-- Pipeline execution order visualization -->
+                                    <div class="dataset-pipeline-flow">
+                                        <span class="flow-step">1️⃣ <span data-i18n="dataset.step.blacklist">Blacklist</span></span>
+                                        <span class="flow-arrow">→</span>
+                                        <span class="flow-step">2️⃣ <span data-i18n="dataset.step.replace">Replace</span></span>
+                                        <span class="flow-arrow">→</span>
+                                        <span class="flow-step">3️⃣ <span data-i18n="dataset.step.maxTags">Max N tags</span></span>
+                                        <span class="flow-arrow">→</span>
+                                        <span class="flow-step">4️⃣ <span data-i18n="dataset.step.append">Append</span></span>
+                                    </div>
                                     <label class="form-label">
                                         <span data-i18n="batchExport.loraTemplate">Custom template</span>
+                                        <details class="dataset-template-help" open>
+                                            <summary>📘 <span data-i18n="dataset.templateVarsTitle">Available variables</span></summary>
+                                            <div class="dataset-template-vars">
+                                                <div class="template-var-row">
+                                                    <code>{trigger}</code>
+                                                    <span data-i18n="dataset.var.trigger">Trigger word(s) for the LoRA</span>
+                                                </div>
+                                                <div class="template-var-row">
+                                                    <code>{tags:filtered}</code>
+                                                    <span data-i18n="dataset.var.tagsFiltered">Tags after blacklist + replace + max-N</span>
+                                                </div>
+                                                <div class="template-var-row">
+                                                    <code>{tags}</code>
+                                                    <span data-i18n="dataset.var.tags">All tags (no filtering)</span>
+                                                </div>
+                                                <div class="template-var-row">
+                                                    <code>{tags:20}</code>
+                                                    <span data-i18n="dataset.var.tagsN">Top N tags by confidence (e.g., {tags:20})</span>
+                                                </div>
+                                                <div class="template-var-row">
+                                                    <code>{nl_caption}</code>
+                                                    <span data-i18n="dataset.var.nlCaption">Natural language description (VLM)</span>
+                                                </div>
+                                                <div class="template-var-row">
+                                                    <code>{prompt}</code>
+                                                    <span data-i18n="dataset.var.prompt">Original generation prompt</span>
+                                                </div>
+                                                <div class="template-var-row">
+                                                    <code>{negative}</code>
+                                                    <span data-i18n="dataset.var.negative">Negative prompt</span>
+                                                </div>
+                                                <div class="template-var-row">
+                                                    <code>{rating}</code>
+                                                    <span data-i18n="dataset.var.rating">Rating tags (safe, questionable, explicit)</span>
+                                                </div>
+                                                <div class="template-var-row">
+                                                    <code>{count}</code>
+                                                    <span data-i18n="dataset.var.count">Subject count (1girl, 2girls, etc.)</span>
+                                                </div>
+                                                <div class="template-var-row">
+                                                    <code>{quality}</code>
+                                                    <span data-i18n="dataset.var.quality">Quality tags (masterpiece, best quality)</span>
+                                                </div>
+                                                <div class="template-var-row">
+                                                    <code>{characters}</code>
+                                                    <span data-i18n="dataset.var.characters">Character tags only</span>
+                                                </div>
+                                                <div class="template-var-row">
+                                                    <code>{general}</code>
+                                                    <span data-i18n="dataset.var.general">General tags only</span>
+                                                </div>
+                                                <div class="template-var-row">
+                                                    <code>{safety}</code>
+                                                    <span data-i18n="dataset.var.safety">Safety/rating category</span>
+                                                </div>
+                                                <div class="template-var-row">
+                                                    <code>{append}</code>
+                                                    <span data-i18n="dataset.var.append">Common tags field below</span>
+                                                </div>
+                                            </div>
+                                            <small class="dataset-template-hint" data-i18n="dataset.templateHint">
+                                                💡 Tip: Use newlines for multi-line captions (e.g., {tags}\n{nl_caption})
+                                            </small>
+                                        </details>
                                         <textarea id="dataset-template-override" class="form-input" rows="3"
                                                   placeholder="{trigger}, {tags:filtered}, {append}">{trigger}, {tags:filtered}, {append}</textarea>
                                     </label>
                                     <label class="form-label">
-                                        <span data-i18n="batchExport.loraReplace">Tag replacements (one per line: from-&gt;to)</span>
+                                        <span>
+                                            <span data-i18n="batchExport.loraReplace">Tag Replacements</span>
+                                            <small class="form-hint" data-i18n="dataset.replaceHint">
+                                                One rule per line. Format: old_tag-&gt;new_tag (case-insensitive)
+                                            </small>
+                                        </span>
                                         <textarea id="dataset-replace-rules" class="form-input" rows="2"
-                                                  placeholder="school_uniform-&gt;serafuku"></textarea>
+                                                  placeholder="school_uniform-&gt;serafuku&#10;blue_eyes-&gt;azure_eyes"></textarea>
                                     </label>
                                     <label class="form-label">
                                         <span data-i18n="batchExport.loraMaxTags">Max tags (0 = unlimited)</span>
@@ -4081,6 +4182,7 @@
                                         </div>
                                     </details>
                                     <button class="btn btn-ghost btn-small" id="btn-reparse-metadata" aria-label="Read image info again" data-i18n="modal.reparse">Read Again</button>
+                                    <button class="btn btn-ghost btn-small" id="btn-edit-metadata" aria-label="Edit metadata" data-i18n="modal.editMetadata" title="Edit image metadata" data-i18n-title="modal.editMetadataTitle">✏️ Edit</button>
                                 </div>
                             </div>
                             <h3 id="modal-filename">filename.png</h3>
@@ -4868,6 +4970,66 @@
                 <div class="modal-actions">
                     <button class="btn btn-ghost" id="btn-confirm-cancel" data-i18n="modal.cancel">Cancel</button>
                     <button class="btn btn-primary danger" id="btn-confirm-ok" data-i18n="modal.yes">Yes, proceed</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metadata Editor Modal -->
+        <div class="modal" id="metadata-editor-modal" role="dialog" aria-modal="true" aria-labelledby="meta-editor-title">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content">
+                <button class="modal-close" id="meta-editor-close" aria-label="Close">
+                    <span aria-hidden="true">✕</span>
+                </button>
+                <h3 id="meta-editor-title" data-i18n="modal.editMetadataTitle">Edit Image Metadata</h3>
+                <p class="modal-description" data-i18n="modal.editMetadataHint">Edit prompt, model, and generation parameters. Changes save directly to the image file.</p>
+
+                <div class="reader-editor-grid">
+                    <label class="reader-editor-field reader-editor-field-full">
+                        <span data-i18n="reader.prompt">Prompt</span>
+                        <textarea id="meta-edit-prompt" class="input-field" rows="5"></textarea>
+                    </label>
+                    <label class="reader-editor-field reader-editor-field-full">
+                        <span data-i18n="reader.negative">Negative Prompt</span>
+                        <textarea id="meta-edit-negative" class="input-field" rows="4"></textarea>
+                    </label>
+                    <label class="reader-editor-field">
+                        <span data-i18n="reader.editSeed">Seed</span>
+                        <input id="meta-edit-seed" class="input-field" type="text">
+                    </label>
+                    <label class="reader-editor-field">
+                        <span data-i18n="reader.editModel">Model / Checkpoint</span>
+                        <input id="meta-edit-checkpoint" class="input-field" type="text">
+                    </label>
+                    <label class="reader-editor-field">
+                        <span data-i18n="reader.editSampler">Sampler</span>
+                        <input id="meta-edit-sampler" class="input-field" type="text">
+                    </label>
+                    <label class="reader-editor-field">
+                        <span data-i18n="reader.editSteps">Steps</span>
+                        <input id="meta-edit-steps" class="input-field" type="number" min="0" step="1">
+                    </label>
+                    <label class="reader-editor-field">
+                        <span data-i18n="reader.editCfg">CFG Scale</span>
+                        <input id="meta-edit-cfg" class="input-field" type="number" min="0" step="0.1">
+                    </label>
+                    <label class="reader-editor-field">
+                        <span data-i18n="reader.outputFormat">Format</span>
+                        <select id="meta-edit-format" class="input-field">
+                            <option value="png">PNG</option>
+                            <option value="webp">WebP</option>
+                            <option value="jpg">JPG</option>
+                        </select>
+                    </label>
+                    <label class="reader-editor-field reader-editor-field-full">
+                        <span data-i18n="reader.editLoras">LoRAs</span>
+                        <input id="meta-edit-loras" class="input-field" type="text" placeholder="lora1, lora2, lora3" data-i18n-placeholder="reader.editLorasPlaceholder">
+                    </label>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" id="btn-meta-edit-cancel" data-i18n="modal.cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-meta-edit-save" data-i18n="modal.saveChanges">💾 Save Changes</button>
                 </div>
             </div>
         </div>

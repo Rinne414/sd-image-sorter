@@ -150,6 +150,13 @@ class CensorSaveOperationsRequest(BaseModel):
     allow_overwrite: bool = False
 
 
+class RemoveBackgroundRequest(BaseModel):
+    """Request to remove background using SAM3."""
+    image_id: int = Field(..., ge=1)
+    fill_mode: str = Field("transparent", pattern="^(transparent|white|black)$")
+    edge_threshold: float = Field(0.5, ge=0.0, le=1.0)
+
+
 class CensorService:
     """Service for NSFW detection and image censoring."""
 
@@ -1750,6 +1757,92 @@ class CensorService:
             raise HTTPException(status_code=503, detail=str(exc))
         except Exception:
             raise HTTPException(status_code=500, detail="Text segmentation failed")
+
+    def remove_background(self, request: RemoveBackgroundRequest) -> Dict[str, Any]:
+        """Remove background using SAM3 foreground detection."""
+        try:
+            from sam3_refiner import get_sam3_refiner
+        except Exception:
+            raise HTTPException(
+                status_code=503,
+                detail="SAM3 module unavailable"
+            )
+
+        sam3_status = get_model_health()["censor"]["sam3"]
+        if not sam3_status["available"]:
+            raise HTTPException(
+                status_code=503,
+                detail=sam3_status["message"]
+            )
+
+        image_data = db.get_image_by_id(request.image_id)
+        if not image_data:
+            raise HTTPException(status_code=404, detail="Image not found")
+
+        image_path = self._resolve_source_image_path(
+            image_data["path"],
+            image_id=request.image_id,
+            action_label="Background removal",
+        )
+
+        try:
+            with Image.open(image_path) as src:
+                image = src.convert("RGB")
+
+            # Use SAM3 to detect foreground objects
+            # We use a generic "main subject" prompt to detect the foreground
+            refiner = get_sam3_refiner()
+            mask = refiner.segment_by_text(
+                image,
+                "foreground subject",
+                presence_threshold=request.edge_threshold,
+            )
+
+            if mask is None:
+                return {
+                    "status": "no_match",
+                    "message": "No foreground object detected",
+                    "preview": None,
+                }
+
+            # Create output image based on fill_mode
+            img_rgba = image.convert('RGBA')
+
+            # Convert mask to PIL Image and ensure it's the right size
+            mask_image = Image.fromarray((mask * 255).astype('uint8'), mode='L')
+            if mask_image.size != img_rgba.size:
+                mask_image = mask_image.resize(img_rgba.size, Image.LANCZOS)
+
+            if request.fill_mode == 'transparent':
+                # Apply alpha channel for transparency
+                img_rgba.putalpha(mask_image)
+                output = img_rgba
+            else:
+                # Create background color
+                bg_color = (255, 255, 255, 255) if request.fill_mode == 'white' else (0, 0, 0, 255)
+                background = Image.new('RGBA', img_rgba.size, bg_color)
+
+                # Composite: paste foreground onto colored background using mask
+                background.paste(img_rgba, (0, 0), mask_image)
+                output = background
+
+            # Encode as base64 preview
+            buffer = BytesIO()
+            output.save(buffer, format='PNG')
+            buffer.seek(0)
+            preview_base64 = f"data:image/png;base64,{base64.b64encode(buffer.getvalue()).decode('utf-8')}"
+
+            return {
+                "status": "ok",
+                "preview": preview_base64,
+                "fill_mode": request.fill_mode,
+                "edge_threshold": request.edge_threshold,
+            }
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
+        except Exception as exc:
+            logger.error("Background removal failed: %s", exc, exc_info=True)
+            raise HTTPException(status_code=500, detail="Background removal failed")
 
     def batch_refine_mask(self, request: "BatchMaskRefineRequest") -> Dict[str, Any]:
         """Run SAM3 mask refinement on multiple images/boxes sequentially."""

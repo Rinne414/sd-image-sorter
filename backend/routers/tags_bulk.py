@@ -22,6 +22,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
 import database as db
+from db_tags import _dedupe_tags
 from services.tag_export_service import (
     PROMPT_MATCH_MODE_CONTAINS,
     PROMPT_MATCH_MODE_EXACT,
@@ -418,14 +419,10 @@ def _do_find_replace(request: FindReplaceRequest) -> Dict[str, Any]:
                                 "after": [t.get("tag") for t in new_tags],
                             })
                         if not request.dry_run:
-                            # Dedupe by tag name (case-insensitive)
-                            seen = set()
-                            deduped = []
-                            for t in new_tags:
-                                key = t["tag"].lower()
-                                if key not in seen:
-                                    seen.add(key)
-                                    deduped.append(t)
+                            # Dedupe by tag name (case-insensitive) using unified logic
+                            tag_tuples = [(t["tag"], t["confidence"]) for t in new_tags]
+                            deduped_tuples = _dedupe_tags(tag_tuples)
+                            deduped = [{"tag": tag, "confidence": conf} for tag, conf in deduped_tuples]
                             updates.append({"image_id": image_id, "tags": deduped})
                 except Exception as exc:  # pragma: no cover — defensive
                     logger.warning("find_replace failed for image %s: %s", image_id, exc)
@@ -625,19 +622,13 @@ def _do_cleanup(request: CleanupRequest) -> Dict[str, Any]:
                     ]
                     low_conf_count = len(existing) - len(filtered)
 
-                    # Dedupe (case-insensitive, keep highest confidence)
+                    # Dedupe (case-insensitive, keep highest confidence) using unified logic
                     dupe_count = 0
                     if request.dedupe:
-                        best: Dict[str, Dict[str, Any]] = {}
-                        for t in filtered:
-                            key = (t.get("tag") or "").lower()
-                            if not key:
-                                continue
-                            conf = float(t.get("confidence") or 1.0)
-                            if key not in best or conf > float(best[key].get("confidence") or 1.0):
-                                best[key] = t
-                        dupe_count = len(filtered) - len(best)
-                        cleaned = list(best.values())
+                        tag_tuples = [(t.get("tag") or "", float(t.get("confidence") or 1.0)) for t in filtered]
+                        deduped_tuples = _dedupe_tags(tag_tuples)
+                        dupe_count = len(filtered) - len(deduped_tuples)
+                        cleaned = [{"tag": tag, "confidence": conf} for tag, conf in deduped_tuples]
                     else:
                         cleaned = filtered
 

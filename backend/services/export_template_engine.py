@@ -168,12 +168,25 @@ def process_tags(
 
     # Step 2: replace
     if config.replace_rules:
-        replace_lower = {k.lower(): v for k, v in config.replace_rules.items()}
+        # Normalize replacement keys consistently with blacklist
+        replace_normalized = {}
+        for find_key, replace_value in config.replace_rules.items():
+            norm_key = _normalize_blacklist_item(find_key, config)
+            if norm_key:
+                replace_normalized[norm_key] = replace_value
+
         new_processed: List[str] = []
         for tag in processed:
-            replaced = replace_lower.get(tag.lower())
+            norm_tag = _normalize_blacklist_item(tag, config)
+            replaced = replace_normalized.get(norm_tag)
             new_processed.append(replaced if replaced is not None else tag)
         processed = new_processed
+
+        # Re-apply blacklist after replacement (Bug 1 fix)
+        processed = [
+            tag for tag in processed
+            if _normalize_blacklist_item(tag, config) not in blacklist_lower
+        ]
 
     # Step 3: max N
     if config.max_tags and config.max_tags > 0:
