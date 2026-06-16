@@ -541,6 +541,7 @@ sd-image-sorter/
 | [zanllp/infinite-image-browsing](https://github.com/zanllp/sd-webui-infinite-image-browsing) | 图库浏览 + 元数据搜索灵感来源 |
 | [starik222/BooruDatasetTagManager](https://github.com/starik222/BooruDatasetTagManager) | Caption Editor 三栏工作台设计参考 |
 | [Tera-Dark/Tag-Master](https://github.com/Tera-Dark/Tag-Master) | Booru 标签管理 + 自动补全 UX 参考 |
+| [n0va39/ComfyUI-EXIF-viewer](https://github.com/n0va39/ComfyUI-EXIF-viewer) | ComfyUI workflow prompt 推测和 Civitai resources 提取的实现参考 |
 
 License: [MIT](LICENSE)
 
@@ -822,5 +823,6 @@ Practical rule:
 | [zanllp/infinite-image-browsing](https://github.com/zanllp/sd-webui-infinite-image-browsing) | Gallery browsing + metadata search inspiration |
 | [starik222/BooruDatasetTagManager](https://github.com/starik222/BooruDatasetTagManager) | Caption Editor 3-pane workbench design reference |
 | [Tera-Dark/Tag-Master](https://github.com/Tera-Dark/Tag-Master) | Booru tag management + autocomplete UX reference |
+| [n0va39/ComfyUI-EXIF-viewer](https://github.com/n0va39/ComfyUI-EXIF-viewer) | ComfyUI workflow prompt inference and Civitai resources extraction reference implementation |
 
 License: [MIT](LICENSE)

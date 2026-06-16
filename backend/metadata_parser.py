@@ -20,6 +20,7 @@ import os
 from pathlib import Path
 import zlib
 
+from civitai_extractor import extract_civitai_resources
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,9 @@ _MAX_SIDECAR_DIRECTORY_CACHE_ENTRIES = 4096
 _MAX_SIDECAR_DIRECTORY_CACHE_FILENAMES = 50_000
 SIDECAR_EXTENSIONS = (".txt", ".json", ".xmp")
 _sidecar_directory_cache: Dict[str, Tuple[Tuple[int, int], Optional[Set[str]]]] = {}
+WEBP_SIGNATURE = b"RIFF"
+WEBP_FOURCC = b"WEBP"
+_MAX_WEBP_CHUNK_BYTES = 64 * 1024 * 1024
 
 
 class MetadataParser:
@@ -250,6 +254,10 @@ class MetadataParser:
             result["checkpoint"] = parsed["checkpoint"]
             result["loras"] = parsed["loras"]
 
+            # Add civitai_resources to top-level result if present
+            if "civitai_resources" in parsed:
+                result["civitai_resources"] = parsed["civitai_resources"]
+
             # Store structured parsed data in metadata for frontend access
             result["metadata"]["_parsed"] = {
                 "version": PARSED_METADATA_VERSION,
@@ -259,6 +267,7 @@ class MetadataParser:
                 "character_prompts": parsed.get("character_prompts"),
                 "prompt_nodes": parsed.get("prompt_nodes"),
                 "model_assets": parsed.get("model_assets"),
+                "civitai_resources": parsed.get("civitai_resources"),
             }
 
         except Exception as e:
@@ -289,7 +298,9 @@ class MetadataParser:
         errors (truncated chunks, bad IEND, …) still bubble up as
         legitimate parse failures.
         """
-        if os.path.splitext(image_path)[1].lower() == ".png":
+        ext = os.path.splitext(image_path)[1].lower()
+
+        if ext == ".png":
             try:
                 return self._load_png_metadata_fast(image_path)
             except ValueError as exc:
@@ -297,6 +308,13 @@ class MetadataParser:
                     raise
                 # File extension said PNG, content sniff says otherwise.
                 # Pillow handles JPEG/WEBP/GIF content with .png extension.
+
+        if ext == ".webp":
+            try:
+                return self._load_webp_metadata_fast(image_path)
+            except ValueError as exc:
+                logger.debug("WEBP fast path failed for %s: %s, falling back to Pillow", image_path, exc)
+                # Fall through to Pillow on any fast-path failure
 
         return self._load_image_metadata_via_pillow(image_path)
 
@@ -514,6 +532,138 @@ class MetadataParser:
             keyword.decode("latin-1", errors="replace"),
             text_bytes.decode("utf-8", errors="replace"),
         )
+
+    def _load_webp_metadata_fast(self, image_path: str) -> Dict[str, Any]:
+        """Read WEBP dimensions + EXIF/XMP metadata without a full Pillow open.
+
+        WEBP uses RIFF container format:
+        - RIFF header (12 bytes): "RIFF" + file_size + "WEBP"
+        - Chunks: fourcc (4 bytes) + chunk_size (4 bytes, little-endian) + data + optional padding
+
+        This fast path parses EXIF and XMP chunks directly, avoiding the overhead
+        of full image decoding. Falls back to Pillow on any parsing error.
+        """
+        metadata: Dict[str, Any] = {}
+        width = 0
+        height = 0
+
+        file_size = os.path.getsize(image_path)
+        if file_size < 12:
+            raise ValueError("File too small to be valid WEBP")
+
+        with open(image_path, "rb") as webp_file:
+            # Read RIFF header
+            riff_header = webp_file.read(4)
+            if riff_header != WEBP_SIGNATURE:
+                raise ValueError("Invalid WEBP signature")
+
+            # Skip file size field (4 bytes)
+            webp_file.read(4)
+            webp_fourcc = webp_file.read(4)
+            if webp_fourcc != WEBP_FOURCC:
+                raise ValueError("Invalid WEBP FOURCC")
+
+            offset = 12
+
+            # Parse chunks
+            while offset + 8 <= file_size:
+                fourcc = webp_file.read(4)
+                if len(fourcc) != 4:
+                    break
+
+                chunk_size_bytes = webp_file.read(4)
+                if len(chunk_size_bytes) != 4:
+                    break
+
+                chunk_size = struct.unpack("<I", chunk_size_bytes)[0]
+                offset += 8
+
+                # Check bounds
+                chunk_end = offset + chunk_size
+                if chunk_end > file_size:
+                    raise ValueError(f"WEBP chunk {fourcc!r} exceeds file size")
+
+                # Limit individual chunk size
+                if chunk_size > _MAX_WEBP_CHUNK_BYTES:
+                    logger.debug("Skipping oversized WEBP chunk %s (%d bytes)", fourcc, chunk_size)
+                    webp_file.seek(chunk_size + (chunk_size % 2), os.SEEK_CUR)
+                    offset = chunk_end + (chunk_size % 2)
+                    continue
+
+                should_read_chunk = fourcc in {b"EXIF", b"XMP ", b"VP8 ", b"VP8L", b"VP8X"}
+                if not should_read_chunk:
+                    # Skip chunk + padding
+                    webp_file.seek(chunk_size + (chunk_size % 2), os.SEEK_CUR)
+                    offset = chunk_end + (chunk_size % 2)
+                    continue
+
+                chunk_data = webp_file.read(chunk_size)
+                if len(chunk_data) != chunk_size:
+                    raise ValueError(f"Truncated WEBP chunk {fourcc!r}")
+
+                # Parse chunk based on type
+                if fourcc == b"EXIF":
+                    # EXIF chunk contains TIFF-format EXIF data
+                    metadata.update(self._extract_exif_from_bytes(chunk_data))
+                    metadata.update(self._extract_exif_ifd_from_bytes(chunk_data))
+                    metadata.update(self._extract_sd_metadata_from_exif_bytes(chunk_data))
+
+                elif fourcc == b"XMP ":
+                    # XMP chunk contains UTF-8 XMP metadata
+                    try:
+                        xmp_text = chunk_data.decode("utf-8", errors="replace")
+                        metadata.update(self._extract_xmp_sd_metadata(xmp_text))
+                    except Exception as e:
+                        logger.debug("Failed to decode WEBP XMP chunk: %s", e)
+
+                elif fourcc == b"VP8 " and width == 0:
+                    # VP8 bitstream: extract dimensions from frame header
+                    # Skip frame tag (3 bytes) and start code (3 bytes)
+                    if chunk_size >= 10:
+                        try:
+                            # Dimensions are in bytes 6-9 (14 bits each)
+                            dim_bytes = struct.unpack("<HH", chunk_data[6:10])
+                            width = (dim_bytes[0] & 0x3FFF)
+                            height = (dim_bytes[1] & 0x3FFF)
+                        except Exception:
+                            pass
+
+                elif fourcc == b"VP8L" and width == 0:
+                    # VP8L (lossless) bitstream: dimensions in first 5 bytes after signature
+                    if chunk_size >= 5:
+                        try:
+                            # Signature byte (0x2f) + 4 bytes for dimensions
+                            if chunk_data[0] == 0x2f:
+                                bits = struct.unpack("<I", chunk_data[1:5])[0]
+                                width = (bits & 0x3FFF) + 1
+                                height = ((bits >> 14) & 0x3FFF) + 1
+                        except Exception:
+                            pass
+
+                elif fourcc == b"VP8X" and width == 0:
+                    # VP8X (extended format): dimensions in bytes 4-9
+                    if chunk_size >= 10:
+                        try:
+                            # Canvas width (24 bits) + height (24 bits)
+                            width = struct.unpack("<I", chunk_data[4:7] + b"\x00")[0] + 1
+                            height = struct.unpack("<I", chunk_data[7:10] + b"\x00")[0] + 1
+                        except Exception:
+                            pass
+
+                # Account for padding (chunks are padded to even byte boundaries)
+                padding = chunk_size % 2
+                if padding:
+                    webp_file.seek(1, os.SEEK_CUR)
+                offset = chunk_end + padding
+
+        if width <= 0 or height <= 0:
+            raise ValueError("WEBP dimensions not found or invalid")
+
+        return {
+            "width": width,
+            "height": height,
+            "metadata": metadata,
+        }
 
     def _serialize_metadata(self, metadata: dict) -> dict:
         """Serialize metadata to JSON-safe format."""
@@ -2027,13 +2177,15 @@ class MetadataParser:
                         for v in prompt_data.values()
                     )
                     if has_nodes:
-                        pos, neg, cp, lr, gen_params, prompt_nodes, img2img, model_assets = self._extract_comfyui_data_extended(prompt_data, workflow_data)
+                        pos, neg, cp, lr, gen_params, prompt_nodes, img2img, model_assets, civitai_resources = self._extract_comfyui_data_extended(prompt_data, workflow_data)
                         base.update({
                             "generator": "comfyui", "prompt": pos, "negative_prompt": neg,
                             "checkpoint": cp, "loras": lr, "generation_params": gen_params,
                             "prompt_nodes": prompt_nodes,
                             "model_assets": model_assets,
                         })
+                        if civitai_resources:
+                            base["civitai_resources"] = civitai_resources
                         if img2img:
                             base["is_img2img"] = True
                             base["img2img_info"] = img2img
@@ -2054,7 +2206,7 @@ class MetadataParser:
                     except (json.JSONDecodeError, TypeError, ValueError) as e:
                         logger.debug('Failed to parse prompt in workflow path: %s', e)
                         prompt_raw = {}
-                pos, neg, cp, lr, gen_params, prompt_nodes, img2img, model_assets = self._extract_comfyui_data_extended(prompt_raw, workflow)
+                pos, neg, cp, lr, gen_params, prompt_nodes, img2img, model_assets, civitai_resources = self._extract_comfyui_data_extended(prompt_raw, workflow)
                 if not pos and isinstance(workflow, dict):
                     pos, neg = self._extract_from_workflow(workflow)
                 base.update({
@@ -2063,6 +2215,8 @@ class MetadataParser:
                     "prompt_nodes": prompt_nodes,
                     "model_assets": model_assets,
                 })
+                if civitai_resources:
+                    base["civitai_resources"] = civitai_resources
                 if not base["checkpoint"]:
                     workflow_assets = self._extract_comfyui_model_assets_from_workflow_widgets(workflow)
                     if workflow_assets:
@@ -2389,23 +2543,23 @@ class MetadataParser:
         Uses graph traversal to follow KSampler positive/negative connections
         back to their source text nodes, rather than guessing based on order.
         """
-        positive_text, negative_text, checkpoint, loras, _, _, _, _ = self._extract_comfyui_data_extended(prompt_data)
+        positive_text, negative_text, checkpoint, loras, _, _, _, _, _ = self._extract_comfyui_data_extended(prompt_data)
         return (positive_text, negative_text, checkpoint, loras)
 
-    def _extract_comfyui_data_extended(self, prompt_data: Any, workflow_data: Any = None) -> Tuple[Optional[str], Optional[str], Optional[str], List[str], Optional[Dict], Optional[List], Optional[Dict], Optional[Dict[str, Any]]]:
+    def _extract_comfyui_data_extended(self, prompt_data: Any, workflow_data: Any = None) -> Tuple[Optional[str], Optional[str], Optional[str], List[str], Optional[Dict], Optional[List], Optional[Dict], Optional[Dict[str, Any]], Optional[List[Dict[str, Any]]]]:
         """
         Extended ComfyUI extraction: returns
-        (pos, neg, checkpoint, loras, gen_params, prompt_nodes, img2img_info, model_assets).
+        (pos, neg, checkpoint, loras, gen_params, prompt_nodes, img2img_info, model_assets, civitai_resources).
         """
         if not isinstance(prompt_data, dict):
             try:
                 prompt_data = json.loads(prompt_data) if isinstance(prompt_data, str) else {}
             except Exception as e:
                 logger.debug('Failed to parse ComfyUI prompt_data (extended): %s', e)
-                return (None, None, None, [], None, None, None, None)
+                return (None, None, None, [], None, None, None, None, None)
 
         if not prompt_data:
-            return (None, None, None, [], None, None, None, None)
+            return (None, None, None, [], None, None, None, None, None)
 
         checkpoint = None
         loras = []
@@ -2595,11 +2749,21 @@ class MetadataParser:
                     if candidates:
                         model_assets[key] = [c for c in candidates if c.get("name") not in disabled_loras]
 
+        # Extract Civitai resources from prompt and workflow JSON
+        civitai_resources = None
+        try:
+            resources = extract_civitai_resources(prompt_data, workflow_data)
+            if resources:
+                civitai_resources = resources
+        except Exception as e:
+            logger.debug('Failed to extract Civitai resources: %s', e)
+
         return (positive_text, negative_text, checkpoint, loras,
                 gen_params if gen_params else None,
                 prompt_nodes if prompt_nodes else None,
                 img2img_info,
-                model_assets)
+                model_assets,
+                civitai_resources)
 
     def _collect_prompt_nodes(self, nodes: Dict[str, dict]) -> List[Dict[str, Any]]:
         """Collect all text-bearing nodes for multi-node prompt breakdown."""
@@ -3527,6 +3691,22 @@ class MetadataParser:
         value_lower = value.lower().strip()
         return value_lower.endswith(self.COMFYUI_MODEL_FILE_EXTENSIONS)
 
+    @staticmethod
+    def _is_numbered_text_key(key: str) -> bool:
+        """
+        Return True when a key matches numbered text input patterns.
+
+        Matches patterns like:
+        - string_1, string_2, string_10, string_99
+        - text_1, text_2, text_3
+        - prompt_1, prompt_2, prompt_3
+
+        This enables dynamic matching of concatenation node inputs without
+        hardcoding a fixed upper limit (e.g. string_1 to string_20).
+        """
+        key_lower = key.lower().strip()
+        return bool(re.fullmatch(r"(string|text|prompt)_\d+", key_lower))
+
     def _extract_inline_lora_tags(self, text: str) -> List[str]:
         """Extract <lora:name:weight> tags from prompt-like strings."""
         matches = re.findall(r"<lora:([^:>,\r\n]+)(?::[^>\r\n]*)?>", text, flags=re.IGNORECASE)
@@ -3578,6 +3758,11 @@ class MetadataParser:
         """
         Trace KSampler positive/negative inputs back through the node graph
         to find the actual text content.
+
+        Fallback strategy when no sampler is found:
+        1. If exactly 2 CLIPTextEncode nodes → first=positive, second=negative
+        2. If 1 CLIPTextEncode node → positive only
+        3. If 3+ CLIPTextEncode nodes → all as positive
         """
         positive_texts = []
         negative_texts = []
@@ -3590,7 +3775,32 @@ class MetadataParser:
                 sampler_nodes.append((node_id, node))
 
         if not sampler_nodes:
-            return (None, None)
+            # Fallback: no sampler found, try to find CLIPTextEncode nodes directly
+            clip_nodes = []
+            for node_id, node in nodes.items():
+                class_type = node.get("class_type", "")
+                if any(clip_type in class_type for clip_type in self.COMFYUI_TEXT_NODE_TYPES):
+                    clip_nodes.append((node_id, node))
+
+            if len(clip_nodes) == 2:
+                # Two CLIP nodes: assume first=positive, second=negative
+                texts = self._trace_to_text(clip_nodes[0][0], nodes, set())
+                positive_texts.extend(texts)
+                texts = self._trace_to_text(clip_nodes[1][0], nodes, set())
+                negative_texts.extend(texts)
+            elif len(clip_nodes) == 1:
+                # Single CLIP node: positive only
+                texts = self._trace_to_text(clip_nodes[0][0], nodes, set())
+                positive_texts.extend(texts)
+            elif len(clip_nodes) > 2:
+                # Multiple CLIP nodes: all as positive (common in multi-prompt workflows)
+                for node_id, _ in clip_nodes:
+                    texts = self._trace_to_text(node_id, nodes, set())
+                    positive_texts.extend(texts)
+
+            pos_result = "\n".join(positive_texts) if positive_texts else None
+            neg_result = "\n".join(negative_texts) if negative_texts else None
+            return (pos_result, neg_result)
 
         # For each sampler, trace its positive and negative inputs
         for sampler_id, sampler_node in sampler_nodes:
@@ -3719,9 +3929,16 @@ class MetadataParser:
         # String/text concatenation/join nodes (CR Text Concatenate, StringConcatenate, JoinStrings, easy promptConcat, etc.)
         # MUST be before StringConstant/Text check since "CR Text Concatenate" contains "Text"
         elif any(kw in class_type for kw in ["Concatenate", "Concat", "JoinString", "Join"]):
-            for key in ["string_a", "string_b", "string1", "string2", "text1", "text2",
-                         "text_a", "text_b", "prompt1", "prompt2", "prompt3",
-                         "string_1", "string_2"]:
+            # Prioritize known text input keys first (preserves order)
+            priority_keys = ["string_a", "string_b", "string1", "string2", "text1", "text2",
+                             "text_a", "text_b", "prompt1", "prompt2", "prompt3",
+                             "string_1", "string_2"]
+            # Then dynamically match numbered keys (string_3, string_4, ..., string_N)
+            numbered_keys = [key for key in inputs.keys() if self._is_numbered_text_key(key) and key not in priority_keys]
+            # Combine: fixed keys first, then numbered keys sorted naturally
+            all_keys = priority_keys + sorted(numbered_keys, key=lambda k: (k.rsplit("_", 1)[0], int(k.rsplit("_", 1)[1])))
+
+            for key in all_keys:
                 val = inputs.get(key)
                 if val is None:
                     continue
@@ -3920,10 +4137,17 @@ class MetadataParser:
             nested_visited = set(visited)
             nested_visited.add(node_id)
             results: List[Dict[str, Any]] = []
-            for key in ["string_a", "string_b", "string1", "string2",
-                         "text1", "text2", "text_a", "text_b",
-                         "prompt1", "prompt2", "prompt3",
-                         "string_1", "string_2", "string_3", "string_4"]:
+            # Prioritize known text input keys first (preserves order)
+            priority_keys = ["string_a", "string_b", "string1", "string2",
+                             "text1", "text2", "text_a", "text_b",
+                             "prompt1", "prompt2", "prompt3",
+                             "string_1", "string_2", "string_3", "string_4"]
+            # Then dynamically match numbered keys (string_5, string_6, ..., string_N)
+            numbered_keys = [key for key in inputs.keys() if self._is_numbered_text_key(key) and key not in priority_keys]
+            # Combine: fixed keys first, then numbered keys sorted naturally
+            all_keys = priority_keys + sorted(numbered_keys, key=lambda k: (k.rsplit("_", 1)[0], int(k.rsplit("_", 1)[1])))
+
+            for key in all_keys:
                 val = inputs.get(key)
                 if val is None:
                     continue

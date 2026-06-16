@@ -3153,6 +3153,44 @@ body::before {
         color: var(--accent-secondary, #06b6d4);
     }
 
+    /* Civitai Resources */
+    .civitai-resources-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .civitai-resources-list li {
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .civitai-resources-list li:last-child {
+        border-bottom: none;
+    }
+
+    .civitai-link {
+        color: var(--accent-primary, #8b5cf6);
+        text-decoration: none;
+        margin-left: 8px;
+        font-size: 11px;
+    }
+
+    .civitai-link:hover {
+        text-decoration: underline;
+    }
+
+    .civitai-version {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 0.9em;
+    }
+
+    .civitai-weight {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 0.85em;
+        font-style: italic;
+    }
+
     /* img2img Badge */
     .img2img-badge {
         display: inline-block;

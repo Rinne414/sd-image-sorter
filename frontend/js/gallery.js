@@ -2988,6 +2988,30 @@ const Gallery = {
 
         this._renderModalModelAssets(parsedData);
 
+        // --- Civitai Resources ---
+        const civitaiSection = $('#modal-civitai-section');
+        const civitaiList = $('#modal-civitai-list');
+        const civitaiResources = parsedData?.civitai_resources;
+        if (Array.isArray(civitaiResources) && civitaiResources.length > 0) {
+            civitaiSection.style.display = '';
+            civitaiList.innerHTML = civitaiResources.map(resource => {
+                const modelName = window.escapeHtml(resource.model_name || 'Unknown Model');
+                const versionName = resource.version_name
+                    ? ` <span class="civitai-version">${window.escapeHtml(resource.version_name)}</span>`
+                    : '';
+                const weight = resource.weight != null
+                    ? ` <span class="civitai-weight">(weight: ${resource.weight})</span>`
+                    : '';
+                const link = resource.civitai_url
+                    ? ` <a href="${window.escapeHtml(resource.civitai_url)}" target="_blank" rel="noopener noreferrer" class="civitai-link">View on Civitai →</a>`
+                    : '';
+                return `<li><strong>${modelName}</strong>${versionName}${weight}${link}</li>`;
+            }).join('');
+        } else {
+            civitaiSection.style.display = 'none';
+            civitaiList.innerHTML = '';
+        }
+
         // --- img2img Details ---
         const img2imgSection = $('#modal-img2img-section');
         const img2imgInfo = $('#modal-img2img-info');
