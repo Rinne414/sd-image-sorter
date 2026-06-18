@@ -491,6 +491,21 @@
             badges.appendChild(phashInfo);
         }
 
+        // Surface the O(N^2) cap as a first-class badge instead of a
+        // hidden summary field. Above PHASH_NEAR_DUPLICATE_LIMIT the
+        // backend degrades to exact-hash-only duplicate detection, so
+        // the user needs to see WHY duplicates may be under-reported
+        // rather than trusting the count blindly.
+        if (summary.near_duplicate_check_limited) {
+            const limitBadge = document.createElement('span');
+            limitBadge.className = 'dataset-audit-badge dataset-audit-badge-limited';
+            limitBadge.title = t('dataset.auditLimitedTip',
+                'Near-duplicate detection was capped at {limit} images to keep the audit responsive. Run a smaller selection for a full near-duplicate pass.',
+                { limit: 5000 });
+            limitBadge.textContent = t('dataset.auditLimitedBadge', 'Near-duplicate check capped');
+            badges.appendChild(limitBadge);
+        }
+
         wrap.hidden = false;
         const dlBtn = $('btn-dataset-audit-download');
         if (dlBtn) dlBtn.hidden = false;
@@ -667,6 +682,10 @@
         duplicate: 'dataset.auditBadgeDuplicate',
     };
 
+    // Fallback English strings for the audit-residue strip when a label
+    // key is missing. These intentionally mirror the values of the
+    // existing ``dataset.auditBadge*`` keys so the strip reads
+    // identically to the audit modal badges.
     const AUDIT_RESIDUE_FLAG_FALLBACKS = {
         missing: 'Missing / unreadable',
         low_quality: 'Low quality',
@@ -1027,9 +1046,12 @@
 
     function applyAnimeDefaults({ silent = false } = {}) {
         // Common tags pre-fill (only if empty so we don't clobber user input).
+        // The seed value is the LoRA community's de-facto quality-tag pair;
+        // it intentionally matches the ``dataset.commonTagsPlaceholder``
+        // copy so the field looks the same before and after the click.
         const ct = document.getElementById('dataset-common-tags');
         if (ct && !String(ct.value || '').trim()) {
-            ct.value = 'masterpiece, best_quality';
+            ct.value = DM._t?.('dataset.commonTagsPlaceholder', 'masterpiece, best_quality') || 'masterpiece, best_quality';
             ct.dispatchEvent(new Event('input', { bubbles: true }));
         }
         // Underscore-to-space ON (preserve user choice if already changed).
@@ -1049,7 +1071,7 @@
         // Trigger placeholder hint if the user has typed nothing yet.
         const trigger = document.getElementById('dataset-trigger');
         if (trigger && !String(trigger.value || '').trim()) {
-            trigger.placeholder = 'your_lora_trigger';
+            trigger.placeholder = DM._t?.('dataset.previewTriggerPlaceholder', 'your_lora_trigger') || 'your_lora_trigger';
         }
         if (!silent && typeof DM._toast === 'function') {
             DM._toast(DM._t('dataset.animeDefaultsApplied',
@@ -1122,18 +1144,23 @@
         const preset = (document.querySelector('input[name="dataset-naming-preset"]:checked')?.value) || 'keep';
         const ext = extensionForDatasetId((DM.imageIds || [])[0]);
         const outputMode = DM._outputMode?.() || 'folder';
+        // Preview placeholders are illustrative sample names shown in the
+        // renamed-pair chip before the user types anything. They go
+        // through i18n so a non-English UI isn't shown English filler.
+        const imgPlaceholder = DM._t?.('dataset.previewImagePlaceholder', 'your_image_name') || 'your_image_name';
+        const triggerPlaceholder = DM._t?.('dataset.previewTriggerPlaceholder', 'your_lora_trigger') || 'your_lora_trigger';
         let stem;
         if (outputMode === 'beside_image' || preset === 'keep') {
-            stem = 'your_image_name';
+            stem = imgPlaceholder;
         } else if (preset === 'renumber') {
-            stem = `${(trigger || 'your_lora_trigger')}_001`;
+            stem = `${trigger || triggerPlaceholder}_001`;
         } else {
             const pattern = (document.getElementById('dataset-naming-pattern')?.value || '{trigger}_{index:03d}');
             stem = pattern
-                .replace(/\{trigger\}/g, trigger || 'your_lora_trigger')
+                .replace(/\{trigger\}/g, trigger || triggerPlaceholder)
                 .replace(/\{index:0*(\d+)d\}/g, (_m, w) => '1'.padStart(parseInt(w, 10) || 1, '0'))
                 .replace(/\{index\}/g, '1')
-                .replace(/\{filename\}/g, 'your_image_name')
+                .replace(/\{filename\}/g, imgPlaceholder)
                 .replace(/\{generator\}/g, 'webui')
                 .replace(/\{ext\}/g, ext)
                 .replace(/\{date\}/g, new Date().toISOString().slice(0, 10));
@@ -1623,12 +1650,76 @@
 })();
 
 /* ============== Custom dark dropdown for native selects ============== */
+//
+// Each native <select> in the dataset panes gets a styled button +
+// floating list. The previous implementation leaked listeners: every
+// wrapped select added its own ``document.addEventListener('click')``,
+// ``window.addEventListener('resize')``, and
+// ``window.addEventListener('scroll', …, true)``, none of which were
+// ever removed. ``initCustomDropdowns`` runs on every view activation,
+// so re-opening the Dataset tab stacked more listeners each time.
+//
+// The fix below:
+//   * Registers the three outside-interaction listeners ONCE (module
+//     scope), not per-select.
+//   * Tracks every open list in a single registry the shared handlers
+//     consult, so adding/removing a dropdown no longer grows the
+//     listener count.
+//   * Removes the body-appended list node when the underlying select is
+//     taken out of the DOM (MutationObserver on view-dataset), so a
+//     dataset teardown doesn't leave orphan list nodes in <body>.
 (function () {
     'use strict';
+
+    const OPEN_LISTS = new Set();        // currently-visible list nodes
+    const LIST_BY_SELECT = new Map();    // select -> { list, display, wrapper, observer }
+    let SHARED_LISTENERS_INSTALLED = false;
+
+    function closeAllLists(except) {
+        for (const list of Array.from(OPEN_LISTS)) {
+            if (list === except) continue;
+            list.hidden = true;
+            OPEN_LISTS.delete(list);
+        }
+    }
+
+    function ensureSharedListeners() {
+        if (SHARED_LISTENERS_INSTALLED) return;
+        SHARED_LISTENERS_INSTALLED = true;
+        // One outside-click closer for every dropdown.
+        document.addEventListener('click', (e) => {
+            for (const list of Array.from(OPEN_LISTS)) {
+                const display = list.dataset.displayId
+                    ? document.getElementById(list.dataset.displayId)
+                    : null;
+                if (display && (e.target === display || display.contains(e.target))) continue;
+                if (e.target === list || list.contains(e.target)) continue;
+                list.hidden = true;
+                OPEN_LISTS.delete(list);
+            }
+        });
+        // One resize closer (position is stale after resize).
+        window.addEventListener('resize', () => closeAllLists());
+        // Scroll closer that preserves the original contract: scrolling
+        // INSIDE an open list must NOT close it (the user is scrolling
+        // the option list), but scrolling anywhere else closes every
+        // open list because the anchored position is stale.
+        window.addEventListener('scroll', (e) => {
+            const target = e.target;
+            for (const list of Array.from(OPEN_LISTS)) {
+                if (target instanceof Node && (target === list || list.contains(target))) {
+                    continue;   // scrolling inside this list — keep it open
+                }
+                list.hidden = true;
+                OPEN_LISTS.delete(list);
+            }
+        }, true);
+    }
 
     function wrapSelect(sel) {
         if (sel.dataset.customDropdown) return;
         sel.dataset.customDropdown = '1';
+        ensureSharedListeners();
         sel.style.display = 'none';
 
         const wrapper = document.createElement('div');
@@ -1642,17 +1733,10 @@
         const list = document.createElement('div');
         list.className = 'dataset-custom-dropdown-list';
         list.hidden = true;
+        // The shared outside-click handler needs to recognize this list's
+        // anchor without a per-select closure, so stamp ids it can read.
+        list.dataset.displayId = '';
         document.body.appendChild(list);
-
-        function closeList() {
-            list.hidden = true;
-        }
-
-        function handleOutsideScroll(e) {
-            const target = e.target;
-            if (target === list || (target instanceof Node && list.contains(target))) return;
-            closeList();
-        }
 
         function positionList() {
             const rect = display.getBoundingClientRect();
@@ -1677,7 +1761,8 @@
                     sel.value = opt.value;
                     sel.dispatchEvent(new Event('change', { bubbles: true }));
                     display.textContent = opt.textContent;
-                    closeList();
+                    list.hidden = true;
+                    OPEN_LISTS.delete(list);
                     for (const o of list.children) o.classList.remove('selected');
                     item.classList.add('selected');
                 });
@@ -1686,19 +1771,22 @@
         }
         buildOptions();
 
+        // Give the list a stable id so the shared outside-click handler
+        // can resolve its anchor button.
+        const displayId = `dataset-dd-display-${Math.random().toString(36).slice(2, 10)}`;
+        display.id = displayId;
+        list.dataset.displayId = displayId;
+
         display.addEventListener('click', (e) => {
             e.stopPropagation();
-            const nextHidden = !list.hidden;
-            for (const openList of document.querySelectorAll('.dataset-custom-dropdown-list:not([hidden])')) {
-                if (openList !== list) openList.hidden = true;
+            const willOpen = list.hidden;
+            closeAllLists();
+            if (willOpen) {
+                list.hidden = false;
+                OPEN_LISTS.add(list);
+                positionList();
             }
-            list.hidden = nextHidden;
-            if (!list.hidden) positionList();
         });
-
-        document.addEventListener('click', closeList);
-        window.addEventListener('resize', closeList);
-        window.addEventListener('scroll', handleOutsideScroll, true);
 
         sel.addEventListener('change', () => {
             display.textContent = sel.options[sel.selectedIndex]?.textContent || '';
@@ -1707,6 +1795,21 @@
 
         wrapper.append(display);
         sel.parentNode.insertBefore(wrapper, sel.nextSibling);
+
+        // Tear the body-appended list down when the underlying select
+        // leaves the DOM (e.g. the dataset view is rebuilt). Without
+        // this, orphan list nodes accumulated in <body> across view
+        // activations.
+        const observer = new MutationObserver(() => {
+            if (!document.body.contains(sel)) {
+                list.remove();
+                OPEN_LISTS.delete(list);
+                LIST_BY_SELECT.delete(sel);
+                observer.disconnect();
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        LIST_BY_SELECT.set(sel, { list, display, wrapper, observer });
     }
 
     function initCustomDropdowns() {

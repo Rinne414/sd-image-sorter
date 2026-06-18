@@ -49,6 +49,8 @@ import logging
 import os
 import re
 import shutil
+import threading
+import time
 import uuid
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
@@ -80,6 +82,14 @@ SCAN_THUMB_WORKERS = max(4, min(16, (os.cpu_count() or 4)))
 
 _SCAN_TOKEN_RE = re.compile(r"^[a-f0-9]{32}$")
 _SCAN_DIR: Optional[Path] = None
+
+# Scan-token manifests under data/dataset-scans/ used to accumulate
+# forever — every folder-scan wrote a new NDJSON file and nothing ever
+# removed it. This TTL cap (in seconds) is enforced by
+# ``purge_expired_scan_manifests`` which runs on app startup and after
+# each successful folder-scan. Old tokens are safe to delete: the
+# frontend re-issues a fresh scan when an expired token is referenced.
+SCAN_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
 
 # Decompression-bomb guard for uploaded ZIP/RAR archives.
 #
@@ -146,6 +156,48 @@ def _scan_manifest_path(scan_token: str) -> Path:
     if not _SCAN_TOKEN_RE.fullmatch(token):
         raise ValueError("Invalid folder scan token")
     return _get_scan_dir() / f"{token}.json"
+
+
+def purge_expired_scan_manifests(*, max_age_seconds: int = SCAN_TOKEN_TTL_SECONDS) -> int:
+    """Delete scan-token manifests older than ``max_age_seconds``.
+
+    Returns the number of token files removed. Safe to call repeatedly:
+    only files matching ``<32-hex>.json`` / ``<32-hex>.paths.jsonl`` /
+    ``<32-hex>.tmp`` under the scan dir are considered, so unrelated
+    files in ``data/dataset-scans/`` are left alone.
+
+    This closes the unbounded-growth hole where every folder-scan wrote
+    a new NDJSON manifest and nothing ever removed them — long-running
+    installs accumulated thousands of stale manifest files.
+    """
+    import time as _time
+
+    scan_dir = _get_scan_dir()
+    cutoff = _time.time() - int(max_age_seconds)
+    removed = 0
+    token_pattern = re.compile(r"^([a-f0-9]{32})(?:\.paths\.jsonl|\.json|\.tmp)$")
+    try:
+        for entry in os.scandir(scan_dir):
+            if not entry.is_file():
+                continue
+            match = token_pattern.fullmatch(entry.name)
+            if not match:
+                continue
+            try:
+                mtime = entry.stat().st_mtime
+            except OSError:
+                continue
+            if mtime < cutoff:
+                try:
+                    os.unlink(entry.path)
+                    removed += 1
+                except OSError:
+                    # Best-effort: a locked/in-use manifest is left for
+                    # the next sweep rather than crashing the caller.
+                    continue
+    except OSError:
+        return removed
+    return removed
 
 
 def _scan_manifest_paths_path(scan_token: str) -> Path:
@@ -273,14 +325,24 @@ def iter_scan_manifest_paths(scan_token: str) -> Iterator[str]:
 
 
 def iter_scan_manifest_entries(scan_token: str) -> Iterator[Dict[str, Any]]:
-    """Yield cached folder-scan entries without loading the whole manifest."""
+    """Yield cached folder-scan entries without loading the whole manifest.
+
+    Each yielded entry's ``path`` is registered with the Dataset Maker
+    session path allowlist so the local-thumbnail endpoint can later
+    serve it. This is the security boundary that stops
+    ``/api/dataset/local-thumbnail?path=<anywhere>`` from reading
+    arbitrary host files: only paths the backend itself surfaced here
+    become thumbnail-readable.
+    """
     manifest = _load_scan_manifest(scan_token)
     legacy_paths = manifest.get("paths")
     if isinstance(legacy_paths, list):
+        registered: List[str] = []
         for index, path in enumerate(legacy_paths):
             value = str(path or "").strip()
             if value:
                 p = Path(value)
+                registered.append(value)
                 yield {
                     "path": value,
                     "filename": p.name,
@@ -288,10 +350,12 @@ def iter_scan_manifest_entries(scan_token: str) -> Iterator[Dict[str, Any]]:
                     "size": 0,
                     "mtime": 0.0,
                 }
+        _register_session_paths(registered)
         return
 
     paths_file = str(manifest.get("paths_file") or "")
     paths_path = _get_scan_dir() / Path(paths_file).name
+    registered: List[str] = []
     try:
         with paths_path.open("r", encoding="utf-8") as handle:
             for index, line in enumerate(handle):
@@ -306,6 +370,7 @@ def iter_scan_manifest_entries(scan_token: str) -> Iterator[Dict[str, Any]]:
                     path = str(value.get("path") or "").strip()
                     if not path:
                         continue
+                    registered.append(path)
                     yield {
                         "path": path,
                         "filename": str(value.get("filename") or Path(path).name),
@@ -316,6 +381,7 @@ def iter_scan_manifest_entries(scan_token: str) -> Iterator[Dict[str, Any]]:
                     continue
                 path = str(value or "").strip()
                 if path:
+                    registered.append(path)
                     yield {
                         "path": path,
                         "filename": Path(path).name,
@@ -323,6 +389,7 @@ def iter_scan_manifest_entries(scan_token: str) -> Iterator[Dict[str, Any]]:
                         "size": 0,
                         "mtime": 0.0,
                     }
+        _register_session_paths(registered)
     except OSError as exc:
         raise ValueError("Folder scan token path manifest is unreadable. Scan the folder again.") from exc
 
@@ -503,6 +570,11 @@ def scan_folder_for_dataset(
 
     has_more = end_offset < total_seen
 
+    # Trust the paths we just surfaced so the local-thumbnail endpoint
+    # can serve them. Without this gate the endpoint would be an
+    # arbitrary-host-file read oracle.
+    _register_session_paths(item.get("abs_path") for item in items if item.get("abs_path"))
+
     response = {
         "folder_path": str(base),
         "items": items,
@@ -529,6 +601,11 @@ def resolve_paths_for_dataset(paths: Iterable[str]) -> List[str]:
     Does NOT enforce ``allowed_base`` because the dataset session is
     deliberately allowed to span arbitrary user folders. Path-traversal
     safety still comes from ``normalize_user_path`` + ``Path.resolve``.
+
+    NOTE: this helper is intentionally permissive. Callers that serve
+    content to the browser (e.g. ``/api/dataset/local-thumbnail``) must
+    additionally call :func:`is_path_in_dataset_session` so a client
+    cannot turn the endpoint into an arbitrary-host-file read oracle.
     """
     out: List[str] = []
     seen: set = set()
@@ -551,6 +628,112 @@ def resolve_paths_for_dataset(paths: Iterable[str]) -> List[str]:
         seen.add(s)
         out.append(s)
     return out
+
+
+# ------------------------------ session path allowlist ------------------------------
+
+# How long an in-memory "this path was served by a Dataset Maker session"
+# entry stays trusted. Long enough for a long export/audit pass, short
+# enough that a stale process cannot be used to read arbitrary files
+# hours after the user walked away.
+_SESSION_PATH_TTL_SECONDS = 6 * 60 * 60  # 6 hours
+
+# Bounded LRU of (abs_path_str -> expiry_timestamp). A path is only
+# resolvable by the local-thumbnail endpoint if it appears here AND the
+# expiry has not passed. Entries are added by scan_folder_for_dataset,
+# upload_files_for_dataset, and iter_scan_manifest_entries — i.e. every
+# path the backend itself chose to surface to the client. The cap is
+# generous (a 100k-image manifest) but bounded so a malicious or buggy
+# client cannot grow this without limit.
+_SESSION_PATH_CACHE_MAX = 200_000
+_session_path_cache: "Dict[str, float]" = {}
+_session_path_lock = threading.Lock()
+
+
+def _normalize_session_path(raw: str) -> str:
+    """Canonical key for the session path cache.
+
+    Uses ``resolve(strict=False)`` so a path that has since been moved
+    (e.g. after a `move` export) still matches its old cache entry. We
+    intentionally do NOT require existence here; existence is checked
+    by the caller before serving bytes.
+    """
+    try:
+        return str(Path(normalize_user_path(str(raw))).resolve(strict=False))
+    except (OSError, ValueError):
+        return str(raw or "").strip()
+
+
+def _register_session_paths(abs_paths: Iterable[str]) -> None:
+    """Trust the given absolute paths for the local-thumbnail endpoint.
+
+    Called by scan/upload/manifest iteration — i.e. only by code paths
+    that have already validated the path is a real image under a folder
+    the user explicitly chose. This is the allowlist that closes the
+    arbitrary-host-file read hole on ``/api/dataset/local-thumbnail``.
+    """
+    expiry = time.monotonic() + _SESSION_PATH_TTL_SECONDS
+    cleaned: List[str] = []
+    for raw in abs_paths or []:
+        key = _normalize_session_path(str(raw))
+        if key:
+            cleaned.append(key)
+    if not cleaned:
+        return
+    with _session_path_lock:
+        cache = _session_path_cache
+        for key in cleaned:
+            cache[key] = expiry
+        # Bounded LRU eviction by insertion order when over capacity.
+        if len(cache) > _SESSION_PATH_CACHE_MAX:
+            overflow = len(cache) - _SESSION_PATH_CACHE_MAX
+            # Drop the oldest entries (lowest expiry, not insertion order,
+            # so an active long export keeps its paths even if many were
+            # registered before it).
+            for key in sorted(cache, key=cache.get)[:overflow]:
+                cache.pop(key, None)
+
+
+def is_path_in_dataset_session(raw_path: str) -> bool:
+    """Return True if ``raw_path`` was surfaced by an active Dataset Maker session.
+
+    This is the gate the local-thumbnail endpoint uses: a path is only
+    readable as a thumbnail if the backend itself put it in front of
+    the client via folder-scan, upload-files, or a scan-token manifest.
+    That closes the hole where ``?path=<anywhere>`` could read arbitrary
+    image bytes off the host.
+    """
+    key = _normalize_session_path(str(raw_path or ""))
+    if not key:
+        return False
+    now = time.monotonic()
+    with _session_path_lock:
+        expiry = _session_path_cache.get(key)
+        if expiry is None:
+            return False
+        if expiry < now:
+            _session_path_cache.pop(key, None)
+            return False
+        # Refresh on access so an active editing session keeps its paths.
+        _session_path_cache[key] = now + _SESSION_PATH_TTL_SECONDS
+    return True
+
+
+def register_scan_manifest_paths_for_session(scan_token: str) -> int:
+    """Trust every path in a scan-token manifest for the local-thumbnail endpoint.
+
+    Called when a manifest is iterated for export/audit/preview. Returns
+    the number of paths registered. Cheap to call repeatedly: the cache
+    is a dict keyed by normalized path, so re-registration just refreshes
+    the expiry.
+    """
+    count = 0
+    try:
+        paths = list(iter_scan_manifest_paths(scan_token))
+    except ValueError:
+        return 0
+    _register_session_paths(paths)
+    return len(paths)
 
 
 def virtual_image_record_for_path(abs_path: str, *, read_dimensions: bool = True) -> Dict[str, Any]:
@@ -886,5 +1069,9 @@ async def upload_files_for_dataset(files, *, recursive: bool = True) -> Dict[str
 
     if not items:
         raise ValueError("No valid image files in the upload.")
+
+    # Trust the uploaded/extracted paths we just wrote to disk so the
+    # local-thumbnail endpoint can serve them.
+    _register_session_paths(item.get("abs_path") for item in items if item.get("abs_path"))
 
     return {"items": items, "skipped_unreadable": skipped, "truncated": truncated}

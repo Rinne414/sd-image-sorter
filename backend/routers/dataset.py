@@ -45,6 +45,7 @@ from services.dataset_export_service import (
 )
 from services.dataset_session_service import (
     MAX_SCAN_RESULTS,
+    is_path_in_dataset_session,
     iter_scan_manifest_paths,
     resolve_paths_for_dataset,
     scan_folder_for_dataset,
@@ -239,6 +240,7 @@ def post_dataset_folder_scan(payload: DatasetFolderScanRequest) -> Dict[str, Any
     summary="Get a thumbnail for a Dataset Maker local-source path",
     responses={
         200: {"description": "Thumbnail image (WebP format)"},
+        403: {"description": "Path was not surfaced by an active Dataset Maker session"},
         404: {"description": "Image path is not readable"},
     },
 )
@@ -246,6 +248,16 @@ async def get_dataset_local_thumbnail(
     path: str = Query(..., min_length=1, max_length=4096),
     size: int = Query(default=256, ge=1, le=4096),
 ) -> StreamingResponse:
+    # Security gate: the thumbnail endpoint must only serve paths the
+    # backend itself surfaced via folder-scan, upload-files, or a
+    # scan-token manifest. Without this check ``?path=<anywhere>`` would
+    # be an arbitrary-host-file read oracle.
+    if not is_path_in_dataset_session(path):
+        raise HTTPException(
+            status_code=403,
+            detail="Path is not part of an active Dataset Maker session. "
+                   "Scan the folder or upload the file first.",
+        )
     resolved = resolve_paths_for_dataset([path])
     if not resolved:
         raise HTTPException(status_code=404, detail="Image path is not readable")
@@ -256,15 +268,21 @@ async def get_dataset_local_thumbnail(
 
     try:
         if int(size) > 512:
-            with Image.open(source_path) as img:
-                resample = getattr(Image, "Resampling", Image).LANCZOS
-                working = img.convert("RGB") if img.mode not in ("RGB", "L") else img.copy()
-                working.thumbnail((int(size), int(size)), resample)
-                buf = io.BytesIO()
-                working.save(buf, format="WEBP", quality=92, method=4)
+            # Large thumbnails require real PIL decode work; run it off
+            # the event loop so a 4K source can't block other requests.
+            def _render_large_thumbnail(sp: str, sz: int) -> bytes:
+                with Image.open(sp) as img:
+                    resample = getattr(Image, "Resampling", Image).LANCZOS
+                    working = img.convert("RGB") if img.mode not in ("RGB", "L") else img.copy()
+                    working.thumbnail((int(sz), int(sz)), resample)
+                    buf = io.BytesIO()
+                    working.save(buf, format="WEBP", quality=92, method=4)
+                    return buf.getvalue()
+
+            thumbnail_bytes = await asyncio.to_thread(_render_large_thumbnail, source_path, int(size))
             stat = os.stat(source_path)
             return StreamingResponse(
-                io.BytesIO(buf.getvalue()),
+                io.BytesIO(thumbnail_bytes),
                 media_type="image/webp",
                 headers={
                     "Cache-Control": "public, max-age=3600",

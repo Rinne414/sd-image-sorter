@@ -525,6 +525,15 @@
     // local-source entry also lands in localStorage. Patching the
     // CaptionEdits Map via a property hook keeps the existing call sites
     // (revert, refresh, render) untouched.
+    //
+    // NOTE: dataset-maker.js already patches captionEdits.set/.delete in
+    // ``_installCaptionEditPersistence`` to schedule a session save. That
+    // patch wraps the ORIGINAL Map methods. To compose correctly we must
+    // patch the CURRENT (already-patched) ``set``/``delete`` here —
+    // calling ``.bind(DM.captionEdits)`` captures the live method, so
+    // when our wrapper calls ``original_captionEdits_set(...)`` it runs
+    // the session-save patch, which in turn runs the real Map.set. Both
+    // side effects (session save + localStorage persist) fire in order.
     const original_captionEdits_set = DM.captionEdits.set.bind(DM.captionEdits);
     DM.captionEdits.set = function (id, val) {
         const result = original_captionEdits_set(id, val);
@@ -679,7 +688,16 @@
     DM._isReadyToExport = function () {
         const logical = this._getLogicalDatasetCount ? this._getLogicalDatasetCount() : this.imageIds.length;
         if (logical <= 0) return false;
-        return original_isReadyToExport.call({ ...this, imageIds: logical > 0 ? [1] : [] });
+        if (this._outputMode?.() === 'beside_image') {
+            return !this._exportDisabledReason?.();
+        }
+        const originalIds = this.imageIds;
+        try {
+            this.imageIds = logical > 0 ? [1] : [];
+            return original_isReadyToExport.call(this);
+        } finally {
+            this.imageIds = originalIds;
+        }
     };
 
     // -------- Folder-import modal wiring --------
@@ -846,7 +864,6 @@
     // optional ``rarfile`` Python package + system ``unrar`` binary; the
     // backend returns a clear toast when those are missing.
     const ARCHIVE_EXTS = new Set(['zip', 'rar']);
-    const unsupportedRarFiles = () => [];
 
     function bindDropzone() {
         const dropzone = $('dataset-dropzone');
@@ -957,16 +974,9 @@
     async function handleFileList(files) {
         const imageFiles = [];
         const archiveFiles = [];
-        // RAR is now handled server-side (optional rarfile dep). The
-        // ``unsupportedRarFiles`` helper exists for backward compat tests
-        // and always returns an empty list — the upload route surfaces a
-        // clear error if the runtime is missing the unrar binary.
-        const rarFiles = unsupportedRarFiles(files);
-        if (rarFiles.length > 0) {
-            DM._toast(DM._t('dataset.rarUnsupported',
-                "RAR needs the 'rarfile' package and a system 'unrar' binary. Extract to a folder or convert to ZIP if those aren't installed."),
-                'warning', 7000);
-        }
+        // RAR is handled server-side alongside ZIP (optional rarfile dep).
+        // The upload route surfaces a clear error if the runtime is
+        // missing the unrar binary.
         for (const f of files) {
             const ext = (f.name.split('.').pop() || '').toLowerCase();
             if (IMAGE_EXTS.has(ext)) imageFiles.push(f);

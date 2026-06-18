@@ -46,6 +46,12 @@
                 (window.Logger?.info || console.log)(`[dataset] ${level}: ${msg}`);
             }
         },
+        // Programmatically switch the active pipeline tab. The click handler
+        // in dataset-maker-pipeline.js ``bindTabs`` owns the same DOM
+        // attributes for user clicks; this method is the single shared
+        // entry point for programmatic switches so the two paths can't
+        // drift. ``bindTabs`` is kept as the listener binder, not a
+        // second implementation of the switch.
         _setPipelineTab(tabName = 'import') {
             const dm = document.querySelector('.dataset-maker');
             if (dm) dm.setAttribute('data-active-tab', tabName);
@@ -427,6 +433,35 @@
                     try { localStorage.setItem('datasetMaker.templateOverride', templateField.value); } catch (_) { /* noop */ }
                 });
             }
+            const dispatchFieldEdit = (el, eventName = 'input') => {
+                if (!el) return;
+                el.dispatchEvent(new Event(eventName, { bubbles: true }));
+            };
+            document.getElementById('btn-dataset-clear-prefix')?.addEventListener('click', () => {
+                const input = document.getElementById('dataset-export-prefix');
+                if (!input) return;
+                input.value = '';
+                dispatchFieldEdit(input, 'input');
+                this._refreshExportPreview?.();
+            });
+            document.getElementById('btn-dataset-reset-template')?.addEventListener('click', () => {
+                const field = document.getElementById('dataset-template-override');
+                if (!field) return;
+                field.value = '{trigger}, {tags:filtered}, {append}';
+                try { localStorage.setItem('datasetMaker.templateOverride', field.value); } catch (_) { /* noop */ }
+                dispatchFieldEdit(field, 'input');
+                this._refreshExportPreview?.();
+            });
+            document.getElementById('btn-dataset-refresh-zh-aid')?.addEventListener('click', () => {
+                const toggle = document.getElementById('dataset-translation-show-zh');
+                this._tagZhCache?.clear?.();
+                if (toggle && !toggle.checked) {
+                    toggle.checked = true;
+                    dispatchFieldEdit(toggle, 'change');
+                } else {
+                    this._renderTagPills?.();
+                }
+            });
 
             // Bulk caption ops -> recompute captions on the fly (debounced)
             for (const id of [
@@ -454,6 +489,10 @@
                         this._refreshExportPreview?.();
                         const templateWrap = document.getElementById('dataset-template-options');
                         if (templateWrap) templateWrap.hidden = this._exportContentMode?.() !== 'template';
+                        // v3.4.4 fix #4: flash a small "✓ preview updated" cue
+                        // so the user sees the debounced re-render fire instead
+                        // of wondering whether the edit took effect.
+                        this._flashPreviewUpdated?.();
                     }, 400);
                 });
             }
@@ -688,12 +727,29 @@
                 this._updateCount();
                 this._updateExportEnabled();
                 this._syncSourceCapabilityStatus?.();
+                // Notify derived caches (confidence pills, future
+                // vocab/tag-zh caches) that the dataset membership
+                // changed so they don't serve stale entries.
+                window.dispatchEvent(new CustomEvent('dataset:changed'));
             };
             if (window.App?.showConfirm) {
                 window.App.showConfirm(title, msg, doClear);
                 return;
             }
             if (window.confirm(msg)) doClear();
+        },
+
+        // v3.4.4 fix #4: tiny "✓ preview updated" cue so users see the
+        // debounced export-preview re-render fire after editing a
+        // prefix/template/blacklist field. No-op if the cue element
+        // isn't present.
+        _flashPreviewUpdated() {
+            const list = document.getElementById('dataset-export-preview-list');
+            if (!list) return;
+            list.classList.remove('dm-preview-just-updated');
+            // reflow to restart the CSS animation
+            void list.offsetWidth;
+            list.classList.add('dm-preview-just-updated');
         },
     };
 

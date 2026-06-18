@@ -258,34 +258,10 @@
         this._syncSourceCapabilityStatus?.();
         this._syncOutputModeUi?.();
         this._saveSession?.();
-    };
-
-    DM._removeActiveLegacy = function () {
-        if (this.activeId == null) return;
-        const msg = this._t('dataset.confirmRemove', 'Remove this image from the dataset?');
-        if (!window.confirm(msg)) return;
-        const id = Number(this.activeId);
-        const idx = this.imageIds.indexOf(id);
-        if (idx < 0) return;
-        this.imageIds.splice(idx, 1);
-        this.captions.delete(id);
-        if (typeof this._deleteCaptionEditForDatasetRemoval === 'function') {
-            this._deleteCaptionEditForDatasetRemoval(id);
-        } else {
-            this.captionEdits.delete(id);
-        }
-        this.activeId = null;
-        this._renderQueue();
-        this._updateCount();
-        this._updateExportEnabled();
-        this._syncSourceCapabilityStatus?.();
-        this._syncOutputModeUi?.();
-        if (this.imageIds.length === 0) {
-            this._renderEmptyEditor();
-        } else {
-            this._setActive(this.imageIds[Math.min(idx, this.imageIds.length - 1)]);
-        }
-        this._saveSession?.();
+        // Notify derived caches (confidence pills, vocab cache) that an
+        // image left the dataset so they don't serve stale entries for
+        // an id that may be re-added later with different tags.
+        window.dispatchEvent(new CustomEvent('dataset:changed', { detail: { removed: id } }));
     };
 
     DM._revertActiveCaption = function () {
@@ -1387,7 +1363,11 @@
 
         wrap.innerHTML = '';
         for (const tag of tags) {
-            const pill = document.createElement('span');
+            // Pills are real buttons so they're keyboard-focusable and
+            // operable. Previously they were <span>s with only a click
+            // handler — mouse-only, no Tab/Enter/Space path, no role.
+            const pill = document.createElement('button');
+            pill.type = 'button';
             const category = this._classifyTagCategory(tag);
             pill.className = `dataset-tag-pill dataset-tag-pill-category-${category}`;
             const label = document.createElement('span');
@@ -1395,8 +1375,11 @@
             const x = document.createElement('span');
             x.className = 'dataset-tag-pill-x';
             x.textContent = 'x';
+            x.setAttribute('aria-hidden', 'true');
             pill.append(label, x);
-            pill.title = `Remove "${tag}"`;
+            pill.title = this._t('dataset.tagPillRemove', 'Remove "{tag}"', { tag })
+                || `Remove "${tag}"`;
+            pill.setAttribute('aria-label', pill.title);
             pill.addEventListener('click', () => this._removeTag(tag));
             wrap.appendChild(pill);
         }

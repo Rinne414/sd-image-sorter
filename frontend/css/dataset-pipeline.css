@@ -80,6 +80,37 @@
 }
 #view-dataset .dataset-maker[data-active-tab="import"] .dataset-tab-import-content:has(.dataset-import-gallery:not([hidden])) {
     overflow: hidden;
+    gap: 8px;
+}
+#view-dataset .dataset-maker[data-active-tab="import"] .dataset-tab-import-content:has(.dataset-import-gallery:not([hidden])) .dataset-import-actions {
+    flex: 0 0 auto;
+    grid-template-columns: minmax(180px, 0.48fr) minmax(360px, 1.2fr) minmax(160px, 0.38fr);
+    grid-template-areas: "gallery folder audit";
+    gap: 8px;
+}
+#view-dataset .dataset-maker[data-active-tab="import"] .dataset-tab-import-content:has(.dataset-import-gallery:not([hidden])) .dataset-import-card {
+    padding: 6px 8px;
+    gap: 4px;
+    border-radius: 8px;
+    box-shadow: none;
+}
+#view-dataset .dataset-maker[data-active-tab="import"] .dataset-tab-import-content:has(.dataset-import-gallery:not([hidden])) .dataset-import-card-copy,
+#view-dataset .dataset-maker[data-active-tab="import"] .dataset-tab-import-content:has(.dataset-import-gallery:not([hidden])) .dataset-import-card-benefits,
+#view-dataset .dataset-maker[data-active-tab="import"] .dataset-tab-import-content:has(.dataset-import-gallery:not([hidden])) .dataset-import-notes {
+    display: none;
+}
+#view-dataset .dataset-maker[data-active-tab="import"] .dataset-tab-import-content:has(.dataset-import-gallery:not([hidden])) .dataset-import-actions .btn-large {
+    min-height: 32px;
+    padding: 6px 10px;
+    font-size: 13px;
+}
+#view-dataset .dataset-maker[data-active-tab="import"] .dataset-tab-import-content:has(.dataset-import-gallery:not([hidden])) .dataset-import-card-folder .dataset-folder-bar {
+    min-height: 32px;
+    padding: 4px 8px;
+}
+#view-dataset .dataset-maker[data-active-tab="import"] .dataset-tab-import-content:has(.dataset-import-gallery:not([hidden])) .dataset-folder-bar .form-input {
+    padding: 2px 6px;
+    font-size: 12px;
 }
 #view-dataset .dataset-maker[data-active-tab="import"] .dataset-workbench {
     display: none;
@@ -415,14 +446,20 @@
 }
 .dataset-tab-import-content:has(.dataset-import-gallery:not([hidden])) .dataset-dropzone {
     flex: 0 0 auto;
-    min-height: 96px;
+    min-height: 38px;
 }
 .dataset-tab-import-content:has(.dataset-import-gallery:not([hidden])) .dataset-dropzone-content {
-    padding: 16px;
+    padding: 4px 10px;
 }
 .dataset-tab-import-content:has(.dataset-import-gallery:not([hidden])) .dataset-dropzone-icon {
-    font-size: 28px;
-    margin-bottom: 4px;
+    display: none;
+}
+.dataset-tab-import-content:has(.dataset-import-gallery:not([hidden])) .dataset-dropzone-text {
+    margin-bottom: 2px;
+    font-size: 13px;
+}
+.dataset-tab-import-content:has(.dataset-import-gallery:not([hidden])) .dataset-dropzone-hint {
+    display: none;
 }
 .dataset-dropzone-icon { font-size: 44px; display: block; margin-bottom: 10px; }
 .dataset-dropzone-text { margin: 0 0 6px; font-size: 16px; font-weight: 600; color: var(--text-primary); }
@@ -478,7 +515,7 @@
 }
 .dataset-import-gallery-grid {
     flex: 1 1 auto;
-    min-height: min(58vh, 680px);
+    min-height: 0;
     overflow-y: auto;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -938,6 +975,16 @@
 .dataset-audit-badge .dataset-audit-badge-count {
     font-weight: 600;
 }
+/* Non-interactive info badge for the O(N^2) near-duplicate cap. Uses
+   the warning palette rather than the accent so users read it as a
+   caveat, not a clickable filter. */
+.dataset-audit-badge-limited {
+    cursor: help;
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.35);
+    color: #fde68a;
+}
+.dataset-audit-badge-limited:hover { background: rgba(245, 158, 11, 0.18); }
 
 .dataset-audit-hint {
     color: var(--text-muted, #9ca3af);

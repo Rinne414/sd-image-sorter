@@ -10,7 +10,11 @@ and the renaming feature didn't exist at all.
 This service handles the whole thing in one transaction:
 
   1. Validate output folder (creates if missing, blocks traversal).
-  2. Plan the renames via ``dataset_naming.plan_renames``.
+  2. For each row, plan the rename via ``dataset_naming.render_stem`` +
+     ``resolve_collision`` (the streaming export path plans per-row so
+     a 100k-image scan-token export does not materialise a full plan
+     before the first file is written). ``dataset_naming.plan_renames``
+     remains available as a batch helper for tests and small callers.
   3. For each non-skipped row:
        a. Copy or move the image to its renamed destination.
        b. Render the caption via the same export-template engine the
@@ -67,10 +71,6 @@ VALID_IMAGE_OPS = {"copy", "move"}
 VALID_OVERWRITE_POLICIES = {"unique", "overwrite", "skip"}
 TRAINING_TAG_CONTENT_MODES = {"tags", "caption_tags", "caption_merged", "tags_nl"}
 DATASET_LEGACY_TEMPLATE = "{trigger}, {tags:filtered}, {append}"
-# Kept as a compatibility symbol for older imports/tests. It is no longer a
-# processing cap; large exports must flow through scan/selection tokens and
-# stream in backend chunks instead of failing validation at an arbitrary count.
-DATASET_EXPORT_MAX_ITEMS = None
 DATASET_EXPORT_RESPONSE_ITEM_LIMIT = 2_000
 DATASET_EXPORT_RECENT_ERROR_LIMIT = 20
 DATASET_EXPORT_DB_CHUNK_SIZE = 500
@@ -249,6 +249,44 @@ def _resolve_dataset_image_path(raw_path: Any) -> Optional[str]:
     if resolved.suffix.lower() not in ALLOWED_IMAGE_EXTENSIONS:
         return None
     return str(resolved)
+
+
+def _reconcile_moved_image_path(
+    image_id: int,
+    src_image_path: str,
+    dst_image_path: str,
+) -> Optional[str]:
+    """Update the indexed library row after a move export.
+
+    Returns ``None`` on success, or an error message string on failure.
+    The caller is responsible for rolling the file back to ``src_image_path``
+    when a failure is returned, so the DB and disk never diverge silently.
+
+    This replaces the old ``except Exception: pass`` around
+    ``db.update_image_path`` which silently left the gallery pointing at
+    the pre-move path (Debt-03 for the dataset export path).
+    """
+    try:
+        db.update_image_path(int(image_id), str(dst_image_path))
+    except Exception as exc:  # noqa: BLE001 - we surface every DB failure
+        logger.warning(
+            "dataset-export: DB path update failed for image %s after move %s -> %s: %s",
+            image_id, src_image_path, dst_image_path, exc,
+        )
+        return str(exc)
+    # Best-effort: drop any stale caption/derived sidecars that were
+    # keyed against the old location. We intentionally do not fail the
+    # export if this cleanup misses something — the primary contract is
+    # the DB row pointing at the new path.
+    try:
+        old_sidecar = Path(src_image_path).with_suffix(".txt")
+        if old_sidecar.exists() and str(old_sidecar) != str(
+            Path(dst_image_path).with_suffix(".txt")
+        ):
+            old_sidecar.unlink(missing_ok=True)
+    except OSError:
+        pass
+    return None
 
 
 def _dataset_sidecar_extension(content_mode: str) -> str:
@@ -796,14 +834,35 @@ def export_dataset(
                     # see the original recency.
                     shutil.copy2(src_image_path, str(dst_image_path))
                 else:  # move
+                    # Move the file first, then reconcile the indexed DB
+                    # row. Previously the DB update was wrapped in a bare
+                    # ``except Exception: pass`` which silently desynced
+                    # the gallery from disk if SQLite failed after the
+                    # file move. We now roll the file back to its source
+                    # path on DB failure and surface the error, so the
+                    # library never points at a non-existent path.
                     shutil.move(src_image_path, str(dst_image_path))
-                    # Keep the DB in sync so the next time the user opens
-                    # the gallery the image isn't shown as "missing on disk".
                     if image_id:
-                        try:
-                            db.update_image_path(image_id, str(dst_image_path))
-                        except Exception:
-                            pass
+                        move_error = _reconcile_moved_image_path(
+                            image_id,
+                            src_image_path,
+                            str(dst_image_path),
+                        )
+                        if move_error:
+                            # Best-effort rollback so the on-disk state
+                            # matches the DB row we just failed to update.
+                            try:
+                                shutil.move(str(dst_image_path), src_image_path)
+                            except OSError:
+                                # If rollback fails we must still report
+                                # the desync rather than hide it.
+                                pass
+                            msg = (
+                                f"moved {filename} but failed to update library path: "
+                                f"{move_error}. File restored to original location."
+                            )
+                            _record_error(image_id, src_image_path, msg, filename)
+                            return True
             except Exception as exc:
                 msg = f"failed to {request.image_op} image {image_id}: {exc}"
                 _record_error(image_id, src_image_path, msg, filename)
