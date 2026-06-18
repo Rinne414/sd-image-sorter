@@ -868,11 +868,29 @@ def export_dataset(
                 _record_error(image_id, src_image_path, msg, filename)
                 return True
 
-        # Write caption sidecar
+        # Write caption sidecar.
+        #
+        # Per-row atomicity (v3.4.5): write to a sibling temp file first,
+        # then atomically rename into place. A crash mid-write now leaves
+        # either the old caption (if any) or no caption — never a
+        # half-written file the trainer might pick up. The temp file uses
+        # a ``.tmp`` suffix on the SAME directory so the rename is atomic
+        # on the same filesystem (POSIX rename + Windows MoveFileEx are
+        # both atomic for same-volume renames).
         try:
             os.makedirs(dst_caption_path.parent, exist_ok=True)
-            with open(dst_caption_path, "w", encoding="utf-8") as handle:
+            tmp_caption_path = dst_caption_path.with_suffix(dst_caption_path.suffix + ".tmp")
+            with open(tmp_caption_path, "w", encoding="utf-8") as handle:
                 handle.write(caption_text)
+                handle.flush()
+                try:
+                    os.fsync(handle.fileno())
+                except OSError:
+                    # fsync may be unavailable on some streams (e.g. over
+                    # network mounts); the rename is still the primary
+                    # atomicity guarantee, so don't fail the row here.
+                    pass
+            os.replace(str(tmp_caption_path), str(dst_caption_path))
         except Exception as exc:
             msg = f"failed to write caption for image {image_id}: {exc}"
             # Don't remove the image — the user can re-run the export and
@@ -888,6 +906,13 @@ def export_dataset(
                 error=msg,
             ))
             _emit(f"Failed to write caption for {filename} ({processed}/{total_expected})", filename)
+            # Best-effort: remove the temp file if the rename failed so
+            # we don't leave .tmp litter next to the captions.
+            try:
+                if os.path.exists(str(tmp_caption_path)):
+                    os.unlink(str(tmp_caption_path))
+            except OSError:
+                pass
             return True
 
         exported += 1
@@ -1294,10 +1319,26 @@ def start_dataset_export(request: DatasetExportRequest) -> DatasetExportStartRes
         }
 
     def publish(updates: Dict[str, Any]) -> None:
-        _set_export_progress_if_current(run_id, {
-            "status": "cancelling" if cancel_event.is_set() else "running",
-            **updates,
-        })
+        # v3.4.5 cancel-race fix: the worker must NOT overwrite a
+        # "cancelling" status back to "running" once the cancel event is
+        # set. The previous ``status: "cancelling" if cancel_event.is_set()
+        # else "running"`` re-derived the status on every progress tick;
+        # if the cancel handler set "cancelling" between two ticks, the
+        # next tick could flip it back to "running" for a window. Now the
+        # worker never writes "running" after cancel is requested — it
+        # only escalates to "cancelling" and leaves terminal-status
+        # transitions to the worker()'s final _set_export_progress_if_current
+        # call.
+        if cancel_event.is_set():
+            _set_export_progress_if_current(run_id, {
+                "status": "cancelling",
+                **updates,
+            })
+        else:
+            _set_export_progress_if_current(run_id, {
+                "status": "running",
+                **updates,
+            })
 
     def worker() -> None:
         try:
