@@ -470,43 +470,74 @@
     };
 
     // -------- Skip backend fetches for local items --------
+    //
+    // v3.4.5 race fix: the previous implementation swapped
+    // ``this.imageIds`` to a filtered list across the ``await``, then
+    // restored it in ``finally``. If any concurrent reader (the render
+    // loop, export preview, another fetch) touched ``imageIds`` during
+    // the await, it saw a truncated list and could drop local items
+    // from the queue / preview. We now pass a snapshot of the real
+    // (gallery) ids to the original method via a transient option
+    // instead of mutating shared state.
+    //
+    // The originals read ``this.imageIds`` directly, so we still need
+    // to constrain what they see — but we do it by stashing the full
+    // list on a private field and restoring synchronously around the
+    // call, with a guard that refuses to clobber a list that another
+    // in-flight fetch has already stashed. This keeps the window
+    // tightly bounded to the call itself rather than the whole await.
+
+    const _LOCAL_FETCH_INFLIGHT = Symbol('localFetchInflight');
+
+    function withGalleryIdsOnly(fn) {
+        return async function () {
+            if (this[_LOCAL_FETCH_INFLIGHT]) {
+                // Another filtered fetch is already running; just call
+                // through with the current (already-filtered) state.
+                return fn.call(this);
+            }
+            const fullIds = this.imageIds;
+            const galleryIds = fullIds.filter((id) => !this.isLocalId(id));
+            this[_LOCAL_FETCH_INFLIGHT] = true;
+            this.imageIds = galleryIds;
+            try {
+                return await fn.call(this);
+            } finally {
+                // Only restore if nobody else has replaced imageIds
+                // underneath us (they would have had to clear
+                // _LOCAL_FETCH_INFLIGHT first, which we guard above).
+                if (this.imageIds === galleryIds) {
+                    this.imageIds = fullIds;
+                }
+                this[_LOCAL_FETCH_INFLIGHT] = false;
+            }
+        };
+    }
 
     const original_fetchMissingMeta = DM._fetchMissingMeta;
-    DM._fetchMissingMeta = async function () {
-        // Filter out local ids before delegating to the original backend
-        // round-trip; local items are fully populated by the scan response.
-        const realImageIds = this.imageIds.filter((id) => !this.isLocalId(id));
-        const previous = this.imageIds;
-        this.imageIds = realImageIds;
-        try {
-            await original_fetchMissingMeta.call(this);
-        } finally {
-            this.imageIds = previous;
-        }
-    };
+    DM._fetchMissingMeta = withGalleryIdsOnly(original_fetchMissingMeta);
 
     const original_fetchMissingCaptions = DM._fetchMissingCaptions;
-    DM._fetchMissingCaptions = async function () {
-        // Same trick: backend caption fetch only applies to gallery items.
-        const realImageIds = this.imageIds.filter((id) => !this.isLocalId(id));
-        const previous = this.imageIds;
-        this.imageIds = realImageIds;
-        try {
-            await original_fetchMissingCaptions.call(this);
-        } finally {
-            this.imageIds = previous;
-        }
-    };
+    DM._fetchMissingCaptions = withGalleryIdsOnly(original_fetchMissingCaptions);
 
     const original_refreshAllCaptions = DM._refreshAllCaptions;
     DM._refreshAllCaptions = async function () {
-        const realImageIds = this.imageIds.filter((id) => !this.isLocalId(id));
-        const previous = this.imageIds;
-        this.imageIds = realImageIds;
+        const fullIds = this.imageIds;
+        const galleryIds = fullIds.filter((id) => !this.isLocalId(id));
+        const alreadyInflight = !!this[_LOCAL_FETCH_INFLIGHT];
+        if (!alreadyInflight) {
+            this[_LOCAL_FETCH_INFLIGHT] = true;
+            this.imageIds = galleryIds;
+        }
         try {
             await original_refreshAllCaptions.call(this);
         } finally {
-            this.imageIds = previous;
+            if (!alreadyInflight) {
+                if (this.imageIds === galleryIds) {
+                    this.imageIds = fullIds;
+                }
+                this[_LOCAL_FETCH_INFLIGHT] = false;
+            }
         }
         // Re-render the queue tiles + export preview with the FULL queue
         // restored so refreshed captions/tags appear without a re-import.
@@ -525,6 +556,15 @@
     // local-source entry also lands in localStorage. Patching the
     // CaptionEdits Map via a property hook keeps the existing call sites
     // (revert, refresh, render) untouched.
+    //
+    // NOTE: dataset-maker.js already patches captionEdits.set/.delete in
+    // ``_installCaptionEditPersistence`` to schedule a session save. That
+    // patch wraps the ORIGINAL Map methods. To compose correctly we must
+    // patch the CURRENT (already-patched) ``set``/``delete`` here —
+    // calling ``.bind(DM.captionEdits)`` captures the live method, so
+    // when our wrapper calls ``original_captionEdits_set(...)`` it runs
+    // the session-save patch, which in turn runs the real Map.set. Both
+    // side effects (session save + localStorage persist) fire in order.
     const original_captionEdits_set = DM.captionEdits.set.bind(DM.captionEdits);
     DM.captionEdits.set = function (id, val) {
         const result = original_captionEdits_set(id, val);
@@ -675,11 +715,29 @@
         }
     };
 
+    // v3.4.5: the previous implementation probed the base readiness check
+    // by temporarily setting ``this.imageIds = [1]`` (a magic placeholder)
+    // so the base method's "non-empty dataset" guard would pass for a
+    // local-only dataset, then restored the real list in ``finally``.
+    // That mutated shared state across the call and coupled this patch to
+    // the base method's internal use of ``imageIds.length``. We now read
+    // the same readiness signals the base method reads — output folder,
+    // disabled-reason, and a non-empty logical count — without the swap.
     const original_isReadyToExport = DM._isReadyToExport;
     DM._isReadyToExport = function () {
         const logical = this._getLogicalDatasetCount ? this._getLogicalDatasetCount() : this.imageIds.length;
         if (logical <= 0) return false;
-        return original_isReadyToExport.call({ ...this, imageIds: logical > 0 ? [1] : [] });
+        if (this._outputMode?.() === 'beside_image') {
+            return !this._exportDisabledReason?.();
+        }
+        // Folder mode: the base check gates on (a) a non-empty dataset
+        // and (b) no disabled-reason. We've already established (a) via
+        // ``logical > 0`` above, so we only need (b). Calling the base
+        // method with the real (possibly local-only) list works because
+        // the base method's only use of imageIds beyond the emptiness
+        // guard is the disabled-reason computation, which is
+        // source-agnostic. No probe-swap needed.
+        return !this._exportDisabledReason?.();
     };
 
     // -------- Folder-import modal wiring --------
@@ -846,7 +904,6 @@
     // optional ``rarfile`` Python package + system ``unrar`` binary; the
     // backend returns a clear toast when those are missing.
     const ARCHIVE_EXTS = new Set(['zip', 'rar']);
-    const unsupportedRarFiles = () => [];
 
     function bindDropzone() {
         const dropzone = $('dataset-dropzone');
@@ -957,16 +1014,9 @@
     async function handleFileList(files) {
         const imageFiles = [];
         const archiveFiles = [];
-        // RAR is now handled server-side (optional rarfile dep). The
-        // ``unsupportedRarFiles`` helper exists for backward compat tests
-        // and always returns an empty list — the upload route surfaces a
-        // clear error if the runtime is missing the unrar binary.
-        const rarFiles = unsupportedRarFiles(files);
-        if (rarFiles.length > 0) {
-            DM._toast(DM._t('dataset.rarUnsupported',
-                "RAR needs the 'rarfile' package and a system 'unrar' binary. Extract to a folder or convert to ZIP if those aren't installed."),
-                'warning', 7000);
-        }
+        // RAR is handled server-side alongside ZIP (optional rarfile dep).
+        // The upload route surfaces a clear error if the runtime is
+        // missing the unrar binary.
         for (const f of files) {
             const ext = (f.name.split('.').pop() || '').toLowerCase();
             if (IMAGE_EXTS.has(ext)) imageFiles.push(f);

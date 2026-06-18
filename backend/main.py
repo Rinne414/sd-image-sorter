@@ -230,6 +230,19 @@ async def lifespan(app: FastAPI):
 
     db.init_db()
 
+    # Purge stale Dataset Maker scan-token manifests so data/dataset-scans/
+    # doesn't grow without bound across long-running installs. Tokens are
+    # NDJSON files created by /api/dataset/folder-scan; the frontend re-issues
+    # a fresh scan when an expired token is referenced, so deleting old ones
+    # is safe. Best-effort: a failure here must not block startup.
+    try:
+        from services.dataset_session_service import purge_expired_scan_manifests
+        removed = purge_expired_scan_manifests()
+        if removed:
+            logger.info("Purged %d expired dataset scan-token manifest(s).", removed)
+    except Exception:
+        logger.warning("Dataset scan-token purge failed; continuing startup.", exc_info=True)
+
     bind_host = os.environ.get("SD_IMAGE_SORTER_BIND_HOST", SERVER_HOST)
     if not _is_loopback_host(bind_host):
         raise RuntimeError(

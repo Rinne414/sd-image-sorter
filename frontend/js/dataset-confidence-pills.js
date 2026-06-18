@@ -67,8 +67,12 @@
             const x = document.createElement('button');
             x.type = 'button';
             x.className = 'dataset-confidence-pill-x';
-            x.title = 'Drop this tag from the caption';
-            x.setAttribute('aria-label', `Drop tag ${t.tag} from caption`);
+            // i18n: title + aria-label go through the shared helper so a
+            // non-English UI isn't shown English tooltip/announce text.
+            const dropTitle = (DM._t?.('dataset.confidenceDropTag', 'Drop this tag from the caption'))
+                || 'Drop this tag from the caption';
+            x.title = dropTitle;
+            x.setAttribute('aria-label', `${dropTitle}: ${t.tag}`);
             x.textContent = '✕';
             x.addEventListener('click', () => dropTagFromCaption(String(t.tag || '')));
             node.appendChild(x);
@@ -76,7 +80,10 @@
         }
 
         if (hint) {
-            hint.textContent = `${high}/${mid}/${low} high/mid/low (${tagsWithConf.length} total)`;
+            hint.textContent = DM._t?.('dataset.confidenceSummary',
+                '{high}/{mid}/{low} high/mid/low ({total} total)',
+                { high, mid, low, total: tagsWithConf.length })
+                || `${high}/${mid}/${low} high/mid/low (${tagsWithConf.length} total)`;
         }
     }
 
@@ -151,6 +158,22 @@
             return ret;
         };
     }
+
+    // Invalidate the confidence cache when the dataset changes. Previously
+    // the cache was fill-only — removing an image, clearing the dataset, or
+    // retagging an image left stale entries that could resurface on a later
+    // add of the same id. The global ``dataset:changed`` event is emitted
+    // by clear/remove/retag flows; we also expose a manual invalidator.
+    DM._invalidateConfidenceCache = function (imageId) {
+        if (imageId == null) {
+            DM._confidenceCache?.clear?.();
+        } else if (DM._confidenceCache) {
+            DM._confidenceCache.delete(Number(imageId));
+        }
+    };
+    window.addEventListener('dataset:changed', () => {
+        DM._invalidateConfidenceCache();
+    });
 
     // Public API for tests / future PRs.
     DM._renderConfidencePills = renderPills;

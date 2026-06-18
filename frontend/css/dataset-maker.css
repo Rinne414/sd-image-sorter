@@ -103,6 +103,10 @@
     overflow: hidden;
 }
 
+#view-dataset .dataset-editor-pane {
+    overflow-y: auto;
+}
+
 #view-dataset .dataset-pane-head {
     flex: 0 0 auto;
     display: flex;
@@ -132,6 +136,43 @@
 #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-pane {
     padding: 14px;
     border-color: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.18);
+    overflow: hidden;
+    /* v3.4.4 fix #6: two-column editor — image pinned left (fills height,
+       stays visible while typing), caption controls scroll on the right.
+       Replaces the old single vertical column where 6+ stacked flex children
+       overflowed the pane and pushed the image out of view. */
+    display: grid;
+    grid-template-columns: minmax(280px, 1.25fr) minmax(300px, 1fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+        "head head"
+        "image controls";
+    gap: 10px;
+}
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-pane > .dataset-pane-head {
+    grid-area: head;
+}
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-pane > .dataset-zoom-toolbar {
+    grid-area: head;
+    align-self: end;
+    margin: 0;
+}
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-pane > .dataset-editor-image-wrap {
+    grid-area: image;
+    flex: none;
+    min-height: 0;
+    height: 100%;
+    max-height: none;
+    margin-bottom: 0;
+}
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-pane > .dataset-editor-controls {
+    grid-area: controls;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-right: 2px;
 }
 
 #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-export-pane {
@@ -190,6 +231,19 @@
     #view-dataset .dataset-editor-pane,
     #view-dataset .dataset-export-pane {
         max-height: 70vh;
+    }
+    /* v3.4.4 fix #6: collapse the two-column editor back to a single column on
+       narrow viewports so the image and controls stack vertically. */
+    #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-pane {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto 1fr;
+        grid-template-areas:
+            "head"
+            "image"
+            "controls";
+    }
+    #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-pane > .dataset-editor-image-wrap {
+        height: clamp(200px, 32vh, 360px);
     }
 }
 
@@ -1191,6 +1245,39 @@
     margin: -4px 0 8px 0;
 }
 
+#view-dataset .dataset-input-action-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+}
+
+#view-dataset .dataset-input-action-row .form-input {
+    min-width: 0;
+}
+
+#view-dataset .dataset-template-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin: 6px 0;
+}
+
+#view-dataset .dataset-zh-aid-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+}
+
+#view-dataset .dataset-zh-aid-row .dataset-zh-aid-toggle {
+    margin-bottom: 0;
+    min-width: 0;
+}
+
 
 /* Inline "what makes a good caption?" help next to the editor title */
 #view-dataset .dataset-editor-help {
@@ -1407,6 +1494,12 @@
     border-top: 1px dashed rgba(255,255,255,0.08);
 }
 #view-dataset .dataset-tag-pill {
+    /* Pills are real <button> elements (keyboard-focusable) but must
+       render like the old <span> chips: no native button chrome. */
+    appearance: none;
+    -webkit-appearance: none;
+    font: inherit;
+    text-align: left;
     display: inline-flex;
     align-items: center;
     gap: 3px;
@@ -1419,6 +1512,10 @@
     cursor: pointer;
     transition: background 0.12s ease, border-color 0.12s ease;
     line-height: 1.4;
+}
+#view-dataset .dataset-tag-pill:focus-visible {
+    outline: 2px solid var(--accent-secondary, #60a5fa);
+    outline-offset: 1px;
 }
 :is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-quality {
     background: rgba(59, 130, 246, 0.14);
@@ -1533,12 +1630,15 @@
     font-size: 11px;
     color: var(--text-muted, rgba(255,255,255,0.55));
 }
+#view-dataset .dataset-tag-pills-section:has(.dataset-tag-pills-empty) .dataset-tag-color-legend {
+    display: none;
+}
 
 /* ---------------- Tag color legend (shared 14-class palette) ---------------- */
 /* The swatch + checkbox both borrow the .dataset-tag-pill-category-* color
    rules above, so there is one source of truth for the palette. */
 #view-dataset .dataset-tag-color-legend {
-    margin: 4px 0 8px 0;
+    margin: 2px 0 6px 0;
     font-size: 11px;
 }
 #view-dataset .dataset-tag-color-legend > summary {
@@ -1546,24 +1646,33 @@
     color: var(--text-muted, rgba(255,255,255,0.6));
     list-style: none;
     user-select: none;
-    padding: 2px 0;
+    padding: 1px 0;
+    width: fit-content;
 }
 #view-dataset .dataset-tag-color-legend > summary:hover {
     color: var(--text-primary, #f1f5f9);
 }
 #view-dataset .dataset-tag-color-legend-body {
     display: grid;
-    grid-template-columns: max-content 1fr;
-    gap: 4px 10px;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 5px 8px;
     align-items: center;
     margin-top: 6px;
     padding: 8px;
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 8px;
+    max-height: min(240px, 30vh);
+    overflow-y: auto;
+}
+#view-dataset .dataset-tag-color-legend:not([open]) .dataset-tag-color-legend-body {
+    display: none;
 }
 #view-dataset .dataset-tag-legend-row {
-    display: contents;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
 }
 #view-dataset .dataset-tag-legend-swatch {
     display: inline-flex;
@@ -1577,10 +1686,14 @@
     border-style: solid;
     font-size: 11px;
     white-space: nowrap;
+    flex: 0 0 auto;
 }
 #view-dataset .dataset-tag-legend-desc {
     color: var(--text-muted, rgba(255,255,255,0.6));
     font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* ---------------- LoRA-type tag pruning control ---------------- */
@@ -2267,6 +2380,7 @@
 }
 #view-dataset .dataset-split-mode > .dataset-zoom-toolbar,
 #view-dataset .dataset-split-mode > .dataset-editor-image-wrap,
+#view-dataset .dataset-split-mode > .dataset-editor-controls,
 #view-dataset .dataset-split-mode > #dataset-caption-diff,
 #view-dataset .dataset-split-mode > .dataset-caption-type,
 #view-dataset .dataset-split-mode > .dataset-box-label,
@@ -2287,28 +2401,115 @@
     }
 }
 
-/* v3.4.3 UX polish: Step 2 should spend the vertical space on the
-   selected image and caption fields, not on empty chrome. Kept as scoped
-   overrides so the existing editor logic remains untouched. */
-#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-image-wrap {
-    flex: 1 1 clamp(340px, 48vh, 680px);
-    min-height: clamp(320px, 42vh, 560px);
+/* v3.4.4 fix #6: the two-column grid above (image | controls) now keeps the
+   image visible while caption controls scroll. The old clamp rules below were
+   for the single-column flex layout and conflict with the grid, so they are
+   scoped to the non-workbench tabs only (import/export keep the old layout). */
+#view-dataset .dataset-maker:not([data-active-tab="workbench"]) .dataset-editor-image-wrap {
+    flex: 0 0 clamp(220px, 32vh, 420px);
+    min-height: clamp(180px, 24vh, 320px);
+    max-height: clamp(240px, 38vh, 440px);
+    margin-bottom: 8px;
 }
 
-#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-textarea {
-    min-height: clamp(170px, 20vh, 280px);
+#view-dataset .dataset-maker:not([data-active-tab="workbench"]) .dataset-editor-textarea {
+    flex: 0 0 clamp(118px, 18vh, 220px);
+    min-height: 110px;
+    max-height: clamp(140px, 22vh, 240px);
+    overflow-y: auto;
+    resize: vertical;
+    margin-bottom: 6px;
 }
 
-#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-nl {
-    min-height: clamp(120px, 15vh, 220px);
+#view-dataset .dataset-maker:not([data-active-tab="workbench"]) .dataset-editor-nl {
+    flex: 0 0 clamp(104px, 16vh, 200px);
+    min-height: 96px;
+    max-height: clamp(120px, 20vh, 220px);
+    overflow-y: auto;
+    resize: vertical;
+    margin-bottom: 6px;
+}
+
+#view-dataset .dataset-maker:not([data-active-tab="workbench"]) .dataset-editor-pane:has(#dataset-editor-textarea[hidden]):has(#dataset-editor-nl:not([hidden])) .dataset-editor-image-wrap {
+    flex-basis: clamp(240px, 36vh, 460px);
+    min-height: clamp(200px, 28vh, 340px);
+}
+
+#view-dataset .dataset-maker:not([data-active-tab="workbench"]) .dataset-editor-pane:has(#dataset-editor-textarea[hidden]):has(#dataset-editor-nl:not([hidden])) .dataset-editor-nl {
+    flex-basis: clamp(130px, 22vh, 260px);
+    min-height: 120px;
+    max-height: clamp(160px, 28vh, 300px);
+}
+
+/* v3.4.4 fix #6: workbench controls live in the scrolling right column; let
+   the textareas breathe without the old vh clamps that fought the grid. */
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-controls .dataset-editor-textarea,
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-controls .dataset-editor-nl {
+    flex: 0 0 auto;
+    min-height: 96px;
+    max-height: 220px;
+    overflow-y: auto;
+    resize: vertical;
+    margin-bottom: 0;
+}
+
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-caption-type {
+    margin-bottom: 0;
+}
+
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-tag-pills-section-inline {
+    flex: 0 0 auto;
+    min-height: 80px;
+    max-height: 240px;
+    overflow: hidden;
+    margin-top: 0;
+    padding: 8px 10px;
+}
+
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-tag-pills-wrap {
+    max-height: clamp(74px, 12vh, 142px);
 }
 
 #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-split-panel {
-    min-height: clamp(620px, 76vh, 920px);
+    min-height: 0;
+    flex: 1 1 auto;
+}
+
+/* v3.4.4 fix #4: "export-time only" banner + preview-updated cue. */
+#view-dataset .dataset-export-only-note {
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: rgba(124, 139, 255, 0.10);
+    border: 1px solid rgba(124, 139, 255, 0.25);
+    color: var(--text-secondary, #cbd5e1);
+    font-size: 12px;
+    line-height: 1.45;
+}
+#view-dataset .dataset-export-only-note strong {
+    color: var(--accent-primary, #7c8bff);
+}
+@keyframes dm-preview-flash {
+    0%   { box-shadow: 0 0 0 0 rgba(124, 139, 255, 0.45); }
+    100% { box-shadow: 0 0 0 6px rgba(124, 139, 255, 0); }
+}
+#view-dataset .dm-preview-just-updated {
+    animation: dm-preview-flash 0.6s ease-out;
+    border-radius: 8px;
 }
 
 #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-split-image-frame {
-    min-height: clamp(280px, 36vh, 520px);
+    min-height: clamp(220px, 32vh, 420px);
+}
+
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-split-card {
+    grid-template-rows: auto minmax(220px, 0.9fr) auto minmax(96px, 0.45fr) auto minmax(88px, 0.38fr);
+    overflow: hidden;
+}
+
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-split-textarea {
+    overflow-y: auto;
+    max-height: clamp(120px, 20vh, 240px);
 }
 
 /* ============================================================

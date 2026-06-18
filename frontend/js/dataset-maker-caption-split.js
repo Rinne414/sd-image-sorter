@@ -267,7 +267,11 @@
                 if (type === 'nl' || type === 'both') {
                     const chip = document.createElement('span');
                     chip.className = `dataset-queue-captype dataset-queue-captype-${type}`;
-                    chip.textContent = type === 'both' ? 'B+N' : 'NL';
+                    // Chip short label goes through i18n so the two-letter
+                    // abbreviation can be localized if a locale needs it.
+                    chip.textContent = type === 'both'
+                        ? (this._t('dataset.captionTypeChipBoth', 'B+N') || 'B+N')
+                        : (this._t('dataset.captionTypeChipNl', 'NL') || 'NL');
                     chip.title = type === 'both'
                         ? this._t('dataset.captionTypeBothTip', 'Exports tags, then the sentence')
                         : this._t('dataset.captionTypeNlTip', 'Exports the sentence only');

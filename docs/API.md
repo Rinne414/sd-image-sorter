@@ -1,6 +1,6 @@
 ﻿# SD Image Sorter API Documentation
 
-**Version:** 3.4.3
+**Version:** 3.4.4
 **Base URL:** `http://127.0.0.1:8487` (default; configurable via `SD_IMAGE_SORTER_PORT`)
 **Interactive Docs:** `http://127.0.0.1:8487/docs` (Swagger UI, same port as runtime)
 
@@ -802,6 +802,11 @@ Segment via text prompt with SAM3.
 
 Body: `image_id` (int), `text_prompt` (string), optional `presence_threshold` (float 0.0–1.0). The presence gate defaults to a looser explicit-text value, decoupled from the stricter 0.5 auto-detect gate, so deliberately-typed prompts are not silently rejected; pass `presence_threshold` to override (higher = stricter recall).
 
+#### POST /api/censor/remove-background
+Remove the image background with SAM3 foreground detection.
+
+Body: `image_id` (int), `fill_mode` (`transparent`, `white`, or `black`), optional `edge_threshold` (float 0.0–1.0). Returns a base64 preview image; transparent mode returns PNG data with an alpha channel.
+
 #### GET /api/censor/mask-cache/{mask_ref}
 Retrieve a cached mask image by reference.
 
@@ -1231,7 +1236,9 @@ Returns `{status, exported, skipped, error_count, output_folder, items[], total_
 
 Preview Dataset Maker export sidecars without writing files. Runs the same caption-assembly engine as `/api/dataset/export` (blacklist removal, common-tag injection, trigger-word prepend, underscore normalization, per-image overrides) but returns the preview rows in-memory instead of touching disk. Used by the Dataset Maker Step C "preview" pane and the renamed-pair chip.
 
-Body matches `/api/dataset/export` minus `output_folder` and `image_op`. Returns `{rows: [{image_id|image_path, src_filename, dst_filename, caption}], skipped, error_count}`.
+Body matches `/api/dataset/export` minus `image_op` (the preview never moves/copies files); it additionally accepts `limit` (1–500, default 72) bounding how many rows are returned. The same `dataset_scan_tokens` source is supported, so large folder previews page through the manifest the same way export does.
+
+Returns `{total, returned, items_truncated, content_mode, output_mode, sidecar_extension, items[]}`. Each `items[]` entry carries `{index, image_id, abs_path, filename, thumbnail_url, output_image_name, output_caption_name, output_image_path, output_caption_path, caption, ai_caption, nl_caption, skipped_reason, error}`. `caption` is the fully-rendered booru-tag line; `nl_caption` is the raw natural-language sentence for the two-box editor. `output_image_path` / `output_caption_path` are empty strings when no output folder is supplied.
 
 ---
 
@@ -1272,15 +1279,15 @@ Body:
 }
 ```
 
-Returns `{folder_path, items[], total_files_seen, skipped_unreadable, truncated}`. Each item carries `{ds_id, abs_path, filename, width, height, mtime, size, thumb_b64}` where `thumb_b64` is a JPEG-encoded base64 string for direct rendering and `ds_id` is a stable session id derived from `sha1(abs_path)`.
+Returns `{folder_path, items[], total_files_seen, skipped_unreadable, truncated, scan_token, offset, next_offset, has_more, page_size}`. Each item carries `{ds_id, abs_path, filename, width, height, mtime, size, thumb_b64, scan_index, source_kind, sidecar_capability}` where `thumb_b64` is a JPEG-encoded base64 string for direct rendering and `ds_id` is a stable session id derived from `sha1(abs_path)`. `scan_token` / `next_offset` / `has_more` / `page_size` form the paging contract: for folders larger than one page, the frontend re-POSTs with `scan_token` + `offset` to fetch subsequent pages without rescanning. Scan-token manifests persist under `data/dataset-scans/` and are garbage-collected after 7 days of inactivity on app startup.
 
 ---
 
 #### GET /api/dataset/local-thumbnail
 
-Return a JPEG thumbnail for a local-source Dataset Maker item that is NOT in the main library DB. Used by the small-gallery flow when the inline base64 thumb from `/api/dataset/folder-scan` is not enough (full-resolution preview, large folder lazy-load).
+Return a WebP thumbnail for a local-source Dataset Maker item that is NOT in the main library DB. Used by the small-gallery flow when the inline base64 thumb from `/api/dataset/folder-scan` is not enough (full-resolution preview, large folder lazy-load).
 
-Query params: `path` (URL-encoded absolute path), `size` (int, default 256). The path must resolve to a previously scanned folder so an unauthenticated visitor cannot pull arbitrary files. Returns `image/jpeg` bytes; `404` if the file is gone, `400` for malformed paths.
+Query params: `path` (URL-encoded absolute path), `size` (int, default 256, max 4096). The endpoint is gated by a Dataset Maker session allowlist: the path must have been surfaced by a prior `/api/dataset/folder-scan`, `/api/dataset/upload-files`, or scan-token manifest iteration, otherwise the endpoint returns `403`. This closes the arbitrary-host-file read hole — a path the user never imported is not thumbnail-readable. Returns `image/webp` bytes; `404` if the file is gone or is a symlink. Headers `X-Thumbnail-Cache` (`HIT` / `MISS` / `BYPASS`) and `X-Thumbnail-Placeholder: UNREADABLE` (for the placeholder fallback) are set on every response.
 
 ---
 
@@ -1293,16 +1300,19 @@ Body:
 {
   "image_ids": [1, 2, 3],
   "image_paths": ["C:/dataset/local_001.png"],
+  "dataset_scan_tokens": [{"scan_token": "abc123...", "exclude_paths": []}],
   "aesthetic_max": 4.5,
   "phash_max": 5,
   "dim_min": 512,
   "enable_aesthetic": true,
   "enable_phash": true,
-  "extra_tag_counts": {"C:/dataset/local_001.png": 5}
+  "enable_untagged": true,
+  "extra_tag_counts": {"C:/dataset/local_001.png": 5},
+  "item_limit": 5000
 }
 ```
 
-Returns `{summary, items[], duplicate_groups[]}`. `summary` aggregates `{total, low_quality_count, duplicate_pairs, untagged_count, small_count, missing_count, avg_aesthetic}`. Each `items[]` row carries the image's flags (`low_quality`, `untagged`, `small`, `missing`) plus the raw measurements that produced them. `duplicate_groups[]` clusters images whose perceptual-hash hamming distance is `<= phash_max`.
+Returns `{summary, items[], items_truncated, items_returned, duplicate_groups[]}`. `summary` aggregates `{total, low_quality_count, duplicate_pairs, untagged_count, small_count, missing_count, avg_aesthetic, near_duplicate_check_limited, near_duplicate_checked, near_duplicate_attempted, near_duplicate_hashes, near_duplicate_failed, near_duplicate_unavailable_count, near_duplicate_error}`. The `near_duplicate_*` fields describe the perceptual-hash pass: `near_duplicate_check_limited` is `true` when the dataset exceeded the O(N²) near-duplicate cap (5000 images), at which point only exact-hash duplicate groups are reported. Each `items[]` row carries `{image_id, abs_path, filename, width, height, tag_count, aesthetic_score, phash_hex, flags}` where `flags` is a list drawn from `low_quality` / `untagged` / `small` / `missing`. `duplicate_groups[]` clusters images whose perceptual-hash hamming distance is `<= phash_max`; each group is `{phash_hex, image_ids[], abs_paths[]}`. `item_limit` caps `items[]` (default 5000, max 50000); `items_truncated` / `items_returned` flag when the per-row list was trimmed even though the summary still reflects the full set.
 
 ---
 

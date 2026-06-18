@@ -399,6 +399,17 @@ def test_route_folder_scan_can_skip_inline_thumbnails(test_client, folder_with_m
 
 
 def test_route_local_thumbnail_serves_dataset_path(test_client, folder_with_mixed_files):
+    # The thumbnail endpoint is gated by the Dataset Maker session
+    # allowlist, so the folder must be scanned first to register the
+    # path. See test_route_local_thumbnail_requires_session_membership
+    # for the negative case.
+    scan_resp = test_client.post("/api/dataset/folder-scan", json={
+        "folder_path": str(folder_with_mixed_files),
+        "recursive": False,
+        "limit": 10,
+    })
+    assert scan_resp.status_code == 200, scan_resp.text
+
     source = folder_with_mixed_files / "alpha.png"
 
     resp = test_client.get("/api/dataset/local-thumbnail", params={
@@ -409,3 +420,42 @@ def test_route_local_thumbnail_serves_dataset_path(test_client, folder_with_mixe
     assert resp.status_code == 200, resp.text
     assert resp.headers["content-type"].startswith("image/webp")
     assert resp.content.startswith(b"RIFF")
+
+
+def test_route_local_thumbnail_requires_session_membership(test_client, folder_with_mixed_files):
+    """A path the user never scanned/uploaded must not be thumbnail-readable.
+
+    Regression for the arbitrary-host-file read hole: before the session
+    allowlist, ``?path=<anywhere>`` could read thumbnails of any image
+    on the host that had a recognised extension. The endpoint now 403s
+    unless the path was surfaced by folder-scan, upload-files, or a
+    scan-token manifest.
+    """
+    # alpha.png is under the scanned folder but we never scanned it in
+    # this test, so it must NOT be in the session allowlist.
+    source = folder_with_mixed_files / "alpha.png"
+
+    # Clear any carryover from other tests in the same process.
+    from services.dataset_session_service import _session_path_cache
+    _session_path_cache.clear()
+
+    resp = test_client.get("/api/dataset/local-thumbnail", params={
+        "path": str(source),
+        "size": 160,
+    })
+    assert resp.status_code == 403, resp.text
+
+    # After a real folder-scan, the same path becomes readable.
+    scan_resp = test_client.post("/api/dataset/folder-scan", json={
+        "folder_path": str(folder_with_mixed_files),
+        "recursive": False,
+        "limit": 10,
+    })
+    assert scan_resp.status_code == 200, scan_resp.text
+
+    resp2 = test_client.get("/api/dataset/local-thumbnail", params={
+        "path": str(source),
+        "size": 160,
+    })
+    assert resp2.status_code == 200, resp2.text
+    assert resp2.headers["content-type"].startswith("image/webp")

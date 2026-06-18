@@ -551,13 +551,17 @@ def test_dataset_maker_sidecar_export_limits_are_visible_before_caption_work():
     assert "rarfile" in html and "unrar" in html
     assert "dataset.sidecarNoticeTitle" in en and "dataset.sidecarNoticeTitle" in zh
     assert "dataset.sidecarSourceStatus" in en and "dataset.sidecarSourceStatus" in zh
-    assert "unsupportedRarFiles" in local_import
-    assert "dataset.rarUnsupported" in local_import
+    # RAR + ZIP both flow through the server-side upload route; the
+    # legacy ``unsupportedRarFiles`` client-side helper was removed (it
+    # always returned []), so only the server-side handling remains.
+    assert "ARCHIVE_EXTS" in local_import
+    assert "upload-files" in local_import
 
 
 def test_dataset_maker_step2_owns_caption_formatting_and_translation_settings():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    dataset_js = (repo_root / "frontend" / "js" / "dataset-maker.js").read_text(encoding="utf-8")
 
     caption_start = html.index('data-i18n="dataset.cardCaptionTitle"')
     find_replace_start = html.index('id="dataset-step-findreplace"', caption_start)
@@ -570,6 +574,9 @@ def test_dataset_maker_step2_owns_caption_formatting_and_translation_settings():
         'id="dataset-export-prefix"',
         'id="dataset-template-options"',
         'id="dataset-template-override"',
+        'id="btn-dataset-clear-prefix"',
+        'id="btn-dataset-reset-template"',
+        'id="btn-dataset-refresh-zh-aid"',
         'id="dataset-replace-rules"',
         'id="dataset-max-tags"',
         'id="dataset-translation-options"',
@@ -586,6 +593,20 @@ def test_dataset_maker_step2_owns_caption_formatting_and_translation_settings():
     assert 'type="hidden" id="dataset-export-content-mode"' in html
     assert 'data-i18n="dataset.exportContentMode"' not in export_block
     assert 'data-i18n="dataset.namingLegend"' not in export_block
+    assert "btn-dataset-clear-prefix" in dataset_js
+    assert "btn-dataset-reset-template" in dataset_js
+    assert "btn-dataset-refresh-zh-aid" in dataset_js
+
+
+def test_smart_tag_has_visible_booru_to_captioner_grounding_control():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    smart_tag_js = (repo_root / "frontend" / "js" / "smart-tag.js").read_text(encoding="utf-8")
+
+    assert 'id="smart-tag-vlm-grounding"' in html
+    assert 'data-i18n="smartTag.vlmGrounding"' in html
+    assert "vlm_grounding" in smart_tag_js
+    assert "toriigate_grounding" in smart_tag_js
 
 
 def test_dataset_export_tab_is_export_only_with_output_mode_payload():
@@ -604,6 +625,9 @@ def test_dataset_export_tab_is_export_only_with_output_mode_payload():
     assert "output_mode: outputMode" in part3
     assert "output_mode: outputMode" in local_import
     assert "_sidecarCapabilityStats" in part3
+    assert "_exportDisabledReason" in part3
+    assert "!this._exportDisabledReason?.()" in local_import
+    assert "{ ...this, imageIds:" not in local_import
     assert "_syncOutputModeUi" in part3
     assert "output_mode" in pipeline
 
@@ -655,10 +679,17 @@ def test_dataset_custom_dropdown_does_not_close_when_its_own_list_scrolls():
     repo_root = Path(__file__).resolve().parents[2]
     pipeline = (repo_root / "frontend" / "js" / "dataset-maker-pipeline.js").read_text(encoding="utf-8")
 
-    assert "function handleOutsideScroll(e)" in pipeline
+    # The custom dropdown registers its outside-interaction listeners ONCE
+    # (shared across every wrapped select) instead of per-select, which
+    # previously leaked 3 permanent listeners + a body-appended node on
+    # every init. The scroll handler must still keep an open list open
+    # when the user scrolls INSIDE it.
+    assert "ensureSharedListeners" in pipeline
+    assert "SHARED_LISTENERS_INSTALLED" in pipeline
     assert "list.contains(target)" in pipeline
-    assert "window.addEventListener('scroll', handleOutsideScroll, true);" in pipeline
-    assert "window.addEventListener('scroll', closeList, true);" not in pipeline
+    # The old per-select leak pattern must be gone.
+    assert "function handleOutsideScroll(e)" not in pipeline
+    assert "document.addEventListener('click', closeList)" not in pipeline
 
 
 def test_gallery_send_to_dataset_maker_button_tracks_selection_state():

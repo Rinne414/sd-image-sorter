@@ -7,6 +7,15 @@
     if (!window.DatasetMaker) return;
     const DM = window.DatasetMaker;
 
+    // Shared HTML-escape helper for every user-influenced string that gets
+    // interpolated into innerHTML via _t(). _t() does NOT escape its
+    // params, so callers must escape at the source. Previously this same
+    // arrow function was duplicated at two call sites (confirm-modal and
+    // result-modal); keeping one definition here removes the drift risk.
+    const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+
     // ---------- Caption rendering ----------
     DM._outputMode = function () {
         return document.querySelector('input[name="dataset-output-mode"]:checked')?.value || 'folder';
@@ -21,6 +30,8 @@
             const meta = this.meta?.get?.(Number(id)) || {};
             const token = String(meta.folder_scan_token || '').trim();
             if (token) {
+                if (this.localManifestTokens?.has?.(token)) continue;
+                besideReady += 1;
                 continue;
             }
             const capability = String(meta.sidecar_capability || '').trim();
@@ -38,6 +49,35 @@
             }
         }
         return { total: besideReady + cacheOnly + unknown, besideReady, cacheOnly, unknown };
+    };
+
+    DM._exportDisabledReason = function () {
+        if ((this.imageIds || []).length === 0) {
+            return this._t('dataset.exportNeedImages', 'Add at least one image to enable export.');
+        }
+        const outputMode = this._outputMode();
+        if (outputMode === 'beside_image') {
+            const stats = this._sidecarCapabilityStats();
+            if (stats.total <= 0) {
+                return this._t('dataset.exportNeedBesideSource',
+                    'Use Gallery or folder path scan images before writing .txt beside originals.');
+            }
+            // v3.4.4 fix #7: cache-only items (drag/drop, ZIP, RAR) CAN write
+            // a same-name .txt beside the imported app-data copy — the import
+            // notice in the UI explicitly promises that. Only genuinely UNKNOWN
+            // sources (no resolved path at all) actually block the write, so
+            // gate on those alone instead of cacheOnly + unknown.
+            if (stats.unknown > 0) {
+                return this._t('dataset.exportBesideBlocked',
+                    '{count} imports have an unknown source path and cannot write beside originals.',
+                    { count: stats.unknown });
+            }
+            return '';
+        }
+        if (!(document.getElementById('dataset-output-folder')?.value || '').trim()) {
+            return this._t('dataset.exportNeedFolder', 'Pick an output folder to enable folder export.');
+        }
+        return '';
     };
 
     DM._syncSourceCapabilityStatus = function () {
@@ -60,10 +100,13 @@
         const warning = document.getElementById('dataset-beside-image-warning');
         const besideRadio = document.querySelector('input[name="dataset-output-mode"][value="beside_image"]');
         const folderRadio = document.querySelector('input[name="dataset-output-mode"][value="folder"]');
-        const besideBlocked = stats.total > 0 && (stats.cacheOnly > 0 || stats.unknown > 0);
+        // v3.4.4 fix #7: only genuinely unknown sources block beside_image.
+        // cache_only items write beside their imported app-data copy (the
+        // import notice promises this), so they must NOT disable the radio
+        // or auto-flip the user's selection back to folder.
+        const besideBlocked = stats.total > 0 && stats.unknown > 0;
         if (besideRadio) {
             besideRadio.disabled = besideBlocked;
-            if (besideBlocked && besideRadio.checked && folderRadio) folderRadio.checked = true;
         }
         const effectiveMode = this._outputMode();
         document.querySelectorAll('[data-export-folder-only]').forEach((el) => {
@@ -73,8 +116,8 @@
             if (besideBlocked) {
                 warning.hidden = false;
                 warning.textContent = this._t('dataset.outputModeBesideBlocked',
-                    '{count} cache-only or unknown imports cannot write beside originals. Use folder export, or import via Gallery/folder path scan.',
-                    { count: stats.cacheOnly + stats.unknown });
+                    '{count} imports have an unknown source path and cannot write beside originals. Use folder export, or import via Gallery/folder path scan.',
+                    { count: stats.unknown });
             } else if (effectiveMode === 'beside_image') {
                 warning.hidden = false;
                 warning.textContent = this._t('dataset.outputModeBesideActive',
@@ -459,15 +502,7 @@
     };
 
     DM._isReadyToExport = function () {
-        if (this.imageIds.length === 0) return false;
-        const outputMode = this._outputMode();
-        if (outputMode === 'beside_image') {
-            const stats = this._sidecarCapabilityStats();
-            if (stats.total <= 0 || stats.cacheOnly > 0 || stats.unknown > 0) return false;
-            return true;
-        }
-        if (!(document.getElementById('dataset-output-folder')?.value || '').trim()) return false;
-        return true;
+        return !this._exportDisabledReason();
     };
 
     DM._updateExportEnabled = function () {
@@ -475,7 +510,10 @@
         const hint = document.getElementById('dataset-export-disabled-hint');
         const ready = this._isReadyToExport();
         if (btn) btn.disabled = !ready;
-        if (hint) hint.hidden = ready;
+        if (hint) {
+            hint.hidden = ready;
+            if (!ready) hint.textContent = this._exportDisabledReason();
+        }
         this._syncOutputModeUi?.();
         this._refreshExportPreview?.();
     };
@@ -488,7 +526,8 @@
             if (this._outputMode() !== 'beside_image' && wrap && !(document.getElementById('dataset-output-folder')?.value || '').trim()) {
                 wrap.classList.add('invalid');
             }
-            this._toast(this._t('dataset.exportDisabledHint',
+            const reason = this._exportDisabledReason();
+            this._toast(reason || this._t('dataset.exportDisabledHint',
                 'Add at least one image and pick an output folder to enable.'), 'warning');
             return;
         }
@@ -506,9 +545,7 @@
         // HTML-escape its params and the result is written via innerHTML below.
         // User-influenced values (trigger, pattern, folder, naming) must be
         // escaped at the source, not only when the outer label is later escaped.
-        const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({
-            '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-        }[c]));
+        // (escapeHtml is the shared helper defined at the top of this IIFE.)
 
         const actionLabel = outputMode === 'beside_image'
             ? this._t('dataset.confirmActionBeside', 'left in place; only .txt sidecars are written')
@@ -732,7 +769,28 @@
     DM._pollExportJob = async function (jobId) {
         let fetchFailures = 0;   // consecutive network / HTTP errors
         let lostJobCount = 0;    // consecutive idle / 404 "no such job" reads
+        // Hard safety bounds so a stuck backend job can't spin this loop
+        // forever. The previous implementation was ``while (true)`` with
+        // no overall timeout and no backoff, which meant a job stuck in
+        // ``status: 'running'`` polled at 350ms for the page lifetime.
+        const startedAt = Date.now();
+        const MAX_POLL_DURATION_MS = 6 * 60 * 60 * 1000; // 6h wall clock
+        const MAX_POLL_ITERATIONS = 100_000;             // generous hard cap
+        let iterations = 0;
+        let delayMs = 350;                               // current backoff
+        const MAX_DELAY_MS = 5000;                       // cap after idle
+        const IDLE_BACKOFF_THRESHOLD_MS = 60 * 1000;     // back off after 60s idle
+
         while (true) {
+            iterations += 1;
+            if (iterations > MAX_POLL_ITERATIONS ||
+                (Date.now() - startedAt) > MAX_POLL_DURATION_MS) {
+                return {
+                    status: 'failed',
+                    recent_errors: [this._t('dataset.exportJobTimeout',
+                        'The export job did not finish within the polling timeout. Check the output folder, then re-run the export if files are missing.')],
+                };
+            }
             let progress;
             try {
                 const qs = jobId ? `?job_id=${encodeURIComponent(jobId)}` : '';
@@ -748,7 +806,7 @@
                                 'The export job no longer exists on the backend (it may have restarted). Check the output folder, then re-run the export if files are missing.')],
                         };
                     }
-                    await new Promise(resolve => setTimeout(resolve, 350));
+                    await new Promise(resolve => setTimeout(resolve, delayMs));
                     continue;
                 }
                 if (!r.ok) {
@@ -763,7 +821,7 @@
                 // Retry, then give up after 3 consecutive failures.
                 fetchFailures += 1;
                 if (fetchFailures >= 3) throw e;
-                await new Promise(resolve => setTimeout(resolve, 350));
+                await new Promise(resolve => setTimeout(resolve, delayMs));
                 continue;
             }
             this._renderExportProgress(progress);
@@ -786,7 +844,16 @@
             } else {
                 lostJobCount = 0;
             }
-            await new Promise(resolve => setTimeout(resolve, 350));
+            // Exponential backoff: a long-running export doesn't need 350ms
+            // polling; after 60s of running we stretch toward 5s, which is
+            // still snappy enough to feel live on a multi-thousand-image job.
+            const elapsed = Date.now() - startedAt;
+            if (elapsed > IDLE_BACKOFF_THRESHOLD_MS && progress.status === 'running') {
+                delayMs = Math.min(MAX_DELAY_MS, Math.round(delayMs * 1.5));
+            } else {
+                delayMs = 350;
+            }
+            await new Promise(resolve => setTimeout(resolve, delayMs));
         }
     };
 
@@ -919,9 +986,7 @@
             titleEl.textContent = this._t(map[resolved], def[resolved]);
         }
         if (detailEl) {
-            const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({
-                '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-            }[c]));
+            // escapeHtml is the shared helper defined at the top of this IIFE.
             let html = '';
             if (resolved === 'ok') {
                 html = this._t('dataset.resultDetailOk',
@@ -1098,12 +1163,16 @@
             setTimeout(() => { dropdown.hidden = true; }, 150);
         });
 
-        // Invalidate cache when image set changes
-        const origAddImages = DM._addImages;
-        if (origAddImages) {
-            DM._addImages = function (...args) {
+        // Invalidate the vocab cache when the image set changes. The
+        // previous version patched a non-existent ``DM._addImages`` (the
+        // real public method is ``addImageIds`` on dataset-maker.js), so
+        // the guard was always false and the cache never cleared,
+        // leaving stale tag suggestions after adding/removing images.
+        const origAddImageIds = DM.addImageIds;
+        if (typeof origAddImageIds === 'function') {
+            DM.addImageIds = function (...args) {
                 cachedVocab = null;
-                return origAddImages.apply(this, args);
+                return origAddImageIds.apply(this, args);
             };
         }
     })();
