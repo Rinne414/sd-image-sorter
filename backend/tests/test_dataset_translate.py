@@ -12,7 +12,10 @@ class DummyTextProvider:
 
 
 def test_dataset_translate_external_free_success(test_client, monkeypatch):
-    import routers.dataset as dataset_router
+    # After the v3.4.5 extraction the translation subsystem lives in
+    # services.dataset_translate_service; tests patch that module, not the
+    # router (the router is now a thin adapter).
+    import services.dataset_translate_service as translate_service
 
     async def fake_translate(payload, texts):
         return {
@@ -21,7 +24,7 @@ def test_dataset_translate_external_free_success(test_client, monkeypatch):
             "provider": payload.external_provider,
         }
 
-    monkeypatch.setattr(dataset_router, "_translate_external_texts", fake_translate)
+    monkeypatch.setattr(translate_service, "_translate_external_texts", fake_translate)
 
     response = test_client.post("/api/dataset/translate", json={
         "texts": ["long_hair, blue_eyes"],
@@ -36,7 +39,7 @@ def test_dataset_translate_external_free_success(test_client, monkeypatch):
 
 
 def test_dataset_translate_external_failure_is_clear(test_client, monkeypatch):
-    import routers.dataset as dataset_router
+    import services.dataset_translate_service as translate_service
     from fastapi import HTTPException
 
     async def fake_translate(payload, texts):
@@ -46,7 +49,7 @@ def test_dataset_translate_external_failure_is_clear(test_client, monkeypatch):
             "provider": "auto",
         })
 
-    monkeypatch.setattr(dataset_router, "_translate_external_texts", fake_translate)
+    monkeypatch.setattr(translate_service, "_translate_external_texts", fake_translate)
 
     response = test_client.post("/api/dataset/translate", json={
         "texts": ["long_hair, blue_eyes"],
@@ -141,7 +144,7 @@ def test_dataset_translate_vlm_empty_translation_is_error(test_client, monkeypat
 
 def test_external_translation_dedupes_tags_and_uses_cache(monkeypatch, tmp_path):
     import asyncio
-    import routers.dataset as dataset_router
+    import services.dataset_translate_service as translate_service
 
     calls = []
 
@@ -152,19 +155,19 @@ def test_external_translation_dedupes_tags_and_uses_cache(monkeypatch, tmp_path)
             "provider": provider,
         }
 
-    monkeypatch.setattr(dataset_router, "DEFAULT_CACHE_DIR", str(tmp_path))
-    monkeypatch.setattr(dataset_router, "_TRANSLATION_CACHE", None)
-    monkeypatch.setattr(dataset_router, "_translate_external_uncached", fake_uncached)
+    monkeypatch.setattr(translate_service, "DEFAULT_CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(translate_service, "_TRANSLATION_CACHE", None)
+    monkeypatch.setattr(translate_service, "_translate_external_uncached", fake_uncached)
 
-    payload = dataset_router.DatasetTranslateRequest(
+    payload = translate_service.DatasetTranslateRequest(
         texts=["long hair, blue eyes", "blue eyes, smile, long hair"],
         provider_mode="external",
         external_provider="google",
         mode="tags",
     )
 
-    first = asyncio.run(dataset_router._translate_external_texts(payload, payload.texts))
-    second = asyncio.run(dataset_router._translate_external_texts(payload, payload.texts))
+    first = asyncio.run(translate_service._translate_external_texts(payload, payload.texts))
+    second = asyncio.run(translate_service._translate_external_texts(payload, payload.texts))
 
     assert calls == [["long hair", "blue eyes", "smile"]]
     assert first["unique_terms"] == 3
@@ -178,7 +181,7 @@ def test_external_translation_dedupes_tags_and_uses_cache(monkeypatch, tmp_path)
 
 def test_external_auto_cn_uses_mainland_chain(monkeypatch, tmp_path):
     import asyncio
-    import routers.dataset as dataset_router
+    import services.dataset_translate_service as translate_service
 
     calls = []
 
@@ -191,18 +194,18 @@ def test_external_auto_cn_uses_mainland_chain(monkeypatch, tmp_path):
             "provider": "baidu",
         }
 
-    monkeypatch.setattr(dataset_router, "DEFAULT_CACHE_DIR", str(tmp_path))
-    monkeypatch.setattr(dataset_router, "_TRANSLATION_CACHE", None)
-    monkeypatch.setattr(dataset_router, "_translate_external_uncached", fake_uncached)
+    monkeypatch.setattr(translate_service, "DEFAULT_CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(translate_service, "_TRANSLATION_CACHE", None)
+    monkeypatch.setattr(translate_service, "_translate_external_uncached", fake_uncached)
 
-    payload = dataset_router.DatasetTranslateRequest(
+    payload = translate_service.DatasetTranslateRequest(
         texts=["long hair, blue eyes"],
         provider_mode="external",
         external_provider="auto_cn",
         mode="tags",
     )
 
-    result = asyncio.run(dataset_router._translate_external_texts(payload, payload.texts))
+    result = asyncio.run(translate_service._translate_external_texts(payload, payload.texts))
 
     assert calls == ["baidu_free"]
     assert result["provider"] == "baidu"
@@ -211,7 +214,7 @@ def test_external_auto_cn_uses_mainland_chain(monkeypatch, tmp_path):
 
 def test_external_auto_cn_falls_back_on_empty_provider(monkeypatch, tmp_path):
     import asyncio
-    import routers.dataset as dataset_router
+    import services.dataset_translate_service as translate_service
 
     calls = []
 
@@ -224,18 +227,18 @@ def test_external_auto_cn_falls_back_on_empty_provider(monkeypatch, tmp_path):
             "provider": provider,
         }
 
-    monkeypatch.setattr(dataset_router, "DEFAULT_CACHE_DIR", str(tmp_path))
-    monkeypatch.setattr(dataset_router, "_TRANSLATION_CACHE", None)
-    monkeypatch.setattr(dataset_router, "_translate_external_uncached", fake_uncached)
+    monkeypatch.setattr(translate_service, "DEFAULT_CACHE_DIR", str(tmp_path))
+    monkeypatch.setattr(translate_service, "_TRANSLATION_CACHE", None)
+    monkeypatch.setattr(translate_service, "_translate_external_uncached", fake_uncached)
 
-    payload = dataset_router.DatasetTranslateRequest(
+    payload = translate_service.DatasetTranslateRequest(
         texts=["long hair, blue eyes"],
         provider_mode="external",
         external_provider="auto_cn",
         mode="tags",
     )
 
-    result = asyncio.run(dataset_router._translate_external_texts(payload, payload.texts))
+    result = asyncio.run(translate_service._translate_external_texts(payload, payload.texts))
 
     assert calls[:2] == ["baidu_free", "alibaba_free"]
     assert result["provider"] == "alibaba_free"
@@ -243,7 +246,7 @@ def test_external_auto_cn_falls_back_on_empty_provider(monkeypatch, tmp_path):
 
 
 def test_physton_no_key_free_providers_are_supported():
-    import routers.dataset as dataset_router
+    import services.dataset_translate_service as translate_service
 
     physton_keys = {
         "bing_free",
@@ -270,20 +273,20 @@ def test_physton_no_key_free_providers_are_supported():
         "mymemory_free",
     }
     supported = (
-        set(dataset_router._DIRECT_TRANSLATION_PROVIDER_ALIASES)
-        | set(dataset_router._TRANSLATORS_PROVIDER_ALIASES)
+        set(translate_service._DIRECT_TRANSLATION_PROVIDER_ALIASES)
+        | set(translate_service._TRANSLATORS_PROVIDER_ALIASES)
     )
 
     assert physton_keys <= supported
-    assert "alibaba_free" in dataset_router._GLOBAL_FREE_PROVIDER_CHAIN
-    assert "alibaba_free" in dataset_router._MAINLAND_FREE_PROVIDER_CHAIN
+    assert "alibaba_free" in translate_service._GLOBAL_FREE_PROVIDER_CHAIN
+    assert "alibaba_free" in translate_service._MAINLAND_FREE_PROVIDER_CHAIN
 
 
 def test_translators_provider_alias_uses_optional_engine(monkeypatch):
     import asyncio
     import sys
     import types
-    import routers.dataset as dataset_router
+    import services.dataset_translate_service as translate_service
 
     fake = types.SimpleNamespace()
     seen = {}
@@ -296,7 +299,7 @@ def test_translators_provider_alias_uses_optional_engine(monkeypatch):
     fake.translate_text = translate_text
     monkeypatch.setitem(sys.modules, "translators", fake)
 
-    result = asyncio.run(dataset_router._translate_translators_web(
+    result = asyncio.run(translate_service._translate_translators_web(
         "qqTranSmart_free",
         ["long hair"],
         source_lang="en",
