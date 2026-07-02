@@ -1,4 +1,5 @@
-﻿# SD Image Sorter
+﻿# SD Image Sorter (兄弟们 先别用 太多bugs了 我自己都红温了 点个star等我v3.5.0 深度修改) (Brothers, don't use it yet, there are too many bugs. I'm already experiencing red-hot issues myself. Give it a star and wait for my deeply modified version 3.5.0.)
+ <img width="1054" height="1144" alt="da71e64a20a4462388898572de22720e0cf3d737" src="https://github.com/user-attachments/assets/6f88d686-0743-4fb8-a93b-2cb42b44b184" />
 
 <p align="center">
   <b>Local-first AI image command center for Stable Diffusion creators.</b>
