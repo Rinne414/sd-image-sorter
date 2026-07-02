@@ -77,6 +77,7 @@ class SmartTagStartRequest(BaseModel):
     # v3.4.3: ToriiGate generation parameters.
     toriigate_caption_length: str = Field(default="detailed", pattern="^(brief|detailed)$")
     toriigate_max_new_tokens: int = Field(default=0, ge=0, le=1024)
+    vlm_grounding: bool = True
     toriigate_grounding: bool = True
 
 

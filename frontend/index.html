@@ -544,7 +544,7 @@
                                 <button id="btn-selection-mass-tag-editor" class="btn btn-secondary full-width" title="Bulk tag operations on selected images" data-i18n-title="massTag.selectionTooltip"><span>🔧</span> <span data-i18n="massTag.selectionOpen">Edit Selected Tags</span></button>
                             </div>
                         </div>
-                        <details class="selection-panel-section selection-panel-disclosure">
+                        <details id="selection-export-disclosure" class="selection-panel-section selection-panel-disclosure">
                             <summary class="selection-panel-section-title selection-panel-disclosure-summary" data-i18n="selection.exportSection">Export</summary>
                             <div class="selection-panel-actions selection-panel-export-actions" aria-label="Export selected images">
                                 <button id="btn-export-selected" class="btn btn-secondary full-width selection-panel-explained-action">
@@ -563,7 +563,7 @@
                                 </button>
                             </div>
                         </details>
-                        <details class="selection-panel-section selection-panel-disclosure selection-panel-danger-section">
+                        <details id="selection-danger-disclosure" class="selection-panel-section selection-panel-disclosure selection-panel-danger-section">
                             <summary class="selection-panel-section-title selection-panel-disclosure-summary" data-i18n="selection.dangerSection">Remove</summary>
                             <div class="selection-panel-actions selection-panel-danger-actions" aria-label="Remove selected images">
                                 <button id="btn-remove-selected-gallery" class="btn btn-secondary full-width" title="Remove selected images from gallery (files not deleted)"><span>🧹</span> <span data-i18n="selection.removeFromGallery">Remove from Gallery</span></button>
@@ -662,18 +662,6 @@
                             <button class="view-btn" data-size="waterfall" title="Waterfall view" aria-label="Waterfall view" aria-pressed="false" data-i18n-title="gallery.viewWaterfall" data-i18n-aria="gallery.viewWaterfall">
                                 <span aria-hidden="true">▥</span>
                             </button>
-                            <div class="divider-v" aria-hidden="true"></div>
-                            <div class="grid-size-control" role="group" aria-label="Adjust image size">
-                                <button class="grid-size-btn" id="grid-size-decrease" type="button" title="Decrease image size" aria-label="Decrease image size">
-                                    <span aria-hidden="true">−</span>
-                                </button>
-                                <input type="range" id="grid-size-slider" class="grid-size-slider"
-                                       min="120" max="400" value="200" step="20"
-                                       aria-label="Image size" title="Adjust image size">
-                                <button class="grid-size-btn" id="grid-size-increase" type="button" title="Increase image size" aria-label="Increase image size">
-                                    <span aria-hidden="true">+</span>
-                                </button>
-                            </div>
                             <div class="divider-v" aria-hidden="true"></div>
                             <div class="aspect-quick-toggle" id="aspect-quick-toggle" role="group" aria-label="Filter by aspect ratio" data-i18n-aria="gallery.aspectToggle">
                                 <button class="aspect-quick-btn is-active" data-aspect="" type="button" aria-pressed="true" title="Any aspect ratio" data-i18n-title="gallery.aspectAll">
@@ -2314,7 +2302,7 @@
                         </div>
 
                         <!-- SECTION 2: Model info (collapsed — for users who want details) -->
-                        <details class="censor-detect-section" style="margin-top:8px;">
+                        <details class="censor-detect-section" id="censor-model-details" style="margin-top:8px;">
                             <summary style="cursor:pointer; font-weight:600; font-size:13px; padding:8px 0; color:var(--text-secondary);">
                                 📋 <span data-i18n="censor.modelCapabilities">Model Details</span>
                             </summary>
@@ -2323,7 +2311,7 @@
                         </details>
 
                         <!-- SECTION 3: Advanced model picker (collapsed) -->
-                        <details class="censor-detect-section" style="margin-top:4px;">
+                        <details class="censor-detect-section" id="censor-advanced-model-picker" style="margin-top:4px;">
                             <summary style="cursor:pointer; font-weight:600; font-size:13px; padding:8px 0; color:var(--text-secondary);">
                                 ⚙️ <span data-i18n="censor.advancedModelPicker">Advanced Model Picker</span>
                             </summary>
@@ -2337,7 +2325,7 @@
                             </div>
 
                             <div class="form-group">
-                                <label class="checkbox-label">
+                                <label class="checkbox-label" id="censor-show-advanced-models-row">
                                     <input type="checkbox" id="censor-show-advanced-models">
                                     <span class="checkbox-custom"></span>
                                     <span class="checkbox-text" data-i18n="censor.showAdvancedModels">Show advanced legacy models (YOLO26 / generic YOLOv8)</span>
@@ -3206,103 +3194,105 @@
                                     </p>
                                 </div>
                             </div>
-                            <div id="dataset-caption-diff" class="dataset-caption-diff" hidden></div>
+                            <div class="dataset-editor-controls">
+                                <div id="dataset-caption-diff" class="dataset-caption-diff" hidden></div>
 
-                            <!-- point 2/3: two-box caption editor. A per-image
-                                 type toggle decides what gets exported (booru
-                                 tags only / natural-language sentence only /
-                                 both), with bulk + auto helpers for large sets.
-                                 Hidden until an image is active. -->
-                            <div class="dataset-caption-type" id="dataset-caption-type" role="group"
-                                 aria-label="Caption type for this image" hidden>
-                                <span class="dataset-caption-type-label" data-i18n="dataset.captionTypeLabel">This image:</span>
-                                <div class="dataset-caption-type-seg" role="radiogroup">
-                                    <button type="button" class="dataset-caption-type-btn" data-caption-type="booru"
-                                            role="radio" aria-checked="false"
-                                            data-i18n="dataset.captionTypeBooru" data-i18n-title="dataset.captionTypeBooruTip"
-                                            title="Export booru tags only">Booru</button>
-                                    <button type="button" class="dataset-caption-type-btn" data-caption-type="both"
-                                            role="radio" aria-checked="false"
-                                            data-i18n="dataset.captionTypeBoth" data-i18n-title="dataset.captionTypeBothTip"
-                                            title="Export tags, then the natural-language sentence">Both</button>
-                                    <button type="button" class="dataset-caption-type-btn" data-caption-type="nl"
-                                            role="radio" aria-checked="false"
-                                            data-i18n="dataset.captionTypeNl" data-i18n-title="dataset.captionTypeNlTip"
-                                            title="Export the natural-language sentence only">NL</button>
+                                <!-- point 2/3: two-box caption editor. A per-image
+                                     type toggle decides what gets exported (booru
+                                     tags only / natural-language sentence only /
+                                     both), with bulk + auto helpers for large sets.
+                                     Hidden until an image is active. -->
+                                <div class="dataset-caption-type" id="dataset-caption-type" role="group"
+                                     aria-label="Caption type for this image" hidden>
+                                    <span class="dataset-caption-type-label" data-i18n="dataset.captionTypeLabel">This image:</span>
+                                    <div class="dataset-caption-type-seg" role="radiogroup">
+                                        <button type="button" class="dataset-caption-type-btn" data-caption-type="booru"
+                                                role="radio" aria-checked="false"
+                                                data-i18n="dataset.captionTypeBooru" data-i18n-title="dataset.captionTypeBooruTip"
+                                                title="Export booru tags only">Booru</button>
+                                        <button type="button" class="dataset-caption-type-btn" data-caption-type="both"
+                                                role="radio" aria-checked="false"
+                                                data-i18n="dataset.captionTypeBoth" data-i18n-title="dataset.captionTypeBothTip"
+                                                title="Export tags, then the natural-language sentence">Both</button>
+                                        <button type="button" class="dataset-caption-type-btn" data-caption-type="nl"
+                                                role="radio" aria-checked="false"
+                                                data-i18n="dataset.captionTypeNl" data-i18n-title="dataset.captionTypeNlTip"
+                                                title="Export the natural-language sentence only">NL</button>
+                                    </div>
+                                    <div class="dataset-caption-type-bulk">
+                                        <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-captype-selected"
+                                                data-i18n="dataset.captionTypeApplySelected"
+                                                title="Apply the active image's type to the selected queue images">▸ Selected</button>
+                                        <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-captype-all"
+                                                data-i18n="dataset.captionTypeApplyAll"
+                                                title="Apply the active image's type to every queue image">▸ All</button>
+                                        <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-captype-auto"
+                                                data-i18n="dataset.captionTypeAuto"
+                                                title="Auto: images that have a natural-language caption → Both, the rest → Booru">⚡ Auto</button>
+                                    </div>
                                 </div>
-                                <div class="dataset-caption-type-bulk">
-                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-captype-selected"
-                                            data-i18n="dataset.captionTypeApplySelected"
-                                            title="Apply the active image's type to the selected queue images">▸ Selected</button>
-                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-captype-all"
-                                            data-i18n="dataset.captionTypeApplyAll"
-                                            title="Apply the active image's type to every queue image">▸ All</button>
-                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-captype-auto"
-                                            data-i18n="dataset.captionTypeAuto"
-                                            title="Auto: images that have a natural-language caption → Both, the rest → Booru">⚡ Auto</button>
+
+                                <label class="dataset-box-label dataset-box-label-booru" id="dataset-booru-label"
+                                       for="dataset-editor-textarea" data-i18n="dataset.booruBoxLabel" hidden>Booru tags</label>
+                                <textarea class="dataset-editor-textarea" id="dataset-editor-textarea"
+                                          placeholder="caption text..."
+                                          data-i18n-placeholder="dataset.captionPlaceholder"
+                                          hidden></textarea>
+
+                                <!-- Active-image tag edit belongs next to the active caption, not in Step 3. -->
+                                <div class="dataset-tag-pills-section dataset-tag-pills-section-inline" id="dataset-tag-pills-section" hidden>
+                                    <h4 class="dataset-tag-pills-title" data-i18n="dataset.tagPillsTitle">Tags</h4>
+                                    <!-- Color legend for the 14-class danbooru tag categories. Body rows
+                                         are injected by dataset-maker-cleanups.js (one source of truth for
+                                         the palette + labels, shared with the LoRA-prune checkboxes). -->
+                                    <details class="dataset-tag-color-legend" id="dataset-tag-color-legend" open>
+                                        <summary data-i18n="dataset.tagColorLegendTitle">🎨 Tag color legend</summary>
+                                        <div class="dataset-tag-color-legend-body" id="dataset-tag-color-legend-body"></div>
+                                    </details>
+                                    <div class="dataset-tag-add-wrap">
+                                        <input type="text" class="dataset-tag-add-input" id="dataset-tag-add-input"
+                                               placeholder="Add tag..."
+                                               data-i18n-placeholder="dataset.addTagPlaceholder"
+                                               autocomplete="off">
+                                        <div class="dataset-tag-add-dropdown" id="dataset-tag-add-dropdown" hidden></div>
+                                    </div>
+                                    <div class="dataset-tag-pills-wrap" id="dataset-tag-pills-wrap"></div>
                                 </div>
-                            </div>
 
-                            <label class="dataset-box-label dataset-box-label-booru" id="dataset-booru-label"
-                                   for="dataset-editor-textarea" data-i18n="dataset.booruBoxLabel" hidden>Booru tags</label>
-                            <textarea class="dataset-editor-textarea" id="dataset-editor-textarea"
-                                      placeholder="caption text..."
-                                      data-i18n-placeholder="dataset.captionPlaceholder"
-                                      hidden></textarea>
+                                <!-- point 2: natural-language box, parallel to the booru box.
+                                     Edits here are kept separate from the tags so the user
+                                     can see and control both independently. -->
+                                <label class="dataset-box-label dataset-box-label-nl" id="dataset-nl-label"
+                                       for="dataset-editor-nl" data-i18n="dataset.nlBoxLabel" hidden>Natural language</label>
+                                <textarea class="dataset-editor-nl" id="dataset-editor-nl"
+                                          placeholder="natural-language caption..."
+                                          data-i18n-placeholder="dataset.nlPlaceholder"
+                                          hidden></textarea>
 
-                            <!-- Active-image tag edit belongs next to the active caption, not in Step 3. -->
-                            <div class="dataset-tag-pills-section dataset-tag-pills-section-inline" id="dataset-tag-pills-section" hidden>
-                                <h4 class="dataset-tag-pills-title" data-i18n="dataset.tagPillsTitle">Tags</h4>
-                                <!-- Color legend for the 14-class danbooru tag categories. Body rows
-                                     are injected by dataset-maker-cleanups.js (one source of truth for
-                                     the palette + labels, shared with the LoRA-prune checkboxes). -->
-                                <details class="dataset-tag-color-legend" id="dataset-tag-color-legend" open>
-                                    <summary data-i18n="dataset.tagColorLegendTitle">🎨 Tag color legend</summary>
-                                    <div class="dataset-tag-color-legend-body" id="dataset-tag-color-legend-body"></div>
+                                <!-- v3.2.2 T-power-PR2 (C): tag confidence pill panel.
+                                     Lets the user spot low-confidence false positives at
+                                     a glance and one-click delete them from the caption. -->
+                                <details class="dataset-confidence-panel" id="dataset-confidence-panel" hidden>
+                                    <summary class="dataset-confidence-summary">
+                                        <span aria-hidden="true">📊</span>
+                                        <span data-i18n="dataset.confidenceTitle">Tag confidence</span>
+                                        <span class="dataset-confidence-summary-hint" id="dataset-confidence-summary-hint"></span>
+                                    </summary>
+                                    <div class="dataset-confidence-body">
+                                        <p class="dataset-confidence-help" data-i18n="dataset.confidenceHelp">
+                                            Each pill shows the local tagger's confidence. Click ✕ to drop a tag from the active caption.
+                                        </p>
+                                        <div class="dataset-confidence-pills" id="dataset-confidence-pills"></div>
+                                    </div>
                                 </details>
-                                <div class="dataset-tag-add-wrap">
-                                    <input type="text" class="dataset-tag-add-input" id="dataset-tag-add-input"
-                                           placeholder="Add tag..."
-                                           data-i18n-placeholder="dataset.addTagPlaceholder"
-                                           autocomplete="off">
-                                    <div class="dataset-tag-add-dropdown" id="dataset-tag-add-dropdown" hidden></div>
+
+                                <div class="dataset-editor-actions" id="dataset-editor-actions" hidden>
+                                    <button class="btn btn-secondary btn-small" id="btn-dataset-prev-image" data-i18n="dataset.prevImage">⬅ Prev</button>
+                                    <button class="btn btn-secondary btn-small" id="btn-dataset-next-image" data-i18n="dataset.nextImage">Next ➡</button>
+                                    <button class="btn btn-ghost btn-small" id="btn-dataset-revert-caption" data-i18n="dataset.revertCaption">Revert</button>
+                                    <button class="btn btn-ghost btn-small" id="btn-dataset-undo-caption" data-i18n="dataset.undoCaption">Undo</button>
+                                    <button class="btn btn-danger btn-small" id="btn-dataset-remove-image" data-i18n="dataset.removeFromDataset">Remove</button>
                                 </div>
-                                <div class="dataset-tag-pills-wrap" id="dataset-tag-pills-wrap"></div>
-                            </div>
-
-                            <!-- point 2: natural-language box, parallel to the booru box.
-                                 Edits here are kept separate from the tags so the user
-                                 can see and control both independently. -->
-                            <label class="dataset-box-label dataset-box-label-nl" id="dataset-nl-label"
-                                   for="dataset-editor-nl" data-i18n="dataset.nlBoxLabel" hidden>Natural language</label>
-                            <textarea class="dataset-editor-nl" id="dataset-editor-nl"
-                                      placeholder="natural-language caption..."
-                                      data-i18n-placeholder="dataset.nlPlaceholder"
-                                      hidden></textarea>
-
-                            <!-- v3.2.2 T-power-PR2 (C): tag confidence pill panel.
-                                 Lets the user spot low-confidence false positives at
-                                 a glance and one-click delete them from the caption. -->
-                            <details class="dataset-confidence-panel" id="dataset-confidence-panel" hidden>
-                                <summary class="dataset-confidence-summary">
-                                    <span aria-hidden="true">📊</span>
-                                    <span data-i18n="dataset.confidenceTitle">Tag confidence</span>
-                                    <span class="dataset-confidence-summary-hint" id="dataset-confidence-summary-hint"></span>
-                                </summary>
-                                <div class="dataset-confidence-body">
-                                    <p class="dataset-confidence-help" data-i18n="dataset.confidenceHelp">
-                                        Each pill shows the local tagger's confidence. Click ✕ to drop a tag from the active caption.
-                                    </p>
-                                    <div class="dataset-confidence-pills" id="dataset-confidence-pills"></div>
-                                </div>
-                            </details>
-
-                            <div class="dataset-editor-actions" id="dataset-editor-actions" hidden>
-                                <button class="btn btn-secondary btn-small" id="btn-dataset-prev-image" data-i18n="dataset.prevImage">⬅ Prev</button>
-                                <button class="btn btn-secondary btn-small" id="btn-dataset-next-image" data-i18n="dataset.nextImage">Next ➡</button>
-                                <button class="btn btn-ghost btn-small" id="btn-dataset-revert-caption" data-i18n="dataset.revertCaption">Revert</button>
-                                <button class="btn btn-ghost btn-small" id="btn-dataset-undo-caption" data-i18n="dataset.undoCaption">Undo</button>
-                                <button class="btn btn-danger btn-small" id="btn-dataset-remove-image" data-i18n="dataset.removeFromDataset">Remove</button>
                             </div>
                         </section>
 
@@ -3320,46 +3310,95 @@
                                             type="button" hidden data-i18n="common.cancel">Cancel</button>
                                 </div>
                             </div>
-                            <details class="dataset-vocab-panel" id="dataset-vocab-panel">
-                                <summary class="dataset-vocab-summary">
-                                    <span aria-hidden="true">#</span>
-                                    <span data-i18n="dataset.vocabTitle">Tag Vocabulary</span>
-                                    <span class="dataset-vocab-count" id="dataset-vocab-count">0 / 0</span>
-                                </summary>
-                                <div class="dataset-vocab-body">
-                                    <p class="dataset-vocab-help" data-i18n="dataset.vocabHelp">
-                                        This list is built from the current dataset captions. Use + for Common tags and - for Blacklist; click again to clear.
-                                    </p>
-                                    <div class="dataset-vocab-controls">
-                                        <input type="text" class="form-input dataset-vocab-search" id="dataset-vocab-search"
-                                               placeholder="Filter tags..." data-i18n-placeholder="dataset.vocabSearchPlaceholder">
-                                        <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-vocab-refresh"
-                                                data-i18n="dataset.vocabRefresh">Refresh</button>
+                            <div class="dataset-workflow-rail" aria-label="Dataset Maker workflow">
+                                <span class="dataset-workflow-step is-active">
+                                    <strong>1</strong>
+                                    <span data-i18n="dataset.workflowSetup">Setup</span>
+                                </span>
+                                <span class="dataset-workflow-step">
+                                    <strong>2</strong>
+                                    <span data-i18n="dataset.workflowGenerate">Generate</span>
+                                </span>
+                                <span class="dataset-workflow-step">
+                                    <strong>3</strong>
+                                    <span data-i18n="dataset.workflowReview">Review</span>
+                                </span>
+                                <span class="dataset-workflow-step">
+                                    <strong>4</strong>
+                                    <span data-i18n="dataset.workflowExport">Clean / Export</span>
+                                </span>
+                            </div>
+
+                            <!-- Step 1: LoRA setup. Keep trigger/common tags before generation. -->
+                            <section class="dataset-card dataset-card-primary" id="dataset-step-setup">
+                                <h3 class="dataset-card-title">
+                                    <span class="dataset-step-number" aria-hidden="true">1</span>
+                                    <span data-i18n="dataset.setupTitle">LoRA setup</span>
+                                </h3>
+                                <p class="dataset-card-help" data-i18n="dataset.setupHelp">
+                                    Fill this before Smart Tag. Trigger and common tags are added to exported captions; LoRA type controls which repeated tags should be pruned later.
+                                </p>
+                                <label class="form-label dataset-trigger-field">
+                                    <span data-i18n="dataset.triggerCaptionLabel">Trigger word</span>
+                                    <div class="dataset-input-action-row">
+                                        <input type="text" id="dataset-trigger" class="form-input"
+                                               placeholder="subject"
+                                               data-i18n-placeholder="dataset.triggerPlaceholderShort"
+                                               aria-label="Trigger word">
+                                        <button type="button" class="btn btn-ghost btn-small"
+                                                id="btn-dataset-quickfill-trigger"
+                                                disabled
+                                                data-i18n="dataset.quickfillTrigger"
+                                                data-i18n-title="dataset.quickfillTriggerTooltip"
+                                                title="Add this trigger word to Common tags so it appears in every caption .txt.">
+                                            Add to captions
+                                        </button>
                                     </div>
-                                    <div class="dataset-vocab-list" id="dataset-vocab-list"></div>
+                                    <small class="dataset-field-hint" data-i18n="dataset.triggerCaptionHint">
+                                        Use one memorable token. It is used for renaming and, when added to Common tags, appears once in every caption.
+                                    </small>
+                                    <small class="dataset-preview-line" id="dataset-naming-preview" aria-live="polite"></small>
+                                </label>
+                                <label class="form-label">
+                                    <span data-i18n="dataset.loraPruneLabel">Prune tags for LoRA type:</span>
+                                    <select id="dataset-lora-type" class="form-input">
+                                        <option value="character" data-i18n="dataset.loraTypeCharacter">Character LoRA</option>
+                                        <option value="style" data-i18n="dataset.loraTypeStyle">Style LoRA</option>
+                                        <option value="outfit" data-i18n="dataset.loraTypeOutfit">Outfit / Clothing LoRA</option>
+                                        <option value="pose" data-i18n="dataset.loraTypePose">Pose / Action LoRA</option>
+                                        <option value="concept" data-i18n="dataset.loraTypeConcept">Concept LoRA</option>
+                                        <option value="general" data-i18n="dataset.loraTypeGeneral">General (noise only)</option>
+                                        <option value="custom" data-i18n="dataset.loraTypeCustom">Custom (pick below)</option>
+                                    </select>
+                                    <small class="dataset-lora-prune-hint" id="dataset-lora-type-hint"></small>
+                                </label>
+                                <label class="form-label">
+                                    <span data-i18n="dataset.commonTagsLabel">Common tags (added to every caption)</span>
+                                    <textarea id="dataset-common-tags" class="form-input" rows="2"
+                                              placeholder="masterpiece, best_quality"
+                                              data-i18n-placeholder="dataset.commonTagsPlaceholder"></textarea>
+                                </label>
+                                <div class="dataset-quickfill-row">
+                                    <button type="button" class="btn btn-ghost btn-small"
+                                            id="btn-dataset-quickfill-quality"
+                                            data-i18n="dataset.quickfillQuality">
+                                        Add quality tags
+                                    </button>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-anime-defaults"
+                                            title="Fill a simple starter setup: common quality tags, underscore handling, and sequential filenames"
+                                            data-i18n="dataset.animeDefaultsButton">Apply starter defaults</button>
                                 </div>
-                            </details>
-                            <!-- Section A: Tagging shortcut -->
+                            </section>
+
+                            <!-- Step 2: Tagging shortcut -->
                             <section class="dataset-card" id="dataset-step-caption">
                                 <h3 class="dataset-card-title">
-                                    <span aria-hidden="true">🏷️</span>
-                                    <span data-i18n="dataset.cardTagTitle">Auto-tag (optional)</span>
+                                    <span class="dataset-step-number" aria-hidden="true">2</span>
+                                    <span data-i18n="dataset.cardTagTitle">Generate captions</span>
                                 </h3>
                                 <p class="dataset-card-help" data-i18n="dataset.cardTagHelp">
-                                    Run AI tagging on every image in the queue. Skips images that are already tagged.
+                                    Run Smart Tag after setup. It writes starter captions, then you review and edit each image in the center pane.
                                 </p>
-                                <button class="btn btn-secondary full-width" id="btn-dataset-tag-all">
-                                    <span aria-hidden="true">🏷️</span>
-                                    <span data-i18n="dataset.tagAll">Tag all images now</span>
-                                </button>
-                                <!-- v3.2.2 follow-up: let the user opt-in to re-tagging already-tagged
-                                     images. Default is OFF (matches the help text + the backend's
-                                     retag_all=False default), so a second click of Tag all only
-                                     processes images that don't have tags yet. -->
-                                <label class="dataset-tag-retag-row">
-                                    <input type="checkbox" id="dataset-tag-retag-all">
-                                    <span data-i18n="dataset.tagRetagAll">Re-tag images that are already tagged</span>
-                                </label>
                                 <button class="btn btn-primary full-width" id="btn-dataset-smart-tag" style="margin-top: 8px;">
                                     <span aria-hidden="true">✨</span>
                                     <span data-i18n="dataset.smartTag">Smart Tag (WD14 + VLM)</span>
@@ -3367,17 +3406,38 @@
                                 <p class="dataset-card-help" data-i18n="dataset.smartTagHelp" style="margin-top: 6px; font-size: 12px; opacity: 0.75;">
                                     Run one or two local taggers, optionally add a VLM sentence, clean noise tags, and write captions back to every image in this dataset.
                                 </p>
+                                <details class="dataset-secondary-actions">
+                                    <summary data-i18n="dataset.legacyTaggerToggle">Local tagger shortcut</summary>
+                                    <button class="btn btn-secondary full-width" id="btn-dataset-tag-all">
+                                        <span aria-hidden="true">🏷️</span>
+                                        <span data-i18n="dataset.tagAll">Tag all images now</span>
+                                    </button>
+                                    <label class="dataset-tag-retag-row">
+                                        <input type="checkbox" id="dataset-tag-retag-all">
+                                        <span data-i18n="dataset.tagRetagAll">Re-tag images that are already tagged</span>
+                                    </label>
+                                </details>
                                 <button class="btn btn-secondary full-width" id="btn-dataset-add-to-collection" style="margin-top: 8px;">
                                     <span aria-hidden="true">📚</span>
                                     <span data-i18n="collections.addTo">Add to collection</span>
                                 </button>
                             </section>
 
-                            <!-- Section B: Captions polish (collapsed by default - novice users don't need this) -->
-                            <details class="dataset-card dataset-card-details">
+                            <section class="dataset-card dataset-review-card">
+                                <h3 class="dataset-card-title">
+                                    <span class="dataset-step-number" aria-hidden="true">3</span>
+                                    <span data-i18n="dataset.reviewTitle">Review captions</span>
+                                </h3>
+                                <p class="dataset-card-help" data-i18n="dataset.reviewHelp">
+                                    Pick an image on the left. Keep the image preview and caption editor together in the center pane while you fix tags, sentences, and caption type.
+                                </p>
+                            </section>
+
+                            <!-- Step 4: Caption polish and cleanup -->
+                            <details class="dataset-card dataset-card-details" id="dataset-step-cleanup">
                                 <summary class="dataset-card-title">
-                                    <span aria-hidden="true">✏️</span>
-                                    <span data-i18n="dataset.cardCaptionTitle">Caption polish (optional)</span>
+                                    <span class="dataset-step-number" aria-hidden="true">4</span>
+                                    <span data-i18n="dataset.cardCaptionTitle">Clean captions before export</span>
                                 </summary>
                                 <p class="dataset-card-help" data-i18n="dataset.cardCaptionHelp">
                                     Bulk-edit every caption: add common tags, remove tags you don't want, control underscore behavior.
@@ -3390,34 +3450,6 @@
                                         <option value="all" selected data-i18n="dataset.scopeAllImages">All images</option>
                                     </select>
                                 </label>
-                                <!-- Optional caption/export starter defaults. -->
-                                <div class="dataset-anime-defaults-row">
-                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-anime-defaults"
-                                            title="Fill a simple starter setup: common quality tags, underscore handling, and sequential filenames"
-                                            data-i18n="dataset.animeDefaultsButton">Apply starter defaults</button>
-                                </div>
-                                <label class="form-label">
-                                    <span data-i18n="dataset.commonTagsLabel">Common tags (added to every caption)</span>
-                                    <textarea id="dataset-common-tags" class="form-input" rows="2"
-                                              placeholder="masterpiece, best_quality"
-                                              data-i18n-placeholder="dataset.commonTagsPlaceholder"></textarea>
-                                </label>
-                                <!-- Quality-tags quick-fill: one click, common LoRA training quality tags -->
-                                <div class="dataset-quickfill-row">
-                                    <button type="button" class="btn btn-ghost btn-small"
-                                            id="btn-dataset-quickfill-quality"
-                                            data-i18n="dataset.quickfillQuality">
-                                        Add quality tags to all captions
-                                    </button>
-                                    <button type="button" class="btn btn-ghost btn-small"
-                                            id="btn-dataset-quickfill-trigger"
-                                            disabled
-                                            data-i18n="dataset.quickfillTrigger"
-                                            data-i18n-title="dataset.quickfillTriggerTooltip"
-                                            title="Type your trigger word in the Renumber preset on Export first, then click here to also have it written into every caption .txt.">
-                                        🏷️ Add my trigger word here
-                                    </button>
-                                </div>
                                 <label class="form-label">
                                     <span>
                                         <span data-i18n="dataset.blacklistLabel">Blacklist tags (removed from every caption)</span>
@@ -3429,6 +3461,25 @@
                                               placeholder="watermark&#10;low quality&#10;bad anatomy"
                                               data-i18n-placeholder="dataset.blacklistPlaceholder"></textarea>
                                 </label>
+                                <details class="dataset-vocab-panel" id="dataset-vocab-panel">
+                                    <summary class="dataset-vocab-summary">
+                                        <span aria-hidden="true">#</span>
+                                        <span data-i18n="dataset.vocabTitle">Tag Vocabulary</span>
+                                        <span class="dataset-vocab-count" id="dataset-vocab-count">0 / 0</span>
+                                    </summary>
+                                    <div class="dataset-vocab-body">
+                                        <p class="dataset-vocab-help" data-i18n="dataset.vocabHelp">
+                                            This list is built from the current dataset captions. Use + for Common tags and - for Blacklist; click again to clear.
+                                        </p>
+                                        <div class="dataset-vocab-controls">
+                                            <input type="text" class="form-input dataset-vocab-search" id="dataset-vocab-search"
+                                                   placeholder="Filter tags..." data-i18n-placeholder="dataset.vocabSearchPlaceholder">
+                                            <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-vocab-refresh"
+                                                    data-i18n="dataset.vocabRefresh">Refresh</button>
+                                        </div>
+                                        <div class="dataset-vocab-list" id="dataset-vocab-list"></div>
+                                    </div>
+                                </details>
 
                                 <!-- LoRA-type tag pruning. Pick a training type to pre-tick the tag
                                      CATEGORIES that type usually drops, then fine-tune. Categories use
@@ -3438,21 +3489,6 @@
                                      (non-destructive — original DB tags are untouched). Checkboxes are
                                      injected by dataset-maker-cleanups.js. -->
                                 <div class="dataset-lora-prune" id="dataset-lora-prune">
-                                    <div class="dataset-lora-prune-head">
-                                        <label class="dataset-lora-prune-type">
-                                            <span class="dataset-cleanup-label" data-i18n="dataset.loraPruneLabel">Prune tags for LoRA type:</span>
-                                            <select id="dataset-lora-type" class="form-input">
-                                                <option value="character" data-i18n="dataset.loraTypeCharacter">Character LoRA</option>
-                                                <option value="style" data-i18n="dataset.loraTypeStyle">Style LoRA</option>
-                                                <option value="outfit" data-i18n="dataset.loraTypeOutfit">Outfit / Clothing LoRA</option>
-                                                <option value="pose" data-i18n="dataset.loraTypePose">Pose / Action LoRA</option>
-                                                <option value="concept" data-i18n="dataset.loraTypeConcept">Concept LoRA</option>
-                                                <option value="general" data-i18n="dataset.loraTypeGeneral">General (noise only)</option>
-                                                <option value="custom" data-i18n="dataset.loraTypeCustom">Custom (pick below)</option>
-                                            </select>
-                                        </label>
-                                        <small class="dataset-lora-prune-hint" id="dataset-lora-type-hint"></small>
-                                    </div>
                                     <div class="dataset-lora-prune-cats" id="dataset-lora-prune-cats" role="group"
                                          aria-label="Tag categories to remove from captions"></div>
                                     <div class="dataset-lora-prune-actions">
@@ -3475,13 +3511,19 @@
                                     <input type="checkbox" id="dataset-underscore-to-space" checked>
                                     <span data-i18n="dataset.underscoreToSpace">Convert tag underscores to spaces (recommended for most LoRA trainers)</span>
                                 </label>
-                                <label class="form-label">
-                                    <span data-i18n="dataset.exportPrefixLabel">Prefix / Class Token</span>
-                                    <input type="text" id="dataset-export-prefix" class="form-input"
-                                           placeholder="masterpiece, best quality"
-                                           data-i18n-placeholder="batchExport.tagPrefix">
-                                </label>
-                                <div id="dataset-template-options" class="dataset-template-options">
+                                <details class="dataset-advanced dataset-caption-advanced">
+                                    <summary data-i18n="dataset.captionAdvancedToggle">Advanced caption template</summary>
+                                    <label class="form-label">
+                                        <span data-i18n="dataset.exportPrefixLabel">Prefix / Class Token</span>
+                                        <input type="text" id="dataset-export-prefix" class="form-input"
+                                               placeholder="masterpiece, best quality"
+                                               data-i18n-placeholder="batchExport.tagPrefix">
+                                    </label>
+                                    <div class="dataset-quickfill-row">
+                                        <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-clear-prefix"
+                                                data-i18n="dataset.clearPrefix">Clear</button>
+                                    </div>
+                                    <div id="dataset-template-options" class="dataset-template-options">
                                     <!-- Pipeline execution order visualization -->
                                     <div class="dataset-pipeline-flow">
                                         <span class="flow-step">1️⃣ <span data-i18n="dataset.step.blacklist">Blacklist</span></span>
@@ -3561,6 +3603,10 @@
                                         <textarea id="dataset-template-override" class="form-input" rows="3"
                                                   placeholder="{trigger}, {tags:filtered}, {append}">{trigger}, {tags:filtered}, {append}</textarea>
                                     </label>
+                                    <div class="dataset-quickfill-row">
+                                        <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-reset-template"
+                                                data-i18n="dataset.resetTemplate">Reset template</button>
+                                    </div>
                                     <label class="form-label">
                                         <span>
                                             <span data-i18n="batchExport.loraReplace">Tag Replacements</span>
@@ -3575,53 +3621,8 @@
                                         <span data-i18n="batchExport.loraMaxTags">Max tags (0 = unlimited)</span>
                                         <input type="number" id="dataset-max-tags" class="form-input" value="0" min="0" max="200">
                                     </label>
-                                </div>
-                                <fieldset class="dataset-fieldset dataset-caption-naming-fieldset">
-                                    <legend data-i18n="dataset.captionNamingLegend">Filename pattern for folder export</legend>
-                                    <label class="dataset-preset-row">
-                                        <input type="radio" name="dataset-naming-preset" value="keep" checked>
-                                        <span class="dataset-preset-label">
-                                            <strong data-i18n="dataset.presetKeepTitle">Keep original filenames</strong>
-                                            <small data-i18n="dataset.presetKeepHint">Caption .txt matches each image exactly.</small>
-                                        </span>
-                                    </label>
-                                    <label class="dataset-preset-row">
-                                        <input type="radio" name="dataset-naming-preset" value="renumber">
-                                        <span class="dataset-preset-label">
-                                            <strong data-i18n="dataset.presetRenumberTitle">Renumber: subject_001, subject_002, ...</strong>
-                                            <small data-i18n="dataset.presetRenumberHint">Clean sequential names. Type your subject below.</small>
-                                        </span>
-                                    </label>
-                                    <label class="dataset-preset-row dataset-preset-trigger" id="dataset-trigger-row" hidden>
-                                        <span class="dataset-preset-label dataset-preset-indent">
-                                            <input type="text" id="dataset-trigger" class="form-input"
-                                                   placeholder="subject"
-                                                   data-i18n-placeholder="dataset.triggerPlaceholderShort"
-                                                   aria-label="Trigger word">
-                                            <small class="dataset-preview-line" id="dataset-naming-preview" aria-live="polite"></small>
-                                            <small class="dataset-trigger-clarify" data-i18n="dataset.triggerClarify">
-                                                This only sets the filename prefix. To put a trigger word inside every caption .txt, type it into Common tags.
-                                            </small>
-                                        </span>
-                                    </label>
-                                    <label class="dataset-preset-row">
-                                        <input type="radio" name="dataset-naming-preset" value="custom">
-                                        <span class="dataset-preset-label">
-                                            <strong data-i18n="dataset.presetCustomTitle">Custom pattern (advanced)</strong>
-                                            <small data-i18n="dataset.presetCustomHint">Full control with variables.</small>
-                                        </span>
-                                    </label>
-                                    <div class="dataset-custom-row" id="dataset-custom-row" hidden>
-                                        <input type="text" id="dataset-naming-pattern" class="form-input"
-                                               value="{trigger}_{index:03d}"
-                                               placeholder="{trigger}_{index:03d}">
-                                        <p class="dataset-help">
-                                            <span data-i18n="dataset.namingHelp">Variables:</span>
-                                            <code>{filename}</code> · <code>{index}</code> · <code>{index:03d}</code>
-                                            · <code>{trigger}</code> · <code>{generator}</code> · <code>{date}</code>
-                                        </p>
                                     </div>
-                                </fieldset>
+                                </details>
                                 <div class="dataset-tag-category-order">
                                     <label class="form-label">
                                         <span data-i18n="dataset.tagCategoryOrderLabel">Tag category order</span>
@@ -3642,6 +3643,10 @@
                                         <input type="checkbox" id="dataset-translation-show-zh">
                                         <span data-i18n="dataset.zhAidToggle">Show Chinese reading aid next to tags</span>
                                     </label>
+                                    <div class="dataset-quickfill-row">
+                                        <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-refresh-zh-aid"
+                                                data-i18n="dataset.refreshZhAid">Refresh</button>
+                                    </div>
                                     <p class="dataset-zh-aid-note" data-i18n="dataset.zhAidNote">
                                         Reading aid only — the Chinese is shown next to each tag for easy reading and is never written into the exported captions.
                                     </p>
@@ -3693,10 +3698,10 @@
                             </details>
 
                             <!-- Section B2: Batch Find/Replace -->
-                            <section class="dataset-card" id="dataset-step-findreplace">
-                                <h3 class="dataset-card-title">
+                            <details class="dataset-card dataset-card-details" id="dataset-step-findreplace">
+                                <summary class="dataset-card-title">
                                     <span data-i18n="dataset.findReplaceTitle">Find / Replace</span>
-                                </h3>
+                                </summary>
                                 <label class="form-label">
                                     <span data-i18n="dataset.findLabel">Find</span>
                                     <input type="text" id="dataset-find-input" class="form-input"
@@ -3711,7 +3716,7 @@
                                 </label>
                                 <button type="button" class="btn btn-secondary full-width" id="btn-dataset-find-replace"
                                         data-i18n="dataset.replaceAllBtn">Replace in all captions</button>
-                            </section>
+                            </details>
 
                             <!-- Section C: Output (the only required section) -->
                             <section class="dataset-card dataset-card-required" id="dataset-step-export">
@@ -3734,6 +3739,41 @@
                                 </div>
 
                                 <input type="hidden" id="dataset-export-content-mode" value="template">
+
+                                <fieldset class="dataset-fieldset dataset-caption-naming-fieldset">
+                                    <legend data-i18n="dataset.captionNamingLegend">Filename pattern for folder export</legend>
+                                    <label class="dataset-preset-row">
+                                        <input type="radio" name="dataset-naming-preset" value="keep" checked>
+                                        <span class="dataset-preset-label">
+                                            <strong data-i18n="dataset.presetKeepTitle">Keep original filenames</strong>
+                                            <small data-i18n="dataset.presetKeepHint">Caption .txt matches each image exactly.</small>
+                                        </span>
+                                    </label>
+                                    <label class="dataset-preset-row">
+                                        <input type="radio" name="dataset-naming-preset" value="renumber">
+                                        <span class="dataset-preset-label">
+                                            <strong data-i18n="dataset.presetRenumberTitle">Renumber: subject_001, subject_002, ...</strong>
+                                            <small data-i18n="dataset.presetRenumberHint">Clean sequential names using the Setup trigger.</small>
+                                        </span>
+                                    </label>
+                                    <label class="dataset-preset-row">
+                                        <input type="radio" name="dataset-naming-preset" value="custom">
+                                        <span class="dataset-preset-label">
+                                            <strong data-i18n="dataset.presetCustomTitle">Custom pattern (advanced)</strong>
+                                            <small data-i18n="dataset.presetCustomHint">Full control with variables.</small>
+                                        </span>
+                                    </label>
+                                    <div class="dataset-custom-row" id="dataset-custom-row" hidden>
+                                        <input type="text" id="dataset-naming-pattern" class="form-input"
+                                               value="{trigger}_{index:03d}"
+                                               placeholder="{trigger}_{index:03d}">
+                                        <p class="dataset-help">
+                                            <span data-i18n="dataset.namingHelp">Variables:</span>
+                                            <code>{filename}</code> · <code>{index}</code> · <code>{index:03d}</code>
+                                            · <code>{trigger}</code> · <code>{generator}</code> · <code>{date}</code>
+                                        </p>
+                                    </div>
+                                </fieldset>
 
                                 <fieldset class="dataset-fieldset dataset-output-mode-fieldset">
                                     <legend data-i18n="dataset.outputModeLegend">Where should caption .txt files be written?</legend>
@@ -5940,7 +5980,10 @@
     </div>
 
     <script src="/static/js/logger.js"></script>
-    <!-- Non-conflicting utility modules (define NEW functions not in app.js) -->
+    <!-- Core modules used by app.js. Keep these before the main application script. -->
+    <script src="/static/js/modules/core/storage-utils.js"></script>
+    <script src="/static/js/modules/core/request-manager.js"></script>
+    <!-- Non-conflicting utility modules -->
     <script src="/static/js/modules/utils/click-guard.js"></script>
     <script src="/static/js/modules/utils/dom.js"></script>
     <script src="/static/js/modules/utils/a11y.js"></script>
@@ -6170,6 +6213,10 @@
                         <label class="checkbox-label smart-tag-inline-toggle">
                             <input type="checkbox" id="smart-tag-use-gpu" checked>
                             <span data-i18n="smartTag.useGpu">Use GPU for local models if available</span>
+                        </label>
+                        <label class="checkbox-label smart-tag-inline-toggle">
+                            <input type="checkbox" id="smart-tag-vlm-grounding" checked>
+                            <span data-i18n="smartTag.vlmGrounding">Send booru tags to the captioner as context</span>
                         </label>
                     </div>
                     <div class="smart-tag-natural-grid" id="smart-tag-torii-options" hidden>

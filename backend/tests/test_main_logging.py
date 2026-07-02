@@ -86,7 +86,7 @@ def test_log_file_defaults_are_bounded():
 
 def test_support_diagnostics_redacts_log_paths_and_tails_existing_log(tmp_path, monkeypatch):
     import config
-    import main
+    import app_diagnostics
 
     log_path = tmp_path / "backend.log"
     secret_root = tmp_path / "Secret User"
@@ -99,8 +99,7 @@ def test_support_diagnostics_redacts_log_paths_and_tails_existing_log(tmp_path, 
     )
 
     monkeypatch.setattr(config, "LOG_FILE_PATH", str(log_path))
-    monkeypatch.setattr(main, "LOG_FILE_PATH", str(log_path))
-    payload = main.build_support_diagnostics(max_lines=5)
+    payload = app_diagnostics.build_support_diagnostics(max_lines=5)
 
     assert payload["log_file_enabled"] is True
     assert payload["log_file_path"] == str(log_path)
@@ -118,12 +117,10 @@ def test_support_diagnostics_redacts_log_paths_and_tails_existing_log(tmp_path, 
 
 def test_support_diagnostics_api_returns_payload(test_client, tmp_path, monkeypatch):
     import config
-    import main
 
     log_path = tmp_path / "backend.log"
     log_path.write_text("Scan started\nScan heartbeat: current=demo.png\n", encoding="utf-8")
     monkeypatch.setattr(config, "LOG_FILE_PATH", str(log_path))
-    monkeypatch.setattr(main, "LOG_FILE_PATH", str(log_path))
 
     response = test_client.get("/api/support/diagnostics")
 
@@ -133,16 +130,17 @@ def test_support_diagnostics_api_returns_payload(test_client, tmp_path, monkeypa
     assert "Scan heartbeat" in data["recent_log_text"]
 
 def test_support_open_log_uses_configured_log_path(tmp_path, monkeypatch):
-    import main
+    import config
+    import app_diagnostics
 
     log_path = tmp_path / "backend.log"
     calls = []
-    monkeypatch.setattr(main, "LOG_FILE_ENABLED", True)
-    monkeypatch.setattr(main, "LOG_FILE_PATH", str(log_path))
-    monkeypatch.setattr(main.sys, "platform", "win32")
-    monkeypatch.setattr(main.subprocess, "Popen", lambda args, **kwargs: calls.append(args))
+    monkeypatch.setattr(config, "LOG_FILE_ENABLED", True)
+    monkeypatch.setattr(config, "LOG_FILE_PATH", str(log_path))
+    monkeypatch.setattr(app_diagnostics.sys, "platform", "win32")
+    monkeypatch.setattr(app_diagnostics.subprocess, "Popen", lambda args, **kwargs: calls.append(args))
 
-    result = main.open_support_log_file()
+    result = app_diagnostics.open_support_log_file()
 
     assert result["success"] is True
     assert result["opened"] is True
@@ -153,15 +151,16 @@ def test_support_open_log_uses_configured_log_path(tmp_path, monkeypatch):
 
 
 def test_support_open_log_endpoint_returns_success(test_client, tmp_path, monkeypatch):
-    import main
+    import config
+    import app_diagnostics
 
     log_path = tmp_path / "backend.log"
     calls = []
-    monkeypatch.setattr(main, "LOG_FILE_ENABLED", True)
-    monkeypatch.setattr(main, "LOG_FILE_PATH", str(log_path))
-    monkeypatch.setattr(main.sys, "platform", "linux")
-    monkeypatch.setattr(main.shutil, "which", lambda name: "/usr/bin/xdg-open" if name == "xdg-open" else None)
-    monkeypatch.setattr(main.subprocess, "Popen", lambda args, **kwargs: calls.append(args))
+    monkeypatch.setattr(config, "LOG_FILE_ENABLED", True)
+    monkeypatch.setattr(config, "LOG_FILE_PATH", str(log_path))
+    monkeypatch.setattr(app_diagnostics.sys, "platform", "linux")
+    monkeypatch.setattr(app_diagnostics.shutil, "which", lambda name: "/usr/bin/xdg-open" if name == "xdg-open" else None)
+    monkeypatch.setattr(app_diagnostics.subprocess, "Popen", lambda args, **kwargs: calls.append(args))
 
     response = test_client.post("/api/support/open-log")
 
@@ -175,15 +174,16 @@ def test_support_open_log_endpoint_returns_success(test_client, tmp_path, monkey
 
 
 def test_support_open_log_returns_path_when_file_manager_is_unavailable(test_client, tmp_path, monkeypatch):
-    import main
+    import config
+    import app_diagnostics
 
     log_path = tmp_path / "backend.log"
     calls = []
-    monkeypatch.setattr(main, "LOG_FILE_ENABLED", True)
-    monkeypatch.setattr(main, "LOG_FILE_PATH", str(log_path))
-    monkeypatch.setattr(main.sys, "platform", "linux")
-    monkeypatch.setattr(main.shutil, "which", lambda name: None)
-    monkeypatch.setattr(main.subprocess, "Popen", lambda args, **kwargs: calls.append(args))
+    monkeypatch.setattr(config, "LOG_FILE_ENABLED", True)
+    monkeypatch.setattr(config, "LOG_FILE_PATH", str(log_path))
+    monkeypatch.setattr(app_diagnostics.sys, "platform", "linux")
+    monkeypatch.setattr(app_diagnostics.shutil, "which", lambda name: None)
+    monkeypatch.setattr(app_diagnostics.subprocess, "Popen", lambda args, **kwargs: calls.append(args))
 
     response = test_client.post("/api/support/open-log")
 

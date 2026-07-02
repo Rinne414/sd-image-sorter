@@ -410,6 +410,30 @@
     resize: vertical;
 }
 
+#metadata-editor-modal .modal-content {
+    display: flex;
+    flex-direction: column;
+    max-height: min(92vh, 760px);
+    overflow: hidden;
+    width: min(520px, calc(100vw - 32px));
+}
+
+#metadata-editor-modal .reader-editor-grid {
+    margin-inline: -4px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 4px 4px;
+}
+
+#metadata-editor-modal .reader-editor-field textarea.input-field {
+    min-height: 86px;
+}
+
+#metadata-editor-modal .modal-actions {
+    flex: 0 0 auto;
+    margin-top: 12px;
+}
+
 .reader-editor-note {
     margin: 0;
     font-size: 0.78rem;

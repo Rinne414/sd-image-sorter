@@ -410,13 +410,13 @@ class TestRateLimiting:
 
     def test_loopback_requests_skip_rate_limit_by_default(self, test_client, monkeypatch):
         """Local-only traffic should not trip the safety limiter during normal app use."""
-        import main
+        import app_security
 
-        monkeypatch.setattr(main, "RATE_LIMIT_MAX_REQUESTS", 1)
-        monkeypatch.setattr(main, "RATE_LIMIT_APPLY_TO_LOOPBACK", False)
+        monkeypatch.setattr(app_security, "RATE_LIMIT_MAX_REQUESTS", 1)
+        monkeypatch.setattr(app_security, "RATE_LIMIT_APPLY_TO_LOOPBACK", False)
 
-        with main._rate_limit_lock:
-            main._rate_limit_buckets.clear()
+        with app_security._rate_limit_lock:
+            app_security._rate_limit_buckets.clear()
 
         first = test_client.get("/api/images?limit=1")
         second = test_client.get("/api/images?limit=1")
@@ -424,18 +424,18 @@ class TestRateLimiting:
         assert first.status_code != 429
         assert second.status_code != 429
 
-        with main._rate_limit_lock:
-            main._rate_limit_buckets.clear()
+        with app_security._rate_limit_lock:
+            app_security._rate_limit_buckets.clear()
 
     def test_excess_requests_are_rate_limited(self, test_client, monkeypatch):
         """Rapid requests beyond the bucket size should return 429."""
-        import main
+        import app_security
 
-        monkeypatch.setattr(main, "RATE_LIMIT_MAX_REQUESTS", 3)
-        monkeypatch.setattr(main, "RATE_LIMIT_APPLY_TO_LOOPBACK", True)
+        monkeypatch.setattr(app_security, "RATE_LIMIT_MAX_REQUESTS", 3)
+        monkeypatch.setattr(app_security, "RATE_LIMIT_APPLY_TO_LOOPBACK", True)
 
-        with main._rate_limit_lock:
-            main._rate_limit_buckets.clear()
+        with app_security._rate_limit_lock:
+            app_security._rate_limit_buckets.clear()
 
         for _ in range(3):
             response = test_client.get("/api/images?limit=1")
@@ -449,8 +449,8 @@ class TestRateLimiting:
             "type": "RateLimitExceeded",
         }
 
-        with main._rate_limit_lock:
-            main._rate_limit_buckets.clear()
+        with app_security._rate_limit_lock:
+            app_security._rate_limit_buckets.clear()
 
 
 class TestCORSHeaders:

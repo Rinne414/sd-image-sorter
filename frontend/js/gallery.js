@@ -103,7 +103,7 @@ function isGalleryImageSelected(AppState, imageId) {
  * Gallery Virtual Scrolling Configuration
  */
 const GALLERY_VIRTUAL_CONFIG = {
-    bufferSize: 10,           // Items to render outside viewport
+    bufferSize: 20,           // Items to render outside viewport (增加 10 → 20)
     threshold: 96,            // Minimum items to enable virtual scrolling
     estimatedItemHeight: 200, // Estimated height for grid mode
     rowGap: 16,               // Gap between rows
@@ -1070,7 +1070,7 @@ const Gallery = {
                     observer.unobserve(entry.target);
                 }
             });
-        }, { rootMargin: '300px', threshold: 0 });
+        }, { rootMargin: '600px', threshold: 0 });  // 增加 300px → 600px
     },
 
     /**

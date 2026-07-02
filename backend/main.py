@@ -8,21 +8,15 @@ This is the main application entry point. Endpoints are organized into routers:
 - routers/sorting.py - Scanning, moving, and manual sorting
 - routers/censor.py - NSFW detection and censoring
 """
-import ipaddress
 import os
 import sys
 import asyncio
-import shutil
-import subprocess
 import logging
 import threading
 import time
 import traceback
-import re
-import zlib
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from collections import defaultdict, deque
 from typing import Optional, Dict, Any, TYPE_CHECKING
 from contextlib import asynccontextmanager
 
@@ -40,11 +34,6 @@ from app_info import APP_VERSION
 from config import (
     SERVER_HOST,
     SERVER_PORT,
-    CORS_ORIGIN_REGEX,
-    RATE_LIMIT_ENABLED as CONFIG_RATE_LIMIT_ENABLED,
-    RATE_LIMIT_WINDOW_SECONDS as CONFIG_RATE_LIMIT_WINDOW_SECONDS,
-    RATE_LIMIT_MAX_REQUESTS as CONFIG_RATE_LIMIT_MAX_REQUESTS,
-    RATE_LIMIT_APPLY_TO_LOOPBACK as CONFIG_RATE_LIMIT_APPLY_TO_LOOPBACK,
     LOG_LEVEL,
     LOG_ACCESS_ENABLED,
     LOG_FILE_ENABLED,
@@ -107,9 +96,14 @@ _PILImage.MAX_IMAGE_PIXELS = 178956970  # ~13400x13400, prevents decompression b
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+import app_static
+from app_diagnostics import build_support_diagnostics, open_support_log_file
+from app_security import _is_loopback_host, configure_security_middleware
+from app_static import mount_frontend_static, serve_frontend_index, static_cache_bust_token
+
+_STATIC_CACHE_BUST_RE = app_static._STATIC_CACHE_BUST_RE
 
 import database as db
 from exceptions import (
@@ -330,162 +324,21 @@ https://github.com/peter119lee/sd-image-sorter/blob/main/docs/API.md
 )
 
 
-LOCALHOST_ALIASES = {"127.0.0.1", "localhost", "::1", "[::1]"}
-RATE_LIMIT_ENABLED = CONFIG_RATE_LIMIT_ENABLED
-RATE_LIMIT_WINDOW_SECONDS = CONFIG_RATE_LIMIT_WINDOW_SECONDS
-RATE_LIMIT_MAX_REQUESTS = CONFIG_RATE_LIMIT_MAX_REQUESTS
-RATE_LIMIT_APPLY_TO_LOOPBACK = CONFIG_RATE_LIMIT_APPLY_TO_LOOPBACK
-RATE_LIMIT_EXEMPT_PATHS = {"/docs", "/redoc", "/openapi.json"}
-RATE_LIMIT_EXEMPT_PREFIXES = ("/static", "/api/image-file", "/api/image-thumbnail")
-_rate_limit_lock = threading.Lock()
-_rate_limit_buckets: dict[str, deque[float]] = defaultdict(deque)
-_rate_limit_cleanup_time = [0.0]
-_RATE_LIMIT_CLEANUP_INTERVAL = 300  # 5 minutes
-
-
-def _is_loopback_host(host: Optional[str]) -> bool:
-    """Return True when the host refers to the local machine."""
-    if not host:
-        return False
-    if host == "testclient" and os.environ.get("SD_SORTER_TESTING") == "1":
-        return True
-    if host in LOCALHOST_ALIASES:
-        return True
-    try:
-        return ipaddress.ip_address(host.strip("[]")).is_loopback
-    except ValueError:
-        return False
-
-
-def _is_rate_limit_exempt(path: str) -> bool:
-    """Return True when a request path should skip in-memory rate limiting."""
-    return path in RATE_LIMIT_EXEMPT_PATHS or path.startswith(RATE_LIMIT_EXEMPT_PREFIXES)
-
-
-# CORS for frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origin_regex=CORS_ORIGIN_REGEX,
-    allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Accept", "X-Requested-With"],
-)
-
-
-@app.middleware("http")
-async def localhost_only_middleware(request: Request, call_next):
-    """Reject non-local clients even if the server is started on a wider bind address."""
-    client_host = request.client.host if request.client else None
-    if client_host and not _is_loopback_host(client_host):
-        logger.warning("Rejected non-local request from %s to %s", client_host, request.url.path)
-        return JSONResponse(
-            status_code=403,
-            content={"error": "This application only accepts local requests", "type": "Forbidden"},
-        )
-    return await call_next(request)
-
-
-@app.middleware("http")
-async def rate_limit_middleware(request: Request, call_next):
-    """Apply a lightweight in-memory rate limit to API requests."""
-    if not RATE_LIMIT_ENABLED:
-        return await call_next(request)
-
-    path = request.url.path
-    if _is_rate_limit_exempt(path):
-        return await call_next(request)
-
-    client_host = request.client.host if request.client else "unknown"
-    if client_host and _is_loopback_host(client_host) and not RATE_LIMIT_APPLY_TO_LOOPBACK:
-        return await call_next(request)
-
-    now = time.monotonic()
-    cutoff = now - RATE_LIMIT_WINDOW_SECONDS
-
-    with _rate_limit_lock:
-        bucket = _rate_limit_buckets[client_host]
-        while bucket and bucket[0] <= cutoff:
-            bucket.popleft()
-        if len(bucket) >= RATE_LIMIT_MAX_REQUESTS:
-            logger.warning("Rate limit exceeded for %s on %s", client_host, path)
-            return JSONResponse(
-                status_code=429,
-                content={"error": "Too many requests. Please try again shortly.", "type": "RateLimitExceeded"},
-            )
-        bucket.append(now)
-
-        # Periodically clean up stale rate limit buckets
-        if now - _rate_limit_cleanup_time[0] > _RATE_LIMIT_CLEANUP_INTERVAL:
-            _rate_limit_cleanup_time[0] = now
-            stale_keys = [k for k, v in _rate_limit_buckets.items() if not v]
-            for k in stale_keys:
-                del _rate_limit_buckets[k]
-
-    return await call_next(request)
-
-
-@app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    """Add security headers to all responses."""
-    response = await call_next(request)
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["Referrer-Policy"] = "no-referrer"
-    return response
+configure_security_middleware(app)
 
 
 # Serve frontend static files
 frontend_path = str(BACKEND_DIR.parent / "frontend")
-
-
-class NoCacheStaticFiles(StaticFiles):
-    """Serve frontend JS/CSS with ``Cache-Control: no-cache``.
-
-    GET / already injects a per-file ``?v=`` content hash onto every
-    ``/static/*.js`` and ``/static/*.css`` reference inside index.html, which
-    busts the cache on upgrade *and* on same-version edits. But scripts appended
-    at runtime (e.g. the Dataset Maker sub-modules via ``_appendOrderedScript``,
-    or guide translation packs) bypass that injection, and a stale cached shell
-    could deliver outdated hashes. ``no-cache`` makes the browser revalidate;
-    because StaticFiles already emits ETag + Last-Modified, an unchanged asset
-    costs only a conditional request that returns 304. This is the transport
-    fix that stops "new HTML running old JS" after an update — see GET /.
-    """
-
-    async def get_response(self, path: str, scope):  # type: ignore[override]
-        response = await super().get_response(path, scope)
-        response.headers["Cache-Control"] = "no-cache"
-        return response
-
-
-if os.path.exists(frontend_path):
-    app.mount("/static", NoCacheStaticFiles(directory=frontend_path), name="static")
-
-
-# Regex used by GET / to add ``?v=APP_VERSION`` to /static/*.js and *.css URLs
-# in index.html. Matches src="/static/.../foo.js" and href="/static/.../foo.css"
-# but only when no query string is already present, so we never double-append.
-_STATIC_CACHE_BUST_RE = re.compile(r'((?:src|href)=")(/static/[^"?]+\.(?:js|css))(")')
+mount_frontend_static(app, frontend_path=frontend_path)
 
 
 def _static_cache_bust_token(asset_path: str) -> str:
-    """Return a cache-bust token that changes for same-version repacks too."""
-    relative_path = asset_path.removeprefix("/static/").replace("/", os.sep)
-    full_path = os.path.join(frontend_path, relative_path)
-    try:
-        stat = os.stat(full_path)
-    except OSError:
-        return APP_VERSION
-    raw = f"{APP_VERSION}:{int(stat.st_mtime_ns)}:{stat.st_size}"
-    return f"{APP_VERSION}.{zlib.crc32(raw.encode('utf-8')) & 0xffffffff:08x}"
-
-
-def _inject_static_cache_busters(html: str) -> str:
-    def replace(match: re.Match[str]) -> str:
-        prefix, asset_path, suffix = match.groups()
-        return f'{prefix}{asset_path}?v={_static_cache_bust_token(asset_path)}{suffix}'
-
-    return _STATIC_CACHE_BUST_RE.sub(replace, html)
+    """Compatibility shim for existing cache-bust tests."""
+    return static_cache_bust_token(
+        asset_path,
+        frontend_path=frontend_path,
+        app_version=APP_VERSION,
+    )
 
 
 # Include routers
@@ -507,112 +360,6 @@ app.include_router(tags_bulk.router)
 app.include_router(dataset.router)
 app.include_router(smart_tag.router)
 app.include_router(collections.router)
-
-
-def _read_tail_lines(path: Path, max_lines: int) -> tuple[list[str], int]:
-    if max_lines <= 0 or not path.exists() or not path.is_file():
-        return [], 0
-    try:
-        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
-        return [], 0
-    return lines[-max_lines:], len(lines)
-
-
-def _redact_support_log_text(text: str) -> str:
-    """Redact likely local filesystem paths before exposing logs to the browser."""
-    field_boundary = r"(?=(?:\s+[-A-Za-z0-9_]+[:=])|[\r\n\"'<>]|$)"
-    text = re.sub(rf"[A-Za-z]:\\.*?{field_boundary}", "<PATH>", text)
-    text = re.sub(rf"(?<!\w)/(?:mnt|home|Users|var|tmp|Volumes|media)/.*?{field_boundary}", "<PATH>", text)
-    return text
-
-
-def build_support_diagnostics(max_lines: int = 200) -> Dict[str, Any]:
-    """Return a bounded, redacted diagnostics payload users can copy from the UI."""
-    log_path = Path(LOG_FILE_PATH)
-    lines, line_count = _read_tail_lines(log_path, max(1, min(int(max_lines or 200), 1000)))
-    redacted_lines = [_redact_support_log_text(line) for line in lines]
-    recent_log_text = "\n".join(redacted_lines)
-    return {
-        "app_version": APP_VERSION,
-        "log_level": LOG_LEVEL.upper(),
-        "access_log_enabled": bool(LOG_ACCESS_ENABLED),
-        "log_file_enabled": bool(LOG_FILE_ENABLED),
-        "log_file_path": str(log_path),
-        "log_file_path_redacted": _redact_support_log_text(str(log_path)),
-        "log_file_exists": log_path.exists(),
-        "log_file_max_bytes": LOG_FILE_MAX_BYTES,
-        "log_file_backup_count": LOG_FILE_BACKUP_COUNT,
-        "log_line_count": line_count,
-        "recent_log_text": recent_log_text,
-        "recent_log_lines": redacted_lines,
-    }
-
-
-def _build_file_manager_command(path: Path) -> Optional[list[str]]:
-    """Build an OS file-manager command for a trusted local path, if one exists."""
-    normalized_path = str(path.resolve())
-    if sys.platform == "win32":
-        return ["explorer", "/select,", normalized_path] if path.is_file() else ["explorer", normalized_path]
-    if sys.platform == "darwin":
-        opener = shutil.which("open")
-        if not opener:
-            return None
-        return [opener, "-R", normalized_path] if path.is_file() else [opener, normalized_path]
-
-    opener = shutil.which("xdg-open")
-    if not opener:
-        return None
-    target = normalized_path if path.is_dir() else str(path.parent.resolve())
-    return [opener, target]
-
-
-def _open_path_in_file_manager(path: Path) -> bool:
-    """Open a known local path in the OS file manager without accepting user input."""
-    command = _build_file_manager_command(path)
-    if not command:
-        return False
-    # Detach the file-manager process's stdio so it never inherits or blocks on
-    # the server's console pipes (avoids the child holding our stdout/stderr).
-    subprocess.Popen(
-        command,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    return True
-
-
-def open_support_log_file() -> Dict[str, Any]:
-    """Open the configured support log location in the user's file manager."""
-    if not LOG_FILE_ENABLED:
-        raise HTTPException(status_code=409, detail="Support log file is disabled")
-
-    log_path = Path(LOG_FILE_PATH)
-
-    try:
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        if not log_path.exists():
-            log_path.touch()
-        opened = _open_path_in_file_manager(log_path)
-    except OSError as exc:
-        logger.warning("Failed to open support log file %s: %s", LOG_FILE_PATH, exc)
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to open support log file. / 開啟支援記錄檔失敗。",
-        ) from exc
-
-    payload = {
-        "success": opened,
-        "opened": opened,
-        "path": str(log_path),
-        "path_redacted": _redact_support_log_text(str(log_path)),
-        "exists": log_path.exists(),
-    }
-    if not opened:
-        payload["message"] = "No OS file manager command is available; copy the log path manually."
-    return payload
-
 
 
 # ============================================================
@@ -752,24 +499,7 @@ async def root():
     selections live in localStorage / SQLite so this is purely a transport
     fix; no user data is touched.
     """
-    index_path = os.path.join(frontend_path, "index.html")
-    if os.path.exists(index_path):
-        try:
-            with open(index_path, "r", encoding="utf-8") as f:
-                html = f.read()
-            html = _inject_static_cache_busters(html)
-            # ``no-cache`` forces the browser to revalidate the shell on every
-            # load, so the freshly-injected per-file ``?v=`` hashes are never
-            # served stale from a previous version. Cheap on localhost.
-            return HTMLResponse(
-                content=html,
-                status_code=200,
-                headers={"Cache-Control": "no-cache"},
-            )
-        except OSError as exc:
-            logger.warning("Falling back to FileResponse for index.html: %s", exc)
-            return FileResponse(index_path, headers={"Cache-Control": "no-cache"})
-    return {"message": "SD Image Sorter API", "docs": "/docs"}
+    return serve_frontend_index(frontend_path=frontend_path, app_version=APP_VERSION)
 
 
 # ============== Run Server ==============

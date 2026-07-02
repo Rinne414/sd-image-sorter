@@ -45,6 +45,50 @@ async function mockMinimalModelStatus(page: Page) {
   })
 }
 
+async function installScrollableGalleryFixture(page: Page) {
+  await page.locator('#main-content').waitFor({ state: 'attached' })
+  await page.evaluate(() => {
+    const main = document.getElementById('main-content')
+    if (!main) throw new Error('main-content is missing')
+    if (document.getElementById('model-manager-scroll-fixture')) return
+
+    main.style.maxHeight = '620px'
+    main.style.overflowY = 'auto'
+    const spacer = document.createElement('div')
+    spacer.id = 'model-manager-scroll-fixture'
+    spacer.style.height = '1800px'
+    spacer.style.flex = '0 0 auto'
+    main.appendChild(spacer)
+  })
+}
+
+async function setGalleryScrollTop(page: Page, scrollTop: number) {
+  return page.evaluate((targetScrollTop) => {
+    const main = document.getElementById('main-content')
+    if (!main) throw new Error('main-content is missing')
+    main.scrollTop = targetScrollTop
+    return Math.round(main.scrollTop)
+  }, scrollTop)
+}
+
+async function getGalleryScrollTop(page: Page) {
+  return page.evaluate(() => {
+    const main = document.getElementById('main-content')
+    if (!main) throw new Error('main-content is missing')
+    return Math.round(main.scrollTop)
+  })
+}
+
+async function waitForInitialViewScrollReset(page: Page) {
+  // switchView() schedules defensive scroll resets up to 700 ms after load.
+  // Wait for that initialization window before asserting modal scroll restore.
+  await page.waitForTimeout(760)
+  await expect.poll(async () => {
+    await setGalleryScrollTop(page, 640)
+    return getGalleryScrollTop(page)
+  }, { timeout: 2_000 }).toBeGreaterThan(300)
+}
+
 function diskUsagePayload(overrides: Record<string, unknown> = {}) {
   return {
     safe_to_clean: [
@@ -98,6 +142,23 @@ function diskUsagePayload(overrides: Record<string, unknown> = {}) {
 test.describe('Model Manager', () => {
   test.beforeEach(async () => {
     await resetModelFixtures()
+  })
+
+  test('closing model manager keeps the previous page scroll position', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 })
+    await mockMinimalModelStatus(page)
+    await page.goto('/')
+    await page.waitForLoadState('domcontentloaded')
+    await installScrollableGalleryFixture(page)
+    await waitForInitialViewScrollReset(page)
+    const beforeScrollTop = await getGalleryScrollTop(page)
+
+    await page.locator('#btn-open-model-manager').click()
+    await expect(page.locator('#model-manager-modal')).toBeVisible()
+    await page.locator('#model-manager-close').click()
+    await expect(page.locator('#model-manager-modal.visible')).toHaveCount(0)
+
+    await expect.poll(async () => getGalleryScrollTop(page)).toBe(beforeScrollTop)
   })
 
   test('model download progress updates while the frontend remains responsive', async ({ page }) => {

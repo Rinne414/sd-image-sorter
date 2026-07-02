@@ -639,6 +639,9 @@
             natural_language_mode: $('#smart-tag-nl-mode')?.value || 'vlm',
             use_gpu: !!$('#smart-tag-use-gpu')?.checked,
             toriigate_caption_length: $('#smart-tag-torii-length')?.value || 'detailed',
+            vlm_grounding: $('#smart-tag-vlm-grounding')
+                ? !!$('#smart-tag-vlm-grounding').checked
+                : true,
             toriigate_grounding: $('#smart-tag-torii-grounding')
                 ? !!$('#smart-tag-torii-grounding').checked
                 : true,

@@ -2393,6 +2393,162 @@ test.describe('Smoke Tests', () => {
     await expect(panel).toContainText('third.png')
   })
 
+  test('dataset workbench should keep the right action pane reachable at laptop width', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.route('**/api/image-thumbnail/**', async (route) => {
+      await route.fulfill({ status: 204 })
+    })
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await page.waitForFunction(() => typeof (window as any).DatasetMaker?._setActive === 'function')
+    await page.evaluate(() => {
+      const dm = (window as any).DatasetMaker
+      dm.imageIds = [401]
+      dm.meta.set(401, { filename: 'reachable-actions.png', width: 1024, height: 1024 })
+      dm.captions.set(401, '1girl, standing, simple_background')
+      dm.nlCaptions.set(401, 'A person stands against a simple background.')
+      ;(window as any).App.switchView('dataset')
+      dm._setActive(401)
+    })
+
+    await page.locator('#dataset-tab-workbench').click()
+    const rightPane = page.locator('#view-dataset .dataset-export-pane')
+    await expect(rightPane).toBeVisible()
+    await expect(page.locator('#btn-dataset-smart-tag')).toBeVisible()
+
+    const fit = await page.evaluate(() => {
+      const view = document.getElementById('view-dataset')
+      const workbench = document.querySelector('#view-dataset .dataset-workbench')
+      const editorControls = document.querySelector('#view-dataset .dataset-editor-controls')
+      const right = document.querySelector('#view-dataset .dataset-export-pane')
+      if (!view || !workbench || !editorControls || !right) return null
+      const viewBox = view.getBoundingClientRect()
+      const workbenchBox = workbench.getBoundingClientRect()
+      const controlsBox = editorControls.getBoundingClientRect()
+      const rightBox = right.getBoundingClientRect()
+      return {
+        viewRight: viewBox.right,
+        workbenchRight: workbenchBox.right,
+        controlsRight: controlsBox.right,
+        rightLeft: rightBox.left,
+        rightRight: rightBox.right,
+        rightWidth: rightBox.width,
+        controlsWidth: controlsBox.width,
+      }
+    })
+    expect(fit).not.toBeNull()
+    expect(fit!.rightRight).toBeLessThanOrEqual(fit!.viewRight + 1)
+    expect(fit!.rightRight).toBeLessThanOrEqual(fit!.workbenchRight + 1)
+    expect(fit!.rightLeft).toBeGreaterThan(fit!.controlsRight)
+    expect(fit!.rightWidth).toBeGreaterThanOrEqual(280)
+    expect(fit!.controlsWidth).toBeGreaterThanOrEqual(240)
+  })
+
+  test('dataset caption workflow keeps setup generate review and cleanup readable at 1366x768', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.route('**/api/image-thumbnail/**', async (route) => {
+      await route.fulfill({ status: 204 })
+    })
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await page.waitForFunction(() => typeof (window as any).DatasetMaker?._setActive === 'function')
+    await page.evaluate(() => {
+      const dm = (window as any).DatasetMaker
+      dm.imageIds = [421]
+      dm.meta.set(421, { filename: 'caption-flow.png', width: 1024, height: 1024 })
+      dm.captions.set(421, '1girl, standing, simple_background')
+      dm.nlCaptions.set(421, 'A person stands against a simple background.')
+      ;(window as any).App.switchView('dataset')
+      dm._setActive(421)
+    })
+
+    await page.locator('#dataset-tab-workbench').click()
+    await expect(page.locator('#dataset-trigger')).toBeInViewport()
+    await expect(page.locator('#dataset-common-tags')).toBeInViewport()
+    await expect(page.locator('#btn-dataset-smart-tag')).toBeInViewport()
+    await expect(page.locator('.dataset-review-card .dataset-card-title')).toBeInViewport()
+    await expect(page.locator('#dataset-step-cleanup > summary')).toBeInViewport()
+
+    const rightPane = page.locator('#view-dataset .dataset-export-pane')
+    const initialPaneBox = await rightPane.boundingBox()
+    expect(initialPaneBox).toBeTruthy()
+
+    await page.locator('#dataset-trigger').fill('ux_test_trigger')
+    await page.locator('#btn-dataset-quickfill-trigger').click()
+    await expect(page.locator('#dataset-common-tags')).toHaveValue(/ux_test_trigger/)
+
+    await page.locator('#dataset-step-cleanup').click()
+    await expect(page.locator('#dataset-step-cleanup')).toHaveAttribute('open', '')
+    const cleanupBox = await page.locator('#dataset-step-cleanup').boundingBox()
+    expect(cleanupBox).toBeTruthy()
+    expect(cleanupBox!.height).toBeGreaterThanOrEqual(300)
+    expect(cleanupBox!.height).toBeLessThanOrEqual(370)
+    await expect(page.locator('.dataset-custom-dropdown[data-select-id="dataset-caption-scope"]')).toBeVisible()
+    await expect(page.locator('#dataset-blacklist')).toBeVisible()
+
+    await page.locator('#dataset-step-findreplace').scrollIntoViewIfNeeded()
+    await page.locator('#dataset-step-findreplace').click()
+    await expect(page.locator('#dataset-step-findreplace')).toHaveAttribute('open', '')
+    await expect(page.locator('#dataset-find-input')).toBeVisible()
+    await expect(page.locator('#dataset-replace-input')).toBeVisible()
+    await expect(page.locator('#btn-dataset-find-replace')).toBeVisible()
+  })
+
+  test('dataset Smart Tag should submit existing-caption and VLM grounding options', async ({ page }) => {
+    await mockGalleryImages(page, [{ id: 711, filename: 'smart-tag-payload.png' }])
+    await mockTaggerCatalog(page)
+    await page.route('**/api/vlm/settings', async (route) => {
+      await route.fulfill({ json: { endpoint: 'https://example.invalid/v1', use_vertex: false } })
+    })
+    await page.route('**/api/smart-tag/progress**', async (route) => {
+      await route.fulfill({ json: { status: 'idle' } })
+    })
+    let startPayload: any = null
+    await page.route('**/api/smart-tag/start', async (route) => {
+      startPayload = route.request().postDataJSON()
+      await route.fulfill({
+        json: {
+          job_id: 'smart-payload-test',
+          status: 'completed',
+          total: 1,
+          processed: 1,
+          succeeded: 1,
+          failed: 0,
+          settings: startPayload,
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await page.evaluate(() => {
+      const dm = (window as any).DatasetMaker
+      dm.imageIds = [711]
+      dm.meta.set(711, { filename: 'smart-tag-payload.png' })
+      dm.captions.set(711, 'existing, caption')
+      ;(window as any).App.switchView('dataset')
+      dm._setActive(711)
+    })
+    await page.locator('#dataset-tab-workbench').click()
+    await page.locator('#btn-dataset-smart-tag').click()
+    await expect(page.locator('#smart-tag-modal.visible')).toBeVisible()
+    await page.locator('#smart-tag-merge').selectOption('append')
+    await page.locator('#smart-tag-skip-existing').uncheck()
+    await page.locator('#smart-tag-vlm-grounding').uncheck()
+    await page.locator('#btn-smart-tag-run').click()
+
+    await expect.poll(() => startPayload).not.toBeNull()
+    expect(startPayload).toMatchObject({
+      image_ids: [711],
+      merge_strategy: 'append',
+      skip_existing: false,
+      vlm_grounding: false,
+      enable_wd14: true,
+      enable_vlm: true,
+      natural_language_mode: 'vlm',
+    })
+  })
+
   test('gallery category copy menu should copy clean purpose prompts', async ({ page }) => {
     await page.addInitScript(() => {
       ;(window as any).__clipboardText = ''
@@ -2511,6 +2667,268 @@ test.describe('Smoke Tests', () => {
 
     await page.locator('#btn-toggle-select').click()
     await expect(selectionFab).toBeHidden()
+  })
+
+  test('desktop batch and metadata windows keep primary actions reachable at 1366x768', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await mockGalleryImages(page, [
+      { id: 181, filename: 'layout-1.png', width: 820, height: 800 },
+      { id: 182, filename: 'layout-2.png', width: 900, height: 500 },
+      { id: 183, filename: 'layout-3.png', width: 640, height: 900 },
+      { id: 184, filename: 'layout-4.png', width: 1024, height: 768 },
+      { id: 185, filename: 'layout-5.png', width: 768, height: 1024 },
+      { id: 186, filename: 'layout-6.png', width: 800, height: 800 },
+    ])
+
+    await page.route('**/api/images/181', async (route) => {
+      await route.fulfill({
+        json: {
+          image: buildMockGalleryImage(181, {
+            filename: 'layout-1.png',
+            path: 'L:/layout/layout-1.png',
+            width: 820,
+            height: 800,
+            file_size: 8192,
+            metadata_json: {
+              _parsed: {
+                generation_params: {
+                  seed: '123',
+                  steps: '28',
+                  cfg_scale: '7',
+                  sampler: 'Euler a',
+                  model: 'layout-model.safetensors',
+                },
+              },
+            },
+          }),
+          tags: [],
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await page.locator('#btn-toggle-select').click()
+    await page.locator('#gallery-grid .gallery-item[data-id="181"]').click()
+    await page.locator('#gallery-grid .gallery-item[data-id="182"]').click()
+    await page.locator('#selection-export-disclosure').evaluate((element: HTMLDetailsElement) => {
+      element.open = true
+    })
+    await page.locator('#selection-danger-disclosure').evaluate((element: HTMLDetailsElement) => {
+      element.open = true
+    })
+
+    const toggleBox = await page.locator('#btn-toggle-select').boundingBox()
+    const sidebarBox = await page.locator('.filter-sidebar').boundingBox()
+    expect(toggleBox).toBeTruthy()
+    expect(sidebarBox).toBeTruthy()
+    expect(toggleBox!.y).toBeGreaterThanOrEqual(sidebarBox!.y - 1)
+    expect(toggleBox!.y + toggleBox!.height).toBeLessThanOrEqual(sidebarBox!.y + sidebarBox!.height + 1)
+    await expect(page.locator('#btn-toggle-select')).toBeInViewport()
+
+    await page.locator('#btn-toggle-select').click()
+    await expect(page.locator('#selection-actions')).toBeHidden()
+
+    await page.locator('#gallery-grid .gallery-item[data-id="181"]').click()
+    await expect(page.locator('#image-modal.visible')).toBeVisible()
+    await page.locator('#btn-edit-metadata').click()
+    await expect(page.locator('#metadata-editor-modal.visible')).toBeVisible()
+
+    const actionsBox = await page.locator('#metadata-editor-modal .modal-actions').boundingBox()
+    expect(actionsBox).toBeTruthy()
+    expect(actionsBox!.y + actionsBox!.height).toBeLessThanOrEqual(768)
+    await expect(page.locator('#btn-meta-edit-cancel')).toBeVisible()
+    await expect(page.locator('#btn-meta-edit-save')).toBeVisible()
+  })
+
+  test('desktop censor and artist workspaces keep window actions reachable at 1366x768', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await mockGalleryImages(page, [
+      { id: 191, filename: 'desktop-censor-artist.png', width: 820, height: 800 },
+    ])
+    await mockArtistDiagnosticsReady(page)
+
+    await page.route('**/api/artists/stats', async (route) => {
+      await route.fulfill({
+        json: {
+          total_images: 1,
+          identified_images: 0,
+          undefined_count: 0,
+          artist_counts: {},
+        },
+      })
+    })
+
+    await page.route('**/api/censor/models', async (route) => {
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          recommended_backend: 'both',
+          models: [
+            {
+              id: 'legacy',
+              name: 'Legacy YOLO',
+              available: true,
+              recommended: true,
+              default_model_path: 'C:/models/wenaka_yolov8s-seg.onnx',
+              files: [],
+            },
+            { id: 'nudenet', name: 'NudeNet v3', available: true, recommended: true },
+            { id: 'sam3', name: 'SAM 3', available: true, recommended: true },
+          ],
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await page.locator('#btn-toggle-select').click()
+    await page.locator('#gallery-grid .gallery-item[data-id="191"]').click()
+    await page.locator('#btn-send-to-censor').click()
+    await expect(page.locator('#view-censor.active')).toBeVisible()
+
+    await page.locator('#btn-open-detect-modal').click()
+    await expect(page.locator('#detect-modal.visible')).toBeVisible()
+    await page.locator('#censor-advanced-model-picker').click()
+    await page.locator('#censor-show-advanced-models-row').click()
+    await expect(page.locator('#censor-show-advanced-models')).toBeChecked()
+    await expect(page.locator('#censor-model-path')).toBeVisible()
+    await expect(page.locator('#btn-auto-detect-current-modal')).toBeInViewport()
+
+    const detectModalBox = await page.locator('#detect-modal .modal-content').boundingBox()
+    const detectCloseBox = await page.locator('#btn-close-detect-modal').boundingBox()
+    const detectActionBox = await page.locator('#btn-auto-detect-current-modal').boundingBox()
+    expect(detectModalBox).toBeTruthy()
+    expect(detectCloseBox).toBeTruthy()
+    expect(detectActionBox).toBeTruthy()
+    expect(detectModalBox!.y).toBeGreaterThanOrEqual(0)
+    expect(detectModalBox!.y + detectModalBox!.height).toBeLessThanOrEqual(768)
+    expect(detectCloseBox!.y).toBeGreaterThanOrEqual(detectModalBox!.y)
+    expect(detectActionBox!.y + detectActionBox!.height).toBeLessThanOrEqual(768)
+    await page.locator('#btn-close-detect-modal').click()
+
+    await page.locator('#btn-save-all-processed').scrollIntoViewIfNeeded()
+    await page.locator('#btn-save-all-processed').click()
+    await expect(page.locator('#save-options-modal.visible')).toBeVisible()
+    await expect(page.locator('#btn-cancel-save-options')).toBeInViewport()
+    await expect(page.locator('#btn-confirm-save-options')).toBeInViewport()
+    const saveModalBox = await page.locator('#save-options-modal .modal-content').boundingBox()
+    expect(saveModalBox).toBeTruthy()
+    expect(saveModalBox!.y).toBeGreaterThanOrEqual(0)
+    expect(saveModalBox!.y + saveModalBox!.height).toBeLessThanOrEqual(768)
+    await page.locator('#btn-cancel-save-options').click()
+
+    await openView(page, 'artist')
+    await expect(page.locator('#view-artist.active')).toBeVisible()
+    const startCard = page.locator('#artist-start-card')
+    if (await startCard.isVisible().catch(() => false)) {
+      await page.locator('#artist-start-dismiss').click()
+    }
+
+    await expect(page.locator('#btn-identify-all')).toBeVisible()
+    await expect(page.locator('#btn-refresh-artist-stats')).toBeVisible()
+    await expect(page.locator('#btn-clear-artist-data')).toBeVisible()
+    await expect(page.locator('#btn-identify-all')).toBeInViewport()
+    await expect(page.locator('#btn-clear-artist-data')).toBeInViewport()
+
+    const artistControlsBox = await page.locator('.artist-controls').boundingBox()
+    const clearArtistBox = await page.locator('#btn-clear-artist-data').boundingBox()
+    expect(artistControlsBox).toBeTruthy()
+    expect(clearArtistBox).toBeTruthy()
+    expect(artistControlsBox!.y + artistControlsBox!.height).toBeLessThanOrEqual(768)
+    expect(clearArtistBox!.y + clearArtistBox!.height).toBeLessThanOrEqual(768)
+  })
+
+  test('desktop prompt helper keeps random output actions reachable at 1366x768', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.addInitScript(() => {
+      localStorage.setItem('promptlab-guide-seen', 'true')
+    })
+
+    await page.route('**/api/prompts/categories', async (route) => {
+      await route.fulfill({
+        json: {
+          categories: {
+            character: ['1girl', '1boy'],
+            outfit: ['school_uniform', 'maid_outfit'],
+            pose: ['standing', 'sitting'],
+            expression: ['smile', 'serious'],
+            angle: ['full_body', 'close-up'],
+            background: ['city', 'beach'],
+            style: ['cinematic_lighting', 'watercolor'],
+            artist: ['artist:mock'],
+            quality: ['masterpiece', 'best_quality'],
+            meta: ['solo'],
+          },
+        },
+      })
+    })
+    await page.route('**/api/prompts/sets', async (route) => {
+      await route.fulfill({ json: { sets: [] } })
+    })
+    await page.route('**/api/prompts/exclusions', async (route) => {
+      await route.fulfill({ json: { rules: [] } })
+    })
+    await page.route('**/api/prompts/presets', async (route) => {
+      await route.fulfill({ json: { presets: [] } })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await openView(page, 'promptlab')
+    await expect(page.locator('#view-promptlab.active')).toBeVisible()
+    await page.locator('.promptlab-tab[data-mode="random"]').click()
+
+    await expect(page.locator('#view-promptlab .promptlab-random-layout')).toBeInViewport()
+    await expect(page.locator('#view-promptlab .promptlab-output-panel')).toBeInViewport()
+    await expect(page.locator('#btn-promptlab-generate')).toBeInViewport()
+    await expect(page.locator('#btn-promptlab-copy')).toBeInViewport()
+    await expect(page.locator('#btn-promptlab-validate')).toBeInViewport()
+    await expect(page.locator('#btn-promptlab-save-preset')).toBeInViewport()
+    await expect(page.locator('#promptlab-output')).toBeInViewport()
+  })
+
+  test('desktop long setup modals keep close buttons reachable after scrolling', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await mockGalleryImages(page, [{ id: 712, filename: 'smart-tag-scroll.png' }])
+    await mockTaggerCatalog(page)
+    await page.route('**/api/vlm/settings', async (route) => {
+      await route.fulfill({ json: { endpoint: 'https://example.invalid/v1', use_vertex: false } })
+    })
+    await page.route('**/api/smart-tag/progress**', async (route) => {
+      await route.fulfill({ json: { status: 'idle' } })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await page.locator('#btn-open-model-manager').click()
+    await expect(page.locator('#model-manager-modal.visible')).toBeVisible()
+    await page.locator('#model-manager-modal .modal-content').hover()
+    await page.mouse.wheel(0, 2400)
+    await expect(page.locator('#model-manager-close')).toBeInViewport()
+    await expect.poll(async () =>
+      page.locator('#model-manager-close').evaluate((element) => getComputedStyle(element).position)
+    ).toBe('sticky')
+    await page.locator('#model-manager-close').click()
+    await expect(page.locator('#model-manager-modal.visible')).toHaveCount(0)
+
+    await page.locator('#btn-toggle-select').click()
+    await page.locator('#gallery-grid .gallery-item[data-id="712"]').click()
+    await page.locator('#btn-tag').click()
+    await expect(page.locator('#tag-modal.visible')).toBeVisible()
+    await page.locator('#btn-tag-modal-smart-tag-go').click()
+    await expect(page.locator('#smart-tag-modal.visible')).toBeVisible()
+    await page.locator('#smart-tag-modal .modal-content').hover()
+    await page.mouse.wheel(0, 900)
+    await expect(page.locator('#btn-smart-tag-close')).toBeInViewport()
+    await expect.poll(async () =>
+      page.locator('#btn-smart-tag-close').evaluate((element) => getComputedStyle(element).position)
+    ).toBe('sticky')
+    await page.locator('#btn-smart-tag-close').click()
+    await expect(page.locator('#smart-tag-modal.visible')).toHaveCount(0)
   })
 
   test('selection scope summary should distinguish manual selection from loaded range selection', async ({ page }) => {

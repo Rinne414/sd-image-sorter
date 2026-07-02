@@ -5,6 +5,42 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2026-06-20
+
+v3.5.0 starts the serious redesign track: the global UI owner is now `frontend/css/ui-refresh.css`, the first Professional Dark Glass token pass is in place, and the repo has a conservative frontend-control audit so UI cleanup is based on evidence instead of grep guesses.
+
+v3.5.0 开始重设计路线：全局 UI owner 收束到 `frontend/css/ui-refresh.css`，首批 Professional Dark Glass token 已落地，并新增保守的前端控件审计工具，后续清理 UI 债务以证据为准，而不是靠 grep 猜测。
+
+### Added / 新增
+- **Frontend control audit / 前端控件审计**: `scripts/audit_frontend_controls.py` parses `frontend/index.html`, scans `frontend/js/**/*.js`, and classifies controls as `referenced-by-id`, `referenced-by-data`, `delegate-only`, `native-control`, `static-only`, or `needs-runtime-check`. It reports evidence only; it never recommends deleting controls.
+  - 新增 `scripts/audit_frontend_controls.py`：解析 `frontend/index.html`，扫描 `frontend/js/**/*.js`，把控件归类为 `referenced-by-id`、`referenced-by-data`、`delegate-only`、`native-control`、`static-only`、`needs-runtime-check`。它只输出证据，不给删除建议。
+- **Contract tests for delegated controls / 委托控件契约测试**: regression coverage confirms known delegated controls such as Reader tabs, Dataset tabs, Dataset queue mode buttons, and Censor filter presets are not misreported as static-only.
+  - 新增契约测试，锁住 Reader tabs、Dataset tabs、Dataset queue mode、Censor filter presets 等已知委托控件，避免被误报为静态按钮。
+- **v3.5.0 release plan skeleton / v3.5.0 计划骨架**: `.plans/sd-image-sorter-release/v3.5.0-plan.md` records the phase gates, assumptions, and current first-stage scope.
+  - 新增 `.plans/sd-image-sorter-release/v3.5.0-plan.md`，记录阶段门、假设和当前首阶段范围。
+- **Smart Tag VLM grounding toggle / Smart Tag VLM 标签辅助开关**: VLM captioning can now explicitly disable sending booru tags as captioner context while keeping the default on.
+  - Smart Tag 的 VLM 描述现在可显式关闭“把 booru 标签作为上下文发给 captioner”，默认仍保持开启。
+- **Dataset caption polish quick actions / Dataset caption 微调快捷动作**: Caption polish now exposes Clear prefix, Reset template, and Refresh Chinese reading-aid actions with real handlers.
+  - Dataset Caption 微调补上真实可用的清空前缀、重置模板、刷新中文阅读辅助按钮。
+
+### Changed / 变更
+- **Professional Dark Glass tokens / 专业暗色玻璃 token**: `ui-refresh.css` now defines v3.5.0 surface, border, focus, toolbar, modal, progress, danger, and empty-state tokens. The old decorative background glow is quieter and more workbench-like.
+  - `ui-refresh.css` 现在定义 v3.5.0 的 surface、border、focus、toolbar、modal、progress、danger、empty-state token。旧的装饰光斑弱化为更适合工作台的暗色背景。
+- **Global component pass / 全局组件首轮收束**: nav tabs, buttons, danger actions, inputs, gallery toolbar, shared panels, modals, model cards, empty states, progress bars, toasts, and the Gallery selection panel now share the same visual language.
+  - 导航 tabs、按钮、危险动作、输入框、图库工具栏、共享面板、弹窗、模型卡、空状态、进度条、toast、图库多选面板完成首轮统一。
+- **Version metadata / 版本元数据**: app metadata, README download links, and release note scaffolding now target `3.5.0`.
+  - app metadata、README 下载链接和 release notes 骨架已同步到 `3.5.0`。
+
+### Fixed / 修复
+- **Dataset Workbench right-pane reachability / Dataset 工作台右侧栏可达性**: the right operation pane now scrolls in Workbench mode, so optional caption-polish controls are reachable instead of being clipped below the viewport.
+  - Dataset Workbench 右侧操作栏现在可滚动，Caption 微调里的可选控件不会被裁在视口外不可达。
+
+### Notes / 注意
+- No user workflow, default sort/copy behavior, backend API contract, DOM id, or destructive action default was changed in this first stage.
+  - 首阶段未改变用户工作流、排序/复制默认行为、后端 API 契约、DOM id 或危险动作默认值。
+- Release package build, `lazy_release_qa.py`, and real portable boot smoke are still pending the next phase gate.
+  - release package 构建、`lazy_release_qa.py`、真实 portable 启动 smoke 仍等待下一阶段门。
+
 ## [3.4.3] - 2026-06-12
 
 ToriiGate「详细NL」不再输出半截 JSON：模型原始 JSON 在写入点解析为纯句子，旧的脏数据由迁移自动清洗；WD14+ToriiGate 改为两阶段流水线（先全部打标→卸载→再描述），修复整机黑屏/崩溃。合集支持批量加入（多选面板按钮 + 扫描完成一键建合集），Dataset Maker 补上 Smart Tag 并重做 Split 比较编辑器，浮层定位和扫描刷新也完成修复。

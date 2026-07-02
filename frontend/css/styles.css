@@ -532,6 +532,44 @@ body::before {
         width: 100%;
     }
 
+    /* ===== Universal Disabled State (UIUX Fix #1) ===== */
+    .btn:disabled,
+    .btn[disabled],
+    button:disabled,
+    button[disabled] {
+        opacity: 0.5;
+        cursor: not-allowed;
+        pointer-events: none;
+        filter: grayscale(0.3);
+    }
+
+    .btn[aria-disabled="true"],
+    button[aria-disabled="true"] {
+        opacity: 0.5;
+        cursor: not-allowed;
+        pointer-events: none;
+        filter: grayscale(0.3);
+    }
+
+    /* ===== Loading State (UIUX Fix #2) ===== */
+    .btn.is-loading {
+        position: relative;
+    }
+
+    .btn.is-loading::after {
+        content: '';
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 12px;
+        height: 12px;
+        border: 2px solid currentColor;
+        border-right-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+    }
+
     /* ===== Inputs ===== */
     .input-field,
     .input,
@@ -576,6 +614,25 @@ body::before {
     .input-field.input-checking {
         border-color: var(--accent-secondary);
         box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.2);
+    }
+
+    /* Disabled Input State (UIUX Fix #8) */
+    .input-field:disabled,
+    .input:disabled,
+    input:disabled,
+    select:disabled,
+    textarea:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        background: rgba(255, 255, 255, 0.02);
+        color: var(--text-muted);
+        border-color: rgba(184, 215, 233, 0.08);
+    }
+
+    .input-field:disabled::placeholder,
+    input:disabled::placeholder,
+    textarea:disabled::placeholder {
+        color: rgba(146, 169, 187, 0.5);
     }
 
     .validation-feedback {
@@ -2373,15 +2430,26 @@ body::before {
     }
 
     /* v3.3.0 USR-4: brief flash when a press is ignored (busy or in cooldown)
-       so a dropped autoclicker press is visible instead of silently swallowed. */
+       so a dropped autoclicker press is visible instead of silently swallowed.
+       UIUX Fix #4: Enhanced visibility with larger box-shadow + inset + scale */
     .current-image-wrapper.sort-busy-flash {
         animation: sortBusyFlash 0.22s ease;
     }
 
     @keyframes sortBusyFlash {
-        0% { box-shadow: 0 0 0 0 rgba(255, 170, 60, 0); }
-        40% { box-shadow: 0 0 0 4px rgba(255, 170, 60, 0.55); }
-        100% { box-shadow: 0 0 0 0 rgba(255, 170, 60, 0); }
+        0% {
+            box-shadow: 0 0 0 0 rgba(255, 170, 60, 0);
+            transform: scale(1);
+        }
+        40% {
+            box-shadow: 0 0 0 12px rgba(255, 170, 60, 0.8),
+                        inset 0 0 50px rgba(255, 170, 60, 0.4);
+            transform: scale(1.03);
+        }
+        100% {
+            box-shadow: 0 0 0 0 rgba(255, 170, 60, 0);
+            transform: scale(1);
+        }
     }
 
     @keyframes flyUp {
@@ -3419,6 +3487,31 @@ body::before {
 
     .toast-action-btn:active {
         transform: scale(0.95);
+    }
+
+    /* UIUX Fix #5: Toast duplicate counter and refresh animation */
+    .toast-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        margin-left: 8px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    .toast-refresh {
+        animation: toastRefresh 0.3s ease;
+    }
+
+    @keyframes toastRefresh {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-4px); }
+        75% { transform: translateX(4px); }
     }
 
     /* ===== Responsive ===== */
@@ -8452,3 +8545,141 @@ input[type="radio"] {
     gap: 4px;
     font-size: 0.85rem;
 }
+
+/* ===== UIUX Fixes #5, #6, #7 ===== */
+
+/* UIUX Fix #5: Move mode warning banner */
+.sort-warning-banner {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2001;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(220, 38, 38, 0.9));
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(239, 68, 68, 0.5);
+    color: white;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.sort-warning-banner .warning-icon {
+    font-size: 20px;
+}
+
+.sort-warning-banner .btn {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.4);
+    color: white;
+}
+
+/* UIUX Fix #6: Keyboard shortcuts help */
+.sort-help-trigger {
+    position: absolute;
+    top: 20px;
+    right: 80px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    color: var(--text-primary);
+    font-size: 24px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.sort-help-trigger:hover {
+    background: rgba(124, 139, 255, 0.3);
+    border-color: var(--accent-primary);
+    transform: scale(1.1);
+}
+
+.sort-help-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(8px);
+}
+
+.sort-help-overlay[hidden] {
+    display: none;
+}
+
+.sort-help-card {
+    background: var(--bg-card-solid);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 32px;
+    max-width: 500px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+}
+
+.shortcut-list {
+    display: grid;
+    gap: 12px;
+    margin: 20px 0;
+}
+
+.shortcut-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.shortcut-item kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    height: 40px;
+    padding: 0 12px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05));
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 8px;
+    font-family: 'Orbitron', monospace;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--accent-primary);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.shortcut-item span {
+    flex: 1;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* UIUX Fix #7: Selection state chip close button */
+.chip-close-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-left: 8px;
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.chip-close-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+

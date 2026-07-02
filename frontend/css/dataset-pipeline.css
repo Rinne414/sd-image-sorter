@@ -131,9 +131,12 @@
 #view-dataset .dataset-maker[data-active-tab="export"] .dataset-audit-section,
 #view-dataset .dataset-maker[data-active-tab="export"] .dataset-queue-pane,
 #view-dataset .dataset-maker[data-active-tab="export"] .dataset-editor-pane,
+#view-dataset .dataset-maker[data-active-tab="export"] .dataset-workflow-rail,
 #view-dataset .dataset-maker[data-active-tab="export"] .dataset-vocab-panel,
+#view-dataset .dataset-maker[data-active-tab="export"] #dataset-step-setup,
 #view-dataset .dataset-maker[data-active-tab="export"] #dataset-step-caption,
 #view-dataset .dataset-maker[data-active-tab="export"] #dataset-step-findreplace,
+#view-dataset .dataset-maker[data-active-tab="export"] .dataset-review-card,
 #view-dataset .dataset-maker[data-active-tab="export"] .dataset-card-details {
     display: none;
 }

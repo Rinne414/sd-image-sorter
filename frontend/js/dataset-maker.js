@@ -307,7 +307,7 @@
                 const trigger = (document.getElementById('dataset-trigger')?.value || '').trim();
                 if (!trigger) {
                     this._toast(this._t('dataset.quickfillTriggerEmpty',
-                        'Type a trigger word in the "Renumber" preset above first.'), 'warning', 4000);
+                        'Type a trigger word in LoRA setup first.'), 'warning', 4000);
                     return;
                 }
                 const ta = document.getElementById('dataset-common-tags');

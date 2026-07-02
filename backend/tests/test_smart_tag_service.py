@@ -1473,6 +1473,7 @@ def test_coerce_request_normalizes_toriigate_params(monkeypatch) -> None:
     })
     assert defaults.toriigate_caption_length == "detailed"
     assert defaults.toriigate_max_new_tokens == 0  # 0 = derive from length
+    assert defaults.vlm_grounding is True
     assert defaults.toriigate_grounding is True
 
     explicit = _coerce_request({
@@ -1481,10 +1482,12 @@ def test_coerce_request_normalizes_toriigate_params(monkeypatch) -> None:
         "natural_language_mode": "toriigate",
         "toriigate_caption_length": "BRIEF",
         "toriigate_max_new_tokens": 5000,
+        "vlm_grounding": False,
         "toriigate_grounding": False,
     })
     assert explicit.toriigate_caption_length == "brief"
     assert explicit.toriigate_max_new_tokens == 1024
+    assert explicit.vlm_grounding is False
     assert explicit.toriigate_grounding is False
 
     junk = _coerce_request({
@@ -1841,6 +1844,29 @@ def test_build_caption_phase_forces_nl_output_format() -> None:
 
     assert ctx.use_vlm is True
     assert vlm.config.output_format == "nl_caption"
+
+
+def test_build_caption_phase_respects_vlm_grounding_toggle() -> None:
+    vlm = SimpleNamespace(
+        config=SimpleNamespace(
+            concurrent_requests=2,
+            include_tags_as_context=True,
+            user_prompt="",
+            user_prompt_with_tags="",
+            output_format="nl_caption",
+        )
+    )
+    req = SmartTagRequest(
+        image_ids=[1],
+        enable_vlm=True,
+        natural_language_mode="vlm",
+        vlm_grounding=False,
+    )
+
+    ctx = smart_tag_service._build_caption_phase(req, vlm, None)
+
+    assert ctx.use_vlm is True
+    assert ctx.include_tags_as_context is False
 
 
 class _ConcurrencyTrackingVlm:

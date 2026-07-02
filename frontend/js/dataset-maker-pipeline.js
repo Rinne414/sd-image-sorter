@@ -1724,6 +1724,7 @@
 
         const wrapper = document.createElement('div');
         wrapper.className = 'dataset-custom-dropdown';
+        wrapper.dataset.selectId = sel.id;
 
         const display = document.createElement('button');
         display.type = 'button';

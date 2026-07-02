@@ -11,6 +11,12 @@
     max-width: 720px;
 }
 
+#mass-tag-modal .mass-tag-shell {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
 /* ---- Scope picker ---------------------------------------------------- */
 
 .mass-tag-scope {
@@ -181,6 +187,15 @@
     overflow-wrap: anywhere;
 }
 
+#mass-tag-modal .modal-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin: 12px -4px 0;
+    padding: 12px 4px 0;
+    background: linear-gradient(180deg, rgba(15, 21, 32, 0), var(--modal-bg, var(--bg-card-solid)) 24%);
+}
+
 /* ---- Confirm dialog -------------------------------------------------- */
 
 .mass-tag-confirm-shell {
@@ -236,4 +251,42 @@
         grid-template-columns: 1fr 1fr;
     }
     .mass-tag-tabs { grid-auto-rows: 1fr; }
+}
+
+@media (max-height: 820px) and (min-width: 1101px) {
+    #mass-tag-modal .mass-tag-shell {
+        max-height: calc(100% - 24px) !important;
+        padding: 22px 26px 18px;
+    }
+
+    #mass-tag-modal .modal-description,
+    #mass-tag-scope-helper {
+        margin-bottom: 8px;
+    }
+
+    #mass-tag-modal h3 {
+        margin-bottom: 8px;
+    }
+
+    .mass-tag-scope {
+        margin: 6px 0 10px;
+        padding: 10px 12px;
+    }
+
+    .mass-tag-tabs {
+        margin: 8px 0;
+    }
+
+    .mass-tag-panel {
+        padding: 12px;
+    }
+
+    .mass-tag-result {
+        max-height: 128px;
+        overflow-y: auto;
+    }
+
+    .mass-tag-result-samples pre {
+        max-height: 72px;
+    }
 }

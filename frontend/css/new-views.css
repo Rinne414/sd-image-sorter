@@ -785,6 +785,7 @@
     grid-template-columns: 280px 1fr 320px;
     gap: 18px;
     align-items: start;
+    min-height: 0;
 }
 
 .artist-controls,
@@ -802,6 +803,7 @@
     flex-direction: column;
     gap: 16px;
     overflow-y: auto;
+    max-height: 100%;
 }
 
 .control-section {
@@ -843,6 +845,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    min-height: 0;
 }
 
 .results-header {
@@ -900,6 +903,7 @@
     overflow-y: auto;
     padding: 12px;
     gap: 12px;
+    min-height: 0;
 }
 
 #artist-results-grid.list-mode {

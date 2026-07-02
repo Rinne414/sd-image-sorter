@@ -74,6 +74,23 @@ Do NOT:
 
 ---
 
+## §css-ownership — Shared tokens and feature layouts must have one owner
+
+The frontend still uses plain CSS with multiple layered stylesheets. Keep the ownership boundary explicit so broad UI refresh work does not become override-only churn.
+
+Ownership:
+- `styles.css`: legacy/base layout foundation and broad compatibility rules.
+- `ui-refresh.css`: shared visual tokens, current theme/chrome, shared controls, and cross-view refresh overrides.
+- Feature stylesheets (`censor-v2.css`, `dataset-maker.css`, `vlm.css`, etc.): feature-local layout and controls only.
+
+Do NOT:
+- Add a third stylesheet that competes with `ui-refresh.css` for global tokens or nav/gallery chrome.
+- Put feature-specific layout fixes in `ui-refresh.css` when a feature stylesheet already owns that surface.
+- Change the same shell from both `styles.css` and a feature stylesheet without documenting which layer wins.
+- Add broad selectors that wrap or resize toolbar/nav/filter text without checking the 1366x768 desktop contract.
+
+---
+
 ## Maintenance
 
 - Update this file when reverting or revising any rule above.

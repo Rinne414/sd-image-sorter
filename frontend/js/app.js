@@ -2206,6 +2206,26 @@ function copyTextToClipboard(text, successMessage = 'Copied to clipboard') {
 let _lastFocusedElement = null;
 let _focusTrapHandler = null;
 
+function readWindowScrollPosition() {
+    const mainContent = document.getElementById('main-content');
+    return {
+        x: window.scrollX || document.documentElement.scrollLeft || document.body.scrollLeft || 0,
+        y: window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0,
+        mainContentX: mainContent?.scrollLeft || 0,
+        mainContentY: mainContent?.scrollTop || 0,
+    };
+}
+
+function restoreWindowScrollPosition(position) {
+    if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.y)) return;
+    window.scrollTo(position.x, position.y);
+    const mainContent = document.getElementById('main-content');
+    if (mainContent && Number.isFinite(position.mainContentX) && Number.isFinite(position.mainContentY)) {
+        mainContent.scrollLeft = position.mainContentX;
+        mainContent.scrollTop = position.mainContentY;
+    }
+}
+
 function trapFocus(modal) {
     const focusableElements = modal.querySelectorAll(
         'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -2253,6 +2273,7 @@ function showModal(modalId) {
     if (modal) {
         // Store the element that had focus before opening modal
         _lastFocusedElement = document.activeElement;
+        modal._previousWindowScrollPosition = readWindowScrollPosition();
         modal.classList.add('visible');
 
         // Populate recent folders datalist when scan modal opens
@@ -2316,6 +2337,7 @@ function showModal(modalId) {
 function hideModal(modalId) {
     const modal = $(`#${modalId}`);
     if (modal) {
+        const previousWindowScrollPosition = modal._previousWindowScrollPosition;
         // Quick exit animation (non-blocking — remove class immediately for E2E compatibility)
         const content = modal.querySelector('.modal-content');
         if (content) {
@@ -2355,6 +2377,8 @@ function hideModal(modalId) {
 
         // Release focus trap and restore focus
         releaseFocus();
+        restoreWindowScrollPosition(previousWindowScrollPosition);
+        modal._previousWindowScrollPosition = null;
     }
 }
 
@@ -5656,6 +5680,68 @@ function initEventListeners() {
         }
     }
 
+    // Keyboard shortcuts for adjusting thumbnail size: [ = decrease, ] = increase
+    const THUMBNAIL_SIZES = {
+        grid: [150, 180, 200, 240, 280, 320],
+        large: [300, 340, 384, 440, 512, 580],
+        waterfall: [220, 250, 280, 320, 360, 400]
+    };
+    const THUMBNAIL_SIZE_KEY = 'sd-sorter:thumbnail-size-index';
+
+    function getCurrentSizeIndex() {
+        const stored = localStorage.getItem(THUMBNAIL_SIZE_KEY);
+        return stored ? parseInt(stored, 10) : 2; // default to middle size
+    }
+
+    function setCurrentSizeIndex(index) {
+        localStorage.setItem(THUMBNAIL_SIZE_KEY, String(index));
+    }
+
+    function applyThumbnailSize(viewMode, sizeIndex) {
+        const galleryGrid = $('#gallery-grid');
+        if (!galleryGrid) return getCurrentSizeIndex();
+
+        const sizes = THUMBNAIL_SIZES[viewMode] || THUMBNAIL_SIZES.grid;
+        const clampedIndex = Math.max(0, Math.min(sizes.length - 1, sizeIndex));
+        const size = sizes[clampedIndex];
+
+        galleryGrid.style.setProperty('--grid-item-size', `${size}px`);
+        if (viewMode === 'waterfall') {
+            galleryGrid.style.setProperty('--waterfall-column-width', `${size}px`);
+        }
+
+        setCurrentSizeIndex(clampedIndex);
+        return clampedIndex;
+    }
+
+    // Apply saved size on page load
+    const initialViewMode = AppState.viewMode || 'grid';
+    applyThumbnailSize(initialViewMode, getCurrentSizeIndex());
+
+    // Global keyboard shortcuts for thumbnail size
+    document.addEventListener('keydown', (e) => {
+        // Skip if user is typing in an input/textarea or modal is open
+        const activeEl = document.activeElement;
+        if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+            return;
+        }
+        const modalOpen = document.querySelector('.modal.show, [role="dialog"][style*="display: block"]');
+        if (modalOpen) return;
+
+        const currentViewMode = AppState.viewMode || 'grid';
+        const currentIndex = getCurrentSizeIndex();
+
+        if (e.key === '[') {
+            e.preventDefault();
+            applyThumbnailSize(currentViewMode, currentIndex - 1);
+            showToast(appT('gallery.thumbnailSizeDecreased', 'Thumbnail size decreased'), 'info');
+        } else if (e.key === ']') {
+            e.preventDefault();
+            applyThumbnailSize(currentViewMode, currentIndex + 1);
+            showToast(appT('gallery.thumbnailSizeIncreased', 'Thumbnail size increased'), 'info');
+        }
+    });
+
     // Gallery-header aspect quick-toggle (FE-7). Drives the SAME FilterStore
     // `aspectRatio` field as the filter modal's aspect radios — no parallel
     // state. Clicking writes through updateAppFilters, then syncs the modal
@@ -5984,6 +6070,12 @@ function initEventListeners() {
             if(btnRestoreDesktop) btnRestoreDesktop.style.display = 'none';
             localStorage.setItem('desktop-sidebar-collapsed', 'false');
         }
+        // Trigger gallery layout recalculation after sidebar width change
+        requestAnimationFrame(() => {
+            if (window.Gallery?.virtualList) {
+                window.Gallery.virtualList.refresh?.();
+            }
+        });
     };
 
     if (localStorage.getItem('desktop-sidebar-collapsed') === 'true') {

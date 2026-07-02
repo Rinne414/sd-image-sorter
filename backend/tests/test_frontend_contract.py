@@ -5,9 +5,11 @@ Frontend contract tests that guard shared state boundaries.
 from __future__ import annotations
 
 import os
+import json
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -563,12 +565,25 @@ def test_dataset_maker_step2_owns_caption_formatting_and_translation_settings():
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
     dataset_js = (repo_root / "frontend" / "js" / "dataset-maker.js").read_text(encoding="utf-8")
 
+    setup_start = html.index('id="dataset-step-setup"')
     caption_start = html.index('data-i18n="dataset.cardCaptionTitle"')
     find_replace_start = html.index('id="dataset-step-findreplace"', caption_start)
+    setup_block = html[setup_start:caption_start]
     caption_block = html[caption_start:find_replace_start]
     export_start = html.index('id="dataset-step-export"')
     export_end = html.index('id="dataset-export-preview"', export_start)
     export_block = html[export_start:export_end]
+
+    for marker in [
+        'id="dataset-trigger"',
+        'id="dataset-lora-type"',
+        'id="dataset-common-tags"',
+        'id="btn-dataset-quickfill-trigger"',
+        'id="btn-dataset-quickfill-quality"',
+    ]:
+        assert marker in setup_block
+        assert marker not in caption_block
+        assert marker not in export_block
 
     for marker in [
         'id="dataset-export-prefix"',
@@ -583,12 +598,13 @@ def test_dataset_maker_step2_owns_caption_formatting_and_translation_settings():
         'id="dataset-translation-provider-mode"',
         'id="dataset-translation-external-provider"',
         'id="dataset-translation-prompt"',
-        'id="dataset-naming-pattern"',
-        'id="dataset-trigger"',
     ]:
         assert marker in caption_block
         assert marker not in export_block
 
+    assert 'id="dataset-naming-pattern"' in export_block
+    assert 'id="dataset-naming-pattern"' not in setup_block
+    assert 'id="dataset-naming-pattern"' not in caption_block
     assert 'id="dataset-export-content-mode"' in html
     assert 'type="hidden" id="dataset-export-content-mode"' in html
     assert 'data-i18n="dataset.exportContentMode"' not in export_block
@@ -1297,3 +1313,64 @@ def test_sorting_payloads_carry_v33x_gallery_scope_filters():
     # (slot/bracket/cull) and the minimap preview query.
     assert "function buildManualSortScopeFilters" in manual_sort_source
     assert manual_sort_source.count("buildManualSortScopeFilters(f)") >= 4
+
+
+def test_frontend_control_audit_script_reports_inventory():
+    repo_root = Path(__file__).resolve().parents[2]
+    script = repo_root / "scripts" / "audit_frontend_controls.py"
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--format", "json"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report = json.loads(result.stdout)
+    summary = report["summary"]
+
+    assert summary["source"] == "frontend/index.html"
+    assert summary["buttons"] >= 400
+    assert summary["total_controls"] >= summary["buttons"]
+    for category in (
+        "referenced-by-id",
+        "referenced-by-data",
+        "delegate-only",
+        "static-only",
+        "needs-runtime-check",
+    ):
+        assert category in summary["categories"]
+    assert "deletion recommendations" in " ".join(report["notes"])
+
+
+def test_frontend_control_audit_keeps_known_delegated_controls_out_of_static_only_bucket():
+    repo_root = Path(__file__).resolve().parents[2]
+    script = repo_root / "scripts" / "audit_frontend_controls.py"
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--format", "json"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report = json.loads(result.stdout)
+    controls_by_id = {
+        control["id"]: control
+        for control in report["controls"]
+        if control.get("id")
+    }
+
+    known_delegated = [
+        "reader-tool-tab-reader",
+        "reader-tool-tab-obfuscation",
+        "dataset-tab-import",
+        "dataset-tab-workbench",
+        "dataset-tab-export",
+        "btn-dataset-queue-grid",
+        "btn-dataset-queue-list",
+        "btn-filter-vivid",
+    ]
+    for control_id in known_delegated:
+        assert control_id in controls_by_id
+        control = controls_by_id[control_id]
+        assert control["category"] not in {"static-only", "needs-runtime-check"}, control
+        assert control["evidence"], control

@@ -22,7 +22,7 @@ from typing import Optional, Dict, Any, List, Callable
 
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
-from PIL import Image, PngImagePlugin, UnidentifiedImageError
+from PIL import Image, UnidentifiedImageError
 from starlette.concurrency import run_in_threadpool
 
 import database as db
@@ -30,6 +30,15 @@ from constants import VALID_ASPECT_RATIOS
 from image_manager import reparse_image_metadata
 from metadata_parser import parse_image, verify_image_readable
 from services.indexed_file_mutation_service import save_and_reconcile_checked
+from services.image_metadata_writer import (
+    JPEG_LIMITATION_WARNING,
+    WEBP_LIMITATION_WARNING,
+    build_exif_bytes,
+    build_pnginfo,
+    build_sd_parameters_text,
+    normalize_edited_metadata,
+    prepare_image_for_save,
+)
 from services.tag_export_service import extract_generation_params
 from thumbnail_cache import (
     get_thumbnail_async,
@@ -250,37 +259,6 @@ VALID_SORT_OPTIONS = [
     "saturation", "saturation_asc",
     "brightness_skew", "brightness_skew_asc",
 ]
-JPEG_LIMITATION_WARNING = "JPEG metadata support is limited; use PNG for the most reliable SD prompt preservation."
-WEBP_LIMITATION_WARNING = "WebP metadata support depends on the viewer; use PNG if another tool fails to read the saved prompt."
-JPEG_ALPHA_WARNING = "JPEG does not support transparency; transparent pixels were flattened onto a white background."
-EDITED_METADATA_KEY_ALIASES = {
-    "negative prompt": "negative_prompt",
-    "negative_prompt": "negative_prompt",
-    "checkpoint": "model",
-    "model_name": "model",
-    "cfg": "cfg_scale",
-    "cfg_scale": "cfg_scale",
-    "cfg scale": "cfg_scale",
-    "lora": "loras",
-    "lora_text": "loras",
-    "lora metadata": "loras",
-    "lora_metadata": "loras",
-}
-PARAMETER_EXPORT_ORDER = [
-    ("steps", "Steps"),
-    ("sampler", "Sampler"),
-    ("cfg_scale", "CFG scale"),
-    ("seed", "Seed"),
-    ("size", "Size"),
-    ("model", "Model"),
-    ("model_hash", "Model hash"),
-    ("clip_skip", "Clip skip"),
-    ("denoising_strength", "Denoising strength"),
-    ("schedule_type", "Schedule type"),
-    ("loras", "LoRAs"),
-]
-
-
 def _cleanup_stale_reader_uploads(temp_dir: Path, ttl_seconds: int) -> None:
     """Best-effort cleanup for temporary Reader uploads kept for follow-up save actions."""
     try:
@@ -357,115 +335,6 @@ def _sanitize_filter_values(items: Any) -> Optional[List[str]]:
 
     sanitized = _sanitize_filter_value(str(items))
     return [sanitized] if sanitized else None
-
-
-def _normalize_edited_metadata(metadata: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    """Normalize metadata keys from the editor into a stable backend shape."""
-    normalized: Dict[str, Any] = {}
-
-    for raw_key, raw_value in (metadata or {}).items():
-        key = str(raw_key or "").strip()
-        if not key:
-            continue
-
-        canonical_key = EDITED_METADATA_KEY_ALIASES.get(key.lower().replace("-", "_"), key.lower().replace("-", "_"))
-        value: Any = raw_value
-        if isinstance(value, (list, tuple, set)):
-            parts = [str(item).strip() for item in value if str(item).strip()]
-            value = ", ".join(parts) if parts else None
-        elif isinstance(value, str):
-            stripped = value.strip()
-            value = stripped if stripped else None
-
-        if value is None:
-            continue
-
-        normalized[canonical_key] = value
-
-    if "size" not in normalized:
-        width = normalized.get("width")
-        height = normalized.get("height")
-        if width is not None and height is not None:
-            normalized["size"] = f"{width}x{height}"
-
-    return normalized
-
-
-def _build_sd_parameters_text(metadata: Dict[str, Any]) -> str:
-    """Build a WebUI-style parameters blob that the existing parser can read back."""
-    prompt = str(metadata.get("prompt") or "").strip()
-    negative_prompt = str(metadata.get("negative_prompt") or "").strip()
-    lines: List[str] = []
-    if prompt:
-        lines.append(prompt)
-    if negative_prompt:
-        lines.append(f"Negative prompt: {negative_prompt}")
-
-    parts: List[str] = []
-    emitted_keys = set()
-    for key, label in PARAMETER_EXPORT_ORDER:
-        value = metadata.get(key)
-        if value is None or value == "":
-            continue
-        emitted_keys.add(key)
-        parts.append(f"{label}: {value}")
-
-    extra_keys = sorted(
-        key for key in metadata.keys()
-        if key not in emitted_keys and key not in {"prompt", "negative_prompt", "width", "height"}
-    )
-    for key in extra_keys:
-        value = metadata.get(key)
-        if value is None or value == "":
-            continue
-        label = " ".join(part.capitalize() for part in key.split("_"))
-        parts.append(f"{label}: {value}")
-
-    if parts:
-        lines.append(", ".join(parts))
-
-    return "\n".join(lines).strip()
-
-
-def _build_pnginfo(metadata: Dict[str, Any], parameters_text: str) -> PngImagePlugin.PngInfo:
-    pnginfo = PngImagePlugin.PngInfo()
-    if parameters_text:
-        pnginfo.add_text("parameters", parameters_text)
-
-    pnginfo.add_text("Software", "SD Image Sorter")
-
-    for key, value in metadata.items():
-        if value is None or value == "":
-            continue
-        pnginfo.add_text(str(key), str(value))
-
-    return pnginfo
-
-
-def _build_exif_bytes(image: Image.Image, parameters_text: str) -> Optional[bytes]:
-    try:
-        exif = image.getexif()
-        if parameters_text:
-            exif[0x010E] = parameters_text  # ImageDescription
-        exif[0x0131] = "SD Image Sorter"  # Software
-        return exif.tobytes()
-    except Exception:
-        return None
-
-
-def _prepare_image_for_save(image: Image.Image, pil_format: str, warnings: List[str]) -> Image.Image:
-    """Prepare image mode conversions required by the target output format."""
-    if pil_format != "JPEG":
-        return image.copy()
-
-    if image.mode in ("RGB", "L", "CMYK"):
-        return image.copy()
-
-    converted = image.convert("RGBA")
-    background = Image.new("RGBA", converted.size, (255, 255, 255, 255))
-    background.alpha_composite(converted)
-    warnings.append(JPEG_ALPHA_WARNING)
-    return background.convert("RGB")
 
 
 class ImageService:
@@ -2747,8 +2616,8 @@ class ImageService:
         if quality is not None and (quality < 1 or quality > 100):
             raise ValueError("Quality must be between 1 and 100")
 
-        normalized_metadata = _normalize_edited_metadata(metadata)
-        parameters_text = _build_sd_parameters_text(normalized_metadata)
+        normalized_metadata = normalize_edited_metadata(metadata)
+        parameters_text = build_sd_parameters_text(normalized_metadata)
         warnings: List[str] = []
 
         pil_format = "PNG"
@@ -2761,16 +2630,16 @@ class ImageService:
 
         def _write_edited_image(final_output_path: str, _overwrite_requested: bool) -> None:
             with Image.open(source) as image:
-                save_image = _prepare_image_for_save(image, pil_format, warnings)
+                save_image = prepare_image_for_save(image, pil_format, warnings)
                 save_kwargs: Dict[str, Any] = {}
                 icc_profile = image.info.get("icc_profile")
                 if icc_profile:
                     save_kwargs["icc_profile"] = icc_profile
 
                 if pil_format == "PNG":
-                    save_kwargs["pnginfo"] = _build_pnginfo(normalized_metadata, parameters_text)
+                    save_kwargs["pnginfo"] = build_pnginfo(normalized_metadata, parameters_text)
                 else:
-                    exif_bytes = _build_exif_bytes(image, parameters_text)
+                    exif_bytes = build_exif_bytes(image, parameters_text)
                     if exif_bytes:
                         save_kwargs["exif"] = exif_bytes
                     save_kwargs["quality"] = int(quality if quality is not None else (92 if pil_format == "JPEG" else 95))

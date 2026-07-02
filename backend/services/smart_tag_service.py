@@ -805,6 +805,7 @@ class SmartTagRequest:
     # reference input (official model usage, mirrors the VLM {tags} context).
     toriigate_caption_length: str = "detailed"
     toriigate_max_new_tokens: int = 0
+    vlm_grounding: bool = True
     toriigate_grounding: bool = True
 
 
@@ -1106,6 +1107,7 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
         toriigate_max_new_tokens=_coerce_toriigate_max_tokens(
             payload.get("toriigate_max_new_tokens")
         ),
+        vlm_grounding=bool(payload.get("vlm_grounding", True)),
         toriigate_grounding=bool(payload.get("toriigate_grounding", True)),
     )
 
@@ -1679,7 +1681,7 @@ def _process_one_image(
         )
         include_tags_as_context = bool(
             getattr(getattr(vlm_provider, "config", None), "include_tags_as_context", True)
-        )
+        ) and req.vlm_grounding
         prompt = build_vlm_prompt(
             req.training_purpose,
             vlm_context_tags,
@@ -2053,7 +2055,7 @@ def _build_caption_phase(req: "SmartTagRequest", vlm_provider, nl_tagger) -> "_C
     if use_vlm:
         config = vlm_provider.config
         ctx.worker_count = max(1, int(getattr(config, "concurrent_requests", 1) or 1))
-        ctx.include_tags_as_context = bool(getattr(config, "include_tags_as_context", True))
+        ctx.include_tags_as_context = bool(getattr(config, "include_tags_as_context", True)) and req.vlm_grounding
         template = (
             PROMPT_PRESETS.get(normalize_training_purpose(req.training_purpose))
             or PROMPT_PRESETS["general"]

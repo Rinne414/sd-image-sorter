@@ -460,9 +460,7 @@
 
     DM._onPresetChange = function () {
         const preset = this._currentPreset();
-        const triggerRow = document.getElementById('dataset-trigger-row');
         const customRow = document.getElementById('dataset-custom-row');
-        if (triggerRow) triggerRow.hidden = (preset !== 'renumber');
         if (customRow) customRow.hidden = (preset !== 'custom');
         this._updateNamingPreview();
     };

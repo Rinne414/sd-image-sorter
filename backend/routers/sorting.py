@@ -10,16 +10,16 @@ from fastapi import APIRouter, Body, Depends, BackgroundTasks, Query, UploadFile
 
 from services.service_provider import ServiceProvider
 from services.state_compat import MutableStateProxy
-from services.sorting_service import (
-    SortingService,
+from services.sorting_models import (
+    BatchMoveRequest,
+    BrowseFolderRequest,
+    FolderConfig,
+    ManualSortStartRequest,
+    MoveRequest,
     ScanRequest,
     ValidatePathRequest,
-    MoveRequest,
-    BatchMoveRequest,
-    FolderConfig,
-    BrowseFolderRequest,
-    ManualSortStartRequest,
 )
+from services.sorting_service import SortingService
 
 
 router = APIRouter(prefix="/api", tags=["sorting"])
