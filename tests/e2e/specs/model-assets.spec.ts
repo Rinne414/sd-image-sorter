@@ -1,9 +1,9 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 
 const TINY_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAAWgmWQ0AAAAASUVORK5CYII='
 
-async function openMainPage(page) {
+async function openMainPage(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect.poll(async () => {
     return await page.evaluate(() => {
@@ -20,7 +20,7 @@ async function openMainPage(page) {
   }).toBe(true)
 }
 
-async function showReader(page) {
+async function showReader(page: Page) {
   await openMainPage(page)
   await page.evaluate(() => {
     const view = document.getElementById('view-reader')

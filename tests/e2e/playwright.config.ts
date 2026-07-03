@@ -124,11 +124,27 @@ const artistRuntimeZip = path.join(e2eFixtureRoot, 'comfyui-lsnet-runtime.zip')
 const artistRuntimeSource = path.join(e2eFixtureRoot, 'comfyui-lsnet-runtime-source')
 const artistCheckpoint = path.join(e2eFixtureRoot, 'best_checkpoint.pth')
 const artistMapping = path.join(e2eFixtureRoot, 'class_mapping.csv')
-const sam3Checkpoint = path.join(e2eFixtureRoot, 'sam3-model.safetensors')
+// Full transformers-style SAM3 stub bundle: the backend prepare flow fetches
+// every file in model_service._SAM3_DOWNLOAD_FILES from
+// SD_IMAGE_SORTER_SAM3_BASE_URL, and get_sam3_checkpoint_path() only reports
+// a checkpoint when config.json + model.safetensors exist in one directory.
+const sam3BundleDir = path.join(e2eFixtureRoot, 'sam3-bundle')
+const sam3BundleSmallFiles: Record<string, string> = {
+  'config.json': JSON.stringify({ model_type: 'sam3' }),
+  'processor_config.json': JSON.stringify({ processor_class: 'Sam3Processor' }),
+  'tokenizer.json': JSON.stringify({ version: '1.0' }),
+  'tokenizer_config.json': JSON.stringify({ tokenizer_class: 'PreTrainedTokenizerFast' }),
+  'vocab.json': JSON.stringify({}),
+  'merges.txt': '#version: 0.2\n',
+  'special_tokens_map.json': JSON.stringify({}),
+}
 ensureZip(artistRuntimeZip, artistRuntimeSource)
 ensureFile(artistCheckpoint, 32 * 1024 * 1024, 'k')
 fs.writeFileSync(artistMapping, 'artist_id,artist_name\n0,fixture_artist\n')
-ensureFile(sam3Checkpoint, 32 * 1024 * 1024, 's')
+ensureFile(path.join(sam3BundleDir, 'model.safetensors'), 32 * 1024 * 1024, 's')
+for (const [sam3FileName, sam3FileContents] of Object.entries(sam3BundleSmallFiles)) {
+  fs.writeFileSync(path.join(sam3BundleDir, sam3FileName), sam3FileContents)
+}
 writeStubModule('torch.py', `__version__ = '2.9.0+cu128'\nclass version:\n    cuda = '12.8'\nclass cuda:\n    @staticmethod\n    def is_available():\n        return True\n`)
 writeStubModule('transformers.py', `__version__ = '5.9.0'\n`)
 writeStubModule('safetensors.py', `__version__ = '0.7.0'\n`)
@@ -217,7 +233,10 @@ export default defineConfig({
       SD_IMAGE_SORTER_ARTIST_RUNTIME_ZIP_URL: pathToFileURL(artistRuntimeZip).href,
       SD_IMAGE_SORTER_ARTIST_CHECKPOINT_URL: pathToFileURL(artistCheckpoint).href,
       SD_IMAGE_SORTER_ARTIST_CLASS_MAPPING_URL: pathToFileURL(artistMapping).href,
-      SD_IMAGE_SORTER_SAM3_URLS: pathToFileURL(sam3Checkpoint).href,
+      SD_IMAGE_SORTER_SAM3_BASE_URL: pathToFileURL(sam3BundleDir).href,
+      // SAM3 prepare runs a Windows torch-runtime repair when the runtime is
+      // not ready; never let the e2e server touch real pip state.
+      SD_IMAGE_SORTER_SKIP_TORCH_REPAIR: '1',
       // Opt-in so model_service.urlopen_with_ua accepts file:// URLs from
       // the fixtures above. The flag is namespaced _TEST_ so production
       // never picks it up.

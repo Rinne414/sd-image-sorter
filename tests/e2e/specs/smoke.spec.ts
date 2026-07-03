@@ -1,6 +1,6 @@
 import os from 'os'
 import path from 'path'
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page, type Route } from '@playwright/test'
 
 // Destination path used by auto-separate mocked tests. Overridable via env so
 // runners on any platform can avoid writing to the author's absolute L:\ path.
@@ -30,7 +30,7 @@ const DEFAULT_AUTOSEP_FILTER_STATE = {
   maxAesthetic: null as number | null,
 }
 
-async function seedAutoSepFilterState(page, overrides: Partial<typeof DEFAULT_AUTOSEP_FILTER_STATE> = {}) {
+async function seedAutoSepFilterState(page: Page, overrides: Partial<typeof DEFAULT_AUTOSEP_FILTER_STATE> = {}) {
   const state = { ...DEFAULT_AUTOSEP_FILTER_STATE, ...overrides }
   await page.addInitScript((payload) => {
     try {
@@ -41,7 +41,7 @@ async function seedAutoSepFilterState(page, overrides: Partial<typeof DEFAULT_AU
   }, state)
 }
 
-async function seedAutoSepTagFilter(page, tags) {
+async function seedAutoSepTagFilter(page: Page, tags: string[]) {
   await seedAutoSepFilterState(page, { tags })
 }
 
@@ -65,7 +65,7 @@ const DEFAULT_MANUAL_SORT_FILTER_STATE = {
   maxAesthetic: null as number | null,
 }
 
-async function seedManualSortFilterState(page, overrides: Partial<typeof DEFAULT_MANUAL_SORT_FILTER_STATE> = {}) {
+async function seedManualSortFilterState(page: Page, overrides: Partial<typeof DEFAULT_MANUAL_SORT_FILTER_STATE> = {}) {
   const state = { ...DEFAULT_MANUAL_SORT_FILTER_STATE, ...overrides }
   await page.addInitScript((payload) => {
     try {
@@ -79,7 +79,7 @@ async function seedManualSortFilterState(page, overrides: Partial<typeof DEFAULT
 const MIXED_MASK_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAjUlEQVR4nOXYsQ3AMBDDQJrw/it/VkhjOAGvVqFS0JoZyiRO4iRO4iRO4iRuv8icGAqLj5A4iZM4iZM4iZM4iZM4iZM4iZM4iZM4iZM4iZM4idt/OjBPkDiJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkzhvF7jtAUZuBIJ86O4rAAAAAElFTkSuQmCC'
 const INLINE_MASK_BOTTOM_RIGHT_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAjUlEQVR4nOXbIQ4AIQADwWXD/7/M2UOiCNlxdZU1HWstyiRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRu8r7Tw8P4B4mTOImTOImTOImTOImTOImbvG/b9qckTuK8XeC2D83PBIILHaPJAAAAAElFTkSuQmCC'
 
-async function getGalleryScrollState(page) {
+async function getGalleryScrollState(page: Page) {
   return page.evaluate(() => {
     const grid = document.getElementById('gallery-grid')
     if (!grid) return { scrollTop: 0, topVisibleId: null }
@@ -122,7 +122,7 @@ async function getGalleryScrollState(page) {
   })
 }
 
-async function openSelectionPanelSection(page, sectionName: 'Export' | 'Remove') {
+async function openSelectionPanelSection(page: Page, sectionName: 'Export' | 'Remove') {
   await expect(page.locator('#selection-actions')).toBeVisible()
   const disclosure = page
     .locator('#selection-actions details.selection-panel-disclosure')
@@ -134,7 +134,7 @@ async function openSelectionPanelSection(page, sectionName: 'Export' | 'Remove')
   await expect(disclosure).toHaveJSProperty('open', true)
 }
 
-async function getVisibleGalleryRects(page, count = 4) {
+async function getVisibleGalleryRects(page: Page, count = 4) {
   return page.evaluate((maxCount) => {
     const grid = document.getElementById('gallery-grid')
     if (!grid) return []
@@ -156,7 +156,7 @@ async function getVisibleGalleryRects(page, count = 4) {
   }, count)
 }
 
-async function getFilterModalLayout(page) {
+async function getFilterModalLayout(page: Page) {
   return page.evaluate(() => {
     const modal = document.querySelector('#filter-modal .filter-modal-shell')
     const primary = document.querySelector('#filter-modal .filter-column-primary')
@@ -167,7 +167,7 @@ async function getFilterModalLayout(page) {
       return null
     }
 
-    const rect = (element) => {
+    const rect = (element: Element) => {
       const box = element.getBoundingClientRect()
       return {
         top: box.top,
@@ -188,7 +188,7 @@ async function getFilterModalLayout(page) {
   })
 }
 
-async function getActiveCensorCanvasSnapshot(page) {
+async function getActiveCensorCanvasSnapshot(page: Page) {
   return page.evaluate(() => {
     const noImage = document.getElementById('censor-no-image')
     const filename = document.getElementById('censor-filename')?.textContent?.trim()
@@ -201,7 +201,7 @@ async function getActiveCensorCanvasSnapshot(page) {
 
     const canvases = ['censor-canvas', 'censor-canvas-buffer']
       .map((id) => document.getElementById(id))
-      .filter((canvas): canvas is HTMLCanvasElement => Boolean(canvas && canvas.width > 0))
+      .filter((canvas): canvas is HTMLCanvasElement => canvas instanceof HTMLCanvasElement && canvas.width > 0)
 
     if (canvases.length === 0) {
       return null
@@ -216,11 +216,11 @@ async function getActiveCensorCanvasSnapshot(page) {
   })
 }
 
-async function getActiveCensorCanvasBox(page) {
+async function getActiveCensorCanvasBox(page: Page) {
   const activeCanvasId = await page.evaluate(() => {
     const canvases = ['censor-canvas', 'censor-canvas-buffer']
       .map((id) => document.getElementById(id))
-      .filter((canvas): canvas is HTMLCanvasElement => Boolean(canvas && canvas.width > 0))
+      .filter((canvas): canvas is HTMLCanvasElement => canvas instanceof HTMLCanvasElement && canvas.width > 0)
 
     const activeCanvas = canvases.find((canvas) => {
       const style = window.getComputedStyle(canvas)
@@ -237,7 +237,7 @@ async function getActiveCensorCanvasBox(page) {
   return page.locator(`#${activeCanvasId}`).boundingBox()
 }
 
-async function findFirstLoadableGalleryItemId(page, maxCandidates = 48) {
+async function findFirstLoadableGalleryItemId(page: Page, maxCandidates = 48) {
   return page.evaluate(async (limit) => {
     const ids = Array.from(document.querySelectorAll('#gallery-grid .gallery-item[data-id]'))
       .map((item) => Number(item.getAttribute('data-id')))
@@ -259,7 +259,9 @@ async function findFirstLoadableGalleryItemId(page, maxCandidates = 48) {
   }, maxCandidates)
 }
 
-function rectsOverlap(a, b) {
+type EdgeBox = { top: number; right: number; bottom: number; left: number }
+
+function rectsOverlap(a: EdgeBox, b: EdgeBox) {
   return Math.min(a.right, b.right) - Math.max(a.left, b.left) > 4 &&
     Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 4
 }
@@ -269,7 +271,7 @@ function normalizeImageSrc(src: string | null) {
   return src.split('?')[0]
 }
 
-async function getImageFingerprint(page, src: string) {
+async function getImageFingerprint(page: Page, src: string) {
   return page.evaluate(async (imageSrc) => {
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {
       const el = new Image()
@@ -309,8 +311,8 @@ const MOCK_IMAGE_SVG = `
 </svg>
 `.trim()
 
-async function mockImageAsset(page, id: number) {
-  const fulfillImage = async (route) => {
+async function mockImageAsset(page: Page, id: number) {
+  const fulfillImage = async (route: Route) => {
     await route.fulfill({
       status: 200,
       contentType: 'image/svg+xml',
@@ -322,7 +324,7 @@ async function mockImageAsset(page, id: number) {
   await page.route(`**/api/image-file/${id}**`, fulfillImage)
 }
 
-function buildMockGalleryImage(id: number, overrides: Record<string, any> = {}) {
+function buildMockGalleryImage(id: number, overrides: Record<string, any> = {}): Record<string, any> {
   const filename = overrides.filename ?? `mock-${id}.png`
   return {
     id,
@@ -333,7 +335,7 @@ function buildMockGalleryImage(id: number, overrides: Record<string, any> = {}) 
   }
 }
 
-async function mockGalleryImages(page, images: Array<Record<string, any>>) {
+async function mockGalleryImages(page: Page, images: Array<Record<string, any>>) {
   const normalized = images.map((image) => buildMockGalleryImage(Number(image.id), image))
   await Promise.all(normalized.map((image) => mockImageAsset(page, image.id)))
 
@@ -357,7 +359,7 @@ async function mockGalleryImages(page, images: Array<Record<string, any>>) {
   return normalized
 }
 
-async function mockTaggerCatalog(page) {
+async function mockTaggerCatalog(page: Page) {
   await page.route('**/api/tagger/models', async (route) => {
     await route.fulfill({
       json: {
@@ -484,7 +486,7 @@ async function mockTaggerCatalog(page) {
   })
 }
 
-async function mockArtistDiagnosticsReady(page) {
+async function mockArtistDiagnosticsReady(page: Page) {
   await page.route('**/api/artists/diagnostics', async (route) => {
     await route.fulfill({
       json: {
@@ -495,7 +497,7 @@ async function mockArtistDiagnosticsReady(page) {
   })
 }
 
-async function openView(page, view: string) {
+async function openView(page: Page, view: string) {
   const desktopTab = page.locator(`.nav-tabs [data-view="${view}"]`).first()
   if (await desktopTab.count()) {
     const box = await desktopTab.boundingBox()
@@ -526,7 +528,7 @@ async function openView(page, view: string) {
   throw new Error(`Could not find navigation entry for ${view}`)
 }
 
-async function waitForNavigationChrome(page) {
+async function waitForNavigationChrome(page: Page) {
   await expect.poll(async () => {
     return await page.evaluate(() => {
       const isVisible = (element: Element | null) => {
@@ -543,7 +545,7 @@ async function waitForNavigationChrome(page) {
   }).toBe(true)
 }
 
-async function hasMainPageShell(page) {
+async function hasMainPageShell(page: Page) {
   return await page.evaluate(() => {
     const isVisible = (element: Element | null) => {
       if (!(element instanceof HTMLElement)) return false
@@ -560,7 +562,7 @@ async function hasMainPageShell(page) {
   }).catch(() => false)
 }
 
-async function waitForMainPageShell(page, timeout = 10000) {
+async function waitForMainPageShell(page: Page, timeout = 10000) {
   try {
     await expect.poll(async () => {
       return await hasMainPageShell(page)
@@ -571,7 +573,7 @@ async function waitForMainPageShell(page, timeout = 10000) {
   }
 }
 
-async function openMainPage(page) {
+async function openMainPage(page: Page) {
   let navigationError = null
   try {
     await page.goto('/', { waitUntil: 'commit', timeout: 5000 })
@@ -586,7 +588,7 @@ async function openMainPage(page) {
   await waitForNavigationChrome(page)
 }
 
-async function getLiveSortBy(page) {
+async function getLiveSortBy(page: Page) {
   return await page.evaluate(() => {
     const app = (window as any).App
     if (app?.FilterStore && typeof app.FilterStore.getState === 'function') {
@@ -596,7 +598,7 @@ async function getLiveSortBy(page) {
   })
 }
 
-async function openSortingSubView(page, subView: 'autosep' | 'manual') {
+async function openSortingSubView(page: Page, subView: 'autosep' | 'manual') {
   await openView(page, 'sorting')
   await expect(page.locator('#view-sorting.active')).toBeVisible()
 
@@ -610,7 +612,7 @@ async function openSortingSubView(page, subView: 'autosep' | 'manual') {
   }
 }
 
-async function openTagAdvancedOptions(page) {
+async function openTagAdvancedOptions(page: Page) {
   const details = page.locator('#tag-advanced-options')
   const isOpen = await details.evaluate((node) => node instanceof HTMLDetailsElement && node.open)
 
@@ -620,7 +622,7 @@ async function openTagAdvancedOptions(page) {
   await expect(details).toHaveAttribute('open', '')
 }
 
-async function setGallerySearch(page, search: string) {
+async function setGallerySearch(page: Page, search: string) {
   await page.evaluate(async (value) => {
     const waitFor = async (predicate: () => boolean, timeout = 10000) => {
       const start = Date.now()
@@ -2797,6 +2799,12 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#censor-model-path')).toBeVisible()
     await expect(page.locator('#btn-auto-detect-current-modal')).toBeInViewport()
 
+    // Expanding the advanced picker rows can focus-scroll the modal body,
+    // pushing the header out of the scroll viewport for a moment. The contract
+    // under test is reachability, so bring the close button back into view
+    // (no-op when it never scrolled away) before measuring geometry.
+    await page.locator('#btn-close-detect-modal').evaluate((node) => node.scrollIntoView({ block: 'nearest' }))
+
     const detectModalBox = await page.locator('#detect-modal .modal-content').boundingBox()
     const detectCloseBox = await page.locator('#btn-close-detect-modal').boundingBox()
     const detectActionBox = await page.locator('#btn-auto-detect-current-modal').boundingBox()
@@ -3107,7 +3115,7 @@ test.describe('Smoke Tests', () => {
     await page.locator('#btn-close-export').click()
 
     await page.evaluate(() => {
-      window.App.updateFilters((filters) => {
+      window.App.updateFilters((filters: any) => {
         filters.search = 'changed-filter'
       })
       return window.App.loadImages()
@@ -3304,7 +3312,10 @@ test.describe('Smoke Tests', () => {
     await Promise.all(largeImages.slice(0, 24).map((image) => mockImageAsset(page, image.id)))
 
     let imageRequests = 0
-    let releaseFirstRequest: (() => void) | null = null
+    // No-op init: the real resolver is assigned inside the route handler, and
+    // TS control flow cannot see closure assignments (a null init narrows the
+    // later call site to `never`).
+    let releaseFirstRequest: () => void = () => {}
     let firstRequestStarted: (() => void) | null = null
     const firstRequestSeen = new Promise<void>((resolve) => {
       firstRequestStarted = resolve
@@ -6327,7 +6338,7 @@ test.describe('Smoke Tests', () => {
 
   test('quick auto censor mixed geometry should affect only matched regions instead of the whole image', async ({ page }) => {
     let detectPayload: any = null
-    const fulfillImage = async (route) => {
+    const fulfillImage = async (route: Route) => {
       await route.fulfill({
         status: 200,
         contentType: 'image/svg+xml',

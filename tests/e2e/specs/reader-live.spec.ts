@@ -13,7 +13,7 @@ const DATASET_DIR = path.resolve(__dirname, '../../../backend/.tmp/release_revie
 interface ReaderFixture {
   file: string
   label: string
-  expectGenerator?: string
+  expectGenerator?: string | RegExp
   expectPromptContains?: string
   expectCheckpointContains?: string
   expectStatus?: RegExp

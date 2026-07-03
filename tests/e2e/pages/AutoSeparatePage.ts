@@ -84,7 +84,7 @@ export class AutoSeparatePage {
     const startTime = Date.now()
 
     while (Date.now() - startTime < timeout) {
-      const text = await this.scanProgress.textContent().catch(() => '')
+      const text = (await this.scanProgress.textContent().catch(() => '')) ?? ''
 
       if (text.includes('completed') || text.includes('Done') || text.includes('finished')) {
         return true
@@ -135,7 +135,7 @@ export class AutoSeparatePage {
     const startTime = Date.now()
 
     while (Date.now() - startTime < timeout) {
-      const text = await this.tagProgress.textContent().catch(() => '')
+      const text = (await this.tagProgress.textContent().catch(() => '')) ?? ''
 
       if (text.includes('completed') || text.includes('Done') || text.includes('finished')) {
         return true

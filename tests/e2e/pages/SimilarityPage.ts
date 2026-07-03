@@ -83,7 +83,7 @@ export class SimilarityPage {
     const startTime = Date.now()
 
     while (Date.now() - startTime < timeout) {
-      const text = await this.embedProgress.textContent().catch(() => '')
+      const text = (await this.embedProgress.textContent().catch(() => '')) ?? ''
 
       if (text.includes('completed') || text.includes('Done') || text.includes('finished')) {
         return true

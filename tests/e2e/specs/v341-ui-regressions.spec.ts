@@ -2,7 +2,7 @@ import fsSync from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 /**
  * v3.4.1 UI regression coverage (2026-06-12):
@@ -146,7 +146,7 @@ print("ok")
   runBackendScript(script)
 }
 
-async function openMainPage(page) {
+async function openMainPage(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect.poll(async () => {
     return await page.evaluate(() => {
@@ -159,7 +159,7 @@ async function openMainPage(page) {
   }).toBe(true)
 }
 
-async function openSortingManualView(page) {
+async function openSortingManualView(page: Page) {
   await page.locator('.nav-tabs [data-view="sorting"]').first().click({ force: true })
   await expect(page.locator('#view-sorting.active')).toBeVisible()
   await page.locator('.sorting-sub-tab[data-sorting-sub="manual"]').click({ force: true })

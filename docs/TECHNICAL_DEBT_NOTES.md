@@ -1,6 +1,6 @@
 # SD Image Sorter - Technical Debt Notes
 
-**Updated:** 2026-07-03 (full status verification sweep against the v3.5.0 tree; stale entries corrected: Debt-11, Debt-19, Debt-25, Debt-27/Roadmap-D, Debt-DM-7)
+**Updated:** 2026-07-03 (full status verification sweep against the v3.5.0 tree; stale entries corrected: Debt-11, Debt-25, Debt-27/Roadmap-D, Debt-DM-7. Same-day fix pass: Debt-15 and Debt-19 resolved; Debt-12 Windows leg and Debt-13 local-disk timing validated on real hardware)
 **Purpose:** Record confirmed structural debt found during recent stability fixes, and provide a reusable prompt for deeper whole-repo debt audits.
 
 ## Scope
@@ -272,7 +272,7 @@ Use this structure for future confirmed-debt entries:
   The current pass fixed the confirmed database lookup bottleneck and reduced scan-time gallery work without risking a broader image-serving scheduler change during release hardening.
 
 ### Debt-12: Trash / Recycle Bin behavior still needs real OS matrix validation
-- Status: open
+- Status: partially validated (2026-07-03). Real Windows 11 Recycle Bin smoke passed: `send2trash==2.1.0` (the pinned production path, no monkeypatching) moved a probe file off its origin successfully. Remaining unvalidated legs: macOS Trash, Linux freedesktop trash, WSL-mounted/network/external drives. Side-finding: the local dev venv was missing the pinned `send2trash` (backend tests monkeypatch the mover, so pytest never notices) — release installs are unaffected because both requirements locks pin it.
 - Type: file lifecycle / operability / platform compatibility
 - Impact: medium
 - Risk if ignored:
@@ -294,7 +294,7 @@ Use this structure for future confirmed-debt entries:
   The current code blocks permanent deletion and reports per-file failures, which is the safe release-hardening behavior. Full OS trash matrix validation requires real platform runs outside the current targeted unit tests.
 
 ### Debt-13: Scan count pass needs real large-folder timing validation
-- Status: open
+- Status: largely resolved (2026-07-03). Real-hardware measurement on a local NTFS library of 51,545 images (`L:\Pictures\AAA Reference`, faithful replica of `image_manager._iter_images`: scandir stack walk + suffix filter + per-entry stat): 0.31s cold, 0.21s warm. The count pass is far below any user-noticeable threshold on local disks at the 50k scale. Remaining unmeasured: network shares, WSL-mounted drives, and slow external disks — revisit only if users report a long pre-thumbnail pause on those mounts.
 - Type: performance / release validation
 - Impact: medium
 - Risk if ignored:
@@ -711,7 +711,7 @@ Quality bar:
 
 ### Debt-15: E2E TypeScript files have no local typecheck command
 
-- Status: open
+- Status: resolved (2026-07-03). `typescript` is a pinned e2e devDependency, `npm --prefix tests/e2e run typecheck` runs `tsc --noEmit -p tsconfig.json`, and `scripts/run_ci.py` gates it as "e2e typescript typecheck". The first run surfaced 200+ latent errors across specs and page objects (untyped `page`/`request`/`route` helper params, `window.App` ambient globals, `textContent()` nullability, a fixture union type, closure-narrowing traps); all were fixed to zero with `strict: true` kept on, and `tests/e2e/types/global.d.ts` now declares the vanilla-JS app globals. `playwright.config.ts` is included in the checked project.
 - Type: test tooling / frontend QA gap
 - Impact: low to medium
 - Risk if ignored:
@@ -806,11 +806,11 @@ Quality bar:
 
 ### Debt-19: SAM3 Model Manager E2E fixture stale after `transformers.Sam3Model` switch
 
-- Status: open, contained (updated 2026-07-03). Both tests are now `test.fixme(...)`-skipped in `tests/e2e/specs/model-manager.spec.ts` with in-file comments explaining the stale fixture, so CI is green (they show up in the "skipped" count) and the red-wall risk below no longer applies. The fixture itself is still stale — the skip is the mitigation, not the fix.
+- Status: resolved (2026-07-03). The Playwright fixture now builds a full transformers-style stub bundle (`.tmp/e2e-model-fixtures/sam3-bundle/` with `config.json` + 32 MB `model.safetensors` + tokenizer files matching `model_service._SAM3_DOWNLOAD_FILES`) and serves it through `SD_IMAGE_SORTER_SAM3_BASE_URL`; the old `SD_IMAGE_SORTER_SAM3_URLS` env var was dead (no backend reader) and is removed. Both tests are re-enabled with assertions updated to the directory-checkpoint contract (`get_sam3_checkpoint_path()` returns the bundle directory, not a weight-file path) and pass: 9/9 in `model-manager.spec.ts`. `SD_IMAGE_SORTER_SKIP_TORCH_REPAIR=1` is set in the e2e web server env so a not-ready SAM3 runtime can never trigger real pip repairs during browser tests.
 - Type: test infrastructure / fixture
 - Impact: low
-- Risk if ignored:
-  Two Playwright tests (`SAM3 prepare shows byte progress and refreshes the card after completion` and the cascading `no model card shows Downloaded badge - only Ready or Missing`) stay skipped, so SAM3 prepare-flow regressions in that area have no browser-level coverage until the fixture ships a full stub bundle.
+- Risk if ignored (historical):
+  Two Playwright tests (`SAM3 prepare shows byte progress and refreshes the card after completion` and the cascading `no model card shows Downloaded badge - only Ready or Missing`) stayed skipped, so SAM3 prepare-flow regressions in that area had no browser-level coverage.
 - Related files:
   `tests/e2e/specs/model-manager.spec.ts`
   `tests/e2e/playwright.config.ts`

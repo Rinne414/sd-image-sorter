@@ -64,7 +64,7 @@ async function sampleScanDom(page: Page): Promise<ScanDomSample> {
   return page.evaluate(() => ({
     loadingVisible: (() => {
       const el = document.querySelector<HTMLElement>('#gallery-loading')
-      return Boolean(el) && getComputedStyle(el).display !== 'none'
+      return el !== null && getComputedStyle(el).display !== 'none'
     })(),
     skeletons: document.querySelectorAll('#gallery-grid .skeleton-item, #gallery-grid .skeleton-gallery-item').length,
     realItems: document.querySelectorAll('#gallery-grid .gallery-item').length,
@@ -78,7 +78,7 @@ async function waitForGalleryToSettle(page: Page, timeout = 15000) {
   await page.waitForFunction(
     () => {
       const loadingEl = document.querySelector<HTMLElement>('#gallery-loading')
-      const loadingVisible = Boolean(loadingEl) && getComputedStyle(loadingEl).display !== 'none'
+      const loadingVisible = loadingEl !== null && getComputedStyle(loadingEl).display !== 'none'
       const skeletons = document.querySelectorAll('#gallery-grid .skeleton-item, #gallery-grid .skeleton-gallery-item').length
       const realItems = document.querySelectorAll('#gallery-grid .gallery-item').length
       return !loadingVisible && skeletons === 0 && realItems > 0

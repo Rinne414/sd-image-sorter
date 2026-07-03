@@ -1,11 +1,11 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 
-async function openMainPage(page) {
+async function openMainPage(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('#btn-tag')).toBeVisible()
 }
 
-async function openTagRuntimeAdvanced(page) {
+async function openTagRuntimeAdvanced(page: Page) {
   const details = page.locator('#tag-runtime-advanced')
   await expect(details).toHaveCount(1)
   await expect.poll(async () => {

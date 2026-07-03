@@ -1,10 +1,10 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 
 // Tiny 1x1 PNG (base64), used to simulate a clipboard image payload.
 const TINY_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAAWgmWQ0AAAAASUVORK5CYII='
 
-async function openReaderView(page) {
+async function openReaderView(page: Page) {
   await page.goto('/')
   await page.waitForLoadState('domcontentloaded')
 

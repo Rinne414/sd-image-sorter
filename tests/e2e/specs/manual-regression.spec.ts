@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
-import { expect, test } from '@playwright/test'
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -148,7 +148,7 @@ print("ok")
   runBackendScript(script)
 }
 
-async function openView(page, view: string) {
+async function openView(page: Page, view: string) {
   // v3.3.3: Prompt Helper + Style Finder live under the "Tools ▾" dropdown.
   const toolItem = page.locator(`#nav-tools-menu [data-view="${view}"]`)
   if (await toolItem.count()) {
@@ -180,7 +180,7 @@ async function openView(page, view: string) {
   throw new Error(`Could not find navigation entry for ${view}`)
 }
 
-async function openMainPage(page) {
+async function openMainPage(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect.poll(async () => {
     return await page.evaluate(() => {
@@ -208,7 +208,7 @@ async function openMainPage(page) {
   }).toBe(true)
 }
 
-async function openSortingSubView(page, subView: 'autosep' | 'manual') {
+async function openSortingSubView(page: Page, subView: 'autosep' | 'manual') {
   await openView(page, 'sorting')
   await expect(page.locator('#view-sorting.active')).toBeVisible()
   await page.locator(`.sorting-sub-tab[data-sorting-sub="${subView}"]`).click({ force: true })
@@ -251,7 +251,7 @@ async function resetSaveOutputs() {
 // The e2e DB persists across runs (per-port file), so favorites left by a prior
 // workbench run would make a baseline+N count assertion non-deterministic
 // (re-favoriting the same image is idempotent). Clear them for a clean baseline.
-async function clearFavorites(request) {
+async function clearFavorites(request: APIRequestContext) {
   const payload = await (await request.get('/api/collections/favorites/ids')).json()
   for (const id of (payload.image_ids || [])) {
     await request.post('/api/collections/favorites', { data: { image_id: id, favorited: false } })
@@ -514,7 +514,7 @@ with sqlite3.connect(db_path) as conn:
   })
 }
 
-async function setGallerySearch(page, search: string) {
+async function setGallerySearch(page: Page, search: string) {
   await page.evaluate(async (value) => {
     const waitFor = async (predicate: () => boolean, timeout = 10000) => {
       const start = Date.now()
@@ -542,7 +542,7 @@ async function setGallerySearch(page, search: string) {
   }, search)
 }
 
-async function disableScanAutoTag(page) {
+async function disableScanAutoTag(page: Page) {
   await page.locator('#scan-auto-tag').evaluate((node) => {
     const input = node as HTMLInputElement
     input.checked = false
@@ -551,7 +551,7 @@ async function disableScanAutoTag(page) {
   })
 }
 
-async function getFirstImageBySearch(request, search: string) {
+async function getFirstImageBySearch(request: APIRequestContext, search: string) {
   const response = await request.get(`/api/images?limit=10&search=${encodeURIComponent(search)}`)
   expect(response.ok()).toBeTruthy()
   const payload = await response.json()
@@ -560,7 +560,7 @@ async function getFirstImageBySearch(request, search: string) {
   return payload.images[0]
 }
 
-async function getImagesByFilenames(request, filenames: string[]) {
+async function getImagesByFilenames(request: APIRequestContext, filenames: string[]) {
   const response = await request.get('/api/images?limit=1000&sort_by=newest')
   expect(response.ok()).toBeTruthy()
   const payload = await response.json()
@@ -580,7 +580,7 @@ function formatArtistNameForUi(name: string) {
     .join(' ')
 }
 
-async function findDetectableImage(request) {
+async function findDetectableImage(request: APIRequestContext) {
   const seededFixture = ensureLibraryImageEntry(repoDetectableFixture)
   if (seededFixture) {
     const detect = await request.post('/api/censor/detect', {
@@ -630,7 +630,7 @@ async function findDetectableImage(request) {
   return null
 }
 
-async function findSam3PromptMatch(request) {
+async function findSam3PromptMatch(request: APIRequestContext) {
   const seededFixture = ensureLibraryImageEntry(repoDetectableFixture)
   if (seededFixture) {
     for (const prompt of ['person', 'face', 'hand', 'breasts']) {
@@ -678,7 +678,7 @@ async function findSam3PromptMatch(request) {
   throw new Error('Could not find a SAM3 text-prompt match in the current library')
 }
 
-async function findArtistIdentifiableImage(request) {
+async function findArtistIdentifiableImage(request: APIRequestContext) {
   const response = await request.get('/api/images?limit=20')
   expect(response.ok()).toBeTruthy()
   const payload = await response.json()
@@ -990,7 +990,7 @@ test('censor queue warning should fire once even after re-entering the tab', asy
     const original = window.App.showToast
     let count = 0
     ;(window as Window & { __toastInvocationCount?: number }).__toastInvocationCount = 0
-    window.App.showToast = (...args) => {
+    window.App.showToast = (...args: any[]) => {
       count += 1
       ;(window as Window & { __toastInvocationCount?: number }).__toastInvocationCount = count
       return original(...args)
@@ -1675,8 +1675,8 @@ test('censor batch rename should update preview and apply only selected queue it
   })
 
   expect(queueState).toHaveLength(2)
-  const renamedItem = queueState.find((item) => item.output.includes('_review_01.png'))
-  const untouchedItem = queueState.find((item) => item.output === item.original)
+  const renamedItem = queueState.find((item: any) => item.output.includes('_review_01.png'))
+  const untouchedItem = queueState.find((item: any) => item.output === item.original)
   expect(renamedItem).toBeTruthy()
   expect(untouchedItem).toBeTruthy()
 })

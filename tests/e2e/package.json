@@ -7,11 +7,13 @@
     "test:headed": "node ./scripts/run-playwright.mjs test --headed",
     "test:debug": "node ./scripts/run-playwright.mjs test --debug",
     "test:ui": "node ./scripts/run-playwright.mjs test --ui",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "report": "node ./scripts/run-playwright.mjs show-report ../../artifacts/playwright-report",
     "codegen": "node ./scripts/run-playwright.mjs codegen"
   },
   "devDependencies": {
     "@playwright/test": "^1.42.0",
-    "@types/node": "^20.11.0"
+    "@types/node": "^20.11.0",
+    "typescript": "^5.5.0"
   }
 }

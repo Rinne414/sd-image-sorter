@@ -458,15 +458,10 @@ test.describe('Model Manager', () => {
     await expect(page.locator('#model-setup-guide-close')).toBeFocused()
   })
 
-  // See docs/TECHNICAL_DEBT_NOTES.md → Debt-19. The Playwright fixture creates a
-  // single 32 MB stub `sam3-model.safetensors` file, but after the SAM3 backend
-  // switch to `transformers.Sam3Model.from_pretrained(directory)`, the runtime
-  // requires a directory containing `config.json` + `model.safetensors` + tokenizer
-  // files. The prepare flow downloads the stub but `get_sam3_checkpoint_path()`
-  // never returns a path because the directory is incomplete. Real ModelScope
-  // downloads deliver a complete bundle, so production is unaffected. Re-enable
-  // when the fixture is updated to produce a full stub bundle.
-  test.fixme('SAM3 prepare shows byte progress and refreshes the card after completion', async ({ page, request }) => {
+  // The fixture serves a full transformers-style stub bundle (config.json +
+  // model.safetensors + tokenizer files) via SD_IMAGE_SORTER_SAM3_BASE_URL,
+  // matching the file-by-file prepare flow in model_service._sam3_download_urls().
+  test('SAM3 prepare shows byte progress and refreshes the card after completion', async ({ page, request }) => {
     await openModelManager(page)
 
     const card = page.locator('.model-card[data-model-id="sam3"]')
@@ -476,19 +471,17 @@ test.describe('Model Manager', () => {
     await prepareButton.click()
     await expect(prepareButton).toContainText(/model\.safetensors.*MB/i, { timeout: 10_000 })
 
-    await expect(card.locator('.model-card-path code')).toContainText(/model\.safetensors/, { timeout: 30_000 })
+    // get_sam3_checkpoint_path() reports the checkpoint DIRECTORY — the
+    // transformers loader needs config.json + model.safetensors together.
+    await expect(card.locator('.model-card-path code')).toContainText(/facebook-sam3-modelscope/, { timeout: 30_000 })
 
     const response = await request.get('/api/models/status')
     expect(response.ok()).toBeTruthy()
     const body = await response.json()
-    expect(body.health.censor.sam3.checkpoint_path).toContain('model.safetensors')
+    expect(body.health.censor.sam3.checkpoint_path).toContain('facebook-sam3-modelscope')
   })
 
-  // Cascading EBUSY follow-on from the SAM3 prepare test above (see Debt-19):
-  // when that test errors out it leaves a `.tmp` file locked on Windows, which
-  // makes this test's pre-cleanup `rm -rf data/models/sam3/...` fail. Re-enable
-  // together with the SAM3 prepare test once the fixture is fixed.
-  test.fixme('no model card shows Downloaded badge - only Ready or Missing', async ({ page }) => {
+  test('no model card shows Downloaded badge - only Ready or Missing', async ({ page }) => {
     await openModelManager(page)
 
     const statusBadges = page.locator('.model-card-status')

@@ -11,6 +11,6 @@
     "declaration": true,
     "types": ["node", "@playwright/test"]
   },
-  "include": ["specs/**/*", "pages/**/*", "fixtures/**/*"],
+  "include": ["specs/**/*", "pages/**/*", "fixtures/**/*", "types/**/*", "playwright.config.ts"],
   "exclude": ["node_modules", "dist"]
 }

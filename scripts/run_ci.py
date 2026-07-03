@@ -183,6 +183,17 @@ def main() -> int:
             ROOT,
         ),
         (
+            "e2e typescript typecheck",
+            [
+                str(NODE_EXECUTABLE),
+                "./node_modules/typescript/lib/tsc.js",
+                "--noEmit",
+                "-p",
+                "tsconfig.json",
+            ],
+            ROOT / "tests" / "e2e",
+        ),
+        (
             "ruff lint",
             [
                 str(BACKEND_PYTHON),
