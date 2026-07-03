@@ -39,6 +39,11 @@ from services.image_metadata_writer import (
     normalize_edited_metadata,
     prepare_image_for_save,
 )
+from services.bulk_job_service import (
+    JOB_KIND_DELETE_FILES,
+    JOB_KIND_REMOVE_FROM_GALLERY,
+    get_bulk_job_service,
+)
 from services.tag_export_service import extract_generation_params
 from thumbnail_cache import (
     get_thumbnail_async,
@@ -1622,6 +1627,83 @@ class ImageService:
             "count": total_count,
             "operation": "remove",
         }
+
+    # ------------------------------------------------------------------
+    # Debt-22: durable job-ID background path via the shared BulkJobService.
+    # These sit alongside the Phase-1 singleton jobs above; the ``background``
+    # opt-in on the sync endpoints routes here so delete / remove appear in the
+    # unified /api/bulk-jobs registry (durable id, list, cancel-by-id) while
+    # reusing the exact per-item helpers so failure reporting stays identical.
+    # The id set is snapshotted server-side BEFORE the worker mutates anything.
+    # ------------------------------------------------------------------
+    def start_delete_bulk_job(self, request: Any, background_tasks: Any) -> Dict[str, Any]:
+        """Start a durable-id background delete-to-trash job and return its envelope."""
+        bulk_jobs = get_bulk_job_service()
+        image_ids = self._expand_delete_request_ids(
+            getattr(request, "image_ids", None),
+            getattr(request, "selection_token", None),
+        )
+        job_id = bulk_jobs.create_job(
+            JOB_KIND_DELETE_FILES,
+            total=len(image_ids),
+            message=f"Deleting {len(image_ids)} images...",
+        )
+
+        def process_chunk(chunk_ids: List[int]) -> Dict[str, Any]:
+            image_map = db.get_images_by_ids(chunk_ids)
+            deleted = 0
+            errors: List[str] = []
+            for image_id in chunk_ids:
+                result = self._delete_one_image_to_trash(image_id, image_map.get(image_id))
+                if result.get("success"):
+                    deleted += 1
+                else:
+                    filename = result.get("filename") or f"id-{image_id}"
+                    errors.append(f"{filename}: {result.get('error') or 'Failed'}")
+            return {
+                "processed": len(chunk_ids),
+                "errors": errors,
+                "result_delta": {"deleted": deleted},
+            }
+
+        worker = bulk_jobs.chunked_worker(
+            lambda: image_ids, process_chunk, chunk_size=DELETE_FETCH_CHUNK
+        )
+        background_tasks.add_task(bulk_jobs.run_job, job_id, worker)
+        envelope = bulk_jobs.get_job(job_id) or {}
+        envelope["operation"] = "delete"
+        return envelope
+
+    def start_remove_bulk_job(self, request: Any, background_tasks: Any) -> Dict[str, Any]:
+        """Start a durable-id background remove-from-gallery job (DB rows only)."""
+        bulk_jobs = get_bulk_job_service()
+        image_ids = self._expand_remove_request_ids(
+            getattr(request, "image_ids", None),
+            getattr(request, "selection_token", None),
+        )
+        job_id = bulk_jobs.create_job(
+            JOB_KIND_REMOVE_FROM_GALLERY,
+            total=len(image_ids),
+            message=f"Removing {len(image_ids)} images...",
+        )
+
+        def process_chunk(chunk_ids: List[int]) -> Dict[str, Any]:
+            result = self._remove_selected_image_id_chunk(chunk_ids)
+            removed = int(result.get("removed", 0) or 0)
+            missing = len(result.get("missing_ids", []) or [])
+            return {
+                "processed": len(chunk_ids),
+                "errors": [],
+                "result_delta": {"removed": removed, "missing": missing},
+            }
+
+        worker = bulk_jobs.chunked_worker(
+            lambda: image_ids, process_chunk, chunk_size=DELETE_FETCH_CHUNK
+        )
+        background_tasks.add_task(bulk_jobs.run_job, job_id, worker)
+        envelope = bulk_jobs.get_job(job_id) or {}
+        envelope["operation"] = "remove"
+        return envelope
 
     def _iter_selection_token_snapshot_chunks(self, selection_token: str, *, chunk_size: int = 500):
         """Snapshot token IDs to a temp file before mutating matching rows."""

@@ -2305,3 +2305,153 @@ class TestSecurityHeaders:
         # Should have an image content type
         content_type = response.headers.get("content-type", "")
         assert "image/" in content_type or content_type == "application/octet-stream"
+
+
+class TestBulkJobEndpoints:
+    """Debt-22: durable-id background bulk jobs (delete / remove / export)."""
+
+    def _add_image(self, tmp_path, name):
+        import database as db
+        from PIL import Image
+
+        image_path = tmp_path / name
+        Image.new("RGB", (8, 8), color="white").save(image_path)
+        image_id = db.add_image(path=str(image_path), filename=image_path.name, metadata_json="{}")
+        return image_id, image_path
+
+    def test_delete_selected_background_returns_job_envelope_and_completes(
+        self, test_client, test_db, tmp_path, monkeypatch
+    ):
+        import database as db
+        from services import image_service
+
+        trashed = []
+
+        def fake_move_file_to_trash(path):
+            trashed.append(Path(path))
+            Path(path).unlink()
+
+        monkeypatch.setattr(image_service, "move_file_to_trash", fake_move_file_to_trash)
+        image_id, image_path = self._add_image(tmp_path, "bg-delete.png")
+
+        start = test_client.post(
+            "/api/images/delete-selected",
+            json={"image_ids": [image_id], "confirm_delete_files": True, "background": True},
+        )
+        assert start.status_code == 200
+        envelope = start.json()
+        assert envelope["kind"] == "delete_files"
+        assert envelope["operation"] == "delete"
+        job_id = envelope["id"]
+        assert envelope["job_id"] == job_id
+
+        # TestClient runs the BackgroundTask synchronously, so the job is
+        # terminal by the time we poll the durable status endpoint.
+        job = test_client.get(f"/api/bulk-jobs/{job_id}").json()
+        assert job["status"] == "done"
+        assert job["total"] == 1
+        assert job["processed"] == 1
+        assert job["result"] == {"deleted": 1}
+        assert trashed == [image_path]
+        assert db.get_image_by_id(image_id) is None
+
+    def test_remove_selected_background_returns_job_envelope_and_keeps_files(
+        self, test_client, test_db, tmp_path
+    ):
+        import database as db
+
+        image_id, image_path = self._add_image(tmp_path, "bg-remove.png")
+
+        start = test_client.post(
+            "/api/images/remove-selected",
+            json={"image_ids": [image_id], "background": True},
+        )
+        assert start.status_code == 200
+        envelope = start.json()
+        assert envelope["kind"] == "remove_from_gallery"
+        job_id = envelope["id"]
+
+        job = test_client.get(f"/api/bulk-jobs/{job_id}").json()
+        assert job["status"] == "done"
+        assert job["result"]["removed"] == 1
+        assert image_path.exists()  # remove keeps files
+        assert db.get_image_by_id(image_id) is None
+
+    def test_delete_selected_background_still_requires_confirmation(self, test_client, test_db, tmp_path):
+        import database as db
+
+        image_id, image_path = self._add_image(tmp_path, "bg-delete-confirm.png")
+
+        response = test_client.post(
+            "/api/images/delete-selected",
+            json={"image_ids": [image_id], "confirm_delete_files": False, "background": True},
+        )
+        assert response.status_code == 400
+        assert image_path.exists()
+        assert db.get_image_by_id(image_id) is not None
+
+    def test_sync_delete_path_unchanged_without_background(self, test_client, test_db, tmp_path, monkeypatch):
+        """Small selections (no background flag) keep the synchronous response
+        shape with no job envelope."""
+        import database as db
+        from services import image_service
+
+        monkeypatch.setattr(image_service, "move_file_to_trash", lambda p: Path(p).unlink())
+        image_id, _ = self._add_image(tmp_path, "sync-delete.png")
+
+        response = test_client.post(
+            "/api/images/delete-selected",
+            json={"image_ids": [image_id], "confirm_delete_files": True},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["deleted"] == 1
+        assert payload["trash_used"] is True
+        assert "job_id" not in payload  # sync path, not a background job envelope
+        assert db.get_image_by_id(image_id) is None
+
+    def test_export_batch_background_writes_sidecars_and_completes(
+        self, test_client, test_db_with_images, tmp_path
+    ):
+        image_ids = test_db_with_images["image_ids"]
+        output_folder = tmp_path / "sidecars"
+
+        start = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": image_ids[:2],
+                "output_folder": str(output_folder),
+                "output_mode": "folder",
+                "content_mode": "tags",
+                "background": True,
+            },
+        )
+        assert start.status_code == 200
+        envelope = start.json()
+        assert envelope["kind"] == "export_sidecars"
+        job_id = envelope["id"]
+
+        job = test_client.get(f"/api/bulk-jobs/{job_id}").json()
+        assert job["status"] == "done"
+        assert job["result"]["exported"] >= 1
+        written = list(output_folder.glob("*.txt"))
+        assert len(written) >= 1
+
+    def test_bulk_jobs_list_contains_started_job(self, test_client, test_db, tmp_path):
+        image_id, _ = self._add_image(tmp_path, "bg-list.png")
+        start = test_client.post(
+            "/api/images/remove-selected",
+            json={"image_ids": [image_id], "background": True},
+        )
+        job_id = start.json()["id"]
+
+        listing = test_client.get("/api/bulk-jobs").json()
+        assert any(job["id"] == job_id for job in listing["jobs"])
+
+    def test_get_unknown_bulk_job_returns_404(self, test_client, test_db):
+        response = test_client.get("/api/bulk-jobs/does-not-exist")
+        assert response.status_code == 404
+
+    def test_cancel_unknown_bulk_job_returns_404(self, test_client, test_db):
+        response = test_client.post("/api/bulk-jobs/does-not-exist/cancel")
+        assert response.status_code == 404

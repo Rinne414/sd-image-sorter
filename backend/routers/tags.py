@@ -294,9 +294,18 @@ async def reset_tag_progress(
 @router.post("/tags/export-batch")
 async def export_tags_batch(
     request: BatchTagExportRequest,
+    background_tasks: BackgroundTasks,
     service: TaggingService = Depends(get_tagging_service),
 ):
-    """Export tags for each image to individual .txt files."""
+    """Export tags for each image to individual .txt files.
+
+    Debt-22: with ``background: true`` this returns a durable bulk-job envelope
+    (poll GET /api/bulk-jobs/{job_id}, cancel POST /api/bulk-jobs/{job_id}/cancel)
+    with per-image progress and mid-run cancel. Without it, the export runs
+    synchronously and the response is unchanged.
+    """
+    if request.background:
+        return service.start_export_bulk_job(request, background_tasks)
     return service.export_tags_batch(request)
 
 

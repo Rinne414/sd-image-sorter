@@ -385,6 +385,25 @@ Request cancellation of the running remove job. The task stops between items and
 #### POST /api/images/remove-selected/reset
 Reset a stuck or finished remove job back to `idle`.
 
+### Bulk background jobs (Debt-22)
+
+Token-scoped Gallery bulk operations (delete-to-trash, remove-from-gallery, same-name sidecar export) can run as durable background jobs with progress polling and mid-run cancellation. Opt in on the existing endpoints:
+
+- `POST /api/images/delete-selected` with `background: true` (still requires `confirm_delete_files: true`)
+- `POST /api/images/remove-selected` with `background: true`
+- `POST /api/tags/export-batch` with `background: true`
+
+Each returns a job envelope: `id` (durable job id), `kind` (`delete_files` / `remove_from_gallery` / `export_sidecars`), `status`, `total`, `processed`, `operation`. The synchronous behavior (no `background` flag) is unchanged. Matching IDs are snapshotted server-side before any mutation, so rows changed mid-job cannot expand the job's scope.
+
+#### GET /api/bulk-jobs
+List durable bulk background jobs, newest first. Query param `active_only=true` hides finished (`done`/`error`/`cancelled`) jobs. Response: `{ "jobs": [ ... ] }`.
+
+#### GET /api/bulk-jobs/{job_id}
+Return one bulk job by id. Fields: `id`/`job_id`, `kind`, `status` (`queued`/`running`/`done`/`error`/`cancelled`), `total`, `processed`, `error_count`, `error_samples` (bounded to 20), `message`, `result` (operation summary, populated on completion), `created_at`, `started_at`, `finished_at`. Returns 404 if the id is unknown.
+
+#### POST /api/bulk-jobs/{job_id}/cancel
+Request cooperative cancellation of a running bulk job. The worker stops at the next chunk boundary and settles as `cancelled` with partial progress. Returns the latest job snapshot, or 404 if the id is unknown.
+
 #### POST /api/tags/export-batch
 Write same-name sidecar `.txt` exports for explicit IDs or a filtered-selection token.
 

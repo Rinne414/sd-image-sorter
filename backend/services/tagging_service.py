@@ -29,6 +29,7 @@ from services.tag_export_service import (
     iter_selection_token_id_chunks,
     render_export_preview,
 )
+from services.bulk_job_service import JOB_KIND_EXPORT_SIDECARS, get_bulk_job_service
 from utils.source_paths import resolve_existing_indexed_image_path
 from utils.path_validation import normalize_user_path, validate_file_path
 
@@ -964,6 +965,10 @@ class BatchTagExportRequest(BaseModel):
     # is an explicit user override surfaced as a checkbox in the export
     # modal.
     normalize_tag_underscores: Optional[bool] = Field(default=None)
+    # Debt-22 opt-in: when true, POST /api/tags/export-batch starts a durable-id
+    # background job (BulkJobService) with per-image progress and mid-run cancel
+    # instead of exporting synchronously in the request.
+    background: bool = Field(default=False)
 
     @model_validator(mode="after")
     def require_ids_or_selection_token(self):
@@ -1901,12 +1906,7 @@ class TaggingService:
         error_count = int(result.get("error_count", 0) or 0)
         exported = int(result.get("exported", 0) or 0)
         skipped = int(result.get("skipped", 0) or 0)
-        if error_count > 0:
-            status = "partial" if exported > 0 or skipped > 0 else "error"
-        elif skipped > 0:
-            status = "partial"
-        else:
-            status = "ok"
+        status = self._resolve_export_status(exported, skipped, error_count)
         return {
             "status": status,
             "exported": exported,
@@ -1919,6 +1919,15 @@ class TaggingService:
             "overwrite_policy": result.get("overwrite_policy", request.overwrite_policy),
             "output_mode": result.get("output_mode", getattr(request, "output_mode", "folder")),
         }
+
+    @staticmethod
+    def _resolve_export_status(exported: int, skipped: int, error_count: int) -> str:
+        """Map export counters to the ok / partial / error status contract."""
+        if error_count > 0:
+            return "partial" if exported > 0 or skipped > 0 else "error"
+        if skipped > 0:
+            return "partial"
+        return "ok"
 
     @staticmethod
     def _build_default_export_progress_state() -> Dict[str, Any]:
@@ -2035,6 +2044,68 @@ class TaggingService:
             "total": total,
             "operation": "export",
         }
+
+    def start_export_bulk_job(self, request: BatchTagExportRequest, background_tasks: Any) -> Dict[str, Any]:
+        """Debt-22: same-name sidecar export as a durable-id background job.
+
+        Unlike the Phase-1 ``start_export_tags_batch_job`` (coarse progress, no
+        mid-run cancel), this streams per-image progress and stops cooperatively
+        when cancelled via the shared BulkJobService. Token selections are
+        snapshotted server-side before the export reads them; the single-call
+        ``export_tags_batch_request`` keeps its filename de-dup intact.
+        """
+        bulk_jobs = get_bulk_job_service()
+        if request.selection_token:
+            total = count_selection_token_ids(request.selection_token)
+        else:
+            total = len(request.image_ids or [])
+        job_id = bulk_jobs.create_job(
+            JOB_KIND_EXPORT_SIDECARS,
+            total=total,
+            message=f"Exporting {total} images...",
+        )
+
+        def worker(handle) -> None:
+            id_chunks = (
+                iter_selection_token_id_chunks(request.selection_token, snapshot=True)
+                if request.selection_token
+                else None
+            )
+
+            def on_progress(update: Dict[str, Any]) -> None:
+                handle.set_progress(
+                    processed=int(update.get("processed") or 0),
+                    total=int(update.get("total") or total),
+                )
+
+            result = export_tags_batch_request(
+                request,
+                id_chunks=id_chunks,
+                total=total,
+                progress_callback=on_progress,
+                cancel_check=lambda: handle.cancelled,
+            )
+            error_count = int(result.get("error_count", 0) or 0)
+            exported = int(result.get("exported", 0) or 0)
+            skipped = int(result.get("skipped", 0) or 0)
+            handle.record_errors(error_count, result.get("error_messages") or [])
+            handle.set_result({
+                "status": self._resolve_export_status(exported, skipped, error_count),
+                "exported": exported,
+                "skipped": skipped,
+                "errors": error_count,
+                "error_count": error_count,
+                "error_messages": result.get("error_messages", []),
+                "total": result.get("total", total),
+                "content_mode": result.get("content_mode", request.content_mode),
+                "overwrite_policy": result.get("overwrite_policy", request.overwrite_policy),
+                "output_mode": result.get("output_mode", getattr(request, "output_mode", "folder")),
+            })
+
+        background_tasks.add_task(bulk_jobs.run_job, job_id, worker)
+        envelope = bulk_jobs.get_job(job_id) or {}
+        envelope["operation"] = "export"
+        return envelope
 
     def export_tags_combined(self, request: CombinedTagExportRequest) -> Dict[str, Any]:
         """Render selected captions into one server-side downloadable file."""

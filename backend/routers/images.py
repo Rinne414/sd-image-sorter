@@ -8,13 +8,14 @@ import logging
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Union
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path as FastAPIPath, Query, UploadFile, File
 from pydantic import BaseModel, Field, model_validator
 
 from config import get_temp_dir
 from services import entry_stats_service
+from services.bulk_job_service import get_bulk_job_service
 from services.image_service import ImageService
 from services.service_provider import ServiceProvider
 from utils.path_validation import PathValidationError
@@ -40,6 +41,10 @@ class DeleteSelectedImagesRequest(BaseModel):
     image_ids: Optional[List[int]] = Field(default=None, min_length=1, max_length=5_000_000)
     selection_token: Optional[str] = Field(default=None, min_length=1)
     confirm_delete_files: bool = False
+    # Debt-22 opt-in: when true the sync endpoint instead starts a durable-id
+    # background job (BulkJobService) and returns the job envelope. Small
+    # selections omit it and keep the unchanged synchronous behavior.
+    background: bool = False
 
     @model_validator(mode="after")
     def require_ids_or_selection_token(self):
@@ -57,6 +62,8 @@ class RemoveSelectedImagesRequest(BaseModel):
     # real users with larger collections.
     image_ids: Optional[List[int]] = Field(default=None, min_length=1, max_length=5_000_000)
     selection_token: Optional[str] = Field(default=None, min_length=1)
+    # Debt-22 opt-in: see DeleteSelectedImagesRequest.background.
+    background: bool = False
 
     @model_validator(mode="after")
     def require_ids_or_selection_token(self):
@@ -203,6 +210,29 @@ class RemoveSelectedImagesResponse(BaseModel):
     removed: int
     missing_ids: List[int] = Field(default_factory=list)
     permanent_delete: bool = False
+
+
+class BulkJobEnvelopeResponse(BaseModel):
+    """Envelope returned when a bulk endpoint is invoked with ``background: true``.
+
+    The client polls GET /api/bulk-jobs/{id} for progress and the final
+    ``result``. This is a distinct response shape from the synchronous
+    delete/remove responses, hence the Union response models below (Debt-22).
+    """
+    id: str
+    job_id: str
+    kind: str
+    status: str
+    total: int = 0
+    processed: int = 0
+    error_count: int = 0
+    error_samples: List[str] = Field(default_factory=list)
+    message: str = ""
+    result: dict[str, Any] = Field(default_factory=dict)
+    created_at: Optional[float] = None
+    started_at: Optional[float] = None
+    finished_at: Optional[float] = None
+    operation: Optional[str] = None
 
 
 class SaveEditedMetadataRequest(BaseModel):
@@ -842,7 +872,7 @@ async def get_selection_ids(
 
 @router.post(
     "/images/delete-selected",
-    response_model=DeleteSelectedImagesResponse,
+    response_model=Union[DeleteSelectedImagesResponse, BulkJobEnvelopeResponse],
     summary="Move selected image files to OS trash",
     description="""
 Move the selected image files to the operating system Trash / Recycle Bin and
@@ -855,6 +885,7 @@ backend must not fall back to permanent deletion when trash is unavailable.
 )
 async def delete_selected_images(
     request: DeleteSelectedImagesRequest,
+    background_tasks: BackgroundTasks,
     service: ImageService = Depends(get_image_service),
 ):
     """Move selected image files to OS trash with partial-failure reporting."""
@@ -863,6 +894,12 @@ async def delete_selected_images(
             status_code=400,
             detail="Deleting image files requires explicit confirmation",
         )
+
+    # Debt-22: opt into a durable-id background job for large selections. The
+    # ids are snapshotted server-side before any file is trashed; poll via
+    # GET /api/bulk-jobs/{job_id} and cancel via POST /api/bulk-jobs/{job_id}/cancel.
+    if request.background:
+        return service.start_delete_bulk_job(request, background_tasks)
 
     if request.selection_token:
         return service.delete_selected_image_files_by_token(request.selection_token)
@@ -933,7 +970,7 @@ async def reset_delete_selected_images(
 
 @router.post(
     "/images/remove-selected",
-    response_model=RemoveSelectedImagesResponse,
+    response_model=Union[RemoveSelectedImagesResponse, BulkJobEnvelopeResponse],
     summary="Remove selected images from the gallery index",
     description="""
 Remove selected database rows from the local gallery without deleting the backing
@@ -942,9 +979,14 @@ image files from disk. Re-scanning the source folder can add them back later.
 )
 async def remove_selected_images(
     request: RemoveSelectedImagesRequest,
+    background_tasks: BackgroundTasks,
     service: ImageService = Depends(get_image_service),
 ):
     """Remove selected images from the gallery index without touching files."""
+    # Debt-22: opt into a durable-id background job for large selections.
+    if request.background:
+        return service.start_remove_bulk_job(request, background_tasks)
+
     if request.selection_token:
         return service.remove_selected_images_from_gallery_by_token(request.selection_token)
     return service.remove_selected_images_from_gallery(request.image_ids or [])
@@ -1000,6 +1042,70 @@ async def reset_remove_selected_images(
 ):
     """Reset a stuck remove-from-gallery job."""
     return service.reset_remove_progress()
+
+
+# ---------------------------------------------------------------------------
+# Debt-22: unified durable bulk-job registry (delete / remove / export).
+# The operation-specific "start" happens on the existing sync endpoints with
+# ``background: true`` (and on POST /api/tags/export-batch); these routes let a
+# client poll, cancel, and list any bulk job by its durable id.
+# ---------------------------------------------------------------------------
+@router.get(
+    "/bulk-jobs",
+    summary="List bulk background jobs",
+    description=(
+        "List token-scoped bulk jobs (delete-files / remove-from-gallery / "
+        "export-sidecars) tracked by the durable BulkJobService. Pass "
+        "``active_only=true`` to hide finished jobs (Debt-22)."
+    ),
+)
+async def list_bulk_jobs(
+    active_only: bool = Query(
+        default=False,
+        description="Only return non-terminal (queued/running) jobs.",
+    ),
+):
+    """List durable bulk background jobs."""
+    return {"jobs": get_bulk_job_service().list_jobs(active_only=active_only)}
+
+
+@router.get(
+    "/bulk-jobs/{job_id}",
+    summary="Get a bulk background job by id",
+    description=(
+        "Poll one durable bulk job by id. Returns ``status`` "
+        "(queued/running/done/error/cancelled), ``processed``/``total``, "
+        "``error_count``, bounded ``error_samples``, and — on completion — the "
+        "operation ``result`` (Debt-22)."
+    ),
+)
+async def get_bulk_job(
+    job_id: str = FastAPIPath(..., min_length=1, max_length=64),
+):
+    """Return one durable bulk job's status snapshot."""
+    job = get_bulk_job_service().get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Bulk job not found")
+    return job
+
+
+@router.post(
+    "/bulk-jobs/{job_id}/cancel",
+    summary="Cancel a bulk background job by id",
+    description=(
+        "Request cooperative cancellation of a running bulk job. The worker "
+        "stops at the next chunk boundary and settles as ``cancelled`` with "
+        "partial progress (Debt-22)."
+    ),
+)
+async def cancel_bulk_job(
+    job_id: str = FastAPIPath(..., min_length=1, max_length=64),
+):
+    """Request cancellation of a durable bulk job."""
+    job = get_bulk_job_service().cancel_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Bulk job not found")
+    return job
 
 
 @router.post(

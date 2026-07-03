@@ -701,8 +701,15 @@ def export_tags_batch_request(
     id_chunks: Optional[Iterable[List[int]]] = None,
     total: Optional[int] = None,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+    cancel_check: Optional[Callable[[], bool]] = None,
 ) -> Dict[str, Any]:
-    """Export selected image metadata to sidecar files."""
+    """Export selected image metadata to sidecar files.
+
+    ``cancel_check`` (Debt-22 background job support): when supplied, it is
+    polled at each chunk boundary. Returning ``True`` stops the export
+    cooperatively and returns the partial result gathered so far. The single
+    ``used_output_paths`` de-dup set is preserved because this stays one call.
+    """
     output_mode = str(getattr(request, "output_mode", "folder") or "folder").strip().lower()
     if output_mode not in VALID_OUTPUT_MODES:
         raise HTTPException(status_code=400, detail=f"Invalid output_mode: {output_mode}")
@@ -767,6 +774,8 @@ def export_tags_batch_request(
     processed = 0
 
     for image_id_list in id_chunks:
+        if cancel_check is not None and cancel_check():
+            break
         images_map = db.get_images_by_ids(image_id_list)
         tags_map = db.get_image_tags_map(image_id_list)
 

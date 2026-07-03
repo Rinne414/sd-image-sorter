@@ -1385,6 +1385,39 @@ const API = {
         return this.post('/api/images/remove-selected/cancel', {});
     },
 
+    // Debt-22: durable-id bulk-job path. Opting in with `background: true` makes
+    // the delete / remove / export endpoints return a job envelope instead of
+    // the synchronous result; progress and cancellation then flow through the
+    // shared /api/bulk-jobs registry (poll by id, cancel by id) rather than the
+    // per-operation Phase-1 singleton /progress endpoints above.
+    async startDeleteBulkJob(imageIds, options = {}) {
+        const payload = { confirm_delete_files: true, background: true };
+        if (options.selectionToken) {
+            payload.selection_token = options.selectionToken;
+        } else {
+            payload.image_ids = imageIds;
+        }
+        return this.post('/api/images/delete-selected', payload);
+    },
+
+    async startRemoveBulkJob(imageIds, options = {}) {
+        const payload = { background: true };
+        if (options.selectionToken) {
+            payload.selection_token = options.selectionToken;
+        } else {
+            payload.image_ids = imageIds;
+        }
+        return this.post('/api/images/remove-selected', payload);
+    },
+
+    async getBulkJob(jobId) {
+        return this.get(`/api/bulk-jobs/${encodeURIComponent(jobId)}`);
+    },
+
+    async cancelBulkJob(jobId) {
+        return this.post(`/api/bulk-jobs/${encodeURIComponent(jobId)}/cancel`, {});
+    },
+
     getImageUrl(id) {
         return `${API_BASE}/api/image-file/${id}`;
     },
@@ -1918,6 +1951,14 @@ const API = {
 
     async getExportProgress() {
         return this.get('/api/tags/export-batch/progress');
+    },
+
+    // Debt-22: durable-id background sidecar export (per-image progress + real
+    // mid-run cancel via /api/bulk-jobs, unlike the coarse Phase-1 job above).
+    async startExportBulkJob(imageIds, outputFolder, blacklist = [], prefix = '', contentMode = 'tags', overwritePolicy = 'unique', options = {}) {
+        const payload = this._buildExportBatchPayload(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy, options);
+        payload.background = true;
+        return this.post('/api/tags/export-batch', payload);
     },
 
     // Prompts Library — removed duplicate, kept single definition above
@@ -4634,8 +4675,20 @@ async function deleteGalleryImagesByIds(imageIds) {
 
     showConfirm(title, message, async () => {
         try {
-            await API.startDeleteJob(ids, { selectionToken });
-            const result = await pollDeleteProgressUntilDone();
+            let result;
+            if (shouldUseBulkJob(selectionToken, ids.length)) {
+                // Debt-22 durable path: token-scoped or large selection.
+                const envelope = await API.startDeleteBulkJob(ids, { selectionToken });
+                const job = await pollBulkJobUntilDone(envelope, 'delete', {
+                    show: _showBgDeleteProgress,
+                    update: _updateBgDeleteProgress,
+                    hide: _hideBgDeleteProgress,
+                });
+                result = normalizeBulkJobResult(job, 'delete');
+            } else {
+                await API.startDeleteJob(ids, { selectionToken });
+                result = await pollDeleteProgressUntilDone();
+            }
             if (result?.status === 'error') {
                 showToast(
                     formatUserError(null, appT('selection.deleteFailed', 'Failed to move selected image files to Trash')),
@@ -4675,11 +4728,14 @@ async function deleteGalleryImagesByIds(imageIds) {
                 return;
             }
 
-            if (failed.length > 0) {
+            // Durable jobs report an aggregate error_count (no per-id `failed`
+            // list); Phase-1 jobs report `failed`. Prefer whichever is present.
+            const failedCount = Number.isFinite(result.error_count) ? result.error_count : failed.length;
+            if (failedCount > 0) {
                 showToast(
                     appT('selection.deletePartial', 'Moved {deleted} file(s) to Trash. {failed} failed.')
                         .replace('{deleted}', result.deleted || 0)
-                        .replace('{failed}', failed.length),
+                        .replace('{failed}', failedCount),
                     'warning'
                 );
                 return;
@@ -4726,8 +4782,20 @@ async function removeGalleryImagesByIds(imageIds) {
 
     showConfirm(title, message, async () => {
         try {
-            await API.startRemoveJob(ids, { selectionToken });
-            const result = await pollRemoveProgressUntilDone();
+            let result;
+            if (shouldUseBulkJob(selectionToken, ids.length)) {
+                // Debt-22 durable path: token-scoped or large selection.
+                const envelope = await API.startRemoveBulkJob(ids, { selectionToken });
+                const job = await pollBulkJobUntilDone(envelope, 'remove', {
+                    show: _showBgRemoveProgress,
+                    update: _updateBgRemoveProgress,
+                    hide: _hideBgRemoveProgress,
+                });
+                result = normalizeBulkJobResult(job, 'remove');
+            } else {
+                await API.startRemoveJob(ids, { selectionToken });
+                result = await pollRemoveProgressUntilDone();
+            }
             if (result?.status === 'error') {
                 showToast(
                     formatUserError(null, appT('selection.removeFailed', 'Failed to remove selected images from gallery')),
@@ -4763,7 +4831,11 @@ async function removeGalleryImagesByIds(imageIds) {
                 return;
             }
 
-            const missingCount = Array.isArray(result?.missing_ids) ? result.missing_ids.length : 0;
+            // Durable jobs report a `missingCount` integer; Phase-1 jobs report
+            // a `missing_ids` array. Prefer whichever is present.
+            const missingCount = Number.isFinite(result?.missingCount)
+                ? result.missingCount
+                : (Array.isArray(result?.missing_ids) ? result.missing_ids.length : 0);
             if (missingCount > 0) {
                 showToast(
                     appT('selection.removePartial', 'Removed {removed} image record(s). {missing} were already missing from the gallery.')
@@ -5120,6 +5192,141 @@ async function pollExportProgressUntilDone() {
             return progress;
         }
         await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+}
+
+// ============== Debt-22: durable bulk-job runner ==============
+// Token-scoped (and large explicit) delete / remove / export gallery actions
+// opt into the shared /api/bulk-jobs registry. This generic poller drives an
+// existing progress bubble, forwards Stop clicks to
+// POST /api/bulk-jobs/{id}/cancel, and resolves with the terminal job snapshot.
+// Small explicit selections keep the Phase-1 singleton path above, so they
+// behave exactly as before.
+const BULK_JOB_TERMINAL_STATUSES = new Set(['done', 'error', 'cancelled']);
+// Route to the durable job when the operation is token-scoped (an unbounded
+// filtered "select all") or the explicit id count reaches one backend chunk.
+const BULK_JOB_ITEM_THRESHOLD = 500;
+const _activeBulkJobIds = { delete: null, remove: null, export: null };
+const _bulkJobCancelRequested = { delete: false, remove: false, export: false };
+
+function shouldUseBulkJob(selectionToken, idCount) {
+    return Boolean(selectionToken) || Number(idCount || 0) >= BULK_JOB_ITEM_THRESHOLD;
+}
+
+async function requestBulkJobCancel(operation) {
+    const jobId = _activeBulkJobIds[operation];
+    if (!jobId) return false;
+    _bulkJobCancelRequested[operation] = true;
+    try {
+        await API.cancelBulkJob(jobId);
+        return true;
+    } catch (error) {
+        Logger?.warn?.('Failed to request bulk job cancellation:', error);
+        return false;
+    }
+}
+
+async function pollBulkJobUntilDone(envelope, operation, handlers = {}) {
+    const { show, update, hide } = handlers;
+    const jobId = envelope?.id || envelope?.job_id;
+    if (!jobId) {
+        // Defensive: a classic synchronous result came back (no background job).
+        // Nothing to poll — hand it straight to the caller's terminal handling.
+        return envelope;
+    }
+    _activeBulkJobIds[operation] = jobId;
+    _bulkJobCancelRequested[operation] = false;
+    if (typeof show === 'function') show();
+    let fetchFailures = 0;
+    try {
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+            let job;
+            try {
+                job = await API.getBulkJob(jobId);
+                fetchFailures = 0;
+            } catch (error) {
+                // Tolerate transient fetch errors, but give up after 3 in a row
+                // so the caller's catch can surface a visible error toast.
+                fetchFailures += 1;
+                if (fetchFailures >= 3) throw error;
+                await new Promise((resolve) => setTimeout(resolve, 300));
+                continue;
+            }
+            if (typeof update === 'function') {
+                update({
+                    total: Number(job?.total || 0),
+                    current: Number(job?.processed || 0),
+                    status: _bulkJobCancelRequested[operation] ? 'cancelling' : job?.status,
+                });
+            }
+            if (BULK_JOB_TERMINAL_STATUSES.has(job?.status)) {
+                return job;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+    } finally {
+        if (typeof hide === 'function') hide();
+        _activeBulkJobIds[operation] = null;
+        _bulkJobCancelRequested[operation] = false;
+    }
+}
+
+// Map a durable /api/bulk-jobs snapshot onto the terminal shape each gallery
+// action already consumes. The durable job reports aggregate counters (result +
+// bounded error_count), not the Phase-1 per-id `failed` list, so `failed` stays
+// empty and callers read `error_count` for the failure count.
+function normalizeBulkJobResult(job, operation) {
+    const status = job?.status || 'error';
+    const result = job?.result || {};
+    const errorCount = Number(job?.error_count || 0);
+    if (operation === 'remove') {
+        return {
+            status,
+            removed: Number(result.removed || 0),
+            missingCount: Number(result.missing || 0),
+            missing_ids: [],
+            error_count: errorCount,
+        };
+    }
+    return {
+        status,
+        deleted: Number(result.deleted || 0),
+        failed: [],
+        error_count: errorCount,
+    };
+}
+
+// Debt-22: the durable sidecar export reuses the batch-export modal's own
+// progress bar; these helpers drive its per-image fill/text and toggle the
+// Stop button that cancels the job by id.
+function _showBatchExportCancel() {
+    const btn = $('#btn-batch-export-cancel-job');
+    if (btn) btn.style.display = '';
+}
+
+function _hideBatchExportCancel() {
+    const btn = $('#btn-batch-export-cancel-job');
+    if (btn) btn.style.display = 'none';
+}
+
+function _updateBatchExportJobProgress(progress) {
+    const fill = $('#batch-export-progress-fill');
+    const textEl = $('#batch-export-progress-text');
+    const total = Number(progress?.total || 0);
+    const current = Number(progress?.current || 0);
+    if (fill) {
+        const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+        fill.style.width = pct + '%';
+    }
+    if (textEl) {
+        if (progress?.status === 'cancelling') {
+            textEl.textContent = appT('batchExport.stopping', 'Stopping...');
+            return;
+        }
+        textEl.textContent = total > 0
+            ? `${appT('batchExport.exporting', 'Exporting...')} ${current}/${total}`
+            : appT('batchExport.exporting', 'Exporting...');
     }
 }
 
@@ -7653,10 +7860,16 @@ function _initBgScanProgressButtons() {
         });
     }
 
-    // v3.3.2 Phase-1: cancel the background delete-to-trash job.
+    // Cancel the background delete-to-trash job. Prefer the Debt-22 durable job
+    // when one is active (token-scoped / large selection); otherwise fall back
+    // to the Phase-1 singleton cancel for small explicit selections.
     const deleteCancelBtn = $('#bg-delete-cancel');
     if (deleteCancelBtn) {
         deleteCancelBtn.addEventListener('click', async () => {
+            if (_activeBulkJobIds.delete) {
+                await requestBulkJobCancel('delete');
+                return;
+            }
             try {
                 await API.cancelDelete();
             } catch (error) {
@@ -7665,15 +7878,27 @@ function _initBgScanProgressButtons() {
         });
     }
 
-    // v3.3.2 Phase-1: cancel the background remove-from-gallery job.
+    // Cancel the background remove-from-gallery job (durable job preferred).
     const removeCancelBtn = $('#bg-remove-cancel');
     if (removeCancelBtn) {
         removeCancelBtn.addEventListener('click', async () => {
+            if (_activeBulkJobIds.remove) {
+                await requestBulkJobCancel('remove');
+                return;
+            }
             try {
                 await API.cancelRemove();
             } catch (error) {
                 Logger.warn('Failed to request remove cancellation:', error);
             }
+        });
+    }
+
+    // Debt-22: cancel the durable background sidecar-export job.
+    const exportCancelBtn = $('#btn-batch-export-cancel-job');
+    if (exportCancelBtn) {
+        exportCancelBtn.addEventListener('click', async () => {
+            await requestBulkJobCancel('export');
         });
     }
 }
@@ -10448,19 +10673,32 @@ async function executeBatchExport() {
         const normalizeTagUnderscores = $('#batch-export-normalize-underscores')
             ? !!$('#batch-export-normalize-underscores').checked
             : undefined;
-        await API.startExportJob(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy, {
+        const exportOptions = {
             selectionToken,
             outputMode,
             templateOptions,
             imageOverrides,
             captionTransforms,
             normalizeTagUnderscores,
-        });
-        // v3.3.2 Phase-1: poll the background job instead of blocking the request.
-        // The terminal payload embeds the export result under `result`, so the
-        // mapping below is unchanged.
-        const finalProgress = await pollExportProgressUntilDone();
-        const result = (finalProgress && finalProgress.result) ? finalProgress.result : (finalProgress || {});
+        };
+        let result;
+        if (shouldUseBulkJob(selectionToken, imageIds.length)) {
+            // Debt-22 durable path: per-image progress + real mid-run cancel.
+            const envelope = await API.startExportBulkJob(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy, exportOptions);
+            const job = await pollBulkJobUntilDone(envelope, 'export', {
+                show: _showBatchExportCancel,
+                update: _updateBatchExportJobProgress,
+                hide: _hideBatchExportCancel,
+            });
+            result = (job && job.result) ? job.result : (job || {});
+        } else {
+            await API.startExportJob(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy, exportOptions);
+            // v3.3.2 Phase-1: poll the background job instead of blocking the
+            // request. The terminal payload embeds the export result under
+            // `result`, so the mapping below is unchanged.
+            const finalProgress = await pollExportProgressUntilDone();
+            result = (finalProgress && finalProgress.result) ? finalProgress.result : (finalProgress || {});
+        }
 
         $('#batch-export-progress-fill').style.width = '100%';
 

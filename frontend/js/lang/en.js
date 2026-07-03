@@ -1799,6 +1799,8 @@ window.I18nLang_en = {
     'batchExport.overwriteReplace': 'Overwrite existing files',
     'batchExport.exporting': 'Exporting...',
     'batchExport.cancel': 'Cancel',
+    'batchExport.stopExport': 'Stop export',
+    'batchExport.stopping': 'Stopping...',
     'batchExport.exportFiles': 'Export Files',
     'batchExport.partialSuccess': 'Exported {count} file(s). {failed} failed.',
 

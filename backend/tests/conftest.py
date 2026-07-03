@@ -66,6 +66,24 @@ def _isolate_similarity_index_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(similarity, "get_state_dir", lambda: str(tmp_path))
 
 
+@pytest.fixture(autouse=True)
+def _isolate_ai_job_queue_state(tmp_path, monkeypatch):
+    """Redirect the persisted AI-job queue file to a per-test temp path.
+
+    The tagging pipeline write-throughs its FIFO queue to STATE_DIR. Without
+    isolation, constructing a pipeline service in tests would read/write the
+    user's real ``data/state/ai-job-queue.json`` and could restore stale
+    queued jobs into a test. Redirect only this store's path resolver, the
+    same seam ``_isolate_similarity_index_dir`` uses for similarity.
+    """
+    try:
+        from services import ai_job_queue_store
+    except Exception:
+        return
+    path = tmp_path / "ai-job-queue.json"
+    monkeypatch.setattr(ai_job_queue_store, "get_queue_state_path", lambda: path)
+
+
 # ============================================================================
 # Test Database Fixture
 # ============================================================================
@@ -300,6 +318,11 @@ def test_client(test_db):
         )
         set_tagging_pipeline_service(TaggingPipelineService(auto_dispatch=False))
 
+        # Fresh durable bulk-job registry per test so jobs created by one test
+        # do not leak into another's /api/bulk-jobs list (Debt-22).
+        from services.bulk_job_service import BulkJobService, set_bulk_job_service
+        set_bulk_job_service(BulkJobService())
+
         client = TestClient(app)
         client.test_db = db
 
@@ -307,6 +330,7 @@ def test_client(test_db):
 
         # Cleanup
         set_tagging_pipeline_service(None)
+        set_bulk_job_service(None)
         db.DATABASE_PATH = original_path
         db._pragmas_initialized = set()
         try:

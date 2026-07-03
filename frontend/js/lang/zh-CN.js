@@ -1974,6 +1974,8 @@ window.I18nLang_zhCN = {
     'batchExport.overwriteReplace': '覆盖已有文件',
     'batchExport.exporting': '正在导出...',
     'batchExport.cancel': '取消',
+    'batchExport.stopExport': '停止导出',
+    'batchExport.stopping': '正在停止...',
     'batchExport.exportFiles': '导出文件',
     'batchExport.partialSuccess': '已导出 {count} 个文件，{failed} 个失败。',
 
