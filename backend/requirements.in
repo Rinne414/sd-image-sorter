@@ -24,7 +24,7 @@ numpy>=1.24.0,<2.0.0; python_version < "3.13"
 numpy>=2.1.0,<3.0.0; python_version >= "3.13"
 huggingface-hub>=0.20.0
 aiofiles>=23.0.0
-python-multipart>=0.0.27
+python-multipart>=0.0.31
 ultralytics>=8.4.0
 fastembed>=0.4.0
 # hnswlib: optional ANN accelerator for fast approximate top-k similarity

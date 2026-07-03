@@ -112,41 +112,8 @@ function formatGeneratorLabel(generator, fallbackUnknown = 'Unknown') {
 }
 
 // ============== Request Manager (Cancellation Support) ==============
-
-const RequestManager = {
-    pendingRequests: new Map(),
-    requestId: 0,
-
-    createAbortController(key) {
-        this.cancel(key);
-        const controller = new AbortController();
-        this.pendingRequests.set(key, controller);
-        return controller;
-    },
-
-    cancel(key) {
-        const controller = this.pendingRequests.get(key);
-        if (controller) {
-            controller.abort();
-            this.pendingRequests.delete(key);
-        }
-    },
-
-    cancelAll() {
-        this.pendingRequests.forEach((controller) => controller.abort());
-        this.pendingRequests.clear();
-    },
-
-    complete(key, controller = null) {
-        if (!controller || this.pendingRequests.get(key) === controller) {
-            this.pendingRequests.delete(key);
-        }
-    },
-
-    isAbortedError(error) {
-        return error.name === 'AbortError';
-    }
-};
+// Owned by modules/core/request-manager.js (loaded before this file);
+// bare `RequestManager` references resolve to that global.
 
 const GALLERY_VIEW_MODE_KEY = 'gallery-view-mode';
 const FILTER_STATE_KEY = 'sd-image-sorter-filter-state';
@@ -162,51 +129,9 @@ const EXPORT_PREVIEW_MAX_CHARS = 200000;
 const FACET_SUGGESTION_LIMIT = 24;
 const FACET_FILTER_SEARCH_LIMIT = 200;
 
-function readStoredBoolean(storageKey, fallback = false) {
-    try {
-        const raw = localStorage.getItem(storageKey);
-        if (raw == null) return fallback;
-        return raw === '1' || raw === 'true';
-    } catch (error) {
-        return fallback;
-    }
-}
-
-function writeStoredBoolean(storageKey, value) {
-    try {
-        localStorage.setItem(storageKey, value ? '1' : '0');
-    } catch (error) {
-        // Ignore localStorage failures.
-    }
-}
-
-function readStoredJson(storageKey, fallback = null) {
-    try {
-        const raw = localStorage.getItem(storageKey);
-        if (!raw) return fallback;
-        const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === 'object' ? parsed : fallback;
-    } catch (error) {
-        return fallback;
-    }
-}
-
-function writeStoredJson(storageKey, value) {
-    try {
-        localStorage.setItem(storageKey, JSON.stringify(value));
-        return true;
-    } catch (error) {
-        return false;
-    }
-}
-
-function removeStoredKey(storageKey) {
-    try {
-        localStorage.removeItem(storageKey);
-    } catch (error) {
-        // Ignore localStorage failures.
-    }
-}
+// Storage helpers (readStoredBoolean / writeStoredBoolean / readStoredJson /
+// writeStoredJson / removeStoredKey) are owned by modules/core/storage-utils.js,
+// loaded before this file.
 
 function finiteNumberInRange(value, min, max, fallback = null) {
     const numeric = Number(value);

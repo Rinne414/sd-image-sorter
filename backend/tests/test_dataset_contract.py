@@ -17,7 +17,6 @@ here instead of leaking into the frontend as a runtime bug.
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest

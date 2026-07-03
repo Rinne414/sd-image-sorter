@@ -13,24 +13,18 @@ from __future__ import annotations
 
 import logging
 import io
-import importlib
-import json
 import os
-import threading
 import asyncio
 from datetime import datetime, timezone
 from email.utils import format_datetime
 from itertools import chain
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import httpx
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field
 
-from config import DEFAULT_CACHE_DIR
 from services.dataset_audit_service import AUDIT_RESPONSE_ITEM_LIMIT, audit_dataset
 from services.dataset_export_service import (
     DatasetExportPreviewRequest,

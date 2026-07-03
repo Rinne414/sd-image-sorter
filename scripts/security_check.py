@@ -40,6 +40,18 @@ IGNORED_VULN_IDS: tuple[str, ...] = (
     # which is a breaking upgrade for the pinned FastAPI. Advisory is Host-header
     # path injection; mitigated by the loopback-only middleware in backend/main.py.
     "PYSEC-2026-161",
+    # starlette 0.52.1 — same situation as PYSEC-2026-161: every fix version is
+    # on the starlette 1.x line (1.1.0 / 1.3.0 / 1.3.1), while requirements.in
+    # deliberately pins starlette<1.0 because fastapi==0.136.x requires it.
+    # Reviewed 2026-07-03: all four are request-parsing / header-handling
+    # hardening issues that presume an untrusted network peer; this tool binds
+    # 127.0.0.1, rejects non-loopback clients in middleware, and rate-limits.
+    # Residual risk for the localhost-only deployment: baseline. Remove these
+    # four ids together when FastAPI supports starlette>=1.3 and the pin moves.
+    "CVE-2026-48817",
+    "CVE-2026-48818",
+    "PYSEC-2026-248",
+    "PYSEC-2026-249",
     # torch 2.11.0 (AI runtime pin). CVE-2025-3000: memory corruption in
     # torch.jit.script with a LOCAL attack vector (CVSS4 AV:L, low C/I/A) and
     # NO fixed release published (pip-audit Fix Versions is empty). Reviewed

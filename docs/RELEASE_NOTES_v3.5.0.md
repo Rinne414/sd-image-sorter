@@ -1,12 +1,15 @@
-## v3.5.0 — Serious Redesign Phase 1 / 重设计首阶段
+## v3.5.0 — 极光重设计 + 任务入口页 / Aurora Redesign Phases 1–2 + Mission Entry
 
-v3.5.0 starts the serious UI/UX redesign and debt cleanup track. This first stage focuses on evidence and the global visual system: no feature was removed, no core workflow semantics were changed, and destructive defaults remain unchanged.
+全局配色换新为 v4.0「清爽极光」设计语言（蓝=下一步、粉=用户决定、紫=AI 产物），新增可跳过的启动任务入口页（四条任务动线 + ★5 门面）；模块拆分收尾、依赖安全清理。功能零删除，核心工作流语义不变。
 
-v3.5.0 开始 UI/UX 重设计与债务清理路线。首阶段重点是证据与全局视觉系统：没有删除功能，没有改变核心工作流语义，危险动作默认值保持不变。
+The palette moves to the v4.0 "Fresh Aurora" design language (blue = next action, pink = user decisions, purple = AI output) and a skippable mission entry page lands at launch (four mission lanes + a daily ★5 cover). Module extraction and dependency security cleanup complete. Zero feature removals; core workflow semantics unchanged.
 
 ---
 
 ## Added / 新增
+
+- **Mission entry page / 任务入口页**: launch surface with the four mission lanes (LoRA dataset / Pixiv set publishing / batch organize / free mode), live-count function tiles, a resume slab for saved manual-sort sessions, a daily ★5 full-bleed cover with 换一张 / 不想展示, and an activity streak. Top-level ESC returns to the entry without losing view state; Settings gains 跳过入口页 and ★5 门面 toggles. Backed by `GET /api/entry/summary` + `activity_log` daily counters (migration 020).
+  - 新增任务入口页：四条任务动线（LoRA 数据集 / Pixiv 成套发布 / 批量整理 / 自由模式）、实时数字功能马赛克、手动分拣「接着上次」锚块、每日 ★5 全屏门面（换一张 / 不想展示）、连续整理天数。顶层 ESC 随时回入口且不丢视图状态；设置新增「跳过入口页」「★5 门面」开关。后端新增 `GET /api/entry/summary` 与 `activity_log` 日计数（migration 020）。
 
 - **Frontend control audit / 前端控件审计**: `scripts/audit_frontend_controls.py` parses `frontend/index.html`, scans `frontend/js/**/*.js`, and outputs an evidence report for controls. Categories include `referenced-by-id`, `referenced-by-data`, `delegate-only`, `native-control`, `static-only`, and `needs-runtime-check`.
   - `scripts/audit_frontend_controls.py` 会解析 `frontend/index.html`、扫描 `frontend/js/**/*.js`，输出控件证据报告。分类包含 `referenced-by-id`、`referenced-by-data`、`delegate-only`、`native-control`、`static-only`、`needs-runtime-check`。
@@ -25,8 +28,11 @@ v3.5.0 开始 UI/UX 重设计与债务清理路线。首阶段重点是证据与
 
 ## Changed / 变更
 
-- **Professional Dark Glass visual system / 专业暗色玻璃视觉系统**: `frontend/css/ui-refresh.css` now owns v3.5.0 surface, border, focus, toolbar, modal, danger, progress, toast, and empty-state tokens.
-  - `frontend/css/ui-refresh.css` 现在统一管理 v3.5.0 的 surface、border、focus、toolbar、modal、danger、progress、toast、empty-state token。
+- **Fresh Aurora visual system / 「清爽极光」视觉系统**: the new last-loaded `frontend/css/tokens.css` owns the global palette — blue-tinted dark surfaces, three semantic accents (blue #5CC8FF = next action, pink #FF8FC0 = user decisions, purple #A78BFF = AI output), unified 2px blue focus rings, solid-blue primary buttons with dark ink, a flat canvas, and Noto Sans SC + IBM Plex Mono + Oswald typography. Legacy tokens are remapped and ~470 hardcoded legacy colors across 13 stylesheets now reference tokens.
+  - 全新最后加载的 `frontend/css/tokens.css` 接管全局配色：蓝调暗色表面、三个各司其职的强调色（蓝=下一步、粉=用户决定、紫=AI 产物）、统一 2px 蓝色焦点圈、实心蓝主按钮配深色文字、平坦画布、思源黑体 + IBM Plex Mono + Oswald 字体组。旧 token 全部重映射，13 个样式表约 470 处硬编码旧色改为 token 引用。
+
+- **Module extraction completed + dependency security / 模块拆分收尾 + 依赖安全**: `app.js` delegates RequestManager and storage helpers to `modules/core/`; python-multipart bumped to 0.0.31 (three CVEs fixed) and the remaining starlette 1.x-only advisories are reviewed-and-documented ignores — the dependency audit gate is green.
+  - `app.js` 的 RequestManager 与存储工具收束到 `modules/core/`；python-multipart 升级到 0.0.31（修复三条 CVE），其余仅 starlette 1.x 才修复的公告按惯例记录为已审阅忽略，依赖审计闸门恢复绿色。
 
 - **Global component polish / 全局组件打磨**: nav tabs, buttons, danger actions, inputs, gallery toolbar, shared panels, modals, settings/model cards, empty states, progress bars, toasts, and selection-panel surfaces now use the same component language.
   - nav tabs、按钮、危险动作、输入框、图库工具栏、共享面板、弹窗、settings/model card、空状态、进度条、toast、多选面板完成首轮统一。

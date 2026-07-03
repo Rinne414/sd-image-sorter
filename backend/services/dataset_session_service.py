@@ -727,7 +727,6 @@ def register_scan_manifest_paths_for_session(scan_token: str) -> int:
     is a dict keyed by normalized path, so re-registration just refreshes
     the expiry.
     """
-    count = 0
     try:
         paths = list(iter_scan_manifest_paths(scan_token))
     except ValueError:

@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file=backend/requirements-dev.txt backend/requirements-dev.in
 #
-# lock-input-sha256: 9cd7a261277348d28531ae848c8c3af35e6bd7a356e8a0e8dc4562dbf43bacf8
+# lock-input-sha256: 6287600bc0b5c0af26705bb15ddb2348fbed6bfd7a12cb16f1bea9ca91ec5e5f
 #
 aiofiles==25.1.0
     # via -r backend/requirements.txt
@@ -415,7 +415,7 @@ python-dotenv==1.2.2
     # via
     #   -r backend/requirements.txt
     #   uvicorn
-python-multipart==0.0.27
+python-multipart==0.0.31
     # via -r backend/requirements.txt
 pyyaml==6.0.3
     # via
