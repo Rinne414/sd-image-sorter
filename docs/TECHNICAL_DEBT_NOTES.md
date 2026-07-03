@@ -272,7 +272,7 @@ Use this structure for future confirmed-debt entries:
   The current pass fixed the confirmed database lookup bottleneck and reduced scan-time gallery work without risking a broader image-serving scheduler change during release hardening.
 
 ### Debt-12: Trash / Recycle Bin behavior still needs real OS matrix validation
-- Status: partially validated (2026-07-03). Real Windows 11 Recycle Bin smoke passed: `send2trash==2.1.0` (the pinned production path, no monkeypatching) moved a probe file off its origin successfully. Remaining unvalidated legs: macOS Trash, Linux freedesktop trash, WSL-mounted/network/external drives. Side-finding: the local dev venv was missing the pinned `send2trash` (backend tests monkeypatch the mover, so pytest never notices) — release installs are unaffected because both requirements locks pin it.
+- Status: partially validated (2026-07-03). Real Windows 11 Recycle Bin smoke passed: `send2trash==2.1.0` (the pinned production path, no monkeypatching) moved a probe file off its origin successfully. Remaining unvalidated legs: macOS Trash, Linux freedesktop trash, WSL-mounted/network/external drives. Side-finding: the local dev venv was missing the pinned `send2trash` (backend tests monkeypatch the mover, so pytest never notices) — release installs are unaffected because both requirements locks pin it. Owner decision 2026-07-03: run a dedicated Linux QA round before the next release (covers this leg plus Debt-13's mount timing and the Linux GPU-tagger repair path).
 - Type: file lifecycle / operability / platform compatibility
 - Impact: medium
 - Risk if ignored:
@@ -687,7 +687,7 @@ Quality bar:
 
 ### Debt-14: Missing-file repair has no ambiguous/conflict review UI yet
 
-- Status: open
+- Status: open — owner decision 2026-07-03: fold into the Aurora Phase 3 Gallery rebuild (`#25a`) instead of a standalone session, so the review modal lands on the new Gallery UI once instead of being built twice.
 - Type: UX / data safety / large-library workflow debt
 - Impact: medium
 - Risk if ignored:
@@ -734,7 +734,7 @@ Quality bar:
 
 ### Debt-16: AI runtime guard is coarse and not yet a real scheduler
 
-- Status: largely resolved (v3.4.2). The three user-facing AI job kinds (gallery tagging, Smart Tag, VLM caption batch) now share a FIFO queue at the `TaggingPipelineService` coordinator: a busy runtime enqueues instead of returning 409, the queue drains automatically after success/error/cancel, duplicate consecutive submits merge, queued entries are cancellable, progress endpoints expose `pipeline_queue`, and the frontend renders "Queued #N" with F5 re-attach. Remaining (still open, lower priority): the queue is in-memory only (lost on restart), there are no priority levels or per-model VRAM budgets, and non-job heavyweight paths (model-health probes, similarity embedding builds) still rely on the coarse `ai_runtime_guard` gate rather than the queue.
+- Status: largely resolved (v3.4.2; queue persistence added 2026-07-03 by owner decision). The three user-facing AI job kinds (gallery tagging, Smart Tag, VLM caption batch) now share a FIFO queue at the `TaggingPipelineService` coordinator: a busy runtime enqueues instead of returning 409, the queue drains automatically after success/error/cancel, duplicate consecutive submits merge, queued entries are cancellable, progress endpoints expose `pipeline_queue`, and the frontend renders "Queued #N" with F5 re-attach. The queue now also survives restarts: `services/ai_job_queue_store.py` write-throughs request-shaped entries to `data/state/ai-job-queue.json` (atomic, never-raise), restore re-queues in FIFO order with a running-at-shutdown job placed back at the head, invalid/corrupt entries degrade to skip/empty with a log, and restored VLM batches re-bind the server event loop captured at startup. Remaining (still open, lower priority): no priority levels or per-model VRAM budgets, and non-job heavyweight paths (model-health probes, similarity embedding builds) still rely on the coarse `ai_runtime_guard` gate rather than the queue.
 - Type: runtime stability / performance debt
 - Impact: high
 - Risk if ignored:
@@ -873,7 +873,7 @@ Quality bar:
   The urgent user-impacting problem was default first-run size and DB bloat. Implementing, compiling, and testing separate cross-platform optional locks is larger and should be handled as a dedicated dependency packaging pass.
 
 ### Debt-22: Token-scoped bulk operations are chunked but still synchronous HTTP
-- Status: mitigated
+- Status: resolved (2026-07-03, owner decision). Token-scoped delete / remove-from-gallery / same-name sidecar export now run as durable background jobs. `services/bulk_job_service.py` is a generic registry (threading.Lock + dict, ServiceProvider singleton): uuid4 job IDs, statuses queued/running/done/error/cancelled, bounded error samples (20), a chunked worker (500/chunk) that snapshots the full ID list server-side BEFORE any mutation and checks a cooperative cancel event between chunks, and terminal-job pruning (keep 50). API: opt-in `background: true` on the existing endpoints returns a job envelope instead of blocking; unified `GET /api/bulk-jobs` (`active_only`), `GET /api/bulk-jobs/{id}`, `POST /api/bulk-jobs/{id}/cancel`. Frontend auto-routes token-scoped or ≥500-explicit-id selections to the job path (`shouldUseBulkJob`), drives the existing progress bubbles via polling (300ms, 3-transient-failure tolerance), and the cancel buttons prefer the durable job with legacy fallback; small explicit selections keep the original synchronous path unchanged. Deliberately out of scope (acceptable residue, not re-opened debt): pause/resume + retry-at-failed-file semantics, and the job registry is in-memory — durable IDs within a server session, not across restarts. These are minutes-scale file operations, unlike the AI queue (Debt-16) which does persist.
 - Type: scalability / UX progress model debt
 - Impact: medium
 - Risk if ignored:
