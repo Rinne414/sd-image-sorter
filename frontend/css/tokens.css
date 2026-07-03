@@ -1,0 +1,283 @@
+/* ==========================================================================
+   "Fresh Aurora" Design Tokens — v4.0 redesign, Phase 1 (skin-level migration)
+   Spec: design_handoff_aurora_redesign/README.md (§Design Tokens)
+
+   This file is loaded LAST in index.html and is the single source of truth
+   for the palette. It (a) defines the Aurora canonical tokens, (b) remaps
+   every legacy token name from styles.css / ui-refresh.css onto Aurora
+   values, and (c) applies the few base-component overrides Phase 1 owns
+   (flat canvas, focus unification, solid-blue primary button, modal scrim).
+
+   Accent semantics are a hard rule of the design language:
+     --blue   = next action / in-progress / links (ONE solid blue per screen)
+     --pink   = the USER's decisions (selection, hearts, favorites, trigger)
+     --purple = AI output (tags, scores, detections, VLM)
+     gradient = blue→purple, max once per screen, cross-step actions only
+   Phase 1 remaps the old palette wholesale (indigo→blue, teal→purple,
+   orange→warning); per-surface semantic corrections (e.g. selection rings
+   to pink) land with each view in Phase 3.
+
+   Legacy :root blocks in styles.css / ui-refresh.css stay until Phase 4;
+   hardcoded long-tail one-off shades (<3 uses, state-specific) are swept
+   per-view in Phase 3 against the #24a–d checklists.
+   ========================================================================== */
+
+:root {
+    /* ===== Aurora canonical: surfaces (blue-tinted dark) ===== */
+    --bg: #12141A;              /* app canvas */
+    --surface-1: #181B23;       /* panels */
+    --surface-2: #1F2330;       /* raised: modals, hover */
+    --stage: #101218;           /* deep stage behind images */
+    --border: #2A2F3D;
+    --border-strong: #333A4B;
+    --hairline-1: #1E222D;      /* table/list row hairlines */
+    --hairline-2: #232836;
+    --scrim: rgba(6, 8, 12, 0.82);
+
+    /* ===== Aurora canonical: text ===== */
+    --text: #EDF0F7;
+    --text-2: #9CA6B8;
+    --muted: #5F6878;           /* never the sole carrier of meaning */
+    --text-disabled: #4A5158;   /* disabled control text (+ reason tooltip) */
+
+    /* ===== Aurora canonical: accents (each OWNS a semantic) ===== */
+    --blue: #5CC8FF;            /* next action / in-progress / links */
+    --blue-rgb: 92, 200, 255;
+    --blue-hover: #7DD3FF;      /* +1 lightness step */
+    --blue-active: #48ADE0;     /* −1 lightness step */
+    --pink: #FF8FC0;            /* user decisions: selection, ♥, trigger word */
+    --pink-rgb: 255, 143, 192;
+    --pink-hover: #FFA6CD;
+    --pink-active: #E578A9;
+    --purple: #A78BFF;          /* AI output: tags, scores, detections, VLM */
+    --purple-rgb: 167, 139, 255;
+    --purple-hover: #B9A3FF;
+    --purple-active: #9174E8;
+    --grad: linear-gradient(90deg, #5CC8FF, #A78BFF);
+    --on-accent: #12141A;       /* ink on solid blue/pink/purple */
+    --tag-chip-bg: rgba(167, 139, 255, 0.14);
+
+    /* ===== Aurora canonical: semantic (always paired with ✓ ⚠ ✕ glyph) ===== */
+    --success: #5FDBA7;
+    --success-rgb: 95, 219, 167;
+    --warning: #FFC46B;
+    --warning-rgb: 255, 196, 107;
+    --danger: #FF7A76;
+    --danger-rgb: 255, 122, 118;
+
+    /* ===== Aurora canonical: booru categories (tag-editing surfaces ONLY —
+       caption editor, tag library, tagger review; browsing stays quiet purple) ===== */
+    --booru-general: #7FB8FF;
+    --booru-character: #7EDB8F;
+    --booru-artist: #FF9E9E;
+    --booru-copyright: #C9A6FF;
+    --booru-meta: #FFC46B;
+
+    /* ===== Aurora canonical: radii ===== */
+    --r-ctl: 10px;              /* buttons, inputs */
+    --r-card: 12px;             /* cards */
+    --r-tile: 14px;             /* image tiles */
+    --r-modal: 16px;
+    --r-pill: 999px;            /* chips, pills */
+
+    /* ===== Aurora canonical: type ===== */
+    --font-body: 'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Source Han Sans SC', -apple-system, 'Segoe UI', sans-serif;
+    --font-display: var(--font-body);   /* headings = Noto 900, no separate face */
+    --font-mono: 'IBM Plex Mono', 'Consolas', 'Monaco', ui-monospace, monospace;
+    --font-numeral: 'Oswald', var(--font-body);  /* entry-page large numerals only */
+    /* Scale (applied per-view in Phase 3; tokens are the contract) */
+    --fs-screen-title: 18px;    /* weight 900, one per screen */
+    --fs-modal-title: 16px;     /* weight 900 */
+    --fs-section: 13px;         /* weight 700 */
+    --fs-body: 13px;            /* weight 400 */
+    --fs-label: 12px;           /* weight 500 */
+    --fs-data: 11px;            /* mono: seeds, paths, counts */
+    --fs-footnote: 10px;        /* mono, minimum size */
+    --lh-body: 1.7;
+
+    /* ==================================================================
+       Legacy token remap — every name below is consumed by pre-Aurora CSS
+       (styles.css, ui-refresh.css, feature sheets). Values re-point to the
+       Aurora tokens above so the whole app reskins without markup changes.
+       ================================================================== */
+
+    /* surfaces */
+    --bg-dark: var(--bg);
+    --bg-card: var(--surface-1);
+    --bg-card-solid: var(--surface-1);
+    --bg-hover: var(--surface-2);
+    --bg-elevated: var(--surface-2);
+    --surface-canvas: var(--bg);
+    --surface-shell: rgba(18, 20, 26, 0.94);
+    --surface-panel: var(--surface-1);
+    --surface-panel-solid: var(--surface-1);
+    --surface-card: var(--surface-1);
+    --surface-card-solid: var(--surface-1);
+    --surface-elevated: var(--surface-2);
+    --surface-hover: var(--surface-2);
+    --surface-active: rgba(var(--blue-rgb), 0.14);
+    --surface-danger: rgba(var(--danger-rgb), 0.12);
+    --control-bg: rgba(16, 18, 24, 0.85);       /* inputs sit a step below panels */
+    --control-bg-hover: rgba(31, 35, 48, 0.85);
+    --toolbar-bg: rgba(24, 27, 35, 0.82);
+    --modal-bg: rgba(31, 35, 48, 0.97);         /* surface-2, near-opaque */
+    --empty-bg: rgba(24, 27, 35, 0.6);
+    --glass-bg: rgba(24, 27, 35, 0.88);         /* translucency only earns its keep over images */
+    --glass-bg-strong: rgba(18, 20, 26, 0.94);
+    --glass-border: var(--hairline-2);
+
+    /* accents */
+    --accent-primary: var(--blue);
+    --accent-primary-rgb: var(--blue-rgb);
+    --accent-secondary: var(--purple);          /* old teal: gradients/second voice → purple */
+    --accent-secondary-rgb: var(--purple-rgb);
+    --accent-tertiary: var(--warning);          /* old orange → warning amber */
+    --accent-tertiary-rgb: var(--warning-rgb);
+    --accent-success: var(--success);
+    --accent-success-rgb: var(--success-rgb);
+    --accent-danger: var(--danger);
+    --accent-danger-rgb: var(--danger-rgb);
+    --accent-contrast: var(--on-accent);        /* was warm white; ink on accents is dark */
+    --accent-grad: var(--grad);
+    --color-primary: var(--blue);               /* previously undefined (orange fallback) */
+    --accent-color: var(--blue);                /* previously undefined (orange fallback) */
+    --accent-hover: var(--blue-hover);          /* previously undefined (orange fallback) */
+    --color-danger: var(--danger);              /* previously undefined */
+    --color-error: var(--danger);               /* previously undefined */
+
+    /* text */
+    --text-primary: var(--text);
+    --text-secondary: var(--text-2);
+    --text-muted: var(--muted);
+    --text-faint: var(--muted);
+
+    /* borders / focus */
+    --border-color: var(--border);
+    --border-subtle: var(--hairline-2);
+    --border-glow: rgba(var(--blue-rgb), 0.35);
+    --focus-ring: 0 0 0 3px rgba(var(--blue-rgb), 0.18), 0 0 0 1px rgba(var(--blue-rgb), 0.6);
+
+    /* progress / shadows */
+    --progress-track: rgba(255, 255, 255, 0.07);
+    --progress-fill: var(--grad);               /* total-progress may carry the gradient */
+    --shadow-glow: 0 0 24px rgba(var(--blue-rgb), 0.10);
+    --shadow-card: 0 12px 32px rgba(0, 0, 0, 0.35);
+    --shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.5);
+    --shadow-float: 0 12px 32px rgba(0, 0, 0, 0.4);
+
+    /* radii: legacy ladder lands on the Aurora steps (10 ctl / 12–14 card / 16 modal) */
+    --radius-xs: 6px;
+    --radius-sm: 8px;
+    --radius-md: 10px;
+    --radius-lg: 10px;
+    --radius-xl: 12px;
+    --radius-2xl: 16px;
+    --radius-3xl: 16px;
+    --radius-full: 999px;
+
+    /* fonts (legacy aliases) */
+    --font-body-cjk: var(--font-body);
+    --font-display-cjk: var(--font-body);
+    --font-sans: var(--font-body);
+}
+
+/* ==========================================================================
+   Base overrides owned by Phase 1
+   ========================================================================== */
+
+/* Flat Aurora canvas: retire the neon gradient washes and grid texture. */
+html,
+body {
+    background: var(--bg);
+}
+
+body::before,
+body::after {
+    display: none;
+}
+
+::selection {
+    background: rgba(var(--blue-rgb), 0.30);
+    color: #ffffff;
+}
+
+/* Focus: 2px blue outline, offset 2px — everywhere (supersedes the split
+   primary/secondary outline colors in styles.css). */
+:focus-visible,
+button:focus-visible,
+.btn:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.gallery-item:focus,
+.gallery-item:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+}
+
+.checkbox-label input[type="checkbox"]:focus-visible + .checkbox-custom {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+}
+
+/* Primary action: exactly one SOLID blue button per screen, dark ink.
+   (The blue→purple gradient is reserved for cross-step actions and is
+   assigned per-view in Phase 3.) Hover = +1 lightness, active = −1. */
+.btn-primary {
+    background: var(--blue);
+    color: var(--on-accent);
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--blue-hover);
+    color: var(--on-accent);
+    box-shadow: none;
+    transform: none;
+}
+
+.btn-primary:active:not(:disabled) {
+    background: var(--blue-active);
+}
+
+/* Brand: quiet text, no gradient clip (gradient budget belongs to actions). */
+.brand-text {
+    background: none;
+    -webkit-background-clip: initial;
+    background-clip: initial;
+    -webkit-text-fill-color: currentColor;
+    color: var(--text);
+}
+
+/* Modal scrim per spec. */
+.modal-backdrop {
+    background: var(--scrim);
+}
+
+/* ==========================================================================
+   Accessibility: re-assert the high-contrast overrides from styles.css —
+   this sheet loads later, so without this block the remap above would win
+   for prefers-contrast users.
+   ========================================================================== */
+@media (prefers-contrast: high) {
+    :root {
+        --bg-card: rgba(0, 0, 0, 0.9);
+        --bg-card-solid: #000000;
+        --bg-hover: rgba(255, 255, 255, 0.1);
+        --text-primary: #ffffff;
+        --text-secondary: #ffffff;
+        --text-muted: #ffffff;
+        --border-color: rgba(255, 255, 255, 0.5);
+        --glass-bg: rgba(0, 0, 0, 0.95);
+        --glass-border: rgba(255, 255, 255, 0.3);
+    }
+
+    .btn-primary {
+        background: var(--accent-primary);
+        color: #000000;
+    }
+}

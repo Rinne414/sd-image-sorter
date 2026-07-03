@@ -58,8 +58,8 @@
     --text-secondary: #c3d4e0;
     --text-muted: #92a9bb;
 
-    --border-color: rgba(124, 139, 255, 0.2);
-    --border-glow: rgba(124, 139, 255, 0.35);
+    --border-color: rgba(var(--accent-primary-rgb), 0.2);
+    --border-glow: rgba(var(--accent-primary-rgb), 0.35);
 
     /* Border Radius - Consolidated */
     --radius-xs: 4px;
@@ -80,7 +80,7 @@
     --glass-border: rgba(184, 215, 233, 0.12);
 
     /* Shadows - Consolidated */
-    --shadow-glow: 0 0 30px rgba(124, 139, 255, 0.18);
+    --shadow-glow: 0 0 30px rgba(var(--accent-primary-rgb), 0.18);
     --shadow-card: 0 18px 40px rgba(0, 0, 0, 0.26);
     --shadow-modal: 0 18px 48px rgba(0, 0, 0, 0.34);
     --shadow-float: 0 12px 36px rgba(0, 0, 0, 0.25);
@@ -272,7 +272,7 @@ html {
 }
 
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-body);
     background: var(--bg-dark);
     color: var(--text-primary);
     line-height: 1.5;
@@ -291,8 +291,8 @@ body::before {
     right: 0;
     bottom: 0;
     background:
-        radial-gradient(circle at 12% 18%, rgba(124, 139, 255, 0.16) 0%, transparent 28%),
-        radial-gradient(circle at 88% 14%, rgba(51, 214, 224, 0.12) 0%, transparent 26%),
+        radial-gradient(circle at 12% 18%, rgba(var(--accent-primary-rgb), 0.16) 0%, transparent 28%),
+        radial-gradient(circle at 88% 14%, rgba(var(--accent-secondary-rgb), 0.12) 0%, transparent 26%),
         linear-gradient(180deg, rgba(8, 18, 27, 0.65) 0%, rgba(8, 18, 27, 0.94) 100%);
     pointer-events: none;
     z-index: -1;
@@ -341,7 +341,7 @@ body::before {
     }
 
     .brand-text {
-        font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: var(--font-display);
         font-size: 20px;
         font-weight: 600;
         background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
@@ -393,10 +393,10 @@ body::before {
     }
 
     .nav-tab.active {
-        background: rgba(124, 139, 255, 0.14);
+        background: rgba(var(--accent-primary-rgb), 0.14);
         border-color: var(--border-color);
         color: #ffd7b5;
-        box-shadow: inset 0 0 0 1px rgba(124, 139, 255, 0.12);
+        box-shadow: inset 0 0 0 1px rgba(var(--accent-primary-rgb), 0.12);
     }
 
     .tab-icon {
@@ -410,7 +410,7 @@ body::before {
         min-width: 18px;
         height: 18px;
         padding: 0 5px;
-        background: rgba(124, 139, 255, 0.18);
+        background: rgba(var(--accent-primary-rgb), 0.18);
         border-radius: 9px;
         font-size: 11px;
         font-weight: 600;
@@ -467,15 +467,15 @@ body::before {
     }
 
     .btn-primary {
-        background: linear-gradient(135deg, var(--accent-primary), #ffb067);
+        background: linear-gradient(135deg, var(--accent-primary), var(--accent-tertiary));
         color: #1f1308;
         border-color: rgba(255, 176, 103, 0.55);
-        box-shadow: 0 10px 24px rgba(124, 139, 255, 0.22);
+        box-shadow: 0 10px 24px rgba(var(--accent-primary-rgb), 0.22);
     }
 
     .btn-primary:hover {
         transform: translateY(-2px);
-        box-shadow: 0 14px 30px rgba(124, 139, 255, 0.28);
+        box-shadow: 0 14px 30px rgba(var(--accent-primary-rgb), 0.28);
     }
 
     .btn-secondary {
@@ -486,8 +486,8 @@ body::before {
 
     .btn-secondary:hover {
         background: rgba(24, 47, 64, 0.98);
-        border-color: rgba(51, 214, 224, 0.4);
-        color: #effffd;
+        border-color: rgba(var(--accent-secondary-rgb), 0.4);
+        color: var(--text-primary);
     }
 
     .btn-ghost {
@@ -591,8 +591,8 @@ body::before {
     textarea.input:focus,
     select.input:focus {
         outline: none;
-        border-color: rgba(51, 214, 224, 0.55);
-        box-shadow: 0 0 0 3px rgba(51, 214, 224, 0.15);
+        border-color: rgba(var(--accent-secondary-rgb), 0.55);
+        box-shadow: 0 0 0 3px rgba(var(--accent-secondary-rgb), 0.15);
     }
 
     .input-field::placeholder,
@@ -671,7 +671,7 @@ body::before {
 
     .skip-link:focus {
         top: 0;
-        outline: 3px solid var(--accent-secondary);
+        outline: 3px solid var(--blue);
         outline-offset: 2px;
     }
 
@@ -684,7 +684,7 @@ body::before {
     .btn:focus-visible,
     button:focus-visible,
     a:focus-visible {
-        outline: 2px solid var(--accent-secondary);
+        outline: 2px solid var(--blue);
         outline-offset: 2px;
     }
 
@@ -730,7 +730,7 @@ body::before {
     }
 
     .sidebar-title {
-        font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: var(--font-display);
         font-size: 14px;
         font-weight: 600;
         text-transform: uppercase;
@@ -974,8 +974,8 @@ body::before {
 
     .header-status-chip.is-warning {
         color: #fde68a;
-        border-color: rgba(124, 139, 255, 0.25);
-        background: rgba(124, 139, 255, 0.08);
+        border-color: rgba(var(--accent-primary-rgb), 0.25);
+        background: rgba(var(--accent-primary-rgb), 0.08);
     }
 
     .header-status-chip.is-info {
@@ -1295,7 +1295,7 @@ body::before {
         background: rgba(15, 23, 42, 0.78);
         color: var(--text-primary);
         box-shadow: 0 5px 14px rgba(0,0,0,0.28);
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-family: var(--font-mono);
         font-size: 11px;
         font-weight: 750;
         line-height: 1;
@@ -1430,7 +1430,7 @@ body::before {
         font-size: 11px;
         font-weight: 700;
         background: rgba(0, 0, 0, 0.7);
-        color: #7c8bff;
+        color: var(--accent-primary);
         backdrop-filter: blur(4px);
         pointer-events: none;
         opacity: 1;
@@ -1544,7 +1544,7 @@ body::before {
     }
 
     .panel-title {
-        font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: var(--font-display);
         font-size: 28px;
         font-weight: 600;
         margin-bottom: 12px;
@@ -1794,7 +1794,7 @@ body::before {
     }
 
     .stat-number {
-        font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: var(--font-display);
         font-size: 48px;
         font-weight: 700;
         color: var(--accent-primary);
@@ -1827,8 +1827,8 @@ body::before {
         right: 0;
         bottom: 0;
         background:
-            radial-gradient(ellipse at 30% 20%, rgba(124, 139, 255, 0.12) 0%, transparent 50%),
-            radial-gradient(ellipse at 70% 80%, rgba(51, 214, 224, 0.08) 0%, transparent 50%);
+            radial-gradient(ellipse at 30% 20%, rgba(var(--accent-primary-rgb), 0.12) 0%, transparent 50%),
+            radial-gradient(ellipse at 70% 80%, rgba(var(--accent-secondary-rgb), 0.08) 0%, transparent 50%);
         pointer-events: none;
     }
 
@@ -1848,7 +1848,7 @@ body::before {
     }
 
     .setup-title {
-        font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: var(--font-display);
         font-size: 42px;
         font-weight: 700;
         margin-bottom: 16px;
@@ -1858,7 +1858,7 @@ body::before {
         -webkit-text-fill-color: transparent;
         background-clip: text;
         animation: gradientShift 8s ease infinite;
-        text-shadow: 0 0 40px rgba(124, 139, 255, 0.18);
+        text-shadow: 0 0 40px rgba(var(--accent-primary-rgb), 0.18);
     }
 
     @keyframes gradientShift {
@@ -1913,7 +1913,7 @@ body::before {
     /* Direction-specific folder key colors */
     .folder-slot[data-direction="up"] .folder-key,
     .folder-slot:first-child .folder-key {
-        background: linear-gradient(135deg, #10b981, #059669);
+        background: linear-gradient(135deg, var(--accent-success), #059669);
         box-shadow: 0 4px 16px rgba(16, 185, 129, 0.4);
     }
 
@@ -1928,8 +1928,8 @@ body::before {
     }
 
     .folder-slot[data-direction="right"] .folder-key {
-        background: linear-gradient(135deg, #7c8bff, #d97706);
-        box-shadow: 0 4px 16px rgba(124, 139, 255, 0.4);
+        background: linear-gradient(135deg, var(--accent-primary), #d97706);
+        box-shadow: 0 4px 16px rgba(var(--accent-primary-rgb), 0.4);
     }
 
     .folder-key {
@@ -1941,7 +1941,7 @@ body::before {
         justify-content: center;
         background: linear-gradient(135deg, var(--accent-primary), var(--accent-tertiary));
         border-radius: 12px;
-        font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: var(--font-display);
         font-size: 22px;
         font-weight: 700;
         color: white;
@@ -2054,7 +2054,7 @@ body::before {
         background: rgba(0, 0, 0, 0.3);
         border: 2px solid rgba(255, 255, 255, 0.1);
         border-radius: 12px;
-        font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: var(--font-display);
         font-size: 14px;
         font-weight: 600;
         color: var(--text-secondary);
@@ -2194,13 +2194,13 @@ body::before {
     }
 
     .sort-folder-top .key-hint {
-        background: linear-gradient(135deg, #10b981, #059669);
+        background: linear-gradient(135deg, var(--accent-success), #059669);
         box-shadow: 0 4px 24px rgba(16, 185, 129, 0.5);
     }
 
     .sort-folder-top:hover,
     .sort-folder-top.active {
-        border-color: #10b981;
+        border-color: var(--accent-success);
         box-shadow: 0 10px 50px rgba(16, 185, 129, 0.3), 0 0 40px rgba(16, 185, 129, 0.2);
     }
 
@@ -2244,18 +2244,18 @@ body::before {
         right: 30px;
         top: 50%;
         transform: translateY(-50%);
-        border-color: rgba(124, 139, 255, 0.3);
+        border-color: rgba(var(--accent-primary-rgb), 0.3);
     }
 
     .sort-folder-right .key-hint {
-        background: linear-gradient(135deg, #7c8bff, #d97706);
-        box-shadow: 0 4px 24px rgba(124, 139, 255, 0.5);
+        background: linear-gradient(135deg, var(--accent-primary), #d97706);
+        box-shadow: 0 4px 24px rgba(var(--accent-primary-rgb), 0.5);
     }
 
     .sort-folder-right:hover,
     .sort-folder-right.active {
-        border-color: #7c8bff;
-        box-shadow: 0 10px 50px rgba(124, 139, 255, 0.3), 0 0 40px rgba(124, 139, 255, 0.2);
+        border-color: var(--accent-primary);
+        box-shadow: 0 10px 50px rgba(var(--accent-primary-rgb), 0.3), 0 0 40px rgba(var(--accent-primary-rgb), 0.2);
     }
 
     /* Active state with scale transform */
@@ -2282,7 +2282,7 @@ body::before {
         justify-content: center;
         background: linear-gradient(135deg, var(--accent-primary), var(--accent-tertiary));
         border-radius: 14px;
-        font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: var(--font-display);
         font-size: 24px;
         font-weight: 700;
         color: white;
@@ -2552,7 +2552,7 @@ body::before {
     }
 
     .combo-number {
-        font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: var(--font-display);
         font-size: 56px;
         font-weight: 700;
         color: var(--accent-tertiary);
@@ -2563,7 +2563,7 @@ body::before {
     }
 
     .combo-text {
-        font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: var(--font-display);
         font-size: 14px;
         font-weight: 600;
         letter-spacing: 6px;
@@ -2597,7 +2597,7 @@ body::before {
 
     .progress-fill {
         height: 100%;
-        background: linear-gradient(90deg, #10b981, #06b6d4, var(--accent-primary));
+        background: linear-gradient(90deg, var(--accent-success), var(--accent-secondary), var(--accent-primary));
         background-size: 200% 100%;
         border-radius: 4px;
         transition: width var(--transition-normal);
@@ -2663,7 +2663,7 @@ body::before {
     }
 
     #sort-progress-text {
-        font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: var(--font-display);
         font-weight: 600;
         color: var(--accent-secondary);
         font-size: 14px;
@@ -3034,7 +3034,7 @@ body::before {
     }
 
     .key-param strong {
-        color: var(--accent-secondary, #06b6d4);
+        color: var(--accent-secondary);
         font-weight: 600;
         margin-right: 3px;
     }
@@ -3190,8 +3190,8 @@ body::before {
     }
 
     .model-asset-confidence.is-medium {
-        background: rgba(124, 139, 255, 0.16);
-        color: #fcd34d;
+        background: rgba(var(--accent-primary-rgb), 0.16);
+        color: var(--warning);
     }
 
     .model-asset-confidence.is-low {
@@ -3218,7 +3218,7 @@ body::before {
         background: rgba(6, 182, 212, 0.15);
         border-radius: 10px;
         font-size: 11px;
-        color: var(--accent-secondary, #06b6d4);
+        color: var(--accent-secondary);
     }
 
     /* Civitai Resources */
@@ -3643,7 +3643,7 @@ body::before {
     }
 
     .analytics-card h4 {
-        font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: var(--font-display);
         font-size: 14px;
         color: var(--accent-secondary);
         text-transform: uppercase;
@@ -3692,7 +3692,7 @@ body::before {
         margin-top: 10px;
         padding: 12px;
         border-radius: 18px;
-        border: 1px solid rgba(124, 139, 255, 0.18);
+        border: 1px solid rgba(var(--accent-primary-rgb), 0.18);
         background: rgba(10, 22, 31, 0.88);
         box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.04),
@@ -3762,7 +3762,7 @@ body::before {
         outline: 2px solid var(--accent-primary);
         outline-offset: -2px;
         box-shadow:
-            0 0 0 1px rgba(124, 139, 255, 0.55),
+            0 0 0 1px rgba(var(--accent-primary-rgb), 0.55),
             0 10px 28px rgba(15, 23, 42, 0.32);
     }
 
@@ -3816,7 +3816,7 @@ body::before {
     }
 
     .export-container textarea {
-        font-family: 'Consolas', 'Monaco', monospace;
+        font-family: var(--font-mono);
         font-size: 13px;
         line-height: 1.6;
         background: #0f172a;
@@ -4167,7 +4167,7 @@ body::before {
 }
 
 .censor-setup .panel-title {
-    font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-display);
     font-size: 28px;
     margin-bottom: 8px;
     background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
@@ -4792,7 +4792,7 @@ body::before {
 
 .range-value {
     min-width: 35px;
-    font-family: monospace;
+    font-family: var(--font-mono);
     color: var(--accent-primary);
 }
 
@@ -4903,7 +4903,7 @@ kbd {
     display: inline-block;
     padding: 2px 6px;
     font-size: 11px;
-    font-family: 'Consolas', 'Monaco', monospace;
+    font-family: var(--font-mono);
     font-weight: 600;
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.2);
@@ -5046,9 +5046,9 @@ kbd {
 
 /* ===== Queue Multi-select ===== */
 .queue-thumb-v2.selected {
-    outline: 2px solid rgba(51, 214, 224, 0.95);
+    outline: 2px solid rgba(var(--accent-secondary-rgb), 0.95);
     outline-offset: 2px;
-    box-shadow: 0 0 0 1px rgba(51, 214, 224, 0.12), 0 10px 22px rgba(14, 165, 233, 0.18);
+    box-shadow: 0 0 0 1px rgba(var(--accent-secondary-rgb), 0.12), 0 10px 22px rgba(14, 165, 233, 0.18);
 }
 
 .queue-thumb-v2.selected.active {
@@ -5219,7 +5219,7 @@ kbd {
 }
 
 .onboarding-title {
-    font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-display);
     font-size: 18px;
     font-weight: 600;
     color: var(--text-primary);
@@ -5292,7 +5292,7 @@ kbd {
     display: inline-block;
     padding: 2px 6px;
     font-size: 11px;
-    font-family: 'Consolas', 'Monaco', monospace;
+    font-family: var(--font-mono);
     font-weight: 600;
     background: rgba(var(--accent-primary-rgb), 0.2);
     border: 1px solid var(--accent-primary);
@@ -5351,13 +5351,13 @@ kbd {
 
 /* Help button in nav-actions */
 .btn-language {
-    border-color: rgba(51, 214, 224, 0.3);
+    border-color: rgba(var(--accent-secondary-rgb), 0.3);
     color: #bff8ef;
 }
 
 .btn-language:hover {
-    border-color: rgba(51, 214, 224, 0.5);
-    color: #effffd;
+    border-color: rgba(var(--accent-secondary-rgb), 0.5);
+    color: var(--text-primary);
 }
 
 .btn-help {
@@ -5377,7 +5377,7 @@ kbd {
 .btn-help:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
-    border-color: rgba(51, 214, 224, 0.45);
+    border-color: rgba(var(--accent-secondary-rgb), 0.45);
 }
 
 .lang-zh .nav-tab,
@@ -5437,11 +5437,11 @@ kbd {
 .wasd-legend-row kbd {
     min-width: 42px;
     padding: 4px 8px;
-    background: rgba(124, 139, 255, 0.12);
-    border: 1px solid rgba(124, 139, 255, 0.32);
+    background: rgba(var(--accent-primary-rgb), 0.12);
+    border: 1px solid rgba(var(--accent-primary-rgb), 0.32);
     border-radius: 8px;
     color: #ffe7d1;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-body);
     text-align: center;
 }
 
@@ -5575,7 +5575,7 @@ kbd {
 }
 
 .mobile-nav-title {
-    font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-display);
     font-size: 16px;
     font-weight: 600;
     color: var(--accent-primary);
@@ -6738,7 +6738,7 @@ button:focus-visible,
 [role="button"]:focus-visible,
 [role="tab"]:focus-visible,
 a:focus-visible {
-    outline: 2px solid var(--accent-secondary);
+    outline: 2px solid var(--blue);
     outline-offset: 2px;
 }
 
@@ -6765,12 +6765,12 @@ textarea:focus-visible {
 
 /* Gallery item focus styles */
 .gallery-item:focus {
-    outline: 2px solid var(--accent-secondary);
+    outline: 2px solid var(--blue);
     outline-offset: 2px;
 }
 
 .gallery-item:focus-visible {
-    outline: 2px solid var(--accent-secondary);
+    outline: 2px solid var(--blue);
     outline-offset: 2px;
 }
 
@@ -6805,7 +6805,7 @@ input[type="radio"] {
 
 /* Checkbox custom styling for accessibility */
 .checkbox-label input[type="checkbox"]:focus-visible + .checkbox-custom {
-    outline: 2px solid var(--accent-secondary);
+    outline: 2px solid var(--blue);
     outline-offset: 2px;
 }
 
@@ -6936,7 +6936,7 @@ input[type="radio"] {
 
 /* Focus trap visible indicator for modals */
 .modal[aria-modal="true"]:focus-within {
-    outline: 2px solid var(--accent-secondary);
+    outline: 2px solid var(--blue);
     outline-offset: -2px;
 }
 
@@ -6950,7 +6950,7 @@ input[type="radio"] {
 .skip-link:focus {
     background: var(--accent-primary);
     color: white;
-    outline: 3px solid var(--accent-secondary);
+    outline: 3px solid var(--blue);
     outline-offset: 2px;
 }
 
@@ -6997,8 +6997,8 @@ input[type="radio"] {
 
 /* Selection mode indicator */
 #btn-toggle-select[aria-pressed="true"] {
-    background: linear-gradient(135deg, rgba(124, 139, 255, 0.22), rgba(51, 214, 224, 0.16));
-    border-color: rgba(51, 214, 224, 0.3);
+    background: linear-gradient(135deg, rgba(var(--accent-primary-rgb), 0.22), rgba(var(--accent-secondary-rgb), 0.16));
+    border-color: rgba(var(--accent-secondary-rgb), 0.3);
     color: var(--text-primary);
     animation: none;
 }
@@ -7032,7 +7032,7 @@ input[type="radio"] {
 }
 
 .section-toggle:focus-visible {
-    outline: 2px solid var(--accent-secondary);
+    outline: 2px solid var(--blue);
     outline-offset: 2px;
 }
 
@@ -7044,7 +7044,7 @@ input[type="radio"] {
 
 .tag-suggestion:focus,
 .suggestion-item:focus {
-    outline: 2px solid var(--accent-secondary);
+    outline: 2px solid var(--blue);
     outline-offset: -2px;
     background: var(--bg-hover);
 }
@@ -7095,7 +7095,7 @@ input[type="radio"] {
 }
 
 .shortcuts-panel-header h3 {
-    font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-display);
     font-size: 18px;
     font-weight: 600;
     color: var(--text-primary, #f1f5f9);
@@ -7163,7 +7163,7 @@ input[type="radio"] {
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid var(--border-color, #334155);
     border-radius: 6px;
-    font-family: 'Consolas', 'Monaco', monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     font-weight: 600;
     color: var(--text-primary, #f1f5f9);
@@ -7194,20 +7194,20 @@ input[type="radio"] {
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid var(--border-color, #334155);
     border-radius: 4px;
-    font-family: 'Consolas', 'Monaco', monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     margin: 0 2px;
 }
 
 /* ===== UX Enhancement: Modal Close Focus Styles ===== */
 .modal-close:focus {
-    outline: 2px solid var(--accent-secondary);
+    outline: 2px solid var(--blue);
     outline-offset: 2px;
     background: var(--bg-hover);
 }
 
 .modal-close:focus-visible {
-    outline: 2px solid var(--accent-secondary);
+    outline: 2px solid var(--blue);
     outline-offset: 2px;
     background: var(--bg-hover);
     box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.2);
@@ -7616,8 +7616,8 @@ input[type="radio"] {
 }
 
 #btn-open-folder:hover {
-    background: rgba(124, 139, 255, 0.12);
-    border-color: rgba(124, 139, 255, 0.28);
+    background: rgba(var(--accent-primary-rgb), 0.12);
+    border-color: rgba(var(--accent-primary-rgb), 0.28);
     color: #fde68a;
 }
 
@@ -7999,13 +7999,13 @@ input[type="radio"] {
     align-items: start;
     padding: 12px;
     border-radius: var(--radius-lg);
-    background: rgba(51, 214, 224, 0.08);
-    border: 1px solid rgba(51, 214, 224, 0.16);
+    background: rgba(var(--accent-secondary-rgb), 0.08);
+    border: 1px solid rgba(var(--accent-secondary-rgb), 0.16);
 }
 
 .health-recommendation.warning {
-    background: rgba(255, 184, 107, 0.09);
-    border-color: rgba(255, 184, 107, 0.22);
+    background: rgba(var(--accent-tertiary-rgb), 0.09);
+    border-color: rgba(var(--accent-tertiary-rgb), 0.22);
 }
 
 .health-rec-dot {
@@ -8245,7 +8245,7 @@ input[type="radio"] {
     box-shadow: var(--shadow-modal);
 }
 .bracket-fighter:focus-visible {
-    outline-color: var(--accent-secondary);
+    outline-color: var(--blue);
 }
 .bracket-fighter img {
     width: 100%;
@@ -8328,7 +8328,7 @@ input[type="radio"] {
     white-space: nowrap;
 }
 .bracket-fighter.is-picked {
-    outline-color: var(--accent-secondary);
+    outline-color: var(--blue);
     box-shadow: 0 0 0 3px rgba(var(--accent-secondary-rgb), 0.55), var(--shadow-modal);
     animation: bracket-pick-pop 240ms cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -8596,7 +8596,7 @@ input[type="radio"] {
 }
 
 .sort-help-trigger:hover {
-    background: rgba(124, 139, 255, 0.3);
+    background: rgba(var(--accent-primary-rgb), 0.3);
     border-color: var(--accent-primary);
     transform: scale(1.1);
 }
@@ -8647,7 +8647,7 @@ input[type="radio"] {
     background: linear-gradient(180deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05));
     border: 1px solid rgba(255,255,255,0.2);
     border-radius: 8px;
-    font-family: 'Orbitron', monospace;
+    font-family: var(--font-display);
     font-size: 16px;
     font-weight: 700;
     color: var(--accent-primary);

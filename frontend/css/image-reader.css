@@ -81,7 +81,7 @@
     width: 100%;
     height: 100%;
     min-height: 280px;
-    border: 2px dashed rgba(124, 139, 255, 0.25);
+    border: 2px dashed rgba(var(--accent-primary-rgb), 0.25);
     border-radius: 14px;
     display: flex;
     flex-direction: column;
@@ -89,18 +89,18 @@
     justify-content: center;
     cursor: pointer;
     transition: all 0.2s;
-    background: linear-gradient(135deg, rgba(51, 214, 224, 0.04), rgba(124, 139, 255, 0.04));
+    background: linear-gradient(135deg, rgba(var(--accent-secondary-rgb), 0.04), rgba(var(--accent-primary-rgb), 0.04));
 }
 
 .reader-drop-zone:hover,
 .reader-drop-zone.drag-over {
-    border-color: rgba(124, 139, 255, 0.5);
-    background: linear-gradient(135deg, rgba(51, 214, 224, 0.08), rgba(124, 139, 255, 0.08));
+    border-color: rgba(var(--accent-primary-rgb), 0.5);
+    background: linear-gradient(135deg, rgba(var(--accent-secondary-rgb), 0.08), rgba(var(--accent-primary-rgb), 0.08));
 }
 
 .reader-drop-zone.paste-armed {
-    border-color: rgba(255, 184, 107, 0.8);
-    box-shadow: 0 0 0 3px rgba(255, 184, 107, 0.18);
+    border-color: rgba(var(--accent-tertiary-rgb), 0.8);
+    box-shadow: 0 0 0 3px rgba(var(--accent-tertiary-rgb), 0.18);
 }
 
 .reader-drop-zone .drop-icon { margin-bottom: 10px; opacity: 0.7; line-height: 1; }
@@ -116,18 +116,18 @@
     gap: 6px;
     padding: 8px 16px;
     border-radius: 10px;
-    border: 1px solid rgba(124, 139, 255, 0.35);
-    background: rgba(124, 139, 255, 0.12);
-    color: #ffb86b;
+    border: 1px solid rgba(var(--accent-primary-rgb), 0.35);
+    background: rgba(var(--accent-primary-rgb), 0.12);
+    color: var(--accent-tertiary);
     font-size: 0.82rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.15s ease;
 }
 .reader-paste-btn:hover {
-    background: rgba(124, 139, 255, 0.22);
-    border-color: rgba(124, 139, 255, 0.6);
-    color: #fcd34d;
+    background: rgba(var(--accent-primary-rgb), 0.22);
+    border-color: rgba(var(--accent-primary-rgb), 0.6);
+    color: var(--warning);
     transform: translateY(-1px);
 }
 .reader-paste-btn:active {
@@ -150,7 +150,7 @@
 
 /* Status */
 .reader-status { text-align: center; padding: 10px; color: var(--text-muted); }
-.reader-status.warning { color: #ffb86b; }
+.reader-status.warning { color: var(--accent-tertiary); }
 .reader-status.error { color: var(--color-error, #ff4444); }
 
 /* Result panel */
@@ -371,8 +371,8 @@
 }
 
 .reader-editor-section {
-    border-color: rgba(124, 139, 255, 0.16);
-    background: linear-gradient(180deg, rgba(124, 139, 255, 0.06), rgba(255, 255, 255, 0.025));
+    border-color: rgba(var(--accent-primary-rgb), 0.16);
+    background: linear-gradient(180deg, rgba(var(--accent-primary-rgb), 0.06), rgba(255, 255, 255, 0.025));
 }
 
 .reader-editor-body {
@@ -445,9 +445,9 @@
     margin: 0;
     padding: 10px 12px;
     border-radius: 10px;
-    background: rgba(124, 139, 255, 0.12);
-    border: 1px solid rgba(124, 139, 255, 0.22);
-    color: #ffb86b;
+    background: rgba(var(--accent-primary-rgb), 0.12);
+    border: 1px solid rgba(var(--accent-primary-rgb), 0.22);
+    color: var(--accent-tertiary);
     font-size: 0.8rem;
     line-height: 1.5;
 }
@@ -618,9 +618,9 @@ a.reader-lora-tag:hover { opacity: 0.8; text-decoration: underline; }
 }
 
 .reader-hash-name { font-size: 0.7rem; color: var(--text-muted); white-space: nowrap; }
-.reader-hash-value { font-size: 0.78rem; font-family: monospace; color: var(--accent-primary, #646cff); text-decoration: none; }
+.reader-hash-value { font-size: 0.78rem; font-family: var(--font-mono); color: var(--accent-primary, #646cff); text-decoration: none; }
 .reader-hash-value:hover { text-decoration: underline; }
-.reader-hash-badge { font-size: 0.6rem; font-family: monospace; color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 1px 3px; border-radius: 3px; margin-left: 3px; }
+.reader-hash-badge { font-size: 0.6rem; font-family: var(--font-mono); color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 1px 3px; border-radius: 3px; margin-left: 3px; }
 
 /* Color distribution */
 .reader-color-histogram {

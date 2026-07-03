@@ -59,7 +59,7 @@
 }
 
 .dataset-tab[aria-selected="true"] .dataset-tab-num {
-    background: var(--accent-primary, #7c8bff);
+    background: var(--accent-primary);
     color: #1f1307;
 }
 
@@ -269,7 +269,7 @@
     padding: 2px 8px;
     border-radius: 999px;
     background: rgba(var(--accent-secondary-rgb, 51, 214, 224), 0.12);
-    color: var(--accent-secondary, #33d6e0);
+    color: var(--accent-secondary);
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.04em;
@@ -313,7 +313,7 @@
     margin-right: 6px;
     border-radius: 999px;
     background: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.20);
-    color: var(--accent-primary, #7c8bff);
+    color: var(--accent-primary);
     font-size: 10px;
     font-weight: 800;
 }
@@ -380,9 +380,9 @@
     align-items: flex-start;
     gap: 8px;
     padding: 8px 10px;
-    border: 1px solid rgba(124, 139, 255, 0.28);
+    border: 1px solid rgba(var(--accent-primary-rgb), 0.28);
     border-radius: 8px;
-    background: rgba(124, 139, 255, 0.10);
+    background: rgba(var(--accent-primary-rgb), 0.10);
     color: var(--text-secondary, #94a3b8);
     font-size: 12px;
     line-height: 1.4;
@@ -407,7 +407,7 @@
     height: 14px;
     flex: 0 0 14px;
     border: 2px solid rgba(255, 255, 255, 0.18);
-    border-top-color: var(--accent-primary, #7c8bff);
+    border-top-color: var(--accent-primary);
     border-radius: 50%;
     animation: dataset-spin 0.72s linear infinite;
 }
@@ -440,7 +440,7 @@
     cursor: pointer;
 }
 .dataset-dropzone.drag-over {
-    border-color: var(--accent-primary, #7c8bff);
+    border-color: var(--accent-primary);
     background: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.08);
 }
 .dataset-dropzone-content {
@@ -569,7 +569,7 @@
     height: 22px;
     margin: -11px 0 0 -11px;
     border: 2px solid rgba(255, 255, 255, 0.22);
-    border-top-color: var(--accent-primary, #7c8bff);
+    border-top-color: var(--accent-primary);
     border-radius: 50%;
     animation: dataset-spin 0.72s linear infinite;
     z-index: 1;
@@ -585,8 +585,8 @@
     border-color: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.55);
 }
 .dataset-import-gallery-grid .import-thumb.multi-selected {
-    border-color: rgba(51, 214, 224, 0.82);
-    box-shadow: 0 0 0 2px rgba(51, 214, 224, 0.38);
+    border-color: rgba(var(--accent-secondary-rgb), 0.82);
+    box-shadow: 0 0 0 2px rgba(var(--accent-secondary-rgb), 0.38);
 }
 .dataset-import-gallery-grid .import-thumb-selected {
     position: absolute;
@@ -598,7 +598,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 4px;
-    background: rgba(51, 214, 224, 0.86);
+    background: rgba(var(--accent-secondary-rgb), 0.86);
     color: #031b1a;
     font-size: 11px;
     font-weight: 900;
@@ -621,7 +621,7 @@
     border-radius: 999px;
     background: rgba(15, 23, 42, 0.82);
     color: var(--text-primary);
-    font: 750 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font: 750 11px/1 var(--font-mono);
     box-shadow: 0 5px 16px rgba(0,0,0,0.24);
     z-index: 2;
 }
@@ -1164,8 +1164,8 @@
 }
 
 .dataset-vocab-tag.state-common {
-    background: rgba(51, 214, 224, 0.18);
-    border-color: rgba(51, 214, 224, 0.45);
+    background: rgba(var(--accent-secondary-rgb), 0.18);
+    border-color: rgba(var(--accent-secondary-rgb), 0.45);
     color: var(--text-primary);
 }
 .dataset-vocab-tag.state-blacklist {
@@ -1180,8 +1180,8 @@
 }
 
 .dataset-vocab-action.active-common {
-    background: rgba(51, 214, 224, 0.22);
-    border-color: rgba(51, 214, 224, 0.50);
+    background: rgba(var(--accent-secondary-rgb), 0.22);
+    border-color: rgba(var(--accent-secondary-rgb), 0.50);
     color: var(--text-primary);
 }
 
@@ -1332,12 +1332,12 @@
     color: var(--text-primary);
 }
 .dataset-confidence-pill.conf-high {
-    border-color: rgba(51, 214, 224, 0.45);
-    background: rgba(51, 214, 224, 0.10);
+    border-color: rgba(var(--accent-secondary-rgb), 0.45);
+    background: rgba(var(--accent-secondary-rgb), 0.10);
 }
 .dataset-confidence-pill.conf-mid {
-    border-color: rgba(124, 139, 255, 0.45);
-    background: rgba(124, 139, 255, 0.10);
+    border-color: rgba(var(--accent-primary-rgb), 0.45);
+    background: rgba(var(--accent-primary-rgb), 0.10);
 }
 .dataset-confidence-pill.conf-low {
     border-color: rgba(239, 68, 68, 0.55);
@@ -1386,7 +1386,7 @@
 .dataset-fullres-btn:hover { opacity: 1; }
 .dataset-fullres-btn.active {
     opacity: 1;
-    outline: 1.5px solid var(--accent-secondary, #33d6e0);
+    outline: 1.5px solid var(--accent-secondary);
 }
 .dataset-editor-image-wrap { position: relative; }
 

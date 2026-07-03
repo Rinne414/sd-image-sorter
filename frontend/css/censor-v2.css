@@ -55,13 +55,14 @@
     min-width: 0 !important;
     height: var(--censor-workspace-height) !important;
     margin-top: 0 !important;
-    background: radial-gradient(circle at 50% 50%, #1a0b2e 0%, #0a0a0f 100%) !important;
+    background: var(--stage, #101218) !important;
     position: relative;
     overflow: hidden !important;
 }
 
-/* Ambient Background Effects */
+/* Ambient Background Effects — retired by the Aurora flat stage (Phase 1) */
 #view-censor .censor-workspace-v2::before {
+    display: none;
     content: '';
     position: absolute;
     box-shadow: 0 0 15px rgba(34, 197, 94, 0.4);
@@ -76,6 +77,7 @@
 }
 
 #view-censor .censor-workspace-v2::after {
+    display: none;
     content: '';
     position: absolute;
     box-shadow: 0 0 15px rgba(34, 197, 94, 0.4);
@@ -118,7 +120,7 @@
 
 /* Sidebar Headers */
 .censor-section-title {
-    font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-display);
     font-size: 14px;
     font-weight: 600;
     color: var(--censor-accent-text);
@@ -240,7 +242,7 @@
 
 .zoom-level {
     color: var(--censor-accent);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 13px;
     font-weight: 600;
     min-width: 48px;
@@ -300,7 +302,7 @@
 }
 
 .queue-thumb-v2.batch-refined:not(.processed) {
-    border-color: #38bdf8;
+    border-color: var(--accent-primary);
     box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
 }
 
@@ -542,7 +544,7 @@
     justify-content: center;
     z-index: 100;
     color: var(--censor-accent);
-    font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-display);
     letter-spacing: 2px;
 }
 
@@ -555,7 +557,7 @@
     align-items: center;
     justify-content: center;
     color: rgba(255, 255, 255, 0.2);
-    font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-display);
     gap: 16px;
     pointer-events: none;
     z-index: 5;
@@ -601,7 +603,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
 }
 
 .status-divider-h {
@@ -660,7 +662,7 @@
 .zoom-level-v2 {
     min-width: 50px;
     text-align: center;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
     font-weight: 600;
     color: var(--censor-accent);
@@ -683,7 +685,7 @@
     color: var(--censor-accent);
     padding: 8px 16px;
     border-radius: 20px;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 14px;
     font-weight: 600;
     pointer-events: none;
@@ -813,7 +815,7 @@
     min-width: 48px;
     text-align: right;
     font-variant-numeric: tabular-nums;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
 }
 
 .censor-side-grow {
@@ -993,7 +995,7 @@
 
 .sidebar-title-v2,
 .properties-title {
-    font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-display);
     font-size: 16px;
     font-weight: 700;
     color: var(--censor-accent-text);
@@ -1264,7 +1266,7 @@
 .btn-v2.btn-detect {
     background: linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(14, 165, 233, 0.15));
     border-color: rgba(6, 182, 212, 0.3);
-    color: #67e8f9;
+    color: var(--accent-secondary);
 }
 
 .btn-v2.btn-detect:hover {
@@ -1487,7 +1489,7 @@
 .queue-manager-count {
     font-size: 12px;
     font-weight: 700;
-    color: var(--accent-secondary, #33d6e0);
+    color: var(--accent-secondary);
     margin-right: auto;
 }
 
@@ -1541,18 +1543,18 @@
 
 .queue-manager-grid-item:hover {
     transform: translateY(-2px);
-    border-color: rgba(124, 139, 255, 0.3);
+    border-color: rgba(var(--accent-primary-rgb), 0.3);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
 }
 
 .queue-manager-grid-item.is-selected {
-    border-color: rgba(124, 139, 255, 0.5);
-    box-shadow: 0 0 0 2px rgba(124, 139, 255, 0.2);
+    border-color: rgba(var(--accent-primary-rgb), 0.5);
+    box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb), 0.2);
 }
 
 .queue-manager-grid-item.is-active {
-    border-color: rgba(51, 214, 224, 0.5);
-    box-shadow: 0 0 0 2px rgba(51, 214, 224, 0.2);
+    border-color: rgba(var(--accent-secondary-rgb), 0.5);
+    box-shadow: 0 0 0 2px rgba(var(--accent-secondary-rgb), 0.2);
 }
 
 .queue-manager-grid-item.is-processed {
@@ -1564,8 +1566,8 @@
 }
 
 .queue-manager-grid-item.drag-over {
-    border-color: rgba(51, 214, 224, 0.8);
-    box-shadow: 0 0 0 3px rgba(51, 214, 224, 0.15);
+    border-color: rgba(var(--accent-secondary-rgb), 0.8);
+    box-shadow: 0 0 0 3px rgba(var(--accent-secondary-rgb), 0.15);
 }
 
 .queue-manager-grid-thumb {
@@ -1587,8 +1589,8 @@
 }
 
 .queue-manager-grid-label[contenteditable="true"] {
-    background: rgba(124, 139, 255, 0.1);
-    outline: 1px solid rgba(124, 139, 255, 0.3);
+    background: rgba(var(--accent-primary-rgb), 0.1);
+    outline: 1px solid rgba(var(--accent-primary-rgb), 0.3);
     border-radius: 4px;
     white-space: normal;
     word-break: break-all;
@@ -1626,8 +1628,8 @@
 }
 
 .queue-manager-grid-badge.is-active {
-    background: #33d6e0;
-    box-shadow: 0 0 6px rgba(51, 214, 224, 0.5);
+    background: var(--accent-secondary);
+    box-shadow: 0 0 6px rgba(var(--accent-secondary-rgb), 0.5);
 }
 
 .queue-manager-empty {

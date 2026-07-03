@@ -195,7 +195,7 @@
 #smart-tag-modal .smart-tag-progress .progress-bar-fill {
     height: 100%;
     width: 0%;
-    background: var(--accent-color, #ff8a00);
+    background: var(--accent-color);
     transition: width 0.3s;
 }
 
@@ -269,7 +269,7 @@
     border: 1px solid rgba(255, 255, 255, 0.28);
     border-radius: 4px;
     background: var(--input-bg, var(--surface-1, #151922));
-    color: var(--accent-primary, #7c8bff);
+    color: var(--accent-primary);
 }
 
 #smart-tag-modal input[type="checkbox"]::before {

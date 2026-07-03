@@ -24,7 +24,10 @@
     <link rel="stylesheet" href="/static/css/tag-power.css">
     <link rel="stylesheet" href="/static/css/tag-stats-modal.css">
     <link rel="stylesheet" href="/static/css/caption-autocomplete.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- tokens.css must stay the LAST stylesheet: it owns the Aurora palette
+         and remaps every legacy token defined by the sheets above. -->
+    <link rel="stylesheet" href="/static/css/tokens.css">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;600;700;900&family=Oswald:wght@500&display=swap" rel="stylesheet">
     <!-- Adaptive UI scaling for large/high-res desktops. Loaded synchronously
          (pre-paint) so the root zoom is set before first render. -->
     <script src="/static/js/ui-scale.js"></script>
