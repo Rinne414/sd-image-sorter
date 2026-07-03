@@ -122,16 +122,16 @@ async function getGalleryScrollState(page: Page) {
   })
 }
 
-async function openSelectionPanelSection(page: Page, sectionName: 'Export' | 'Remove') {
-  await expect(page.locator('#selection-actions')).toBeVisible()
-  const disclosure = page
-    .locator('#selection-actions details.selection-panel-disclosure')
-    .filter({ has: page.locator('summary', { hasText: new RegExp(`^${sectionName}$`) }) })
-  await expect(disclosure).toHaveCount(1)
-  await disclosure.evaluate((element: HTMLDetailsElement) => {
-    element.open = true
-  })
-  await expect(disclosure).toHaveJSProperty('open', true)
+async function openSelectionPanelSection(page: Page, _sectionName: 'Export' | 'Remove') {
+  // Aurora Phase 3 (#25a): Export/Remove actions moved from the left-panel
+  // disclosures into the bottom action bar's More▾ menu. The bar (and hence
+  // the menu) only exists once at least one image is selected.
+  await expect(page.locator('#gallery-action-bar')).toBeVisible()
+  const menu = page.locator('#gallery-action-more-menu')
+  if (await menu.isHidden()) {
+    await page.locator('#btn-gallery-action-more').click()
+  }
+  await expect(menu).toBeVisible()
 }
 
 async function getVisibleGalleryRects(page: Page, count = 4) {
@@ -2642,33 +2642,34 @@ test.describe('Smoke Tests', () => {
     await page.waitForLoadState('networkidle')
 
     const selectionFab = page.locator('#selection-actions')
+    const actionBar = page.locator('#gallery-action-bar')
     await expect(selectionFab).toBeHidden()
+    await expect(actionBar).toBeHidden()
 
     await page.locator('#btn-toggle-select').click()
     await expect(selectionFab).toBeVisible()
     await expect(page.locator('#selection-scope-summary')).toContainText('Selected manually from Gallery')
-    await expect(page.locator('#btn-move-selected')).toBeVisible()
-    await expect(page.locator('#btn-copy-selected')).toBeVisible()
-    await expect(page.locator('#btn-send-to-censor')).toBeVisible()
-    await openSelectionPanelSection(page, 'Export')
-    await openSelectionPanelSection(page, 'Remove')
-    await expect(page.locator('#btn-export-selected')).toBeVisible()
-    await expect(page.locator('#btn-delete-selected-files')).toBeVisible()
-    await expect(page.locator('#btn-export-selected')).toBeDisabled()
-    await expect(page.locator('#btn-send-to-censor')).toBeDisabled()
-    await expect(page.locator('#btn-delete-selected-files')).toBeDisabled()
+    // Aurora Phase 3: with zero images selected the batch actions are not
+    // just disabled — the whole action bar stays hidden.
+    await expect(actionBar).toBeHidden()
 
     const firstGalleryItem = page.locator('#gallery-grid .gallery-item').first()
     await expect(firstGalleryItem).toBeVisible()
     await firstGalleryItem.click()
 
     await expect(selectionFab).toBeVisible()
-    await expect(page.locator('#btn-export-selected')).toBeEnabled()
+    await expect(actionBar).toBeVisible()
+    await expect(page.locator('#btn-move-selected')).toBeEnabled()
     await expect(page.locator('#btn-send-to-censor')).toBeEnabled()
+    await openSelectionPanelSection(page, 'Export')
+    await expect(page.locator('#btn-export-selected')).toBeVisible()
+    await expect(page.locator('#btn-export-selected')).toBeEnabled()
+    await expect(page.locator('#btn-copy-selected')).toBeEnabled()
     await expect(page.locator('#btn-delete-selected-files')).toBeEnabled()
 
     await page.locator('#btn-toggle-select').click()
     await expect(selectionFab).toBeHidden()
+    await expect(actionBar).toBeHidden()
   })
 
   test('desktop batch and metadata windows keep primary actions reachable at 1366x768', async ({ page }) => {
@@ -2714,12 +2715,9 @@ test.describe('Smoke Tests', () => {
     await page.locator('#btn-toggle-select').click()
     await page.locator('#gallery-grid .gallery-item[data-id="181"]').click()
     await page.locator('#gallery-grid .gallery-item[data-id="182"]').click()
-    await page.locator('#selection-export-disclosure').evaluate((element: HTMLDetailsElement) => {
-      element.open = true
-    })
-    await page.locator('#selection-danger-disclosure').evaluate((element: HTMLDetailsElement) => {
-      element.open = true
-    })
+    // (Aurora Phase 3: the export/danger disclosures left the sidebar — batch
+    // actions live in the bottom action bar now, so the sidebar no longer
+    // grows when actions are revealed.)
 
     const toggleBox = await page.locator('#btn-toggle-select').boundingBox()
     const sidebarBox = await page.locator('.filter-sidebar').boundingBox()
@@ -3258,15 +3256,28 @@ test.describe('Smoke Tests', () => {
     await page.waitForLoadState('networkidle')
 
     await page.locator('#btn-toggle-select').click()
+    // Aurora Phase 3: with nothing selected the action bar (and its More menu
+    // housing the danger actions) does not exist at all.
+    await expect(page.locator('#gallery-action-bar')).toBeHidden()
+
+    await page.locator('#gallery-grid .gallery-item[data-id="301"]').click()
     await openSelectionPanelSection(page, 'Remove')
     await expect(page.locator('#btn-remove-selected-gallery')).toBeVisible()
     await expect(page.locator('#btn-delete-selected-files')).toBeVisible()
-    await expect(page.locator('#btn-remove-selected-gallery')).toBeDisabled()
-    await expect(page.locator('#btn-delete-selected-files')).toBeDisabled()
-
-    await page.locator('#gallery-grid .gallery-item[data-id="301"]').click()
     await expect(page.locator('#btn-remove-selected-gallery')).toBeEnabled()
     await expect(page.locator('#btn-delete-selected-files')).toBeEnabled()
+    // The danger pair sits behind the menu's divider, separated from the
+    // everyday actions (same separation intent as the old Remove disclosure).
+    await expect(page.locator('#gallery-action-more-menu .gallery-action-more-divider')).toHaveCount(1)
+    expect(await page.evaluate(() => {
+      const menu = document.getElementById('gallery-action-more-menu')
+      if (!menu) return null
+      const children = Array.from(menu.children)
+      const dividerIndex = children.findIndex((el) => el.classList.contains('gallery-action-more-divider'))
+      const removeIndex = children.findIndex((el) => el.id === 'btn-remove-selected-gallery')
+      const deleteIndex = children.findIndex((el) => el.id === 'btn-delete-selected-files')
+      return dividerIndex >= 0 && removeIndex > dividerIndex && deleteIndex > dividerIndex
+    })).toBe(true)
     await page.locator('#btn-remove-selected-gallery').click()
     await expect(page.locator('#confirm-modal.visible')).toBeVisible()
     await expect(page.locator('#confirm-message')).toContainText('Files stay on disk')
@@ -3435,6 +3446,8 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#gallery-grid .gallery-item[data-id="401"]')).toBeVisible()
     await page.locator('#gallery-grid .gallery-item[data-id="401"]').click()
     await page.locator('#gallery-grid .gallery-item[data-id="402"]').click()
+    // Copy moved into the action bar's More menu (Aurora Phase 3).
+    await openSelectionPanelSection(page, 'Export')
     await expect(page.locator('#btn-copy-selected')).toBeEnabled()
     await page.locator('#btn-copy-selected').click()
     await expect(page.locator('#input-modal.visible')).toBeVisible()

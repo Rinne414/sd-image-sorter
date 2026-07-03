@@ -152,6 +152,12 @@
             var elements = document.querySelectorAll('[data-i18n]');
             for (var i = 0; i < elements.length; i++) {
                 var el = elements[i];
+                // Honor the dynamic-text lock (same contract as ui-refresh's
+                // _setButton): a runtime label like "Apply · ~N images" must
+                // not be reset to its static key while the lock is held.
+                if (el.dataset && el.dataset.i18nLocked === '1') {
+                    continue;
+                }
                 var key = el.getAttribute('data-i18n');
                 if (key) {
                     el.textContent = this.t(key);

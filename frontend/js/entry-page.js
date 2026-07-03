@@ -345,6 +345,13 @@
         '#onboarding-overlay:not([hidden])',
         '.guide-overlay.visible',
         '.update-popup.visible',
+        // Open dropdowns and gallery selection mode own ESC too. Their own
+        // handlers close/clear on the same keypress; checking the DOM here is
+        // registration-order safe where relying on stopPropagation between
+        // same-node capture listeners is not.
+        '#gallery-action-more-menu:not([hidden])',
+        '#nav-tools-menu:not([hidden])',
+        '#btn-toggle-select[data-state="selecting"]',
     ].join(', ');
 
     function editingTarget(target) {

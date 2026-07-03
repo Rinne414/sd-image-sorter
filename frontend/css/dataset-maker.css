@@ -321,6 +321,32 @@
     }
 }
 
+/* Aurora Phase 3: the left nav rail claims 216px of viewport width, so at
+   laptop widths (1280-1439 viewport ≈ 1060-1220 content) the base grids'
+   fixed middle-column minimums (520-720px) overflow the view. Let the middle
+   column shrink to fill whatever remains; side panes keep usable floors
+   (right pane ≥ 280px). Starts above the 1100px single-column breakpoint so
+   it never fights that rule. */
+@media (min-width: 1101px) and (max-width: 1439px) {
+    #view-dataset .dataset-workbench {
+        grid-template-columns: clamp(250px, 17vw, 320px) minmax(0, 1.65fr) clamp(280px, 19vw, 340px);
+    }
+    #view-dataset .dataset-maker[data-active-tab="import"] .dataset-workbench {
+        grid-template-columns: clamp(300px, 21vw, 360px) minmax(0, 1fr) clamp(280px, 18vw, 320px);
+    }
+    #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-workbench {
+        grid-template-columns: clamp(240px, 17vw, 320px) minmax(0, 1.85fr) clamp(280px, 19vw, 340px);
+    }
+    #view-dataset .dataset-maker[data-active-tab="export"] .dataset-workbench {
+        grid-template-columns: clamp(240px, 16vw, 300px) minmax(0, 0.95fr) minmax(340px, 1.1fr);
+    }
+    /* The editor pane's inner image|controls grid must shrink with its pane
+       (base minimums 280+300 overflow the squeezed middle column). */
+    #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-pane {
+        grid-template-columns: minmax(220px, 1.15fr) minmax(240px, 1fr);
+    }
+}
+
 @media (min-width: 1600px) {
     #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-workbench {
         grid-template-columns: clamp(300px, 17vw, 380px) minmax(920px, 2fr) clamp(300px, 18vw, 380px);

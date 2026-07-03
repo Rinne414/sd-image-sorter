@@ -134,6 +134,11 @@ Retrieve images with filters and cursor pagination.
 | `brightness_distribution` | string | - | `left_heavy`, `right_heavy`, `middle_heavy`, `edge_heavy`, `balanced`; requires color analysis data |
 | `folder` | string | - | v3.3.2: absolute directory path; restricts results to that folder **and all subfolders** (recursive, case-insensitive). Forward- or back-slashes accepted. Composes with every other filter. |
 | `has_metadata` | bool | - | v3.3.2: tri-state "has SD generation parameters" filter. Omit for all images; `true` keeps only images with a known generator **or** a non-empty prompt; `false` keeps only images with neither (e.g. plain PNGs). Distinct from `metadata_status` (parse-pipeline state). Composes with every other filter. |
+| `no_caption` | bool | - | v3.5.0: `true` keeps only images with no AI caption and no NL caption (both empty/NULL) — the "still needs captioning" workflow chip. |
+| `aesthetic_unscored` | bool | - | v3.5.0: `true` keeps only images with no aesthetic score yet (`aesthetic_score IS NULL`); takes precedence over `min_aesthetic`/`max_aesthetic` when set. Backs the filter modal's 未评分 tier. |
+| `min_saturation` | float | - | v3.5.0: minimum average saturation, `0..255`; requires color analysis data |
+| `max_saturation` | float | - | v3.5.0: maximum average saturation, `0..255`; requires color analysis data |
+| `seed` | int | - | v3.5.0: exact generation seed match (extracted from metadata). Powers the toolbar `seed:` search key. |
 
 Example response:
 
@@ -159,6 +164,17 @@ Example response:
   "has_more": true,
   "total": 500
 }
+```
+
+#### GET /api/images/count
+Return the exact number of images matching the same filter parameters as `GET /api/images` (v3.5.0, Aurora Phase 3). Powers the filter modal's live "应用筛选 · 预计 N 张" Apply preview.
+
+Accepts every filter parameter from the table above (plus the include/exclude families); sort and pagination parameters are irrelevant to a count and are not accepted. Unlike the `total` field on `GET /api/images` — which can return a `-1` skip sentinel on the cursor path for very large libraries — this endpoint always runs the count and returns a real total.
+
+Example response:
+
+```json
+{ "total": 4213 }
 ```
 
 #### GET /api/folders
@@ -218,6 +234,16 @@ Serve a thumbnail for the image.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `size` | int | 256 | Max dimension in pixels (1-4096) |
+
+#### GET /api/image-preview-by-path
+Serve a WebP thumbnail for an image file addressed by absolute path (v3.5.0, Roadmap-C missing-file repair). Used by the repair-review UI to preview a found-but-unlinked candidate file that the id-based thumbnail endpoint cannot reach.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | string | required | Absolute path to the image file |
+| `size` | int | 256 | Max dimension in pixels (1-1024) |
+
+The path is validated before any read: directory traversal (`..`) is rejected, the file must exist, and it must be an allowed image type. Returns `404` for an invalid, missing, or non-image path.
 
 #### GET /api/thumbnail-cache/stats
 Get thumbnail cache statistics, including `max_size_mb`, `max_size_bytes`, and whether the persistent thumbnail cache limit is enabled.
@@ -465,6 +491,49 @@ Response includes `status`, `step`, `current`, `processed`, `total`, `total_fina
 #### POST /api/images/reconnect-missing/cancel
 Request cancellation of the current missing-file reconnect search. The task stops between files and returns the latest progress snapshot.
 
+#### GET /api/images/repair-candidates
+List ambiguous missing-file matches awaiting review (v3.5.0, Roadmap-C). During a reconnect run, a discovered file that matches **several** missing library rows by name+size is never auto-linked — the group is persisted as a *pending* review (migration 021, `reconnect_reviews`) and the rows keep their old paths. Each new run replaces the previous run's pending snapshot; resolved history is pruned to the newest 500 rows.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | int | 50 | Page size (1-500) |
+| `offset` | int | 0 | Pagination offset |
+| `status` | string | `pending` | `pending`, `resolved`, `conflict`, or `all` |
+
+Each item carries the review row plus candidates enriched from the live images table (`image_id`, current `path`, `file_size`, `source_mtime_ns`, `still_missing`) and `found_exists` for the discovered file. Candidate ids deleted since the run are omitted.
+
+Example response:
+
+```json
+{
+  "total": 1,
+  "items": [
+    {
+      "review_id": 12,
+      "filename": "same.png",
+      "found_path": "D:/new/same.png",
+      "found_exists": true,
+      "candidate_count": 2,
+      "run_started_at": 1717430000.0,
+      "status": "pending",
+      "resolution": null,
+      "candidates": [
+        { "image_id": 3, "path": "D:/old/same.png", "file_size": 2048, "source_mtime_ns": 1700000000000000000, "still_missing": true }
+      ]
+    }
+  ]
+}
+```
+
+#### POST /api/images/repair-confirm
+Resolve one pending ambiguous-match review (v3.5.0, Roadmap-C). Body: `{ "review_id": N, "action": "pick" | "merge" | "skip", "chosen_image_id": N }` (`chosen_image_id` required for pick/merge, ignored for skip).
+
+- **pick** — relink `chosen_image_id` to the review's found file; other candidates untouched.
+- **merge** — relink `chosen_image_id` **and delete** the other still-existing candidate rows (returned as `deleted_ids`).
+- **skip** — record the decision; touch no image rows.
+
+Returns `404` for an unknown review and `409` when a reconnect run is active, the review is already resolved, the found file no longer exists, or the found path is already indexed as a different row (the review is then marked `conflict` — a row is never silently duplicated).
+
 #### POST /api/image-metadata/save-edited
 Save an image copy with edited metadata fields.
 
@@ -529,6 +598,9 @@ The response now includes truthful runtime fields so the UI can distinguish targ
 - `memory_pressure_warning`
 
 **v3.4.2:** the progress snapshot additionally carries `pipeline_queue`: `{"total_queued": N, "queued": [{"queue_id", "kind", "position", "enqueued_at"}], "last_start_error"}` so pollers can render "Queued #N" before the job starts. The same field appears on the Smart Tag and VLM batch progress endpoints.
+
+#### GET /api/tags/pipeline-queue
+Read-only snapshot of the shared AI-job FIFO queue across all kinds — gallery tagging / smart-tag / VLM / aesthetic (v3.5.0, Aurora Phase 3). Returns the same shape as the `pipeline_queue` field above, standalone: `{"total_queued": N, "queued": [{"queue_id", "kind", "position", "enqueued_at"}], "last_start_error"}`. Powers the gallery action bar's live AI-queue indicator without polling a job-specific progress endpoint. No side effects.
 
 #### POST /api/tag/reset
 Reset stuck tagging task.

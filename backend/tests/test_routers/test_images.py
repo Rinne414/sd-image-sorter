@@ -2455,3 +2455,255 @@ class TestBulkJobEndpoints:
     def test_cancel_unknown_bulk_job_returns_404(self, test_client, test_db):
         response = test_client.post("/api/bulk-jobs/does-not-exist/cancel")
         assert response.status_code == 404
+
+
+def _set_image_columns(db, image_id, **cols):
+    """Directly set columns (ai_caption/nl_caption/aesthetic_score/color_saturation)
+    that add_image does not expose, mirroring the direct-SQL pattern in test_database.py."""
+    if not cols:
+        return
+    assignments = ", ".join(f"{key} = ?" for key in cols)
+    with db.get_db() as conn:
+        conn.execute(
+            f"UPDATE images SET {assignments} WHERE id = ?",
+            (*cols.values(), image_id),
+        )
+
+
+def _seed_meta(seed=None, noise_seed=None, extra=None):
+    """Build a realistic compact metadata_json blob with the parsed seed path."""
+    gen_params = {}
+    if seed is not None:
+        gen_params["seed"] = seed
+    if noise_seed is not None:
+        gen_params["noise_seed"] = noise_seed
+    if extra:
+        gen_params.update(extra)
+    return json.dumps({
+        "_compact": {"version": 1},
+        "_parsed": {"version": 2, "generation_params": gen_params},
+    })
+
+
+class TestAuroraPhase3Filters:
+    """Aurora Phase 3 gallery filters: no_caption, aesthetic_unscored,
+    min/max_saturation, seed, plus the /api/images/count preview endpoint and
+    selection-token composition."""
+
+    def _add(self, db, filename, **kwargs):
+        return db.add_image(
+            path=f"/lib/{filename}",
+            filename=filename,
+            generator="comfyui",
+            metadata_json=kwargs.pop("metadata_json", "{}"),
+            **kwargs,
+        )
+
+    # ---- no_caption ---------------------------------------------------
+    def test_no_caption_filters_to_uncaptioned(self, test_db):
+        ai_only = self._add(test_db, "ai.png")
+        _set_image_columns(test_db, ai_only, ai_caption="a cat sitting")
+        nl_only = self._add(test_db, "nl.png")
+        _set_image_columns(test_db, nl_only, nl_caption="natural language caption")
+        self._add(test_db, "blank.png")  # both NULL -> uncaptioned
+
+        assert test_db.get_filtered_image_count(no_caption=True) == 1
+        page = test_db.get_images_paginated(no_caption=True, limit=50)
+        assert [i["filename"] for i in page["images"]] == ["blank.png"]
+        assert page["total"] == 1
+
+    def test_no_caption_treats_empty_string_as_uncaptioned(self, test_db):
+        blank = self._add(test_db, "empty.png")
+        _set_image_columns(test_db, blank, ai_caption="", nl_caption="")
+        assert test_db.get_filtered_image_count(no_caption=True) == 1
+
+    def test_no_caption_none_is_noop(self, test_db):
+        self._add(test_db, "x.png")
+        captioned = self._add(test_db, "y.png")
+        _set_image_columns(test_db, captioned, ai_caption="hi")
+        assert test_db.get_filtered_image_count(no_caption=None) == 2
+
+    # ---- aesthetic_unscored ------------------------------------------
+    def test_aesthetic_unscored_matches_null_only(self, test_db):
+        scored = self._add(test_db, "scored.png")
+        _set_image_columns(test_db, scored, aesthetic_score=7.5)
+        self._add(test_db, "unscored.png")  # NULL
+
+        assert test_db.get_filtered_image_count(aesthetic_unscored=True) == 1
+        page = test_db.get_images_paginated(aesthetic_unscored=True, limit=50)
+        assert [i["filename"] for i in page["images"]] == ["unscored.png"]
+
+    def test_aesthetic_unscored_takes_precedence_over_range(self, test_db):
+        scored = self._add(test_db, "s.png")
+        _set_image_columns(test_db, scored, aesthetic_score=8.0)
+        self._add(test_db, "u.png")  # NULL score
+
+        # A min/max range alone would drop the unscored row; unscored=True wins
+        # and ignores the range entirely.
+        assert test_db.get_filtered_image_count(
+            aesthetic_unscored=True, min_aesthetic=5.0, max_aesthetic=9.0
+        ) == 1
+        page = test_db.get_images_paginated(
+            aesthetic_unscored=True, min_aesthetic=5.0, max_aesthetic=9.0, limit=50
+        )
+        assert [i["filename"] for i in page["images"]] == ["u.png"]
+
+    def test_aesthetic_range_still_works_without_unscored(self, test_db):
+        low = self._add(test_db, "low.png"); _set_image_columns(test_db, low, aesthetic_score=2.0)
+        high = self._add(test_db, "high.png"); _set_image_columns(test_db, high, aesthetic_score=8.0)
+        self._add(test_db, "none.png")  # NULL excluded by a numeric bound
+        assert test_db.get_filtered_image_count(min_aesthetic=5.0) == 1
+
+    # ---- saturation ---------------------------------------------------
+    def test_saturation_range(self, test_db):
+        lo = self._add(test_db, "lo.png"); _set_image_columns(test_db, lo, color_saturation=10.0)
+        mid = self._add(test_db, "mid.png"); _set_image_columns(test_db, mid, color_saturation=50.0)
+        hi = self._add(test_db, "hi.png"); _set_image_columns(test_db, hi, color_saturation=200.0)
+        self._add(test_db, "null.png")  # NULL saturation
+
+        assert test_db.get_filtered_image_count(min_saturation=40, max_saturation=100) == 1
+        page = test_db.get_images_paginated(min_saturation=40, max_saturation=100, limit=50)
+        assert [i["filename"] for i in page["images"]] == ["mid.png"]
+
+    def test_saturation_excludes_unanalyzed_rows(self, test_db):
+        self._add(test_db, "n1.png")  # NULL
+        analyzed = self._add(test_db, "a1.png")
+        _set_image_columns(test_db, analyzed, color_saturation=5.0)
+        # min_saturation=0 still requires a non-null value, so the NULL row is out.
+        assert test_db.get_filtered_image_count(min_saturation=0) == 1
+
+    # ---- seed ---------------------------------------------------------
+    def test_seed_matches_webui_and_nai_shapes(self, test_db):
+        webui = self._add(test_db, "webui.png",
+                          metadata_json=_seed_meta(seed=987654321, extra={"steps": 30}))
+        self._add(test_db, "nai.png", metadata_json=_seed_meta(seed=111222333))
+
+        assert test_db.get_filtered_image_count(seed=987654321) == 1
+        page = test_db.get_images_paginated(seed=987654321, limit=50)
+        assert [i["filename"] for i in page["images"]] == ["webui.png"]
+        assert test_db.get_filtered_image_count(seed=111222333) == 1
+
+    def test_seed_matches_comfyui_noise_seed(self, test_db):
+        self._add(test_db, "comfy.png", metadata_json=_seed_meta(noise_seed=424242))
+        assert test_db.get_filtered_image_count(seed=424242) == 1
+        page = test_db.get_images_paginated(seed=424242, limit=50)
+        assert [i["filename"] for i in page["images"]] == ["comfy.png"]
+
+    def test_seed_does_not_crash_on_invalid_or_empty_metadata(self, test_db):
+        self._add(test_db, "bad.png", metadata_json="not json at all")
+        self._add(test_db, "blank.png", metadata_json="")
+        self._add(test_db, "good.png", metadata_json=_seed_meta(seed=555))
+        # Must not raise on malformed rows, and only the good row matches.
+        assert test_db.get_filtered_image_count(seed=555) == 1
+        page = test_db.get_images_paginated(seed=555, limit=50)
+        assert [i["filename"] for i in page["images"]] == ["good.png"]
+
+    def test_seed_no_match_returns_zero(self, test_db):
+        self._add(test_db, "s.png", metadata_json=_seed_meta(seed=1))
+        assert test_db.get_filtered_image_count(seed=999999) == 0
+
+    # ---- GET /api/images endpoint acceptance --------------------------
+    @pytest.mark.parametrize("query", [
+        "no_caption=true",
+        "aesthetic_unscored=true",
+        "min_saturation=10&max_saturation=200",
+        "seed=12345",
+    ])
+    def test_get_images_endpoint_accepts_new_filters(self, test_client, query):
+        resp = test_client.get(f"/api/images?{query}&limit=5")
+        assert resp.status_code == 200, resp.text
+
+    def test_get_images_endpoint_seed_filters_result(self, test_client, tmp_path):
+        # The gallery listing drops rows whose files are missing on disk, so
+        # these must be real files (unlike the db-layer / count / selection paths).
+        db = test_client.test_db
+        keep_path = tmp_path / "keep.png"
+        drop_path = tmp_path / "drop.png"
+        Image.new("RGB", (16, 16), "white").save(keep_path)
+        Image.new("RGB", (16, 16), "white").save(drop_path)
+        keep = db.add_image(path=str(keep_path), filename="keep.png",
+                            metadata_json=_seed_meta(seed=314159))
+        db.add_image(path=str(drop_path), filename="drop.png",
+                     metadata_json=_seed_meta(seed=271828))
+        resp = test_client.get("/api/images?seed=314159&limit=50")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert [i["id"] for i in data["images"]] == [keep]
+
+    # ---- /api/images/count -------------------------------------------
+    def test_count_endpoint_exact_totals_with_filters(self, test_client):
+        db = test_client.test_db
+        db.add_image(path="/lib/c1.png", filename="c1.png", metadata_json="{}")
+        db.add_image(path="/lib/c2.png", filename="c2.png", metadata_json="{}")
+        captioned = db.add_image(path="/lib/c3.png", filename="c3.png", metadata_json="{}")
+        _set_image_columns(db, captioned, ai_caption="captioned")
+
+        assert test_client.get("/api/images/count").json()["total"] == 3
+        assert test_client.get("/api/images/count?no_caption=true").json()["total"] == 2
+
+    def test_count_endpoint_always_counts_no_sentinel(self, test_client):
+        db = test_client.test_db
+        for i in range(3):
+            db.add_image(path=f"/lib/s{i}.png", filename=f"s{i}.png", metadata_json="{}")
+        total = test_client.get("/api/images/count").json()["total"]
+        assert total == 3  # never the -1 skip sentinel
+
+    def test_count_route_not_shadowed_by_image_id(self, test_client):
+        # /api/images/count must resolve to the count endpoint, not be captured
+        # by GET /api/images/{image_id} (which would 422 on the non-int "count").
+        resp = test_client.get("/api/images/count")
+        assert resp.status_code == 200
+        assert "total" in resp.json()
+
+    def test_count_seed_filter_matches_images_endpoint(self, test_client):
+        db = test_client.test_db
+        db.add_image(path="/lib/x.png", filename="x.png", metadata_json=_seed_meta(seed=42))
+        db.add_image(path="/lib/y.png", filename="y.png", metadata_json=_seed_meta(seed=7))
+        assert test_client.get("/api/images/count?seed=42").json()["total"] == 1
+
+    # ---- selection-token composition ----------------------------------
+    def test_new_filters_compose_with_selection_token(self, test_client):
+        db = test_client.test_db
+        seeded = db.add_image(path="/lib/seeded.png", filename="seeded.png",
+                              metadata_json=_seed_meta(seed=314159))
+        db.add_image(path="/lib/other.png", filename="other.png",
+                     metadata_json=_seed_meta(seed=271828))
+
+        token_resp = test_client.post("/api/images/selection-token", json={"seed": 314159})
+        assert token_resp.status_code == 200
+        token_data = token_resp.json()
+        assert token_data["total_estimate"] == 1
+
+        chunk = test_client.get(
+            f"/api/images/selection-chunk?selection_token={token_data['selection_token']}"
+        ).json()
+        assert chunk["image_ids"] == [seeded]
+
+    def test_new_filters_compose_with_selection_ids(self, test_client):
+        db = test_client.test_db
+        uncaptioned = db.add_image(path="/lib/u.png", filename="u.png", metadata_json="{}")
+        captioned = db.add_image(path="/lib/c.png", filename="c.png", metadata_json="{}")
+        _set_image_columns(db, captioned, nl_caption="has caption")
+
+        resp = test_client.post("/api/images/selection-ids", json={"noCaption": True})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["image_ids"] == [uncaptioned]
+
+
+class TestPipelineQueueEndpoint:
+    """GET /api/tags/pipeline-queue read-only snapshot."""
+
+    def test_returns_snapshot_shape(self, test_client):
+        resp = test_client.get("/api/tags/pipeline-queue")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert set(data.keys()) >= {"total_queued", "queued", "last_start_error"}
+        assert isinstance(data["total_queued"], int)
+        assert isinstance(data["queued"], list)
+
+    def test_idle_queue_is_empty(self, test_client):
+        data = test_client.get("/api/tags/pipeline-queue").json()
+        assert data["total_queued"] == 0
+        assert data["queued"] == []

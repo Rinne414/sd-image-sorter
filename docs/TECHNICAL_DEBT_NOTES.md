@@ -687,7 +687,8 @@ Quality bar:
 
 ### Debt-14: Missing-file repair has no ambiguous/conflict review UI yet
 
-- Status: open — owner decision 2026-07-03: fold into the Aurora Phase 3 Gallery rebuild (`#25a`) instead of a standalone session, so the review modal lands on the new Gallery UI once instead of being built twice.
+- Status: resolved (2026-07-04, Aurora Phase 3 Slice 1 / Roadmap-C). Ambiguous name+size groups are now persisted per reconnect run (`reconnect_reviews` table, migration 021, capped per run with pruned resolved history) instead of being dropped from memory. `GET /api/images/repair-candidates` lists them paginated with live-enriched candidate rows (current path / size / still-missing) plus `found_exists`; `POST /api/images/repair-confirm` resolves one review as pick (relink chosen row) / merge (relink + delete other candidates, behind a confirm dialog) / skip — refusing with 409 while a run is active, when already resolved, when the found file vanished, or when the found path is already indexed (review flips to `conflict`, nothing is duplicated). `GET /api/image-preview-by-path` serves traversal-validated thumbnails for not-yet-indexed found files. Frontend: `frontend/js/modules/repair-review.js` modal (radio candidate cards, preview, pager) wired from the reconnect result panel's 需要你确认 group. The locked invariant stands: no image row changes until explicit user confirmation. Coverage: `backend/tests/test_repair_review.py` (20 tests: run persistence, pagination/enrichment, pick/merge/skip, conflict, all rejection paths, endpoint routing) + e2e `aurora-phase3-gallery.spec.ts` repair-review flow.
+- Original decision trail: owner 2026-07-03 folded this into the Aurora Phase 3 Gallery rebuild (`#25a`) so the review modal lands on the new Gallery UI once instead of being built twice.
 - Type: UX / data safety / large-library workflow debt
 - Impact: medium
 - Risk if ignored:
@@ -1046,11 +1047,11 @@ These are deferred from the v3.2.1 stability sweep and tracked for the next rele
 - Target: stable search latency up to 200k images.
 - Touches: `backend/similarity.py`, `backend/services/similarity_service.py`, `backend/services/derived_state_service.py`, `backend/requirements*.txt`, `backend/migrations/` (one new migration), plus a build worker.
 
-### Roadmap-C: Missing-file repair review UI (Debt-14)
-- Paginated `/api/images/repair-candidates` endpoint returning ambiguous matches with `old_path` + N candidate `new_paths` + side-by-side metadata.
-- `POST /api/images/repair-confirm` to commit explicit per-row choice (pick / merge / drop).
-- New modal in `frontend/js/app.js` (or a dedicated `frontend/js/repair-review.js`) listing ambiguous rows with image preview.
-- Wires into the existing repair-missing flow as the second-stage step when the safe auto-reconnect refuses.
+### Roadmap-C: Missing-file repair review UI (Debt-14) — SHIPPED (2026-07-04, Aurora Phase 3 Slice 1; see Debt-14 status)
+- Paginated `/api/images/repair-candidates` endpoint returning ambiguous matches with `old_path` + N candidate `new_paths` + side-by-side metadata. ✅
+- `POST /api/images/repair-confirm` to commit explicit per-row choice (pick / merge / skip). ✅ (merge deletes the other candidates; conflict-safe)
+- Dedicated `frontend/js/modules/repair-review.js` modal listing ambiguous rows with image preview (`GET /api/image-preview-by-path`). ✅
+- Wired into the existing repair-missing flow as the second-stage step from the reconnect result panel. ✅ Persistence went further than sketched: reviews survive restarts via migration 021 (`reconnect_reviews`).
 
 ### Roadmap-D: Per-item exclude on tag / prompt / lora / checkpoint filters (Debt-27) — SHIPPED (see Debt-27 status; verified 2026-07-03)
 - Add UI cycle on each filter chip: click once = include (default), click again = exclude (visual: red strikethrough or 🚫), click again = remove.

@@ -32,6 +32,15 @@
     <!-- Adaptive UI scaling for large/high-res desktops. Loaded synchronously
          (pre-paint) so the root zoom is set before first render. -->
     <script src="/static/js/ui-scale.js"></script>
+    <!-- Nav rail collapsed state must land before first paint or the rail
+         visibly snaps from 216px to 46px on every load. -->
+    <script>
+        try {
+            if (localStorage.getItem('sd-sorter:rail-collapsed') === '1') {
+                document.documentElement.classList.add('rail-collapsed');
+            }
+        } catch (e) { /* storage blocked: default to expanded */ }
+    </script>
     <style>
         /* Folder Browser Widget */
         .folder-path-row { display: flex; gap: 8px; align-items: stretch; }
@@ -250,7 +259,7 @@
     <div id="app" role="application" aria-label="SD Image Sorter - Image Management Tool">
         <!-- Navigation -->
         <nav class="nav-bar" role="navigation" aria-label="Main navigation">
-            <div class="nav-brand">
+            <div class="nav-brand" id="nav-brand" role="button" tabindex="0" title="Back to the mission entry page" aria-label="Back to the mission entry page" data-i18n-title="rail.backToEntry" data-i18n-aria="rail.backToEntry">
                 <span class="brand-icon" aria-hidden="true">🎨</span>
                 <span class="brand-text" data-i18n="brand.name">SD Image Sorter</span>
                 <span class="brand-version" id="brand-version" aria-label="Application version"></span>
@@ -464,6 +473,15 @@
                     <span data-i18n="action.tag">Tag Images</span>
                 </button>
             </div>
+            <!-- Aurora Phase 3: rail collapse toggle (46px icon strip when collapsed).
+                 Hidden by the legacy top-bar CSS below 769px. -->
+            <button id="btn-rail-collapse" class="btn btn-ghost btn-small rail-collapse-btn" type="button" aria-pressed="false"
+                    title="Collapse navigation" aria-label="Collapse navigation"
+                    data-i18n-title="rail.collapseTooltip" data-i18n-aria="rail.collapseTooltip">
+                <span class="rail-collapse-icon-collapse" aria-hidden="true">◀</span>
+                <span class="rail-collapse-icon-expand" aria-hidden="true">▶</span>
+                <span data-i18n="rail.collapse">Collapse</span>
+            </button>
         </nav>
 
         <!-- Background Tagging Progress Bar (visible when tagging runs in background) -->
@@ -669,46 +687,9 @@
                             </div>
                             <span class="selection-panel-helper" data-i18n="selection.selectAllFilteredHelp">Uses the current Gallery filters, including images not scrolled into view.</span>
                         </div>
-                        <div class="selection-panel-section">
-                            <span class="selection-panel-section-title" data-i18n="selection.commonSection">Common actions</span>
-                            <div class="selection-panel-actions selection-panel-primary-actions" aria-label="Common batch actions">
-                                <button id="btn-move-selected" class="btn btn-primary full-width" title="Move selected images to another folder"><span>📁</span> <span data-i18n="selection.moveSelected">Move...</span></button>
-                                <button id="btn-copy-selected" class="btn btn-secondary full-width" title="Copy selected images to another folder"><span>📄</span> <span data-i18n="selection.copySelected">Copy...</span></button>
-                                <button id="btn-send-to-censor" class="btn btn-primary full-width" title="Send to Censor Edit" data-i18n-title="gallery.contextSendToCensor"><span>🔳</span> <span data-i18n="selection.censorEdit">Censor Edit</span></button>
-                                <!-- v3.2.2 task #4: replaced Analyze Colors button with Send to Dataset Maker; color analysis still runs from the Tag Images modal -->
-                                <button id="btn-send-selection-to-dataset-maker" class="btn btn-secondary full-width" title="Push the selected images into the Dataset Maker queue (training set workspace)"><span>📦</span> <span data-i18n="selection.sendToDatasetMaker">To Dataset Maker</span></button>
-                                <!-- v3.4.3 P4: batch add-to-collection (reference, no file copy) -->
-                                <button id="btn-add-selected-to-collection" class="btn btn-secondary full-width" title="Add selected images to a collection (reference, no file copy)"><span>📚</span> <span data-i18n="selection.addToCollection">Add to collection…</span></button>
-                                <!-- P16: Mass Tag Editor entry from selection panel -->
-                                <button id="btn-selection-mass-tag-editor" class="btn btn-secondary full-width" title="Bulk tag operations on selected images" data-i18n-title="massTag.selectionTooltip"><span>🔧</span> <span data-i18n="massTag.selectionOpen">Edit Selected Tags</span></button>
-                            </div>
-                        </div>
-                        <details id="selection-export-disclosure" class="selection-panel-section selection-panel-disclosure">
-                            <summary class="selection-panel-section-title selection-panel-disclosure-summary" data-i18n="selection.exportSection">Export</summary>
-                            <div class="selection-panel-actions selection-panel-export-actions" aria-label="Export selected images">
-                                <button id="btn-export-selected" class="btn btn-secondary full-width selection-panel-explained-action">
-                                    <span>📤</span>
-                                    <span>
-                                        <strong data-i18n="selection.exportTextData">Combined Export...</strong>
-                                        <small data-i18n="selection.exportTextDataHelp">Prompt / Tags / CSV / JSONL</small>
-                                    </span>
-                                </button>
-                                <button id="btn-batch-export-tags" class="btn btn-secondary full-width selection-panel-explained-action">
-                                    <span>📝</span>
-                                    <span>
-                                        <strong data-i18n="selection.exportTagsToFiles">Training captions...</strong>
-                                        <small data-i18n="selection.exportTagsToFilesHelp">Training captions, one file per image</small>
-                                    </span>
-                                </button>
-                            </div>
-                        </details>
-                        <details id="selection-danger-disclosure" class="selection-panel-section selection-panel-disclosure selection-panel-danger-section">
-                            <summary class="selection-panel-section-title selection-panel-disclosure-summary" data-i18n="selection.dangerSection">Remove</summary>
-                            <div class="selection-panel-actions selection-panel-danger-actions" aria-label="Remove selected images">
-                                <button id="btn-remove-selected-gallery" class="btn btn-secondary full-width" title="Remove selected images from gallery (files not deleted)"><span>🧹</span> <span data-i18n="selection.removeFromGallery">Remove from Gallery</span></button>
-                                <button id="btn-delete-selected-files" class="btn btn-ghost danger full-width" title="Move selected image files to trash"><span>🗑</span> <span data-i18n="selection.deleteSelectedFiles">Move to Trash...</span></button>
-                            </div>
-                        </details>
+                        <!-- Aurora Phase 3 (#25a): batch ACTION buttons moved to the
+                             bottom action bar (#gallery-action-bar); this panel keeps
+                             the selection SCOPE tools only, per the 24a checklist. -->
                     </div>
                 </aside>
 
@@ -719,7 +700,9 @@
                 </button>
 
                 <!-- Desktop Sidebar Restore Button -->
-                <button id="btn-restore-desktop-sidebar" class="btn btn-secondary" title="Expand Sidebar" style="display: none; position: fixed; top: calc(var(--nav-height) + 16px); left: 0; z-index: 100; padding: 12px 8px; border-radius: 0 4px 4px 0; border-left: none;">
+                <!-- Positioning lives in ui-refresh.css (#btn-restore-desktop-sidebar)
+                     so the nav rail can offset it; JS only toggles display. -->
+                <button id="btn-restore-desktop-sidebar" class="btn btn-secondary" title="Expand Sidebar" style="display: none;">
                     <span aria-hidden="true">▶</span>
                 </button>
 
@@ -772,6 +755,74 @@
                             </div>
                         </div>
                         <div class="view-options">
+                            <button class="view-btn" data-size="grid" title="Grid view" aria-label="Grid view" aria-pressed="true" data-i18n-title="gallery.viewGrid" data-i18n-aria="gallery.viewGrid">
+                                <span>◼◼</span>
+                            </button>
+                            <button class="view-btn" data-size="large" title="Large view" aria-label="Large view" aria-pressed="false" data-i18n-title="gallery.viewLarge" data-i18n-aria="gallery.viewLarge">
+                                <span aria-hidden="true">◼</span>
+                            </button>
+                            <button class="view-btn" data-size="waterfall" title="Waterfall view" aria-label="Waterfall view" aria-pressed="false" data-i18n-title="gallery.viewWaterfall" data-i18n-aria="gallery.viewWaterfall">
+                                <span aria-hidden="true">▥</span>
+                            </button>
+                        </div>
+
+                        <!-- NOISE-05 (superseded 2026-06-12, owner directive): Clear Library
+                             MUST be visible at a glance on the gallery page — it previously
+                             hid inside the Import modal's advanced options and the owner
+                             couldn't find it. It sits at the far-right END of the gallery
+                             header, OUTSIDE .view-options, with distinct danger styling and
+                             extra separation so it stays far from everyday controls (view
+                             toggles / sort / aspect). Same #btn-clear-db id so the existing
+                             handler + busy-guard (app.js) keep working unchanged. -->
+                        <button id="btn-clear-db" class="btn btn-ghost btn-small danger gallery-clear-button" type="button" title="Remove all images from the current library (files stay on disk)" data-i18n-title="action.clearGalleryTooltip" aria-label="Clear Current Library" data-i18n-aria="action.clearGallery">
+                            <span aria-hidden="true">🗑️</span> <span data-i18n="action.clearGallery">Clear Current Library</span>
+                        </button>
+
+                    </div>
+                    <!-- Aurora Phase 3 (#25a): key:value search + quick filter chips.
+                         Parsed by modules/gallery-toolbar.js onto the SAME FilterStore
+                         fields the filter modal uses — no parallel state. -->
+                    <div class="gallery-search-row" id="gallery-search-row">
+                        <div class="gallery-search-box">
+                            <span class="gallery-search-icon" aria-hidden="true">⌕</span>
+                            <input type="text" id="gallery-search-input" class="input-field gallery-search-input"
+                                   placeholder="tag:silver_hair seed:314159 free text…"
+                                   data-i18n-placeholder="gallerySearch.placeholder"
+                                   aria-label="Search gallery (supports key:value)" data-i18n-aria="gallerySearch.aria">
+                            <button type="button" id="gallery-search-clear" class="gallery-search-clear" hidden
+                                    title="Clear search" aria-label="Clear search"
+                                    data-i18n-title="gallerySearch.clear" data-i18n-aria="gallerySearch.clear">✕</button>
+                        </div>
+                        <div class="gallery-quick-chips" role="group" aria-label="Quick filters" data-i18n-aria="gallerySearch.quickFilters">
+                            <button type="button" class="gallery-chip" id="chip-has-metadata" aria-pressed="false">
+                                <span aria-hidden="true">✦</span> <span data-i18n="gallerySearch.chipHasParams">Has params</span>
+                            </button>
+                            <button type="button" class="gallery-chip" id="chip-aesthetic-7" aria-pressed="false">
+                                <span data-i18n="gallerySearch.chipAesthetic7">Aesthetic 7+</span>
+                            </button>
+                            <button type="button" class="gallery-chip" id="chip-no-caption" aria-pressed="false">
+                                <span data-i18n="gallerySearch.chipNoCaption">No caption</span>
+                            </button>
+                        </div>
+                        <!-- Sort + aspect ride the search row (#25a line: 最新▾ · 调大小) so
+                             the generator tabs keep the header row's width on laptops.
+                             Same ids/classes — handlers in app.js are unchanged. -->
+                        <div class="gallery-search-tools">
+                            <div class="aspect-quick-toggle" id="aspect-quick-toggle" role="group" aria-label="Filter by aspect ratio" data-i18n-aria="gallery.aspectToggle">
+                                <button class="aspect-quick-btn is-active" data-aspect="" type="button" aria-pressed="true" title="Any aspect ratio" data-i18n-title="gallery.aspectAll">
+                                    <span aria-hidden="true">▦</span>
+                                    <span data-i18n="common.all">All</span>
+                                </button>
+                                <button class="aspect-quick-btn" data-aspect="square" type="button" aria-pressed="false" title="Square" data-i18n-title="filter.square" aria-label="Square" data-i18n-aria="filter.square">
+                                    <span aria-hidden="true">■</span>
+                                </button>
+                                <button class="aspect-quick-btn" data-aspect="landscape" type="button" aria-pressed="false" title="Landscape" data-i18n-title="filter.landscape" aria-label="Landscape" data-i18n-aria="filter.landscape">
+                                    <span aria-hidden="true">▬</span>
+                                </button>
+                                <button class="aspect-quick-btn" data-aspect="portrait" type="button" aria-pressed="false" title="Portrait" data-i18n-title="filter.portrait" aria-label="Portrait" data-i18n-aria="filter.portrait">
+                                    <span aria-hidden="true">▮</span>
+                                </button>
+                            </div>
                             <select id="gallery-sort" class="sort-dropdown" aria-label="Sort images">
                                 <option value="newest" data-i18n="sort.optionDate">Date</option>
                                 <option value="name_asc" data-i18n="sort.optionName">Name</option>
@@ -791,46 +842,7 @@
                             <button class="view-btn sort-reverse-btn" id="sort-reverse-btn" title="Reverse sort order" aria-label="Reverse sort order" aria-pressed="false">
                                 <span aria-hidden="true">↕</span>
                             </button>
-                            <div class="divider-v" aria-hidden="true"></div>
-                            <button class="view-btn" data-size="grid" title="Grid view" aria-label="Grid view" aria-pressed="true" data-i18n-title="gallery.viewGrid" data-i18n-aria="gallery.viewGrid">
-                                <span>◼◼</span>
-                            </button>
-                            <button class="view-btn" data-size="large" title="Large view" aria-label="Large view" aria-pressed="false" data-i18n-title="gallery.viewLarge" data-i18n-aria="gallery.viewLarge">
-                                <span aria-hidden="true">◼</span>
-                            </button>
-                            <button class="view-btn" data-size="waterfall" title="Waterfall view" aria-label="Waterfall view" aria-pressed="false" data-i18n-title="gallery.viewWaterfall" data-i18n-aria="gallery.viewWaterfall">
-                                <span aria-hidden="true">▥</span>
-                            </button>
-                            <div class="divider-v" aria-hidden="true"></div>
-                            <div class="aspect-quick-toggle" id="aspect-quick-toggle" role="group" aria-label="Filter by aspect ratio" data-i18n-aria="gallery.aspectToggle">
-                                <button class="aspect-quick-btn is-active" data-aspect="" type="button" aria-pressed="true" title="Any aspect ratio" data-i18n-title="gallery.aspectAll">
-                                    <span aria-hidden="true">▦</span>
-                                    <span data-i18n="common.all">All</span>
-                                </button>
-                                <button class="aspect-quick-btn" data-aspect="square" type="button" aria-pressed="false" title="Square" data-i18n-title="filter.square" aria-label="Square" data-i18n-aria="filter.square">
-                                    <span aria-hidden="true">■</span>
-                                </button>
-                                <button class="aspect-quick-btn" data-aspect="landscape" type="button" aria-pressed="false" title="Landscape" data-i18n-title="filter.landscape" aria-label="Landscape" data-i18n-aria="filter.landscape">
-                                    <span aria-hidden="true">▬</span>
-                                </button>
-                                <button class="aspect-quick-btn" data-aspect="portrait" type="button" aria-pressed="false" title="Portrait" data-i18n-title="filter.portrait" aria-label="Portrait" data-i18n-aria="filter.portrait">
-                                    <span aria-hidden="true">▮</span>
-                                </button>
-                            </div>
                         </div>
-
-                        <!-- NOISE-05 (superseded 2026-06-12, owner directive): Clear Library
-                             MUST be visible at a glance on the gallery page — it previously
-                             hid inside the Import modal's advanced options and the owner
-                             couldn't find it. It sits at the far-right END of the gallery
-                             header, OUTSIDE .view-options, with distinct danger styling and
-                             extra separation so it stays far from everyday controls (view
-                             toggles / sort / aspect). Same #btn-clear-db id so the existing
-                             handler + busy-guard (app.js) keep working unchanged. -->
-                        <button id="btn-clear-db" class="btn btn-ghost btn-small danger gallery-clear-button" type="button" title="Remove all images from the current library (files stay on disk)" data-i18n-title="action.clearGalleryTooltip" aria-label="Clear Current Library" data-i18n-aria="action.clearGallery">
-                            <span aria-hidden="true">🗑️</span> <span data-i18n="action.clearGallery">Clear Current Library</span>
-                        </button>
-
                     </div>
                     <div id="color-backfill-banner" class="color-backfill-banner" hidden role="status" aria-live="polite">
                         <div class="color-backfill-banner-icon" aria-hidden="true">🎨</div>
@@ -974,6 +986,34 @@
                     <div class="gallery-loading" id="gallery-loading" role="status" aria-live="polite" aria-label="Loading status">
                         <div class="spinner" aria-hidden="true"></div>
                         <span data-i18n="gallery.loading">Loading images...</span>
+                    </div>
+                    <!-- Aurora Phase 3 (#25a): sticky bottom action bar. Shown by
+                         updateSelectionUI via modules/gallery-toolbar.js when the
+                         selection has items. Buttons keep their original ids (and
+                         handlers) — they MOVED here from the left selection panel. -->
+                    <div class="gallery-action-bar" id="gallery-action-bar" hidden role="toolbar" aria-label="Batch actions" data-i18n-aria="actionBar.aria">
+                        <div class="gallery-action-bar-buttons">
+                            <button id="btn-move-selected" class="btn btn-primary" title="Move selected images to another folder"><span>📁</span> <span data-i18n="selection.moveSelected">Move...</span></button>
+                            <button id="btn-tag-selected" class="btn btn-secondary" title="AI-tag the selected images" data-i18n-title="actionBar.tagSelectedTooltip"><span>🏷️</span> <span data-i18n="actionBar.tagSelected">Tag</span></button>
+                            <button id="btn-send-to-censor" class="btn btn-secondary" title="Send to Censor Edit" data-i18n-title="gallery.contextSendToCensor"><span>🔳</span> <span data-i18n="selection.censorEdit">Censor Edit</span></button>
+                            <button id="btn-add-selected-to-collection" class="btn btn-secondary" title="Add selected images to a collection (reference, no file copy)"><span>📚</span> <span data-i18n="selection.addToCollection">Add to collection…</span></button>
+                            <div class="gallery-action-more">
+                                <button id="btn-gallery-action-more" class="btn btn-ghost" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="gallery-action-more-menu">
+                                    <span data-i18n="actionBar.more">More</span> <span aria-hidden="true">▾</span>
+                                </button>
+                                <div class="gallery-action-more-menu" id="gallery-action-more-menu" hidden>
+                                    <button id="btn-copy-selected" class="btn btn-ghost" title="Copy selected images to another folder"><span>📄</span> <span data-i18n="selection.copySelected">Copy...</span></button>
+                                    <button id="btn-send-selection-to-dataset-maker" class="btn btn-ghost" title="Push the selected images into the Dataset Maker queue (training set workspace)"><span>📦</span> <span data-i18n="selection.sendToDatasetMaker">To Dataset Maker</span></button>
+                                    <button id="btn-selection-mass-tag-editor" class="btn btn-ghost" title="Bulk tag operations on selected images" data-i18n-title="massTag.selectionTooltip"><span>🔧</span> <span data-i18n="massTag.selectionOpen">Edit Selected Tags</span></button>
+                                    <button id="btn-export-selected" class="btn btn-ghost" title="Prompt / Tags / CSV / JSONL" data-i18n-title="selection.exportTextDataHelp"><span>📤</span> <span data-i18n="selection.exportTextData">Combined Export...</span></button>
+                                    <button id="btn-batch-export-tags" class="btn btn-ghost" title="Training captions, one file per image" data-i18n-title="selection.exportTagsToFilesHelp"><span>📝</span> <span data-i18n="selection.exportTagsToFiles">Training captions...</span></button>
+                                    <div class="gallery-action-more-divider" aria-hidden="true"></div>
+                                    <button id="btn-remove-selected-gallery" class="btn btn-ghost" title="Remove selected images from gallery (files not deleted)"><span>🧹</span> <span data-i18n="selection.removeFromGallery">Remove from Gallery</span></button>
+                                    <button id="btn-delete-selected-files" class="btn btn-ghost danger" title="Move selected image files to trash"><span>🗑</span> <span data-i18n="selection.deleteSelectedFiles">Move to Trash...</span></button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="gallery-action-bar-stats" id="gallery-action-bar-stats" aria-live="polite"></div>
                     </div>
                 </div>
             </section>
@@ -4696,6 +4736,27 @@
             </div>
         </div>
 
+        <!-- Aurora Phase 3 / Roadmap-C: second-stage review for AMBIGUOUS
+             reconnect matches. Populated by modules/repair-review.js from
+             GET /api/images/repair-candidates; per-row choices commit via
+             POST /api/images/repair-confirm. -->
+        <div class="modal" id="repair-review-modal" role="dialog" aria-modal="true" aria-labelledby="repair-review-title">
+            <div class="modal-backdrop" aria-hidden="true"></div>
+            <div class="modal-content modal-large repair-review-shell">
+                <button class="modal-close" id="btn-close-repair-review" aria-label="Close" data-i18n-aria="common.close" title="Close" data-i18n-title="common.close">✕</button>
+                <h3 id="repair-review-title" data-i18n="repairReview.title">Review Ambiguous Matches</h3>
+                <p class="modal-description" data-i18n="repairReview.description">Each found file matches more than one gallery record with the same name and size. Pick the record it belongs to — nothing changes until you confirm, and files on disk are never touched.</p>
+                <div class="repair-review-list" id="repair-review-list" aria-live="polite"></div>
+                <div class="repair-review-footer">
+                    <span class="repair-review-count" id="repair-review-count" aria-live="polite"></span>
+                    <div class="repair-review-pager">
+                        <button class="btn btn-ghost btn-small" id="btn-repair-review-prev" type="button" data-i18n="repairReview.prev">‹ Prev</button>
+                        <button class="btn btn-ghost btn-small" id="btn-repair-review-next" type="button" data-i18n="repairReview.next">Next ›</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Tag Modal -->
         <div class="modal" id="tag-modal" role="dialog" aria-modal="true" aria-labelledby="tag-modal-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
@@ -4738,6 +4799,14 @@
                     </button>
                 </div>
                 <p class="tagger-tab-description" id="tagger-tab-description" data-i18n="tagger.tabLocalDesc">WD14 / Camie / PixAI ONNX models — fast Danbooru-style tags.</p>
+
+                <!-- Aurora Phase 3: shown when the run is scoped to the Gallery
+                     selection (opened via the batch action bar's Tag button). -->
+                <div class="tagger-scope-note" id="tag-scope-note" hidden role="status">
+                    <span aria-hidden="true">✔</span>
+                    <span id="tag-scope-note-text"></span>
+                    <button type="button" class="btn btn-ghost btn-small" id="btn-tag-scope-clear" data-i18n="tagModal.scopeClear">Tag whole library instead</button>
+                </div>
 
                 <!-- Natural Language tab: sub-toggle to pick between local ToriiGate and remote VLM API -->
                 <div class="tagger-nl-subtoggle tagger-nl-source-inputs" data-tagger-shows="nl" role="radiogroup" aria-label="Natural Language source" style="display:none">
@@ -5670,7 +5739,7 @@
                                 <button class="btn btn-ghost btn-small aesthetic-quick" data-min="7" data-max="" data-i18n="filter.aestheticGreat">Great (7+)</button>
                                 <button class="btn btn-ghost btn-small aesthetic-quick" data-min="5" data-max="" data-i18n="filter.aestheticGood">Good (5+)</button>
                                 <button class="btn btn-ghost btn-small aesthetic-quick" data-min="" data-max="4" data-i18n="filter.aestheticLow">Low (&lt;4)</button>
-                                <button class="btn btn-ghost btn-small aesthetic-quick" data-min="" data-max="" data-i18n="filter.aestheticUnscored">Unscored</button>
+                                <button class="btn btn-ghost btn-small aesthetic-quick" data-min="" data-max="" data-unscored="1" data-i18n="filter.aestheticUnscored">Unscored</button>
                             </div>
                         </section>
 
@@ -5727,6 +5796,15 @@
                                 <label class="dimension-field">
                                     <span class="dimension-label" data-i18n="filter.brightnessMax">Max brightness</span>
                                     <input type="number" id="filter-brightness-max" class="input-field" placeholder="255" min="0" max="255" step="1" aria-label="Maximum brightness">
+                                </label>
+                                <!-- Aurora Phase 3 (24d): saturation range joins brightness -->
+                                <label class="dimension-field">
+                                    <span class="dimension-label" data-i18n="filter.saturationMin">Min saturation</span>
+                                    <input type="number" id="filter-saturation-min" class="input-field" placeholder="0" min="0" max="255" step="1" aria-label="Minimum saturation">
+                                </label>
+                                <label class="dimension-field">
+                                    <span class="dimension-label" data-i18n="filter.saturationMax">Max saturation</span>
+                                    <input type="number" id="filter-saturation-max" class="input-field" placeholder="255" min="0" max="255" step="1" aria-label="Maximum saturation">
                                 </label>
                             </div>
                             <h5 data-i18n="filter.colorTemperature">Color Temperature</h5>
@@ -6199,6 +6277,10 @@
     <script src="/static/js/mass-tag-editor.js"></script>
     <script src="/static/js/ui-refresh.js"></script>
     <script src="/static/js/entry-page.js"></script>
+    <script src="/static/js/modules/nav-rail.js"></script>
+    <script src="/static/js/modules/gallery-selection-badges.js"></script>
+    <script src="/static/js/modules/gallery-toolbar.js"></script>
+    <script src="/static/js/modules/repair-review.js"></script>
     <script>
     /* Sorting sub-tab toggle (Auto-Separate / Manual Sort) */
     window._switchSortingSub = function(sub) {

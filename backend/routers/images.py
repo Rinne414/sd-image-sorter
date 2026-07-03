@@ -80,6 +80,15 @@ class ReconnectMissingFilesRequest(BaseModel):
     verify_uncertain: bool = True
 
 
+class RepairConfirmRequest(BaseModel):
+    """Body for POST /api/images/repair-confirm (Roadmap-C missing-file repair)."""
+    review_id: int = Field(..., ge=1)
+    action: str = Field(..., pattern="^(pick|merge|skip)$")
+    # Required for pick/merge; ignored for skip. Validated against the review's
+    # candidate ids in the service layer.
+    chosen_image_id: Optional[int] = Field(default=None, ge=1)
+
+
 class ExportSelectionRequest(BaseModel):
     # Same rationale as RemoveSelectedImagesRequest: sequential per-image
     # work + chunked SQL means the ceiling only caps payload memory.
@@ -135,6 +144,12 @@ class SelectionIdsRequest(BaseModel):
     excludePrompts: List[str] = Field(default_factory=list)
     excludeColors: List[str] = Field(default_factory=list)
     collectionId: Optional[int] = Field(default=None, ge=1)
+    # Aurora Phase 3 gallery filters (compose with selection tokens)
+    noCaption: Optional[bool] = Field(default=None)
+    aestheticUnscored: Optional[bool] = Field(default=None)
+    minSaturation: Optional[float] = Field(default=None, ge=0, le=255)
+    maxSaturation: Optional[float] = Field(default=None, ge=0, le=255)
+    seed: Optional[int] = Field(default=None)
 
     @model_validator(mode="after")
     def validate_prompt_match_mode(self):
@@ -552,6 +567,31 @@ async def get_images(
         default=None,
         description="Restrict to images that carry SD generation parameters (true) or carry none (false). Omit for all. v3.3.2 small-opt.",
     ),
+    # Aurora Phase 3 gallery filters
+    no_caption: Optional[bool] = Query(
+        default=None,
+        description="When true, only images with neither an AI caption nor an NL caption (both empty). Aurora Phase 3.",
+    ),
+    aesthetic_unscored: Optional[bool] = Query(
+        default=None,
+        description="When true, only images with no aesthetic score. Takes precedence over min/max_aesthetic. Aurora Phase 3.",
+    ),
+    min_saturation: Optional[float] = Query(
+        default=None,
+        ge=0,
+        le=255,
+        description="Minimum color saturation (0-255). Requires color analysis. Aurora Phase 3.",
+    ),
+    max_saturation: Optional[float] = Query(
+        default=None,
+        ge=0,
+        le=255,
+        description="Maximum color saturation (0-255). Requires color analysis. Aurora Phase 3.",
+    ),
+    seed: Optional[int] = Query(
+        default=None,
+        description="Match images generated with this exact seed (read from metadata_json). Aurora Phase 3.",
+    ),
     service: ImageService = Depends(get_image_service),
 ):
     """Retrieve images with optional filtering using cursor-based pagination."""
@@ -614,6 +654,11 @@ async def get_images(
         collection_id=collection_id,
         folder=folder,
         has_metadata=has_metadata,
+        no_caption=no_caption,
+        aesthetic_unscored=aesthetic_unscored,
+        min_saturation=min_saturation,
+        max_saturation=max_saturation,
+        seed=seed,
     )
 
 
@@ -694,6 +739,11 @@ async def create_selection_token(
         collection_id=request.collectionId,
         folder=request.folder,
         has_metadata=request.hasMetadata,
+        no_caption=request.noCaption,
+        aesthetic_unscored=request.aestheticUnscored,
+        min_saturation=request.minSaturation,
+        max_saturation=request.maxSaturation,
+        seed=request.seed,
         chunk_size=request.chunkSize,
     )
 
@@ -745,6 +795,233 @@ async def cancel_reconnect_missing_files(
     service: ImageService = Depends(get_image_service),
 ):
     return service.cancel_reconnect_missing_files()
+
+
+@router.get(
+    "/images/repair-candidates",
+    summary="List ambiguous missing-file matches awaiting review",
+    description="""
+Roadmap-C missing-file repair. After a reconnect run, discovered files that
+matched several missing library rows by name+size are persisted as *pending*
+reviews (the run never touches those rows). This lists them, enriched with each
+candidate's current row (path / size / mtime) and whether the candidate's own
+file is still missing on disk. Candidate ids deleted since the run are omitted.
+
+Declared above `GET /api/images/{image_id}` so the dynamic-id route does not
+shadow it.
+    """,
+    responses={
+        200: {
+            "description": "Pending (or scoped) reviews with enriched candidates",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "total": 1,
+                        "items": [
+                            {
+                                "review_id": 12,
+                                "filename": "same.png",
+                                "found_path": "D:/new/same.png",
+                                "found_exists": True,
+                                "candidate_count": 2,
+                                "run_started_at": 1717430000.0,
+                                "status": "pending",
+                                "resolution": None,
+                                "candidates": [
+                                    {"image_id": 3, "path": "D:/old/same.png", "file_size": 2048,
+                                     "source_mtime_ns": 1700000000000000000, "still_missing": True},
+                                    {"image_id": 9, "path": "D:/other/same.png", "file_size": 2048,
+                                     "source_mtime_ns": 1700000000000000000, "still_missing": True},
+                                ],
+                            }
+                        ],
+                    }
+                }
+            },
+        }
+    },
+)
+async def get_repair_candidates(
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    status: str = Query(
+        default="pending",
+        description="Filter by review status: pending | resolved | conflict | all.",
+    ),
+    service: ImageService = Depends(get_image_service),
+):
+    """List persisted ambiguous-match reviews with enriched candidate rows."""
+    return service.get_repair_candidates(limit=limit, offset=offset, status=status)
+
+
+@router.post(
+    "/images/repair-confirm",
+    summary="Resolve one ambiguous missing-file match",
+    description="""
+Roadmap-C missing-file repair. Resolve one pending review:
+
+- **pick** — relink `chosen_image_id` to the review's found file.
+- **merge** — relink `chosen_image_id` AND delete the other still-existing candidate rows.
+- **skip** — record the decision; touch no image rows.
+
+Refuses with 409 while a reconnect run is active. If the found path is already
+indexed as a different row, the review is marked `conflict` and 409 is returned
+(never silently duplicating a row). Declared above `GET /api/images/{image_id}`.
+    """,
+    responses={
+        200: {
+            "description": "Review resolved",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "resolved",
+                        "review_id": 12,
+                        "resolution": "merge",
+                        "image_id": 3,
+                        "new_path": "D:/new/same.png",
+                        "deleted_ids": [9],
+                    }
+                }
+            },
+        },
+        404: {"description": "Review not found"},
+        409: {"description": "Reconnect run active, review already resolved, or found-path conflict"},
+    },
+)
+async def confirm_repair(
+    request: RepairConfirmRequest,
+    service: ImageService = Depends(get_image_service),
+):
+    """Resolve one ambiguous missing-file match (pick / merge / skip)."""
+    return service.confirm_repair(
+        review_id=request.review_id,
+        action=request.action,
+        chosen_image_id=request.chosen_image_id,
+    )
+
+
+@router.get(
+    "/images/count",
+    summary="Count images matching filters",
+    description="""
+Return the exact number of images matching the same filter parameters as
+`GET /api/images`. Powers the live "Apply · ~N images" filter preview
+(Aurora Phase 3).
+
+Unlike the `total` field on `GET /api/images` — which returns a `-1` skip
+sentinel on the cursor path for very large libraries — this endpoint always
+runs the count query and returns a real total. Sort order and pagination
+parameters are irrelevant to a count and are not accepted.
+
+Declared above `GET /api/images/{image_id}` so the dynamic-id route does not
+shadow it.
+    """,
+    responses={
+        200: {
+            "description": "Exact match count",
+            "content": {"application/json": {"example": {"total": 4213}}},
+        }
+    },
+)
+async def count_images(
+    generators: Optional[str] = Query(default=None, description="Comma-separated generators to filter."),
+    generator: Optional[str] = Query(default=None, description="Singular alias for generators.", deprecated=True),
+    tags: Optional[str] = Query(default=None, description="Comma-separated tags (AND by default)."),
+    tag: Optional[str] = Query(default=None, description="Singular alias for tags.", deprecated=True),
+    tag_mode: str = Query(default="and", pattern="^(and|or)$", description="Tag matching mode."),
+    ratings: Optional[str] = Query(default=None, description="Comma-separated ratings."),
+    rating: Optional[str] = Query(default=None, description="Singular alias for ratings.", deprecated=True),
+    checkpoints: Optional[str] = Query(default=None, description="Comma-separated checkpoints."),
+    checkpoint: Optional[str] = Query(default=None, description="Singular alias for checkpoints.", deprecated=True),
+    loras: Optional[str] = Query(default=None, description="Comma-separated LoRAs."),
+    lora: Optional[str] = Query(default=None, description="Singular alias for loras.", deprecated=True),
+    search: Optional[str] = Query(default=None, max_length=1000, description="Free-text search in prompts."),
+    artist: Optional[str] = Query(default=None, max_length=500, description="Filter by artist name."),
+    min_width: Optional[int] = Query(default=None, ge=1, le=100000),
+    max_width: Optional[int] = Query(default=None, ge=1, le=100000),
+    min_height: Optional[int] = Query(default=None, ge=1, le=100000),
+    max_height: Optional[int] = Query(default=None, ge=1, le=100000),
+    prompts: Optional[str] = Query(default=None, max_length=1000, description="Comma-separated prompt terms (AND)."),
+    prompt_match_mode: str = Query(default=PROMPT_MATCH_MODE_EXACT, pattern="^(exact|contains)$"),
+    aspect_ratio: Optional[str] = Query(default=None, description="square, landscape, or portrait."),
+    min_aesthetic: Optional[float] = Query(default=None, ge=0, le=10),
+    max_aesthetic: Optional[float] = Query(default=None, ge=0, le=10),
+    min_user_rating: Optional[int] = Query(default=None, ge=0, le=5),
+    brightness_min: Optional[float] = Query(default=None, ge=0, le=255),
+    brightness_max: Optional[float] = Query(default=None, ge=0, le=255),
+    color_temperature: Optional[str] = Query(default=None, description="warm | cool | neutral."),
+    brightness_distribution: Optional[str] = Query(default=None),
+    exclude_tags: Optional[str] = Query(default=None, description="Comma-separated tags to exclude."),
+    exclude_generators: Optional[str] = Query(default=None),
+    exclude_ratings: Optional[str] = Query(default=None),
+    exclude_checkpoints: Optional[str] = Query(default=None),
+    exclude_loras: Optional[str] = Query(default=None),
+    exclude_prompts: Optional[str] = Query(default=None),
+    exclude_colors: Optional[str] = Query(default=None),
+    collection_id: Optional[int] = Query(default=None, ge=1),
+    folder: Optional[str] = Query(default=None, max_length=4096),
+    has_metadata: Optional[bool] = Query(default=None),
+    # Aurora Phase 3 gallery filters
+    no_caption: Optional[bool] = Query(default=None, description="Only images with no AI and no NL caption."),
+    aesthetic_unscored: Optional[bool] = Query(default=None, description="Only images with no aesthetic score. Takes precedence over min/max_aesthetic."),
+    min_saturation: Optional[float] = Query(default=None, ge=0, le=255),
+    max_saturation: Optional[float] = Query(default=None, ge=0, le=255),
+    seed: Optional[int] = Query(default=None, description="Match images generated with this exact seed."),
+    service: ImageService = Depends(get_image_service),
+):
+    """Return the exact number of images matching the given filters."""
+    # Accept singular aliases exactly as GET /api/images does.
+    def _merge(plural: Optional[str], singular: Optional[str]) -> Optional[str]:
+        if not singular:
+            return plural
+        combined = (plural + "," + singular) if plural else singular
+        seen, parts = set(), []
+        for tok in combined.split(","):
+            t = tok.strip()
+            if t and t not in seen:
+                seen.add(t)
+                parts.append(t)
+        return ",".join(parts) if parts else None
+
+    return service.get_image_count(
+        generators=_merge(generators, generator),
+        tags=_merge(tags, tag),
+        tag_mode=tag_mode,
+        ratings=_merge(ratings, rating),
+        checkpoints=_merge(checkpoints, checkpoint),
+        loras=_merge(loras, lora),
+        search=search,
+        artist=artist,
+        min_width=min_width,
+        max_width=max_width,
+        min_height=min_height,
+        max_height=max_height,
+        prompts=prompts,
+        prompt_match_mode=prompt_match_mode,
+        aspect_ratio=aspect_ratio,
+        min_aesthetic=min_aesthetic,
+        max_aesthetic=max_aesthetic,
+        min_user_rating=min_user_rating,
+        brightness_min=brightness_min,
+        brightness_max=brightness_max,
+        color_temperature=color_temperature,
+        brightness_distribution=brightness_distribution,
+        exclude_tags=exclude_tags,
+        exclude_generators=exclude_generators,
+        exclude_ratings=exclude_ratings,
+        exclude_checkpoints=exclude_checkpoints,
+        exclude_loras=exclude_loras,
+        exclude_prompts=exclude_prompts,
+        exclude_colors=exclude_colors,
+        collection_id=collection_id,
+        folder=folder,
+        has_metadata=has_metadata,
+        no_caption=no_caption,
+        aesthetic_unscored=aesthetic_unscored,
+        min_saturation=min_saturation,
+        max_saturation=max_saturation,
+        seed=seed,
+    )
 
 
 @router.get(
@@ -867,6 +1144,11 @@ async def get_selection_ids(
         collection_id=request.collectionId,
         folder=request.folder,
         has_metadata=request.hasMetadata,
+        no_caption=request.noCaption,
+        aesthetic_unscored=request.aestheticUnscored,
+        min_saturation=request.minSaturation,
+        max_saturation=request.maxSaturation,
+        seed=request.seed,
     )
 
 
@@ -1282,6 +1564,33 @@ async def get_image_thumbnail(
 ):
     """Get a thumbnail of the image with persistent disk caching."""
     return await service.get_image_thumbnail(image_id, size)
+
+
+@router.get(
+    "/image-preview-by-path",
+    summary="Get a thumbnail for a file by absolute path",
+    description="""
+Roadmap-C missing-file repair. Serve a WebP thumbnail for a found-but-unlinked
+image file addressed by absolute path (the id-based thumbnail endpoint can't
+reach a file that is not yet an indexed image).
+
+The path is validated before any read: directory traversal (`..`) is rejected,
+the file must exist, and it must be an allowed image type. Size is clamped to
+1..1024. Returns 404 JSON for an invalid, missing, or non-image path.
+    """,
+    responses={
+        200: {"description": "Thumbnail image (WebP)"},
+        404: {"description": "Invalid, missing, or non-image path",
+              "content": {"application/json": {"example": {"detail": "File does not exist"}}}},
+    },
+)
+async def get_image_preview_by_path(
+    path: str = Query(..., min_length=1, max_length=4096, description="Absolute path to the image file."),
+    size: int = Query(default=256, ge=1, le=1024, description="Thumbnail max dimension in pixels (1-1024)."),
+    service: ImageService = Depends(get_image_service),
+):
+    """Serve a WebP thumbnail for a validated file path (repair-review preview)."""
+    return await service.get_image_preview_by_path(path, size)
 
 
 @router.get("/thumbnail-cache/stats")

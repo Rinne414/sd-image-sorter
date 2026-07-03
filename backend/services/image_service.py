@@ -99,6 +99,11 @@ SELECTION_TOKEN_RANDOM_SORT_ERROR = (
 RECONNECT_PROGRESS_EVERY_N_FILES = 100
 RECONNECT_PROGRESS_MIN_INTERVAL_SECONDS = 0.5
 RECONNECT_MTIME_TOLERANCE_NS = 2_000_000_000
+# Roadmap-C missing-file repair review: cap persisted pending review rows per
+# run so a pathological library (tens of thousands of same-name/size ambiguous
+# files) can't bloat the table; resolved history is separately pruned to 500.
+RECONNECT_REVIEW_MAX_PENDING_PER_RUN = 2000
+RECONNECT_REVIEW_RESOLVED_HISTORY_KEEP = 500
 
 
 def _invalid_selection_token() -> HTTPException:
@@ -360,6 +365,7 @@ class ImageService:
             "library_missing_total": 0,
             "matched": 0,
             "ambiguous": 0,
+            "review_pending_total": 0,
             "conflicts": 0,
             "skipped": 0,
             "errors": 0,
@@ -592,6 +598,16 @@ class ImageService:
     ) -> Dict[str, Any]:
         """Search one folder for files that can reconnect missing library rows."""
         normalized_folder = normalize_user_path(search_folder)
+        run_started_at = time.time()
+        # Roadmap-C: each run snapshots a fresh set of pending repair reviews.
+        # Clear the previous run's still-pending rows (they belonged to a stale
+        # search) and prune resolved history so the table stays bounded. This
+        # only touches the reconnect_reviews table, never image rows.
+        try:
+            db.delete_pending_reconnect_reviews()
+            db.prune_resolved_reconnect_reviews(RECONNECT_REVIEW_RESOLVED_HISTORY_KEEP)
+        except Exception as exc:
+            logger.warning("Could not reset reconnect review snapshot: %s", exc)
         missing_candidates = db.get_missing_image_reconnect_candidates()
         candidates_by_name: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
         for candidate in missing_candidates:
@@ -605,6 +621,7 @@ class ImageService:
             "library_missing_total": len(missing_candidates),
             "matched": 0,
             "ambiguous": 0,
+            "review_pending_total": 0,
             "conflicts": 0,
             "skipped": 0,
             "errors": 0,
@@ -620,6 +637,9 @@ class ImageService:
         target_candidate_ids: set[int] = set()
         used_found_paths: set[str] = set()
         last_emit = 0.0
+        # Roadmap-C review persistence counters (bounded per run).
+        persisted_review_count = 0
+        review_cap_logged = False
 
         def candidate_id(row: Dict[str, Any]) -> int:
             try:
@@ -725,6 +745,35 @@ class ImageService:
                             "candidate_count": len(candidate_rows),
                             "old_paths": [row.get("path") for row in candidate_rows[:3]],
                         })
+                    # Roadmap-C: persist the ambiguous group for later review,
+                    # carrying the REAL candidate image ids (the in-memory
+                    # needs_review sample above is capped at 10 and has no ids).
+                    # This inserts a review row only; the candidate image rows keep
+                    # their old paths until the user explicitly confirms (invariant).
+                    if persisted_review_count < RECONNECT_REVIEW_MAX_PENDING_PER_RUN:
+                        review_candidate_ids = [
+                            candidate_id(row) for row in candidate_rows if candidate_id(row) > 0
+                        ]
+                        try:
+                            db.add_reconnect_review(
+                                filename=filename,
+                                found_path=resolved_found_path,
+                                candidate_ids=review_candidate_ids,
+                                candidate_count=len(candidate_rows),
+                                run_started_at=run_started_at,
+                            )
+                            persisted_review_count += 1
+                        except Exception as exc:
+                            logger.warning(
+                                "Could not persist reconnect review for %s: %s", filename, exc
+                            )
+                    elif not review_cap_logged:
+                        review_cap_logged = True
+                        logger.warning(
+                            "Reconnect review persistence capped at %d pending rows this run; "
+                            "further ambiguous matches are still counted but not individually reviewable.",
+                            RECONNECT_REVIEW_MAX_PENDING_PER_RUN,
+                        )
                 else:
                     result["skipped"] += 1
             except OSError as exc:
@@ -747,6 +796,7 @@ class ImageService:
             if len(still_missing_samples) >= 10:
                 break
         result["still_missing_samples"] = still_missing_samples
+        result["review_pending_total"] = persisted_review_count
         emit(force=True)
         return result
 
@@ -828,6 +878,7 @@ class ImageService:
                         "library_missing_total": result.get("library_missing_total", 0),
                         "matched": result.get("matched", 0),
                         "ambiguous": result.get("ambiguous", 0),
+                        "review_pending_total": result.get("review_pending_total", 0),
                         "conflicts": result.get("conflicts", 0),
                         "skipped": result.get("skipped", 0),
                         "errors": result.get("errors", 0),
@@ -887,6 +938,214 @@ class ImageService:
                 "updated_at": time.time(),
             }
             return self._reconnect_progress.copy()
+
+    # ------------------------------------------------------------------
+    # Roadmap-C: missing-file repair review (resolve ambiguous matches)
+    # ------------------------------------------------------------------
+    def _reconnect_run_is_active(self) -> bool:
+        with self._reconnect_lock:
+            return self._reconnect_progress.get("status") in {"running", "cancelling"}
+
+    def get_repair_candidates(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        status: str = "pending",
+    ) -> Dict[str, Any]:
+        """List persisted ambiguous-match reviews, enriched with candidate rows.
+
+        Each candidate is loaded fresh from the images table so callers see the
+        current path/size and whether the candidate's own file is still missing.
+        Candidate ids that no longer exist (deleted since the run) are skipped.
+        ``status='all'`` lists every status; otherwise it scopes to one status.
+        """
+        normalized_status = str(status or "pending").strip().lower() or "pending"
+        scope = None if normalized_status == "all" else normalized_status
+        listing = db.list_reconnect_reviews(status=scope, limit=limit, offset=offset)
+
+        items: List[Dict[str, Any]] = []
+        for review in listing["items"]:
+            candidate_ids = review.get("candidate_ids") or []
+            rows_by_id = db.get_images_by_ids(candidate_ids) if candidate_ids else {}
+            candidates: List[Dict[str, Any]] = []
+            for image_id in candidate_ids:
+                row = rows_by_id.get(image_id)
+                if not row:
+                    continue  # candidate deleted since the run; drop it
+                candidate_path = row.get("path") or ""
+                candidates.append({
+                    "image_id": image_id,
+                    "path": candidate_path,
+                    "file_size": row.get("file_size"),
+                    "source_mtime_ns": row.get("source_mtime_ns"),
+                    "still_missing": not (bool(candidate_path) and os.path.isfile(candidate_path)),
+                })
+            found_path = review.get("found_path") or ""
+            items.append({
+                "review_id": review.get("id"),
+                "filename": review.get("filename"),
+                "found_path": found_path,
+                "found_exists": bool(found_path) and os.path.isfile(found_path),
+                "candidate_count": review.get("candidate_count"),
+                "run_started_at": review.get("run_started_at"),
+                "status": review.get("status"),
+                "resolution": review.get("resolution"),
+                "candidates": candidates,
+            })
+        return {"total": listing["total"], "items": items}
+
+    def confirm_repair(
+        self,
+        *,
+        review_id: int,
+        action: str,
+        chosen_image_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Resolve one ambiguous-match review (pick / merge / skip).
+
+        - ``pick``  relinks ``chosen_image_id`` to the found file.
+        - ``merge`` relinks ``chosen_image_id`` and deletes the other still-existing
+          candidate rows.
+        - ``skip``  records the decision without touching any image row.
+
+        Refuses with 409 while a reconnect run is active. If the found path is
+        already indexed as a different row, the review is marked ``conflict`` and
+        a 409 is raised (never silently duplicating a row).
+        """
+        normalized_action = str(action or "").strip().lower()
+        if normalized_action not in {"pick", "merge", "skip"}:
+            raise HTTPException(status_code=400, detail="action must be one of: pick, merge, skip")
+
+        # Serialize against a running reconnect and against concurrent confirms
+        # using the same lock the reconnect run holds.
+        with self._reconnect_lock:
+            if self._reconnect_progress.get("status") in {"running", "cancelling"}:
+                raise HTTPException(
+                    status_code=409,
+                    detail="A missing-file reconnect run is in progress. Try again once it finishes.",
+                )
+
+            review = db.get_reconnect_review(review_id)
+            if not review:
+                raise HTTPException(status_code=404, detail="Repair review not found")
+            if review.get("status") != db.REVIEW_STATUS_PENDING:
+                raise HTTPException(status_code=409, detail="This repair review has already been resolved")
+
+            candidate_ids = review.get("candidate_ids") or []
+
+            if normalized_action == "skip":
+                db.resolve_reconnect_review(
+                    review_id, status=db.REVIEW_STATUS_RESOLVED, resolution="skip"
+                )
+                return {"status": "resolved", "review_id": int(review_id), "resolution": "skip"}
+
+            # pick / merge both relink a chosen candidate.
+            if chosen_image_id is None:
+                raise HTTPException(status_code=400, detail="chosen_image_id is required for pick/merge")
+            try:
+                chosen_image_id = int(chosen_image_id)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="chosen_image_id must be an integer")
+            if chosen_image_id not in candidate_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail="chosen_image_id is not one of this review's candidates",
+                )
+
+            found_path = review.get("found_path") or ""
+            if not found_path or not os.path.isfile(found_path):
+                raise HTTPException(status_code=409, detail="The found file no longer exists on disk")
+            resolved_found_path = os.path.abspath(found_path)
+
+            # Relinking onto a path already owned by a different row would create
+            # a duplicate index entry; mark the review conflicted and refuse.
+            existing = db.get_image_by_path(resolved_found_path)
+            if existing and int(existing.get("id") or 0) != chosen_image_id:
+                db.resolve_reconnect_review(
+                    review_id,
+                    status=db.REVIEW_STATUS_CONFLICT,
+                    resolution="conflict",
+                    chosen_image_id=chosen_image_id,
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"{resolved_found_path} is already indexed as image "
+                        f"{existing.get('id')}; nothing was relinked."
+                    ),
+                )
+
+            stat_result = os.stat(resolved_found_path)
+            db.reconnect_image_source_path(
+                chosen_image_id,
+                resolved_found_path,
+                source_mtime_ns=int(stat_result.st_mtime_ns),
+                source_size=int(stat_result.st_size),
+                source_file_mtime=datetime.fromtimestamp(stat_result.st_mtime),
+            )
+
+            deleted_ids: List[int] = []
+            if normalized_action == "merge":
+                others = [cid for cid in candidate_ids if cid != chosen_image_id]
+                existing_others = [cid for cid in others if db.get_image_by_id(cid)]
+                if existing_others:
+                    db.delete_images_by_ids(existing_others)
+                    deleted_ids = existing_others
+
+            db.resolve_reconnect_review(
+                review_id,
+                status=db.REVIEW_STATUS_RESOLVED,
+                resolution=normalized_action,
+                chosen_image_id=chosen_image_id,
+            )
+            return {
+                "status": "resolved",
+                "review_id": int(review_id),
+                "resolution": normalized_action,
+                "image_id": chosen_image_id,
+                "new_path": resolved_found_path,
+                "deleted_ids": deleted_ids,
+            }
+
+    async def get_image_preview_by_path(self, path: str, size: int = 256) -> StreamingResponse:
+        """Serve a thumbnail for a found-but-unlinked file by absolute path.
+
+        Used by the repair-review UI to preview a candidate file that is not yet
+        an indexed image (the id-based thumbnail endpoint can't reach it). The
+        path is validated (traversal-safe, must exist, must be an allowed image
+        type) before any read; size is clamped to 1..1024.
+        """
+        normalized_size = max(1, min(int(size or 256), 1024))
+        is_valid, error = validate_file_path(path, ALLOWED_IMAGE_EXTENSIONS)
+        if not is_valid:
+            raise HTTPException(status_code=404, detail=error or "Image not found")
+
+        source_path = normalize_user_path(path)
+        try:
+            thumbnail_bytes, last_modified, cache_hit = await get_thumbnail_async(source_path, normalized_size)
+            return StreamingResponse(
+                io.BytesIO(thumbnail_bytes),
+                media_type="image/webp",
+                headers={
+                    "Cache-Control": f"public, max-age={86400 if cache_hit else 3600}",
+                    "Last-Modified": format_datetime(last_modified, usegmt=True),
+                    "X-Thumbnail-Cache": "HIT" if cache_hit else "MISS",
+                },
+            )
+        except (UnidentifiedImageError, OSError):
+            placeholder_bytes = generate_placeholder_thumbnail(normalized_size)
+            return StreamingResponse(
+                io.BytesIO(placeholder_bytes),
+                media_type="image/webp",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Thumbnail-Cache": "MISS",
+                    "X-Thumbnail-Placeholder": "UNREADABLE",
+                },
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail="Failed to generate preview") from exc
 
     def _validate_common_gallery_filters(
         self,
@@ -1750,6 +2009,11 @@ class ImageService:
                     collection_id=contract.get("collectionId"),
                     folder=contract.get("folder"),
                     has_metadata=contract.get("hasMetadata"),
+                    no_caption=contract.get("noCaption"),
+                    aesthetic_unscored=contract.get("aestheticUnscored"),
+                    min_saturation=contract.get("minSaturation"),
+                    max_saturation=contract.get("maxSaturation"),
+                    seed=contract.get("seed"),
                 ):
                     for image_id in batch_ids:
                         handle.write(f"{int(image_id)}\n")
@@ -1826,6 +2090,12 @@ class ImageService:
         collection_id: Optional[int] = None,
         folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
         has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
+        # Aurora Phase 3 gallery filters
+        no_caption: Optional[bool] = None,  # both ai_caption and nl_caption empty
+        aesthetic_unscored: Optional[bool] = None,  # aesthetic_score IS NULL; takes precedence over min/max_aesthetic
+        min_saturation: Optional[float] = None,
+        max_saturation: Optional[float] = None,
+        seed: Optional[int] = None,  # generation seed inside metadata_json
     ) -> Dict[str, Any]:
         """
         Retrieve images with optional filtering using cursor-based pagination.
@@ -1848,6 +2118,12 @@ class ImageService:
             max_height: Maximum height filter
             prompts: Comma-separated prompt terms
             aspect_ratio: 'square', 'landscape', or 'portrait'
+            no_caption: When true, only images with neither an ai_caption nor an nl_caption
+            aesthetic_unscored: When true, only images with no aesthetic score. Takes
+                precedence over min_aesthetic/max_aesthetic when both are supplied
+                (the range is ignored so "unscored" cannot contradict a numeric bound).
+            min_saturation/max_saturation: Color-saturation range (requires color analysis)
+            seed: Match images generated with this exact seed (read from metadata_json)
 
         Returns:
             Dict containing images, next_cursor, has_more, total
@@ -1910,6 +2186,11 @@ class ImageService:
                 result = db.get_images_paginated(
                     folder=folder,
                     has_metadata=has_metadata,
+                    no_caption=no_caption,
+                    aesthetic_unscored=aesthetic_unscored,
+                    min_saturation=min_saturation,
+                    max_saturation=max_saturation,
+                    seed=seed,
                     generators=gen_list,
                     tags=tag_list,
                     tag_mode=tag_mode,
@@ -1984,6 +2265,11 @@ class ImageService:
             batch = db.get_images(
                 folder=folder,
                 has_metadata=has_metadata,
+                no_caption=no_caption,
+                aesthetic_unscored=aesthetic_unscored,
+                min_saturation=min_saturation,
+                max_saturation=max_saturation,
+                seed=seed,
                 generators=gen_list,
                 tags=tag_list,
                 tag_mode=tag_mode,
@@ -2036,6 +2322,11 @@ class ImageService:
         total = db.get_filtered_image_count(
             folder=folder,
             has_metadata=has_metadata,
+            no_caption=no_caption,
+            aesthetic_unscored=aesthetic_unscored,
+            min_saturation=min_saturation,
+            max_saturation=max_saturation,
+            seed=seed,
             generators=gen_list,
             tags=tag_list,
             tag_mode=tag_mode,
@@ -2075,6 +2366,113 @@ class ImageService:
             "has_more": has_more,
             "total": total,
         }
+
+    def get_image_count(
+        self,
+        *,
+        generators: Optional[str] = None,
+        tags: Optional[str] = None,
+        tag_mode: str = "and",
+        ratings: Optional[str] = None,
+        checkpoints: Optional[str] = None,
+        loras: Optional[str] = None,
+        search: Optional[str] = None,
+        artist: Optional[str] = None,
+        min_width: Optional[int] = None,
+        max_width: Optional[int] = None,
+        min_height: Optional[int] = None,
+        max_height: Optional[int] = None,
+        prompts: Optional[str] = None,
+        prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
+        aspect_ratio: Optional[str] = None,
+        min_aesthetic: Optional[float] = None,
+        max_aesthetic: Optional[float] = None,
+        min_user_rating: Optional[int] = None,
+        brightness_min: Optional[float] = None,
+        brightness_max: Optional[float] = None,
+        color_temperature: Optional[str] = None,
+        brightness_distribution: Optional[str] = None,
+        exclude_tags: Optional[str] = None,
+        exclude_generators: Optional[str] = None,
+        exclude_ratings: Optional[str] = None,
+        exclude_checkpoints: Optional[str] = None,
+        exclude_loras: Optional[str] = None,
+        exclude_prompts: Optional[str] = None,
+        exclude_colors: Optional[str] = None,
+        collection_id: Optional[int] = None,
+        folder: Optional[str] = None,
+        has_metadata: Optional[bool] = None,
+        # Aurora Phase 3 gallery filters
+        no_caption: Optional[bool] = None,
+        aesthetic_unscored: Optional[bool] = None,
+        min_saturation: Optional[float] = None,
+        max_saturation: Optional[float] = None,
+        seed: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Return the exact count of images matching the same filters as GET /api/images.
+
+        Powers the live "Apply · ~N images" filter preview (Aurora Phase 3). Unlike
+        the ``total`` field on GET /api/images — which returns a -1 skip sentinel on
+        the cursor path for large libraries — this endpoint always runs the count
+        query and returns a real total. Sort order and pagination are irrelevant to
+        a count, so they are intentionally not accepted.
+        """
+        self._validate_common_gallery_filters(
+            sort_by="newest",
+            aspect_ratio=aspect_ratio,
+            min_width=min_width,
+            max_width=max_width,
+            min_height=min_height,
+            max_height=max_height,
+            brightness_min=brightness_min,
+            brightness_max=brightness_max,
+            color_temperature=color_temperature,
+            brightness_distribution=brightness_distribution,
+        )
+
+        color_temperature = _sanitize_filter_value(color_temperature).lower() if color_temperature else None
+        brightness_distribution = _sanitize_filter_value(brightness_distribution).lower() if brightness_distribution else None
+
+        total = db.get_filtered_image_count(
+            generators=_sanitize_filter_values(generators),
+            tags=_sanitize_filter_values(tags),
+            tag_mode=tag_mode,
+            ratings=_sanitize_filter_values(ratings),
+            checkpoints=_sanitize_filter_values(checkpoints),
+            loras=_sanitize_filter_values(loras),
+            search_query=_sanitize_filter_value(search) if search else None,
+            prompt_terms=_sanitize_filter_values(prompts),
+            prompt_match_mode=_coerce_prompt_match_mode(prompt_match_mode),
+            artist=_sanitize_filter_value(artist) if artist else None,
+            min_width=min_width,
+            max_width=max_width,
+            min_height=min_height,
+            max_height=max_height,
+            aspect_ratio=aspect_ratio,
+            min_aesthetic=min_aesthetic,
+            max_aesthetic=max_aesthetic,
+            min_user_rating=min_user_rating,
+            brightness_min=brightness_min,
+            brightness_max=brightness_max,
+            color_temperature=color_temperature,
+            brightness_distribution=brightness_distribution,
+            exclude_tags=_sanitize_filter_values(exclude_tags),
+            exclude_generators=_sanitize_filter_values(exclude_generators),
+            exclude_ratings=_sanitize_filter_values(exclude_ratings),
+            exclude_checkpoints=_sanitize_filter_values(exclude_checkpoints),
+            exclude_loras=_sanitize_filter_values(exclude_loras),
+            exclude_prompts=_sanitize_filter_values(exclude_prompts),
+            exclude_colors=_sanitize_filter_values(exclude_colors),
+            collection_id=collection_id,
+            folder=folder,
+            has_metadata=has_metadata,
+            no_caption=no_caption,
+            aesthetic_unscored=aesthetic_unscored,
+            min_saturation=min_saturation,
+            max_saturation=max_saturation,
+            seed=seed,
+        )
+        return {"total": int(total)}
 
     def get_library_folders(self) -> Dict[str, Any]:
         """List distinct image directories for the gallery folder tree (v3.3.2 Library Navigation)."""
@@ -2137,6 +2535,12 @@ class ImageService:
         collection_id: Optional[int] = None,
         folder: Optional[str] = None,  # v3.3.2 Library Navigation
         has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
+        # Aurora Phase 3 gallery filters
+        no_caption: Optional[bool] = None,
+        aesthetic_unscored: Optional[bool] = None,
+        min_saturation: Optional[float] = None,
+        max_saturation: Optional[float] = None,
+        seed: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Build the canonical filter contract encoded into selection tokens."""
         sort_by = _coerce_optional_string_filter(sort_by, "sortBy") or "newest"
@@ -2212,6 +2616,12 @@ class ImageService:
             "collectionId": collection_id,
             "folder": _coerce_optional_string_filter(folder, "folder"),
             "hasMetadata": _coerce_optional_bool_filter(has_metadata, "hasMetadata"),
+            # Aurora Phase 3 gallery filters
+            "noCaption": _coerce_optional_bool_filter(no_caption, "noCaption"),
+            "aestheticUnscored": _coerce_optional_bool_filter(aesthetic_unscored, "aestheticUnscored"),
+            "minSaturation": _coerce_optional_float_filter(min_saturation, "minSaturation"),
+            "maxSaturation": _coerce_optional_float_filter(max_saturation, "maxSaturation"),
+            "seed": _coerce_optional_int_filter(seed, "seed"),
         }
 
     def _selection_ids_from_contract(
@@ -2256,6 +2666,11 @@ class ImageService:
             collection_id=contract.get("collectionId"),
             folder=contract.get("folder"),
             has_metadata=contract.get("hasMetadata"),
+            no_caption=contract.get("noCaption"),
+            aesthetic_unscored=contract.get("aestheticUnscored"),
+            min_saturation=contract.get("minSaturation"),
+            max_saturation=contract.get("maxSaturation"),
+            seed=contract.get("seed"),
             fetch_chunk_size=SELECTION_IDS_FETCH_CHUNK,
             offset=offset,
             limit=limit,
@@ -2296,6 +2711,11 @@ class ImageService:
             collection_id=contract.get("collectionId"),
             folder=contract.get("folder"),
             has_metadata=contract.get("hasMetadata"),
+            no_caption=contract.get("noCaption"),
+            aesthetic_unscored=contract.get("aestheticUnscored"),
+            min_saturation=contract.get("minSaturation"),
+            max_saturation=contract.get("maxSaturation"),
+            seed=contract.get("seed"),
         )
 
     def _encode_selection_token(self, contract: Dict[str, Any]) -> str:
@@ -2374,6 +2794,11 @@ class ImageService:
                 collection_id=filters.get("collectionId") or filters.get("collection_id"),
                 folder=filters.get("folder"),
                 has_metadata=filters.get("hasMetadata"),
+                no_caption=filters.get("noCaption"),
+                aesthetic_unscored=filters.get("aestheticUnscored"),
+                min_saturation=filters.get("minSaturation"),
+                max_saturation=filters.get("maxSaturation"),
+                seed=filters.get("seed"),
             )
         except HTTPException:
             raise
@@ -2457,6 +2882,12 @@ class ImageService:
         collection_id: Optional[int] = None,
         folder: Optional[str] = None,
         has_metadata: Optional[bool] = None,
+        # Aurora Phase 3 gallery filters
+        no_caption: Optional[bool] = None,
+        aesthetic_unscored: Optional[bool] = None,
+        min_saturation: Optional[float] = None,
+        max_saturation: Optional[float] = None,
+        seed: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Resolve the full filtered-result ID set in current gallery sort order."""
         contract = self._build_selection_filter_contract(
@@ -2493,6 +2924,11 @@ class ImageService:
             collection_id=collection_id,
             folder=folder,
             has_metadata=has_metadata,
+            no_caption=no_caption,
+            aesthetic_unscored=aesthetic_unscored,
+            min_saturation=min_saturation,
+            max_saturation=max_saturation,
+            seed=seed,
         )
         image_ids = self._selection_ids_from_contract(
             contract,

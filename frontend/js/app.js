@@ -332,6 +332,12 @@ function cloneFilterState(filters) {
         collectionId: source.collectionId ?? null,
         folder: source.folder ? String(source.folder).trim() : null,
         hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
+        // Aurora Phase 3 toolbar/24d filters
+        noCaption: source.noCaption === true ? true : null,
+        aestheticUnscored: source.aestheticUnscored === true ? true : null,
+        minSaturation: source.minSaturation ?? null,
+        maxSaturation: source.maxSaturation ?? null,
+        seed: source.seed ?? null,
     };
 }
 
@@ -413,6 +419,12 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
         collectionId: source.collectionId ?? null,
         folder: source.folder ? String(source.folder).trim() : null,
         hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
+        // Aurora Phase 3 toolbar/24d filters
+        noCaption: source.noCaption === true ? true : null,
+        aestheticUnscored: source.aestheticUnscored === true ? true : null,
+        minSaturation: source.minSaturation ?? null,
+        maxSaturation: source.maxSaturation ?? null,
+        seed: source.seed ?? null,
     };
 }
 
@@ -629,6 +641,12 @@ window.AppFilterAccess = {
         if (filters.excludeColors?.length) params.set('exclude_colors', filters.excludeColors.join(','));
         if (filters.folder) params.set('folder', filters.folder);
         if (filters.hasMetadata != null) params.set('has_metadata', String(filters.hasMetadata));
+        // Aurora Phase 3 toolbar/24d filters
+        if (filters.noCaption === true) params.set('no_caption', 'true');
+        if (filters.aestheticUnscored === true) params.set('aesthetic_unscored', 'true');
+        if (filters.minSaturation != null) params.set('min_saturation', filters.minSaturation);
+        if (filters.maxSaturation != null) params.set('max_saturation', filters.maxSaturation);
+        if (filters.seed != null) params.set('seed', filters.seed);
         return params;
     },
 };
@@ -1207,6 +1225,53 @@ const API = {
         }
     },
 
+    // Aurora Phase 3: filter → query params for GET /api/images/count (the
+    // live hit-count preview). Mirrors getImages' filter mapping WITHOUT the
+    // pagination/sort params — keep the two in step when adding filters.
+    buildFilterQueryParams(filters = {}) {
+        const params = new URLSearchParams();
+        if (filters.generators?.length) params.set('generators', filters.generators.join(','));
+        if (filters.ratings?.length) params.set('ratings', filters.ratings.join(','));
+        if (filters.tags?.length) params.set('tags', filters.tags.join(','));
+        if (filters.tagMode && filters.tagMode !== 'and') params.set('tag_mode', filters.tagMode);
+        if (filters.checkpoints?.length) params.set('checkpoints', filters.checkpoints.join(','));
+        if (filters.loras?.length) params.set('loras', filters.loras.join(','));
+        if (filters.prompts?.length) params.set('prompts', filters.prompts.join(','));
+        const promptMatchMode = normalizePromptMatchMode(filters.promptMatchMode);
+        if (promptMatchMode !== 'exact') params.set('prompt_match_mode', promptMatchMode);
+        if (filters.artist) params.set('artist', filters.artist);
+        if (filters.search) params.set('search', filters.search);
+        if (filters.minWidth) params.set('min_width', filters.minWidth);
+        if (filters.maxWidth) params.set('max_width', filters.maxWidth);
+        if (filters.minHeight) params.set('min_height', filters.minHeight);
+        if (filters.maxHeight) params.set('max_height', filters.maxHeight);
+        const aspectRatio = normalizeAspectRatioFilter(filters.aspectRatio);
+        if (aspectRatio) params.set('aspect_ratio', aspectRatio);
+        if (filters.minAesthetic) params.set('min_aesthetic', filters.minAesthetic);
+        if (filters.maxAesthetic) params.set('max_aesthetic', filters.maxAesthetic);
+        if (filters.minUserRating) params.set('min_user_rating', filters.minUserRating);
+        if (filters.brightnessMin) params.set('brightness_min', filters.brightnessMin);
+        if (filters.brightnessMax) params.set('brightness_max', filters.brightnessMax);
+        if (filters.colorTemperature) params.set('color_temperature', filters.colorTemperature);
+        if (filters.brightnessDistribution) params.set('brightness_distribution', filters.brightnessDistribution);
+        if (filters.excludeTags?.length) params.set('exclude_tags', filters.excludeTags.join(','));
+        if (filters.excludeGenerators?.length) params.set('exclude_generators', filters.excludeGenerators.join(','));
+        if (filters.excludeRatings?.length) params.set('exclude_ratings', filters.excludeRatings.join(','));
+        if (filters.excludeCheckpoints?.length) params.set('exclude_checkpoints', filters.excludeCheckpoints.join(','));
+        if (filters.excludeLoras?.length) params.set('exclude_loras', filters.excludeLoras.join(','));
+        if (filters.excludePrompts?.length) params.set('exclude_prompts', filters.excludePrompts.join(','));
+        if (filters.excludeColors?.length) params.set('exclude_colors', filters.excludeColors.join(','));
+        if (filters.collectionId) params.set('collection_id', filters.collectionId);
+        if (filters.folder) params.set('folder', filters.folder);
+        if (filters.hasMetadata != null) params.set('has_metadata', String(filters.hasMetadata));
+        if (filters.noCaption === true) params.set('no_caption', 'true');
+        if (filters.aestheticUnscored === true) params.set('aesthetic_unscored', 'true');
+        if (filters.minSaturation != null) params.set('min_saturation', filters.minSaturation);
+        if (filters.maxSaturation != null) params.set('max_saturation', filters.maxSaturation);
+        if (filters.seed != null) params.set('seed', filters.seed);
+        return params;
+    },
+
     // Images with cursor-based pagination
     async getImages(filters = {}, options = {}) {
         const params = new URLSearchParams();
@@ -1260,6 +1325,12 @@ const API = {
         // v3.3.2 Library Navigation: recursive folder-subtree scope
         if (filters.folder) params.set('folder', filters.folder);
         if (filters.hasMetadata != null) params.set('has_metadata', String(filters.hasMetadata));
+        // Aurora Phase 3 toolbar/24d filters
+        if (filters.noCaption === true) params.set('no_caption', 'true');
+        if (filters.aestheticUnscored === true) params.set('aesthetic_unscored', 'true');
+        if (filters.minSaturation != null) params.set('min_saturation', filters.minSaturation);
+        if (filters.maxSaturation != null) params.set('max_saturation', filters.maxSaturation);
+        if (filters.seed != null) params.set('seed', filters.seed);
 
         return this.get(`/api/images?${params}`, options);
     },
@@ -5440,72 +5511,14 @@ function updateNavigationOverflowState() {
         return true;
     }
 
-    const needsOverflow = () => {
-        // v3.2.2: simplest possible overflow detection — does the
-        // ``navTabs`` flex container's scrollWidth (its natural,
-        // un-clipped width) exceed its clientWidth (what the layout
-        // gave it)? If yes, content is being clipped, regardless of
-        // what nav-actions-compact / brand width / etc. compute to.
-        // The previous formula tried to predict the available width
-        // from sibling sizes; on 1440 px laptops it under-counted the
-        // gap and let the last tab silently clip.
-        return navTabs.scrollWidth > navTabs.clientWidth + 1;
-    };
-
-    if (!needsOverflow()) {
-        closeMobileMenu();
-        return false;
-    }
-
-    // Desktop-first degradation: show Prompt Helper / Style Finder directly
-    // when there is room, then move only those low-priority tools into More.
-    navBar.classList.add('nav-priority-overflow');
-    if (!needsOverflow()) {
-        closeMobileMenu();
-        return false;
-    }
-
-    // Keep the core pipeline labels readable before falling back to icon-only.
-    navBar.classList.add('nav-tabs-compact-labels');
-    if (!needsOverflow()) {
-        closeMobileMenu();
-        return false;
-    }
-
-    navBar.classList.add('nav-tabs-compact-secondary');
-    if (!needsOverflow()) {
-        closeMobileMenu();
-        return false;
-    }
-
-    navBar.classList.add('nav-tabs-compact-brand');
-    if (!needsOverflow()) {
-        closeMobileMenu();
-        return false;
-    }
-
-    navBar.classList.add('nav-actions-compact');
-    if (!needsOverflow()) {
-        closeMobileMenu();
-        return false;
-    }
-
-    navBar.classList.add('nav-tabs-icon-only');
-    if (!needsOverflow()) {
-        closeMobileMenu();
-        return false;
-    }
-
-    navBar.classList.remove(
-        'nav-actions-compact',
-        'nav-tabs-icon-only',
-        'nav-tabs-compact-labels',
-        'nav-tabs-compact-secondary',
-        'nav-tabs-compact-brand',
-        'nav-priority-overflow'
-    );
-    navBar.classList.add('nav-tabs-overflow');
-    return true;
+    // Aurora Phase 3: >=769px renders the vertical left rail (ui-refresh.css
+    // "Nav Rail" section), where horizontal clipping cannot happen — the old
+    // width-degradation ladder (nav-priority-overflow → nav-tabs-compact-* →
+    // icon-only → overflow) retired with the top bar. The classList.remove
+    // above still strips any ladder class left over from a resize; the
+    // ladder's CSS skins are removed in the Phase 4 legacy sweep.
+    closeMobileMenu();
+    return false;
 }
 
 // v3.4.3: Prompt Helper + Style Finder render as direct tabs when space allows.
@@ -5810,69 +5823,32 @@ function initEventListeners() {
                 updateGridSize(currentSize + 20);
             });
         }
+
+        // Keyboard shortcuts [ / ] step the SAME px value as the slider.
+        // (Aurora Phase 3: previously these stepped a separate per-mode size
+        // array with its own localStorage key, so keyboard and slider fought
+        // over --grid-item-size and never agreed after a reload.)
+        document.addEventListener('keydown', (e) => {
+            const activeEl = document.activeElement;
+            if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+                return;
+            }
+            const modalOpen = document.querySelector('.modal.show, [role="dialog"][style*="display: block"]');
+            if (modalOpen) return;
+
+            if (e.key === '[' || e.key === ']') {
+                e.preventDefault();
+                const currentSize = parseInt(gridSizeSlider.value, 10) || 200;
+                updateGridSize(e.key === '[' ? currentSize - 20 : currentSize + 20);
+                showToast(
+                    e.key === '['
+                        ? appT('gallery.thumbnailSizeDecreased', 'Thumbnail size decreased')
+                        : appT('gallery.thumbnailSizeIncreased', 'Thumbnail size increased'),
+                    'info'
+                );
+            }
+        });
     }
-
-    // Keyboard shortcuts for adjusting thumbnail size: [ = decrease, ] = increase
-    const THUMBNAIL_SIZES = {
-        grid: [150, 180, 200, 240, 280, 320],
-        large: [300, 340, 384, 440, 512, 580],
-        waterfall: [220, 250, 280, 320, 360, 400]
-    };
-    const THUMBNAIL_SIZE_KEY = 'sd-sorter:thumbnail-size-index';
-
-    function getCurrentSizeIndex() {
-        const stored = localStorage.getItem(THUMBNAIL_SIZE_KEY);
-        return stored ? parseInt(stored, 10) : 2; // default to middle size
-    }
-
-    function setCurrentSizeIndex(index) {
-        localStorage.setItem(THUMBNAIL_SIZE_KEY, String(index));
-    }
-
-    function applyThumbnailSize(viewMode, sizeIndex) {
-        const galleryGrid = $('#gallery-grid');
-        if (!galleryGrid) return getCurrentSizeIndex();
-
-        const sizes = THUMBNAIL_SIZES[viewMode] || THUMBNAIL_SIZES.grid;
-        const clampedIndex = Math.max(0, Math.min(sizes.length - 1, sizeIndex));
-        const size = sizes[clampedIndex];
-
-        galleryGrid.style.setProperty('--grid-item-size', `${size}px`);
-        if (viewMode === 'waterfall') {
-            galleryGrid.style.setProperty('--waterfall-column-width', `${size}px`);
-        }
-
-        setCurrentSizeIndex(clampedIndex);
-        return clampedIndex;
-    }
-
-    // Apply saved size on page load
-    const initialViewMode = AppState.viewMode || 'grid';
-    applyThumbnailSize(initialViewMode, getCurrentSizeIndex());
-
-    // Global keyboard shortcuts for thumbnail size
-    document.addEventListener('keydown', (e) => {
-        // Skip if user is typing in an input/textarea or modal is open
-        const activeEl = document.activeElement;
-        if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
-            return;
-        }
-        const modalOpen = document.querySelector('.modal.show, [role="dialog"][style*="display: block"]');
-        if (modalOpen) return;
-
-        const currentViewMode = AppState.viewMode || 'grid';
-        const currentIndex = getCurrentSizeIndex();
-
-        if (e.key === '[') {
-            e.preventDefault();
-            applyThumbnailSize(currentViewMode, currentIndex - 1);
-            showToast(appT('gallery.thumbnailSizeDecreased', 'Thumbnail size decreased'), 'info');
-        } else if (e.key === ']') {
-            e.preventDefault();
-            applyThumbnailSize(currentViewMode, currentIndex + 1);
-            showToast(appT('gallery.thumbnailSizeIncreased', 'Thumbnail size increased'), 'info');
-        }
-    });
 
     // Gallery-header aspect quick-toggle (FE-7). Drives the SAME FilterStore
     // `aspectRatio` field as the filter modal's aspect radios — no parallel
@@ -6282,7 +6258,21 @@ function initEventListeners() {
             const maxInput = $('#filter-aesthetic-max');
             if (minInput) minInput.value = btn.dataset.min || '';
             if (maxInput) maxInput.value = btn.dataset.max || '';
+            // Aurora Phase 3 (24d): "Unscored" is a REAL aesthetic-IS-NULL
+            // filter now, carried as a flag on the tier group (it has no
+            // min/max representation). Any other tier clears it.
+            const group = btn.closest('.aesthetic-quick-filters');
+            if (group) group.dataset.unscored = btn.dataset.unscored === '1' ? '1' : '';
+            $$('.aesthetic-quick').forEach(b => b.classList.toggle('is-active', b === btn));
             updateFilterModalSummary();
+        });
+    });
+    // Typing a manual aesthetic bound is a scored-range intent — drop Unscored.
+    ['#filter-aesthetic-min', '#filter-aesthetic-max'].forEach((selector) => {
+        $(selector)?.addEventListener('input', () => {
+            const group = $('.aesthetic-quick-filters');
+            if (group) group.dataset.unscored = '';
+            $$('.aesthetic-quick').forEach(b => b.classList.remove('is-active'));
         });
     });
 
@@ -6983,7 +6973,11 @@ function _renderReconnectResultPanel(progress) {
             `)}
         </details>
         <details class="reconnect-result-group" ${needsReview.length ? 'open' : ''}>
-            <summary>${escapeHtml(appT('reconnect.resultNeedsReview', 'Need your choice'))} <span>${needsReview.length}</span></summary>
+            <summary>${escapeHtml(appT('reconnect.resultNeedsReview', 'Need your choice'))} <span>${Number(result.review_pending_total || needsReview.length || 0)}</span></summary>
+            ${Number(result.review_pending_total || needsReview.length || 0) > 0 ? `
+                <button type="button" class="btn btn-primary btn-small reconnect-open-repair-review" id="btn-open-repair-review">
+                    ${escapeHtml(appT('repairReview.openButton', 'Review & fix these matches ({count})').replace('{count}', String(Number(result.review_pending_total || needsReview.length || 0))))}
+                </button>` : ''}
             ${renderItems(needsReview, (item) => `
                 <div class="reconnect-result-item">
                     <strong>${escapeHtml(item.filename || '')}</strong>
@@ -7033,6 +7027,12 @@ function _renderReconnectResultPanel(progress) {
                 removeGalleryImagesByIds([imageId]);
             }
         });
+    });
+    // Aurora Phase 3 / Roadmap-C: hand ambiguous matches to the review modal.
+    panel.querySelector('#btn-open-repair-review')?.addEventListener('click', () => {
+        if (window.RepairReview && typeof window.RepairReview.open === 'function') {
+            window.RepairReview.open();
+        }
     });
     panel.style.display = 'grid';
 }
@@ -8498,6 +8498,14 @@ async function startTagging() {
 
     persistTaggerDefaultsFromDom();
 
+    // Aurora Phase 3: the batch action bar's Tag button scopes this run to the
+    // Gallery selection (explicit id selections only; token selections keep
+    // the whole-library semantics of this modal).
+    const scopedTagIds = window.GalleryToolbar?.consumeTagSelectionIds?.();
+    if (scopedTagIds && scopedTagIds.length) {
+        options.imageIds = scopedTagIds;
+    }
+
     try {
         _tagStartInFlight = true;
         const startResp = await API.startTagging(options);
@@ -8514,6 +8522,11 @@ async function startTagging() {
                 : appT('aiQueue.queuedToast', 'Queued — starts automatically after the current AI job finishes'), 'info');
         } else {
             _tagQueuedWaiting = false;
+        }
+
+        // Scoped run accepted — disarm so the NEXT run isn't silently scoped.
+        if (scopedTagIds && scopedTagIds.length) {
+            window.GalleryToolbar?.disarmTagSelection?.();
         }
 
         _tagPollingActive = true;
@@ -9965,6 +9978,20 @@ function updateSelectionUI() {
         grid.classList.toggle('selection-mode', !!AppState.selectionMode);
     }
 
+    // Aurora Phase 3: stamp pick-order numbers onto selected tiles (♥ N badge).
+    if (window.GallerySelectionBadges) {
+        window.GallerySelectionBadges.refresh(AppState);
+    }
+
+    // Aurora Phase 3: sticky bottom action bar visibility + stats line.
+    if (window.GalleryToolbar) {
+        window.GalleryToolbar.syncActionBar({
+            visible: canRunBatchActions,
+            selectedCount,
+            tokenScoped: !!AppState.selectionToken,
+        });
+    }
+
     // In gallery selection mode, keep the browse/filter sections visible so users
     // can select images across different filters; the batch-action panel is pinned
     // to the sidebar bottom (see .filter-sidebar.selection-mode in ui-refresh.css).
@@ -10922,6 +10949,25 @@ async function openFilterModal(options = {}) {
     const brightnessMaxInput = $('#filter-brightness-max');
     if (brightnessMinInput) brightnessMinInput.value = filterState.brightnessMin ?? '';
     if (brightnessMaxInput) brightnessMaxInput.value = filterState.brightnessMax ?? '';
+    // Aurora Phase 3 (24d): saturation range + Unscored aesthetic tier state
+    const saturationMinInput = $('#filter-saturation-min');
+    const saturationMaxInput = $('#filter-saturation-max');
+    if (saturationMinInput) saturationMinInput.value = filterState.minSaturation ?? '';
+    if (saturationMaxInput) saturationMaxInput.value = filterState.maxSaturation ?? '';
+    // Reset the Apply label to its translatable state on every open; the
+    // count preview re-locks it as soon as a fresh count arrives.
+    const applyModalButton = $('#btn-apply-modal-filters');
+    if (applyModalButton) {
+        delete applyModalButton.dataset.i18nLocked;
+        applyModalButton.textContent = appT('filter.apply', 'Apply Filters');
+    }
+    const aestheticQuickGroup = $('.aesthetic-quick-filters');
+    if (aestheticQuickGroup) {
+        aestheticQuickGroup.dataset.unscored = filterState.aestheticUnscored === true ? '1' : '';
+    }
+    $$('.aesthetic-quick').forEach(btn => {
+        btn.classList.toggle('is-active', btn.dataset.unscored === '1' && filterState.aestheticUnscored === true);
+    });
     $$('input[name="color-temperature"]').forEach(radio => {
         radio.checked = radio.value === (filterState.colorTemperature || '');
     });
@@ -12498,10 +12544,53 @@ function renderLoraFilterList(loras, t = appT) {
     `).join('') : `<div class="filter-empty-state">${escapeHtml(t('filter.noLoras', null, 'No LoRAs found yet.'))}</div>`;
 }
 
+// ---- Aurora Phase 3 (24d): live hit-count preview on the Apply button ----
+// Debounced: every modal change reads the WOULD-BE state via
+// readFilterModalDomInto and asks GET /api/images/count how many images
+// match, so "Apply" shows the outcome before committing. Degrades silently
+// (plain "Apply Filters" label) when the endpoint is unavailable.
+let _filterCountPreviewTimer = null;
+let _filterCountPreviewAbort = null;
+
+function scheduleFilterCountPreview() {
+    if (_filterCountPreviewTimer) clearTimeout(_filterCountPreviewTimer);
+    _filterCountPreviewTimer = setTimeout(() => {
+        _filterCountPreviewTimer = null;
+        runFilterCountPreview();
+    }, 600);
+}
+
+async function runFilterCountPreview() {
+    const applyButton = $('#btn-apply-modal-filters');
+    const modal = document.getElementById('filter-modal');
+    if (!applyButton || !modal || !modal.classList.contains('visible')) return;
+
+    const candidate = readFilterModalDomInto(cloneFilterState(getFilterModalState()));
+    const params = API.buildFilterQueryParams(candidate);
+    try {
+        if (_filterCountPreviewAbort) _filterCountPreviewAbort.abort();
+        _filterCountPreviewAbort = new AbortController();
+        const resp = await fetch(`/api/images/count?${params}`, { signal: _filterCountPreviewAbort.signal });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const total = Number(data?.total);
+        if (Number.isFinite(total) && total >= 0) {
+            // Lock the label first: I18n.applyToDOM and ui-refresh's
+            // _setButton both re-translate this button (data-i18n +
+            // explicit _setButton call), and the observer fires on our own
+            // write — without the lock the count is clobbered one frame later.
+            applyButton.dataset.i18nLocked = '1';
+            applyButton.textContent = appT('filter.applyWithCount', 'Apply · ~{count} images')
+                .replace('{count}', total.toLocaleString());
+        }
+    } catch (e) { /* aborted / offline — keep the last label */ }
+}
+
 function updateFilterModalSummary() {
     const selectionSummary = $('#filter-modal-selection-summary');
     const summaryHint = $('#filter-modal-summary-hint');
     const filterState = getFilterModalState();
+    scheduleFilterCountPreview();
     const t = (key, params, fallback) => {
         const translated = window.I18n?.t?.(key, params);
         return translated && translated !== key ? translated : (fallback || key);
@@ -12766,8 +12855,10 @@ function _collectAllAwareCheckboxValues(listId, searchId) {
     return checked;
 }
 
-function applyModalFilters() {
-    const filterState = getFilterModalState();
+// Reads every filter-modal control into ``filterState``. Shared by the Apply
+// path and the live hit-count preview (Aurora Phase 3, 24d) so the predicted
+// count is computed from EXACTLY what Apply would commit.
+function readFilterModalDomInto(filterState) {
     // Get generators
     const generators = [];
     $$('#modal-generator-filters input:checked').forEach(cb => generators.push(cb.value));
@@ -12788,22 +12879,16 @@ function applyModalFilters() {
     // But read the free-text search field for filename/prompt text search
     const freeTextSearch = $('#modal-free-text-search');
     filterState.search = freeTextSearch ? freeTextSearch.value.trim() : '';
-    const promptSearch = $('#modal-prompt-search');
-    if (promptSearch) promptSearch.value = '';
     const promptMatchRadio = $('input[name="prompt-match-mode"]:checked');
     filterState.promptMatchMode = normalizePromptMatchMode(promptMatchRadio?.value);
     const tagModeRadio = $('input[name="tag-match-mode"]:checked');
     filterState.tagMode = tagModeRadio?.value || 'and';
 
     // Get dimension filters
-    const minWidth = parseInt($('#filter-min-width')?.value, 10) || null;
-    const maxWidth = parseInt($('#filter-max-width')?.value, 10) || null;
-    const minHeight = parseInt($('#filter-min-height')?.value, 10) || null;
-    const maxHeight = parseInt($('#filter-max-height')?.value, 10) || null;
-    filterState.minWidth = minWidth;
-    filterState.maxWidth = maxWidth;
-    filterState.minHeight = minHeight;
-    filterState.maxHeight = maxHeight;
+    filterState.minWidth = parseInt($('#filter-min-width')?.value, 10) || null;
+    filterState.maxWidth = parseInt($('#filter-max-width')?.value, 10) || null;
+    filterState.minHeight = parseInt($('#filter-min-height')?.value, 10) || null;
+    filterState.maxHeight = parseInt($('#filter-max-height')?.value, 10) || null;
 
     // Get aspect ratio
     const aspectRadio = $('input[name="aspect-ratio"]:checked');
@@ -12815,23 +12900,42 @@ function applyModalFilters() {
     filterState.hasMetadata = hasMetaValue === 'true' ? true : (hasMetaValue === 'false' ? false : null);
 
     // Get aesthetic score range
-    const minAesthetic = parseFloat($('#filter-aesthetic-min')?.value) || null;
-    const maxAesthetic = parseFloat($('#filter-aesthetic-max')?.value) || null;
-    filterState.minAesthetic = minAesthetic;
-    filterState.maxAesthetic = maxAesthetic;
+    filterState.minAesthetic = parseFloat($('#filter-aesthetic-min')?.value) || null;
+    filterState.maxAesthetic = parseFloat($('#filter-aesthetic-max')?.value) || null;
+
+    // Aurora Phase 3 (24d): the Unscored tier = aesthetic_score IS NULL. It is
+    // mutually exclusive with a scored range.
+    const aestheticGroup = $('.aesthetic-quick-filters');
+    filterState.aestheticUnscored = aestheticGroup?.dataset.unscored === '1' ? true : null;
+    if (filterState.aestheticUnscored) {
+        filterState.minAesthetic = null;
+        filterState.maxAesthetic = null;
+    }
 
     // v3.3.3 WIRING-01: minimum user star rating (1-5; '' = any).
-    const minUserRating = parseInt($('#filter-user-rating-min')?.value, 10) || null;
-    filterState.minUserRating = minUserRating;
+    filterState.minUserRating = parseInt($('#filter-user-rating-min')?.value, 10) || null;
 
-    const brightnessMin = parseFloat($('#filter-brightness-min')?.value) || null;
-    const brightnessMax = parseFloat($('#filter-brightness-max')?.value) || null;
     const colorTemperatureRadio = $('input[name="color-temperature"]:checked');
     const brightnessDistributionRadio = $('input[name="brightness-distribution"]:checked');
-    filterState.brightnessMin = brightnessMin;
-    filterState.brightnessMax = brightnessMax;
+    filterState.brightnessMin = parseFloat($('#filter-brightness-min')?.value) || null;
+    filterState.brightnessMax = parseFloat($('#filter-brightness-max')?.value) || null;
     filterState.colorTemperature = colorTemperatureRadio ? colorTemperatureRadio.value : '';
     filterState.brightnessDistribution = brightnessDistributionRadio ? brightnessDistributionRadio.value : '';
+
+    // Aurora Phase 3 (24d): saturation range (0-255, needs color analysis).
+    const saturationMinRaw = parseFloat($('#filter-saturation-min')?.value);
+    const saturationMaxRaw = parseFloat($('#filter-saturation-max')?.value);
+    filterState.minSaturation = Number.isFinite(saturationMinRaw) ? saturationMinRaw : null;
+    filterState.maxSaturation = Number.isFinite(saturationMaxRaw) ? saturationMaxRaw : null;
+
+    return filterState;
+}
+
+function applyModalFilters() {
+    const filterState = getFilterModalState();
+    readFilterModalDomInto(filterState);
+    const promptSearch = $('#modal-prompt-search');
+    if (promptSearch) promptSearch.value = '';
 
     const committedFilters = commitFilterModalState(filterState);
 
@@ -13137,6 +13241,12 @@ function updateFilterSummary() {
     saveFilterState();
 
     const f = AppState.filters;
+
+    // Aurora Phase 3: keep the toolbar quick chips in step with the store,
+    // whatever surface changed it (modal, chips, summary ✕, Clear all).
+    if (window.GalleryToolbar) {
+        window.GalleryToolbar.syncFromFilters(f);
+    }
 
     // Use shared filter summary formatter for common fields
     const summary = window.formatFilterSummary(f);

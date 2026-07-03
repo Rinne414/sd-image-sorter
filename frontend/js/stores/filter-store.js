@@ -54,6 +54,16 @@
             // v3.3.2 small-opt: "has SD generation parameters" filter
             // (null = all, true = only with metadata, false = only without).
             hasMetadata: null,
+            // Aurora Phase 3 toolbar/24d filters:
+            // no AI caption at all (ai_caption AND nl_caption both empty).
+            noCaption: null,
+            // aesthetic_score IS NULL (the "Unscored" quick tier).
+            aestheticUnscored: null,
+            // color saturation range 0-255 (same column as the saturation sort).
+            minSaturation: null,
+            maxSaturation: null,
+            // exact generation seed from the toolbar key:value search.
+            seed: null,
         };
     }
 
@@ -105,6 +115,14 @@
             folder: source.folder ? String(source.folder).trim() : null,
             // v3.3.2 small-opt: tri-state "has SD generation parameters"
             hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
+            // Aurora Phase 3 toolbar/24d filters
+            noCaption: source.noCaption === true ? true : null,
+            aestheticUnscored: source.aestheticUnscored === true ? true : null,
+            minSaturation: source.minSaturation ?? null,
+            maxSaturation: source.maxSaturation ?? null,
+            seed: Number.isFinite(Number(source.seed)) && source.seed !== null && source.seed !== ''
+                ? Number(source.seed)
+                : null,
         };
     }
 

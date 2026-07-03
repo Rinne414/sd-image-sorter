@@ -699,14 +699,91 @@ def _apply_dimension_filters(conditions: List[str], params: List[Any],
 
 def _apply_aesthetic_filter(conditions: List[str], params: List[Any],
                             min_aesthetic: Optional[float],
-                            max_aesthetic: Optional[float]) -> tuple:
-    """Apply aesthetic score range filters."""
+                            max_aesthetic: Optional[float],
+                            aesthetic_unscored: Optional[bool] = None) -> tuple:
+    """Apply aesthetic score range filters.
+
+    ``aesthetic_unscored`` takes precedence: when truthy it matches only rows
+    that have not been aesthetic-scored yet (``aesthetic_score IS NULL``) and
+    the min/max range is ignored entirely, so "unscored" and a numeric range
+    can never contradict each other in the same query.
+    """
+    if aesthetic_unscored:
+        conditions.append("i.aesthetic_score IS NULL")
+        return conditions, params
     if min_aesthetic is not None:
         conditions.append("i.aesthetic_score IS NOT NULL AND i.aesthetic_score >= ?")
         params.append(min_aesthetic)
     if max_aesthetic is not None:
         conditions.append("i.aesthetic_score IS NOT NULL AND i.aesthetic_score <= ?")
         params.append(max_aesthetic)
+    return conditions, params
+
+
+def _apply_saturation_filter(conditions: List[str], params: List[Any],
+                             min_saturation: Optional[float],
+                             max_saturation: Optional[float]) -> tuple:
+    """Apply a color-saturation range filter (Aurora Phase 3 gallery filter).
+
+    Ranges over ``i.color_saturation`` — the same column the ``saturation`` /
+    ``saturation_asc`` gallery sorts use. Only rows that have been color-analyzed
+    (non-null saturation) can match, mirroring the brightness range in
+    :func:`_apply_color_filter`, so unanalyzed rows are excluded rather than
+    treated as 0.
+    """
+    if min_saturation is not None:
+        conditions.append("i.color_saturation IS NOT NULL AND i.color_saturation >= ?")
+        params.append(float(min_saturation))
+    if max_saturation is not None:
+        conditions.append("i.color_saturation IS NOT NULL AND i.color_saturation <= ?")
+        params.append(float(max_saturation))
+    return conditions, params
+
+
+def _apply_no_caption_filter(conditions: List[str], params: List[Any],
+                             no_caption: Optional[bool]) -> tuple:
+    """Restrict to images that carry no caption of either kind (Aurora Phase 3).
+
+    "No caption" means both the WD14/smart-tag ``ai_caption`` and the VLM
+    natural-language ``nl_caption`` are empty/NULL. ``None`` (or falsy) is a
+    no-op. No parameters are bound — the predicate is a pure column expression —
+    so this composes with every other filter and both pagination strategies.
+    """
+    if not no_caption:
+        return conditions, params
+    conditions.append("(COALESCE(i.ai_caption, '') = '' AND COALESCE(i.nl_caption, '') = '')")
+    return conditions, params
+
+
+def _apply_seed_filter(conditions: List[str], params: List[Any],
+                       seed: Optional[int]) -> tuple:
+    """Match images generated with a specific seed (Aurora Phase 3).
+
+    The seed is not a column; it lives inside ``metadata_json`` at the parsed
+    path ``$._parsed.generation_params.seed`` for every generator (WebUI / NAI /
+    Forge / ComfyUI all funnel through ``_parsed.generation_params`` — see
+    metadata_parser.py). ComfyUI KSampler graphs additionally record
+    ``noise_seed``, so both verified paths are OR'd. ``metadata_json`` is
+    persisted as compact valid JSON, but legacy rows can hold non-JSON text, so
+    the extraction is guarded by ``json_valid`` (SQLite's ``json_extract`` raises
+    on malformed input); guarded rows simply do not match instead of crashing
+    the query. The extracted value is CAST to INTEGER so a stringified seed
+    still compares equal to the integer bind.
+    """
+    if seed is None:
+        return conditions, params
+    try:
+        seed_value = int(seed)
+    except (TypeError, ValueError):
+        return conditions, params
+    conditions.append(
+        "(json_valid(i.metadata_json) AND ("
+        "CAST(json_extract(i.metadata_json, '$._parsed.generation_params.seed') AS INTEGER) = ? "
+        "OR CAST(json_extract(i.metadata_json, '$._parsed.generation_params.noise_seed') AS INTEGER) = ?"
+        "))"
+    )
+    params.append(seed_value)
+    params.append(seed_value)
     return conditions, params
 
 

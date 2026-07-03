@@ -45,6 +45,9 @@ from db_query import (
     _apply_prompt_terms_filter,
     _apply_dimension_filters,
     _apply_aesthetic_filter,
+    _apply_saturation_filter,
+    _apply_no_caption_filter,
+    _apply_seed_filter,
     _apply_user_rating_filter,
     _apply_color_filter,
     _apply_artist_filter,
@@ -186,6 +189,12 @@ def get_images(
     collection_id: Optional[int] = None,
     folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
+    # Aurora Phase 3 gallery filters
+    no_caption: Optional[bool] = None,
+    aesthetic_unscored: Optional[bool] = None,
+    min_saturation: Optional[float] = None,
+    max_saturation: Optional[float] = None,
+    seed: Optional[int] = None,
 ) ->List[Dict[str, Any]]:
     """
     Get images with optional filters.
@@ -278,11 +287,17 @@ def get_images(
 
         # Apply aesthetic score filters
         conditions, params = _apply_aesthetic_filter(
-            conditions, params, min_aesthetic, max_aesthetic
+            conditions, params, min_aesthetic, max_aesthetic, aesthetic_unscored
         )
         conditions, params = _apply_user_rating_filter(
             conditions, params, min_user_rating
         )
+        # Aurora Phase 3 gallery filters (saturation range, caption presence, seed)
+        conditions, params = _apply_saturation_filter(
+            conditions, params, min_saturation, max_saturation
+        )
+        conditions, params = _apply_no_caption_filter(conditions, params, no_caption)
+        conditions, params = _apply_seed_filter(conditions, params, seed)
 
         # Apply v3.2.1 color filters
         conditions, params = _apply_color_filter(
@@ -378,6 +393,12 @@ def get_filtered_image_count(
     collection_id: Optional[int] = None,
     folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
+    # Aurora Phase 3 gallery filters
+    no_caption: Optional[bool] = None,
+    aesthetic_unscored: Optional[bool] = None,
+    min_saturation: Optional[float] = None,
+    max_saturation: Optional[float] = None,
+    seed: Optional[int] = None,
 ) ->int:
     """Get count of images matching filters without loading image data.
 
@@ -453,11 +474,17 @@ def get_filtered_image_count(
         )
 
         conditions, params = _apply_aesthetic_filter(
-            conditions, params, min_aesthetic, max_aesthetic
+            conditions, params, min_aesthetic, max_aesthetic, aesthetic_unscored
         )
         conditions, params = _apply_user_rating_filter(
             conditions, params, min_user_rating
         )
+        # Aurora Phase 3 gallery filters (saturation range, caption presence, seed)
+        conditions, params = _apply_saturation_filter(
+            conditions, params, min_saturation, max_saturation
+        )
+        conditions, params = _apply_no_caption_filter(conditions, params, no_caption)
+        conditions, params = _apply_seed_filter(conditions, params, seed)
 
         # Apply v3.2.1 color filters
         conditions, params = _apply_color_filter(
@@ -534,6 +561,12 @@ def get_filtered_image_ids(
     collection_id: Optional[int] = None,
     folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
+    # Aurora Phase 3 gallery filters
+    no_caption: Optional[bool] = None,
+    aesthetic_unscored: Optional[bool] = None,
+    min_saturation: Optional[float] = None,
+    max_saturation: Optional[float] = None,
+    seed: Optional[int] = None,
 ) ->List[int]:
     """Get list of image IDs matching filters without loading full image data.
 
@@ -608,11 +641,17 @@ def get_filtered_image_ids(
         )
 
         conditions, params = _apply_aesthetic_filter(
-            conditions, params, min_aesthetic, max_aesthetic
+            conditions, params, min_aesthetic, max_aesthetic, aesthetic_unscored
         )
         conditions, params = _apply_user_rating_filter(
             conditions, params, min_user_rating
         )
+        # Aurora Phase 3 gallery filters (saturation range, caption presence, seed)
+        conditions, params = _apply_saturation_filter(
+            conditions, params, min_saturation, max_saturation
+        )
+        conditions, params = _apply_no_caption_filter(conditions, params, no_caption)
+        conditions, params = _apply_seed_filter(conditions, params, seed)
 
         # Apply v3.2.1 color filters
         conditions, params = _apply_color_filter(
@@ -728,6 +767,12 @@ def get_images_paginated(
     collection_id: Optional[int] = None,
     folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
+    # Aurora Phase 3 gallery filters
+    no_caption: Optional[bool] = None,
+    aesthetic_unscored: Optional[bool] = None,
+    min_saturation: Optional[float] = None,
+    max_saturation: Optional[float] = None,
+    seed: Optional[int] = None,
 ) ->Dict[str, Any]:
     """
     Get images with cursor-based pagination for efficient handling of large datasets.
@@ -813,11 +858,17 @@ def get_images_paginated(
 
         # Apply aesthetic score filters
         conditions, params = _apply_aesthetic_filter(
-            conditions, params, min_aesthetic, max_aesthetic
+            conditions, params, min_aesthetic, max_aesthetic, aesthetic_unscored
         )
         conditions, params = _apply_user_rating_filter(
             conditions, params, min_user_rating
         )
+        # Aurora Phase 3 gallery filters (saturation range, caption presence, seed)
+        conditions, params = _apply_saturation_filter(
+            conditions, params, min_saturation, max_saturation
+        )
+        conditions, params = _apply_no_caption_filter(conditions, params, no_caption)
+        conditions, params = _apply_seed_filter(conditions, params, seed)
 
         # Apply v3.2.1 color filters
         conditions, params = _apply_color_filter(
@@ -931,6 +982,11 @@ def get_images_paginated(
                 collection_id=collection_id,
                 folder=folder,
                 has_metadata=has_metadata,
+                no_caption=no_caption,
+                aesthetic_unscored=aesthetic_unscored,
+                min_saturation=min_saturation,
+                max_saturation=max_saturation,
+                seed=seed,
                 brightness_min=brightness_min,
                 brightness_max=brightness_max,
                 color_temperature=color_temperature,
@@ -982,6 +1038,13 @@ def _get_filtered_count(
     collection_id: Optional[int] = None,
     folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
+    # Aurora Phase 3 gallery filters. Mirrored here so the cursor-pagination
+    # first-page COUNT matches the page query when these filters are active.
+    no_caption: Optional[bool] = None,
+    aesthetic_unscored: Optional[bool] = None,
+    min_saturation: Optional[float] = None,
+    max_saturation: Optional[float] = None,
+    seed: Optional[int] = None,
     # v3.2.1 color filters + v3.2.2 per-item exclude filters. Added here so the
     # cursor-pagination first-page COUNT matches the page query (it previously
     # omitted these, so an active color/exclude filter under newest/oldest sort
@@ -1045,11 +1108,17 @@ def _get_filtered_count(
 
     # Apply aesthetic score filters
     conditions, params = _apply_aesthetic_filter(
-        conditions, params, min_aesthetic, max_aesthetic
+        conditions, params, min_aesthetic, max_aesthetic, aesthetic_unscored
     )
     conditions, params = _apply_user_rating_filter(
         conditions, params, min_user_rating
     )
+    # Aurora Phase 3 gallery filters (saturation range, caption presence, seed)
+    conditions, params = _apply_saturation_filter(
+        conditions, params, min_saturation, max_saturation
+    )
+    conditions, params = _apply_no_caption_filter(conditions, params, no_caption)
+    conditions, params = _apply_seed_filter(conditions, params, seed)
 
     # Apply v3.2.1 color filters (mirror get_filtered_image_count so the
     # cursor-path total matches the page query).

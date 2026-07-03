@@ -201,6 +201,18 @@ from db_library_roots import (
     set_library_root_enabled,
     touch_library_root_scanned,
 )
+from db_reconnect_reviews import (
+    add_reconnect_review,
+    delete_pending_reconnect_reviews,
+    prune_resolved_reconnect_reviews,
+    count_pending_reconnect_reviews,
+    list_reconnect_reviews,
+    get_reconnect_review,
+    resolve_reconnect_review,
+    REVIEW_STATUS_PENDING,
+    REVIEW_STATUS_RESOLVED,
+    REVIEW_STATUS_CONFLICT,
+)
 from db_tags import (
     add_tags,
     add_tags_batch,
@@ -323,6 +335,12 @@ def iter_filtered_image_id_chunks(
     collection_id: Optional[int] = None,
     folder: Optional[str] = None,
     has_metadata: Optional[bool] = None,
+    # Aurora Phase 3 gallery filters
+    no_caption: Optional[bool] = None,
+    aesthetic_unscored: Optional[bool] = None,
+    min_saturation: Optional[float] = None,
+    max_saturation: Optional[float] = None,
+    seed: Optional[int] = None,
 ) -> Iterator[List[int]]:
     """Yield filtered image IDs in bounded chunks without a giant ID list.
 
@@ -371,6 +389,11 @@ def iter_filtered_image_id_chunks(
             collection_id=collection_id,
             folder=folder,
             has_metadata=has_metadata,
+            no_caption=no_caption,
+            aesthetic_unscored=aesthetic_unscored,
+            min_saturation=min_saturation,
+            max_saturation=max_saturation,
+            seed=seed,
             fetch_chunk_size=normalized_chunk_size,
             offset=offset,
             limit=normalized_chunk_size,

@@ -291,6 +291,41 @@ async def reset_tag_progress(
     return service.reset_progress()
 
 
+@router.get(
+    "/tags/pipeline-queue",
+    summary="Get the AI-job pipeline queue snapshot",
+    description=(
+        "Read-only snapshot of the shared AI-job FIFO queue across all kinds "
+        "(gallery tagging / smart-tag / VLM / aesthetic). Returns "
+        "``{total_queued, queued:[{queue_id, kind, position, enqueued_at}], "
+        "last_start_error}``. Powers a live queue indicator (Aurora Phase 3). "
+        "No side effects."
+    ),
+    responses={
+        200: {
+            "description": "Pipeline queue snapshot",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "total_queued": 2,
+                        "queued": [
+                            {"queue_id": "q1", "kind": "gallery", "position": 1, "enqueued_at": 1717430000.0},
+                            {"queue_id": "q2", "kind": "smart", "position": 2, "enqueued_at": 1717430005.0},
+                        ],
+                        "last_start_error": None,
+                    }
+                }
+            },
+        }
+    },
+)
+async def get_pipeline_queue(
+    pipeline: TaggingPipelineService = Depends(get_tagging_pipeline_service),
+):
+    """Return the shared AI-job pipeline queue snapshot (all kinds)."""
+    return pipeline.queue_snapshot()
+
+
 @router.post("/tags/export-batch")
 async def export_tags_batch(
     request: BatchTagExportRequest,
