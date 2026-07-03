@@ -1,6 +1,6 @@
 # SD Image Sorter - Technical Debt Notes
 
-**Updated:** 2026-05-04
+**Updated:** 2026-07-03 (full status verification sweep against the v3.5.0 tree; stale entries corrected: Debt-11, Debt-19, Debt-25, Debt-27/Roadmap-D, Debt-DM-7)
 **Purpose:** Record confirmed structural debt found during recent stability fixes, and provide a reusable prompt for deeper whole-repo debt audits.
 
 ## Scope
@@ -249,7 +249,7 @@ Use this structure for future confirmed-debt entries:
 
 
 ### Debt-11: Thumbnail generation is still not scan-aware
-- Status: partially mitigated
+- Status: resolved (verified 2026-07-03). `backend/thumbnail_cache.py` now owns a dedicated bounded thumbnail thread pool (isolated from the default asyncio executor) plus a scan-time semaphore (`_THUMB_CONCURRENCY_DURING_SCAN = 2`) that hard-caps concurrent thumbnail generation while a folder scan is actively parsing metadata — the scan-aware backpressure this entry asked for. Original entry kept below for history.
 - Type: performance / UX contract
 - Impact: medium
 - Risk if ignored:
@@ -806,11 +806,11 @@ Quality bar:
 
 ### Debt-19: SAM3 Model Manager E2E fixture stale after `transformers.Sam3Model` switch
 
-- Status: open
+- Status: open, contained (updated 2026-07-03). Both tests are now `test.fixme(...)`-skipped in `tests/e2e/specs/model-manager.spec.ts` with in-file comments explaining the stale fixture, so CI is green (they show up in the "skipped" count) and the red-wall risk below no longer applies. The fixture itself is still stale — the skip is the mitigation, not the fix.
 - Type: test infrastructure / fixture
 - Impact: low
 - Risk if ignored:
-  Two Playwright tests (`SAM3 prepare shows byte progress and refreshes the card after completion` and the cascading `no model card shows Downloaded badge - only Ready or Missing`) stay red in CI. A persistent red wall masks future real regressions in the same area.
+  Two Playwright tests (`SAM3 prepare shows byte progress and refreshes the card after completion` and the cascading `no model card shows Downloaded badge - only Ready or Missing`) stay skipped, so SAM3 prepare-flow regressions in that area have no browser-level coverage until the fixture ships a full stub bundle.
 - Related files:
   `tests/e2e/specs/model-manager.spec.ts`
   `tests/e2e/playwright.config.ts`
@@ -955,7 +955,7 @@ Quality bar:
 
 
 ### Debt-25: `test_routers/test_images.py` contains duplicate test class names
-- Status: open
+- Status: resolved (verified 2026-07-03). The second class was renamed to `TestExportSelectionDataAdvanced`, so both classes collect and no tests are shadowed. The optional collection guard for duplicate top-level test class names was not added; reopen only if duplicate names reappear.
 - Type: test architecture debt
 - Impact: medium
 - Risk if ignored:
@@ -1000,7 +1000,7 @@ Quality bar:
 
 ### Debt-27: Per-item exclude on tag / prompt / lora / checkpoint filters
 
-- Status: open — deferred to v3.2.2 (Roadmap-D)
+- Status: resolved — shipped (verified in tree 2026-07-03). Exclude arrays are live end to end: SQL layer (`backend/database.py`, `db_query.py`, `db_images_read.py`), selection-token contract (`services/image_service.py`), batch move (`services/sorting_service.py` / `sorting_models.py`), routers (`images` / `sorting` / `tags_bulk` / `vlm`), export (`tag_export_service.py`), frontend `stores/filter-store.js` (`excludeTags` / `excludePrompts` / `excludeLoras`), plus dedicated coverage in `backend/tests/test_exclude_filters.py` and `test_batch_move_safety.py`.
 - Type: data model / UX contract / SQL filter layer
 - Impact: medium
 - Risk if ignored:
@@ -1052,7 +1052,7 @@ These are deferred from the v3.2.1 stability sweep and tracked for the next rele
 - New modal in `frontend/js/app.js` (or a dedicated `frontend/js/repair-review.js`) listing ambiguous rows with image preview.
 - Wires into the existing repair-missing flow as the second-stage step when the safe auto-reconnect refuses.
 
-### Roadmap-D: Per-item exclude on tag / prompt / lora / checkpoint filters (Debt-27)
+### Roadmap-D: Per-item exclude on tag / prompt / lora / checkpoint filters (Debt-27) — SHIPPED (see Debt-27 status; verified 2026-07-03)
 - Add UI cycle on each filter chip: click once = include (default), click again = exclude (visual: red strikethrough or 🚫), click again = remove.
 - Backend: new `exclude_tags` / `exclude_prompts` / `exclude_loras` / `exclude_checkpoints` query params on `/api/images`, `/api/images/selection-token`, `/api/batch-move`, `/api/tags/bulk/*`. SQL: NOT EXISTS subquery per filter type.
 - Filter store: parallel `excludeTags` / `excludePrompts` / etc. arrays; cloneState + getState handle both directions; serializer maps to backend snake_case.
@@ -1073,7 +1073,7 @@ These are deferred from the v3.2.1 stability sweep and tracked for the next rele
 
 ## Debt-DM-7: Smart Tag wizard is gallery-only; path-mode deferred to v3.2.3
 
-**Status:** Confirmed; deferred. Documented in v3.2.2 release notes.
+**Status:** Resolved (verified 2026-07-03). `smart_tag_service.py` now accepts `image_ids` OR `image_paths` OR `selection_token` OR `dataset_scan_token`; path-mode entries are validated, run through the pipeline, and produce path-keyed results without writing gallery rows — the approach sketched below was implemented.
 
 **Where:** `backend/services/smart_tag_service.py::_run_pipeline`, `_persist_result`, `_resolve_image_paths`.
 
