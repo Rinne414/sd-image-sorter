@@ -14,6 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from starlette.concurrency import run_in_threadpool
 
+from services import entry_stats_service
 from services.service_provider import ServiceProvider
 from services.censor_service import (
     CensorService,
@@ -134,7 +135,9 @@ async def censor_save(
     service: CensorService = Depends(get_censor_service),
 ):
     """Apply censoring and save to output folder."""
-    return await run_in_threadpool(service.save, request)
+    result = await run_in_threadpool(service.save, request)
+    entry_stats_service.record_activity(entry_stats_service.KIND_CENSORED, 1)
+    return result
 
 
 @router.post("/save-data")
@@ -147,7 +150,9 @@ async def censor_save_data(
     Used for saving canvas-edited images.
     Supports metadata handling: 'keep' preserves original metadata, 'strip' removes all metadata.
     """
-    return await run_in_threadpool(service.save_data, request)
+    result = await run_in_threadpool(service.save_data, request)
+    entry_stats_service.record_activity(entry_stats_service.KIND_CENSORED, 1)
+    return result
 
 
 @router.post("/save-operations")
@@ -160,7 +165,9 @@ async def censor_save_operations(
     Used by the large-image proxy editor so the browser does not need to upload
     a full rasterized canvas snapshot.
     """
-    return await run_in_threadpool(service.save_operations, request)
+    result = await run_in_threadpool(service.save_operations, request)
+    entry_stats_service.record_activity(entry_stats_service.KIND_CENSORED, 1)
+    return result
 
 
 @router.post("/refine-mask")

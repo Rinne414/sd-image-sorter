@@ -1,0 +1,448 @@
+/* ==========================================================================
+   Entry page — v4.0 Aurora shell, Phase 2 (spec: canvas #11a, recolored to
+   Aurora tokens per README; #11a predates the final palette).
+
+   Composition rules from the frame ("乱而不散"):
+   - tile size = information weight; offsets limited to ±6–16px;
+   - the column keeps a CONSTANT 10px gap (the offsets ride on margins);
+   - hierarchy in three border tiers: accent (continue) → solid (missions/
+     tools) → dashed (free mode);
+   - absolute positioning is legitimate here only (art layering, T12 note).
+   ========================================================================== */
+
+.entry-page {
+    position: fixed;
+    inset: 0;
+    z-index: 2600; /* above app chrome, below toasts/modals (3000+) */
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    font-family: var(--font-body);
+}
+
+/* The flex display on tiles/slabs must not defeat the hidden attribute. */
+.entry-page [hidden],
+.entry-page[hidden] {
+    display: none !important;
+}
+
+body.entry-active {
+    overflow: hidden;
+}
+
+/* --- art layer --- */
+.entry-hero {
+    position: absolute;
+    inset: 0;
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-color: var(--stage);
+}
+
+.entry-veil-x {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg,
+        rgba(16, 18, 22, 0.06) 30%,
+        rgba(16, 18, 22, 0.42) 52%,
+        rgba(16, 18, 22, 0.90) 76%);
+}
+
+.entry-veil-y {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(0deg,
+        rgba(16, 18, 22, 0.78) 0%,
+        rgba(16, 18, 22, 0) 30%);
+}
+
+.entry-prompt-texture {
+    position: absolute;
+    left: 40px;
+    bottom: 190px;
+    width: 480px;
+    font-family: var(--font-mono);
+    font-size: 30px;
+    line-height: 1.3;
+    font-weight: 600;
+    color: rgba(237, 240, 247, 0.045);
+    pointer-events: none;
+    user-select: none;
+    word-break: break-word;
+}
+
+/* --- top bar --- */
+.entry-topbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    padding: 15px 26px;
+    z-index: 3;
+}
+
+.entry-brand {
+    font-size: 14px;
+    font-weight: 900;
+}
+
+.entry-version {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: rgba(237, 240, 247, 0.4);
+    margin-left: 10px;
+}
+
+.entry-system {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: rgba(237, 240, 247, 0.45);
+}
+
+.entry-system .sys-accent {
+    color: var(--blue);
+}
+
+.entry-settings-btn {
+    background: none;
+    border: none;
+    padding: 4px 6px;
+    font-size: 13px;
+    color: rgba(237, 240, 247, 0.6);
+    cursor: pointer;
+    border-radius: var(--r-ctl);
+}
+
+.entry-settings-btn:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+/* --- mosaic column --- */
+.entry-mosaic {
+    position: absolute;
+    top: 64px;
+    right: 28px;
+    width: 620px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 2;
+}
+
+.entry-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+.entry-tile {
+    background: rgba(10, 14, 18, 0.76);
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: var(--r-card);
+    padding: 13px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    cursor: pointer;
+    text-align: left;
+    color: var(--text);
+    transition: border-color 150ms ease, background 150ms ease;
+}
+
+.entry-tile:hover {
+    border-color: rgba(var(--blue-rgb), 0.45);
+    background: rgba(13, 17, 22, 0.84);
+}
+
+.entry-tile .tile-head {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+}
+
+.entry-tile .tile-title {
+    font-size: 16px;
+    font-weight: 900;
+}
+
+.entry-tile .tile-arrow {
+    margin-left: auto;
+    font-size: 14px;
+    color: rgba(237, 240, 247, 0.5);
+}
+
+.entry-tile .tile-output {
+    font-size: 11px;
+    color: rgba(237, 240, 247, 0.55);
+}
+
+.entry-tile .tile-steps {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: rgba(237, 240, 247, 0.32);
+}
+
+/* continue (anchor) slab — accent tier */
+.entry-anchor {
+    background: rgba(10, 14, 18, 0.88);
+    border: 1px solid rgba(var(--blue-rgb), 0.55);
+    border-radius: var(--r-card);
+    padding: 17px 20px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    text-align: left;
+    color: var(--text);
+}
+
+.entry-anchor .anchor-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+}
+
+.entry-anchor .anchor-badge {
+    color: var(--blue);
+}
+
+.entry-anchor .anchor-when {
+    color: rgba(237, 240, 247, 0.35);
+}
+
+.entry-anchor .anchor-title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+}
+
+.entry-anchor .anchor-title {
+    font-size: 22px;
+    font-weight: 900;
+    line-height: 1.2;
+}
+
+.entry-anchor .anchor-detail {
+    font-size: 12px;
+    color: rgba(237, 240, 247, 0.6);
+}
+
+.entry-anchor .anchor-progress-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.entry-anchor .anchor-track {
+    flex: 1;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.10);
+    border-radius: var(--r-pill);
+    overflow: hidden;
+}
+
+.entry-anchor .anchor-fill {
+    height: 100%;
+    background: var(--blue);
+}
+
+.entry-anchor .anchor-count {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--blue);
+}
+
+.entry-anchor .anchor-continue {
+    background: var(--blue);
+    color: var(--on-accent);
+    border: none;
+    border-radius: var(--r-ctl);
+    font-size: 13px;
+    font-weight: 900;
+    padding: 7px 18px;
+    cursor: pointer;
+}
+
+.entry-anchor .anchor-continue:hover {
+    background: var(--blue-hover);
+}
+
+.entry-anchor .anchor-continue:active {
+    background: var(--blue-active);
+}
+
+/* mission tiles: flex weights + offsets from the frame */
+.entry-mission-lora { flex: 1.35; }
+.entry-mission-organize { flex: 1; margin-top: 16px; }
+.entry-mission-pixiv { flex: 1; margin-top: 6px; }
+
+/* function tiles: size = live information weight */
+.entry-fn {
+    padding: 15px 18px 13px;
+    gap: 2px;
+}
+
+.entry-fn .fn-head {
+    display: flex;
+    align-items: baseline;
+    gap: 11px;
+}
+
+.entry-fn .fn-count {
+    font-family: var(--font-numeral);
+    font-weight: 500;
+    line-height: 1;
+}
+
+.entry-fn .fn-title {
+    font-weight: 900;
+}
+
+.entry-fn .fn-sub {
+    font-size: 11px;
+    color: rgba(237, 240, 247, 0.55);
+}
+
+.entry-fn-gallery { flex: 1.5; }
+.entry-fn-gallery .fn-count { font-size: 40px; }
+.entry-fn-gallery .fn-title { font-size: 17px; }
+
+.entry-fn-sort { flex: 1; margin-top: -6px; padding: 13px 16px 11px; }
+.entry-fn-sort .fn-count { font-size: 29px; }
+.entry-fn-sort .fn-title { font-size: 15px; }
+
+.entry-fn-censor { flex: 1.1; margin-top: 4px; padding: 12px 16px 10px; }
+.entry-fn-censor .fn-count { font-size: 24px; }
+.entry-fn-censor .fn-title { font-size: 14px; }
+.entry-fn-censor .fn-sub { font-size: 10px; color: rgba(237, 240, 247, 0.5); }
+
+.entry-fn-reader { flex: 0.75; margin-top: -8px; padding: 12px 16px 10px; }
+.entry-fn-similar { flex: 0.85; margin-top: 8px; padding: 12px 16px 10px; }
+
+.entry-fn-reader .fn-title,
+.entry-fn-similar .fn-title { font-size: 14px; }
+
+.entry-fn-reader .fn-sub,
+.entry-fn-similar .fn-sub { font-size: 10px; color: rgba(237, 240, 247, 0.5); }
+
+/* free mode row — dashed tier */
+.entry-free {
+    background: none;
+    border: 1px dashed rgba(255, 255, 255, 0.25);
+    border-radius: var(--r-card);
+    padding: 11px 16px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    cursor: pointer;
+    color: var(--text);
+    text-align: left;
+    transition: border-color 150ms ease;
+}
+
+.entry-free:hover {
+    border-color: rgba(var(--blue-rgb), 0.5);
+}
+
+.entry-free-main { flex: 1.6; }
+
+.entry-free-main .free-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: rgba(237, 240, 247, 0.85);
+}
+
+.entry-free-main .free-hint {
+    font-size: 11px;
+    color: rgba(237, 240, 247, 0.45);
+}
+
+.entry-free-main .tile-arrow {
+    margin-left: auto;
+    font-size: 14px;
+    color: rgba(237, 240, 247, 0.5);
+}
+
+.entry-free-all {
+    flex: 0.9;
+    margin-top: 6px;
+    justify-content: center;
+    align-items: center;
+}
+
+.entry-free-all .free-all-label {
+    font-size: 12px;
+    color: rgba(237, 240, 247, 0.6);
+}
+
+/* --- bottom-left identity block --- */
+.entry-identity {
+    position: absolute;
+    left: 40px;
+    bottom: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    z-index: 2;
+}
+
+.entry-identity .identity-streak {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+
+.entry-identity .streak-num {
+    font-family: var(--font-numeral);
+    font-size: 52px;
+    font-weight: 500;
+    line-height: 1;
+}
+
+.entry-identity .streak-label {
+    font-size: 14px;
+    color: rgba(237, 240, 247, 0.85);
+}
+
+.entry-identity .streak-today {
+    font-size: 12px;
+    color: rgba(237, 240, 247, 0.5);
+}
+
+.entry-identity .identity-hero-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: rgba(237, 240, 247, 0.45);
+}
+
+.entry-identity .hero-link {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: rgba(237, 240, 247, 0.6);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.entry-identity .hero-link:hover {
+    color: var(--text);
+}
+
+/* keyboard focus inside the entry page */
+.entry-page :focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+}

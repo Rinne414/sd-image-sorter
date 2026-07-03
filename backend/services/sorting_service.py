@@ -25,6 +25,7 @@ import image_manager as image_manager_module
 from image_manager import scan_folder, move_image, copy_image, parse_metadata_job
 from database import add_images_batch
 from metadata_parser import verify_image_readable
+from services import entry_stats_service
 from services.state_compat import MutableStateProxy
 from services.sorting_models import (
     BatchMoveRequest,
@@ -1259,6 +1260,9 @@ class SortingService:
                 # v3.3.2 Library Navigation: remember the scanned folder as a
                 # library root (multi-root management + idle auto-refresh target
                 # list). Bookkeeping must never fail an otherwise-complete scan.
+                entry_stats_service.record_activity(
+                    entry_stats_service.KIND_ADDED, new_count
+                )
                 try:
                     db.add_library_root(normalized_folder_path)
                     db.touch_library_root_scanned(normalized_folder_path)
@@ -1649,6 +1653,9 @@ class SortingService:
                         "updated_at": time.time(),
                     },
                 )
+                entry_stats_service.record_activity(
+                    entry_stats_service.KIND_MOVED, moved
+                )
             except Exception as e:
                 logger.error("Move job failed: %s", e)
                 self._set_move_progress_if_current(
@@ -1979,6 +1986,9 @@ class SortingService:
                         "started_at": self._batch_move_progress.get("started_at"),
                         "updated_at": time.time(),
                     }
+                )
+                entry_stats_service.record_activity(
+                    entry_stats_service.KIND_MOVED, moved
                 )
 
             except Exception as e:

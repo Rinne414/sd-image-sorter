@@ -1,6 +1,6 @@
 ﻿# SD Image Sorter API Documentation
 
-**Version:** 3.4.4
+**Version:** 3.5.0
 **Base URL:** `http://127.0.0.1:8487` (default; configurable via `SD_IMAGE_SORTER_PORT`)
 **Interactive Docs:** `http://127.0.0.1:8487/docs` (Swagger UI, same port as runtime)
 
@@ -713,6 +713,11 @@ List the ids of all favorited images (plus `count`) for fast client-side heart-s
 
 #### POST /api/collections/favorites
 Set the favorite state of one image. Body carries `image_id` and `favorited` (default `true`; pass `false` to unfavorite). Returns `{ "favorited": bool }`.
+
+### Entry Page
+
+#### GET /api/entry/summary
+Aggregate stats for the v4.0 mission entry page in one call: `library_total`, `added_today`, `unviewed` (images indexed after the `last_seen` watermark the client stored from a previous call's `server_now`), activity `streak_days` / `today_touched` (fed by the `activity_log` daily counters), and the deterministic daily ★5 `hero` pick (`hero_seed` query param offsets the pick for 换一张; `null` when no image is rated ★5).
 
 ### Model Manager
 

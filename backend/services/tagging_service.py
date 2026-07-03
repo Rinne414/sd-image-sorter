@@ -20,6 +20,7 @@ import database as db
 from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
 from image_fingerprint import compute_image_content_fingerprint
 from metadata_parser import verify_image_readable
+from services import entry_stats_service
 from services.state_compat import MutableStateProxy
 from services.tag_export_service import (
     count_selection_token_ids,
@@ -892,6 +893,9 @@ def _tagging_worker_main(
                 tagging_start_time, total_processed, total_tagged,
                 total_errors, top_tags_counter,
             ),
+        )
+        entry_stats_service.record_activity(
+            entry_stats_service.KIND_TAGGED, total_processed
         )
     except Exception as error:
         send("error", f"Error: {error}")

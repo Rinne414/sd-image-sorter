@@ -14,6 +14,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path as 
 from pydantic import BaseModel, Field, model_validator
 
 from config import get_temp_dir
+from services import entry_stats_service
 from services.image_service import ImageService
 from services.service_provider import ServiceProvider
 from utils.path_validation import PathValidationError
@@ -1058,6 +1059,7 @@ async def set_image_user_rating(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not result.get("updated"):
         raise HTTPException(status_code=404, detail="Image not found")
+    entry_stats_service.record_activity(entry_stats_service.KIND_RATED, 1)
     return result
 
 

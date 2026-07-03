@@ -158,6 +158,13 @@ const onboardingStorageState = {
           // tour stays suppressed in e2e; a stale version re-triggers the overlay.
           value: JSON.stringify({ version: 2, completed: true, completedAt: '2026-04-08T00:00:00.000Z' }),
         },
+        {
+          // v4.0 Aurora shell: suppress the mission entry page so the existing
+          // suite lands directly in the gallery. entry-page.spec.ts opts back
+          // in per-test by clearing this key.
+          name: 'aurora-entry-skip',
+          value: '1',
+        },
       ],
     },
   ],

@@ -24,6 +24,7 @@
     <link rel="stylesheet" href="/static/css/tag-power.css">
     <link rel="stylesheet" href="/static/css/tag-stats-modal.css">
     <link rel="stylesheet" href="/static/css/caption-autocomplete.css">
+    <link rel="stylesheet" href="/static/css/entry.css">
     <!-- tokens.css must stay the LAST stylesheet: it owns the Aurora palette
          and remaps every legacy token defined by the sheets above. -->
     <link rel="stylesheet" href="/static/css/tokens.css">
@@ -110,6 +111,141 @@
 
     <!-- Screen Reader Live Region for Announcements -->
     <div id="a11y-live-region" aria-live="polite" aria-atomic="true" class="sr-only" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;"></div>
+
+    <!-- v4.0 Aurora shell: mission entry (canvas #11a). Shown at launch unless
+         the 跳过入口页 setting is on; every tile is a shortcut, never a cage. -->
+    <section id="entry-page" class="entry-page" hidden aria-label="Mission entry" data-i18n-aria="settings.entryTitle">
+        <div class="entry-hero" id="entry-hero" aria-hidden="true"></div>
+        <div class="entry-veil-x" aria-hidden="true"></div>
+        <div class="entry-veil-y" aria-hidden="true"></div>
+        <div class="entry-prompt-texture" id="entry-prompt-texture" aria-hidden="true"></div>
+
+        <header class="entry-topbar">
+            <span class="entry-brand" data-i18n="brand.name">SD Image Sorter</span>
+            <span class="entry-version" id="entry-version"></span>
+            <div class="entry-system">
+                <span id="entry-sys-tagging" hidden></span>
+                <span id="entry-sys-cache" hidden></span>
+                <span id="entry-sys-vram" hidden></span>
+                <span id="entry-sys-clock"></span>
+                <button type="button" class="entry-settings-btn" id="entry-settings-btn"
+                        aria-label="Settings" data-i18n-aria="entry.settingsBtn">⚙</button>
+            </div>
+        </header>
+
+        <div class="entry-mosaic">
+            <article class="entry-anchor" id="entry-anchor" hidden>
+                <div class="anchor-meta">
+                    <span class="anchor-badge" data-i18n="entry.continueBadge">In progress</span>
+                    <span class="anchor-when" id="entry-anchor-when"></span>
+                </div>
+                <div class="anchor-title-row">
+                    <span class="anchor-title" id="entry-anchor-title"></span>
+                    <span class="anchor-detail" id="entry-anchor-detail"></span>
+                </div>
+                <div class="anchor-progress-row">
+                    <div class="anchor-track"><div class="anchor-fill" id="entry-anchor-fill" style="width:0%"></div></div>
+                    <span class="anchor-count" id="entry-anchor-count"></span>
+                    <button type="button" class="anchor-continue" id="entry-anchor-continue"
+                            data-i18n="entry.continueBtn">Continue</button>
+                </div>
+            </article>
+
+            <div class="entry-row">
+                <button type="button" class="entry-tile entry-mission-lora" id="entry-mission-lora">
+                    <span class="tile-head">
+                        <span class="tile-title" data-i18n="entry.missionLoraTitle">LoRA Dataset</span>
+                        <span class="tile-arrow" aria-hidden="true">→</span>
+                    </span>
+                    <span class="tile-output" data-i18n="entry.missionLoraOutput">Output: a training set kohya can consume directly</span>
+                    <span class="tile-steps" data-i18n="entry.missionLoraSteps">Scan → Tag → Filter → Caption → Export</span>
+                </button>
+                <button type="button" class="entry-tile entry-mission-organize" id="entry-mission-organize">
+                    <span class="tile-head">
+                        <span class="tile-title" data-i18n="entry.missionOrganizeTitle">Batch Organize</span>
+                        <span class="tile-arrow" aria-hidden="true">→</span>
+                    </span>
+                    <span class="tile-output" data-i18n="entry.missionOrganizeOutput">Output: folders that stop exploding</span>
+                    <span class="tile-steps" data-i18n="entry.missionOrganizeSteps">Scan → Auto-sort → WASD → Archive</span>
+                </button>
+            </div>
+
+            <div class="entry-row">
+                <button type="button" class="entry-tile entry-mission-pixiv" id="entry-mission-pixiv">
+                    <span class="tile-head">
+                        <span class="tile-title" data-i18n="entry.missionPixivTitle">Pixiv Set Publishing</span>
+                        <span class="tile-arrow" aria-hidden="true">→</span>
+                    </span>
+                    <span class="tile-output" data-i18n="entry.missionPixivOutput">Output: a publishable, censored image set</span>
+                    <span class="tile-steps" data-i18n="entry.missionPixivSteps">Pick → Censor → Rename → Export</span>
+                </button>
+            </div>
+
+            <div class="entry-row">
+                <button type="button" class="entry-tile entry-fn entry-fn-gallery" id="entry-fn-gallery">
+                    <span class="fn-head">
+                        <span class="fn-count" id="entry-count-gallery"></span>
+                        <span class="fn-title" data-i18n="entry.tileGallery">Library</span>
+                    </span>
+                    <span class="fn-sub" id="entry-sub-gallery" data-i18n="entry.tileGallerySubQuiet">Browse, filter, and pick images</span>
+                </button>
+                <button type="button" class="entry-tile entry-fn entry-fn-sort" id="entry-fn-sort">
+                    <span class="fn-head">
+                        <span class="fn-count" id="entry-count-sort"></span>
+                        <span class="fn-title" data-i18n="entry.tileSort">Manual Sort</span>
+                    </span>
+                    <span class="fn-sub" id="entry-sub-sort" data-i18n="entry.tileSortIdle">Sort a batch with WASD</span>
+                </button>
+            </div>
+
+            <div class="entry-row">
+                <button type="button" class="entry-tile entry-fn entry-fn-censor" id="entry-fn-censor">
+                    <span class="fn-head">
+                        <span class="fn-count" id="entry-count-censor"></span>
+                        <span class="fn-title" data-i18n="entry.tileCensor">Censor Editor</span>
+                    </span>
+                    <span class="fn-sub" data-i18n="entry.tileCensorSub">Brush, detect, and export safely</span>
+                </button>
+                <button type="button" class="entry-tile entry-fn entry-fn-reader" id="entry-fn-reader">
+                    <span class="fn-head">
+                        <span class="fn-title" data-i18n="entry.tileReader">Reader</span>
+                    </span>
+                    <span class="fn-sub" data-i18n="entry.tileReaderSub">Drop an image to read its params</span>
+                </button>
+                <button type="button" class="entry-tile entry-fn entry-fn-similar" id="entry-fn-similar">
+                    <span class="fn-head">
+                        <span class="fn-title" data-i18n="entry.tileSimilar">Find Similar</span>
+                    </span>
+                    <span class="fn-sub" data-i18n="entry.tileSimilarSub">Dedupe · search by image</span>
+                </button>
+            </div>
+
+            <div class="entry-row">
+                <button type="button" class="entry-free entry-free-main" id="entry-free-mode">
+                    <span class="free-title" data-i18n="entry.freeMode">Free mode</span>
+                    <span class="free-hint" data-i18n="entry.freeModeHint">Skip missions, open the tools directly</span>
+                    <span class="tile-arrow" aria-hidden="true">→</span>
+                </button>
+                <button type="button" class="entry-free entry-free-all" id="entry-all-tools">
+                    <span class="free-all-label" data-i18n="entry.allTools">All tools →</span>
+                </button>
+            </div>
+        </div>
+
+        <footer class="entry-identity">
+            <div class="identity-streak">
+                <span class="streak-num" id="entry-streak-num">0</span>
+                <span class="streak-label" data-i18n="entry.streakDays">day streak of organizing</span>
+                <span class="streak-today" id="entry-streak-today"></span>
+            </div>
+            <div class="identity-hero-line">
+                <span id="entry-hero-credit" data-i18n="entry.heroEmpty">Rate an image ★5 and it becomes the cover here</span>
+                <button type="button" class="hero-link" id="entry-hero-swap" data-i18n="entry.heroSwap" hidden>Swap ↻</button>
+                <button type="button" class="hero-link" id="entry-hero-hide" data-i18n="entry.heroHide" hidden>Don't show</button>
+                <span data-i18n="entry.localNote">· Runs locally — images never leave this PC</span>
+            </div>
+        </footer>
+    </section>
 
     <div id="app" role="application" aria-label="SD Image Sorter - Image Management Tool">
         <!-- Navigation -->
@@ -3995,6 +4131,26 @@
                     </div>
                     <div class="settings-row">
                         <div class="settings-row-copy">
+                            <strong data-i18n="settings.entryTitle">Entry page</strong>
+                            <span data-i18n="settings.entryBody">Show the mission entry at launch (off = straight to the Library)</span>
+                        </div>
+                        <button type="button" class="btn btn-ghost" id="btn-settings-entry-toggle" aria-pressed="true">
+                            <span aria-hidden="true" id="settings-entry-icon">🚪</span>
+                            <span id="settings-entry-label" data-i18n="settings.entryOn">Shown</span>
+                        </button>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-copy">
+                            <strong data-i18n="settings.entryHeroTitle">★5 cover art</strong>
+                            <span data-i18n="settings.entryHeroBody">Full-bleed ★5 artwork on the entry page, rotating daily</span>
+                        </div>
+                        <button type="button" class="btn btn-ghost" id="btn-settings-entry-hero-toggle" aria-pressed="true">
+                            <span aria-hidden="true" id="settings-entry-hero-icon">🖼️</span>
+                            <span id="settings-entry-hero-label" data-i18n="settings.entryHeroOn">Shown</span>
+                        </button>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-copy">
                             <strong data-i18n="settings.appearanceTitle">Appearance</strong>
                             <span id="settings-ui-scale-current" data-i18n="settings.uiScaleBody">UI scale follows your desktop size</span>
                         </div>
@@ -6041,6 +6197,7 @@
     <script src="/static/js/color-backfill.js"></script>
     <script src="/static/js/mass-tag-editor.js"></script>
     <script src="/static/js/ui-refresh.js"></script>
+    <script src="/static/js/entry-page.js"></script>
     <script>
     /* Sorting sub-tab toggle (Auto-Separate / Manual Sort) */
     window._switchSortingSub = function(sub) {
