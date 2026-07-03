@@ -97,6 +97,33 @@ def test_portable_launcher_runs_onnx_repair_unconditionally(tmp_path):
         )
 
 
+def test_linux_portable_launcher_runs_onnx_repair_unconditionally(tmp_path):
+    """Regression guard (Linux GPU tagger report, 2026-07-03): the Linux
+    requirements pin CPU-only onnxruntime, so the Linux portable launcher must
+    run repair_onnxruntime.py unconditionally (NVIDIA machines get the
+    onnxruntime-gpu swap; everyone else is a fast no-op). Torch repair stays
+    Windows-only because Linux CUDA torch wheels come from pip markers."""
+    release_builder = load_release_builder()
+    launcher_path = release_builder.write_linux_portable_launcher(tmp_path)
+    content = launcher_path.read_text(encoding="utf-8")
+
+    assert "repair_onnxruntime.py --auto" in content
+    assert "repair_torch_runtime.py --auto" not in content
+
+    # Must not be nested inside a FULL_AI conditional: every `if` opened after
+    # the last FULL_AI mention before the repair call must be closed by `fi`.
+    onnx_pos = content.index("repair_onnxruntime.py --auto")
+    preceding = content[:onnx_pos]
+    last_full_ai = preceding.rfind("SD_IMAGE_SORTER_INSTALL_FULL_AI")
+    if last_full_ai != -1:
+        between = preceding[last_full_ai:onnx_pos]
+        opened = len(re.findall(r"(?m)^\s*if\b", between))
+        closed = len(re.findall(r"(?m)^\s*fi\b", between))
+        assert closed >= opened, (
+            "repair_onnxruntime.py appears inside a FULL_AI conditional block in the Linux launcher"
+        )
+
+
 def test_portable_launcher_opens_browser_in_process_not_hidden_powershell(tmp_path):
     """Regression lock (v3.3.2, AV false positive): the GENERATED Windows portable
     launcher must open the browser in-process via SD_IMAGE_SORTER_OPEN_BROWSER=1,

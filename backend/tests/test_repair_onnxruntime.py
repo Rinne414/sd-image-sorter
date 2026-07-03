@@ -450,6 +450,182 @@ def test_repair_installs_runtime_when_nothing_present_with_nvidia_vendor(monkeyp
     assert any("onnxruntime-gpu" in arg for c in install_calls for arg in c)
 
 
+def _linux_install_state(**overrides):
+    state = {
+        "platform": "Linux",
+        "python": repair_onnxruntime.sys.executable,
+        "onnxruntime_version": "1.25.0",
+        "onnxruntime_gpu_version": None,
+        "onnxruntime_directml_version": None,
+        "has_conflict": False,
+        "has_gpu_package": False,
+        "has_dml_package": False,
+        "gpu_vendor_primary": "nvidia",
+        "gpu_vendors_detected": ["nvidia"],
+        "gpu_devices": [{"name": "NVIDIA GeForce RTX 4090", "vendor": "nvidia"}],
+    }
+    state.update(overrides)
+    return state
+
+
+def test_linux_detect_gpu_vendor_parses_nvidia_smi(monkeypatch):
+    monkeypatch.setattr(repair_onnxruntime.platform, "system", lambda: "Linux")
+
+    def fake_check_output(command, **kwargs):
+        assert command[0] == "nvidia-smi"
+        return "NVIDIA GeForce RTX 4090\nNVIDIA GeForce RTX 3060\n"
+
+    monkeypatch.setattr(repair_onnxruntime.subprocess, "check_output", fake_check_output)
+
+    result = repair_onnxruntime._detect_gpu_vendor()
+
+    assert result["primary"] == "nvidia"
+    assert result["vendors"] == ["nvidia"]
+    assert [d["name"] for d in result["devices"]] == [
+        "NVIDIA GeForce RTX 4090",
+        "NVIDIA GeForce RTX 3060",
+    ]
+
+
+def test_linux_detect_gpu_vendor_without_nvidia_smi_reports_no_gpu(monkeypatch):
+    monkeypatch.setattr(repair_onnxruntime.platform, "system", lambda: "Linux")
+
+    def fake_check_output(command, **kwargs):
+        raise FileNotFoundError("nvidia-smi not found")
+
+    monkeypatch.setattr(repair_onnxruntime.subprocess, "check_output", fake_check_output)
+
+    result = repair_onnxruntime._detect_gpu_vendor()
+
+    assert result["primary"] is None
+    assert result["vendors"] == []
+    assert result["devices"] == []
+
+
+def test_linux_repair_swaps_cpu_runtime_for_cuda_gpu_runtime(monkeypatch):
+    """The reported Linux bug: requirements pin CPU-only onnxruntime, so an
+    NVIDIA Linux machine must get onnxruntime-gpu[cuda,cudnn] swapped in."""
+    pip_calls = []
+
+    def fake_version(dist_name: str):
+        return {"onnxruntime-gpu": "1.21.0"}.get(dist_name)
+
+    def fake_run_pip(args, *, stream=False):
+        pip_calls.append((list(args), stream))
+        return subprocess.CompletedProcess(args, 0)
+
+    monkeypatch.setattr(repair_onnxruntime, "get_install_state", lambda: _linux_install_state())
+    monkeypatch.setattr(repair_onnxruntime.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(repair_onnxruntime, "_version", fake_version)
+    monkeypatch.setattr(repair_onnxruntime, "_run_pip", fake_run_pip)
+    monkeypatch.setattr(repair_onnxruntime, "_probe_ort_providers", lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"])
+
+    result = repair_onnxruntime.repair_linux_onnxruntime(stream_pip=True)
+
+    assert pip_calls[0] == (["uninstall", "-y", "onnxruntime"], True)
+    gpu_install = next(call for call in pip_calls if "cuda,cudnn" in " ".join(call[0]))
+    assert gpu_install[0][:3] == ["install", "--no-warn-script-location", "--constraint"]
+    assert gpu_install[0][-1] == "onnxruntime-gpu[cuda,cudnn]==1.21.0"
+    assert result["repaired"] is True
+    assert result["target_runtime"] == "onnxruntime-gpu"
+    assert result["providers_after_repair"] == ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+
+def test_linux_repair_keeps_cpu_runtime_without_nvidia(monkeypatch):
+    pip_calls = []
+    monkeypatch.setattr(
+        repair_onnxruntime,
+        "get_install_state",
+        lambda: _linux_install_state(gpu_vendor_primary=None, gpu_vendors_detected=[], gpu_devices=[]),
+    )
+    monkeypatch.setattr(repair_onnxruntime.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(repair_onnxruntime, "_run_pip", lambda args, *, stream=False: pip_calls.append(list(args)))
+
+    result = repair_onnxruntime.repair_linux_onnxruntime(stream_pip=False)
+
+    assert pip_calls == []
+    assert result["repaired"] is False
+    assert result["target_runtime"] == "onnxruntime"
+    assert any("No NVIDIA GPU detected" in action for action in result["actions"])
+
+
+def test_linux_repair_skips_non_x86_64(monkeypatch):
+    """aarch64 portable builds (Pi 5 / Graviton) must not attempt the swap —
+    onnxruntime-gpu publishes no aarch64 wheels on PyPI."""
+    pip_calls = []
+    monkeypatch.setattr(repair_onnxruntime, "get_install_state", lambda: _linux_install_state())
+    monkeypatch.setattr(repair_onnxruntime.platform, "machine", lambda: "aarch64")
+    monkeypatch.setattr(repair_onnxruntime, "_run_pip", lambda args, *, stream=False: pip_calls.append(list(args)))
+
+    result = repair_onnxruntime.repair_linux_onnxruntime(stream_pip=False)
+
+    assert pip_calls == []
+    assert result["repaired"] is False
+    assert result["target_runtime"] == "onnxruntime"
+    assert any("aarch64" in action for action in result["actions"])
+
+
+def test_linux_repair_backfills_cuda_wheels_when_gpu_runtime_present(monkeypatch):
+    """A manually installed onnxruntime-gpu without the [cuda,cudnn] extras
+    lists CUDAExecutionProvider but silently falls back to CPU; the repair
+    must backfill the runtime wheels."""
+    pip_calls = []
+
+    def fake_version(dist_name: str):
+        return {"onnxruntime-gpu": "1.21.0", "nvidia-cudnn-cu12": None}.get(dist_name)
+
+    def fake_run_pip(args, *, stream=False):
+        pip_calls.append((list(args), stream))
+        return subprocess.CompletedProcess(args, 0)
+
+    monkeypatch.setattr(
+        repair_onnxruntime,
+        "get_install_state",
+        lambda: _linux_install_state(onnxruntime_version=None, onnxruntime_gpu_version="1.21.0", has_gpu_package=True),
+    )
+    monkeypatch.setattr(repair_onnxruntime.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(repair_onnxruntime, "_version", fake_version)
+    monkeypatch.setattr(repair_onnxruntime, "_run_pip", fake_run_pip)
+    monkeypatch.setattr(repair_onnxruntime, "_probe_ort_providers", lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"])
+
+    result = repair_onnxruntime.repair_linux_onnxruntime(stream_pip=True)
+
+    assert len(pip_calls) == 1
+    assert pip_calls[0][0][-1] == "onnxruntime-gpu[cuda,cudnn]==1.21.0"
+    assert result["repaired"] is True
+
+
+def test_linux_repair_is_idempotent_when_gpu_runtime_complete(monkeypatch):
+    pip_calls = []
+
+    def fake_version(dist_name: str):
+        return {"onnxruntime-gpu": "1.21.0", "nvidia-cudnn-cu12": "9.22.0.52"}.get(dist_name)
+
+    monkeypatch.setattr(
+        repair_onnxruntime,
+        "get_install_state",
+        lambda: _linux_install_state(onnxruntime_version=None, onnxruntime_gpu_version="1.21.0", has_gpu_package=True),
+    )
+    monkeypatch.setattr(repair_onnxruntime.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(repair_onnxruntime, "_version", fake_version)
+    monkeypatch.setattr(repair_onnxruntime, "_run_pip", lambda args, *, stream=False: pip_calls.append(list(args)))
+    monkeypatch.setattr(repair_onnxruntime, "_probe_ort_providers", lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"])
+
+    result = repair_onnxruntime.repair_linux_onnxruntime(stream_pip=False)
+
+    assert pip_calls == []
+    assert result["repaired"] is False
+    assert result["actions"] == ["No repair needed"]
+
+
+def test_platform_dispatcher_routes_linux(monkeypatch):
+    sentinel = {"platform": "Linux", "repaired": True, "actions": ["linux path"]}
+    monkeypatch.setattr(repair_onnxruntime.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(repair_onnxruntime, "repair_linux_onnxruntime", lambda *, stream_pip=False: sentinel)
+
+    assert repair_onnxruntime.repair_platform_onnxruntime(stream_pip=True) is sentinel
+
+
 def test_repair_falls_back_to_cpu_runtime_when_nothing_present_and_no_gpu_detected(monkeypatch):
     """Regression: VM / RDP / headless CI machines without a
     detectable GPU vendor must still get the CPU runtime so the app

@@ -1041,10 +1041,20 @@ if [ "$NEED_INSTALL" = "1" ]; then
     echo "[OK] Dependencies installed."
 fi
 
-# Skip Windows-only repair scripts (repair_onnxruntime.py / repair_torch_runtime.py)
-# on Linux: the bundled python-build-standalone interpreter has its CUDA
-# runtime selection done at the pip layer, and the Windows-specific
-# DirectML / cudnn DLL fixups are not relevant.
+# ONNX Runtime GPU repair: Linux requirements pin the CPU-only onnxruntime
+# (the GPU package cannot be selected by pip markers), so NVIDIA machines need
+# this swap to onnxruntime-gpu[cuda,cudnn] for GPU WD14 tagging. Non-NVIDIA
+# machines are a fast no-op. Mirrors the unconditional call in the Windows
+# portable launcher.
+echo "[Info] Checking ONNX Runtime package state..."
+"$PYTHON_CMD" backend/repair_onnxruntime.py --auto || {
+    echo "[WARN] Could not auto-repair ONNX Runtime package state."
+    echo "       The app can still start, but WD14 tagging may stay on CPU."
+}
+echo
+
+# repair_torch_runtime.py stays Windows-only: Linux CUDA torch wheels are
+# already selected at the pip layer by platform markers in requirements.txt.
 
 echo "[Info] Checking startup readiness..."
 ( cd backend && "$PYTHON_CMD" model_health.py --startup ) || true

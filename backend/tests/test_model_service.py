@@ -108,7 +108,7 @@ def test_prepare_wd14_repairs_windows_onnx_runtime(monkeypatch):
         sys.modules,
         "repair_onnxruntime",
         SimpleNamespace(
-            repair_windows_onnxruntime=lambda stream_pip=False: repair_calls.append(stream_pip) or {
+            repair_platform_onnxruntime=lambda stream_pip=False: repair_calls.append(stream_pip) or {
                 "repaired": True,
                 "actions": ["Installed onnxruntime-gpu CUDA runtime"],
                 "providers_after_repair": ["CUDAExecutionProvider", "CPUExecutionProvider"],
@@ -123,6 +123,44 @@ def test_prepare_wd14_repairs_windows_onnx_runtime(monkeypatch):
     assert repair_calls == [True]
     assert result["status"] == "ok"
     assert result["restart_recommended"] is True
+    assert result["runtime_repair"]["ok"] is True
+    assert result["runtime_repair"]["providers_after_repair"] == ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+
+def test_prepare_wd14_repairs_linux_onnx_runtime(monkeypatch):
+    """Linux Prepare must run the same ONNX GPU repair path as Windows — the
+    Linux requirements pin CPU-only onnxruntime, so this Prepare-time swap is
+    the lightweight/portable user's only route to GPU WD14 tagging."""
+    repair_calls = []
+
+    class FakeWD14Tagger:
+        def __init__(self, model_name, use_gpu=False):
+            self.model_name = model_name
+            self.use_gpu = use_gpu
+
+        def _get_model_paths(self):
+            return ("/models/wd14/model.onnx", "/models/wd14/selected_tags.csv")
+
+    monkeypatch.setattr(model_service.platform, "system", lambda: "Linux")
+    monkeypatch.setitem(sys.modules, "tagger", SimpleNamespace(DEFAULT_MODEL="wd-swinv2-tagger-v3", WD14Tagger=FakeWD14Tagger))
+    monkeypatch.setitem(
+        sys.modules,
+        "repair_onnxruntime",
+        SimpleNamespace(
+            repair_platform_onnxruntime=lambda stream_pip=False: repair_calls.append(stream_pip) or {
+                "repaired": True,
+                "actions": ["Installing onnxruntime-gpu[cuda,cudnn]==1.21.0"],
+                "providers_after_repair": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+                "gpu_vendor_primary": "nvidia",
+                "target_runtime": "onnxruntime-gpu",
+            }
+        ),
+    )
+
+    result = model_service.ModelService().prepare_model("wd14", variant="wd-swinv2-tagger-v3")
+
+    assert repair_calls == [True]
+    assert result["status"] == "ok"
     assert result["runtime_repair"]["ok"] is True
     assert result["runtime_repair"]["providers_after_repair"] == ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
@@ -142,7 +180,7 @@ def test_prepare_wd14_warns_when_windows_onnx_repair_fails(monkeypatch):
         sys.modules,
         "repair_onnxruntime",
         SimpleNamespace(
-            repair_windows_onnxruntime=lambda stream_pip=False: {
+            repair_platform_onnxruntime=lambda stream_pip=False: {
                 "repaired": False,
                 "actions": ["CPU-only runtime remained installed"],
                 "providers_after_repair": ["CPUExecutionProvider"],

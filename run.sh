@@ -299,7 +299,8 @@ if [ "${SD_IMAGE_SORTER_INSTALL_FULL_AI:-}" = "1" ]; then
     echo
 else
     echo "[Info] Skipping ONNX GPU repair for lightweight startup."
-    echo "       WD14 can still run on CPU; set SD_IMAGE_SORTER_INSTALL_FULL_AI=1 for GPU runtime repair."
+    echo "       WD14 can still run on CPU. For the GPU runtime, click Prepare on the"
+    echo "       tagger in Feature Setup, or set SD_IMAGE_SORTER_INSTALL_FULL_AI=1."
     echo
 fi
 

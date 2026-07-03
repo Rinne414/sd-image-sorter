@@ -83,13 +83,16 @@ def _with_dependency_result(result: Dict[str, Any], install_result: DependencyIn
 
 
 def _repair_wd14_onnxruntime_if_possible() -> Dict[str, Any]:
-    if platform.system() != "Windows":
-        return {"attempted": False, "ok": True, "reason": "non_windows"}
+    # Windows AND Linux: Linux requirements pin the CPU-only onnxruntime, so
+    # NVIDIA Linux users need this Prepare-time swap to onnxruntime-gpu just
+    # like Windows users need the CUDA-DLL / DirectML fixups.
+    if platform.system() not in ("Windows", "Linux"):
+        return {"attempted": False, "ok": True, "reason": "unsupported_platform"}
 
     try:
-        from repair_onnxruntime import repair_windows_onnxruntime
+        from repair_onnxruntime import repair_platform_onnxruntime
 
-        result = repair_windows_onnxruntime(stream_pip=True)
+        result = repair_platform_onnxruntime(stream_pip=True)
         providers = [str(provider) for provider in (result.get("providers_after_repair") or [])]
         has_gpu_provider = "CUDAExecutionProvider" in providers or "DmlExecutionProvider" in providers
         vendor = str(result.get("gpu_vendor_primary") or "").lower()

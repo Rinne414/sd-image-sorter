@@ -1,10 +1,14 @@
-"""Repair Windows ONNX Runtime package conflicts for WD14 tagging.
+"""Repair ONNX Runtime GPU packaging for WD14 tagging (Windows + Linux).
 
 Why this exists:
-- `onnxruntime-gpu` is the correct Windows package for NVIDIA users (CUDA +
-  CPU fallback).
+- `onnxruntime-gpu` is the correct package for NVIDIA users (CUDA +
+  CPU fallback) on both Windows and Linux.
 - `onnxruntime-directml` is the correct Windows package for Intel / AMD
   users (DirectML + CPU fallback) so their GPU can accelerate tagging.
+- requirements pin the CPU-only `onnxruntime` on Linux because the GPU
+  package cannot be conditioned on hardware at the pip-marker layer, so
+  Linux NVIDIA machines stay on CPU tagging unless this repair swaps the
+  package at launch / Prepare time.
 - Some downstream packages still depend on the CPU package name
   `onnxruntime`, which can get installed afterwards and override the active
   runtime, leaving users stuck on CPU even when GPU acceleration is
@@ -14,9 +18,13 @@ This script makes the launcher self-heal that state so users do not need to
 understand the package split before using the app.
 
 Behaviour:
-- NVIDIA primary GPU: keep onnxruntime-gpu, remove conflicting onnxruntime.
-- Intel / AMD only (no NVIDIA): swap onnxruntime-gpu for
+- Windows, NVIDIA primary GPU: keep onnxruntime-gpu, remove conflicting
+  onnxruntime.
+- Windows, Intel / AMD only (no NVIDIA): swap onnxruntime-gpu for
   onnxruntime-directml, remove conflicting onnxruntime.
+- Linux, NVIDIA (via nvidia-smi, x86_64 only): swap the CPU onnxruntime for
+  onnxruntime-gpu[cuda,cudnn]. AMD / Intel Linux keep the CPU runtime
+  (DirectML is Windows-only and ROCm builds are not published to PyPI).
 - No supported GPU detected: leave the installed package as-is (CPU runtime in
   lightweight mode, existing GPU runtime in full-AI mode).
 - Idempotent: if the installed package already matches the detected GPU
@@ -146,8 +154,37 @@ def _core_requirements_constraint_args() -> List[str]:
     return ["--constraint", str(constraints_path)]
 
 
+def _detect_linux_nvidia_gpu(result: Dict[str, Any]) -> Dict[str, Any]:
+    """NVIDIA-only detection on Linux via nvidia-smi.
+
+    onnxruntime-gpu is the only PyPI-published accelerated ONNX Runtime for
+    Linux and it is CUDA-only, so AMD / Intel GPUs are intentionally left
+    undetected here: they keep the CPU runtime instead of getting a package
+    that cannot use their hardware.
+    """
+    try:
+        raw = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            text=True,
+            timeout=10,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        # nvidia-smi missing or failing means no usable NVIDIA driver.
+        return result
+
+    names = [line.strip() for line in raw.splitlines() if line.strip()]
+    if not names:
+        return result
+
+    result["devices"] = [{"name": name, "vendor": "nvidia"} for name in names]
+    result["vendors"] = ["nvidia"]
+    result["primary"] = "nvidia"
+    return result
+
+
 def _detect_gpu_vendor() -> Dict[str, Any]:
-    """Best-effort primary GPU vendor detection on Windows via CIM.
+    """Best-effort primary GPU vendor detection (Windows CIM / Linux nvidia-smi).
 
     Returns a dict with:
     - vendors: list of vendors present ("nvidia", "intel", "amd", "unknown")
@@ -159,6 +196,9 @@ def _detect_gpu_vendor() -> Dict[str, Any]:
         "primary": None,
         "devices": [],
     }
+
+    if platform.system() == "Linux":
+        return _detect_linux_nvidia_gpu(result)
 
     if platform.system() != "Windows":
         return result
@@ -224,7 +264,7 @@ def get_install_state() -> Dict[str, Any]:
     cpu_version = _version("onnxruntime")
     gpu_version = _version("onnxruntime-gpu")
     dml_version = _version("onnxruntime-directml")
-    gpu_vendor = _detect_gpu_vendor() if platform.system() == "Windows" else {"vendors": [], "primary": None, "devices": []}
+    gpu_vendor = _detect_gpu_vendor() if platform.system() in ("Windows", "Linux") else {"vendors": [], "primary": None, "devices": []}
     return {
         "platform": platform.system(),
         "python": sys.executable,
@@ -600,6 +640,150 @@ def repair_windows_onnxruntime(*, stream_pip: bool = False) -> Dict[str, Any]:
     return state
 
 
+def repair_linux_onnxruntime(*, stream_pip: bool = False) -> Dict[str, Any]:
+    """Give Linux NVIDIA machines the CUDA ONNX Runtime for WD14 tagging.
+
+    requirements pin the CPU-only ``onnxruntime`` on Linux (small and always
+    resolvable), so without this repair NVIDIA users tag on CPU forever — the
+    gap a Linux portable user reported. Mirrors the Windows flow: detect the
+    vendor, remove the CPU package, install ``onnxruntime-gpu[cuda,cudnn]``
+    (the extras pull the CUDA 12 / cuDNN 9 runtime wheels), and leave
+    non-NVIDIA machines untouched.
+    """
+    state = get_install_state()
+    actions: List[str] = []
+    did_repair = False
+
+    if state["platform"] != "Linux":
+        state["actions"] = actions
+        state["repaired"] = False
+        return state
+
+    machine = platform.machine().lower()
+    if machine not in ("x86_64", "amd64"):
+        _record_action(
+            actions,
+            f"onnxruntime-gpu publishes no {machine} wheels on PyPI. Keeping CPU runtime.",
+            stream_pip=stream_pip,
+        )
+        state["actions"] = actions
+        state["repaired"] = False
+        state["target_runtime"] = "onnxruntime"
+        return state
+
+    if state.get("gpu_vendor_primary") != "nvidia":
+        _record_action(
+            actions,
+            "No NVIDIA GPU detected via nvidia-smi. Keeping CPU runtime "
+            "(onnxruntime-gpu is CUDA-only on Linux).",
+            stream_pip=stream_pip,
+        )
+        state["actions"] = actions
+        state["repaired"] = False
+        state["target_runtime"] = "onnxruntime"
+        return state
+
+    cpu_version = state["onnxruntime_version"]
+    gpu_version = state["onnxruntime_gpu_version"]
+    pinned_gpu_version = _release_runtime_version("onnxruntime-gpu")
+
+    # Step 1: remove the CPU-only package first. Its files override the GPU
+    # runtime's when both are installed (the same silent-CPU failure mode as
+    # Windows), and removing it up front avoids a redundant force-reinstall.
+    if cpu_version:
+        _record_action(
+            actions,
+            f"Uninstalling CPU-only onnxruntime {cpu_version} (NVIDIA GPU detected).",
+            stream_pip=stream_pip,
+        )
+        _run_pip(["uninstall", "-y", "onnxruntime"], stream=stream_pip)
+        did_repair = True
+
+    # Step 2: ensure the GPU runtime and its CUDA 12 + cuDNN 9 runtime wheels.
+    if not gpu_version:
+        install_spec = _runtime_install_spec("onnxruntime-gpu", extras="cuda,cudnn")
+        _record_action(
+            actions,
+            f"Installing {install_spec} (~1.4 GB with CUDA runtime wheels) for GPU tagging.",
+            stream_pip=stream_pip,
+        )
+        _run_pip(
+            [
+                "install",
+                "--no-warn-script-location",
+                *_core_requirements_constraint_args(),
+                install_spec,
+            ],
+            stream=stream_pip,
+        )
+        did_repair = True
+    else:
+        if cpu_version:
+            # The removed CPU package may have clobbered shared files; restore.
+            reinstall_spec = _runtime_install_spec("onnxruntime-gpu", installed_version=gpu_version)
+            _record_action(
+                actions,
+                f"Reinstalling {reinstall_spec} to restore overwritten files",
+                stream_pip=stream_pip,
+            )
+            _run_pip(
+                ["install", "--no-deps", "--upgrade", "--force-reinstall", reinstall_spec],
+                stream=stream_pip,
+            )
+            did_repair = True
+        if not _version("nvidia-cudnn-cu12"):
+            # Torch CUDA installs usually provide the nvidia-* wheels already,
+            # so this backfill is often a no-op on full-AI machines.
+            install_spec = _runtime_install_spec(
+                "onnxruntime-gpu", extras="cuda,cudnn", installed_version=gpu_version
+            )
+            _record_action(
+                actions,
+                f"Installing CUDA 12 + cuDNN 9 runtime wheels so onnxruntime-gpu "
+                f"{gpu_version} can use CUDAExecutionProvider",
+                stream_pip=stream_pip,
+            )
+            _run_pip(
+                [
+                    "install",
+                    "--no-warn-script-location",
+                    *_core_requirements_constraint_args(),
+                    install_spec,
+                ],
+                stream=stream_pip,
+            )
+            did_repair = True
+
+    if not actions:
+        actions.append("No repair needed")
+
+    state = get_install_state()
+    state["actions"] = actions
+    state["repaired"] = did_repair
+    state["target_runtime"] = "onnxruntime-gpu"
+    if pinned_gpu_version:
+        state["pinned_gpu_version"] = pinned_gpu_version
+    try:
+        state["providers_after_repair"] = _probe_ort_providers()
+    except Exception as exc:  # pragma: no cover - best-effort diagnostic only
+        state["providers_after_repair"] = []
+        state["provider_probe_error"] = str(exc)
+    return state
+
+
+def repair_platform_onnxruntime(*, stream_pip: bool = False) -> Dict[str, Any]:
+    """Dispatch to the ONNX Runtime repair for the current OS."""
+    system = platform.system()
+    if system == "Windows":
+        return repair_windows_onnxruntime(stream_pip=stream_pip)
+    if system == "Linux":
+        return repair_linux_onnxruntime(stream_pip=stream_pip)
+    state = get_install_state()
+    state["actions"] = ["No repair needed on this platform"]
+    state["repaired"] = False
+    return state
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--auto", action="store_true", help="Repair automatically when needed.")
@@ -607,23 +791,26 @@ def main() -> int:
     args = parser.parse_args()
 
     state = get_install_state()
-    result = repair_windows_onnxruntime(stream_pip=not args.json) if args.auto else state
+    result = repair_platform_onnxruntime(stream_pip=not args.json) if args.auto else state
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
-        if result["platform"] != "Windows":
-            print("[onnxruntime] Non-Windows platform detected. No repair needed.")
+        result_platform = result["platform"]
+        if result_platform not in ("Windows", "Linux"):
+            print("[onnxruntime] No ONNX Runtime repair is needed on this platform.")
         else:
             vendor = result.get("gpu_vendor_primary") or "unknown"
             vendors_all = result.get("gpu_vendors_detected") or []
             if vendors_all:
                 print(f"[onnxruntime] Detected GPU vendor(s): {', '.join(vendors_all)} (primary: {vendor})")
+            elif result_platform == "Linux":
+                print("[onnxruntime] No NVIDIA GPU detected via nvidia-smi.")
             else:
                 print("[onnxruntime] No GPU detected via CIM.")
 
             if result.get("repaired"):
-                print("[onnxruntime] Repaired Windows ONNX Runtime packages.")
+                print(f"[onnxruntime] Repaired {result_platform} ONNX Runtime packages.")
                 for action in result.get("actions", []):
                     print(" -", action)
             else:
