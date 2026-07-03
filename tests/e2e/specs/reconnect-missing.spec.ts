@@ -158,11 +158,18 @@ test('find moved images reconnects a file through the real gallery UI', async ({
 
   // The scan-done "what's next" CTA banner floats over the gallery toolbar
   // (since v3.4.3 it carries a third "Create collection" action, wide enough
-  // to cover #btn-reconnect-missing at this viewport). Dismiss it the way a
-  // real user would before reaching for the toolbar underneath.
-  await expect(page.locator('#pipeline-next-step.visible')).toBeVisible({ timeout: 15000 })
-  await page.locator('#pipeline-next-step .pns-dismiss').click()
-  await expect(page.locator('#pipeline-next-step.visible')).toHaveCount(0)
+  // to cover #btn-reconnect-missing at this viewport). The banner is NOT
+  // guaranteed: the app deliberately shows a warning toast instead when the
+  // scan counted any transient per-file error (app.js scan done-branch), so
+  // requiring it here flakes. #btn-start-scan is re-enabled in the same
+  // synchronous done-branch that settles banner-vs-toast, and the poll loop
+  // stops afterwards — wait for that, then dismiss the banner only if it
+  // actually appeared.
+  await expect(page.locator('#btn-start-scan')).toBeEnabled({ timeout: 15000 })
+  if (await page.locator('#pipeline-next-step.visible').isVisible()) {
+    await page.locator('#pipeline-next-step .pns-dismiss').click()
+    await expect(page.locator('#pipeline-next-step.visible')).toHaveCount(0)
+  }
 
   await page.locator('#btn-reconnect-missing').click()
   await expect(page.locator('#reconnect-modal.visible')).toBeVisible()
