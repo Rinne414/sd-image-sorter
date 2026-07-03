@@ -678,3 +678,191 @@ def test_dispatcher_thread_auto_starts_queued_job(monkeypatch):
         service.remove_queued_jobs("gallery-tag")
         service.remove_queued_jobs("smart-tag")
         service.remove_queued_jobs("vlm-caption-batch")
+
+
+# ---------------------------------------------------------------------------
+# Persistence across restart (Debt-16 durability upgrade)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def queue_state_file(tmp_path, monkeypatch):
+    """Redirect the AI-job-queue store to a known per-test path and return it."""
+    from services import ai_job_queue_store
+
+    path = tmp_path / "ai-job-queue.json"
+    monkeypatch.setattr(ai_job_queue_store, "get_queue_state_path", lambda: path)
+    return path
+
+
+def _smart_busy(monkeypatch):
+    """Force Smart Tag busy + VLM idle so every kind queues behind it."""
+    import routers.vlm as vlm_router
+    from services import tagging_pipeline_service
+
+    monkeypatch.setattr(
+        tagging_pipeline_service.smart_tag_service,
+        "get_active_job",
+        lambda: SimpleNamespace(job_id="smart-active", status="running"),
+    )
+    monkeypatch.setattr(vlm_router, "is_caption_batch_active", lambda: False)
+
+
+def test_persisted_queue_survives_restart_in_order(queue_state_file, monkeypatch):
+    """enqueue three kinds → new service instance restores them in FIFO order."""
+    from services.tagging_service import TagRequest
+
+    service = _make_service()
+    legacy = _FakeLegacyTaggingService()
+    _smart_busy(monkeypatch)
+
+    service.start_gallery_tagging(
+        TagRequest(image_ids=[1]), background_tasks=None, legacy_service=legacy
+    )
+    service.start_smart_tagging({"image_ids": [2]}, legacy_service=legacy)
+    service.start_vlm_caption_batch(
+        lambda: pytest.fail("must queue, not claim"),
+        payload={"image_ids": [3]},
+        loop=None,
+        legacy_service=legacy,
+    )
+    assert queue_state_file.exists()
+
+    # "Restart": a brand-new service instance reads the same state file.
+    restored = _make_service()
+    assert restored.queue_snapshot()["total_queued"] == 3
+    assert [item.kind for item in restored._queue] == [
+        "gallery-tag",
+        "smart-tag",
+        "vlm-caption-batch",
+    ]
+    # Gallery payload round-trips back into a TagRequest; smart/VLM stay dicts.
+    assert restored._queue[0].payload.image_ids == [1]
+    assert restored._queue[1].payload == {"image_ids": [2]}
+    assert restored._queue[2].payload == {"image_ids": [3]}
+
+
+def test_running_job_restored_at_head(queue_state_file, monkeypatch):
+    """A job that was RUNNING at shutdown comes back at HEAD, ahead of the queue."""
+    import routers.vlm as vlm_router
+    from services import tagging_pipeline_service
+    from services.tagging_service import TagRequest
+
+    service = _make_service()
+    legacy = _FakeLegacyTaggingService()
+    smart_job = {"job": SimpleNamespace(job_id="smart-active", status="running")}
+    monkeypatch.setattr(
+        tagging_pipeline_service.smart_tag_service, "get_active_job", lambda: smart_job["job"]
+    )
+    monkeypatch.setattr(vlm_router, "is_caption_batch_active", lambda: False)
+    monkeypatch.setattr(
+        tagging_pipeline_service.smart_tag_service,
+        "start_smart_tag_job",
+        lambda payload: {"job_id": "smart-x", "status": "queued"},
+    )
+
+    # Queue gallery A then smart B behind the running smart job.
+    service.start_gallery_tagging(
+        TagRequest(image_ids=[1]), background_tasks=None, legacy_service=legacy
+    )
+    service.start_smart_tagging({"image_ids": [2]}, legacy_service=legacy)
+
+    # Smart finishes → dispatch starts A (gallery); A is now RUNNING, B queued.
+    smart_job["job"] = None
+    assert service.dispatch_pending_once() is True
+    assert legacy.started is True
+    assert service.queue_snapshot()["total_queued"] == 1  # only B is queued now
+
+    # "Restart": A must be re-queued at HEAD (it cannot resume mid-flight).
+    restored = _make_service()
+    assert [item.kind for item in restored._queue] == ["gallery-tag", "smart-tag"]
+    assert restored._queue[0].payload.image_ids == [1]
+    assert restored.queue_snapshot()["total_queued"] == 2
+
+
+def test_corrupt_state_file_starts_empty(queue_state_file):
+    """A corrupt/unreadable state file degrades to an empty queue, no crash."""
+    queue_state_file.write_text("{ this is not valid json", encoding="utf-8")
+
+    service = _make_service()
+
+    assert service.queue_snapshot()["total_queued"] == 0
+    assert service._queue == []
+
+
+def test_invalid_persisted_entries_skipped(queue_state_file):
+    """Malformed entries are skipped on restore; valid ones still load."""
+    import json
+
+    payload = {
+        "schema_version": 1,
+        "entries": [
+            {"queue_id": "q1", "kind": "gallery-tag", "payload": {"image_ids": [5]}, "running": False},
+            {"queue_id": "q2", "kind": "bogus-kind", "payload": {}, "running": False},
+            {"queue_id": "q3", "kind": "smart-tag", "payload": "not-a-dict", "running": False},
+            "totally-not-an-object",
+        ],
+    }
+    queue_state_file.write_text(json.dumps(payload), encoding="utf-8")
+
+    service = _make_service()
+
+    assert service.queue_snapshot()["total_queued"] == 1
+    assert service._queue[0].kind == "gallery-tag"
+    assert service._queue[0].payload.image_ids == [5]
+
+
+def test_cancel_removes_entry_from_persisted_file(queue_state_file, monkeypatch):
+    """Cancelling a queued job also drops it from the persisted state file."""
+    import json
+
+    from services.tagging_service import TagRequest
+
+    service = _make_service()
+    legacy = _FakeLegacyTaggingService()
+    _smart_busy(monkeypatch)
+
+    service.start_gallery_tagging(
+        TagRequest(image_ids=[1]), background_tasks=None, legacy_service=legacy
+    )
+    on_disk = json.loads(queue_state_file.read_text(encoding="utf-8"))
+    assert len(on_disk["entries"]) == 1
+
+    service.cancel_gallery_tagging(legacy_service=legacy)
+
+    on_disk = json.loads(queue_state_file.read_text(encoding="utf-8"))
+    assert on_disk["entries"] == []
+    # And a restart now restores nothing.
+    assert _make_service().queue_snapshot()["total_queued"] == 0
+
+
+def test_restored_gallery_job_dispatches_with_rebound_service(queue_state_file, monkeypatch):
+    """A restored entry carries no live service; dispatch re-binds one and starts it."""
+    import json
+
+    payload = {
+        "schema_version": 1,
+        "entries": [
+            {
+                "queue_id": "q1",
+                "kind": "gallery-tag",
+                "payload": {"image_ids": [9]},
+                "enqueued_at": "2026-01-01T00:00:00.000+00:00",
+                "running": True,
+            }
+        ],
+    }
+    queue_state_file.write_text(json.dumps(payload), encoding="utf-8")
+
+    _idle_probes(monkeypatch)
+    legacy = _FakeLegacyTaggingService()
+    service = _make_service(legacy_service_resolver=lambda: legacy)
+
+    # The running-at-shutdown entry restored at HEAD as a queued entry.
+    assert service._queue[0].kind == "gallery-tag"
+    assert service._queue[0].legacy_service is None
+
+    # Runtime is idle → it dispatches, re-binding the resolved legacy service.
+    assert service.dispatch_pending_once() is True
+    assert legacy.started is True
+    assert service.queue_snapshot()["total_queued"] == 0

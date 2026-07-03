@@ -750,8 +750,8 @@ async def caption_batch(request: BatchCaptionRequest):
     Returns {"status": "started", ...} immediately when the batch starts
     now, or {"status": "queued", "queue_position": N, ...} when another AI
     job (gallery AI Tag / Smart Tag / VLM batch) is running and the batch
-    was added to the unified in-memory FIFO queue (auto-starts when the
-    running job finishes; the queue does not survive a restart). Poll
+    was added to the unified FIFO queue (auto-starts when the running job
+    finishes; the queue is persisted and restored across restarts). Poll
     /caption-batch/progress either way.
     """
     from routers.tags import get_tagging_service

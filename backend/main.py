@@ -214,6 +214,12 @@ async def lifespan(app: FastAPI):
     logger.info("SD Image Sorter backend starting...")
     _install_windows_loop_exception_handler()
 
+    # Capture the running server loop so the tagging pipeline dispatcher can
+    # re-submit a VLM caption batch restored from disk — its original request
+    # loop is gone after a restart. Harmless no-op for gallery/smart jobs.
+    from services.tagging_pipeline_service import set_server_loop
+    set_server_loop(asyncio.get_running_loop())
+
     # Ensure all required directories exist
     ensure_directories()
 

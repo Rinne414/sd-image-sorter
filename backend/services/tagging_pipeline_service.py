@@ -6,13 +6,16 @@ starts/cancels/progress go through this coordinator so the app cannot run
 two heavyweight tagging jobs at the same time.
 
 v3.4.1 (Debt-16, TODO #19): a start request that arrives while another AI
-job runs is no longer rejected with 409. It is appended to an in-memory
+job runs is no longer rejected with 409. It is appended to a
 FIFO queue and auto-started by a background dispatcher thread when the
 running job finishes (success, error, or cancel all release the busy
 probes the dispatcher polls). Contract notes:
 
-- The queue lives in this process only. It does NOT survive a backend
-  restart (consistent with all other in-memory job state in this app).
+- The queue is persisted to ``data/state/ai-job-queue.json`` (write-through
+  on every enqueue/dequeue/cancel/merge) so it survives a backend restart.
+  Only the request-shaped spec is stored; live runtime handles (legacy
+  service objects, event loops) are re-bound at dispatch time. See
+  ``services/ai_job_queue_store.py`` and ``_restore_persisted_queue``.
 - There is intentionally NO queue depth cap.
 - Exact-duplicate *consecutive* enqueues of the same kind+payload collapse
   into the existing queued entry (response carries ``duplicate: true``).
@@ -37,7 +40,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 from fastapi import HTTPException
 
-from services import smart_tag_service
+from services import ai_job_queue_store, smart_tag_service
 from services.service_provider import ServiceProvider
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checkers only
@@ -182,6 +185,70 @@ def _fingerprint(kind: str, payload: Any) -> str:
         return ""
 
 
+# The server event loop, captured once at app startup (main.py lifespan). A
+# VLM caption batch restored from disk lost its original request loop, so the
+# dispatcher re-binds this one to re-submit it. Never set in tests (restored
+# VLM entries there just fail closed at dispatch, which is a safe no-op).
+_server_loop: "Optional[asyncio.AbstractEventLoop]" = None
+
+
+def set_server_loop(loop: "Optional[asyncio.AbstractEventLoop]") -> None:
+    """Record the running server loop for re-submitting restored VLM batches."""
+    global _server_loop
+    _server_loop = loop
+
+
+def _get_server_loop() -> "Optional[asyncio.AbstractEventLoop]":
+    return _server_loop
+
+
+def _default_legacy_service_resolver() -> Any:
+    """Resolve the gallery TaggingService singleton for a restored/queued job.
+
+    Lazy import (the same cycle-avoidance the router probes use): a queued
+    entry restored from disk carries no legacy service handle, so it is
+    re-bound to the live singleton at dispatch time.
+    """
+    from routers.tags import get_tagging_service
+
+    return get_tagging_service()
+
+
+def _serialize_payload(payload: Any) -> Any:
+    """Reduce a queue entry's payload to JSON-serializable request data.
+
+    Gallery payloads are ``TagRequest`` pydantic models; Smart Tag / VLM
+    payloads are already plain dicts.
+    """
+    if hasattr(payload, "model_dump"):
+        return payload.model_dump()
+    return payload
+
+
+def _deserialize_payload(kind: str, data: Dict[str, Any]) -> Any:
+    """Rebuild an entry payload from persisted request data.
+
+    Raises when the persisted gallery payload no longer validates so the
+    caller can skip the entry instead of restoring a malformed job.
+    """
+    if kind == KIND_GALLERY:
+        from services.tagging_service import TagRequest
+
+        return TagRequest(**data)
+    return dict(data)
+
+
+def _serialize_queue_entry(entry: "_QueuedPipelineJob", *, running: bool) -> Dict[str, Any]:
+    """On-disk form of a queue entry (request-shaped data only)."""
+    return {
+        "queue_id": entry.queue_id,
+        "kind": entry.kind,
+        "payload": _serialize_payload(entry.payload),
+        "enqueued_at": entry.enqueued_at,
+        "running": bool(running),
+    }
+
+
 class _ThreadLaunchBackgroundTasks:
     """Duck-typed stand-in for ``fastapi.BackgroundTasks`` at dispatch time.
 
@@ -234,9 +301,16 @@ def _start_queued_vlm_batch(entry: _QueuedPipelineJob) -> None:
 class TaggingPipelineService:
     """Coordinator shared by `/api/tag/*`, `/api/smart-tag/*`, and `/api/vlm/caption-batch`."""
 
-    def __init__(self, *, poll_interval: float = 1.0, auto_dispatch: bool = True) -> None:
-        # FIFO queue of jobs waiting for the AI runtime. In-memory only —
-        # it does not survive a backend restart.
+    def __init__(
+        self,
+        *,
+        poll_interval: float = 1.0,
+        auto_dispatch: bool = True,
+        legacy_service_resolver: Optional[Callable[[], Any]] = None,
+    ) -> None:
+        # FIFO queue of jobs waiting for the AI runtime. Write-through
+        # persisted to data/state/ai-job-queue.json (see _persist_state_locked)
+        # so it survives a backend restart.
         self._queue: List[_QueuedPipelineJob] = []
         self._queue_seq = 0
         self._poll_interval = max(0.01, float(poll_interval))
@@ -248,6 +322,16 @@ class TaggingPipelineService:
         # Latest failed-to-start error per kind; cleared by the next
         # successful start of that kind. Surfaced via queue_snapshot().
         self._last_start_errors: Dict[str, Dict[str, Any]] = {}
+        # The entry the dispatcher has started but that has not been observed
+        # finishing yet. Kept persisted (flagged "running") but NOT counted in
+        # queue_snapshot() — it re-queues at HEAD on restart because a job
+        # cannot resume mid-flight. Cleared when the next job dispatches or the
+        # dispatcher observes the runtime go idle.
+        self._running_entry: Optional[_QueuedPipelineJob] = None
+        # How a restored/queued job re-binds the live gallery TaggingService
+        # (injectable for tests). Defaults to the router singleton.
+        self._legacy_service_resolver = legacy_service_resolver or _default_legacy_service_resolver
+        self._restore_persisted_queue()
 
     # ------------------------------------------------------------------
     # Start paths
@@ -448,6 +532,17 @@ class TaggingPipelineService:
             before = len(self._queue)
             self._queue = [entry for entry in self._queue if entry.kind != kind]
             removed = before - len(self._queue)
+            # A live cancel for this kind also invalidates a persisted RUNNING
+            # marker of the same kind: the running job is being cancelled, so it
+            # must not be re-queued on the next restart. The returned count still
+            # reports only queued entries (removed_queued contract unchanged).
+            running_cleared = (
+                self._running_entry is not None and self._running_entry.kind == kind
+            )
+            if running_cleared:
+                self._running_entry = None
+            if removed or running_cleared:
+                self._persist_state_locked()
         if removed:
             logger.info("Removed %d queued %s job(s)", removed, kind)
         return removed
@@ -464,9 +559,15 @@ class TaggingPipelineService:
             if not self._queue:
                 return False
             head = self._queue[0]
-            if self._runtime_busy_or_unknown(head.legacy_service):
+            # Restored-from-disk entries carry no live handles; re-bind the
+            # gallery service (used both by the probe and the gallery start).
+            legacy_service = head.legacy_service or self._resolve_legacy_service()
+            if self._runtime_busy_or_unknown(legacy_service):
                 return False
             entry = self._queue.pop(0)
+            entry.legacy_service = legacy_service
+            if entry.kind == KIND_VLM and entry.loop is None:
+                entry.loop = _get_server_loop()
             try:
                 self._start_queued_entry(entry)
             except BaseException as exc:  # noqa: BLE001 — a failed start must never wedge the queue
@@ -482,9 +583,17 @@ class TaggingPipelineService:
                     "error": detail,
                     "at": _utc_now_iso(),
                 }
+                # A failed start drops the entry (it is not running).
+                self._running_entry = None
             else:
                 logger.info("Queued %s job %s auto-started", entry.kind, entry.queue_id)
                 self._last_start_errors.pop(entry.kind, None)
+                # Keep the just-started job persisted as the RUNNING head so a
+                # restart re-queues it (a job cannot resume mid-flight). A prior
+                # running entry is necessarily finished — dispatch only proceeds
+                # when every runtime is idle — so replacing it is correct.
+                self._running_entry = entry
+            self._persist_state_locked()
             return True
 
     # ------------------------------------------------------------------
@@ -498,6 +607,117 @@ class TaggingPipelineService:
             _probe_vlm()[0],
         )
         return any(state != _PROBE_IDLE for state in states)
+
+    def _resolve_legacy_service(self) -> Any:
+        """Best-effort resolution of the gallery TaggingService (never raises)."""
+        try:
+            return self._legacy_service_resolver()
+        except Exception:
+            logger.exception("Could not resolve the gallery tagging service for a queued job")
+            return None
+
+    # ------------------------------------------------------------------
+    # Persistence (write-through + restore)
+    # ------------------------------------------------------------------
+
+    def _persist_state_locked(self) -> None:
+        """Write the running entry (if any) + the queue through to disk.
+
+        Caller holds ``_start_lock``. Best-effort: a persistence failure must
+        never surface into the queue mutation that triggered it.
+        """
+        try:
+            entries: List[Dict[str, Any]] = []
+            if self._running_entry is not None:
+                entries.append(_serialize_queue_entry(self._running_entry, running=True))
+            entries.extend(_serialize_queue_entry(item, running=False) for item in self._queue)
+            ai_job_queue_store.write_queue_state(entries)
+        except Exception:  # noqa: BLE001 — persistence must never break a queue mutation
+            logger.exception("Failed to persist AI job queue state")
+
+    def _restore_persisted_queue(self) -> None:
+        """Load the persisted queue on startup (best-effort).
+
+        The RUNNING-at-shutdown entry is persisted first and restored as a
+        queued entry at HEAD (it cannot resume mid-flight). Entries that fail
+        validation are skipped; a corrupt/unreadable file yields an empty
+        queue. When anything restores and auto-dispatch is on, the dispatcher
+        is started so the queue resumes draining.
+        """
+        try:
+            raw_entries = ai_job_queue_store.read_queue_state()
+        except Exception:  # noqa: BLE001 — a bad file must never block construction
+            logger.exception("Failed to read the persisted AI job queue; starting empty")
+            return
+        if not raw_entries:
+            return
+
+        restored: List[_QueuedPipelineJob] = []
+        max_seq = 0
+        for data in raw_entries:
+            parsed = self._deserialize_persisted_entry(data)
+            if parsed is None:
+                continue
+            entry, seq = parsed
+            # Same consecutive-duplicate collapse as _enqueue_locked. Because
+            # the running entry is first, a running job identical to the first
+            # still-queued job merges here.
+            if restored and entry.fingerprint and restored[-1].fingerprint == entry.fingerprint:
+                continue
+            restored.append(entry)
+            max_seq = max(max_seq, seq)
+
+        if not restored:
+            return
+
+        with _start_lock:
+            self._queue = restored
+            self._queue_seq = max(self._queue_seq, max_seq)
+            # Persist the normalized (running-collapsed-into-queued) form so the
+            # file matches the in-memory queue immediately after restore.
+            self._persist_state_locked()
+            self._ensure_dispatcher_locked()
+        logger.info(
+            "Restored %d persisted AI job queue entr%s",
+            len(restored),
+            "y" if len(restored) == 1 else "ies",
+        )
+
+    def _deserialize_persisted_entry(self, data: Any) -> Optional[Tuple["_QueuedPipelineJob", int]]:
+        """Rebuild one queue entry from persisted data, or None if invalid."""
+        try:
+            if not isinstance(data, dict):
+                raise ValueError("entry is not an object")
+            kind = data.get("kind")
+            if kind not in (KIND_GALLERY, KIND_SMART, KIND_VLM):
+                raise ValueError(f"unknown kind {kind!r}")
+            raw_payload = data.get("payload")
+            if not isinstance(raw_payload, dict):
+                raise ValueError("payload is not an object")
+            payload = _deserialize_payload(kind, raw_payload)
+
+            queue_id = str(data.get("queue_id") or "").strip()
+            if queue_id.startswith("q") and queue_id[1:].isdigit():
+                seq = int(queue_id[1:])
+            else:
+                self._queue_seq += 1
+                queue_id = f"q{self._queue_seq}"
+                seq = self._queue_seq
+
+            enqueued_at = str(data.get("enqueued_at") or "").strip() or _utc_now_iso()
+            entry = _QueuedPipelineJob(
+                queue_id=queue_id,
+                kind=kind,
+                payload=payload,
+                legacy_service=None,
+                loop=None,
+                fingerprint=_fingerprint(kind, payload),
+                enqueued_at=enqueued_at,
+            )
+            return entry, seq
+        except Exception as exc:  # noqa: BLE001 — one bad entry never blocks restore
+            logger.warning("Skipping invalid persisted AI job queue entry: %s", exc)
+            return None
 
     def _start_queued_entry(self, entry: _QueuedPipelineJob) -> None:
         if entry.kind == KIND_GALLERY:
@@ -545,6 +765,7 @@ class TaggingPipelineService:
         )
         self._queue.append(entry)
         position = len(self._queue)
+        self._persist_state_locked()
         self._ensure_dispatcher_locked()
         logger.info("Queued %s job %s at position %d", kind, entry.queue_id, position)
         return _with_owner(
@@ -581,17 +802,28 @@ class TaggingPipelineService:
         Polling (instead of completion hooks inside the three services)
         keeps the dispatch logic robust against every terminal path —
         success, error, cancel, and even crashed workers that an internal
-        hook would have missed. The thread exits when the queue empties
-        and is restarted by the next enqueue; both transitions happen
-        under ``_start_lock`` so no enqueue can be stranded without a
-        dispatcher.
+        hook would have missed. The thread exits once the queue is empty
+        AND the last dispatched job has been observed finishing (so its
+        persisted running marker is cleared), and is restarted by the next
+        enqueue; both transitions happen under ``_start_lock`` so no enqueue
+        can be stranded without a dispatcher.
         """
         while True:
             with _start_lock:
                 if not self._queue:
-                    if self._dispatcher_thread is threading.current_thread():
-                        self._dispatcher_thread = None
-                    return
+                    # Queue drained. If the last dispatched job is still running,
+                    # stay alive and keep polling so its persisted "running"
+                    # marker clears once it finishes — otherwise a cleanly
+                    # completed final job would be re-queued on the next restart.
+                    if self._running_entry is not None and not self._runtime_busy_or_unknown(
+                        self._running_entry.legacy_service
+                    ):
+                        self._running_entry = None
+                        self._persist_state_locked()
+                    if self._running_entry is None:
+                        if self._dispatcher_thread is threading.current_thread():
+                            self._dispatcher_thread = None
+                        return
             try:
                 progressed = self.dispatch_pending_once()
             except Exception:  # pragma: no cover - dispatch_pending_once already guards
