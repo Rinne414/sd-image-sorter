@@ -25,6 +25,7 @@
     <link rel="stylesheet" href="/static/css/tag-stats-modal.css">
     <link rel="stylesheet" href="/static/css/caption-autocomplete.css">
     <link rel="stylesheet" href="/static/css/dup-cleaner.css">
+    <link rel="stylesheet" href="/static/css/publish-set.css">
     <link rel="stylesheet" href="/static/css/entry.css">
     <!-- tokens.css must stay the LAST stylesheet: it owns the Aurora palette
          and remaps every legacy token defined by the sheets above. -->
@@ -363,6 +364,12 @@
                                     data-i18n-title="dup.navTitle" title="Duplicate Cleanup">
                                 <span class="tab-icon" aria-hidden="true">🧹</span>
                                 <span class="tab-text" data-i18n="dup.navTitle">Duplicate Cleanup</span>
+                            </button>
+                            <!-- v3.5.0 Tier 1: Pixiv publish-set workbench (opens a modal, not a view) -->
+                            <button class="nav-tab nav-tools-item" id="nav-tools-publish-set" type="button"
+                                    data-i18n-title="pub.navTitle" title="Publish Set">
+                                <span class="tab-icon" aria-hidden="true">📤</span>
+                                <span class="tab-text" data-i18n="pub.navTitle">Publish Set</span>
                             </button>
                         </div>
                     </div>
@@ -1057,6 +1064,7 @@
                                 <div class="gallery-action-more-menu" id="gallery-action-more-menu" hidden>
                                     <button id="btn-copy-selected" class="btn btn-ghost" title="Copy selected images to another folder"><span>📄</span> <span data-i18n="selection.copySelected">Copy...</span></button>
                                     <button id="btn-send-selection-to-dataset-maker" class="btn btn-ghost" title="Push the selected images into the Dataset Maker queue (training set workspace)"><span>📦</span> <span data-i18n="selection.sendToDatasetMaker">To Dataset Maker</span></button>
+                                    <button id="btn-publish-selected" class="btn btn-ghost" title="Order, censor-pair and export the selected images as a publish set" data-i18n-title="pub.selectionTooltip"><span>📤</span> <span data-i18n="pub.selectionOpen">Publish set…</span></button>
                                     <button id="btn-selection-mass-tag-editor" class="btn btn-ghost" title="Bulk tag operations on selected images" data-i18n-title="massTag.selectionTooltip"><span>🔧</span> <span data-i18n="massTag.selectionOpen">Edit Selected Tags</span></button>
                                     <button id="btn-export-selected" class="btn btn-ghost" title="Prompt / Tags / CSV / JSONL" data-i18n-title="selection.exportTextDataHelp"><span>📤</span> <span data-i18n="selection.exportTextData">Combined Export...</span></button>
                                     <button id="btn-batch-export-tags" class="btn btn-ghost" title="Training captions, one file per image" data-i18n-title="selection.exportTagsToFilesHelp"><span>📝</span> <span data-i18n="selection.exportTagsToFiles">Training captions...</span></button>
@@ -5750,6 +5758,69 @@
             </div>
         </div>
 
+        <!-- v3.5.0 Tier 1: Publish Set workbench (Pixiv 成套發布) -->
+        <div class="modal" id="publish-set-modal" role="dialog" aria-modal="true" aria-labelledby="publish-set-title">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-large publish-set-content">
+                <button class="modal-close" id="btn-close-publish-set" aria-label="Close" data-i18n-aria="common.close">✕</button>
+                <h3 id="publish-set-title" data-i18n="pub.title">Publish Set</h3>
+                <div class="pub-toolbar">
+                    <label class="pub-master-label">
+                        <input type="checkbox" id="pub-master-censored" checked>
+                        <span data-i18n="pub.masterCensored">Use censored version where available</span>
+                    </label>
+                    <button class="btn btn-ghost btn-small" id="btn-pub-repair" type="button" data-i18n="pub.repair">Re-pair</button>
+                    <span class="pub-toolbar-count" id="pub-count"></span>
+                </div>
+                <div class="pub-empty" id="pub-empty">
+                    <p data-i18n="pub.emptyIntro">Turn a gallery selection into a platform-ready set: drag into publish order, pair each image with its censored version, then export as 01.png, 02.png, … plus an optional caption.txt.</p>
+                    <p class="pub-empty-hint" data-i18n="pub.emptyHint">Select images in the Gallery, then use the batch action bar → More → “Publish set…”.</p>
+                </div>
+                <div class="pub-items" id="pub-items"></div>
+                <div class="pub-export-panel">
+                    <div class="pub-export-grid">
+                        <label class="pub-field">
+                            <span data-i18n="pub.outputFolder">Output folder</span>
+                            <input type="text" id="pub-folder" class="input-field" placeholder="D:\publish\set-01" autocomplete="off" spellcheck="false">
+                        </label>
+                        <label class="pub-field">
+                            <span data-i18n="pub.prefix">Filename prefix</span>
+                            <input type="text" id="pub-prefix" class="input-field" placeholder="" autocomplete="off" spellcheck="false">
+                        </label>
+                        <label class="pub-field">
+                            <span data-i18n="pub.startIndex">Start at</span>
+                            <input type="number" id="pub-start" class="input-field" value="1" min="0" step="1">
+                        </label>
+                        <label class="pub-field">
+                            <span data-i18n="pub.padWidth">Digits</span>
+                            <select id="pub-pad" class="input-field">
+                                <option value="1">1 (1.png)</option>
+                                <option value="2" selected>2 (01.png)</option>
+                                <option value="3">3 (001.png)</option>
+                                <option value="4">4 (0001.png)</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="pub-export-row2">
+                        <label class="pub-field pub-caption-field">
+                            <span data-i18n="pub.caption">Caption / description (saved as caption.txt, optional)</span>
+                            <textarea id="pub-caption" class="input-field" spellcheck="false"></textarea>
+                        </label>
+                        <label class="pub-field pub-suffix-field">
+                            <span data-i18n="pub.suffix">Censored suffix</span>
+                            <input type="text" id="pub-suffix" class="input-field" value="_censored" autocomplete="off" spellcheck="false">
+                        </label>
+                        <label class="pub-overwrite-label">
+                            <input type="checkbox" id="pub-overwrite">
+                            <span data-i18n="pub.overwrite">Overwrite existing files</span>
+                        </label>
+                        <button class="btn btn-primary" id="btn-pub-export" type="button" data-i18n="pub.export">Export set</button>
+                    </div>
+                    <div class="pub-result" id="pub-result" hidden></div>
+                </div>
+            </div>
+        </div>
+
         <div class="modal" id="filter-modal" role="dialog" aria-modal="true" aria-labelledby="filter-modal-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-large filter-modal-shell">
@@ -6507,6 +6578,7 @@
     <script src="/static/js/tag-complete-notification.js"></script>
     <script src="/static/js/caption-autocomplete.js"></script>
     <script src="/static/js/modules/dup-cleaner.js"></script>
+    <script src="/static/js/modules/publish-set.js"></script>
     <script src="/static/js/artist-ident.js"></script>
     <script src="/static/js/image-reader.js"></script>
     <script src="/static/js/obfuscate-engine.js"></script>

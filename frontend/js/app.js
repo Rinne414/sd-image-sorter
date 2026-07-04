@@ -5675,9 +5675,13 @@ function syncGeneratorRailOverflow() {
 // ============== Event Listeners ==============
 
 function initEventListeners() {
-    // Nav tabs
+    // Nav tabs. Tools-menu entries that open modals (Duplicate Cleanup,
+    // Publish Set) are .nav-tab for styling but carry no data-view —
+    // switchView(undefined) would hide every view and leave a black screen.
     $$('.nav-tab').forEach(tab => {
-        tab.addEventListener('click', () => switchView(tab.dataset.view));
+        tab.addEventListener('click', () => {
+            if (tab.dataset.view) switchView(tab.dataset.view);
+        });
     });
     setupNavToolsMenu();
 
@@ -6173,6 +6177,23 @@ function initEventListeners() {
     $('#btn-add-selected-to-collection')?.addEventListener('click', addSelectionToCollectionPicker);
     $('#btn-remove-selected-gallery')?.addEventListener('click', removeSelectedGalleryImages);
     $('#btn-delete-selected-files')?.addEventListener('click', deleteSelectedGalleryImages);
+    // v3.5.0 Tier 1: publish-set workbench. Explicit ids only — a filtered
+    // "select all matching" token can span tens of thousands of images, which
+    // is never a hand-curated publish set.
+    $('#btn-publish-selected')?.addEventListener('click', () => {
+        const ids = getSelectedGalleryIds();
+        if (!ids || ids.length === 0) {
+            showToast(
+                appT('pub.needExplicitSelection',
+                     'Select the images for the set first (explicit picks, not "all matching")'),
+                'info'
+            );
+            return;
+        }
+        if (window.PublishSet && typeof window.PublishSet.open === 'function') {
+            window.PublishSet.open(ids);
+        }
+    });
 
 
     // Confirm modal
@@ -10050,6 +10071,7 @@ function updateSelectionUI() {
         'btn-send-to-censor',
         'btn-send-selection-to-dataset-maker',
         'btn-add-selected-to-collection',
+        'btn-publish-selected',
         'btn-remove-selected-gallery',
         'btn-delete-selected-files'
     ];

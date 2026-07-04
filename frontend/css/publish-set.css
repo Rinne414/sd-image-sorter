@@ -1,0 +1,269 @@
+/* SD Image Sorter — Publish Set workbench (v3.5.0 Tier 1, Pixiv publishing). */
+
+.publish-set-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 88vh;
+}
+
+.pub-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.pub-toolbar-count {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-left: auto;
+}
+
+.pub-master-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.pub-empty {
+    padding: 16px 6px;
+    color: var(--text-secondary);
+    max-width: 72ch;
+}
+
+.pub-empty-hint {
+    margin-top: 8px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+/* --- Ordered item list ------------------------------------------------ */
+
+.pub-items {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 0;
+    flex: 1 1 auto;
+    padding-right: 4px;
+}
+
+.pub-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.10));
+    border-radius: var(--radius-md, 10px);
+    background: var(--surface-1, rgba(255, 255, 255, 0.03));
+    cursor: grab;
+}
+
+.pub-item.dragging {
+    opacity: 0.45;
+    cursor: grabbing;
+}
+
+/* Insert-position markers while dragging over a row. */
+.pub-item.pub-drop-before {
+    box-shadow: 0 -2px 0 0 var(--accent-primary);
+}
+
+.pub-item.pub-drop-after {
+    box-shadow: 0 2px 0 0 var(--accent-primary);
+}
+
+.pub-item-handle {
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    cursor: grab;
+    user-select: none;
+}
+
+.pub-item-number {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--accent-primary);
+    min-width: 44px;
+}
+
+.pub-item-thumb {
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.3);
+    flex: 0 0 auto;
+}
+
+.pub-item-meta {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.pub-item-name {
+    font-size: 0.85rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pub-item-facts {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.pub-item-pair {
+    font-size: 0.75rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pub-item-pair.is-paired {
+    color: var(--success, #4ade80);
+}
+
+.pub-item-pair.is-unpaired {
+    color: var(--text-muted);
+}
+
+/* Original / Censored segmented toggle. */
+.pub-variant-toggle {
+    display: inline-flex;
+    border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.14));
+    border-radius: 8px;
+    overflow: hidden;
+    flex: 0 0 auto;
+}
+
+.pub-variant-btn {
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    padding: 5px 10px;
+    cursor: pointer;
+}
+
+.pub-variant-btn + .pub-variant-btn {
+    border-left: 1px solid var(--surface-border, rgba(255, 255, 255, 0.14));
+}
+
+.pub-variant-btn.active {
+    background: var(--accent-primary);
+    color: var(--accent-contrast, #12141A);
+    font-weight: 600;
+}
+
+.pub-variant-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.pub-item-remove {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    flex: 0 0 auto;
+}
+
+.pub-item-remove:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.10);
+}
+
+/* --- Export panel ------------------------------------------------------ */
+
+.pub-export-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-top: 1px solid var(--surface-border, rgba(255, 255, 255, 0.10));
+    padding-top: 12px;
+}
+
+.pub-export-grid {
+    display: grid;
+    grid-template-columns: minmax(260px, 2fr) minmax(140px, 1fr) 90px 110px;
+    gap: 10px;
+    align-items: end;
+}
+
+.pub-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.pub-field .input-field {
+    width: 100%;
+}
+
+.pub-export-row2 {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.pub-caption-field {
+    flex: 1 1 320px;
+}
+
+.pub-caption-field textarea {
+    min-height: 52px;
+    resize: vertical;
+}
+
+.pub-suffix-field {
+    flex: 0 0 150px;
+}
+
+.pub-overwrite-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    padding-bottom: 8px;
+    cursor: pointer;
+}
+
+.pub-result {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md, 10px);
+    background: var(--surface-1, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.10));
+    max-height: 160px;
+    overflow-y: auto;
+    font-size: 0.85rem;
+}
+
+.pub-result-ok {
+    color: var(--success, #4ade80);
+}
+
+.pub-result-warn {
+    color: var(--warning, #facc15);
+}
+
+.pub-result-error {
+    color: #ef4444;
+}

@@ -388,7 +388,15 @@
     function wire() {
         const clicks = {
             'entry-mission-lora': () => navigate('dataset'),
-            'entry-mission-pixiv': () => navigate('gallery'),
+            // v3.5.0: the Pixiv mission tile now opens the publish-set
+            // workbench it always promised (Pick → Censor → Rename → Export)
+            // on top of the gallery, instead of just navigating there.
+            'entry-mission-pixiv': () => {
+                navigate('gallery');
+                if (window.PublishSet && typeof window.PublishSet.open === 'function') {
+                    window.PublishSet.open();
+                }
+            },
             'entry-mission-organize': () => navigate('sorting'),
             'entry-anchor-continue': () => navigate('sorting'),
             'entry-fn-gallery': () => navigate('gallery'),
