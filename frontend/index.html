@@ -764,6 +764,25 @@
                             <button class="view-btn" data-size="waterfall" title="Waterfall view" aria-label="Waterfall view" aria-pressed="false" data-i18n-title="gallery.viewWaterfall" data-i18n-aria="gallery.viewWaterfall">
                                 <span aria-hidden="true">▥</span>
                             </button>
+                            <!-- Owner FB-3: visible thumbnail-size control. Same state as the
+                                 [ / ] shortcuts (app.js updateGridSize, 'sd-sorter:grid-size'). -->
+                            <div class="grid-size-control" role="group" aria-label="Thumbnail size"
+                                 data-i18n-aria="gallery.thumbSizeGroup"
+                                 title="Thumbnail size — smaller shows more per page (shortcuts [ / ])"
+                                 data-i18n-title="gallery.thumbSizeTooltip">
+                                <button type="button" id="grid-size-decrease" class="grid-size-btn"
+                                        aria-label="Smaller thumbnails" data-i18n-aria="gallery.thumbSizeSmallerTip"
+                                        title="Smaller thumbnails ([)" data-i18n-title="gallery.thumbSizeSmallerTip">
+                                    <span aria-hidden="true">−</span>
+                                </button>
+                                <input type="range" id="grid-size-slider" min="120" max="400" step="20" value="200"
+                                       aria-label="Thumbnail size" data-i18n-aria="gallery.thumbSizeGroup">
+                                <button type="button" id="grid-size-increase" class="grid-size-btn"
+                                        aria-label="Larger thumbnails" data-i18n-aria="gallery.thumbSizeLargerTip"
+                                        title="Larger thumbnails (])" data-i18n-title="gallery.thumbSizeLargerTip">
+                                    <span aria-hidden="true">+</span>
+                                </button>
+                            </div>
                         </div>
 
                         <!-- NOISE-05 (superseded 2026-06-12, owner directive): Clear Library

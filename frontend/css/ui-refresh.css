@@ -10449,3 +10449,55 @@ html.lang-zh #view-censor .queue-action-btn span {
     display: flex;
     justify-content: flex-end;
 }
+
+/* ==========================================================================
+   Owner FB-3 — visible thumbnail-size control in the gallery toolbar.
+   Rides .view-options next to the grid/large/waterfall buttons and drives
+   the SAME px state as the [ / ] shortcuts (app.js updateGridSize).
+   ========================================================================== */
+.grid-size-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 6px;
+    padding-left: 12px;
+    border-left: 1px solid var(--glass-border);
+}
+
+.grid-size-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 160ms ease, color 160ms ease;
+}
+
+.grid-size-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.grid-size-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+}
+
+#grid-size-slider {
+    width: 104px;
+    accent-color: var(--accent-primary);
+    cursor: pointer;
+}
+
+#grid-size-slider:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+    border-radius: 6px;
+}

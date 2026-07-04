@@ -229,8 +229,11 @@ class VirtualList {
      * Handle resize events
      */
     _onResize() {
-        this._recalculateLayout();
-        this._updateVisibleItems();
+        // Non-virtual mode renders into the container's normal CSS grid flow,
+        // which reflows on its own; recalculating here would stomp the cleared
+        // inline styles (_renderAllItems) with virtual-layout ones.
+        if (!this.isVirtualEnabled) return;
+        this.refresh();
     }
 
     /**
@@ -622,11 +625,38 @@ class VirtualList {
     }
 
     /**
-     * Force a layout recalculation and re-render
+     * Force a layout recalculation and re-render.
+     *
+     * Items get their absolute position exactly once, at creation
+     * (_createItemElement) — so after the container width changes (sidebar
+     * collapse, window resize) every already-rendered element must be moved
+     * to its new slot here, and the visible range must be re-evaluated from
+     * scratch. Without both steps the old geometry survives: the grid keeps
+     * its previous column count and leaves a dead band where the sidebar was.
      */
     refresh() {
+        if (!this.isVirtualEnabled) return;
         this._recalculateLayout();
+        this._repositionRenderedElements();
+        this.visibleRange = { start: -1, end: -1 };
         this._updateVisibleItems();
+    }
+
+    /**
+     * Move every currently rendered element to its recomputed layout slot.
+     * Reuses the existing DOM (loaded thumbnails don't flash) instead of
+     * recreating items. Works for the waterfall subclass too via its
+     * _getLayoutForIndex override.
+     */
+    _repositionRenderedElements() {
+        for (const [, itemData] of this.renderedElements) {
+            const layout = this._getLayoutForIndex(itemData.index);
+            if (!layout || !itemData.element) continue;
+            itemData.element.style.top = `${layout.top}px`;
+            itemData.element.style.left = `${layout.left}px`;
+            itemData.element.style.width = `${layout.width}px`;
+            itemData.element.style.height = `${layout.height}px`;
+        }
     }
 
     /**
@@ -812,6 +842,18 @@ class WaterfallVirtualList extends VirtualList {
             maxHeight: options.maxHeight || 600,
             estimatedHeight: options.estimatedHeight || 350,
         };
+    }
+
+    /**
+     * Waterfall reads its column width from waterfallConfig (constructor
+     * bound), not config.minColumnWidth — keep them in sync when the shared
+     * thumbnail size pushes a new width through updateConfig (owner FB-3).
+     */
+    updateConfig(newConfig) {
+        if (newConfig && Number(newConfig.minColumnWidth) > 0) {
+            this.waterfallConfig.columnWidth = Number(newConfig.minColumnWidth);
+        }
+        super.updateConfig(newConfig);
     }
 
     /**

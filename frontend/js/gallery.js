@@ -186,6 +186,10 @@ const Gallery = {
     // Virtual scrolling state
     virtualList: null,
     useVirtualScroll: false,
+    // Owner FB-3: one thumbnail-size px shared by the toolbar slider, the
+    // [ / ] shortcuts and every layout path. Lazily hydrated from the same
+    // localStorage key the slider block in app.js persists.
+    _thumbnailSizePx: null,
     pendingRenderFrame: null,
     renderSessionId: 0,
     largeUpgradeQueue: new Set(),
@@ -1000,12 +1004,62 @@ const Gallery = {
         requestAnimationFrame(() => requestAnimationFrame(() => attemptRestore(8)));
     },
 
+    /**
+     * Owner FB-3: current thumbnail size in px (120–400). Defaults to the
+     * grid baseline (200) so nothing changes until the user moves the slider.
+     */
+    getThumbnailSizePx() {
+        if (this._thumbnailSizePx == null) {
+            let saved = NaN;
+            try {
+                saved = parseInt(localStorage.getItem('sd-sorter:grid-size'), 10);
+            } catch (e) { /* storage blocked: fall back to default */ }
+            this._thumbnailSizePx = Number.isFinite(saved)
+                ? Math.max(120, Math.min(400, saved))
+                : GALLERY_VIRTUAL_CONFIG.minColumnWidth.grid;
+        }
+        return this._thumbnailSizePx;
+    },
+
+    /**
+     * Per-mode min column width derived from the shared thumbnail size.
+     * large/waterfall keep their identity by scaling their default ratio to
+     * the grid baseline (at the default 200px this returns exactly the
+     * GALLERY_VIRTUAL_CONFIG values — zero change for slider non-users).
+     */
+    _effectiveMinColumnWidth(viewMode) {
+        const base = this.getThumbnailSizePx();
+        const scale = base / GALLERY_VIRTUAL_CONFIG.minColumnWidth.grid;
+        if (viewMode === 'waterfall') {
+            return Math.round(GALLERY_VIRTUAL_CONFIG.waterfall.columnWidth * scale);
+        }
+        if (viewMode === 'large') {
+            return Math.round(GALLERY_VIRTUAL_CONFIG.minColumnWidth.large * scale);
+        }
+        return base;
+    },
+
+    /**
+     * Live entry point for the toolbar slider / [ ] shortcuts (app.js
+     * updateGridSize). Persisting the px value stays with the caller; this
+     * updates layout state and reflows the active virtual list in place.
+     */
+    setThumbnailSize(px) {
+        const parsed = Number(px);
+        if (!Number.isFinite(parsed)) return;
+        this._thumbnailSizePx = Math.max(120, Math.min(400, parsed));
+        if (this.virtualList) {
+            const { AppState } = getGalleryAppContext();
+            this.virtualList.updateConfig({
+                minColumnWidth: this._effectiveMinColumnWidth(AppState.viewMode),
+            });
+        }
+    },
+
     _buildVirtualListOptions(grid, scrollContainer, viewMode) {
         const isWaterfall = viewMode === 'waterfall';
         const isLarge = viewMode === 'large';
-        const minColumnWidth = isWaterfall
-            ? GALLERY_VIRTUAL_CONFIG.waterfall.columnWidth
-            : (isLarge ? GALLERY_VIRTUAL_CONFIG.minColumnWidth.large : GALLERY_VIRTUAL_CONFIG.minColumnWidth.grid);
+        const minColumnWidth = this._effectiveMinColumnWidth(isWaterfall ? 'waterfall' : (isLarge ? 'large' : 'grid'));
 
         const options = {
             container: grid,
@@ -1026,7 +1080,7 @@ const Gallery = {
         };
 
         if (isWaterfall) {
-            options.columnWidth = GALLERY_VIRTUAL_CONFIG.waterfall.columnWidth;
+            options.columnWidth = minColumnWidth;
             options.minHeight = GALLERY_VIRTUAL_CONFIG.waterfall.minHeight;
             options.maxHeight = GALLERY_VIRTUAL_CONFIG.waterfall.maxHeight;
             options.estimatedHeight = GALLERY_VIRTUAL_CONFIG.waterfall.estimatedHeight;

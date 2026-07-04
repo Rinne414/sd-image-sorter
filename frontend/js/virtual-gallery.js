@@ -147,6 +147,14 @@ const VirtualGallery = {
         this.containerEl.style.display = 'block';
         this.containerEl.style.minHeight = Math.max(0, totalHeight) + 'px';
 
+        // Rows bake columns/top/height into inline styles at creation, so a
+        // width change must drop them all — renderVisible only adds missing
+        // row indices and would leave in-range rows at stale geometry.
+        for (const [, rowEl] of this.renderedItems) {
+            rowEl.remove();
+        }
+        this.renderedItems.clear();
+
         // Re-render visible items
         this.renderVisible();
     },

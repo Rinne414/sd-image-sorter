@@ -5801,6 +5801,9 @@ function initEventListeners() {
             galleryGrid.style.setProperty('--grid-item-size', `${clampedSize}px`);
             galleryGrid.style.setProperty('--waterfall-column-width', `${clampedSize}px`);
             localStorage.setItem(GRID_SIZE_KEY, clampedSize);
+            // CSS vars only drive the small-gallery (non-virtual) grid; the
+            // virtual list needs the same value pushed into its layout config.
+            window.Gallery?.setThumbnailSize?.(clampedSize);
         }
 
         // Slider input event
