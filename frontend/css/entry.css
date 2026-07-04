@@ -2,11 +2,18 @@
    Entry page — v4.0 Aurora shell, Phase 2 (spec: canvas #11a, recolored to
    Aurora tokens per README; #11a predates the final palette).
 
-   Composition rules from the frame ("乱而不散"):
-   - tile size = information weight; offsets limited to ±6–16px;
-   - the column keeps a CONSTANT 10px gap (the offsets ride on margins);
-   - hierarchy in three border tiers: accent (continue) → solid (missions/
-     tools) → dashed (free mode);
+   Owner FB-2 recomposition (2026-07-05, "too empty / boxes too noisy"):
+   - the #11a "乱而不散" offsets (±6–16px margins, per-tile flex weights and
+     type sizes) read as misalignment at real sizes — every offset is gone,
+     rows are flush, and each tier has ONE geometry (missions / tools / free);
+   - eyebrow labels (Missions / Tools) explain the tiers instead of size
+     jitter doing it;
+   - the art half is never a black void: with no ★5 cover the hero layer
+     carries a quiet aurora gradient, and the bottom-left identity block
+     grew into a greeting + live stat row (library / added / handled /
+     streak) so the space holds real content;
+   - hierarchy keeps the three border tiers: accent (continue) → solid
+     (missions/tools) → dashed (free mode);
    - absolute positioning is legitimate here only (art layering, T12 note).
    ========================================================================== */
 
@@ -31,9 +38,16 @@ body.entry-active {
 }
 
 /* --- art layer --- */
+/* The gradient layers are the NO-COVER state (owner FB-2: the empty canvas
+   read as a black void). entry-page.js sets an inline background-image for
+   the ★5 cover, which replaces these layers; clearing it brings them back. */
 .entry-hero {
     position: absolute;
     inset: 0;
+    background-image:
+        radial-gradient(1100px 700px at 16% 24%, rgba(var(--blue-rgb), 0.13), transparent 62%),
+        radial-gradient(900px 620px at 34% 78%, rgba(167, 139, 250, 0.09), transparent 65%),
+        radial-gradient(720px 540px at 68% 45%, rgba(var(--blue-rgb), 0.05), transparent 60%);
     background-position: center;
     background-size: cover;
     background-repeat: no-repeat;
@@ -60,7 +74,7 @@ body.entry-active {
 .entry-prompt-texture {
     position: absolute;
     left: 40px;
-    bottom: 190px;
+    top: 96px;
     width: 480px;
     font-family: var(--font-mono);
     font-size: 30px;
@@ -129,18 +143,31 @@ body.entry-active {
 .entry-mosaic {
     position: absolute;
     top: 64px;
-    right: 28px;
-    width: 620px;
+    right: 32px;
+    width: 640px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     z-index: 2;
 }
 
 .entry-row {
     display: flex;
-    gap: 10px;
-    align-items: flex-start;
+    gap: 12px;
+    align-items: stretch;
+}
+
+/* Tier labels — structure stated in words, not in size jitter (FB-2). */
+.entry-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 2.4px;
+    text-transform: uppercase;
+    color: rgba(237, 240, 247, 0.35);
+    padding: 2px 2px 0;
+    margin-bottom: -6px;
+    user-select: none;
 }
 
 .entry-tile {
@@ -280,59 +307,43 @@ body.entry-active {
     background: var(--blue-active);
 }
 
-/* mission tiles: flex weights + offsets from the frame */
-.entry-mission-lora { flex: 1.35; }
-.entry-mission-organize { flex: 1; margin-top: 16px; }
-.entry-mission-pixiv { flex: 1; margin-top: 6px; }
+/* mission tiles: one geometry per tier, rows flush (FB-2) */
+.entry-mission-lora,
+.entry-mission-organize,
+.entry-mission-pixiv { flex: 1; }
 
-/* function tiles: size = live information weight */
+/* function tiles: equal cards inside each row; the live numbers still talk,
+   at one calm size instead of four */
 .entry-fn {
-    padding: 15px 18px 13px;
-    gap: 2px;
+    flex: 1;
+    padding: 14px 16px 12px;
+    gap: 3px;
+    justify-content: flex-start;
 }
 
 .entry-fn .fn-head {
     display: flex;
     align-items: baseline;
-    gap: 11px;
+    gap: 10px;
 }
 
 .entry-fn .fn-count {
     font-family: var(--font-numeral);
     font-weight: 500;
     line-height: 1;
+    font-size: 26px;
+    color: rgba(237, 240, 247, 0.92);
 }
 
 .entry-fn .fn-title {
     font-weight: 900;
+    font-size: 15px;
 }
 
 .entry-fn .fn-sub {
     font-size: 11px;
     color: rgba(237, 240, 247, 0.55);
 }
-
-.entry-fn-gallery { flex: 1.5; }
-.entry-fn-gallery .fn-count { font-size: 40px; }
-.entry-fn-gallery .fn-title { font-size: 17px; }
-
-.entry-fn-sort { flex: 1; margin-top: -6px; padding: 13px 16px 11px; }
-.entry-fn-sort .fn-count { font-size: 29px; }
-.entry-fn-sort .fn-title { font-size: 15px; }
-
-.entry-fn-censor { flex: 1.1; margin-top: 4px; padding: 12px 16px 10px; }
-.entry-fn-censor .fn-count { font-size: 24px; }
-.entry-fn-censor .fn-title { font-size: 14px; }
-.entry-fn-censor .fn-sub { font-size: 10px; color: rgba(237, 240, 247, 0.5); }
-
-.entry-fn-reader { flex: 0.75; margin-top: -8px; padding: 12px 16px 10px; }
-.entry-fn-similar { flex: 0.85; margin-top: 8px; padding: 12px 16px 10px; }
-
-.entry-fn-reader .fn-title,
-.entry-fn-similar .fn-title { font-size: 14px; }
-
-.entry-fn-reader .fn-sub,
-.entry-fn-similar .fn-sub { font-size: 10px; color: rgba(237, 240, 247, 0.5); }
 
 /* free mode row — dashed tier */
 .entry-free {
@@ -353,7 +364,7 @@ body.entry-active {
     border-color: rgba(var(--blue-rgb), 0.5);
 }
 
-.entry-free-main { flex: 1.6; }
+.entry-free-main { flex: 1.6; align-items: baseline; }
 
 .entry-free-main .free-title {
     font-size: 14px;
@@ -374,7 +385,6 @@ body.entry-active {
 
 .entry-free-all {
     flex: 0.9;
-    margin-top: 6px;
     justify-content: center;
     align-items: center;
 }
@@ -384,33 +394,53 @@ body.entry-active {
     color: rgba(237, 240, 247, 0.6);
 }
 
-/* --- bottom-left identity block --- */
+/* --- bottom-left identity block (FB-2: greeting + live stat row) --- */
 .entry-identity {
     position: absolute;
     left: 40px;
-    bottom: 30px;
+    bottom: 34px;
     display: flex;
     flex-direction: column;
-    gap: 9px;
+    gap: 18px;
     z-index: 2;
+    max-width: min(760px, calc(100vw - 760px));
 }
 
-.entry-identity .identity-streak {
+.entry-identity .identity-greeting {
+    margin: 0;
+    font-family: var(--font-display, inherit);
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--text);
+    text-shadow: 0 2px 18px rgba(16, 18, 22, 0.65);
+}
+
+.entry-identity .identity-stats {
     display: flex;
-    align-items: baseline;
-    gap: 10px;
+    align-items: flex-end;
+    gap: 40px;
 }
 
-.entry-identity .streak-num {
+.entry-identity .identity-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.entry-identity .stat-num {
     font-family: var(--font-numeral);
-    font-size: 52px;
+    font-size: 34px;
     font-weight: 500;
     line-height: 1;
+    color: var(--text);
 }
 
-.entry-identity .streak-label {
-    font-size: 14px;
-    color: rgba(237, 240, 247, 0.85);
+.entry-identity .stat-label {
+    font-size: 11px;
+    letter-spacing: 0.4px;
+    color: rgba(237, 240, 247, 0.55);
+    white-space: nowrap;
 }
 
 .entry-identity .streak-today {

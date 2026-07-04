@@ -151,6 +151,7 @@
                 </div>
             </article>
 
+            <div class="entry-eyebrow"><span data-i18n="entry.groupMissions">Missions</span></div>
             <div class="entry-row">
                 <button type="button" class="entry-tile entry-mission-lora" id="entry-mission-lora">
                     <span class="tile-head">
@@ -181,6 +182,7 @@
                 </button>
             </div>
 
+            <div class="entry-eyebrow"><span data-i18n="entry.groupTools">Tools</span></div>
             <div class="entry-row">
                 <button type="button" class="entry-tile entry-fn entry-fn-gallery" id="entry-fn-gallery">
                     <span class="fn-head">
@@ -232,11 +234,31 @@
             </div>
         </div>
 
+        <!-- Owner FB-2 (2026-07-05): the bottom-left block grows from a lone
+             streak line into a greeting + live stat row so the art half of
+             the canvas is no longer an empty void when no ★5 cover is set.
+             Existing ids stay; #entry-streak-today keeps receiving text from
+             entry-page.js but is hidden — "handled today" is its own stat now. -->
         <footer class="entry-identity">
-            <div class="identity-streak">
-                <span class="streak-num" id="entry-streak-num">0</span>
-                <span class="streak-label" data-i18n="entry.streakDays">day streak of organizing</span>
-                <span class="streak-today" id="entry-streak-today"></span>
+            <p class="identity-greeting" data-i18n="entry.greeting">What are we organizing today?</p>
+            <div class="identity-stats">
+                <div class="identity-stat">
+                    <span class="stat-num" id="entry-stat-total">–</span>
+                    <span class="stat-label" data-i18n="entry.statLibrary">images in library</span>
+                </div>
+                <div class="identity-stat">
+                    <span class="stat-num" id="entry-stat-added">0</span>
+                    <span class="stat-label" data-i18n="entry.statAddedToday">added today</span>
+                </div>
+                <div class="identity-stat">
+                    <span class="stat-num" id="entry-stat-touched">0</span>
+                    <span class="stat-label" data-i18n="entry.statHandledToday">handled today</span>
+                </div>
+                <div class="identity-stat identity-streak">
+                    <span class="stat-num streak-num" id="entry-streak-num">0</span>
+                    <span class="stat-label streak-label" data-i18n="entry.streakDays">day streak of organizing</span>
+                    <span class="streak-today" id="entry-streak-today" hidden></span>
+                </div>
             </div>
             <div class="identity-hero-line">
                 <span id="entry-hero-credit" data-i18n="entry.heroEmpty">Rate an image ★5 and it becomes the cover here</span>

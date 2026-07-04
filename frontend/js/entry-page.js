@@ -126,6 +126,14 @@
                 : '';
         }
 
+        // Owner FB-2: greeting + stat row fills the art half of the canvas.
+        const statTotal = el('entry-stat-total');
+        if (statTotal) statTotal.textContent = String(summary.library_total ?? 0);
+        const statAdded = el('entry-stat-added');
+        if (statAdded) statAdded.textContent = String(summary.added_today || 0);
+        const statTouched = el('entry-stat-touched');
+        if (statTouched) statTouched.textContent = String(summary.today_touched || 0);
+
         renderHero(summary.hero);
     }
 
