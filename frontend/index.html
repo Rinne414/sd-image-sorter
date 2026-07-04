@@ -4779,9 +4779,14 @@
                     </div>
                 </div>
 
-                <!-- v3.2.1: 3-tab redesign — Local / Natural Language / Aesthetic -->
+                <!-- Aurora Phase 3 (#25b): 智能一趟 (Smart Tag one-pass) is the default
+                     first tab — the recommended entry — with Local / VLM / Aesthetic / Color after it. -->
                 <div class="tagger-tabs" role="tablist" aria-label="Tagger mode">
-                    <button type="button" class="tagger-tab active" data-tagger-tab="local" role="tab" aria-selected="true">
+                    <button type="button" class="tagger-tab active" data-tagger-tab="smart" role="tab" aria-selected="true">
+                        <span aria-hidden="true">✨</span>
+                        <span data-i18n="tagger.tabSmart">Smart Tag</span>
+                    </button>
+                    <button type="button" class="tagger-tab" data-tagger-tab="local" role="tab" aria-selected="false">
                         <span aria-hidden="true">🏷️</span>
                         <span data-i18n="tagger.tabLocal">Local Tagger</span>
                     </button>
@@ -4806,6 +4811,29 @@
                     <span aria-hidden="true">✔</span>
                     <span id="tag-scope-note-text"></span>
                     <button type="button" class="btn btn-ghost btn-small" id="btn-tag-scope-clear" data-i18n="tagModal.scopeClear">Tag whole library instead</button>
+                </div>
+
+                <!-- Aurora Phase 3 (#25b): 智能一趟 launch panel. Shown only for the
+                     default Smart Tag tab (every other panel is gated the same way via
+                     data-tagger-shows). Opens the full Smart Tag workspace (#smart-tag-modal),
+                     forwarding the armed Gallery selection scope. Zero backend — the whole
+                     one-pass pipeline (dual-tagger voting + copyright threshold + trigger +
+                     cleanup + optional VLM) is already live there. -->
+                <div class="tagger-smart-launch" data-tagger-shows="smart">
+                    <div class="tagger-smart-hero">
+                        <span class="tagger-smart-hero-icon" aria-hidden="true">✨</span>
+                        <div class="tagger-smart-hero-copy">
+                            <strong data-i18n="tagger.smartHeroTitle">One pass: tags + caption + trigger word, cleaned for training</strong>
+                            <p data-i18n="tagger.smartHeroBody">Runs one or two booru taggers (with optional voting), an optional natural-language caption, strips noise tags, and writes a clean training caption — choosing a training purpose auto-cleans artist/character tags and applies your trigger word.</p>
+                        </div>
+                    </div>
+                    <div class="tagger-smart-scope" id="tagger-smart-scope" role="status" aria-live="polite"></div>
+                    <div class="tagger-smart-actions">
+                        <button type="button" class="btn btn-primary btn-large" id="btn-tagger-smart-go">
+                            <span aria-hidden="true">✨</span>
+                            <span data-i18n="tagger.smartOpen">Start Smart Tag</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Natural Language tab: sub-toggle to pick between local ToriiGate and remote VLM API -->
@@ -6488,7 +6516,7 @@
                 <div class="smart-tag-summary" id="smart-tag-summary">
                     <span data-i18n="smartTag.imageCountLabel">Will run on:</span>
                     <strong id="smart-tag-image-count">0</strong>
-                    <span data-i18n="smartTag.imageCountSuffix">images currently in Dataset Maker.</span>
+                    <span id="smart-tag-image-count-suffix" data-i18n="smartTag.imageCountSuffix">images currently in Dataset Maker.</span>
                 </div>
 
                 <!-- Progress (hidden until job starts) -->

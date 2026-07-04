@@ -285,9 +285,24 @@ test.describe('Aurora Phase 3 — selection action bar', () => {
     expect(await page.evaluate(() => (window as any).App.AppState.selectionMode)).toBe(true)
     await expect(tiles.nth(0)).toHaveAttribute('data-sel-order', '1')
 
-    // 打标 arms the tag modal with the explicit selection scope.
+    // 打标 arms the tag modal with the explicit selection scope AND lands on the
+    // 智能一趟 (Smart Tag) default tab (#25b), forwarding the selection scope.
     await page.locator('#btn-tag-selected').click()
     await expect(page.locator('#tag-modal')).toHaveClass(/visible/)
+    await expect(page.locator('#tag-scope-note')).toBeVisible()
+    await expect(page.locator('#tag-modal .tagger-tab[data-tagger-tab="smart"]')).toHaveClass(/active/)
+    await expect(page.locator('.tagger-smart-launch')).toBeVisible()
+    await expect(page.locator('#tagger-smart-scope')).toContainText('2')
+    // The launch CTA opens the full Smart Tag workspace scoped to the selection.
+    await page.locator('#btn-tagger-smart-go').click()
+    await expect(page.locator('#smart-tag-modal')).toHaveClass(/visible/)
+    await expect(page.locator('#smart-tag-image-count')).toHaveText('2')
+    await page.locator('#btn-smart-tag-cancel-modal').click()
+    await expect(page.locator('#smart-tag-modal')).not.toHaveClass(/visible/)
+    // Re-open the tagger to exercise the scope-clear affordance.
+    await page.locator('#btn-tag-selected').click()
+    await expect(page.locator('#tag-modal')).toHaveClass(/visible/)
+    await page.locator('#tag-modal .tagger-tab[data-tagger-tab="local"]').click()
     await expect(page.locator('#tag-scope-note')).toBeVisible()
     await page.locator('#btn-tag-scope-clear').click()
     await expect(page.locator('#tag-scope-note')).toBeHidden()

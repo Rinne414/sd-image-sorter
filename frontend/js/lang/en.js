@@ -2498,6 +2498,15 @@ window.I18nLang_en = {
     // ========================
     'tagger.aiUtilityActions': 'AI utility actions',
     'tagger.aestheticToolTitle': 'Aesthetic scoring',
+    // Aurora Phase 3 (#25b): Smart Tag one-pass is the default tab
+    'tagger.tabSmart': 'Smart Tag',
+    'tagger.tabSmartDesc': 'One guided pass — booru tags, optional caption, cleanup, and trigger word. Recommended.',
+    'tagger.modalDescSmart': 'One guided pass: booru tags, optional caption, cleanup, and trigger word — recommended.',
+    'tagger.smartHeroTitle': 'One pass: tags + caption + trigger word, cleaned for training',
+    'tagger.smartHeroBody': 'Runs one or two booru taggers (with optional voting), an optional natural-language caption, strips noise tags, and writes a clean training caption — choosing a training purpose auto-cleans artist/character tags and applies your trigger word.',
+    'tagger.smartScopeSelected': 'Scoped to the {count} images selected in Gallery.',
+    'tagger.smartScopeAll': 'Runs on your Gallery selection, filtered scope, or the Dataset Maker queue you set up next.',
+    'tagger.smartOpen': 'Start Smart Tag',
     // v3.2.1 tagger 3-tab redesign
     'tagger.tabLocal': 'Local Tagger',
     'tagger.tabLocalDesc': 'WD14 / Camie / PixAI ONNX models — fast Danbooru-style tags.',
@@ -3384,6 +3393,7 @@ window.I18nLang_en = {
     'smartTag.stageVlm': 'VLM captioning',
     'smartTag.imageCountLabel': 'Will run on:',
     'smartTag.imageCountSuffix': 'images currently in Dataset Maker.',
+    'smartTag.imageCountSuffixSelected': 'selected images.',
     'smartTag.cancel': 'Cancel',
     'smartTag.cancelJob': 'Stop',
     'smartTag.run': 'Run Smart Tag',

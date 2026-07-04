@@ -215,7 +215,9 @@ def test_export_renumber_with_padded_index(test_client, staged_images, tmp_path:
     assert body["status"] == "ok"
     assert body["exported"] == 3
 
-    actual = sorted(p.name for p in out.iterdir())
+    # Folder-mode export also drops an export_manifest.json run record; this
+    # test asserts the renamed image/caption pairs, so exclude the manifest.
+    actual = sorted(p.name for p in out.iterdir() if p.name != "export_manifest.json")
     expected = sorted([
         "train_001.png", "train_001.txt",
         "train_002.png", "train_002.txt",

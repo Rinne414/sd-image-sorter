@@ -2664,6 +2664,15 @@ window.I18nLang_zhCN = {
     // ========================
     'tagger.aiUtilityActions': 'AI 工具操作',
     'tagger.aestheticToolTitle': '美学评分',
+    // Aurora Phase 3 (#25b): 智能一趟 是默认标签页
+    'tagger.tabSmart': '智能一趟',
+    'tagger.tabSmartDesc': '一趟搞定 — booru 标签、可选描述、清洗、触发词。推荐。',
+    'tagger.modalDescSmart': '一趟引导流程：booru 标签、可选描述、清洗、触发词 — 推荐。',
+    'tagger.smartHeroTitle': '一趟：标签 + 描述 + 触发词，直接可用于训练',
+    'tagger.smartHeroBody': '跑一个或两个 booru 打标器（可投票）、可选的自然语言描述，剔除噪声标签，写出干净的训练用 caption — 选择训练用途会自动清洗画师/角色标签并套用你的触发词。',
+    'tagger.smartScopeSelected': '范围：图库中已选的 {count} 张图片。',
+    'tagger.smartScopeAll': '将对你的图库选择、筛选范围，或接下来在 Dataset Maker 里配置的队列运行。',
+    'tagger.smartOpen': '开始智能一趟',
     // v3.2.1 tagger 3-tab redesign
     'tagger.tabLocal': '本地标签',
     'tagger.tabLocalDesc': 'WD14 / Camie / PixAI ONNX 模型 — 快速生成 Danbooru 风格标签。',
@@ -3385,6 +3394,7 @@ window.I18nLang_zhCN = {
     'smartTag.stageVlm': 'VLM 描述中',
     'smartTag.imageCountLabel': '会跑：',
     'smartTag.imageCountSuffix': '张图（当前 Dataset Maker 里）',
+    'smartTag.imageCountSuffixSelected': '张已选图片。',
     'smartTag.cancel': '取消',
     'smartTag.cancelJob': '停止',
     'smartTag.run': '开始 Smart Tag',

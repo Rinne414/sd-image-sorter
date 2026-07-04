@@ -38,6 +38,13 @@
     let taggerModelDefault = '';
     const LARGE_EXPLICIT_SOURCE_LIMIT = 5000;
 
+    // Aurora Phase 3 (#25b): a one-shot explicit scope handed in when the modal
+    // is opened from the Gallery [打标] armed selection (via openScoped). It takes
+    // priority over the Dataset-Maker-first heuristic so the run + summary reflect
+    // "the images I selected in Gallery", not a stale Dataset Maker queue. Cleared
+    // on close and on a plain (unscoped) open.
+    let pendingExplicitScope = null;
+
     const t = (key, fallback) => {
         const value = window.I18n?.t?.(key);
         return value && value !== key ? value : fallback;
@@ -50,6 +57,20 @@
     }
 
     function getDatasetSources() {
+        // Aurora Phase 3 (#25b): an explicit Gallery-armed scope wins outright.
+        if (pendingExplicitScope && Array.isArray(pendingExplicitScope.imageIds) && pendingExplicitScope.imageIds.length) {
+            const ids = pendingExplicitScope.imageIds.slice();
+            return {
+                imageIds: ids,
+                imagePaths: [],
+                selectionToken: null,
+                selectionTotal: 0,
+                datasetScanToken: null,
+                datasetScanTotal: 0,
+                total: ids.length,
+                source: 'gallery-armed',
+            };
+        }
         const imageIds = [];
         const imagePaths = [];
         let selectionToken = null;
@@ -292,6 +313,16 @@
         const total = sources.total || 0;
         const countEl = $('#smart-tag-image-count');
         if (countEl) countEl.textContent = String(total);
+
+        // Aurora Phase 3 (#25b): word the summary suffix for the actual scope —
+        // a Gallery selection reads "selected images", not "in Dataset Maker".
+        const suffixEl = $('#smart-tag-image-count-suffix');
+        if (suffixEl) {
+            const gallery = typeof sources.source === 'string' && sources.source.indexOf('gallery') === 0;
+            const key = gallery ? 'smartTag.imageCountSuffixSelected' : 'smartTag.imageCountSuffix';
+            suffixEl.setAttribute('data-i18n', key);
+            suffixEl.textContent = t(key, gallery ? 'selected images.' : 'images currently in Dataset Maker.');
+        }
 
         // Disable run button if there are no images to process.
         const runBtn = $('#btn-smart-tag-run');
@@ -603,6 +634,8 @@
         stopProgressPolling();
         showProgress(false);
         setProgressUI({ percent: 0, text: '', preview: '' });
+        // One-shot: the Gallery-armed scope does not survive a close.
+        pendingExplicitScope = null;
     }
 
     function readForm() {
@@ -1185,8 +1218,26 @@
     // Public hooks for other modules (Color Analysis "Send to Dataset
     // Maker" will eventually call openSmartTagModal() after pushing
     // images into the queue).
+    // Plain open: clear any stale one-shot scope so callers that mean
+    // "whatever is queued now" (e.g. Dataset Maker) are not poisoned by a
+    // previous Gallery-armed open.
+    function openUnscoped() {
+        pendingExplicitScope = null;
+        return openModal();
+    }
+
+    // Aurora Phase 3 (#25b): open with an explicit Gallery selection scope.
+    function openScoped(scope) {
+        const ids = scope && Array.isArray(scope.imageIds)
+            ? scope.imageIds.map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0)
+            : [];
+        pendingExplicitScope = ids.length ? { imageIds: ids } : null;
+        return openModal();
+    }
+
     window.SmartTag = {
-        open: openModal,
+        open: openUnscoped,
+        openScoped,
         close: closeModal,
         run: runSmartTag,
         cancel: cancelSmartTag,

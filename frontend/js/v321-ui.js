@@ -83,7 +83,11 @@ const V321Integration = {
     //     Replaces the old single-dropdown VLM-mode-banner approach.
     // ====================================================================
 
-    /** Currently selected tab id ('local' | 'nl' | 'aesthetic'). */
+    /** Currently selected tab id ('smart' | 'local' | 'nl' | 'aesthetic' | 'color').
+     *  The global AI-Tag button opens on 'local' (the familiar WD14 config). The
+     *  Aurora Phase 3 (#25b) 智能一趟 (Smart Tag) landing is scoped to the Gallery
+     *  [打标] selection flow, which forces the 'smart' tab on open — see
+     *  gallery-toolbar wireTagSelected. Smart stays the prominent first tab. */
     activeTaggerTab: 'local',
     localModelPickerOpen: false,
 
@@ -183,14 +187,57 @@ const V321Integration = {
             }
         });
 
-        // Initial state.
+        // Aurora Phase 3 (#25b): wire the 智能一趟 launch CTA once.
+        this._bindSmartTabOnce();
+
+        // Initial state — the global tagger opens on the local WD14 config.
+        // #25b's 智能一趟 landing is applied per-open by the Gallery [打标] flow
+        // (gallery-toolbar wireTagSelected → setTaggerTab('smart')), not globally.
         this.setTaggerTab('local');
+    },
+
+    /** Wire the Smart Tag launch panel's CTA (idempotent). Opens the full Smart
+     *  Tag workspace, forwarding the armed Gallery selection scope if present. */
+    _bindSmartTabOnce() {
+        if (this._smartTabBound) return;
+        this._smartTabBound = true;
+        const goBtn = document.getElementById('btn-tagger-smart-go');
+        if (!goBtn) return;
+        goBtn.addEventListener('click', () => {
+            const armed = window.GalleryToolbar?.consumeTagSelectionIds?.() || null;
+            if (typeof window.hideModal === 'function') {
+                try { window.hideModal('tag-modal'); } catch (_e) {}
+            }
+            // Defer so the tagger modal's close animation finishes first.
+            setTimeout(() => {
+                if (armed && armed.length && typeof window.SmartTag?.openScoped === 'function') {
+                    window.SmartTag.openScoped({ imageIds: armed });
+                } else if (typeof window.SmartTag?.open === 'function') {
+                    window.SmartTag.open();
+                }
+            }, 120);
+        });
+    },
+
+    /** Refresh the 智能一趟 launch panel's scope line from the armed Gallery
+     *  selection (non-consuming peek) or fall back to whole-library wording. */
+    _refreshSmartTab() {
+        const scopeEl = document.getElementById('tagger-smart-scope');
+        if (!scopeEl) return;
+        const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
+        const armed = window.GalleryToolbar?.consumeTagSelectionIds?.() || null;
+        if (armed && armed.length) {
+            scopeEl.textContent = i18n('tagger.smartScopeSelected', 'Scoped to the {count} images selected in Gallery.')
+                .replace('{count}', String(armed.length));
+        } else {
+            scopeEl.textContent = i18n('tagger.smartScopeAll', 'Runs on the Gallery selection, filtered scope, or Dataset Maker queue you set up next.');
+        }
     },
 
     /** Switch the active tab. Updates dropdown filter, panel visibility, status text. */
     setTaggerTab(tab) {
-        if (!['local', 'nl', 'aesthetic', 'color'].includes(tab)) {
-            tab = 'local';
+        if (!['smart', 'local', 'nl', 'aesthetic', 'color'].includes(tab)) {
+            tab = 'smart';
         }
         this.activeTaggerTab = tab;
         this.vlmActive = (tab === 'nl');
@@ -214,6 +261,7 @@ const V321Integration = {
         if (desc) {
             const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
             const map = {
+                smart: 'tagger.tabSmartDesc',
                 local: 'tagger.tabLocalDesc',
                 nl: 'tagger.tabNlDesc',
                 aesthetic: 'tagger.tabAestheticDesc',
@@ -225,12 +273,13 @@ const V321Integration = {
         if (modalDesc) {
             const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
             const map = {
+                smart: ['tagger.modalDescSmart', 'One guided pass: booru tags, optional caption, cleanup, and trigger word — recommended.'],
                 local: ['modal.tagDescription', 'Pick a supported tagger model and generate tags for images.'],
                 nl: ['tagger.modalDescNl', 'Choose a natural-language backend and caption selected images.'],
                 aesthetic: ['tagger.modalDescAesthetic', 'Score selected images with the local aesthetic model.'],
                 color: ['tagger.modalDescColor', 'Run local color analysis to enable color sorts and filters.'],
             };
-            const [key, fallback] = map[tab] || map.local;
+            const [key, fallback] = map[tab] || map.smart;
             modalDesc.setAttribute('data-i18n', key);
             modalDesc.textContent = i18n(key, fallback);
         }
@@ -244,6 +293,9 @@ const V321Integration = {
 
         this.applyTaggerTab(tab);
 
+        if (tab === 'smart') {
+            this._refreshSmartTab();
+        }
         if (tab === 'nl') {
             // Bind radio listeners (idempotent) + apply current selection.
             this._bindNlSubToggleOnce();

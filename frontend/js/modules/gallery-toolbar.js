@@ -357,6 +357,9 @@
                 armedTagIds = ids;
                 showScopeNote(ids.length);
                 if (typeof a.showModal === 'function') a.showModal('tag-modal');
+                // Aurora Phase 3 (#25b): [打标] lands on the 智能一趟 (Smart Tag)
+                // tab with this selection scope, regardless of the last-used tab.
+                try { window.V321Integration?.setTaggerTab?.('smart'); } catch (_e) { /* tagger UI not ready */ }
             });
         }
         // The global AI Tag entry always means "whole library" — disarm.

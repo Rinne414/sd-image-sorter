@@ -10253,3 +10253,62 @@ html.lang-zh #view-censor .queue-action-btn span {
 .tagger-scope-note .btn {
     margin-left: auto;
 }
+
+/* Aurora Phase 3 (#25b): 智能一趟 (Smart Tag) launch panel — the default tagger
+   tab. AI-forward purple hero, then the single blue primary CTA. The full
+   pixel-faithful reskin lands in the Tagger skin slice; this is the structural
+   default-tab landing. */
+.tagger-smart-launch {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 4px 2px 8px;
+}
+
+.tagger-smart-hero {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 16px 18px;
+    border-radius: 14px;
+    border: 1px solid rgba(var(--purple-rgb, 167, 139, 255), 0.28);
+    background:
+        radial-gradient(120% 140% at 0% 0%, rgba(var(--purple-rgb, 167, 139, 255), 0.14), transparent 60%),
+        var(--surface-elevated, rgba(31, 35, 48, 0.6));
+}
+
+.tagger-smart-hero-icon {
+    font-size: 24px;
+    line-height: 1;
+    filter: drop-shadow(0 0 10px rgba(var(--purple-rgb, 167, 139, 255), 0.5));
+}
+
+.tagger-smart-hero-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.tagger-smart-hero-copy strong {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.tagger-smart-hero-copy p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-secondary, var(--text-muted));
+}
+
+.tagger-smart-scope {
+    font-size: 13px;
+    color: var(--text-secondary, var(--text-muted));
+    padding-left: 2px;
+}
+
+.tagger-smart-actions {
+    display: flex;
+    justify-content: flex-end;
+}

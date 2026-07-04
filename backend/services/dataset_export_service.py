@@ -35,12 +35,14 @@ Reuses:
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 
@@ -74,6 +76,8 @@ DATASET_LEGACY_TEMPLATE = "{trigger}, {tags:filtered}, {append}"
 DATASET_EXPORT_RESPONSE_ITEM_LIMIT = 2_000
 DATASET_EXPORT_RECENT_ERROR_LIMIT = 20
 DATASET_EXPORT_DB_CHUNK_SIZE = 500
+EXPORT_MANIFEST_FILENAME = "export_manifest.json"
+EXPORT_MANIFEST_VERSION = 1
 _EXPORT_ACTIVE_STATUSES = {"starting", "running", "cancelling"}
 
 ExportProgressCallback = Callable[[Dict[str, Any]], None]
@@ -643,6 +647,88 @@ def _render_dataset_sidecar(
     return apply_caption_transforms(rendered, getattr(request, "caption_transforms", None) or {})
 
 
+def _manifest_item(item: DatasetExportItemResult) -> Dict[str, Any]:
+    """Flatten a per-row result into the manifest's source->destination record."""
+    return {
+        "image_id": item.image_id,
+        "source_path": item.src_image_path,
+        "output_path": item.dst_image_path,
+        "caption_path": item.dst_caption_path,
+        "skipped_reason": item.skipped_reason,
+        "error": item.error,
+    }
+
+
+def _build_export_manifest(
+    request: DatasetExportRequest,
+    *,
+    status: str,
+    output_folder: Path,
+    output_mode: str,
+    caption_extension: str,
+    exported: int,
+    skipped: int,
+    error_count: int,
+    total_items: int,
+    items: List[DatasetExportItemResult],
+    items_truncated: bool,
+    generated_at: float,
+) -> Dict[str, Any]:
+    """Assemble the ``export_manifest.json`` payload from existing run state.
+
+    Every field is sourced from data already computed during the export — no
+    new plumbing. ``items`` mirrors the (capped) per-row list surfaced in the
+    API response, so ``items_truncated`` flags when it is shorter than
+    ``total`` for very large runs.
+    """
+    return {
+        "manifest_version": EXPORT_MANIFEST_VERSION,
+        "generated_at": generated_at,
+        "generated_at_iso": datetime.fromtimestamp(generated_at, tz=timezone.utc).isoformat(),
+        "status": status,
+        "output_folder": str(output_folder),
+        "settings": {
+            "output_mode": output_mode,
+            "image_op": request.image_op,
+            "overwrite_policy": request.overwrite_policy,
+            "naming_pattern": request.naming_pattern,
+            "trigger": request.trigger,
+            "content_mode": str(request.content_mode or "template").strip().lower(),
+            "caption_extension": caption_extension,
+            "prefix": request.prefix,
+            "normalize_tag_underscores": bool(request.normalize_tag_underscores),
+            "common_tags": list(request.common_tags or []),
+            "blacklist": list(request.blacklist or []),
+        },
+        "counts": {
+            "total": total_items,
+            "exported": exported,
+            "skipped": skipped,
+            "failed": error_count,
+        },
+        "items_truncated": items_truncated,
+        "items": [_manifest_item(item) for item in items],
+    }
+
+
+def _write_export_manifest(output_folder: Path, manifest: Dict[str, Any]) -> None:
+    """Best-effort write of ``export_manifest.json`` into the output folder.
+
+    A manifest write failure must never fail the export — the images and
+    captions are already on disk — so every error is logged and swallowed.
+    """
+    manifest_path = output_folder / EXPORT_MANIFEST_FILENAME
+    try:
+        with open(manifest_path, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, ensure_ascii=False, indent=2)
+    except Exception as exc:  # noqa: BLE001 - manifest is a best-effort side-effect
+        logger.warning(
+            "dataset-export: failed to write export manifest %s: %s",
+            manifest_path,
+            exc,
+        )
+
+
 def export_dataset(
     request: DatasetExportRequest,
     *,
@@ -988,6 +1074,29 @@ def export_dataset(
     else:
         status = "partial"
 
+    items_truncated = total_items > len(items)
+
+    # Best-effort: drop an ``export_manifest.json`` describing this run into
+    # the output folder. Only ``folder`` mode has a single destination folder;
+    # ``beside_image`` writes sidecars next to each source image (output_path
+    # is None), so there is no one place a run-level manifest belongs.
+    if output_mode == "folder" and output_path is not None:
+        manifest = _build_export_manifest(
+            request,
+            status=status,
+            output_folder=output_path,
+            output_mode=output_mode,
+            caption_extension=caption_extension,
+            exported=exported,
+            skipped=skipped,
+            error_count=error_count,
+            total_items=total_items,
+            items=items,
+            items_truncated=items_truncated,
+            generated_at=time.time(),
+        )
+        _write_export_manifest(output_path, manifest)
+
     return DatasetExportResponse(
         status=status,
         exported=exported,
@@ -997,7 +1106,7 @@ def export_dataset(
         output_mode=output_mode,
         items=items,
         total_items=total_items,
-        items_truncated=total_items > len(items),
+        items_truncated=items_truncated,
         error_messages=error_messages,
     )
 
