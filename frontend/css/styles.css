@@ -466,16 +466,19 @@ body::before {
         letter-spacing: 0.01em;
     }
 
+    /* Aurora Phase 3 (#25): the primary button is the single blue next-action.
+       Clean solid blue app-wide, replacing the legacy blue->amber gradient +
+       orange border. This supersedes the earlier per-view scoped overrides. */
     .btn-primary {
-        background: linear-gradient(135deg, var(--accent-primary), var(--accent-tertiary));
-        color: #1f1308;
-        border-color: rgba(255, 176, 103, 0.55);
-        box-shadow: 0 10px 24px rgba(var(--accent-primary-rgb), 0.22);
+        background: var(--blue);
+        color: #062033;
+        border-color: var(--blue);
+        box-shadow: 0 10px 24px rgba(var(--blue-rgb), 0.22);
     }
 
     .btn-primary:hover {
         transform: translateY(-2px);
-        box-shadow: 0 14px 30px rgba(var(--accent-primary-rgb), 0.28);
+        box-shadow: 0 14px 30px rgba(var(--blue-rgb), 0.28);
     }
 
     .btn-secondary {
