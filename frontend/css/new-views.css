@@ -898,11 +898,14 @@
 
 .artist-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    /* Owner 2026-07-05 (design rule: grid mode = quick dense scanning):
+       190px cards pack ~2x more per row than the old 260px ones; list
+       mode stays the detail-oriented view. */
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
     flex: 1;
     overflow-y: auto;
     padding: 12px;
-    gap: 12px;
+    gap: 10px;
     min-height: 0;
 }
 
@@ -939,14 +942,21 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 12px;
-    padding: 14px;
+    gap: 8px;
+    padding: 10px 12px;
     background: rgba(9, 21, 30, 0.78);
     border-radius: var(--radius-lg);
     cursor: pointer;
     transition: all var(--transition-fast);
     border: 1px solid transparent;
     overflow: hidden;
+}
+
+/* Grid mode: compact avatar so the dense cards stay short. */
+#artist-results-grid:not(.list-mode) .artist-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
 }
 
 .artist-card:hover,

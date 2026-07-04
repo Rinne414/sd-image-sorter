@@ -160,8 +160,12 @@ const SkeletonModal = {
     /**
      * Show skeleton modal for image preview
      * @param {string} modalId - Modal element ID
+     * @param {{keepImage?: boolean}} options - keepImage: leave the current
+     *        image visible (image-to-image navigation) and only skeleton the
+     *        info column. Owner 2026-07-05: hiding the old image until the
+     *        new one loaded read as an unpleasant black flash.
      */
-    showImageModal(modalId = 'image-modal') {
+    showImageModal(modalId = 'image-modal', options = {}) {
         const modal = document.getElementById(modalId);
         if (!modal) return;
 
@@ -207,7 +211,7 @@ const SkeletonModal = {
         infoColumn.insertBefore(skeletonWrapper, infoColumn.firstChild);
 
         // Also add skeleton to image column
-        const imageContainer = modal.querySelector('.modal-image-container');
+        const imageContainer = options.keepImage ? null : modal.querySelector('.modal-image-container');
         if (imageContainer) {
             const imageSkeleton = document.createElement('div');
             imageSkeleton.id = 'skeleton-modal-image';

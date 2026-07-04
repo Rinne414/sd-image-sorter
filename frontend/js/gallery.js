@@ -3576,18 +3576,41 @@ ${String(value)}`)
         this._lastModalTags = [];
         this._lastParsedData = null;
 
-        // Show skeleton modal content while loading
+        // Show skeleton modal content while loading. When the modal is
+        // ALREADY showing an image (prev/next navigation), keep it on screen
+        // and swap only after the next image has decoded — hiding it first
+        // produced a black flash on every switch (owner 2026-07-05, design
+        // rule: no uncomfortable/rapid flashes).
+        const modalImgEl = $('#modal-image');
+        const isRenavigation = !!(modalImgEl?.getAttribute('src'))
+            && !!document.getElementById('image-modal')?.classList.contains('visible');
         if (window.SkeletonModal) {
-            window.SkeletonModal.showImageModal('image-modal');
+            window.SkeletonModal.showImageModal('image-modal', { keepImage: isRenavigation });
         }
 
-        $('#modal-image').src = API?.getImageUrl?.(imageId) ?? `/api/image-file/${imageId}`;
+        const nextImageUrl = API?.getImageUrl?.(imageId) ?? `/api/image-file/${imageId}`;
         // When image loads, hide the skeleton
-        $('#modal-image').onload = () => {
+        modalImgEl.onload = () => {
             if (window.SkeletonModal) {
                 window.SkeletonModal.hideImageModal('image-modal');
             }
         };
+        if (isRenavigation) {
+            const preload = new Image();
+            preload.src = nextImageUrl;
+            const applyPreloaded = () => {
+                if (requestId !== this.currentPreviewRequestId) return; // user moved on
+                modalImgEl.src = nextImageUrl;
+            };
+            if (typeof preload.decode === 'function') {
+                preload.decode().then(applyPreloaded).catch(applyPreloaded);
+            } else {
+                preload.onload = applyPreloaded;
+                preload.onerror = applyPreloaded;
+            }
+        } else {
+            modalImgEl.src = nextImageUrl;
+        }
         $('#modal-filename').textContent = summaryImage?.filename || `Image #${imageId}`;
         const modalGenerator = $('#modal-generator');
         if (modalGenerator) {

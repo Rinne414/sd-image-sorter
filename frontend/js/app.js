@@ -11601,6 +11601,22 @@ function initSettingsControls() {
         soundBtn.addEventListener('click', toggleSettingsSound);
     }
 
+    // Owner 2026-07-05: toggle rows read as "not working" — only the small
+    // button was clickable and its state change was subtle. Make the WHOLE
+    // row a click target for every row whose control is a pressed-state
+    // button (sound / entry page / ★5 cover; future rows get it for free).
+    document.querySelectorAll('.settings-row').forEach((row) => {
+        if (row.dataset.rowToggleBound === '1') return;
+        const toggle = row.querySelector('button[aria-pressed]');
+        if (!toggle) return;
+        row.dataset.rowToggleBound = '1';
+        row.classList.add('settings-row-toggle');
+        row.addEventListener('click', (event) => {
+            if (event.target.closest('button')) return; // button handles itself
+            toggle.click();
+        });
+    });
+
     const uiScale = document.getElementById('settings-ui-scale');
     if (uiScale && uiScale.dataset.bound !== '1') {
         uiScale.dataset.bound = '1';

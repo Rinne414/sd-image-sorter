@@ -243,6 +243,20 @@
     height: 8px;
 }
 
+/* Owner 2026-07-05 (design rule: no reflow-on-scrollbar): when a panel
+   grows past its height (e.g. expanding LoRAs in the gallery sidebar),
+   the appearing scrollbar used to steal 8px of width and re-wrap every
+   label. Reserving the gutter keeps content width constant whether or
+   not the scrollbar is present. Applied to the containers whose content
+   height changes with user interaction. */
+.filter-sidebar,
+.modal-content,
+.modal-info-scroll,
+.filter-modal-shell,
+.nav-tools-menu {
+    scrollbar-gutter: stable;
+}
+
 *::-webkit-scrollbar-track {
     background: transparent;
 }
@@ -1964,6 +1978,10 @@ body::before {
 
     .folder-path-input {
         flex: 1;
+        /* min-width: 0 — an <input> refuses to shrink below ~170px by
+           default, which pushed the 📁 browse button clean out of the
+           narrower A/D slot cards (owner report 2026-07-05). */
+        min-width: 0;
         padding: 14px 18px;
         background: rgba(0, 0, 0, 0.4);
         border: 1px solid rgba(var(--accent-primary-rgb), 0.2);
@@ -2005,6 +2023,11 @@ body::before {
         display: flex;
         align-items: center;
         gap: 12px;
+        min-width: 0;
+    }
+
+    .slot-folder-target .browse-folder {
+        flex-shrink: 0;
     }
 
     .slot-collection-select {

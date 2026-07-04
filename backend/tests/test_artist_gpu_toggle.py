@@ -68,3 +68,42 @@ def test_get_artist_identifier_recreates_when_use_gpu_changes(monkeypatch):
     # A changed use_gpu must rebuild the singleton, not silently reuse the GPU one.
     assert second.use_gpu is False
     assert first is not second
+
+
+class _FakeOrt:
+    """Stand-in for onnxruntime with a GPU provider installed."""
+
+    def __init__(self, available):
+        self._available = available
+
+    def get_available_providers(self):
+        return list(self._available)
+
+
+def test_onnx_providers_cpu_only_when_gpu_off():
+    """The .onnx path ignored use_gpu entirely (owner report 2026-07-05):
+    InferenceSession(path) defaults to CUDA-first on onnxruntime-gpu."""
+    import artist_identifier
+
+    fake = _FakeOrt(["CUDAExecutionProvider", "CPUExecutionProvider"])
+    assert artist_identifier._onnx_providers_for(fake, use_gpu=False) == [
+        "CPUExecutionProvider"
+    ]
+
+
+def test_onnx_providers_prefer_gpu_when_on_and_available():
+    import artist_identifier
+
+    fake = _FakeOrt(["CUDAExecutionProvider", "CPUExecutionProvider"])
+    assert artist_identifier._onnx_providers_for(fake, use_gpu=True) == [
+        "CUDAExecutionProvider", "CPUExecutionProvider",
+    ]
+
+
+def test_onnx_providers_safe_on_cpu_only_install():
+    import artist_identifier
+
+    fake = _FakeOrt(["CPUExecutionProvider"])
+    assert artist_identifier._onnx_providers_for(fake, use_gpu=True) == [
+        "CPUExecutionProvider"
+    ]

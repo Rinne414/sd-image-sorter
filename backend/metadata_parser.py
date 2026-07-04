@@ -152,6 +152,18 @@ class MetadataParser:
     # deliberately NOT in this list and are never followed on that path.
     COMFYUI_IMAGE_BRIDGE_KEYS = ("图片", "image", "images", "img")
 
+    # Non-semantic link channels the conditioning bridge must never follow:
+    # model/clip/vae/latent/mask plumbing cannot carry prompt text, and
+    # walking them would traverse the whole graph for nothing. Image keys
+    # stay with the VLM image bridge above; instruction/system inputs stay
+    # excluded per the image-bridge rationale.
+    COMFYUI_COND_BRIDGE_EXCLUDE_KEYS = (
+        "model", "clip", "vae", "latent", "latent_image", "samples",
+        "mask", "pixels", "sigmas", "sampler", "noise", "guider",
+        "clip_vision", "control_net", "controlnet", "提示词", "系统提示词",
+        "system", "system_prompt",
+    )
+
     COMFYUI_MODEL_FILE_EXTENSIONS = (
         ".safetensors",
         ".ckpt",
@@ -4164,7 +4176,14 @@ class MetadataParser:
             if results:
                 return results
 
-        for key in ["text_0", "text", "prompt", "user_prompt", "string", "String", "value", "result"]:
+        # "base_prompt" (AnimaArtistPack), "positive"/"conditioning"
+        # (ControlNet/guider-style processors) are link channels that carry
+        # the prompt through custom conditioning nodes. "negative" is
+        # deliberately absent: on a positive-side trace a mixed node must
+        # never resolve through its negative input.
+        for key in ["text_0", "text", "prompt", "base_prompt", "user_prompt",
+                    "positive", "string", "String", "value", "result",
+                    "conditioning"]:
             value = inputs.get(key)
             if isinstance(value, str) and value.strip():
                 return [{
@@ -4191,6 +4210,25 @@ class MetadataParser:
                 traced = self._trace_to_text_with_source(val, nodes, bridge_visited, depth + 1)
                 if traced:
                     return traced
+
+        # Conditioning bridge (v3.5.0): custom conditioning processors hide
+        # the prompt behind node-specific link keys (e.g. AnimaArtistCrossAttn
+        # → artist_pack → AnimaArtistPack → base_prompt). After every known
+        # text key missed, follow the remaining links except known non-text
+        # plumbing — the first chain that yields text wins. Only reached when
+        # the node would otherwise dead-end, so already-parsing workflows are
+        # unaffected.
+        for key, val in inputs.items():
+            if not isinstance(val, (list, tuple)) or len(val) < 2:
+                continue
+            lowered = str(key).lower()
+            if lowered in self.COMFYUI_COND_BRIDGE_EXCLUDE_KEYS:
+                continue
+            if lowered in self.COMFYUI_IMAGE_BRIDGE_KEYS:
+                continue
+            traced = self._trace_to_text_with_source(val, nodes, bridge_visited, depth + 1)
+            if traced:
+                return traced
 
         return []
 

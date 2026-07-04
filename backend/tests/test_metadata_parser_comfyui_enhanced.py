@@ -325,5 +325,64 @@ class TestRealWorldWorkflow:
         assert "high quality" in texts
 
 
+class TestConditioningBridge:
+    """Custom conditioning processors between the sampler and the text
+    (v3.5.0, owner report: Anima* node packs produced empty positives)."""
+
+    def _anima_style_graph(self):
+        """Minimal replica of the AAA111 Random workflow shape:
+        KSampler.positive → CrossAttn (custom keys only) → ArtistPack
+        (base_prompt link) → ShowText (stale-able cache + live link) →
+        Concatenate → two Text literals. Negative is a plain literal."""
+        return {
+            "12": {"class_type": "Text", "inputs": {"text": "masterpiece, best quality,"}},
+            "13": {"class_type": "Text", "inputs": {"text": "1girl, black hair, hime cut"}},
+            "14": {"class_type": "CR Text Concatenate", "inputs": {
+                "separator": "", "text1": ["12", 0], "text2": ["13", 0]}},
+            "15": {"class_type": "ShowText|pysssss", "inputs": {
+                "text": ["14", 0], "text_0": "stale cached copy"}},
+            "16": {"class_type": "AnimaArtistPack", "inputs": {
+                "artist_chain": "0.6::@someone::", "base_prompt": ["15", 0], "clip": ["11", 1]}},
+            "17": {"class_type": "AnimaArtistPreset", "inputs": {
+                "preset": "drift_auto", "intensity": 1.0}},
+            "18": {"class_type": "AnimaArtistCrossAttn", "inputs": {
+                "combine_mode": "output_avg", "strength": 1.0,
+                "model": ["11", 0], "artist_pack": ["16", 0],
+                "advanced_options": ["17", 1], "preset": ["17", 0]}},
+            "20": {"class_type": "CLIPTextEncode", "inputs": {
+                "text": "worst quality, blurry", "clip": ["11", 1]}},
+            "21": {"class_type": "KSampler", "inputs": {
+                "seed": 1, "steps": 20, "positive": ["18", 1],
+                "negative": ["20", 0], "model": ["18", 0], "latent_image": ["19", 0]}},
+        }
+
+    def test_bridges_custom_conditioning_nodes_to_the_prompt(self):
+        parser = MetadataParser()
+        pos, neg = parser._trace_sampler_prompts(self._anima_style_graph())
+
+        assert pos is not None
+        assert "masterpiece, best quality," in pos
+        assert "1girl, black hair, hime cut" in pos
+        # Live upstream wins over the ShowText display cache.
+        assert "stale cached copy" not in pos
+        assert neg == "worst quality, blurry"
+
+    def test_bridge_never_walks_model_channels(self):
+        """A text-bearing node reachable ONLY through the model link must
+        stay invisible to the positive trace."""
+        parser = MetadataParser()
+        nodes = {
+            "5": {"class_type": "SneakyModelPatcher", "inputs": {
+                "text": "not a prompt", "model": ["6", 0]}},
+            "18": {"class_type": "MysteryConditioner", "inputs": {
+                "model": ["5", 0], "strength": 1.0}},
+            "21": {"class_type": "KSampler", "inputs": {
+                "positive": ["18", 0], "negative": ["18", 0]}},
+        }
+        pos, neg = parser._trace_sampler_prompts(nodes)
+        assert pos is None
+        assert neg is None
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

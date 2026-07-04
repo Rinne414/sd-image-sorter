@@ -75,6 +75,25 @@ def _resolve_artist_device(*, use_gpu: bool = True, cuda_available: Optional[boo
     return "cuda" if cuda_available else "cpu"
 
 
+def _onnx_providers_for(ort_module: Any, *, use_gpu: bool) -> List[str]:
+    """ONNX Runtime provider list honoring the use_gpu opt-out.
+
+    ``InferenceSession(path)`` with no providers defaults to CUDA-first when
+    onnxruntime-gpu is installed, which silently ignored the Style Finder's
+    "use GPU if available" toggle on the .onnx path (owner report 2026-07-05:
+    the toggle "did nothing"). Intersect with the actually available
+    providers so passing CUDA on a CPU-only install never raises.
+    """
+    try:
+        available = list(ort_module.get_available_providers())
+    except Exception:
+        available = ["CPUExecutionProvider"]
+    if not use_gpu:
+        return ["CPUExecutionProvider"]
+    preferred = [p for p in available if p != "CPUExecutionProvider"]
+    return [*preferred, "CPUExecutionProvider"]
+
+
 # Lazy-loaded model
 _model = None
 _processor = None
@@ -1394,7 +1413,9 @@ class ArtistIdentifier:
             if path.endswith('.onnx'):
                 import onnxruntime as ort  # type: ignore
                 with exclusive_ai_runtime("artist-onnx-load"):
-                    self._session = ort.InferenceSession(path)
+                    self._session = ort.InferenceSession(
+                        path, providers=_onnx_providers_for(ort, use_gpu=self.use_gpu)
+                    )
                 self._model = "onnx"
                 self._backend = "onnx"
             else:
@@ -1445,7 +1466,9 @@ class ArtistIdentifier:
                         # Fall back to ONNX runtime
                         import onnxruntime as ort  # type: ignore
                         with exclusive_ai_runtime("artist-onnx-load"):
-                            self._session = ort.InferenceSession(path)
+                            self._session = ort.InferenceSession(
+                                path, providers=_onnx_providers_for(ort, use_gpu=self.use_gpu)
+                            )
                         self._model = "onnx"
                         self._backend = "onnx"
             self._load_error = None

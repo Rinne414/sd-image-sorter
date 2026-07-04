@@ -77,8 +77,15 @@
     padding-block: 9px;
 }
 
+/* Owner 2026-07-05: the modal read as "unnecessarily large and noisy" —
+   inputs holding 3 digits spanned full grid columns. Width tightened, the
+   booru grid packs Tagger pickers (wide) and numeric fields (narrow) onto
+   two rows, and number inputs stop pretending to be text areas. */
 #smart-tag-modal .smart-tag-modal-content {
-    max-width: min(1080px, calc(100vw - 32px));
+    /* !important: the global ".modal.visible > .modal-content" viewport
+       clamp in ui-refresh.css is itself !important; this value keeps the
+       same viewport protection via min() while capping the modal width. */
+    max-width: min(880px, calc(100vw - 32px)) !important;
     max-height: calc(100vh - 40px);
     overflow-y: auto;
 }
@@ -86,8 +93,8 @@
 #smart-tag-modal .smart-tag-form {
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    margin-top: 16px;
+    gap: 12px;
+    margin-top: 12px;
 }
 
 #smart-tag-modal .smart-tag-basic-grid,
@@ -95,7 +102,7 @@
 #smart-tag-modal .smart-tag-natural-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    gap: 10px 12px;
 }
 
 #smart-tag-modal .smart-tag-basic-grid {
@@ -104,6 +111,23 @@
 
 #smart-tag-modal .smart-tag-basic-grid .form-label:first-child {
     grid-column: 1 / -1;
+}
+
+/* Booru grid: row 1 = the two (wide) tagger pickers, row 2 = the four
+   numeric fields, row 3 = merge mode. */
+#smart-tag-modal .smart-tag-vote-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+#smart-tag-modal .smart-tag-vote-grid > .form-label:nth-child(1),
+#smart-tag-modal .smart-tag-vote-grid > .form-label:nth-child(2),
+#smart-tag-modal .smart-tag-vote-grid > .form-label:nth-child(7) {
+    grid-column: span 2;
+}
+
+/* A threshold box holds "0.35", not prose — cap its width. */
+#smart-tag-modal input[type="number"] {
+    max-width: 120px;
 }
 
 #smart-tag-modal .form-label {

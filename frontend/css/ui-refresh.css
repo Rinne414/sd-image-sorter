@@ -1929,6 +1929,40 @@ textarea:focus,
     min-height: 42px;
 }
 
+/* Owner 2026-07-05 ("buttons are not working"): the on/off buttons toggled
+   state but showed almost no visual change, and only the small button was
+   clickable. Whole-row click is wired in app.js; here every pressed state
+   gets an unmistakable on (accent) / off (dimmed) look. */
+.settings-row.settings-row-toggle {
+    cursor: pointer;
+    border-radius: 10px;
+    margin: 0 -8px;
+    padding: 0 8px;
+    transition: background 140ms ease;
+}
+
+.settings-row.settings-row-toggle:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.settings-row .btn[aria-pressed] {
+    min-width: 92px;
+    justify-content: center;
+    border: 1px solid transparent;
+}
+
+.settings-row .btn[aria-pressed="true"] {
+    color: var(--accent-primary);
+    border-color: color-mix(in srgb, var(--accent-primary) 45%, transparent);
+    background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+}
+
+.settings-row .btn[aria-pressed="false"] {
+    color: var(--text-muted);
+    border-color: var(--surface-border, rgba(255, 255, 255, 0.12));
+    opacity: 0.85;
+}
+
 .settings-row-copy {
     display: grid;
     gap: 2px;

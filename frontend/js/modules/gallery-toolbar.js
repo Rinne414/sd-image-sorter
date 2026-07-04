@@ -445,8 +445,15 @@
             });
         }
         // Language switch re-translates static labels but the help rows are
-        // JS-rendered — drop the cache so the next open re-renders.
-        window.addEventListener('languagechange', () => { helpRendered = false; });
+        // JS-rendered — drop the cache so the next open re-renders. i18n.js
+        // dispatches "languageChanged" (camelCase) on document; the browser's
+        // own window "languagechange" never fires for in-app switches.
+        document.addEventListener('languageChanged', () => {
+            helpRendered = false;
+            // Re-render immediately if the modal is open right now.
+            const modal = document.getElementById('search-help-modal');
+            if (modal && modal.classList.contains('visible')) renderSearchHelp();
+        });
         document.addEventListener('i18n:changed', () => { helpRendered = false; });
 
         const filterBtn = document.getElementById('btn-toolbar-filters');
