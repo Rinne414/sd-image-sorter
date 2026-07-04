@@ -17,6 +17,9 @@ The v4.0 "Fresh Aurora" redesign lands: a mission entry page (the top bar keeps 
 - **Gallery search query language + quick chips + bottom action bar / 图库搜索查询语言、快捷筛选与底部批量操作条**: the search box speaks a full query language over every filter — 21 keys with en/zh aliases, `score>=7` comparisons, `score:6..8` ranges, `size:1024x1536`, `-tag:blurry` negation, gen/rating narrowing — with a live "Understood as:" chip line (⚠ chips name bad values and the legal ones), a ? syntax-help modal, a filter-modal button next to the box, and Danbooru-style fuzzy value autocomplete from your own library (usage counts included). Plus one-click chips (有参数 / 美学 7+ / 无字幕) and batch actions in a floating bottom bar — Move / Tag / Censor Edit / Add to collection up front, the rest under More ▾ with destructive actions separated. The filter modal previews a live "≈N images" hit count, the aesthetic Unscored tier is a real filter, and selection turns pink with ♥ pick-order badges.
   - 搜索框升级为覆盖全部筛选的查询语言——21 个键位中英别名、`score>=7` 比较、`score:6..8` 区间、`size:1024x1536` 精确分辨率、`-tag:blurry` 排除、生成器/分级收敛；输入框下方实时「解析为：」chip 行（格式错误用 ⚠ 标出并给出合法值）、旁边有 ? 语法帮助弹窗和筛选弹窗按钮（不用再开侧栏）、输入值时按 Danbooru 模糊搜索方式从你自己的库补全（带使用次数）。另有「有参数 / 美学 7+ / 无字幕」快捷片；批量操作在底部悬浮操作条——移动 / 打标 / 打码编辑 / 加入合集直接可点，其余收进「更多 ▾」，危险操作隔离。筛选弹窗实时预览「预计 N 张」，美学「未评分」档是真筛选，选中为粉色描边 + ♥ 挑选顺序徽章。
 
+- **Duplicate Cleanup / 查重清理**: Tools → 查重清理 scans the whole library into duplicate groups (background job, no size cap), suggests the best of each group (stars → aesthetic → resolution), and trashes the rest in one click via the Recycle-Bin pipeline.
+  - 「工具 → 查重清理」把全库扫描成重复分组（后台任务、无大小上限），每组自动建议保留最佳（星级 → 美学分 → 分辨率），一键把其余移入回收站。
+
 - **Color search / 颜色搜图**: `color:red` (or `color:红`) finds images by dominant hue — 12 colors + the old warm/cool/neutral, in the search bar and a new filter-modal multi-select; existing libraries backfill instantly via migration 022.
   - `color:red`（或 `color:红`）按主色搜图——12 色 + 原有暖/冷/中性，搜索栏与筛选弹窗多选都可用；旧库经 migration 022 秒级回填。
 
@@ -95,7 +98,7 @@ The v4.0 "Fresh Aurora" redesign lands: a mission entry page (the top bar keeps 
 
 ## Validation / 验证
 
-- Full 7-gate CI green: backend pytest 2366 passed / 7 skipped; Playwright e2e 181 passed / 3 skipped; ruff, strict tsc, JS syntax, lock freshness, and dependency audit all clean.
+- Full 7-gate CI green: backend pytest 2373 passed / 7 skipped; Playwright e2e 184 passed / 3 skipped; ruff, strict tsc, JS syntax, lock freshness, and dependency audit all clean.
 
 ---
 

@@ -556,6 +556,15 @@ Get generators with counts.
 #### GET /api/tags/library
 Get tag library. Optional query params: `sort_by=frequency|alphabetical`, `q=<text>`, `limit=<n>`. Search runs across the full tag table before applying `limit`.
 
+#### POST /api/duplicates/scan
+Start a whole-library near-duplicate GROUP scan (v3.5.0). Body: `{ "threshold": 0.80-0.999, default 0.95 }`. Clusters all CLIP-embedded images into groups (hnswlib ANN when available, exact chunked matmul otherwise — no size cap), ranks each group's members by user rating → aesthetic → resolution → file size and flags the best as `suggested_keep`. Runs as a bulk background job: poll `GET /api/bulk-jobs/{job_id}` with the returned `job_id`. 409 while another scan runs. Results persist to `<state>/duplicate-groups.json`.
+
+#### GET /api/duplicates/scan-status
+Return `{ "active", "job_id", "job" }` for the running duplicate scan (if any) so a reopened UI can re-attach to the progress poll.
+
+#### GET /api/duplicates/groups
+Page through the last completed duplicate scan. Query: `offset`, `limit` (1-200). Returns `{ "available", "scanned_at", "threshold", "summary": { "embedded_count", "group_count", "redundant_count", "reclaimable_bytes" }, "groups": [{ "group_id", "similarity", "members": [{ "id", "path", "filename", "width", "height", "file_size", "aesthetic_score", "user_rating", "suggested_keep" }] }], "total_groups", "has_more" }`. Deletion reuses the existing delete endpoints.
+
 #### GET /api/tags/suggest
 Type-ahead tag suggestions for autocomplete inputs (v3.5.0). Query params: `q=<partial token>`, `limit=<1..50, default 20>`. Merges the user's library tags (frequency-ranked, `source: "library"`) with the bundled danbooru vocabulary `backend/assets/danbooru_tags.csv` (popularity-ranked, alias-aware, `source: "danbooru"`). Each suggestion carries a 14-category `category` (same palette as Dataset Maker tag pills) and an optional `zh` display string. CJK queries fuzzy-match Chinese aliases when the optional `danbooru_zh.csv` drop-in is present (see `backend/assets/README.md`). Returns `{ "suggestions": [{ "tag", "count", "source", "category", "zh" }], "danbooru_loaded", "zh_loaded" }`. Empty `q` returns the library's most frequent tags.
 

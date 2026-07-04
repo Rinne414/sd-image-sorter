@@ -24,6 +24,7 @@
     <link rel="stylesheet" href="/static/css/tag-power.css">
     <link rel="stylesheet" href="/static/css/tag-stats-modal.css">
     <link rel="stylesheet" href="/static/css/caption-autocomplete.css">
+    <link rel="stylesheet" href="/static/css/dup-cleaner.css">
     <link rel="stylesheet" href="/static/css/entry.css">
     <!-- tokens.css must stay the LAST stylesheet: it owns the Aurora palette
          and remaps every legacy token defined by the sheets above. -->
@@ -356,6 +357,12 @@
                                 <span class="tab-icon" aria-hidden="true">🖌️</span>
                                 <span class="tab-text" data-i18n="nav.artist">Style Finder</span>
                                 <span class="nav-tools-badge" data-i18n="nav.experimental">Experimental</span>
+                            </button>
+                            <!-- v3.5.0 Tier 1: whole-library duplicate cleanup (opens a modal, not a view) -->
+                            <button class="nav-tab nav-tools-item" id="nav-tools-dup-cleaner" type="button"
+                                    data-i18n-title="dup.navTitle" title="Duplicate Cleanup">
+                                <span class="tab-icon" aria-hidden="true">🧹</span>
+                                <span class="tab-text" data-i18n="dup.navTitle">Duplicate Cleanup</span>
                             </button>
                         </div>
                     </div>
@@ -5706,6 +5713,43 @@
             </div>
         </div>
 
+        <!-- v3.5.0 Tier 1: duplicate cleanup workflow (scan → review groups → keep best) -->
+        <div class="modal" id="dup-cleaner-modal" role="dialog" aria-modal="true" aria-labelledby="dup-cleaner-title">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-large dup-cleaner-content">
+                <button class="modal-close" id="btn-close-dup-cleaner" aria-label="Close" data-i18n-aria="common.close">✕</button>
+                <h3 id="dup-cleaner-title" data-i18n="dup.title">Duplicate Cleanup</h3>
+                <div class="dup-cleaner-toolbar">
+                    <label class="dup-threshold-label">
+                        <span data-i18n="dup.threshold">Similarity</span>
+                        <select id="dup-threshold" class="input-field">
+                            <option value="0.98" data-i18n="dup.threshold98">0.98 — near-exact</option>
+                            <option value="0.95" selected data-i18n="dup.threshold95">0.95 — near-duplicates</option>
+                            <option value="0.90" data-i18n="dup.threshold90">0.90 — similar variants</option>
+                        </select>
+                    </label>
+                    <button class="btn btn-primary" id="btn-dup-scan" type="button" data-i18n="dup.scan">Scan Library</button>
+                    <button class="btn btn-ghost" id="btn-dup-cancel-scan" type="button" hidden data-i18n="common.cancel">Cancel</button>
+                    <div class="dup-scan-progress" id="dup-scan-progress" hidden>
+                        <div class="dup-scan-progress-bar"><div class="dup-scan-progress-fill" id="dup-scan-progress-fill"></div></div>
+                        <span class="dup-scan-progress-text" id="dup-scan-progress-text"></span>
+                    </div>
+                </div>
+                <div class="dup-summary" id="dup-summary" hidden>
+                    <span id="dup-summary-text"></span>
+                    <button class="btn btn-primary btn-small" id="btn-dup-apply-all" type="button" data-i18n="dup.applyAll">Keep best everywhere…</button>
+                </div>
+                <div class="dup-empty" id="dup-empty">
+                    <p data-i18n="dup.emptyIntro">Scan your whole library for near-duplicate groups. Each group gets a suggested keeper (your star rating first, then aesthetic score, resolution, file size) — review side by side and move the rest to the trash.</p>
+                    <p class="dup-empty-hint" data-i18n="dup.needEmbeddings">Requires CLIP embeddings — build them in Similarity tools if the scan reports none.</p>
+                </div>
+                <div class="dup-groups" id="dup-groups"></div>
+                <div class="dup-load-more-row">
+                    <button class="btn btn-ghost" id="btn-dup-load-more" type="button" hidden data-i18n="common.showMore">Show More</button>
+                </div>
+            </div>
+        </div>
+
         <div class="modal" id="filter-modal" role="dialog" aria-modal="true" aria-labelledby="filter-modal-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-large filter-modal-shell">
@@ -6462,6 +6506,7 @@
     <script src="/static/js/tag-stats-modal.js"></script>
     <script src="/static/js/tag-complete-notification.js"></script>
     <script src="/static/js/caption-autocomplete.js"></script>
+    <script src="/static/js/modules/dup-cleaner.js"></script>
     <script src="/static/js/artist-ident.js"></script>
     <script src="/static/js/image-reader.js"></script>
     <script src="/static/js/obfuscate-engine.js"></script>
