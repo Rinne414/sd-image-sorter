@@ -1,8 +1,8 @@
 ## v3.5.0 — 清爽极光重设计 + 任务入口页 / Fresh Aurora Redesign + Mission Entry
 
-全局换新 v4.0「清爽极光」设计语言：左侧导航栏、任务入口页，图库搜索工具栏与底部批量操作条、排序专注模式与命名预设、打码审核流水线、「智能一趟」打标入口、Caption 双框编辑器统一。超大库批量操作转为可取消的后台任务，AI 队列跨重启持久化，Linux NVIDIA 修复 GPU 打标。功能零删除。
+全局换新 v4.0「清爽极光」设计语言：任务入口页（顶栏保持经典布局、品牌区一键回入口），图库搜索工具栏、底部批量操作条与可视缩图大小控制、排序专注模式与命名预设、打码审核流水线、「智能一趟」打标入口、Caption 双框编辑器统一。超大库批量操作转为可取消的后台任务，AI 队列跨重启持久化，Linux NVIDIA 修复 GPU 打标。功能零删除。
 
-The v4.0 "Fresh Aurora" redesign lands: a left navigation rail, a mission entry page, gallery toolbar search + a bottom batch action bar, sort focus mode & named presets, a censor review conveyor, a one-pass Smart Tag entry, and the caption editors consolidated into one two-box model. Huge-library bulk ops become cancellable background jobs, the AI queue survives restarts, and Linux NVIDIA machines get GPU tagging. Zero feature removals.
+The v4.0 "Fresh Aurora" redesign lands: a mission entry page (the top bar keeps its classic layout, brand click returns to the entry), gallery toolbar search + a bottom batch action bar + a visible thumbnail-size control, sort focus mode & named presets, a censor review conveyor, a one-pass Smart Tag entry, and the caption editors consolidated into one two-box model. Huge-library bulk ops become cancellable background jobs, the AI queue survives restarts, and Linux NVIDIA machines get GPU tagging. Zero feature removals.
 
 ---
 
@@ -11,14 +11,14 @@ The v4.0 "Fresh Aurora" redesign lands: a left navigation rail, a mission entry 
 - **Mission entry page / 任务入口页**: launch surface with the four mission lanes (LoRA dataset / Pixiv set publishing / batch organize / free mode), live-count function tiles, a resume slab for saved manual-sort sessions, a daily ★5 full-bleed cover with 换一张 / 不想展示, and an activity streak. Top-level ESC returns to the entry without losing view state; Settings gains 跳过入口页 and ★5 门面 toggles. Backed by `GET /api/entry/summary` + `activity_log` daily counters (migration 020).
   - 新增任务入口页：四条任务动线（LoRA 数据集 / Pixiv 成套发布 / 批量整理 / 自由模式）、实时数字功能马赛克、手动分拣「接着上次」锚块、每日 ★5 全屏门面（换一张 / 不想展示）、连续整理天数。顶层 ESC 随时回入口且不丢视图状态；设置新增「跳过入口页」「★5 门面」开关。后端新增 `GET /api/entry/summary` 与 `activity_log` 日计数（migration 020）。
 
-- **Left navigation rail / 左侧导航栏**: the top tab bar becomes a left vertical rail — brand on top (click returns to the entry page), the eight views as a column with a blue active indicator, utilities and Import / AI Tag at the bottom, and a collapse toggle that shrinks it to a 46px icon strip (remembered across restarts).
-  - 顶部标签栏改为左侧纵向导航栏：品牌在顶部（点击回任务入口页）、八个视图纵向排列（蓝色当前指示条）、常用工具与「导入图片 / AI 打标」在底部，可一键收合成 46px 图标条（重启后记住）。
+- **Top bar stays, brand returns to the entry / 顶栏保留、品牌区回入口**: navigation keeps the classic fixed top bar (a left-rail experiment was reverted on owner review), and clicking the brand block (or Enter / Space on it) returns to the mission entry page — even with 跳过入口页 enabled. The gallery toolbar also gains a visible − slider + thumbnail-size control (120–400px, live in grid / large / waterfall, persisted; `[` `]` step the same value), and the entry page is recomposed: calm equal-geometry tiles under Missions / Tools labels, an aurora gradient instead of a black void when no ★5 cover is set, and a bottom-left greeting + live stats (library / added today / handled today / streak).
+  - 导航保持经典顶部固定栏（左侧导航栏实验按所有者反馈回退），点击品牌区（或在其上按 Enter / 空格）即可回任务入口页——开了「跳过入口页」也有效。图库工具栏新增可见的「− 滑杆 +」缩图大小控制（120–400px，网格/大图/瀑布流实时生效、重启后记住；`[` `]` 与滑杆同源）；入口页同步重排：任务/工具分组标签下等宽等高卡片、无 ★5 门面时显示极光渐层而非一片黑、左下新增问候语与实时统计（库内 / 今日新增 / 今日已处理 / 连续天数）。
 
 - **Gallery toolbar search, quick chips + bottom action bar / 图库搜索、快捷筛选与底部批量操作条**: a key:value search box (`tag:` `checkpoint:` `lora:` `seed:` + free text) feeding the same filter store as the filter modal, one-click chips (有参数 / 美学 7+ / 无字幕), and batch actions in a floating bottom bar — Move / Tag / Censor Edit / Add to collection up front, the rest under More ▾ with destructive actions separated. The filter modal previews a live "≈N images" hit count, the aesthetic Unscored tier is a real filter, and selection turns pink with ♥ pick-order badges.
   - 新增 key:value 搜索框（`tag:` `checkpoint:` `lora:` `seed:` + 自由文本，与筛选弹窗共用状态）、「有参数 / 美学 7+ / 无字幕」快捷片；批量操作移到底部悬浮操作条——移动 / 打标 / 打码编辑 / 加入合集直接可点，其余收进「更多 ▾」，危险操作用分隔线隔离。筛选弹窗实时预览「预计 N 张」，美学「未评分」档变成真筛选，选中改为粉色描边 + ♥ 挑选顺序徽章。
 
-- **Sort stage: live count, focus mode, named presets / 排序台：实时计数、专注模式、命名预设**: the setup card shows a live "≈N images in scope" count; a 🧘 focus mode collapses the nav rail so the WASD stage fills the screen; named presets save/load/delete the entire setup (folders, collection slots, layout, mode, action, filters); the HUD gains a mute toggle and the progress line shows percent + images/min.
-  - 排序设置卡实时显示「范围内约 N 张图片」；🧘 专注模式收起导航栏、WASD 舞台全屏；命名预设保存/载入/删除整套配置（文件夹、收藏夹槽位、布局、模式、动作、筛选）；HUD 新增静音开关，进度行显示百分比与「张/分」速度。
+- **Sort stage: live count, focus mode, named presets / 排序台：实时计数、专注模式、命名预设**: the setup card shows a live "≈N images in scope" count; a 🧘 focus mode hides the top nav bar so the WASD stage fills the screen; named presets save/load/delete the entire setup (folders, collection slots, layout, mode, action, filters); the HUD gains a mute toggle and the progress line shows percent + images/min.
+  - 排序设置卡实时显示「范围内约 N 张图片」；🧘 专注模式隐藏顶部导航栏、WASD 舞台全屏；命名预设保存/载入/删除整套配置（文件夹、收藏夹槽位、布局、模式、动作、筛选）；HUD 新增静音开关，进度行显示百分比与「张/分」速度。
 
 - **Censor sidebar tabs + review conveyor / 打码侧栏分页 + 审核流水线**: the right sidebar becomes three tabs — 画笔 Brush (all existing tools, unchanged), 调整 Adjust (photo filters), and the new 审核 Review conveyor: detect the current image, check/uncheck each region (unchecked stays uncensored), then Approve & Next bakes the kept regions and auto-advances (Prev / Next / Skip included). Detection boxes draw on a preview layer that is never saved into the image.
   - 打码右侧栏改为三个分页：画笔（原有工具全部保留）、调整（照片滤镜）、审核（新流水线：检测当前图 → 逐区域勾选/取消（取消=保留不打码）→「通过并下一张」烘焙勾选区域并自动前进，含上一张/下一张/跳过）。检测框画在独立预览层上，永不写入保存结果。
@@ -80,8 +80,8 @@ The v4.0 "Fresh Aurora" redesign lands: a left navigation rail, a mission entry 
   - 数据库迁移 020（`activity_log`）与 021（`reconnect_reviews`）首次启动自动执行，无需手动操作，现有数据不受影响。
 - First launch shows the new mission entry page; click any lane (or press ESC later to come back to it). Prefer the old behavior? Settings → 跳过入口页.
   - 首次启动会看到新的任务入口页；点任意动线进入，之后按 ESC 可随时回来。想跳过它：设置 → 「跳过入口页」。
-- The top tab bar is now the left rail; the ⟨ toggle at its bottom collapses it to icons. No workflow, shortcut, DOM id, or destructive-action default changed; Auto-Separate / Manual Sort defaults stay `copy`.
-  - 顶部标签栏移到了左侧导航栏，底部 ⟨ 按钮可收合成图标条。工作流、快捷键、DOM id、危险操作默认值均未改变；自动分类 / 手动分拣默认仍为 `copy`。
+- Navigation stays the familiar top bar; the brand block on its left now returns to the entry page. No workflow, shortcut, or destructive-action default changed; Auto-Separate / Manual Sort defaults stay `copy`.
+  - 导航仍是熟悉的顶部栏，左侧品牌区现在可点击回入口页。工作流、快捷键、危险操作默认值均未改变；自动分类 / 手动分拣默认仍为 `copy`。
 - In-app update from v3.4.x via "Check Update" works as usual.
   - 从 v3.4.x 用「检查更新」升级照常可用。
 
@@ -89,7 +89,7 @@ The v4.0 "Fresh Aurora" redesign lands: a left navigation rail, a mission entry 
 
 ## Validation / 验证
 
-- Full 7-gate CI green: backend pytest 2328 passed / 7 skipped; Playwright e2e 166 passed / 3 skipped; ruff, strict tsc, JS syntax, lock freshness, and dependency audit all clean.
+- Full 7-gate CI green: backend pytest 2328 passed / 7 skipped; Playwright e2e 169 passed / 3 skipped; ruff, strict tsc, JS syntax, lock freshness, and dependency audit all clean.
 
 ---
 
