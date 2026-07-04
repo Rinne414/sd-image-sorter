@@ -6305,20 +6305,44 @@ async function censorReviewApprove() {
     updateCensorReviewPanel();
 
     try {
-        const kept = CensorReviewState.regions.filter((_, i) => !CensorReviewState.excluded.has(i));
-        const excludedAny = kept.length !== CensorReviewState.regions.length;
-        if (kept.length > 0) {
-            // The precise combined mask covers ALL detected regions, so only use
-            // it when nothing was excluded; otherwise censor the kept subset by
-            // its per-region boxes so excluded regions stay untouched.
+        const keptRaw = CensorReviewState.regions.filter((_, i) => !CensorReviewState.excluded.has(i));
+        const excludedAny = keptRaw.length !== CensorReviewState.regions.length;
+        let didCensor = false;
+        if (keptRaw.length > 0) {
+            // The precise combined mask covers ALL detected regions, so it can't
+            // stand in for a subset. When the user excluded any region, censor the
+            // kept ones by their BOXES: strip polygon/mask so splitDetectionGeometry
+            // routes them to boxRegions (every detection carries a box). This
+            // GUARANTEES the kept regions are covered — leaving the polygons on with
+            // the combined mask nulled would drop them into maskRegions with no mask
+            // and censor nothing (the bug the review caught). Box is looser than the
+            // precise outline but always safe; approve-all still uses the mask.
+            const kept = excludedAny
+                ? keptRaw.map(({ polygon, mask, ...rest }) => rest)
+                : keptRaw;
             const data = excludedAny
                 ? { ...CensorReviewState.data, combined_mask: null, combined_mask_ref: null, combined_mask_bounds: null }
                 : (CensorReviewState.data || {});
             await applyDetectedRegionsToItem(item, kept, data);
-            item.isModified = true;
-            renderQueue();
+            didCensor = Boolean(item.isProcessed);
+            if (didCensor) {
+                item.isModified = true;
+                renderQueue();
+            }
         }
-        const count = kept.length;
+
+        // Never pass an uncensored image off as "approved". If regions were kept
+        // but nothing baked (e.g. a detection lacked a usable box), fail loud and
+        // stay on this image so the user can retry with Box shape or the Brush tab.
+        if (keptRaw.length > 0 && !didCensor) {
+            window.App.showToast(
+                censorT('censor.reviewApproveNothingBaked', null, 'Could not censor the kept regions — nothing was changed. Try switching Shape to Box, or the Brush tab.'),
+                'error'
+            );
+            return;
+        }
+
+        const count = keptRaw.length;
         window.App.showToast(
             count > 0
                 ? censorT('censor.reviewApproved', { count }, 'Approved {count} region(s) — moved to the next image')

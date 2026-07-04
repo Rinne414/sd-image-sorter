@@ -740,6 +740,22 @@ function clearManualSortZen() {
     document.documentElement.classList.remove('sort-zen');
 }
 
+// Repaint the on-stage mute button from the live AudioManager state. Module-level
+// so it can re-sync on stage entry — the global Settings sound toggle mutates
+// AudioManager without notifying this button, which would otherwise show a stale
+// icon/aria-pressed until its own next click.
+function syncSortMuteButton() {
+    const muteBtn = document.getElementById('btn-sort-mute');
+    const muteIcon = document.getElementById('sort-mute-icon');
+    if (!muteBtn) return;
+    const on = window.AudioManager ? window.AudioManager.enabled !== false : true;
+    if (muteIcon) muteIcon.textContent = on ? '🔊' : '🔇';
+    muteBtn.setAttribute('aria-pressed', on ? 'false' : 'true');
+    muteBtn.title = on
+        ? manualSortText('manual.muteSounds', 'Mute sort sounds', '静音排序音效')
+        : manualSortText('manual.unmuteSounds', 'Unmute sort sounds', '取消静音');
+}
+
 // --- Named full-config presets -------------------------------------------
 function getManualSortPresets() {
     try {
@@ -803,6 +819,18 @@ function applyManualSortPreset(preset) {
 
     setManualSortSelectedMode(preset.mode || 'slot');
     setManualSortOperationMode(preset.operationMode || 'copy', { persist: true, updateUi: true });
+
+    // Reset each slot's folder/collection radio to match the preset BEFORE
+    // refreshing the slot UI. refreshManualSortSlotUi reads the LIVE radio state
+    // (explicitCollectionType), so a slot still checked "collection" from a
+    // previous preset would otherwise hide the restored folder path behind an
+    // empty collection dropdown.
+    MANUAL_SORT_SLOT_KEYS.forEach((key) => {
+        const isCollection = Number.isInteger(slots[key]) && slots[key] > 0;
+        document.querySelectorAll(`input[name="slot-type-${key}"]`).forEach((radio) => {
+            radio.checked = isCollection ? radio.value === 'collection' : radio.value === 'folder';
+        });
+    });
 
     populateManualSortCollectionSelects();
     MANUAL_SORT_SLOT_KEYS.forEach(refreshManualSortSlotUi);
@@ -1357,22 +1385,15 @@ async function initManualSort() {
 
     // On-stage sound mute toggle — silences the sort SFX without leaving the
     // stage. Wires to the same AudioManager singleton + sort-audio-enabled key
-    // as the global Settings toggle, so the two stay in sync via that key.
+    // as the global Settings toggle. syncSortMuteButton() is module-level so
+    // activateSortingUi can re-sync it on stage entry (the global Settings
+    // toggle mutates AudioManager without notifying this button).
     const muteBtn = $('#btn-sort-mute');
-    const muteIcon = $('#sort-mute-icon');
-    if (muteBtn && muteIcon) {
-        const syncMute = () => {
-            const on = window.AudioManager ? window.AudioManager.enabled !== false : true;
-            muteIcon.textContent = on ? '🔊' : '🔇';
-            muteBtn.setAttribute('aria-pressed', on ? 'false' : 'true');
-            muteBtn.title = on
-                ? manualSortText('manual.muteSounds', 'Mute sort sounds', '静音排序音效')
-                : manualSortText('manual.unmuteSounds', 'Unmute sort sounds', '取消静音');
-        };
-        syncMute();
+    if (muteBtn) {
+        syncSortMuteButton();
         muteBtn.addEventListener('click', () => {
             if (window.AudioManager?.toggle) window.AudioManager.toggle();
-            syncMute();
+            syncSortMuteButton();
         });
     }
 
@@ -1851,6 +1872,9 @@ function activateSortingUi(mode = 'slot') {
         // in this HUD). hideSortInterfaces() above already cleared it.
         applyManualSortZen(getManualSortZenPref(), { persist: false });
     }
+    // Re-sync the HUD mute button — the global Settings toggle may have changed
+    // AudioManager since this button was last painted.
+    syncSortMuteButton();
     updateHistoryControlState();
 }
 

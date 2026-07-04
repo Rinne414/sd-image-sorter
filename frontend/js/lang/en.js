@@ -827,6 +827,7 @@ window.I18nLang_en = {
     'censor.reviewRegionsFound': '{count} region(s) found — uncheck any to leave it uncensored',
     'censor.reviewApproved': 'Approved {count} region(s) — moved to the next image',
     'censor.reviewApprovedNone': 'Approved with nothing censored — moved on',
+    'censor.reviewApproveNothingBaked': 'Could not censor the kept regions — nothing was changed. Try switching Shape to Box, or the Brush tab.',
     'censor.reviewAllDone': 'Queue fully reviewed — nothing left',
     'censor.reviewEmptyQueue': 'Queue is empty. Send images from the Gallery first.',
     'censor.reviewRegionConfidence': '{label} · {confidence}%',

@@ -838,6 +838,7 @@ window.I18nLang_zhCN = {
     'censor.reviewRegionsFound': '检测到 {count} 个区域 —— 取消勾选即可保留该处不打码',
     'censor.reviewApproved': '已通过 {count} 个区域 —— 已跳到下一张',
     'censor.reviewApprovedNone': '已通过（未打码任何区域）—— 已前进',
+    'censor.reviewApproveNothingBaked': '无法给保留的区域打码 —— 没有做任何改动。试试把形状切成「框」，或改用「画笔」分页。',
     'censor.reviewAllDone': '队列已全部审核完，没有剩余',
     'censor.reviewEmptyQueue': '队列是空的，请先从图库发送图片过来。',
     'censor.reviewRegionConfidence': '{label} · {confidence}%',
