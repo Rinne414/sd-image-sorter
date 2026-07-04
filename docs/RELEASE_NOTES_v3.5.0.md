@@ -1,8 +1,8 @@
-## v3.5.0 — 极光重设计 + 任务入口页 / Aurora Redesign Phases 1–2 + Mission Entry
+## v3.5.0 — 清爽极光重设计 + 任务入口页 / Fresh Aurora Redesign + Mission Entry
 
-全局配色换新为 v4.0「清爽极光」设计语言（蓝=下一步、粉=用户决定、紫=AI 产物），新增可跳过的启动任务入口页（四条任务动线 + ★5 门面）；模块拆分收尾、依赖安全清理。功能零删除，核心工作流语义不变。
+全局换新 v4.0「清爽极光」设计语言：左侧导航栏、任务入口页，图库搜索工具栏与底部批量操作条、排序专注模式与命名预设、打码审核流水线、「智能一趟」打标入口。超大库批量操作转为可取消的后台任务，AI 队列跨重启持久化，Linux NVIDIA 修复 GPU 打标。功能零删除。
 
-The palette moves to the v4.0 "Fresh Aurora" design language (blue = next action, pink = user decisions, purple = AI output) and a skippable mission entry page lands at launch (four mission lanes + a daily ★5 cover). Module extraction and dependency security cleanup complete. Zero feature removals; core workflow semantics unchanged.
+The v4.0 "Fresh Aurora" redesign lands: a left navigation rail, a mission entry page, gallery toolbar search + a bottom batch action bar, sort focus mode & named presets, a censor review conveyor, and a one-pass Smart Tag entry. Huge-library bulk ops become cancellable background jobs, the AI queue survives restarts, and Linux NVIDIA machines get GPU tagging. Zero feature removals.
 
 ---
 
@@ -11,70 +11,86 @@ The palette moves to the v4.0 "Fresh Aurora" design language (blue = next action
 - **Mission entry page / 任务入口页**: launch surface with the four mission lanes (LoRA dataset / Pixiv set publishing / batch organize / free mode), live-count function tiles, a resume slab for saved manual-sort sessions, a daily ★5 full-bleed cover with 换一张 / 不想展示, and an activity streak. Top-level ESC returns to the entry without losing view state; Settings gains 跳过入口页 and ★5 门面 toggles. Backed by `GET /api/entry/summary` + `activity_log` daily counters (migration 020).
   - 新增任务入口页：四条任务动线（LoRA 数据集 / Pixiv 成套发布 / 批量整理 / 自由模式）、实时数字功能马赛克、手动分拣「接着上次」锚块、每日 ★5 全屏门面（换一张 / 不想展示）、连续整理天数。顶层 ESC 随时回入口且不丢视图状态；设置新增「跳过入口页」「★5 门面」开关。后端新增 `GET /api/entry/summary` 与 `activity_log` 日计数（migration 020）。
 
-- **Frontend control audit / 前端控件审计**: `scripts/audit_frontend_controls.py` parses `frontend/index.html`, scans `frontend/js/**/*.js`, and outputs an evidence report for controls. Categories include `referenced-by-id`, `referenced-by-data`, `delegate-only`, `native-control`, `static-only`, and `needs-runtime-check`.
-  - `scripts/audit_frontend_controls.py` 会解析 `frontend/index.html`、扫描 `frontend/js/**/*.js`，输出控件证据报告。分类包含 `referenced-by-id`、`referenced-by-data`、`delegate-only`、`native-control`、`static-only`、`needs-runtime-check`。
+- **Left navigation rail / 左侧导航栏**: the top tab bar becomes a left vertical rail — brand on top (click returns to the entry page), the eight views as a column with a blue active indicator, utilities and Import / AI Tag at the bottom, and a collapse toggle that shrinks it to a 46px icon strip (remembered across restarts).
+  - 顶部标签栏改为左侧纵向导航栏：品牌在顶部（点击回任务入口页）、八个视图纵向排列（蓝色当前指示条）、常用工具与「导入图片 / AI 打标」在底部，可一键收合成 46px 图标条（重启后记住）。
 
-- **Known delegated-control tests / 已知委托控件测试**: contract coverage confirms Reader tabs, Dataset tabs, Dataset queue mode buttons, and Censor filter preset buttons are recognized as wired controls.
-  - 契约测试确认 Reader tabs、Dataset tabs、Dataset queue mode、Censor filter preset 等委托控件不会被误判成静态 UI。
+- **Gallery toolbar search, quick chips + bottom action bar / 图库搜索、快捷筛选与底部批量操作条**: a key:value search box (`tag:` `checkpoint:` `lora:` `seed:` + free text) feeding the same filter store as the filter modal, one-click chips (有参数 / 美学 7+ / 无字幕), and batch actions in a floating bottom bar — Move / Tag / Censor Edit / Add to collection up front, the rest under More ▾ with destructive actions separated. The filter modal previews a live "≈N images" hit count, the aesthetic Unscored tier is a real filter, and selection turns pink with ♥ pick-order badges.
+  - 新增 key:value 搜索框（`tag:` `checkpoint:` `lora:` `seed:` + 自由文本，与筛选弹窗共用状态）、「有参数 / 美学 7+ / 无字幕」快捷片；批量操作移到底部悬浮操作条——移动 / 打标 / 打码编辑 / 加入合集直接可点，其余收进「更多 ▾」，危险操作用分隔线隔离。筛选弹窗实时预览「预计 N 张」，美学「未评分」档变成真筛选，选中改为粉色描边 + ♥ 挑选顺序徽章。
 
-- **v3.5.0 phase plan / v3.5.0 阶段计划**: `.plans/sd-image-sorter-release/v3.5.0-plan.md` records the phase gates, assumptions, and current first-stage implementation scope.
-  - `.plans/sd-image-sorter-release/v3.5.0-plan.md` 记录阶段门、假设与当前首阶段范围。
+- **Sort stage: live count, focus mode, named presets / 排序台：实时计数、专注模式、命名预设**: the setup card shows a live "≈N images in scope" count; a 🧘 focus mode collapses the nav rail so the WASD stage fills the screen; named presets save/load/delete the entire setup (folders, collection slots, layout, mode, action, filters); the HUD gains a mute toggle and the progress line shows percent + images/min.
+  - 排序设置卡实时显示「范围内约 N 张图片」；🧘 专注模式收起导航栏、WASD 舞台全屏；命名预设保存/载入/删除整套配置（文件夹、收藏夹槽位、布局、模式、动作、筛选）；HUD 新增静音开关，进度行显示百分比与「张/分」速度。
 
-- **Smart Tag VLM grounding toggle / Smart Tag VLM 标签辅助开关**: VLM captioning can now explicitly disable booru-tag context, while the default remains on.
-  - Smart Tag VLM 描述现在可以显式关闭 booru 标签上下文辅助，默认仍保持开启。
+- **Censor sidebar tabs + review conveyor / 打码侧栏分页 + 审核流水线**: the right sidebar becomes three tabs — 画笔 Brush (all existing tools, unchanged), 调整 Adjust (photo filters), and the new 审核 Review conveyor: detect the current image, check/uncheck each region (unchecked stays uncensored), then Approve & Next bakes the kept regions and auto-advances (Prev / Next / Skip included). Detection boxes draw on a preview layer that is never saved into the image.
+  - 打码右侧栏改为三个分页：画笔（原有工具全部保留）、调整（照片滤镜）、审核（新流水线：检测当前图 → 逐区域勾选/取消（取消=保留不打码）→「通过并下一张」烘焙勾选区域并自动前进，含上一张/下一张/跳过）。检测框画在独立预览层上，永不写入保存结果。
+
+- **Tagger 智能一趟 landing tab / 打标弹窗「智能一趟」落地页**: the AI tag modal gains a Smart Tag one-pass tab in first position — it opens the full Smart Tag workspace (booru taggers with optional voting, cleanup, trigger word, optional caption) and forwards the armed Gallery selection scope. Gallery 选中打标 lands here; the global AI Tag button still opens the Local tagger tab directly.
+  - 打标弹窗新增第一个分页「智能一趟」：一键打开完整 Smart Tag 工作区（booru 打标器可选投票、清洗、触发词、可选描述），自动带上图库已选范围。图库选中后点「打标」默认落在这里；全局「AI 打标」按钮仍直达本地打标分页。
+
+- **Caption preview health strip + trigger check / Caption 预览健康条 + 触发词检查**: the batch-export caption preview always shows a checks strip (edited / empty / blacklist hits / duplicates / max tokens, plus missing-trigger when a trigger word is set); images missing the trigger word carry a ⚑ badge.
+  - 批量导出 caption 预览常驻「检查」健康条（已编辑 / 空 caption / 黑名单命中 / 重复词 / 最多标签，设触发词时统计「缺触发词」）；缺触发词的图片带 ⚑ 徽章。
+
+- **Dataset export manifest / 数据集导出清单**: every dataset export writes an `export_manifest.json` — settings snapshot, per-image results, and counts — so a training set's provenance is reproducible.
+  - 数据集导出附带 `export_manifest.json`：设置快照、逐图结果与统计，训练集来源可复现。
+
+- **Missing-file repair review / 移动文件修复审查**: ambiguous Find-Moved-Images matches persist as reviewable items — a modal previews the found file, lists candidate records, and commits relink / relink+remove-others / skip per row (migration 021).
+  - 「找回移动的图片」的不确定匹配会保存下来供审查——弹窗预览找到的文件、列出候选记录，逐条确认重连 / 重连并移除其余 / 跳过（migration 021）。
+
+- **Background bulk jobs + persistent AI queue / 后台批量任务 + AI 队列持久化**: huge Gallery delete / remove / sidecar-export selections run as cancellable background jobs with real progress; the AI job queue (tagging / Smart Tag / VLM batches) persists to disk and re-queues after a restart.
+  - 超大图库删除/移出/同名导出改为可取消的后台任务并显示真实进度；AI 任务队列（打标 / Smart Tag / VLM 批次）落盘持久化，重启后按原顺序恢复。
+
+- **Smart Tag VLM grounding toggle / Smart Tag VLM 标签辅助开关**: VLM captioning can explicitly disable booru-tag context (default stays on).
+  - Smart Tag VLM 描述可显式关闭 booru 标签上下文辅助，默认仍开启。
 
 - **Dataset caption polish quick actions / Dataset caption 微调快捷动作**: Clear prefix, Reset template, and Refresh Chinese reading aid are now real controls with handlers.
   - Dataset Caption 微调补上清空前缀、重置模板、刷新中文阅读辅助等真实控件。
 
 ## Changed / 变更
 
-- **Fresh Aurora visual system / 「清爽极光」视觉系统**: the new last-loaded `frontend/css/tokens.css` owns the global palette — blue-tinted dark surfaces, three semantic accents (blue #5CC8FF = next action, pink #FF8FC0 = user decisions, purple #A78BFF = AI output), unified 2px blue focus rings, solid-blue primary buttons with dark ink, a flat canvas, and Noto Sans SC + IBM Plex Mono + Oswald typography. Legacy tokens are remapped and ~470 hardcoded legacy colors across 13 stylesheets now reference tokens.
-  - 全新最后加载的 `frontend/css/tokens.css` 接管全局配色：蓝调暗色表面、三个各司其职的强调色（蓝=下一步、粉=用户决定、紫=AI 产物）、统一 2px 蓝色焦点圈、实心蓝主按钮配深色文字、平坦画布、思源黑体 + IBM Plex Mono + Oswald 字体组。旧 token 全部重映射，13 个样式表约 470 处硬编码旧色改为 token 引用。
+- **Fresh Aurora visual system / 「清爽极光」视觉系统**: the new last-loaded `frontend/css/tokens.css` owns the global palette — blue-tinted dark surfaces, three semantic accents (blue #5CC8FF = next action, pink #FF8FC0 = user decisions, purple #A78BFF = AI output), unified 2px blue focus rings, solid-blue primary buttons with dark ink, a flat canvas, and Noto Sans SC + IBM Plex Mono + Oswald typography. ~470 hardcoded legacy colors across 13 stylesheets now reference tokens, and every primary action button is the single clean Aurora blue (legacy orange primaries retired).
+  - 全新最后加载的 `frontend/css/tokens.css` 接管全局配色：蓝调暗色表面、三个各司其职的强调色（蓝=下一步、粉=用户决定、紫=AI 产物）、统一 2px 蓝色焦点圈、实心蓝主按钮配深色文字、平坦画布、思源黑体 + IBM Plex Mono + Oswald 字体组。13 个样式表约 470 处硬编码旧色改为 token 引用，全部视图的主按钮统一为 Aurora 蓝（旧橙色主按钮退役）。
 
 - **Module extraction completed + dependency security / 模块拆分收尾 + 依赖安全**: `app.js` delegates RequestManager and storage helpers to `modules/core/`; python-multipart bumped to 0.0.31 (three CVEs fixed) and the remaining starlette 1.x-only advisories are reviewed-and-documented ignores — the dependency audit gate is green.
   - `app.js` 的 RequestManager 与存储工具收束到 `modules/core/`；python-multipart 升级到 0.0.31（修复三条 CVE），其余仅 starlette 1.x 才修复的公告按惯例记录为已审阅忽略，依赖审计闸门恢复绿色。
 
-- **Global component polish / 全局组件打磨**: nav tabs, buttons, danger actions, inputs, gallery toolbar, shared panels, modals, settings/model cards, empty states, progress bars, toasts, and selection-panel surfaces now use the same component language.
-  - nav tabs、按钮、危险动作、输入框、图库工具栏、共享面板、弹窗、settings/model card、空状态、进度条、toast、多选面板完成首轮统一。
-
 - **Quieter workbench background / 更安静的工作台背景**: old decorative glow is reduced so long sessions have less visual noise while keeping the dark glass identity.
   - 旧的装饰光斑已弱化，保留暗色玻璃识别度，同时降低长时间使用的视觉噪音。
 
-- **Dataset Workbench reachability / Dataset 工作台可达性**: the right-side operation pane now scrolls in Workbench mode so optional caption-polish controls are not clipped below the viewport.
-  - Dataset Workbench 右侧操作栏现在可滚动，可选 Caption 微调控件不会被裁在视口外。
+## Fixed / 修复
+
+- **UI text coverage + Simplified-Chinese purity / 界面文案补全与简体统一**: 13 toast/button strings that silently fell back to English now have proper entries in both language packs, and ~20 Dataset template-help strings that shipped in Traditional Chinese are converted to Simplified Chinese.
+  - 13 条此前静默回退英文的提示/按钮文案补上双语词条；Dataset 模板帮助区约 20 条繁体中文全部转换为简体。
+
+- **Linux GPU tagging / Linux GPU 打标修复**: Linux installs only ever got the CPU-only `onnxruntime`, so WD14/NudeNet/CLIP stayed on CPU even with an NVIDIA card. The repair tool now detects NVIDIA via `nvidia-smi` and swaps in `onnxruntime-gpu[cuda,cudnn]` (x86_64); the Linux portable launcher runs it at startup and WD14 Prepare triggers it too. Non-NVIDIA machines keep the small CPU runtime; aarch64 is skipped (no PyPI wheels).
+  - Linux 此前只会装 CPU 版 `onnxruntime`，有 NVIDIA 卡也只能 CPU 打标。修复工具现在用 `nvidia-smi` 检测到 NVIDIA 后换装 `onnxruntime-gpu[cuda,cudnn]`（x86_64）；Linux portable 启动时自动运行，WD14 Prepare 也会触发。非 NVIDIA 机器保持小体积 CPU 运行时；aarch64 无 wheel 自动跳过。
+
+- **ESC no longer hijacks open menus or selection mode / ESC 不再劫持打开的菜单与选择模式**: ESC with the gallery More ▾ menu (or the nav tools menu / selection mode) open now closes/clears that first; only a bare ESC returns to the entry page.
+  - 开着图库「更多 ▾」菜单（或导航工具菜单/选择模式）时按 ESC，现在先关菜单/清选择；空手再按才回入口页。
+
+- **Dataset Workbench right-pane reachability / Dataset 工作台右侧栏可达性**: the right operation pane now scrolls in Workbench mode, so optional caption-polish controls are reachable instead of being clipped below the viewport.
+  - Dataset Workbench 右侧操作栏现在可滚动，Caption 微调里的可选控件不会被裁在视口外不可达。
 
 ---
 
-## Compatibility / 兼容性
+## Upgrading / 升级注意
 
-- No backend API contract changes.
-- No DOM id migration.
-- No feature deletion.
-- Auto-Separate / Manual Sort defaults stay `copy`.
-- Destructive actions stay separated and confirm-protected.
-
----
-
-## Validation So Far / 当前验证
-
-- `python scripts/audit_frontend_controls.py` — passed, reports 948 controls, 538 buttons, 61 JS files scanned.
-- `python -m pytest backend/tests/test_frontend_contract.py -q` — passed, 68 tests.
-- `python -m pytest backend/tests/test_smart_tag_service.py -q -k "grounding or caption_phase"` — passed, 4 selected tests.
-- `python -m pytest backend/tests/test_release_build.py -q` — passed, 48 tests.
-- `node --check frontend/js/smart-tag.js` and `node --check frontend/js/app.js` — passed.
-- Playwright rendered QA — passed at 1366x768 and 1920x1080 for Gallery selection, filter modal, Dataset Workbench, Smart Tag modal, Censor, and Model Manager; Browser plugin was unavailable, so regular Playwright was used.
-
-## Pending Release QA / 待发布 QA
-
-- Full `python scripts/run_ci.py`.
-- Remaining desktop screenshot review at 1440x900, 2560x1440, and 3840x2160.
-- Release package build.
-- `python scripts/lazy_release_qa.py`.
-- Real portable startup smoke.
+- Database migrations 020 (`activity_log`) and 021 (`reconnect_reviews`) run automatically on first start — no manual steps, existing data untouched.
+  - 数据库迁移 020（`activity_log`）与 021（`reconnect_reviews`）首次启动自动执行，无需手动操作，现有数据不受影响。
+- First launch shows the new mission entry page; click any lane (or press ESC later to come back to it). Prefer the old behavior? Settings → 跳过入口页.
+  - 首次启动会看到新的任务入口页；点任意动线进入，之后按 ESC 可随时回来。想跳过它：设置 → 「跳过入口页」。
+- The top tab bar is now the left rail; the ⟨ toggle at its bottom collapses it to icons. No workflow, shortcut, DOM id, or destructive-action default changed; Auto-Separate / Manual Sort defaults stay `copy`.
+  - 顶部标签栏移到了左侧导航栏，底部 ⟨ 按钮可收合成图标条。工作流、快捷键、DOM id、危险操作默认值均未改变；自动分类 / 手动分拣默认仍为 `copy`。
+- In-app update from v3.4.x via "Check Update" works as usual.
+  - 从 v3.4.x 用「检查更新」升级照常可用。
 
 ---
 
-## Download / 下载
+## Validation / 验证
+
+- Full 7-gate CI green: backend pytest 2318 passed / 7 skipped; Playwright e2e 165 passed / 3 skipped; ruff, strict tsc, JS syntax, lock freshness, and dependency audit all clean.
+
+---
+
+## ⬇️ Which file should I download? / 我该下载哪一个？
 
 **Windows → `sd-image-sorter-v3.5.0-windows-portable.zip`** — extract, run `run-portable.bat`.
 
