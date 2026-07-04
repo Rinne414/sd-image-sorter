@@ -718,6 +718,14 @@ function bindEvents() {
 
     // Sidebar: Queue Actions — handled by consolidated clearQueueHandler below
 
+    // 3-tab shell (画笔 / 调整 / 审核) + review conveyor controls.
+    initCensorTabs();
+    $('#btn-review-detect')?.addEventListener('click', censorReviewDetect);
+    $('#btn-review-approve')?.addEventListener('click', censorReviewApprove);
+    $('#btn-review-skip')?.addEventListener('click', () => censorReviewGoTo(1, { atEndMessage: true }));
+    $('#btn-review-prev')?.addEventListener('click', () => censorReviewGoTo(-1));
+    $('#btn-review-next')?.addEventListener('click', () => censorReviewGoTo(1));
+
     $('#btn-run-auto-censor')?.addEventListener('click', runAutoCensorBatch);
     $('#btn-batch-rename')?.addEventListener('click', () => {
         const onlySelectedCheckbox = document.getElementById('rename-only-selected');
@@ -2744,6 +2752,10 @@ async function loadCanvasImage(id) {
                 syncProxyItemPreviewFromCanvas(item, nextCanvas);
             }
             renderQueue();
+            // Keep the 审核 conveyor in step with the newly active image (progress,
+            // button states, stale-overlay clearing). No-op when its elements are
+            // absent; cheap enough to run on every load.
+            if (typeof updateCensorReviewPanel === 'function') updateCensorReviewPanel();
         });
 
     } catch (error) {
@@ -2813,6 +2825,12 @@ function refitCensorCanvasPair(width = null, height = null) {
     const refHeight = height || referenceCanvas?.height || CensorState.originalImage?.height || 0;
     fitCanvasToContainer(c1, refWidth, refHeight);
     fitCanvasToContainer(c2, refWidth, refHeight);
+    // Keep the review annotation overlay letterboxed like the content canvases
+    // (only meaningful while it's showing detected regions).
+    const overlay = document.getElementById('censor-review-overlay');
+    if (overlay && overlay.style.opacity !== '0') {
+        fitCanvasToContainer(overlay, refWidth, refHeight);
+    }
 }
 
 function scheduleCensorCanvasRefit(width = null, height = null) {
@@ -4166,6 +4184,86 @@ async function runAutoCensorBatch() {
     );
 }
 
+// Bake a set of detected regions into an item (proxy edit-op path or full
+// canvas dataURL path). Extracted from runDetectionForImage so the 审核 review
+// conveyor can bake an approved SUBSET. When `data.combined_mask*` is present it
+// is used for precise masks (covers ALL regions), so the review approve path
+// passes a mask-stripped `data` when the user excluded any region — then each
+// kept region is censored by its own box instead. Returns whether it reloaded
+// the active canvas (so the caller can skip a redundant reload).
+async function applyDetectedRegionsToItem(item, regions, data = {}) {
+    const useBoxShape = CensorState.maskShape === 'box';
+    let reloadedActiveItem = false;
+
+    const { maskRegions, boxRegions } = splitDetectionGeometry(regions);
+    const combinedMaskSource = {
+        mask: useBoxShape ? null : (data.combined_mask || null),
+        mask_ref: useBoxShape ? null : (data.combined_mask_ref || null),
+        mask_bounds: (!useBoxShape && Array.isArray(data.combined_mask_bounds)) ? cloneNumberArray(data.combined_mask_bounds) : null,
+        image_width: data.image_width,
+        image_height: data.image_height,
+    };
+    const shouldUseMask = Boolean(combinedMaskSource.mask || combinedMaskSource.mask_ref) && maskRegions.length > 0;
+    const shouldUseBoxes = boxRegions.length > 0;
+
+    if (shouldUseProxyEditMode(item)) {
+        if (shouldUseMask || shouldUseBoxes) {
+            item.editOperations = [{
+                kind: 'geometry_effect',
+                style: CensorState.style,
+                block_size: Number(CensorState.blockSize || 16),
+                blur_radius: Math.max(1, Math.round(CensorState.blockSize / 2)),
+                regions,
+            }];
+            item.currentDataUrl = null;
+            item.isProcessed = true;
+            if (item.id === CensorState.activeId) {
+                await loadCanvasImage(item.id);
+                reloadedActiveItem = true;
+            } else {
+                await renderProxyPreviewDataForItem(item);
+            }
+        } else {
+            item.editOperations = [];
+            item.previewDataUrl = null;
+            item.currentDataUrl = null;
+            item.isProcessed = false;
+            item.isModified = false;
+            if (item.id === CensorState.activeId) {
+                await loadCanvasImage(item.id);
+                reloadedActiveItem = true;
+            }
+        }
+    } else {
+        // Apply to a temporary canvas to generate DataURL
+        const img = await loadImage(item.originalUrl);
+        const cvs = document.createElement('canvas');
+        cvs.width = img.width;
+        cvs.height = img.height;
+        const ctx = cvs.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+
+        if (shouldUseMask) {
+            const maskOperation = createMaskEffectOperation(combinedMaskSource);
+            await applyMaskOperationToCanvas(cvs, img, maskOperation, 1, 1);
+        }
+        if (shouldUseBoxes) {
+            applyBoxRegionsToCanvas(cvs, img, boxRegions);
+        }
+
+        if (shouldUseMask || shouldUseBoxes) {
+            item.currentDataUrl = cvs.toDataURL('image/png');
+            item.isProcessed = true;
+        } else {
+            item.currentDataUrl = null;
+            item.isProcessed = false;
+        }
+        item.previewDataUrl = null;
+    }
+
+    return { reloadedActiveItem, shouldUseMask, shouldUseBoxes };
+}
+
 async function runDetectionForImage(item, silent = false, executionPlan = null) {
     try {
         let reloadedActiveItem = false;
@@ -4224,71 +4322,11 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
             );
         }
 
-        const { maskRegions, boxRegions } = splitDetectionGeometry(regions);
-        const combinedMaskSource = {
-            mask: useBoxShape ? null : (data.combined_mask || null),
-            mask_ref: useBoxShape ? null : (data.combined_mask_ref || null),
-            mask_bounds: (!useBoxShape && Array.isArray(data.combined_mask_bounds)) ? cloneNumberArray(data.combined_mask_bounds) : null,
-            image_width: data.image_width,
-            image_height: data.image_height,
-        };
-        const shouldUseMask = Boolean(combinedMaskSource.mask || combinedMaskSource.mask_ref) && maskRegions.length > 0;
-        const shouldUseBoxes = boxRegions.length > 0;
-
-        if (shouldUseProxyEditMode(item)) {
-            if (shouldUseMask || shouldUseBoxes) {
-                item.editOperations = [{
-                    kind: 'geometry_effect',
-                    style: CensorState.style,
-                    block_size: Number(CensorState.blockSize || 16),
-                    blur_radius: Math.max(1, Math.round(CensorState.blockSize / 2)),
-                    regions,
-                }];
-                item.currentDataUrl = null;
-                item.isProcessed = true;
-                if (item.id === CensorState.activeId) {
-                    await loadCanvasImage(item.id);
-                    reloadedActiveItem = true;
-                } else {
-                    await renderProxyPreviewDataForItem(item);
-                }
-            } else {
-                item.editOperations = [];
-                item.previewDataUrl = null;
-                item.currentDataUrl = null;
-                item.isProcessed = false;
-                item.isModified = false;
-                if (item.id === CensorState.activeId) {
-                    await loadCanvasImage(item.id);
-                    reloadedActiveItem = true;
-                }
-            }
-        } else {
-            // Apply to a temporary canvas to generate DataURL
-            const img = await loadImage(item.originalUrl);
-            const cvs = document.createElement('canvas');
-            cvs.width = img.width;
-            cvs.height = img.height;
-            const ctx = cvs.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-
-            if (shouldUseMask) {
-                const maskOperation = createMaskEffectOperation(combinedMaskSource);
-                await applyMaskOperationToCanvas(cvs, img, maskOperation, 1, 1);
-            }
-            if (shouldUseBoxes) {
-                applyBoxRegionsToCanvas(cvs, img, boxRegions);
-            }
-
-            if (shouldUseMask || shouldUseBoxes) {
-                item.currentDataUrl = cvs.toDataURL('image/png');
-                item.isProcessed = true;
-            } else {
-                item.currentDataUrl = null;
-                item.isProcessed = false;
-            }
-            item.previewDataUrl = null;
-        }
+        // Bake the detected regions into the item. Extracted so the 审核 review
+        // conveyor can reuse the exact same baking for an approved region subset.
+        // The geometry flags come back so the toast below can describe what ran.
+        const bakeResult = await applyDetectedRegionsToItem(item, regions, data);
+        reloadedActiveItem = bakeResult.reloadedActiveItem;
 
         if (!silent && item.id === CensorState.activeId) {
             if (!reloadedActiveItem) {
@@ -4300,9 +4338,9 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
                     'info'
                 );
             } else {
-                const usedMask = shouldUseMask;
+                const usedMask = bakeResult.shouldUseMask;
                 window.App.showToast(
-                    usedMask && shouldUseBoxes
+                    usedMask && bakeResult.shouldUseBoxes
                         ? censorT('censor.autoCensorAppliedMixed', { count: regions.length }, 'Applied mixed auto-censor to {count} region(s)')
                         : (usedMask
                             ? censorT('censor.autoCensorAppliedMask', { count: regions.length }, 'Applied auto-censor mask to {count} matched region(s)')
@@ -5990,6 +6028,335 @@ function cleanupCensorViewFull() {
     const cursorOverlay = document.getElementById('cursor-overlay');
     if (cursorOverlay) {
         cursorOverlay.style.display = 'none';
+    }
+}
+
+// ============== 3-tab shell + 审核 review conveyor (Aurora Phase 3 Slice 2) ==============
+//
+// The review conveyor is an ADDITIVE guided mode: detect an image, review the
+// detected regions as a purple overlay + keep/exclude checklist, then Approve
+// (bakes the kept regions via applyDetectedRegionsToItem — the same path the
+// free-form auto-detect uses) and auto-advance. The free-form brush/detect flow
+// on the Brush tab is untouched.
+
+const CensorReviewState = {
+    regions: [],          // regions from the last review-detect for the active item
+    data: null,           // raw detect response (holds combined_mask for approve-all)
+    excluded: new Set(),  // region indices the user unchecked (keep uncensored)
+    detectedForId: null,  // which item id the current regions belong to
+    busy: false,
+};
+
+function initCensorTabs() {
+    document.querySelectorAll('.censor-tab[data-censor-tab]').forEach((tab) => {
+        tab.addEventListener('click', () => setCensorTab(tab.dataset.censorTab));
+    });
+}
+
+function setCensorTab(name) {
+    const target = ['brush', 'adjust', 'review'].includes(name) ? name : 'brush';
+    document.querySelectorAll('.censor-tab[data-censor-tab]').forEach((tab) => {
+        const on = tab.dataset.censorTab === target;
+        tab.classList.toggle('is-active', on);
+        tab.setAttribute('aria-selected', String(on));
+    });
+    document.querySelectorAll('.censor-tab-pane[data-censor-pane]').forEach((pane) => {
+        pane.classList.toggle('is-active', pane.dataset.censorPane === target);
+    });
+    if (target === 'review') {
+        updateCensorReviewPanel();
+    } else {
+        // The annotation overlay is a review-only affordance — never let it linger
+        // over the brush/adjust workflows.
+        clearCensorReviewOverlay();
+    }
+}
+
+function isCensorReviewActive() {
+    return Boolean(document.querySelector('.censor-tab[data-censor-tab="review"]')?.classList.contains('is-active'));
+}
+
+function getCensorReviewOrderedIds() {
+    return (CensorState.queue || []).map((i) => i.id);
+}
+
+function getCensorReviewOverlayCanvas() {
+    return document.getElementById('censor-review-overlay');
+}
+
+function clearCensorReviewOverlay() {
+    const overlay = getCensorReviewOverlayCanvas();
+    if (!overlay) return;
+    overlay.style.opacity = '0';
+    const ctx = overlay.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, overlay.width, overlay.height);
+}
+
+// Draw the detected regions onto the review overlay canvas (kept = purple = AI
+// output; excluded = dimmed dashed). The overlay shares the content canvas's
+// buffer + fitted size and lives inside the same transformed container, so the
+// boxes track the image under pan/zoom without extra math.
+function drawCensorReviewOverlay() {
+    const overlay = getCensorReviewOverlayCanvas();
+    const content = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
+    if (!overlay || !content || !content.width || !content.height) {
+        clearCensorReviewOverlay();
+        return;
+    }
+    overlay.width = content.width;
+    overlay.height = content.height;
+    fitCanvasToContainer(overlay, content.width, content.height);
+
+    const ctx = overlay.getContext('2d');
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    const lineW = Math.max(2, Math.round(Math.min(overlay.width, overlay.height) / 300));
+    const purple = getComputedStyle(document.documentElement).getPropertyValue('--purple').trim() || '#A78BFF';
+    // Region coords are in ORIGINAL image space; in proxy mode the content canvas
+    // is a downscaled proxy, so scale to it.
+    const scale = (CensorState.proxyEditMode && CensorState.originalLogicalWidth > 0)
+        ? overlay.width / CensorState.originalLogicalWidth
+        : 1;
+
+    CensorReviewState.regions.forEach((region, index) => {
+        const excluded = CensorReviewState.excluded.has(index);
+        ctx.lineWidth = lineW;
+        ctx.strokeStyle = excluded ? 'rgba(255,255,255,0.35)' : purple;
+        ctx.setLineDash(excluded ? [lineW * 3, lineW * 2] : []);
+        const poly = Array.isArray(region.polygon)
+            ? region.polygon.filter((p) => Array.isArray(p) && p.length >= 2)
+            : [];
+        if (poly.length >= 3) {
+            ctx.beginPath();
+            poly.forEach(([px, py], i) => {
+                const x = px * scale;
+                const y = py * scale;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            });
+            ctx.closePath();
+            ctx.stroke();
+        } else if (Array.isArray(region.box) && region.box.length === 4) {
+            const [x1, y1, x2, y2] = region.box.map((v) => v * scale);
+            ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+        }
+    });
+    ctx.setLineDash([]);
+    overlay.style.opacity = '1';
+}
+
+function getCensorReviewRegionLabel(region) {
+    const raw = region?.label || region?.class || region?.class_name || region?.name || 'region';
+    return String(raw).replace(/_/g, ' ');
+}
+
+function renderCensorReviewRegions() {
+    const host = document.getElementById('censor-review-regions');
+    if (!host) return;
+    while (host.firstChild) host.removeChild(host.firstChild);
+    const fresh = CensorReviewState.detectedForId === CensorState.activeId;
+    if (!fresh || CensorReviewState.regions.length === 0) return;
+
+    CensorReviewState.regions.forEach((region, index) => {
+        const row = document.createElement('label');
+        row.className = 'censor-review-region';
+        if (CensorReviewState.excluded.has(index)) row.classList.add('is-excluded');
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = !CensorReviewState.excluded.has(index);
+        cb.addEventListener('change', () => {
+            if (cb.checked) CensorReviewState.excluded.delete(index);
+            else CensorReviewState.excluded.add(index);
+            row.classList.toggle('is-excluded', !cb.checked);
+            drawCensorReviewOverlay();
+        });
+
+        const label = document.createElement('span');
+        label.className = 'censor-review-region-label';
+        label.textContent = getCensorReviewRegionLabel(region);
+
+        const conf = document.createElement('span');
+        conf.className = 'censor-review-region-conf';
+        conf.textContent = Math.round((Number(region.confidence) || 0) * 100) + '%';
+
+        row.append(cb, label, conf);
+        host.append(row);
+    });
+}
+
+function updateCensorReviewPanel() {
+    const ids = getCensorReviewOrderedIds();
+    const total = ids.length;
+    const idx = CensorState.activeId != null ? ids.indexOf(CensorState.activeId) : -1;
+    const hasActive = idx >= 0;
+
+    // Regions belong to a single item; drop them if the active item changed.
+    const fresh = CensorReviewState.detectedForId != null && CensorReviewState.detectedForId === CensorState.activeId;
+    if (!fresh && CensorReviewState.detectedForId != null && CensorReviewState.detectedForId !== CensorState.activeId) {
+        CensorReviewState.regions = [];
+        CensorReviewState.excluded = new Set();
+        CensorReviewState.data = null;
+        CensorReviewState.detectedForId = null;
+    }
+    const hasRegions = CensorReviewState.detectedForId === CensorState.activeId && CensorReviewState.regions.length > 0;
+
+    const progressEl = document.getElementById('censor-review-progress');
+    if (progressEl) {
+        progressEl.textContent = (total > 0 && hasActive)
+            ? censorT('censor.reviewProgress', { current: idx + 1, total }, 'Reviewing {current} / {total}')
+            : '— / —';
+    }
+
+    const prevBtn = document.getElementById('btn-review-prev');
+    const nextBtn = document.getElementById('btn-review-next');
+    const detectBtn = document.getElementById('btn-review-detect');
+    const approveBtn = document.getElementById('btn-review-approve');
+    const skipBtn = document.getElementById('btn-review-skip');
+    if (prevBtn) prevBtn.disabled = idx <= 0;
+    if (nextBtn) nextBtn.disabled = !hasActive || idx >= total - 1;
+    if (detectBtn) detectBtn.disabled = !hasActive || CensorReviewState.busy;
+    if (skipBtn) skipBtn.disabled = !hasActive || idx >= total - 1;
+    if (approveBtn) approveBtn.disabled = !hasActive || !hasRegions || CensorReviewState.busy;
+
+    const detectLabel = document.getElementById('censor-review-detect-label');
+    if (detectLabel) {
+        detectLabel.textContent = hasRegions
+            ? censorT('censor.reviewRedetect', null, 'Re-detect')
+            : censorT('censor.reviewDetect', null, 'Detect this image');
+    }
+
+    renderCensorReviewRegions();
+    if (isCensorReviewActive() && hasRegions) {
+        drawCensorReviewOverlay();
+    } else {
+        clearCensorReviewOverlay();
+    }
+
+    // Status line: only own the empty / detect-first cases; a fresh detect owns
+    // its own "N regions" / "none" message set in censorReviewDetect.
+    const statusEl = document.getElementById('censor-review-status');
+    if (statusEl && !CensorReviewState.busy) {
+        if (!hasActive) {
+            statusEl.textContent = total === 0
+                ? censorT('censor.reviewEmptyQueue', null, 'Queue is empty. Send images from the Gallery first.')
+                : '';
+        } else if (CensorReviewState.detectedForId !== CensorState.activeId) {
+            statusEl.textContent = censorT('censor.reviewDetectFirst', null, 'Detect first to review regions on this image.');
+        }
+    }
+}
+
+async function censorReviewDetect() {
+    const item = CensorState.queue.find((i) => i.id === CensorState.activeId);
+    if (!item || CensorReviewState.busy) return;
+    CensorReviewState.busy = true;
+    updateCensorReviewPanel();
+    const statusEl = document.getElementById('censor-review-status');
+    const setStatus = (msg) => { if (statusEl) statusEl.textContent = msg; };
+    setStatus(censorT('censor.processing', null, 'Processing...'));
+
+    try {
+        const plan = await resolveQuickAutoCensorExecutionPlan({ silent: false });
+        if (!plan?.ok) {
+            CensorReviewState.regions = [];
+            CensorReviewState.detectedForId = null;
+            setStatus(plan?.message || censorT('censor.detectFailed', null, 'Detection failed'));
+            return;
+        }
+        const detectBody = {
+            image_id: item.id,
+            model_path: plan.modelPath,
+            model_type: plan.modelType,
+            confidence_threshold: CensorState.confidence,
+            target_classes: plan.targetClasses,
+        };
+        if (plan.modelType === 'sam3') {
+            const customInput = document.getElementById('sam3-custom-prompt')?.value?.trim();
+            if (customInput) detectBody.text_prompts = customInput.split(',').map((s) => s.trim()).filter(Boolean);
+        }
+        const data = await window.App.API.post('/api/censor/detect', detectBody);
+        const useBoxShape = CensorState.maskShape === 'box';
+        const raw = [...(data.detections || [])].sort((a, b) => b.confidence - a.confidence);
+        const regions = useBoxShape ? raw.map(({ polygon, mask, ...rest }) => rest) : raw;
+
+        CensorReviewState.regions = regions;
+        CensorReviewState.data = data;
+        CensorReviewState.excluded = new Set();
+        CensorReviewState.detectedForId = item.id;
+
+        setStatus(regions.length === 0
+            ? censorT('censor.reviewNoRegions', null, 'No regions detected. Try a lower confidence or another model.')
+            : censorT('censor.reviewRegionsFound', { count: regions.length }, '{count} region(s) found — uncheck any to leave it uncensored'));
+    } catch (e) {
+        Logger.error(e);
+        CensorReviewState.regions = [];
+        CensorReviewState.detectedForId = null;
+        setStatus(formatUserError(e, censorT('censor.detectFailed', null, 'Detection failed')));
+    } finally {
+        CensorReviewState.busy = false;
+        updateCensorReviewPanel();
+    }
+}
+
+async function censorReviewApprove() {
+    const item = CensorState.queue.find((i) => i.id === CensorState.activeId);
+    if (!item || CensorReviewState.busy) return;
+    if (CensorReviewState.detectedForId !== item.id || CensorReviewState.regions.length === 0) return;
+    CensorReviewState.busy = true;
+    updateCensorReviewPanel();
+
+    try {
+        const kept = CensorReviewState.regions.filter((_, i) => !CensorReviewState.excluded.has(i));
+        const excludedAny = kept.length !== CensorReviewState.regions.length;
+        if (kept.length > 0) {
+            // The precise combined mask covers ALL detected regions, so only use
+            // it when nothing was excluded; otherwise censor the kept subset by
+            // its per-region boxes so excluded regions stay untouched.
+            const data = excludedAny
+                ? { ...CensorReviewState.data, combined_mask: null, combined_mask_ref: null, combined_mask_bounds: null }
+                : (CensorReviewState.data || {});
+            await applyDetectedRegionsToItem(item, kept, data);
+            item.isModified = true;
+            renderQueue();
+        }
+        const count = kept.length;
+        window.App.showToast(
+            count > 0
+                ? censorT('censor.reviewApproved', { count }, 'Approved {count} region(s) — moved to the next image')
+                : censorT('censor.reviewApprovedNone', null, 'Approved with nothing censored — moved on'),
+            'success'
+        );
+
+        CensorReviewState.regions = [];
+        CensorReviewState.excluded = new Set();
+        CensorReviewState.data = null;
+        CensorReviewState.detectedForId = null;
+        clearCensorReviewOverlay();
+        censorReviewGoTo(1, { atEndMessage: true });
+    } catch (e) {
+        Logger.error(e);
+        window.App.showToast(formatUserError(e, censorT('censor.detectFailed', null, 'Detection failed')), 'error');
+    } finally {
+        CensorReviewState.busy = false;
+        updateCensorReviewPanel();
+    }
+}
+
+// Advance/retreat through the queue. loadCanvasImage refreshes the review panel
+// from its RAF finalize hook once the new active id is committed.
+function censorReviewGoTo(delta, { atEndMessage = false } = {}) {
+    const ids = getCensorReviewOrderedIds();
+    if (ids.length === 0) return;
+    const idx = CensorState.activeId != null ? ids.indexOf(CensorState.activeId) : -1;
+    if (idx < 0) {
+        loadCanvasImage(ids[0]);
+        return;
+    }
+    const next = idx + delta;
+    if (next >= 0 && next < ids.length) {
+        loadCanvasImage(ids[next]);
+    } else if (atEndMessage && next >= ids.length) {
+        const statusEl = document.getElementById('censor-review-status');
+        if (statusEl) statusEl.textContent = censorT('censor.reviewAllDone', null, 'Queue fully reviewed — nothing left');
     }
 }
 

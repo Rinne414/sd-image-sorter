@@ -760,6 +760,156 @@
     display: none;
 }
 
+/* ==========================================================================
+   Aurora Phase 3 Slice 2 — Censor 3-tab shell (审核 / 调整 / 画笔) + review conveyor.
+   Brush pane is default-active so every manual + detect control stays visible
+   exactly as before. Panes toggle via .is-active; Save & Queue lives outside
+   the panes and is always shown. Colors follow the token contract: blue = next
+   action (Detect / Approve / active tab), purple = AI detections, pink = the
+   user's keep/exclude decision (the region checkboxes).
+   ========================================================================== */
+.censor-tab-bar {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 10px;
+    padding: 4px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.censor-tab {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 6px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-secondary, #9aa3b2);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.censor-tab:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary, #e8ebf0);
+}
+.censor-tab.is-active {
+    background: rgba(var(--blue-rgb), 0.14);
+    border-color: rgba(var(--blue-rgb), 0.42);
+    color: var(--blue);
+}
+.censor-tab-pane {
+    display: none;
+}
+.censor-tab-pane.is-active {
+    display: block;
+}
+
+/* Review conveyor pane */
+.censor-review {
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.03);
+}
+.censor-review-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+.censor-review-progress {
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary, #9aa3b2);
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(var(--blue-rgb), 0.10);
+    border: 1px solid rgba(var(--blue-rgb), 0.22);
+    white-space: nowrap;
+}
+.censor-review-hint {
+    margin: 0 0 10px;
+}
+.censor-review-navrow {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+.censor-review-navrow .btn {
+    flex: 1;
+}
+.censor-review-detect {
+    width: 100%;
+    margin-bottom: 8px;
+}
+.censor-review-status {
+    font-size: 12px;
+    color: var(--text-secondary, #9aa3b2);
+    margin-bottom: 8px;
+    min-height: 16px;
+}
+.censor-review-regions {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 220px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+}
+.censor-review-region {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(var(--purple-rgb), 0.28);
+    background: rgba(var(--purple-rgb), 0.06);
+    font-size: 12px;
+    cursor: pointer;
+    transition: opacity 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+.censor-review-region input[type="checkbox"] {
+    accent-color: var(--pink);
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+.censor-review-region.is-excluded {
+    opacity: 0.5;
+    border-color: rgba(255, 255, 255, 0.10);
+    background: rgba(255, 255, 255, 0.02);
+}
+.censor-review-region-label {
+    flex: 1;
+    text-transform: capitalize;
+    color: var(--text-primary, #e8ebf0);
+}
+.censor-review-region-conf {
+    color: var(--purple);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+.censor-review-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.censor-review-approve {
+    flex: 1;
+}
+.censor-review-empty {
+    font-size: 12px;
+    color: var(--text-muted, #6b7280);
+    text-align: center;
+    padding: 12px 8px;
+}
+
 .sidebar-flat-row,
 .censor-side-row {
     display: flex;

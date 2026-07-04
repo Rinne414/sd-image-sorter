@@ -2237,6 +2237,12 @@
                                 <canvas id="censor-canvas" style="position: absolute;"></canvas>
                                 <canvas id="censor-canvas-buffer"
                                     style="position: absolute; opacity: 0; pointer-events: none;"></canvas>
+                                <!-- Review-mode annotation layer (审核 conveyor). Sits inside
+                                     the same transformed container so it pans/zooms in lockstep
+                                     with the content canvases. Never saved: the save path reads
+                                     #censor-canvas only. Hidden unless review has drawn regions. -->
+                                <canvas id="censor-review-overlay"
+                                    style="position: absolute; opacity: 0; pointer-events: none; z-index: 20;"></canvas>
                             </div>
                             <!-- Overlays -->
                             <div id="censor-loading" class="censor-loading-v2" style="display: none;">
@@ -2292,6 +2298,23 @@
 
                     <!-- Right Sidebar (Settings & Tools) -->
                     <aside class="censor-sidebar-v2 right">
+                        <!-- 3-tab shell (审核 / 调整 / 画笔). Brush is default-active so all
+                             the manual + detect controls stay visible exactly as before;
+                             Adjust holds Filters; Review is the new detect→approve→next
+                             conveyor. Save & Queue stays below the tabs, always visible. -->
+                        <div class="censor-tab-bar" role="tablist" aria-label="Censor tools">
+                            <button type="button" class="censor-tab is-active" data-censor-tab="brush" role="tab" aria-selected="true">
+                                <span aria-hidden="true">🖌️</span> <span data-i18n="censor.tabBrush">Brush</span>
+                            </button>
+                            <button type="button" class="censor-tab" data-censor-tab="adjust" role="tab" aria-selected="false">
+                                <span aria-hidden="true">🎨</span> <span data-i18n="censor.tabAdjust">Adjust</span>
+                            </button>
+                            <button type="button" class="censor-tab" data-censor-tab="review" role="tab" aria-selected="false">
+                                <span aria-hidden="true">✅</span> <span data-i18n="censor.tabReview">Review</span>
+                            </button>
+                        </div>
+
+                        <div class="censor-tab-pane is-active" data-censor-pane="brush">
                         <div class="censor-side-card">
                             <div class="censor-side-card-header">
                                 <div>
@@ -2369,11 +2392,13 @@
                             <div id="censor-model-health" style="display:none"></div>
                             <div id="censor-simple-guide" style="display:none"></div>
                         </div>
+                        </div><!-- /brush pane -->
 
-                        <!-- NOISE-01: Photo Filters collapsed by default (8 sliders) to
-                             cut the censor sidebar's at-rest control count. The slider ids
-                             are unchanged, so censor-edit.js getElementById lookups still work. -->
-                        <details class="censor-side-card censor-side-card-collapsible">
+                        <div class="censor-tab-pane" data-censor-pane="adjust">
+                        <!-- Photo Filters. The Adjust tab now gates visibility, so the card
+                             opens by default within the tab. Slider ids are unchanged, so
+                             censor-edit.js getElementById lookups still work. -->
+                        <details class="censor-side-card censor-side-card-collapsible" open>
                             <summary class="censor-side-card-header censor-side-card-summary">
                                 <div>
                                     <h4 class="censor-side-card-title">🎨 <span data-i18n="censor.filters">Filters</span></h4>
@@ -2437,6 +2462,33 @@
                                 <div id="filter-color-palette" class="modal-color-palette"></div>
                             </div>
                         </details>
+                        </div><!-- /adjust pane -->
+
+                        <div class="censor-tab-pane" data-censor-pane="review">
+                            <div class="censor-review" id="censor-review-panel">
+                                <div class="censor-review-head">
+                                    <h4 class="censor-side-card-title">✅ <span data-i18n="censor.reviewTitle">Review conveyor</span></h4>
+                                    <span class="censor-review-progress" id="censor-review-progress">— / —</span>
+                                </div>
+                                <p class="helper-text censor-review-hint" data-i18n="censor.reviewHint">Detect → review → approve → next</p>
+                                <div class="censor-review-navrow">
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-review-prev">◀ <span data-i18n="censor.reviewPrev">Prev</span></button>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-review-next"><span data-i18n="censor.reviewNext">Next</span> ▶</button>
+                                </div>
+                                <button type="button" class="btn btn-primary btn-small censor-review-detect" id="btn-review-detect">
+                                    🎯 <span id="censor-review-detect-label" data-i18n="censor.reviewDetect">Detect this image</span>
+                                </button>
+                                <div class="censor-review-status" id="censor-review-status" aria-live="polite"></div>
+                                <div class="censor-review-regions" id="censor-review-regions"></div>
+                                <div class="censor-review-actions">
+                                    <button type="button" class="btn btn-primary censor-review-approve" id="btn-review-approve" disabled>
+                                        ✅ <span data-i18n="censor.reviewApprove">Approve &amp; Next</span>
+                                    </button>
+                                    <button type="button" class="btn btn-secondary btn-small" id="btn-review-skip"><span data-i18n="censor.reviewSkip">Skip</span></button>
+                                </div>
+                                <small class="helper-text" data-i18n="censor.reviewNote">Approve bakes the checked regions and moves to the next image. For fine touch-ups, use the Brush tab.</small>
+                            </div>
+                        </div><!-- /review pane -->
 
                         <div class="sidebar-bottom-actions censor-side-card censor-save-card">
                             <div class="censor-side-card-header">
