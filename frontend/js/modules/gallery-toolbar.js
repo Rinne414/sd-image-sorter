@@ -15,8 +15,8 @@
     const CACHE_STATS_TTL_MS = 60000;
     const QUEUE_STATS_TTL_MS = 15000;
 
-    // key:value prefixes → structured filters. Chinese aliases included so the
-    // zh-CN placeholder examples work as typed.
+    // Legacy fallback aliases (used only if modules/gallery-search-query.js
+    // failed to load — the full grammar lives there).
     const KEY_ALIASES = {
         tag: 'tag', '标签': 'tag',
         checkpoint: 'checkpoint', model: 'checkpoint', '模型': 'checkpoint',
@@ -24,10 +24,40 @@
         seed: 'seed',
     };
 
+    // Search v2: FilterStore scalar fields the box may write, with the value
+    // that means "not filtered". The box only ever clears fields IT set on a
+    // previous apply (boxOwnedScalars) — modal/chip-set values are untouched.
+    const SCALAR_DEFAULTS = {
+        seed: null,
+        minAesthetic: null, maxAesthetic: null, aestheticUnscored: null,
+        minUserRating: null,
+        minWidth: null, maxWidth: null, minHeight: null, maxHeight: null,
+        aspectRatio: '',
+        brightnessMin: null, brightnessMax: null,
+        minSaturation: null, maxSaturation: null,
+        colorTemperature: '', brightnessDistribution: '',
+        hasMetadata: null, noCaption: null,
+        folder: null, artist: null,
+    };
+
+    const SUGGEST_DEBOUNCE_MS = 200;
+    const SUGGEST_LIMIT = 12;
+    const LIBRARY_ENDPOINTS = {
+        tags: '/api/tags/library',
+        checkpoints: '/api/tags/checkpoints/library',
+        loras: '/api/tags/loras/library',
+        prompts: '/api/tags/prompts/library',
+    };
+
     let searchTimer = null;
     let armedTagIds = null;
     let cacheStats = { at: 0, text: '' };
     let queueStats = { at: 0, text: '', unsupported: false };
+    let boxOwnedScalars = new Set();
+    let boxOwnedNarrows = new Set();
+    let suggestTimer = null;
+    let suggestAbort = null;
+    let suggestState = { items: [], active: -1, ctx: null };
 
     function t(key, fallback) {
         const v = window.I18n && typeof window.I18n.t === 'function' ? window.I18n.t(key) : null;
@@ -39,28 +69,35 @@
     }
 
     // ------------------------------------------------------------------
-    // Search box: parse `tag:x seed:314 free text` into filter fields
+    // Search box: parse the query language into filter fields.
+    // Grammar + parsing live in modules/gallery-search-query.js; this side
+    // owns applying the result onto FilterStore, the "understood as" chips,
+    // the autocomplete dropdown, and the syntax-help modal.
     // ------------------------------------------------------------------
 
     function parseQuery(raw) {
-        const result = { tags: [], checkpoints: [], loras: [], seed: null, freeText: [] };
+        if (window.GallerySearchQuery) return window.GallerySearchQuery.parse(raw);
+        // Legacy minimal fallback (tag/checkpoint/lora/seed only).
+        const result = {
+            tags: [], excludeTags: [], checkpoints: [], excludeCheckpoints: [],
+            loras: [], excludeLoras: [], prompts: [], excludePrompts: [],
+            generators: [], excludeGenerators: [], ratings: [], excludeRatings: [],
+            excludeColors: [], scalars: {}, freeText: [], parts: [], warnings: [],
+        };
         const tokens = String(raw || '').match(/(?:[^\s"]+|"[^"]*")+/g) || [];
         tokens.forEach((token) => {
             const sep = token.indexOf(':');
             if (sep > 0) {
-                const rawKey = token.slice(0, sep).toLowerCase();
-                const key = KEY_ALIASES[rawKey] || KEY_ALIASES[token.slice(0, sep)];
-                let value = token.slice(sep + 1).replace(/^"|"$/g, '').trim();
+                const key = KEY_ALIASES[token.slice(0, sep).toLowerCase()] || KEY_ALIASES[token.slice(0, sep)];
+                const value = token.slice(sep + 1).replace(/^"|"$/g, '').trim();
                 if (key && value) {
-                    if (key === 'tag') result.tags.push(value);
-                    else if (key === 'checkpoint') result.checkpoints.push(value);
-                    else if (key === 'lora') result.loras.push(value);
-                    else if (key === 'seed') {
+                    if (key === 'tag') { result.tags.push(value); return; }
+                    if (key === 'checkpoint') { result.checkpoints.push(value); return; }
+                    if (key === 'lora') { result.loras.push(value); return; }
+                    if (key === 'seed') {
                         const n = Number(value);
-                        if (Number.isFinite(n)) result.seed = Math.trunc(n);
-                        else result.freeText.push(token);
+                        if (Number.isFinite(n)) { result.scalars.seed = Math.trunc(n); return; }
                     }
-                    return;
                 }
             }
             result.freeText.push(token.replace(/^"|"$/g, ''));
@@ -73,31 +110,67 @@
         if (!a || typeof a.updateFilters !== 'function') return;
         const parsed = parseQuery(raw);
         const added = [];
+        const narrowsTouched = [];
 
         a.updateFilters((filters) => {
-            // Structured tokens ADD to the existing filters (removal happens via
-            // the sidebar summary ✕ / Clear all, same as modal-added values).
-            parsed.tags.forEach((tag) => {
-                if (!filters.tags.includes(tag)) {
-                    filters.tags.push(tag);
-                    added.push(`tag:${tag}`);
+            // List tokens ADD to the existing filters (removal happens via the
+            // sidebar summary ✕ / Clear all, same as modal-added values).
+            const addUnique = (values, field, label) => {
+                (values || []).forEach((value) => {
+                    if (!filters[field].includes(value)) {
+                        filters[field].push(value);
+                        added.push(`${label}:${value}`);
+                    }
+                });
+            };
+            addUnique(parsed.tags, 'tags', 'tag');
+            addUnique(parsed.excludeTags, 'excludeTags', '-tag');
+            addUnique(parsed.checkpoints, 'checkpoints', 'checkpoint');
+            addUnique(parsed.excludeCheckpoints, 'excludeCheckpoints', '-checkpoint');
+            addUnique(parsed.loras, 'loras', 'lora');
+            addUnique(parsed.excludeLoras, 'excludeLoras', '-lora');
+            addUnique(parsed.prompts, 'prompts', 'prompt');
+            addUnique(parsed.excludePrompts, 'excludePrompts', '-prompt');
+            addUnique(parsed.excludeGenerators, 'excludeGenerators', '-generator');
+            addUnique(parsed.excludeRatings, 'excludeRatings', '-rating');
+            addUnique(parsed.excludeColors, 'excludeColors', '-color');
+
+            // generator:/rating: NARROW their default-everything lists while the
+            // token is present; removing the token restores the default set.
+            const applyNarrow = (values, field) => {
+                const unique = [...new Set(values || [])];
+                if (unique.length) {
+                    filters[field] = unique;
+                    boxOwnedNarrows.add(field);
+                    narrowsTouched.push(field);
+                } else if (boxOwnedNarrows.has(field)) {
+                    const defaults = typeof a.createDefaultFilterState === 'function'
+                        ? a.createDefaultFilterState() : null;
+                    if (defaults && Array.isArray(defaults[field])) {
+                        filters[field] = defaults[field];
+                    }
+                    boxOwnedNarrows.delete(field);
+                    narrowsTouched.push(field);
+                }
+            };
+            applyNarrow(parsed.generators, 'generators');
+            applyNarrow(parsed.ratings, 'ratings');
+
+            // Scalars are box-owned: present → write; absent but previously
+            // written by the box → reset to the not-filtered default.
+            const nextOwned = new Set();
+            Object.keys(SCALAR_DEFAULTS).forEach((field) => {
+                if (Object.prototype.hasOwnProperty.call(parsed.scalars, field)) {
+                    filters[field] = parsed.scalars[field];
+                    nextOwned.add(field);
+                } else if (boxOwnedScalars.has(field)) {
+                    filters[field] = SCALAR_DEFAULTS[field];
                 }
             });
-            parsed.checkpoints.forEach((ckpt) => {
-                if (!filters.checkpoints.includes(ckpt)) {
-                    filters.checkpoints.push(ckpt);
-                    added.push(`checkpoint:${ckpt}`);
-                }
-            });
-            parsed.loras.forEach((lora) => {
-                if (!filters.loras.includes(lora)) {
-                    filters.loras.push(lora);
-                    added.push(`lora:${lora}`);
-                }
-            });
-            // Free text + seed are declarative: the box owns them.
+            boxOwnedScalars = nextOwned;
+
+            // Free text is declarative: the box owns it.
             filters.search = parsed.freeText.join(' ').trim();
-            filters.seed = parsed.seed;
         });
 
         if (added.length && typeof a.showToast === 'function') {
@@ -106,12 +179,278 @@
                 'info'
             );
         }
+        if (narrowsTouched.includes('generators') && typeof a.syncGenTabsWithFilters === 'function') {
+            a.syncGenTabsWithFilters();
+        }
         if (typeof a.updateFilterSummary === 'function') a.updateFilterSummary();
         if (typeof a.loadImages === 'function') a.loadImages();
+        syncFromFilters(a.AppState ? a.AppState.filters : null);
+    }
+
+    // ------------------------------------------------------------------
+    // "Understood as" preview chips (live while typing)
+    // ------------------------------------------------------------------
+
+    function keyLabel(key) {
+        if (!key) return '';
+        const negated = key.startsWith('-');
+        const base = negated ? key.slice(1) : key;
+        const label = t(`searchKey.${base}`, base);
+        return negated ? `${t('searchPreview.exclude', 'exclude')} ${label}` : label;
+    }
+
+    function renderSearchPreview(raw, parsed) {
+        const host = document.getElementById('gallery-search-preview');
+        if (!host) return;
+        const hasQuery = String(raw || '').trim().length > 0;
+        host.textContent = '';
+        if (!hasQuery) {
+            host.hidden = true;
+            return;
+        }
+
+        const intro = document.createElement('span');
+        intro.className = 'gsq-preview-label';
+        intro.textContent = t('searchPreview.understood', 'Understood as:');
+        host.appendChild(intro);
+
+        (parsed.parts || []).forEach((part) => {
+            if (part.kind === 'free') return; // merged into one chip below
+            const chip = document.createElement('span');
+            if (part.kind === 'warn') {
+                chip.className = 'gsq-chip gsq-chip-warn';
+                const reason = t(part.reasonKey, 'unrecognized value');
+                chip.textContent = `⚠ ${part.value} — ${reason}${part.hint ? ` (${part.hint})` : ''}`;
+            } else {
+                chip.className = 'gsq-chip';
+                chip.textContent = part.op
+                    ? `${keyLabel(part.key)} ${part.op} ${part.value}`
+                    : `${keyLabel(part.key)}: ${part.value}`;
+            }
+            host.appendChild(chip);
+        });
+
+        const free = (parsed.freeText || []).join(' ').trim();
+        if (free) {
+            const chip = document.createElement('span');
+            chip.className = 'gsq-chip gsq-chip-free';
+            chip.textContent = `${t('searchPreview.free', 'free text')}: ${free}`;
+            host.appendChild(chip);
+        }
+
+        host.hidden = host.childElementCount <= 1;
     }
 
     function syncClearButton(input, clearBtn) {
         if (clearBtn) clearBtn.hidden = !input.value;
+    }
+
+    // ------------------------------------------------------------------
+    // Autocomplete: fuzzy value suggestions for the caret token.
+    // tag/checkpoint/lora/prompt values come from the library endpoints
+    // (?q= does normalized substring matching, Danbooru-search style, over
+    // the user's OWN library, with usage counts); enum keys suggest locally.
+    // ------------------------------------------------------------------
+
+    function suggestHost() {
+        return document.getElementById('gallery-search-suggest');
+    }
+
+    function hideSuggest() {
+        const host = suggestHost();
+        if (host) host.hidden = true;
+        const input = document.getElementById('gallery-search-input');
+        if (input) input.setAttribute('aria-expanded', 'false');
+        suggestState = { items: [], active: -1, ctx: null };
+        if (suggestAbort) { suggestAbort.abort(); suggestAbort = null; }
+        if (suggestTimer) { clearTimeout(suggestTimer); suggestTimer = null; }
+    }
+
+    function isSuggestOpen() {
+        const host = suggestHost();
+        return !!host && !host.hidden && suggestState.items.length > 0;
+    }
+
+    function normalizeLibraryItems(data) {
+        const array = data && (data.tags || data.checkpoints || data.loras || data.prompts || data.items);
+        if (!Array.isArray(array)) return [];
+        return array.map((item) => {
+            if (typeof item === 'string') return { value: item, count: null };
+            const value = item.tag ?? item.checkpoint ?? item.lora ?? item.prompt
+                ?? item.token ?? item.name ?? item.value ?? null;
+            const count = Number.isFinite(Number(item.count)) ? Number(item.count) : null;
+            return value != null ? { value: String(value), count } : null;
+        }).filter(Boolean);
+    }
+
+    function renderSuggest(items, ctx) {
+        const host = suggestHost();
+        const input = document.getElementById('gallery-search-input');
+        if (!host || !input) return;
+        host.textContent = '';
+        suggestState = { items, active: items.length ? 0 : -1, ctx };
+        if (!items.length) {
+            host.hidden = true;
+            input.setAttribute('aria-expanded', 'false');
+            return;
+        }
+        items.forEach((item, index) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'gsq-suggest-item' + (index === suggestState.active ? ' is-active' : '');
+            btn.setAttribute('role', 'option');
+            btn.dataset.value = item.value;
+            const label = document.createElement('span');
+            label.className = 'gsq-suggest-value';
+            label.textContent = item.value;
+            btn.appendChild(label);
+            if (item.count != null) {
+                const count = document.createElement('span');
+                count.className = 'gsq-suggest-count';
+                count.textContent = String(item.count);
+                btn.appendChild(count);
+            }
+            // mousedown (not click): runs before the input loses focus.
+            btn.addEventListener('mousedown', (event) => {
+                event.preventDefault();
+                acceptSuggestion(item.value);
+            });
+            host.appendChild(btn);
+        });
+        host.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+    }
+
+    function moveSuggestActive(delta) {
+        if (!suggestState.items.length) return;
+        const count = suggestState.items.length;
+        suggestState.active = ((suggestState.active + delta) % count + count) % count;
+        const host = suggestHost();
+        if (!host) return;
+        Array.from(host.children).forEach((child, index) => {
+            child.classList.toggle('is-active', index === suggestState.active);
+        });
+    }
+
+    function acceptSuggestion(value) {
+        const input = document.getElementById('gallery-search-input');
+        const ctx = suggestState.ctx;
+        if (!input || !ctx) return;
+        const text = input.value;
+        const needsQuotes = /\s/.test(value);
+        const inserted = needsQuotes ? `"${value}"` : value;
+        const next = text.slice(0, ctx.valueStart) + inserted + text.slice(ctx.tokenEnd);
+        input.value = next + (next.endsWith(' ') ? '' : ' ');
+        const caret = ctx.valueStart + inserted.length + 1;
+        input.focus();
+        try { input.setSelectionRange(caret, caret); } catch (e) { /* unsupported */ }
+        hideSuggest();
+        // Re-run the normal pipeline (preview + debounced apply + suggest).
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    async function refreshSuggest() {
+        const input = document.getElementById('gallery-search-input');
+        if (!input || !window.GallerySearchQuery) return;
+        if (document.activeElement !== input) { hideSuggest(); return; }
+        const ctx = window.GallerySearchQuery.suggestionContext(input.value, input.selectionStart);
+        if (!ctx) { hideSuggest(); return; }
+
+        if (ctx.source === 'enum') {
+            const prefix = ctx.prefix.toLowerCase();
+            const items = ctx.values
+                .filter((value) => !prefix || value.toLowerCase().startsWith(prefix))
+                .slice(0, SUGGEST_LIMIT)
+                .map((value) => ({ value, count: null }));
+            renderSuggest(items, ctx);
+            return;
+        }
+
+        const endpoint = LIBRARY_ENDPOINTS[ctx.endpointKey];
+        if (!endpoint) { hideSuggest(); return; }
+        if (suggestAbort) suggestAbort.abort();
+        suggestAbort = new AbortController();
+        try {
+            const resp = await fetch(
+                `${endpoint}?q=${encodeURIComponent(ctx.prefix)}&limit=${SUGGEST_LIMIT}`,
+                { signal: suggestAbort.signal }
+            );
+            if (!resp.ok) { hideSuggest(); return; }
+            const data = await resp.json();
+            // The caret may have moved while the request was in flight.
+            const fresh = window.GallerySearchQuery.suggestionContext(input.value, input.selectionStart);
+            if (!fresh || fresh.prefix !== ctx.prefix || fresh.key !== ctx.key) return;
+            renderSuggest(normalizeLibraryItems(data).slice(0, SUGGEST_LIMIT), fresh);
+        } catch (e) {
+            if (e && e.name !== 'AbortError') hideSuggest();
+        }
+    }
+
+    function scheduleSuggest() {
+        if (suggestTimer) clearTimeout(suggestTimer);
+        suggestTimer = setTimeout(() => {
+            suggestTimer = null;
+            refreshSuggest();
+        }, SUGGEST_DEBOUNCE_MS);
+    }
+
+    // ------------------------------------------------------------------
+    // Syntax help modal (rows rendered from the parser's own table)
+    // ------------------------------------------------------------------
+
+    let helpRendered = false;
+
+    function renderSearchHelp() {
+        if (helpRendered) return;
+        const host = document.getElementById('search-help-rows');
+        if (!host || !window.GallerySearchQuery) return;
+        host.textContent = '';
+        window.GallerySearchQuery.SYNTAX_ROWS.forEach((row) => {
+            const line = document.createElement('div');
+            line.className = 'search-help-row';
+            const syntax = document.createElement('code');
+            syntax.className = 'search-help-syntax';
+            syntax.textContent = row.syntax;
+            const example = document.createElement('code');
+            example.className = 'search-help-example';
+            example.textContent = row.example;
+            const desc = document.createElement('span');
+            desc.className = 'search-help-desc';
+            desc.textContent = t(row.descKey, row.descKey);
+            line.append(syntax, example, desc);
+            host.appendChild(line);
+        });
+        helpRendered = true;
+    }
+
+    function wireSearchSideButtons() {
+        const helpBtn = document.getElementById('btn-search-help');
+        if (helpBtn) {
+            helpBtn.addEventListener('click', () => {
+                const a = app();
+                renderSearchHelp();
+                if (a && typeof a.showModal === 'function') a.showModal('search-help-modal');
+            });
+        }
+        const closeBtn = document.getElementById('btn-close-search-help');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                const a = app();
+                if (a && typeof a.hideModal === 'function') a.hideModal('search-help-modal');
+            });
+        }
+        // Language switch re-translates static labels but the help rows are
+        // JS-rendered — drop the cache so the next open re-renders.
+        window.addEventListener('languagechange', () => { helpRendered = false; });
+        document.addEventListener('i18n:changed', () => { helpRendered = false; });
+
+        const filterBtn = document.getElementById('btn-toolbar-filters');
+        if (filterBtn) {
+            filterBtn.addEventListener('click', () => {
+                const a = app();
+                if (a && typeof a.openFilterModal === 'function') a.openFilterModal();
+            });
+        }
     }
 
     function wireSearch() {
@@ -120,24 +459,55 @@
         if (!input) return;
 
         input.addEventListener('keydown', (event) => {
+            if (isSuggestOpen()) {
+                if (event.key === 'ArrowDown') { event.preventDefault(); moveSuggestActive(1); return; }
+                if (event.key === 'ArrowUp') { event.preventDefault(); moveSuggestActive(-1); return; }
+                if (event.key === 'Tab' || (event.key === 'Enter' && suggestState.active >= 0)) {
+                    event.preventDefault();
+                    acceptSuggestion(suggestState.items[Math.max(0, suggestState.active)].value);
+                    return;
+                }
+                if (event.key === 'Escape') {
+                    // Only closes the dropdown — entry-page.js defers to us via
+                    // its OVERLAY_SELECTOR check on #gallery-search-suggest.
+                    event.preventDefault();
+                    event.stopPropagation();
+                    hideSuggest();
+                    return;
+                }
+            }
             if (event.key === 'Enter') {
                 event.preventDefault();
                 if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
+                hideSuggest();
                 applySearch(input.value);
             }
         });
         input.addEventListener('input', () => {
             syncClearButton(input, clearBtn);
+            renderSearchPreview(input.value, parseQuery(input.value));
+            scheduleSuggest();
             if (searchTimer) clearTimeout(searchTimer);
             searchTimer = setTimeout(() => {
                 searchTimer = null;
                 applySearch(input.value);
             }, SEARCH_DEBOUNCE_MS);
         });
+        // Caret moves without input (click / arrow keys) re-anchor suggestions.
+        input.addEventListener('click', scheduleSuggest);
+        input.addEventListener('keyup', (event) => {
+            if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') scheduleSuggest();
+        });
+        input.addEventListener('blur', () => {
+            // mousedown-accept runs before blur; a plain blur just closes.
+            setTimeout(() => hideSuggest(), 0);
+        });
         if (clearBtn) {
             clearBtn.addEventListener('click', () => {
                 input.value = '';
                 syncClearButton(input, clearBtn);
+                renderSearchPreview('', parseQuery(''));
+                hideSuggest();
                 applySearch('');
                 input.focus();
             });
@@ -378,6 +748,7 @@
 
     function boot() {
         wireSearch();
+        wireSearchSideButtons();
         wireChips();
         wireMoreMenu();
         wireTagSelected();

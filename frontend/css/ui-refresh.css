@@ -10293,3 +10293,195 @@ html.lang-zh #view-censor .queue-action-btn span {
     box-shadow: var(--focus-ring);
     border-radius: 6px;
 }
+
+/* ==========================================================================
+   Search v2 (owner 2026-07-05) — query language UI:
+   side buttons (? help + filter modal), "understood as" preview chips,
+   fuzzy value suggestions, and the syntax-help modal rows.
+   ========================================================================== */
+.gallery-search-box {
+    position: relative;
+}
+
+.gallery-search-btns {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.gallery-search-side-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border-color);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.gallery-search-side-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: rgba(var(--accent-primary-rgb), 0.4);
+}
+
+.gallery-search-side-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+}
+
+/* --- suggestions dropdown --- */
+.gallery-search-suggest {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 320;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    background: var(--surface-elevated, rgba(24, 27, 35, 0.97));
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+.gallery-search-suggest[hidden] {
+    display: none;
+}
+
+.gsq-suggest-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding: 7px 10px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.gsq-suggest-item:hover,
+.gsq-suggest-item.is-active {
+    background: rgba(var(--accent-primary-rgb), 0.16);
+}
+
+.gsq-suggest-value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.gsq-suggest-count {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* --- "understood as" preview chips --- */
+.gallery-search-preview {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 6px 2px 10px;
+}
+
+.gallery-search-preview[hidden] {
+    display: none;
+}
+
+.gsq-preview-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.gsq-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(var(--accent-primary-rgb), 0.35);
+    background: rgba(var(--accent-primary-rgb), 0.10);
+    color: var(--text-primary);
+    font-size: 11px;
+    line-height: 1.6;
+    white-space: nowrap;
+    max-width: 340px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.gsq-chip-free {
+    border-color: var(--glass-border);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+}
+
+.gsq-chip-warn {
+    border-color: rgba(255, 196, 107, 0.55);
+    background: rgba(255, 196, 107, 0.12);
+    color: var(--warning, #FFC46B);
+}
+
+/* --- syntax help modal --- */
+.search-help-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 14px;
+    max-height: min(56vh, 640px);
+    overflow-y: auto;
+}
+
+.search-help-row {
+    display: grid;
+    grid-template-columns: 220px 230px 1fr;
+    align-items: baseline;
+    gap: 14px;
+    padding: 7px 10px;
+    border-radius: 8px;
+}
+
+.search-help-row:nth-child(odd) {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.search-help-syntax,
+.search-help-example {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.search-help-syntax {
+    color: var(--accent-primary);
+}
+
+.search-help-example {
+    color: var(--text-secondary);
+}
+
+.search-help-desc {
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}

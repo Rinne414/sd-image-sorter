@@ -359,6 +359,7 @@
         // same-node capture listeners is not.
         '#gallery-action-more-menu:not([hidden])',
         '#nav-tools-menu:not([hidden])',
+        '#gallery-search-suggest:not([hidden])',
         '#btn-toggle-select[data-state="selecting"]',
     ].join(', ');
 

@@ -809,12 +809,32 @@
                         <div class="gallery-search-box">
                             <span class="gallery-search-icon" aria-hidden="true">⌕</span>
                             <input type="text" id="gallery-search-input" class="input-field gallery-search-input"
-                                   placeholder="tag:silver_hair seed:314159 free text…"
+                                   placeholder="tag:silver_hair score>=7 -tag:blurry free text…"
                                    data-i18n-placeholder="gallerySearch.placeholder"
-                                   aria-label="Search gallery (supports key:value)" data-i18n-aria="gallerySearch.aria">
+                                   aria-label="Search gallery (supports key:value)" data-i18n-aria="gallerySearch.aria"
+                                   autocomplete="off" spellcheck="false"
+                                   role="combobox" aria-expanded="false" aria-controls="gallery-search-suggest">
                             <button type="button" id="gallery-search-clear" class="gallery-search-clear" hidden
                                     title="Clear search" aria-label="Clear search"
                                     data-i18n-title="gallerySearch.clear" data-i18n-aria="gallerySearch.clear">✕</button>
+                            <!-- Search v2: fuzzy value suggestions (tag/checkpoint/lora/prompt
+                                 from the library endpoints, enum keys locally). -->
+                            <div class="gallery-search-suggest" id="gallery-search-suggest" hidden role="listbox"
+                                 aria-label="Search suggestions" data-i18n-aria="gallerySearch.suggestAria"></div>
+                        </div>
+                        <!-- Search v2: syntax help + filter modal shortcut live NEXT TO the
+                             box so neither requires the sidebar. -->
+                        <div class="gallery-search-btns">
+                            <button type="button" id="btn-search-help" class="gallery-search-side-btn"
+                                    title="Search syntax help" aria-label="Search syntax help"
+                                    data-i18n-title="gallerySearch.helpTooltip" data-i18n-aria="gallerySearch.helpTooltip">
+                                <span aria-hidden="true">?</span>
+                            </button>
+                            <button type="button" id="btn-toolbar-filters" class="gallery-search-side-btn"
+                                    title="Open the filter editor" aria-label="Open the filter editor"
+                                    data-i18n-title="gallery.editFiltersTooltip" data-i18n-aria="gallery.editFiltersTooltip">
+                                <span aria-hidden="true">⚙</span>
+                            </button>
                         </div>
                         <div class="gallery-quick-chips" role="group" aria-label="Quick filters" data-i18n-aria="gallerySearch.quickFilters">
                             <button type="button" class="gallery-chip" id="chip-has-metadata" aria-pressed="false">
@@ -867,6 +887,9 @@
                             </button>
                         </div>
                     </div>
+                    <!-- Search v2: live "understood as" chips — what the query parsed
+                         into, plus ⚠ chips for known keys with bad values. -->
+                    <div class="gallery-search-preview" id="gallery-search-preview" hidden aria-live="polite"></div>
                     <div id="color-backfill-banner" class="color-backfill-banner" hidden role="status" aria-live="polite">
                         <div class="color-backfill-banner-icon" aria-hidden="true">🎨</div>
                         <div class="color-backfill-banner-copy">
@@ -5670,6 +5693,19 @@
 
 
         <!-- Unified Filter Modal -->
+        <!-- Search v2 syntax reference — content rows are rendered by
+             modules/gallery-toolbar.js from GallerySearchQuery.SYNTAX_ROWS
+             so the doc can never drift from the parser. -->
+        <div class="modal" id="search-help-modal" role="dialog" aria-modal="true" aria-labelledby="search-help-title">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-large search-help-content">
+                <button class="modal-close" id="btn-close-search-help" aria-label="Close" data-i18n-aria="common.close">✕</button>
+                <h3 id="search-help-title" data-i18n="searchHelp.title">Search syntax</h3>
+                <p class="modal-description" data-i18n="searchHelp.intro">Combine any number of conditions with spaces. key:value adds a filter; anything else searches filename / checkpoint / prompt text. Use quotes for values with spaces, - to exclude, and >= <= for numbers. The line under the box always shows how your query was understood.</p>
+                <div id="search-help-rows" class="search-help-rows"></div>
+            </div>
+        </div>
+
         <div class="modal" id="filter-modal" role="dialog" aria-modal="true" aria-labelledby="filter-modal-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-large filter-modal-shell">
@@ -6425,6 +6461,7 @@
     <script src="/static/js/entry-page.js"></script>
     <script src="/static/js/modules/nav-rail.js"></script>
     <script src="/static/js/modules/gallery-selection-badges.js"></script>
+    <script src="/static/js/modules/gallery-search-query.js"></script>
     <script src="/static/js/modules/gallery-toolbar.js"></script>
     <script src="/static/js/modules/repair-review.js"></script>
     <script>
