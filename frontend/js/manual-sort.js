@@ -1062,6 +1062,27 @@ async function initManualSort() {
         exitBtn.addEventListener('click', exitSorting);
     }
 
+    // On-stage sound mute toggle — silences the sort SFX without leaving the
+    // stage. Wires to the same AudioManager singleton + sort-audio-enabled key
+    // as the global Settings toggle, so the two stay in sync via that key.
+    const muteBtn = $('#btn-sort-mute');
+    const muteIcon = $('#sort-mute-icon');
+    if (muteBtn && muteIcon) {
+        const syncMute = () => {
+            const on = window.AudioManager ? window.AudioManager.enabled !== false : true;
+            muteIcon.textContent = on ? '🔊' : '🔇';
+            muteBtn.setAttribute('aria-pressed', on ? 'false' : 'true');
+            muteBtn.title = on
+                ? manualSortText('manual.muteSounds', 'Mute sort sounds', '静音排序音效')
+                : manualSortText('manual.unmuteSounds', 'Unmute sort sounds', '取消静音');
+        };
+        syncMute();
+        muteBtn.addEventListener('click', () => {
+            if (window.AudioManager?.toggle) window.AudioManager.toggle();
+            syncMute();
+        });
+    }
+
     // Resume session button
     const resumeBtn = $('#btn-resume-sorting');
     if (resumeBtn) {
@@ -2595,15 +2616,15 @@ function updateProgress() {
     const remainingEl = $('#sort-remaining-count');
     if (remainingEl) remainingEl.textContent = Math.max(0, ManualSortState.total - ManualSortState.index);
 
-    // Speed calculation (actions per second, rolling 10-second window)
+    // Throughput: images per minute over a rolling 10-second window (张/分).
     const speedEl = $('#sort-speed');
     if (speedEl) {
         const now = Date.now();
         const recentActions = ManualSortState.actionTimestamps.filter(t => now - t < 10000);
-        const speed = recentActions.length > 1
-            ? (recentActions.length / ((now - recentActions[0]) / 1000)).toFixed(1)
-            : '0.0';
-        speedEl.textContent = formatManualSortI18n('manual.actionsPerSecond', '{speed}/s', { speed });
+        const perMinute = recentActions.length > 1
+            ? Math.round((recentActions.length / ((now - recentActions[0]) / 1000)) * 60)
+            : 0;
+        speedEl.textContent = formatManualSortI18n('manual.imagesPerMinute', '{speed}/min', { speed: perMinute });
     }
 
     // Segmented progress bar

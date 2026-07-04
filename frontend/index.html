@@ -1828,8 +1828,17 @@
                             </div>
                             <div class="progress-info">
                                 <span id="sort-progress-text">0 / 0</span>
+                                <span class="sort-progress-metrics">
+                                    <span id="sort-percent">0%</span>
+                                    <span id="sort-speed" class="sort-progress-speed"></span>
+                                </span>
                             </div>
                         </div>
+
+                        <!-- On-stage sound mute toggle -->
+                        <button class="btn btn-ghost sort-hud-mute" id="btn-sort-mute" type="button" aria-pressed="false" title="Mute sort sounds" data-i18n-title="manual.muteSounds">
+                            <span id="sort-mute-icon" aria-hidden="true">🔊</span>
+                        </button>
 
                         <!-- Exit Button -->
                         <button class="btn btn-ghost sort-exit" id="btn-exit-sorting">

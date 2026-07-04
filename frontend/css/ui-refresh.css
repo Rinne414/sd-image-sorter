@@ -2551,6 +2551,45 @@ textarea:focus,
     padding: 24px;
 }
 
+/* Aurora Phase 3 (#25d): Start Sorting is the single blue next-action CTA on
+   the setup screen — clean solid blue, replacing the legacy blue->amber
+   gradient + orange border. Its glow pulse is already blue via the token alias. */
+#btn-start-sorting.btn-primary {
+    background: var(--blue);
+    color: #062033;
+    border-color: var(--blue);
+    box-shadow: 0 10px 26px rgba(var(--blue-rgb), 0.30);
+}
+#btn-start-sorting.btn-primary:hover {
+    box-shadow: 0 14px 32px rgba(var(--blue-rgb), 0.40);
+}
+
+/* On-stage throughput (张/分) + percent readout in the sort HUD. */
+.sort-progress-metrics {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: 16px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary);
+}
+.sort-progress-speed {
+    font-weight: 600;
+}
+
+/* Compact on-stage sound mute toggle in the sort HUD. */
+.sort-hud-mute {
+    width: 44px;
+    min-width: 44px;
+    padding: 8px;
+    font-size: 18px;
+    line-height: 1;
+}
+.sort-hud-mute[aria-pressed="true"] {
+    color: var(--warning);
+    border-color: rgba(var(--warning-rgb), 0.5);
+}
+
 .autosep-header-row {
     display: flex;
     justify-content: space-between;
