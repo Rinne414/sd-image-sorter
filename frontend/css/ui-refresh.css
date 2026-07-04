@@ -1082,8 +1082,9 @@ textarea:focus,
 }
 
 .tagger-model-badge.is-warning {
-    background: rgba(var(--accent-primary-rgb), 0.14);
-    border-color: rgba(var(--accent-primary-rgb), 0.28);
+    /* Aurora: warnings read amber, not the blue next-action color. */
+    background: rgba(var(--warning-rgb), 0.14);
+    border-color: rgba(var(--warning-rgb), 0.34);
     color: #ffe0a6;
 }
 
@@ -6123,6 +6124,36 @@ html.lang-zh #view-censor .queue-action-btn span {
 #tag-modal .modal-content.modal-large.tagger-modal-shell {
     width: min(1040px, calc(100vw - 48px));
     max-width: 1040px;
+}
+
+/* Aurora Phase 3 (#25b/#25f): tagger primaries are the single blue next-action
+   per tab (Start Tagging / Score Aesthetic / Start Smart Tag) — clean solid blue
+   inside the purple AI-context modal, replacing the legacy blue->amber gradient. */
+#tag-modal .btn-primary {
+    background: var(--blue);
+    color: #062033;
+    border-color: var(--blue);
+    box-shadow: 0 8px 22px rgba(var(--blue-rgb), 0.28);
+}
+#tag-modal .btn-primary:hover {
+    box-shadow: 0 12px 28px rgba(var(--blue-rgb), 0.36);
+}
+
+/* Aurora Phase 3 (#25d): censor action primaries (Save All / Detect Current /
+   Quick Auto Censor, plus the Detect-settings modal) are the blue next-action —
+   clean solid blue, dropping the legacy blue->amber gradient + orange border.
+   AI=purple detection recolor is intentionally NOT here: it needs a reviewable
+   detection overlay that does not exist yet (owner-gated 审核 conveyor). */
+#view-censor .btn-primary,
+#detect-modal .btn-primary {
+    background: var(--blue);
+    color: #062033;
+    border-color: var(--blue);
+    box-shadow: 0 8px 22px rgba(var(--blue-rgb), 0.28);
+}
+#view-censor .btn-primary:hover,
+#detect-modal .btn-primary:hover {
+    box-shadow: 0 12px 28px rgba(var(--blue-rgb), 0.36);
 }
 
 #tag-modal .modal-actions {
