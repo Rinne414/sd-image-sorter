@@ -26,8 +26,6 @@ window.I18nLang_en = {
     'nav.more': 'More',
     'nav.tools': 'Tools',
     'rail.backToEntry': 'Back to the mission entry page',
-    'rail.collapseTooltip': 'Collapse or expand the navigation rail',
-    'rail.collapse': 'Collapse',
     'gallerySearch.placeholder': 'tag:silver_hair seed:314159 free text…',
     'gallerySearch.aria': 'Search gallery (supports key:value)',
     'gallerySearch.clear': 'Clear search',

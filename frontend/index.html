@@ -32,15 +32,6 @@
     <!-- Adaptive UI scaling for large/high-res desktops. Loaded synchronously
          (pre-paint) so the root zoom is set before first render. -->
     <script src="/static/js/ui-scale.js"></script>
-    <!-- Nav rail collapsed state must land before first paint or the rail
-         visibly snaps from 216px to 46px on every load. -->
-    <script>
-        try {
-            if (localStorage.getItem('sd-sorter:rail-collapsed') === '1') {
-                document.documentElement.classList.add('rail-collapsed');
-            }
-        } catch (e) { /* storage blocked: default to expanded */ }
-    </script>
     <style>
         /* Folder Browser Widget */
         .folder-path-row { display: flex; gap: 8px; align-items: stretch; }
@@ -473,15 +464,6 @@
                     <span data-i18n="action.tag">Tag Images</span>
                 </button>
             </div>
-            <!-- Aurora Phase 3: rail collapse toggle (46px icon strip when collapsed).
-                 Hidden by the legacy top-bar CSS below 769px. -->
-            <button id="btn-rail-collapse" class="btn btn-ghost btn-small rail-collapse-btn" type="button" aria-pressed="false"
-                    title="Collapse navigation" aria-label="Collapse navigation"
-                    data-i18n-title="rail.collapseTooltip" data-i18n-aria="rail.collapseTooltip">
-                <span class="rail-collapse-icon-collapse" aria-hidden="true">◀</span>
-                <span class="rail-collapse-icon-expand" aria-hidden="true">▶</span>
-                <span data-i18n="rail.collapse">Collapse</span>
-            </button>
         </nav>
 
         <!-- Background Tagging Progress Bar (visible when tagging runs in background) -->
@@ -700,8 +682,8 @@
                 </button>
 
                 <!-- Desktop Sidebar Restore Button -->
-                <!-- Positioning lives in ui-refresh.css (#btn-restore-desktop-sidebar)
-                     so the nav rail can offset it; JS only toggles display. -->
+                <!-- Positioning lives in ui-refresh.css (#btn-restore-desktop-sidebar,
+                     pinned below the fixed top bar); JS only toggles display. -->
                 <button id="btn-restore-desktop-sidebar" class="btn btn-secondary" title="Expand Sidebar" style="display: none;">
                     <span aria-hidden="true">▶</span>
                 </button>
@@ -1881,7 +1863,7 @@
                             </div>
                         </div>
 
-                        <!-- Focus mode: collapse the app nav rail so the WASD stage
+                        <!-- Focus mode: hide the top nav bar so the WASD stage
                              fills the screen. Stripped automatically on exit. -->
                         <button class="btn btn-ghost sort-hud-zen" id="btn-sort-zen" type="button" aria-pressed="false" title="Focus mode" data-i18n-title="manual.zenEnter">
                             <span id="sort-zen-icon" aria-hidden="true">🧘</span>

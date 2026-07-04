@@ -28,8 +28,6 @@ window.I18nLang_zhCN = {
     'nav.more': '更多',
     'nav.tools': '工具',
     'rail.backToEntry': '回到任务入口页',
-    'rail.collapseTooltip': '收合/展开导航栏',
-    'rail.collapse': '收合',
     'gallerySearch.placeholder': 'tag:silver_hair seed:314159 自由文本… 支持 key:value',
     'gallerySearch.aria': '搜索图库（支持 key:value）',
     'gallerySearch.clear': '清空搜索',

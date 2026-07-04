@@ -5511,14 +5511,75 @@ function updateNavigationOverflowState() {
         return true;
     }
 
-    // Aurora Phase 3: >=769px renders the vertical left rail (ui-refresh.css
-    // "Nav Rail" section), where horizontal clipping cannot happen — the old
-    // width-degradation ladder (nav-priority-overflow → nav-tabs-compact-* →
-    // icon-only → overflow) retired with the top bar. The classList.remove
-    // above still strips any ladder class left over from a resize; the
-    // ladder's CSS skins are removed in the Phase 4 legacy sweep.
-    closeMobileMenu();
-    return false;
+    // Owner 2026-07-05: the Aurora left rail is reverted to the classic top
+    // bar, so the horizontal width-degradation ladder below is live again
+    // (it was a no-op at >=769px while the rail was vertical).
+    const needsOverflow = () => {
+        // v3.2.2: simplest possible overflow detection — does the
+        // ``navTabs`` flex container's scrollWidth (its natural,
+        // un-clipped width) exceed its clientWidth (what the layout
+        // gave it)? If yes, content is being clipped, regardless of
+        // what nav-actions-compact / brand width / etc. compute to.
+        // The previous formula tried to predict the available width
+        // from sibling sizes; on 1440 px laptops it under-counted the
+        // gap and let the last tab silently clip.
+        return navTabs.scrollWidth > navTabs.clientWidth + 1;
+    };
+
+    if (!needsOverflow()) {
+        closeMobileMenu();
+        return false;
+    }
+
+    // Desktop-first degradation: show Prompt Helper / Style Finder directly
+    // when there is room, then move only those low-priority tools into More.
+    navBar.classList.add('nav-priority-overflow');
+    if (!needsOverflow()) {
+        closeMobileMenu();
+        return false;
+    }
+
+    // Keep the core pipeline labels readable before falling back to icon-only.
+    navBar.classList.add('nav-tabs-compact-labels');
+    if (!needsOverflow()) {
+        closeMobileMenu();
+        return false;
+    }
+
+    navBar.classList.add('nav-tabs-compact-secondary');
+    if (!needsOverflow()) {
+        closeMobileMenu();
+        return false;
+    }
+
+    navBar.classList.add('nav-tabs-compact-brand');
+    if (!needsOverflow()) {
+        closeMobileMenu();
+        return false;
+    }
+
+    navBar.classList.add('nav-actions-compact');
+    if (!needsOverflow()) {
+        closeMobileMenu();
+        return false;
+    }
+
+    navBar.classList.add('nav-tabs-icon-only');
+    if (!needsOverflow()) {
+        closeMobileMenu();
+        return false;
+    }
+
+    navBar.classList.remove(
+        'nav-actions-compact',
+        'nav-tabs-icon-only',
+        'nav-tabs-compact-labels',
+        'nav-tabs-compact-secondary',
+        'nav-tabs-compact-brand',
+        'nav-priority-overflow'
+    );
+    navBar.classList.add('nav-tabs-overflow');
+    return true;
 }
 
 // v3.4.3: Prompt Helper + Style Finder render as direct tabs when space allows.

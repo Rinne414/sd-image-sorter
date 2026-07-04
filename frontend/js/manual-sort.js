@@ -716,7 +716,7 @@ function getManualSortZenPref() {
 }
 
 // Collapse the app chrome for a distraction-free WASD stage. A single
-// html.sort-zen class does the work in CSS (--rail-width:0 + hidden nav rail);
+// html.sort-zen class does the work in CSS (--nav-height:0 + hidden top bar);
 // the preference persists so the next session remembers it.
 function applyManualSortZen(on, { persist = true } = {}) {
     const enabled = !!on;
@@ -1397,7 +1397,7 @@ async function initManualSort() {
         });
     }
 
-    // Focus (zen) mode toggle — collapses the app nav rail for the WASD stage.
+    // Focus (zen) mode toggle — hides the top nav bar for the WASD stage.
     const zenBtn = $('#btn-sort-zen');
     if (zenBtn) {
         // Reflect the persisted preference on the button without touching the

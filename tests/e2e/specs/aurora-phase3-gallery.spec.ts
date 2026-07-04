@@ -25,7 +25,7 @@ const repairOldB = path.join(fixtureRoot, 'repair', 'old-b')
 const repairFoundDir = path.join(fixtureRoot, 'repair', 'found')
 const repairFilename = 'aurora-repair-dup.png'
 
-const RAIL_VIEWS = ['reader', 'sorting', 'censor', 'similar', 'dataset', 'promptlab', 'artist', 'gallery']
+const NAV_VIEWS = ['reader', 'sorting', 'censor', 'similar', 'dataset', 'promptlab', 'artist', 'gallery']
 
 function commandExists(candidate: string): boolean {
   if (candidate.includes(path.sep) || candidate.includes('/')) {
@@ -115,42 +115,41 @@ async function openMainPage(page: any) {
   }).toBe(true)
 }
 
-test.describe('Aurora Phase 3 — nav rail', () => {
-  test('rail is vertical, every view stays reachable, collapse persists', async ({ page }) => {
+test.describe('Navigation — top bar (rail reverted, owner 2026-07-05)', () => {
+  test('nav is a horizontal top bar and every view stays reachable', async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 900 })
+    // Stale rail state from a pre-revert session must be ignored.
+    await page.addInitScript(() => {
+      localStorage.setItem('sd-sorter:rail-collapsed', '1')
+    })
     await openMainPage(page)
 
-    const railBox = await page.locator('.nav-bar').boundingBox()
-    expect(railBox).not.toBeNull()
-    expect(railBox!.width).toBeLessThan(280)
-    expect(railBox!.height).toBeGreaterThan(600)
+    const navBox = await page.locator('.nav-bar').boundingBox()
+    expect(navBox).not.toBeNull()
+    expect(navBox!.width).toBeGreaterThan(1200)
+    expect(navBox!.height).toBeLessThan(200)
+    expect(navBox!.y).toBeLessThan(2)
 
-    for (const view of RAIL_VIEWS) {
-      await page.locator(`#nav-tab-${view}`).click()
+    // The rail collapse toggle is gone and the pre-paint class is never applied.
+    await expect(page.locator('#btn-rail-collapse')).toHaveCount(0)
+    expect(await page.evaluate(() => document.documentElement.classList.contains('rail-collapsed'))).toBe(false)
+
+    for (const view of NAV_VIEWS) {
+      const tab = page.locator(`#nav-tab-${view}`)
+      if (await tab.isVisible()) {
+        await tab.click()
+        await expect(tab).toHaveAttribute('aria-selected', 'true')
+      } else {
+        // The width-degradation ladder tucks low-priority tools (Prompt
+        // Helper / Style Finder) behind More; users reach them through the
+        // mirror items (#nav-tools-{view}) in the dropdown.
+        await page.locator('#nav-tools-toggle').click()
+        const mirror = page.locator(`#nav-tools-${view}`)
+        await expect(mirror).toBeVisible()
+        await mirror.click()
+      }
       await expect(page.locator(`#view-${view}`)).toHaveClass(/active/)
-      await expect(page.locator(`#nav-tab-${view}`)).toHaveAttribute('aria-selected', 'true')
     }
-
-    await page.locator('#btn-rail-collapse').click()
-    await expect.poll(async () => {
-      return await page.evaluate(() => document.documentElement.classList.contains('rail-collapsed'))
-    }).toBe(true)
-    // The rail animates width over 180ms — poll until it settles.
-    await expect.poll(async () => {
-      const box = await page.locator('.nav-bar').boundingBox()
-      return box ? box.width : 0
-    }).toBeLessThan(90)
-
-    // Collapse survives a reload via the pre-paint localStorage class.
-    await page.reload({ waitUntil: 'domcontentloaded' })
-    await expect.poll(async () => {
-      return await page.evaluate(() => document.documentElement.classList.contains('rail-collapsed'))
-    }).toBe(true)
-
-    await page.locator('#btn-rail-collapse').click()
-    await expect.poll(async () => {
-      return await page.evaluate(() => document.documentElement.classList.contains('rail-collapsed'))
-    }).toBe(false)
   })
 
   test('brand block returns to the mission entry page', async ({ page }) => {
@@ -160,7 +159,7 @@ test.describe('Aurora Phase 3 — nav rail', () => {
     await page.locator('#nav-brand').click()
     await expect(page.locator('#entry-page')).toBeVisible()
 
-    // The entry page covers the rail; leave through its own gallery entry.
+    // The entry page covers the app; leave through its own gallery entry.
     await page.locator('#entry-fn-gallery').click()
     await expect(page.locator('#entry-page')).toBeHidden()
     await expect(page.locator('#view-gallery')).toHaveClass(/active/)

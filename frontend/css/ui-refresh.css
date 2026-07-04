@@ -9660,27 +9660,19 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 
 /* ==========================================================================
-   Aurora Phase 3 — Left navigation rail (desktop/laptop only, >=769px)
+   Navigation chrome — classic fixed TOP BAR (owner 2026-07-05).
 
-   The top bar becomes a fixed left rail. One hinge: --nav-height drops to 0
-   inside this media query, so every existing calc(100vh - var(--nav-height))
-   / --ui-viewport-below-nav consumer becomes full-height WITHOUT touching
-   those rules; horizontal space is claimed via --rail-width instead.
-   <=768px keeps the legacy top bar + hamburger untouched (out of scope).
-   DOM is unchanged: same ids/classes, so switchView, EntryPage tile clicks
-   (#nav-tab-{view}.click()) and e2e selectors keep working. The horizontal
-   overflow ladder (nav-tabs-compact-* etc.) is a no-op at rail widths — the
-   JS early-returns and clears those classes (app.js updateNavigationOverflowState).
-   Collapsed state: html.rail-collapsed (pre-paint class from localStorage,
-   see the inline head script in index.html) shrinks to a 46px icon strip
-   per the design's focus-mode strip (#21a / #15e frames).
+   Aurora Phase 3 Slice 1 turned the top bar into a vertical left rail; the
+   owner reviewed it and asked for the top bar back ("make it back to the
+   toppest bar"), so the whole >=769px rail override block (--nav-height:0,
+   --rail-width, html.rail-collapsed strip, per-element rotations) is gone.
+   The base rules in styles.css already render the fixed top bar at every
+   width, and the horizontal overflow ladder (nav-priority-overflow →
+   nav-tabs-compact-* → icon-only, app.js updateNavigationOverflowState) is
+   live again at >=769px. The brand block keeps its click/Enter → entry-page
+   behavior (modules/nav-rail.js), which is orientation-independent.
    ========================================================================== */
-/* Rail-only control: invisible in the legacy <=768px top bar. */
-.rail-collapse-btn {
-    display: none;
-}
-
-/* Positioning moved out of the inline style so the rail can offset it. */
+/* Positioning moved out of the inline style (below the fixed top bar). */
 #btn-restore-desktop-sidebar {
     position: fixed;
     top: calc(var(--nav-height) + 16px);
@@ -9692,44 +9684,10 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 
 @media (min-width: 769px) {
-    :root {
-        --nav-height: 0px;
-        --rail-width: 216px;
-    }
-
-    html.rail-collapsed {
-        --rail-width: 46px;
-    }
-
-    .nav-bar {
-        top: 0;
-        left: 0;
-        bottom: 0;
-        right: auto;
-        width: var(--rail-width);
-        height: auto;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 12px;
-        padding: 14px 10px;
-        border-bottom: none;
-        border-right: 1px solid var(--glass-border);
-        box-shadow: 12px 0 28px rgba(0, 0, 0, 0.16);
-        transition: width 180ms ease;
-        overflow: hidden;
-    }
-
-    html.rail-collapsed .nav-bar {
-        padding: 14px 4px;
-    }
-
     .nav-brand {
-        gap: 10px;
-        padding: 4px 6px;
         border-radius: 10px;
+        padding: 4px 8px;
         cursor: pointer;
-        flex-wrap: wrap;
-        row-gap: 0;
     }
 
     .nav-brand:hover {
@@ -9740,191 +9698,25 @@ html.lang-zh #view-censor .queue-action-btn span {
         outline: 2px solid var(--accent-primary);
         outline-offset: 2px;
     }
-
-    .brand-icon {
-        font-size: 22px;
-    }
-
-    .brand-text {
-        font-size: 15px;
-    }
-
-    html.rail-collapsed .nav-brand {
-        justify-content: center;
-        padding: 4px 0;
-    }
-
-    html.rail-collapsed .brand-text,
-    html.rail-collapsed .brand-version {
-        display: none;
-    }
-
-    .nav-tabs {
-        flex-direction: column;
-        margin-left: 0;
-        gap: 4px;
-        overflow-x: hidden;
-        overflow-y: auto;
-        flex: 1 1 auto;
-        min-height: 0;
-        scrollbar-width: thin;
-    }
-
-    .nav-tab {
-        width: 100%;
-        justify-content: flex-start;
-        padding: 10px 12px;
-    }
-
-    html.rail-collapsed .nav-tab {
-        justify-content: center;
-        padding: 10px 0;
-    }
-
-    html.rail-collapsed .nav-tab .tab-text,
-    html.rail-collapsed .nav-tab .tab-badge,
-    html.rail-collapsed .nav-tab .tab-step {
-        display: none;
-    }
-
-    /* Active indicator: bottom underline -> left edge bar (blue = current). */
-    .nav-tab::after,
-    .nav-tabs button::after {
-        bottom: auto;
-        left: 0;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 3px;
-        height: 0;
-        transition: height 180ms ease;
-    }
-
-    .nav-tab.active::after,
-    .nav-tabs button.active::after,
-    .nav-tabs button[aria-selected="true"]::after {
-        width: 3px;
-        height: 60%;
-        left: 0;
-    }
-
-    .nav-tabs .nav-divider {
-        width: 100%;
-        height: 1px;
-        background: var(--glass-border);
-        margin: 6px 0;
-        flex-shrink: 0;
-    }
-
-    /* No horizontal squeeze in a vertical rail: the More dropdown retires.
-       DOM stays (e2e reads menu item attributes while closed). */
-    .nav-tools {
-        display: none;
-    }
-
-    .nav-actions {
-        margin-left: 0;
-        margin-top: auto;
-        flex-direction: row;
-        flex-wrap: wrap;
-        gap: 6px;
-        padding-top: 12px;
-        border-top: 1px solid var(--glass-border);
-        flex-shrink: 0;
-    }
-
-    .nav-actions-divider {
-        display: none;
-    }
-
-    .nav-actions #btn-scan,
-    .nav-actions #btn-tag {
-        flex: 1 1 100%;
-        justify-content: flex-start;
-    }
-
-    html.rail-collapsed .nav-actions {
-        flex-direction: column;
-        align-items: center;
-    }
-
-    html.rail-collapsed .nav-actions .btn {
-        width: 34px;
-        height: 34px;
-        padding: 0;
-        justify-content: center;
-    }
-
-    html.rail-collapsed .nav-actions .btn span:not([aria-hidden="true"]) {
-        display: none;
-    }
-
-    .rail-collapse-btn {
-        display: inline-flex;
-        flex-shrink: 0;
-        width: 100%;
-        justify-content: flex-start;
-        gap: 8px;
-        color: var(--text-secondary);
-    }
-
-    html.rail-collapsed .rail-collapse-btn {
-        width: 34px;
-        height: 34px;
-        padding: 0;
-        justify-content: center;
-        align-self: center;
-    }
-
-    html.rail-collapsed .rail-collapse-btn span:not([aria-hidden="true"]) {
-        display: none;
-    }
-
-    .rail-collapse-btn .rail-collapse-icon-expand,
-    html.rail-collapsed .rail-collapse-btn .rail-collapse-icon-collapse {
-        display: none;
-    }
-
-    html.rail-collapsed .rail-collapse-btn .rail-collapse-icon-expand {
-        display: inline;
-    }
-
-    /* Content shifts right instead of down (margin-top zeroes via --nav-height). */
-    .main-content {
-        margin-left: var(--rail-width);
-        transition: margin-left 180ms ease;
-    }
-
-    .filter-sidebar {
-        left: var(--rail-width);
-    }
-
-    #btn-restore-desktop-sidebar {
-        left: var(--rail-width);
-    }
-
-    .pipeline-next-step {
-        left: calc(50vw + var(--rail-width) / 2);
-        max-width: min(680px, calc(100vw - var(--rail-width) - 48px));
-    }
 }
 
 /* ==========================================================================
    Aurora Phase 3 Slice 2 — Sort focus (zen) mode.
 
    html.sort-zen is toggled only while a WASD slot session is on the stage
-   (manual-sort.js applyManualSortZen) and stripped on exit. It collapses the
-   nav rail to reclaim the full viewport for the image being sorted. Placed
-   after the rail block above so its --rail-width:0 wins over
-   html.rail-collapsed (equal specificity → source order). Desktop-only, like
-   the rail itself (<=768px keeps the legacy top bar, out of scope).
+   (manual-sort.js applyManualSortZen) and stripped on exit. It hides the top
+   nav bar to reclaim the full viewport for the image being sorted:
+   --nav-height:0 makes every calc(100vh - var(--nav-height)) /
+   --ui-viewport-below-nav consumer full-height without touching those rules.
+   Desktop-only (<=768px keeps its own compact layout, out of scope).
    ========================================================================== */
 @media (min-width: 769px) {
     html.sort-zen {
-        --rail-width: 0px;
+        --nav-height: 0px;
     }
 
     html.sort-zen .nav-bar {
-        transform: translateX(-100%);
+        transform: translateY(-100%);
         opacity: 0;
         pointer-events: none;
     }
@@ -10111,7 +9903,7 @@ html.lang-zh #view-censor .queue-action-btn span {
    ========================================================================== */
 .gallery-action-bar {
     position: fixed;
-    left: calc(var(--rail-width, 0px) + var(--sidebar-width) + 18px);
+    left: calc(var(--sidebar-width) + 18px);
     right: 18px;
     bottom: 12px;
     z-index: 60;
@@ -10129,7 +9921,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 
 .gallery-container.desktop-collapsed .gallery-action-bar {
-    left: calc(var(--rail-width, 0px) + 18px);
+    left: 18px;
 }
 
 .gallery-action-bar[hidden] {
