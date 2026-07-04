@@ -2065,12 +2065,34 @@ const V321Integration = {
             btn.appendChild(placeholder);
         }
 
+        // Aurora Phase 3 (#25c): flag a loaded caption that's missing the
+        // trigger word (no-op when no trigger is set or the caption is unloaded).
+        this._decorateQueueItemTrigger(btn, id);
+
         btn.addEventListener('click', () => {
             this.activePreviewImageId = id;
             this.activePreviewIndex = Number(index || 0);
             this._onQueueItemClick(id);
         });
         return btn;
+    },
+
+    /** Append a small ⚑ badge when this queue item's loaded caption is missing
+     *  the Dataset Maker trigger word. Lazy/unloaded captions get no badge. */
+    _decorateQueueItemTrigger(btn, id) {
+        const triggerRaw = (document.getElementById('dataset-trigger')?.value || '').trim();
+        if (!triggerRaw) return;
+        if (!this.editedCaptions.has(id) && !this.previewCache.has(id)) return;
+        const tokens = this._splitCaptionTokens(this._getRenderedCaption(id));
+        if (!tokens.length) return;
+        const triggerKey = this._normalizeCaptionToken(triggerRaw);
+        if (tokens.some((t) => this._normalizeCaptionToken(t) === triggerKey)) return;
+        const badge = document.createElement('span');
+        badge.className = 'export-preview-queue-trigger-warn';
+        badge.textContent = '⚑';
+        badge.title = this._i18n('batchExport.previewMissingTriggerHint', 'Missing trigger word');
+        badge.setAttribute('aria-label', badge.title);
+        btn.appendChild(badge);
     },
 
     async _onQueueItemClick(imageId) {
@@ -2390,18 +2412,23 @@ const V321Integration = {
         });
         form.append(inputRow, addCurrent, removeCurrent, addAll, removeAll);
 
-        const secondaryTools = document.createElement('details');
-        secondaryTools.className = 'export-preview-tools-disclosure';
-        const secondarySummary = document.createElement('summary');
-        const checksLabel = this._i18n('batchExport.previewChecks', 'Checks');
+        // Aurora Phase 3 (#25c): the health-check strip is always visible so
+        // dataset problems (empty / blacklist / duplicate / over-length /
+        // missing trigger) surface without a click. Only the heavier Cleanup
+        // tools stay behind a disclosure.
+        const cleanupTools = document.createElement('details');
+        cleanupTools.className = 'export-preview-tools-disclosure';
+        const cleanupSummary = document.createElement('summary');
         const cleanupLabel = this._i18n('batchExport.previewCleanupTools', 'Cleanup');
         const metrics = this._getPreviewDiagnostics();
-        secondarySummary.innerHTML = `<span></span><small></small>`;
-        secondarySummary.querySelector('span').textContent = `${checksLabel} / ${cleanupLabel}`;
-        secondarySummary.querySelector('small').textContent = `${metrics.edited}/${metrics.total}`;
-        secondaryTools.append(secondarySummary, diagnostics, cleanup);
+        const cleanupSummaryLabel = document.createElement('span');
+        cleanupSummaryLabel.textContent = cleanupLabel;
+        const cleanupSummaryCount = document.createElement('small');
+        cleanupSummaryCount.textContent = `${metrics.edited}/${metrics.total}`;
+        cleanupSummary.append(cleanupSummaryLabel, cleanupSummaryCount);
+        cleanupTools.append(cleanupSummary, cleanup);
 
-        panel.append(head, helper, commonList, form, secondaryTools);
+        panel.append(head, helper, commonList, form, diagnostics, cleanupTools);
         return panel;
     },
 
@@ -2431,6 +2458,10 @@ const V321Integration = {
             ['batchExport.previewDuplicateCount', 'Duplicates', String(metrics.duplicateHits), metrics.duplicateHits > 0],
             ['batchExport.previewMaxTokens', 'Max tokens', String(metrics.maxTokens), metrics.maxTokens > 75],
         ];
+        // Missing-trigger check only appears when a LoRA trigger word is set.
+        if (metrics.hasTrigger) {
+            rows.push(['batchExport.previewMissingTrigger', 'Missing trigger', String(metrics.missingTrigger), metrics.missingTrigger > 0]);
+        }
         for (const [key, label, value, warn] of rows) {
             const stat = document.createElement('div');
             stat.className = 'export-preview-stat';
@@ -2556,10 +2587,15 @@ const V321Integration = {
 
     _getPreviewDiagnostics() {
         const blacklist = new Set(this._getBlacklistTokens().map((token) => this._normalizeCaptionToken(token)));
+        // Cross-reference the Dataset Maker LoRA trigger word. Missing-trigger
+        // is only a meaningful check when the user actually set one.
+        const triggerRaw = (document.getElementById('dataset-trigger')?.value || '').trim();
+        const triggerKey = triggerRaw ? this._normalizeCaptionToken(triggerRaw) : '';
         let empty = 0;
         let blockedHits = 0;
         let duplicateHits = 0;
         let maxTokens = 0;
+        let missingTrigger = 0;
         // Use previewResults for diagnostics (only covers loaded items)
         for (const item of this.previewResults) {
             const tokens = this._splitCaptionTokens(this._getRenderedCaption(item.image_id));
@@ -2572,6 +2608,9 @@ const V321Integration = {
                 if (seen.has(key)) duplicateHits += 1;
                 seen.add(key);
             }
+            // Only flag non-empty captions that forgot the trigger — empty
+            // captions are already surfaced by the 'empty' metric.
+            if (triggerKey && tokens.length && !seen.has(triggerKey)) missingTrigger += 1;
         }
         return {
             total: this.queueTotalCount || this.queueImageIds.length || this.previewResults.length,
@@ -2580,6 +2619,8 @@ const V321Integration = {
             blockedHits,
             duplicateHits,
             maxTokens,
+            hasTrigger: !!triggerKey,
+            missingTrigger,
         };
     },
 

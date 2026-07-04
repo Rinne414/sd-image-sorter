@@ -387,6 +387,7 @@
 
 .export-preview-queue-item {
     display: grid;
+    position: relative;
     grid-template-columns: 64px minmax(0, 1fr);
     gap: 8px;
     width: 100%;
@@ -442,6 +443,26 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 12px;
+}
+
+/* Aurora Phase 3 (#25c): amber ⚑ flag on queue items whose loaded caption is
+   missing the LoRA trigger word. */
+.export-preview-queue-trigger-warn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    font-size: 11px;
+    line-height: 1;
+    color: #1f1308;
+    background: var(--warning);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
 }
 
 .export-preview-thumb {
@@ -631,8 +652,9 @@
 }
 
 .export-preview-stat.warn {
-    border-color: rgba(var(--accent-primary-rgb), 0.5);
-    background: rgba(var(--accent-primary-rgb), 0.08);
+    /* Aurora: health-check warnings read as amber, not the blue next-action. */
+    border-color: rgba(var(--warning-rgb), 0.5);
+    background: rgba(var(--warning-rgb), 0.1);
 }
 
 .export-preview-stat span,
@@ -1413,8 +1435,14 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--border-color);
+    /* Aurora: amber marks the temporary-edit contract — edits in this editor
+       are session-only (used at Export / Copy / Download), never written back
+       to the library. The header reinforces that promise. */
+    padding: 10px 12px;
+    border: 1px solid rgba(var(--warning-rgb), 0.32);
+    border-left: 3px solid var(--warning);
+    border-radius: 10px;
+    background: rgba(var(--warning-rgb), 0.06);
 }
 
 .caption-editor-title-block {

@@ -1772,6 +1772,8 @@ window.I18nLang_en = {
     'batchExport.previewBlockedCount': 'Blacklist hits',
     'batchExport.previewDuplicateCount': 'Duplicates',
     'batchExport.previewMaxTokens': 'Max tokens',
+    'batchExport.previewMissingTrigger': 'Missing trigger',
+    'batchExport.previewMissingTriggerHint': 'Missing trigger word',
     'batchExport.previewCleanupTools': 'Cleanup',
     'batchExport.cleanupDedupeLabel': 'Dedupe',
     'batchExport.cleanupBlacklistLabel': 'Blacklist',

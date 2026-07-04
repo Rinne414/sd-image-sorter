@@ -1947,6 +1947,8 @@ window.I18nLang_zhCN = {
     'batchExport.previewBlockedCount': '黑名单命中',
     'batchExport.previewDuplicateCount': '重复词',
     'batchExport.previewMaxTokens': '最多标签',
+    'batchExport.previewMissingTrigger': '缺触发词',
+    'batchExport.previewMissingTriggerHint': '缺少触发词',
     'batchExport.previewCleanupTools': '清理',
     'batchExport.cleanupDedupeLabel': '去重',
     'batchExport.cleanupBlacklistLabel': '黑名单',
