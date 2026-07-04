@@ -2052,6 +2052,10 @@ const V321Integration = {
 
     /** Aurora #25c: explicit per-image caption types for the export payload. */
     collectCaptionTypes() {
+        // If caption-core.js somehow failed to load, the preview never
+        // composes — keep the payload consistent so the user can't get an
+        // export that differs from what the editor showed.
+        if (!window.CaptionCore) return null;
         const map = {};
         for (const [id, type] of this.captionTypes.entries()) {
             const numericId = Number(id);
@@ -2064,6 +2068,7 @@ const V321Integration = {
 
     /** Aurora #25c: user-edited NL sentences ('' = suppress the stored one). */
     collectNlOverrides() {
+        if (!window.CaptionCore) return null;  // mirror collectCaptionTypes
         const map = {};
         for (const [id, text] of this.editedNl.entries()) {
             const numericId = Number(id);
@@ -2230,6 +2235,9 @@ const V321Integration = {
     /** Append the caption-type chip (B+N / NL) when this image will export the
      *  NL sentence — same chip language as the Dataset Maker queue. */
     _decorateQueueItemType(btn, id) {
+        // Chip = export effect, not just the stored setting: in content modes
+        // where the compose is gated off, showing B+N/NL would over-promise.
+        if (!this._composeEligible()) return;
         const ctype = this._getCaptionType(id);
         if (ctype !== 'nl' && ctype !== 'both') return;
         const chip = document.createElement('span');
