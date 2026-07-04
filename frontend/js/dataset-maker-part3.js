@@ -1129,8 +1129,24 @@
             if (q.length < 1) { dropdown.hidden = true; return; }
             if (fetchTimer) clearTimeout(fetchTimer);
             fetchTimer = setTimeout(async () => {
-                const vocab = await getVocab();
-                const matches = vocab.filter(t => t.toLowerCase().includes(q));
+                // v3.5.0: library + danbooru vocabulary first; the dataset
+                // vocab keeps covering tags that only exist in local (not yet
+                // imported) captions, which /api/tags/suggest can't see.
+                let matches = [];
+                try {
+                    const r = await fetch(`/api/tags/suggest?q=${encodeURIComponent(q)}&limit=8`);
+                    if (r.ok) {
+                        const data = await r.json();
+                        matches = (data.suggestions || []).map(s => s.tag).filter(Boolean);
+                    }
+                } catch { /* fall through to dataset vocab */ }
+                if (matches.length < 8) {
+                    const vocab = await getVocab();
+                    for (const t of vocab) {
+                        if (matches.length >= 8) break;
+                        if (t.toLowerCase().includes(q) && !matches.includes(t)) matches.push(t);
+                    }
+                }
                 showSuggestions(matches);
             }, 150);
         });

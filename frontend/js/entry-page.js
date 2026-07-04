@@ -360,6 +360,7 @@
         '#gallery-action-more-menu:not([hidden])',
         '#nav-tools-menu:not([hidden])',
         '#gallery-search-suggest:not([hidden])',
+        '.caption-autocomplete-dropdown:not([hidden])',
         '#btn-toggle-select[data-state="selecting"]',
     ].join(', ');
 

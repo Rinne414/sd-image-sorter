@@ -554,6 +554,9 @@ Get generators with counts.
 #### GET /api/tags/library
 Get tag library. Optional query params: `sort_by=frequency|alphabetical`, `q=<text>`, `limit=<n>`. Search runs across the full tag table before applying `limit`.
 
+#### GET /api/tags/suggest
+Type-ahead tag suggestions for autocomplete inputs (v3.5.0). Query params: `q=<partial token>`, `limit=<1..50, default 20>`. Merges the user's library tags (frequency-ranked, `source: "library"`) with the bundled danbooru vocabulary `backend/assets/danbooru_tags.csv` (popularity-ranked, alias-aware, `source: "danbooru"`). Each suggestion carries a 14-category `category` (same palette as Dataset Maker tag pills) and an optional `zh` display string. CJK queries fuzzy-match Chinese aliases when the optional `danbooru_zh.csv` drop-in is present (see `backend/assets/README.md`). Returns `{ "suggestions": [{ "tag", "count", "source", "category", "zh" }], "danbooru_loaded", "zh_loaded" }`. Empty `q` returns the library's most frequent tags.
+
 #### GET /api/prompts/library
 Get prompt token library. Optional query params: `q=<text>`, `limit=<n>`. Search runs across the full prompt-token index before applying `limit`.
 

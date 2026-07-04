@@ -48,3 +48,61 @@
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
 }
+
+/* v3.5.0 — /api/tags/suggest upgrade: category dot, zh alias, library marker */
+
+.caption-autocomplete-item {
+    justify-content: flex-start;
+}
+
+.caption-autocomplete-name {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.caption-autocomplete-meta {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-shrink: 0;
+    max-width: 55%;
+}
+
+.caption-autocomplete-zh {
+    font-size: 0.78rem;
+    color: var(--text-secondary, #c4c9d4);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Library tags (already in the user's collection) get the accent count. */
+.caption-autocomplete-item.is-library .caption-autocomplete-count {
+    color: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.95);
+    font-weight: 600;
+}
+
+/* Category dot — colors mirror the 14-category danbooru pill palette in
+   dataset-maker.css (border-color values, solid). */
+.cap-ac-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: #6b7280;
+}
+
+.cap-ac-dot-character  { background: #f472b6; }
+.cap-ac-dot-artist     { background: #d946ef; }
+.cap-ac-dot-outfit     { background: #a78bfa; }
+.cap-ac-dot-pose       { background: #eab308; }
+.cap-ac-dot-body       { background: #fb7185; }
+.cap-ac-dot-expression { background: #f59e0b; }
+.cap-ac-dot-background { background: #2dd4bf; }
+.cap-ac-dot-action     { background: #f97316; }
+.cap-ac-dot-style      { background: #818cf8; }
+.cap-ac-dot-quality    { background: #3b82f6; }
+.cap-ac-dot-meta       { background: #64748b; }
+.cap-ac-dot-rating     { background: #ef4444; }
+.cap-ac-dot-angle      { background: #22d3ee; }
+.cap-ac-dot-unknown    { background: #6b7280; }

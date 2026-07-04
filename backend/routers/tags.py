@@ -170,6 +170,43 @@ def get_tags_library(
     return service.get_tags_library(sort_by=sort_by, limit=limit, search_query=q)
 
 
+@router.get(
+    "/tags/suggest",
+    summary="Suggest tags for type-ahead",
+    description="""
+Unified tag suggestions for autocomplete inputs. Merges the user's own
+library tags (frequency-ranked) with the bundled danbooru vocabulary
+(popularity-ranked, alias-aware). CJK queries match the optional
+user-supplied Chinese translation file when present.
+    """,
+    responses={
+        200: {
+            "description": "Ranked suggestions",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "suggestions": [
+                            {"tag": "long_hair", "count": 1523, "source": "library", "category": "body", "zh": None},
+                            {"tag": "long_sleeves", "count": 2102140, "source": "danbooru", "category": "outfit", "zh": None},
+                        ],
+                        "danbooru_loaded": True,
+                        "zh_loaded": False,
+                    }
+                }
+            }
+        }
+    }
+)
+def suggest_tags(
+    q: str = Query(default="", description="Partial tag token; CJK matches Chinese aliases when available"),
+    limit: int = Query(default=20, ge=1, le=50, description="Maximum suggestions to return"),
+):
+    """Type-ahead tag suggestions across library + danbooru vocabulary."""
+    from services import tag_suggest_service
+
+    return tag_suggest_service.suggest(q=q, limit=limit)
+
+
 @router.get("/prompts/library")
 def get_prompts_library(
     limit: Optional[int] = Query(default=None, ge=1, description="Optional display limit; omitted returns all matching prompt tokens"),

@@ -1,21 +1,27 @@
 /**
- * Caption autocomplete (v3.2.2 T-power-PR3 / I).
+ * Tag autocomplete (v3.5.0 — upgraded from the v3.2.2 single-surface version).
  *
- * Surface: the Dataset Maker caption editor textarea.
+ * Shared type-ahead for every comma-separated tag input:
+ *   - Dataset Maker caption editor  (#dataset-editor-textarea)
+ *   - Image detail tag editor       (#modal-tags-add-input)
+ *   - Mass tag editor "add" box     (#mass-tag-add-tags)
+ *   - Caption-editor export preview (.export-preview-main-textarea, attached
+ *     by v321-ui.js each render)
  *
- * Behaviour rules (per user discussion):
+ * Source: GET /api/tags/suggest — the user's own library tags merged with
+ * the bundled danbooru vocabulary (alias-aware; CJK queries match the
+ * optional Chinese translation drop-in). Falls back to a tiny local list
+ * when the endpoint is unreachable.
+ *
+ * Behaviour rules (unchanged from v3.2.2):
  *   - Suggestion-style only — never blocks free typing. Any keystroke
  *     not in {Tab, Enter, Escape, ArrowUp, ArrowDown} commits as raw text.
- *   - Trigger only when the current token (last comma-segment, trimmed)
- *     looks tag-like: ASCII letters / digits / underscore / hyphen,
- *     length >= 2.
- *   - Skip Natural-Language tokens: if the token contains a space AND
- *     length > 6, treat it as prose and don't suggest.
- *   - Source: Tag Vocabulary panel's frequency list (window.DatasetMaker
- *     ._auditState's lastReport tags + the dataset/vocab API). Falls back
- *     to a small top-200 danbooru frequency list bundled below.
- *   - Tab or Enter on a focused suggestion accepts; commits replace the
+ *   - Trigger on tag-like ASCII tokens (>= 2 chars) or CJK tokens (>= 1).
+ *   - Skip Natural-Language prose: token contains a space AND length > 6.
+ *   - Tab/Enter accepts the highlighted suggestion; commits replace the
  *     current token in place and add ", " for the next entry.
+ *   - Keydown handling runs in the CAPTURE phase so surfaces with their
+ *     own Enter handlers (image detail modal) don't race the accept.
  */
 (function () {
     'use strict';
@@ -33,73 +39,21 @@
         'highres', 'absurdres',
     ];
 
+    const SUGGEST_LIMIT = 12;
+    const DEBOUNCE_MS = 120;
+    const CJK_RE = /[぀-ヿ㐀-䶿一-鿿豈-﫿]/;
+
     const STATE = {
         lastSuggestions: [],
         active: -1,
         dropdown: null,
-        textarea: null,
-        cachedVocab: null, // [{tag, count}]
-        lastFetchAt: 0,
+        abort: null,
+        seq: 0,
     };
 
-    function vocabSource() {
-        // Prefer the live audit/vocab cache if Dataset Maker has it.
-        if (window.DatasetMaker?._auditState?.lastReport?.items) {
-            const tags = new Set();
-            for (const it of window.DatasetMaker._auditState.lastReport.items) {
-                for (const flag of (it.flags || [])) {
-                    // not used — we just want any tag-like activity
-                }
-            }
-        }
-        return STATE.cachedVocab || DEFAULT_FALLBACK.map((t) => ({ tag: t, count: 1 }));
-    }
-
-    async function refreshVocab() {
-        // Throttle: 30 s
-        if (Date.now() - STATE.lastFetchAt < 30_000 && STATE.cachedVocab) return;
-        const dm = window.DatasetMaker;
-        if (!dm || !Array.isArray(dm.imageIds) || dm.imageIds.length === 0) {
-            STATE.cachedVocab = DEFAULT_FALLBACK.map((t) => ({ tag: t, count: 1 }));
-            return;
-        }
-        const galleryIds = [];
-        const localCaps = {};
-        for (const id of dm.imageIds) {
-            if (dm.isLocalId && dm.isLocalId(id)) {
-                const p = dm.localItemPaths?.get?.(id);
-                const cap = dm.captionEdits?.get?.(id);
-                if (p && cap) localCaps[p] = cap;
-            } else {
-                galleryIds.push(Number(id));
-            }
-        }
-        try {
-            const r = await fetch('/api/dataset/vocab', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    image_ids: galleryIds,
-                    path_caption_overrides: localCaps,
-                    top_n: 500,
-                }),
-            });
-            if (!r.ok) return;
-            const data = await r.json();
-            const live = data.vocab || [];
-            // Merge with fallback so a fresh dataset still gets useful hints.
-            const seen = new Set(live.map((v) => v.tag));
-            const fallback = DEFAULT_FALLBACK
-                .filter((t) => !seen.has(t))
-                .map((t) => ({ tag: t, count: 0 }));
-            STATE.cachedVocab = [...live, ...fallback];
-            STATE.lastFetchAt = Date.now();
-        } catch { /* fall back silently */ }
-    }
-
-    function currentToken(textarea) {
-        const value = textarea.value || '';
-        const cursor = textarea.selectionStart ?? value.length;
+    function currentToken(el) {
+        const value = el.value || '';
+        const cursor = el.selectionStart ?? value.length;
         const left = value.slice(0, cursor);
         // Last comma OR newline boundary.
         const startIdx = Math.max(left.lastIndexOf(','), left.lastIndexOf('\n'));
@@ -115,27 +69,51 @@
     }
 
     function shouldSuggest(token) {
-        if (!token || token.length < 2) return false;
-        // Only ASCII tag-like tokens.
+        if (!token) return false;
+        if (CJK_RE.test(token)) return !token.includes(' ');
+        if (token.length < 2) return false;
+        // Only ASCII tag-like tokens otherwise.
         if (!/^[A-Za-z0-9_\-]+$/.test(token)) return false;
         return true;
     }
 
-    function findMatches(token) {
+    function localFallbackMatches(token) {
         const q = token.toLowerCase();
-        const vocab = vocabSource();
-        const exact = [];
         const prefix = [];
         const contains = [];
-        for (const entry of vocab) {
-            const t = String(entry.tag || '').toLowerCase();
-            if (!t) continue;
-            if (t === q) exact.push(entry);
-            else if (t.startsWith(q)) prefix.push(entry);
-            else if (t.includes(q)) contains.push(entry);
-            if (exact.length + prefix.length + contains.length >= 50) break;
+        for (const tag of DEFAULT_FALLBACK) {
+            if (tag.startsWith(q)) prefix.push(tag);
+            else if (tag.includes(q)) contains.push(tag);
         }
-        return [...exact, ...prefix, ...contains].slice(0, 8);
+        return [...prefix, ...contains]
+            .slice(0, 8)
+            .map((tag) => ({ tag, count: 0, source: 'library', category: 'unknown', zh: null }));
+    }
+
+    async function fetchSuggestions(token) {
+        const seq = ++STATE.seq;
+        if (STATE.abort) STATE.abort.abort();
+        const controller = new AbortController();
+        STATE.abort = controller;
+        try {
+            const url = `/api/tags/suggest?q=${encodeURIComponent(token)}&limit=${SUGGEST_LIMIT}`;
+            const r = await fetch(url, { signal: controller.signal });
+            if (!r.ok) throw new Error(`suggest ${r.status}`);
+            const data = await r.json();
+            if (seq !== STATE.seq) return null; // stale response
+            return Array.isArray(data.suggestions) ? data.suggestions : [];
+        } catch (err) {
+            if (err && err.name === 'AbortError') return null;
+            if (seq !== STATE.seq) return null;
+            return localFallbackMatches(token);
+        }
+    }
+
+    function formatCount(n) {
+        const num = Number(n) || 0;
+        if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+        if (num >= 1_000) return `${Math.round(num / 1_000)}k`;
+        return num > 0 ? String(num) : '';
     }
 
     function ensureDropdown() {
@@ -155,7 +133,7 @@
         STATE.active = -1;
     }
 
-    function renderDropdown(textarea, suggestions) {
+    function renderDropdown(el, suggestions) {
         const dd = ensureDropdown();
         STATE.lastSuggestions = suggestions;
         STATE.active = suggestions.length > 0 ? 0 : -1;
@@ -163,72 +141,85 @@
             dd.hidden = true;
             return;
         }
-        dd.innerHTML = '';
+        dd.replaceChildren();
         suggestions.forEach((s, idx) => {
             const item = document.createElement('div');
             item.className = 'caption-autocomplete-item' + (idx === 0 ? ' active' : '');
+            if (s.source === 'library') item.classList.add('is-library');
             item.dataset.tag = s.tag;
+
+            const dot = document.createElement('span');
+            dot.className = `cap-ac-dot cap-ac-dot-${s.category || 'unknown'}`;
+
             const name = document.createElement('span');
             name.className = 'caption-autocomplete-name';
             name.textContent = s.tag;
+
+            const meta = document.createElement('span');
+            meta.className = 'caption-autocomplete-meta';
+            if (s.zh) {
+                const zh = document.createElement('span');
+                zh.className = 'caption-autocomplete-zh';
+                zh.textContent = s.zh;
+                meta.appendChild(zh);
+            }
             const count = document.createElement('span');
             count.className = 'caption-autocomplete-count';
-            count.textContent = s.count > 0 ? String(s.count) : '';
-            item.append(name, count);
+            count.textContent = formatCount(s.count);
+            meta.appendChild(count);
+
+            item.append(dot, name, meta);
             item.addEventListener('mousedown', (e) => {
-                // mousedown so the click commits before the textarea blurs.
+                // mousedown so the click commits before the input blurs.
                 e.preventDefault();
-                accept(textarea, idx);
+                accept(el, idx);
             });
             dd.appendChild(item);
         });
         dd.hidden = false;
-        const rect = textarea.getBoundingClientRect();
+        const rect = el.getBoundingClientRect();
         window.PopupPosition?.place(dd, {
-            anchor: textarea,
+            anchor: el,
             placement: 'bottom-start',
             gap: 4,
-            width: Math.min(rect.width, 320),
+            width: Math.min(Math.max(rect.width, 240), 360),
             maxHeight: 280,
         });
     }
 
-    function accept(textarea, suggestionIdx) {
+    function accept(el, suggestionIdx) {
         const s = STATE.lastSuggestions[suggestionIdx];
         if (!s) return;
-        const tok = currentToken(textarea);
-        const value = textarea.value || '';
+        const tok = currentToken(el);
+        const value = el.value || '';
         const before = value.slice(0, tok.start);
         const after = value.slice(tok.end);
         // Append a comma-space if the next char isn't already a comma.
         const sep = after.startsWith(',') || after.startsWith('\n') ? '' : ', ';
-        const replaced = `${before}${s.tag}${sep}${after}`;
-        textarea.value = replaced;
+        el.value = `${before}${s.tag}${sep}${after}`;
         const newCursor = (before + s.tag + sep).length;
-        textarea.setSelectionRange(newCursor, newCursor);
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        el.setSelectionRange(newCursor, newCursor);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
         hideDropdown();
     }
 
     function highlightActive() {
         const dd = STATE.dropdown;
         if (!dd) return;
-        for (const [i, el] of Array.from(dd.children).entries()) {
-            el.classList.toggle('active', i === STATE.active);
+        for (const [i, node] of Array.from(dd.children).entries()) {
+            node.classList.toggle('active', i === STATE.active);
         }
     }
 
-    function attach(textarea) {
-        if (!textarea || textarea.dataset.captionAutocomplete === '1') return;
-        textarea.dataset.captionAutocomplete = '1';
-        STATE.textarea = textarea;
+    function attach(el) {
+        if (!el || el.dataset.captionAutocomplete === '1') return;
+        el.dataset.captionAutocomplete = '1';
 
         let inputDebounce = null;
-        textarea.addEventListener('input', () => {
+        el.addEventListener('input', () => {
             if (inputDebounce) clearTimeout(inputDebounce);
             inputDebounce = setTimeout(async () => {
-                await refreshVocab();
-                const tok = currentToken(textarea);
+                const tok = currentToken(el);
                 if (!shouldSuggest(tok.text)) {
                     hideDropdown();
                     return;
@@ -238,12 +229,22 @@
                     hideDropdown();
                     return;
                 }
-                const matches = findMatches(tok.text);
-                renderDropdown(textarea, matches);
-            }, 80);
+                const matches = await fetchSuggestions(tok.text);
+                if (matches === null) return; // superseded by a newer keystroke
+                // Re-check the token: it may have changed while fetching.
+                const now = currentToken(el);
+                if (now.text !== tok.text || document.activeElement !== el) {
+                    if (document.activeElement !== el) hideDropdown();
+                    return;
+                }
+                renderDropdown(el, matches);
+            }, DEBOUNCE_MS);
         });
 
-        textarea.addEventListener('keydown', (e) => {
+        // Capture phase: surfaces like the image-detail modal bind their own
+        // Enter handler on the same element; accepting a suggestion must win
+        // and stop that handler from also firing.
+        el.addEventListener('keydown', (e) => {
             if (!STATE.dropdown || STATE.dropdown.hidden) return;
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
@@ -256,22 +257,32 @@
             } else if (e.key === 'Tab' || e.key === 'Enter') {
                 if (STATE.active >= 0) {
                     e.preventDefault();
-                    accept(textarea, STATE.active);
+                    e.stopImmediatePropagation();
+                    accept(el, STATE.active);
                 }
             } else if (e.key === 'Escape') {
+                e.stopImmediatePropagation();
                 hideDropdown();
             }
-        });
+        }, true);
 
-        textarea.addEventListener('blur', () => {
+        el.addEventListener('blur', () => {
             // Defer in case the blur was triggered by clicking a suggestion.
             setTimeout(hideDropdown, 200);
         });
     }
 
     function bind() {
-        const ta = document.getElementById('dataset-editor-textarea');
-        if (ta) attach(ta);
+        const surfaces = [
+            'dataset-editor-textarea',   // Dataset Maker caption editor
+            'modal-tags-add-input',      // image detail tag editor
+            'mass-tag-add-tags',         // mass tag editor: add
+            'mass-tag-remove-tags',      // mass tag editor: remove
+        ];
+        for (const id of surfaces) {
+            const el = document.getElementById(id);
+            if (el) attach(el);
+        }
     }
 
     if (document.readyState === 'loading') {
@@ -280,5 +291,13 @@
         bind();
     }
 
-    window.CaptionAutocomplete = { attach, refreshVocab };
+    function isOpen() {
+        return !!(STATE.dropdown && !STATE.dropdown.hidden && STATE.active >= 0);
+    }
+
+    // refreshVocab kept as a no-op for API compatibility (the suggest
+    // endpoint queries live data; there is no client-side vocab cache).
+    // isOpen lets surfaces with their own Enter handlers (image detail
+    // modal) yield to the suggestion accept regardless of listener order.
+    window.CaptionAutocomplete = { attach, isOpen, refreshVocab: async () => {} };
 })();

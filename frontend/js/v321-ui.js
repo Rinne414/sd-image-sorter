@@ -2440,6 +2440,7 @@ const V321Integration = {
             refreshWillExport();
         });
         textarea.addEventListener('blur', () => this._renderPreviewWorkbench());
+        window.CaptionAutocomplete?.attach?.(textarea);
 
         const chips = document.createElement('div');
         chips.className = 'export-preview-token-list';

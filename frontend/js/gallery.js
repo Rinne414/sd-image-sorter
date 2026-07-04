@@ -3234,6 +3234,10 @@ const Gallery = {
         const input = document.querySelector('#modal-tags-add-input');
         input?.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
+                // When the tag autocomplete dropdown is open, Enter belongs
+                // to the suggestion accept (listener order is not reliable
+                // between same-node handlers, so check state instead).
+                if (window.CaptionAutocomplete?.isOpen?.()) return;
                 e.preventDefault();
                 this._addTagFromInput();
             }
