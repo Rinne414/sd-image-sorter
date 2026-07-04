@@ -1545,6 +1545,26 @@
                             <span class="sort-mode-soon" title="Coming soon"><span aria-hidden="true">▦</span> <span data-i18n="manual.modeMoreSoon">More modes soon</span></span>
                         </div>
 
+                        <!-- Named full-config presets: save/load/delete the whole setup
+                             (folders + collection slots + slot layout + mode + action +
+                             filters) as a reusable preset. Delete sits apart from the
+                             common Load/Save so it can't be hit by accident. -->
+                        <div class="sort-preset-bar" id="sort-preset-bar">
+                            <span class="sort-preset-label" data-i18n="manual.presetLabel">Presets</span>
+                            <select id="sort-preset-select" class="sort-preset-select" aria-label="Saved sort presets">
+                                <option value="" data-i18n="manual.presetNone">No saved presets</option>
+                            </select>
+                            <button type="button" class="btn btn-secondary btn-small" id="btn-sort-preset-load">
+                                <span aria-hidden="true">📂</span> <span data-i18n="manual.presetLoad">Load</span>
+                            </button>
+                            <button type="button" class="btn btn-secondary btn-small" id="btn-sort-preset-save">
+                                <span aria-hidden="true">💾</span> <span data-i18n="manual.presetSave">Save current…</span>
+                            </button>
+                            <button type="button" class="btn btn-ghost btn-small sort-preset-delete" id="btn-sort-preset-delete" title="Delete preset" data-i18n-title="manual.presetDelete">
+                                <span aria-hidden="true">🗑</span>
+                            </button>
+                        </div>
+
                         <!-- Shown only in A/B Showdown (bracket) mode -->
                         <div class="sort-bracket-intro sort-bracket-only" id="sort-bracket-intro" style="display:none;">
                             <p data-i18n="manual.bracketIntro">Compare two images at a time and keep picking the winner to find the single best of a batch. Non-destructive: winners are not moved.</p>
@@ -1716,6 +1736,13 @@
                             </div>
                             <div class="helper-text" data-i18n="manual.cooldownHelp">Off by default. When on, presses fired during the delay are ignored, so an autoclicker can't fire a chaotic burst.</div>
                         </div>
+                        <!-- Live scoped image count. Lives OUTSIDE #btn-start-sorting on
+                             purpose: ui-refresh.js rebuilds the button's inner spans, which
+                             would clobber any count placed inside it. -->
+                        <div class="sort-scope-count" id="sort-scope-count" aria-live="polite" hidden>
+                            <span class="sort-scope-count-icon" aria-hidden="true">🖼️</span>
+                            <span id="sort-scope-count-text"></span>
+                        </div>
                         <button class="btn btn-primary btn-large btn-glow" id="btn-start-sorting">
                             🎮 <span id="sort-start-label" data-i18n="manual.startSorting">Start Sorting</span>
                         </button>
@@ -1834,6 +1861,12 @@
                                 </span>
                             </div>
                         </div>
+
+                        <!-- Focus mode: collapse the app nav rail so the WASD stage
+                             fills the screen. Stripped automatically on exit. -->
+                        <button class="btn btn-ghost sort-hud-zen" id="btn-sort-zen" type="button" aria-pressed="false" title="Focus mode" data-i18n-title="manual.zenEnter">
+                            <span id="sort-zen-icon" aria-hidden="true">🧘</span>
+                        </button>
 
                         <!-- On-stage sound mute toggle -->
                         <button class="btn btn-ghost sort-hud-mute" id="btn-sort-mute" type="button" aria-pressed="false" title="Mute sort sounds" data-i18n-title="manual.muteSounds">
@@ -6336,6 +6369,11 @@
             }
             autosep.style.display = 'none';
             manual.style.display = '';
+            // Refresh the live scoped image count now that the setup is visible
+            // (the summary hook skips fetching while the view is hidden).
+            if (typeof window.refreshManualSortScopeCount === 'function') {
+                window.refreshManualSortScopeCount();
+            }
         }
         var btns = document.querySelectorAll('.sorting-sub-tab');
         btns.forEach(function(b) {

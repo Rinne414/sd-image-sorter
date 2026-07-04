@@ -2578,6 +2578,94 @@ textarea:focus,
     border-color: rgba(var(--warning-rgb), 0.5);
 }
 
+/* Focus (zen) mode toggle — sibling of the mute button in the sort HUD.
+   Engaged state uses the blue "active" accent (not a primary CTA, so it does
+   not conflict with the one-blue-primary rule; the stage has no blue CTA). */
+.sort-hud-zen {
+    width: 44px;
+    min-width: 44px;
+    padding: 8px;
+    font-size: 18px;
+    line-height: 1;
+}
+.sort-hud-zen.is-active {
+    color: var(--blue);
+    border-color: rgba(var(--blue-rgb), 0.5);
+    background: rgba(var(--blue-rgb), 0.10);
+}
+
+/* Live scoped image count above the Start button. Informational: it previews
+   the size of the next action, so it carries a restrained blue tint. */
+.sort-scope-count {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 4px auto 10px;
+    padding: 6px 14px;
+    width: fit-content;
+    max-width: 100%;
+    border-radius: 999px;
+    border: 1px solid rgba(var(--blue-rgb), 0.28);
+    background: rgba(var(--blue-rgb), 0.08);
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+.sort-scope-count[hidden] {
+    display: none;
+}
+.sort-scope-count .sort-scope-count-icon {
+    font-size: 14px;
+    line-height: 1;
+    opacity: 0.85;
+}
+.sort-scope-count.is-counting {
+    opacity: 0.7;
+    animation: sortScopeCountPulse 1.1s ease-in-out infinite;
+}
+.sort-scope-count.is-failed {
+    border-color: var(--border-subtle, rgba(255, 255, 255, 0.12));
+    background: transparent;
+    color: var(--text-muted);
+}
+@keyframes sortScopeCountPulse {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 0.85; }
+}
+
+/* Named full-config preset bar in the sort setup. Delete sits apart, ghost +
+   muted, so the destructive action is never adjacent to the common ones. */
+.sort-preset-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 0 0 18px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg, rgba(255, 255, 255, 0.03));
+}
+.sort-preset-bar .sort-preset-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.sort-preset-bar .sort-preset-select {
+    flex: 1 1 200px;
+    min-width: 160px;
+}
+.sort-preset-bar .sort-preset-delete {
+    margin-left: auto;
+}
+.sort-preset-bar .sort-preset-delete:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 .autosep-header-row {
     display: flex;
     justify-content: space-between;
@@ -9817,6 +9905,28 @@ html.lang-zh #view-censor .queue-action-btn span {
     .pipeline-next-step {
         left: calc(50vw + var(--rail-width) / 2);
         max-width: min(680px, calc(100vw - var(--rail-width) - 48px));
+    }
+}
+
+/* ==========================================================================
+   Aurora Phase 3 Slice 2 — Sort focus (zen) mode.
+
+   html.sort-zen is toggled only while a WASD slot session is on the stage
+   (manual-sort.js applyManualSortZen) and stripped on exit. It collapses the
+   nav rail to reclaim the full viewport for the image being sorted. Placed
+   after the rail block above so its --rail-width:0 wins over
+   html.rail-collapsed (equal specificity → source order). Desktop-only, like
+   the rail itself (<=768px keeps the legacy top bar, out of scope).
+   ========================================================================== */
+@media (min-width: 769px) {
+    html.sort-zen {
+        --rail-width: 0px;
+    }
+
+    html.sort-zen .nav-bar {
+        transform: translateX(-100%);
+        opacity: 0;
+        pointer-events: none;
     }
 }
 
