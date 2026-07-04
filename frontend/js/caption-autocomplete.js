@@ -55,8 +55,20 @@
         const value = el.value || '';
         const cursor = el.selectionStart ?? value.length;
         const left = value.slice(0, cursor);
-        // Last comma OR newline boundary.
-        const startIdx = Math.max(left.lastIndexOf(','), left.lastIndexOf('\n'));
+        // Comma-separated tag inputs break tokens on comma/newline. Insert
+        // mode (free-writing prompt boxes) also breaks on spaces and the
+        // weight syntax "(tag:1.2)" so suggestions track just the word
+        // under the caret.
+        let startIdx = Math.max(left.lastIndexOf(','), left.lastIndexOf('\n'));
+        if (el.dataset.capAcMode === 'insert') {
+            startIdx = Math.max(
+                startIdx,
+                left.lastIndexOf(' '),
+                left.lastIndexOf('('),
+                left.lastIndexOf(')'),
+                left.lastIndexOf(':'),
+            );
+        }
         const tokenStart = startIdx >= 0 ? startIdx + 1 : 0;
         const tokenRaw = left.slice(tokenStart);
         const tokenTrimmed = tokenRaw.trimStart();
@@ -194,8 +206,12 @@
         const value = el.value || '';
         const before = value.slice(0, tok.start);
         const after = value.slice(tok.end);
-        // Append a comma-space if the next char isn't already a comma.
-        const sep = after.startsWith(',') || after.startsWith('\n') ? '' : ', ';
+        // Comma mode appends ", " for the next entry; insert mode (prompt
+        // writing boxes) completes the word in place and stays out of the
+        // author's flow.
+        const sep = el.dataset.capAcMode === 'insert' || after.startsWith(',') || after.startsWith('\n')
+            ? ''
+            : ', ';
         el.value = `${before}${s.tag}${sep}${after}`;
         const newCursor = (before + s.tag + sep).length;
         el.setSelectionRange(newCursor, newCursor);
@@ -211,9 +227,10 @@
         }
     }
 
-    function attach(el) {
+    function attach(el, opts) {
         if (!el || el.dataset.captionAutocomplete === '1') return;
         el.dataset.captionAutocomplete = '1';
+        if (opts && opts.mode === 'insert') el.dataset.capAcMode = 'insert';
 
         let inputDebounce = null;
         el.addEventListener('input', () => {
@@ -278,10 +295,19 @@
             'modal-tags-add-input',      // image detail tag editor
             'mass-tag-add-tags',         // mass tag editor: add
             'mass-tag-remove-tags',      // mass tag editor: remove
+            'dataset-blacklist',         // Dataset Maker export blacklist
+            'tag-pre-blacklist',         // AI tagging pre-blacklist
+            'batch-export-blacklist',    // batch export blacklist
         ];
         for (const id of surfaces) {
             const el = document.getElementById(id);
             if (el) attach(el);
+        }
+        // Prompt Lab writing boxes: complete the word under the caret
+        // without inserting comma separators (owner-approved insert mode).
+        for (const id of ['pl-build-prompt', 'pl-build-negative']) {
+            const el = document.getElementById(id);
+            if (el) attach(el, { mode: 'insert' });
         }
     }
 

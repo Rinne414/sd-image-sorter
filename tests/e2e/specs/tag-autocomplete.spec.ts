@@ -234,3 +234,55 @@ test('mass tag editor add box is attached to the shared autocomplete', async ({ 
   expect(attached.add).toBe(true)
   expect(attached.remove).toBe(true)
 })
+
+test('blacklist boxes attach in comma mode; Prompt Lab writing boxes in insert mode', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('#view-gallery')).toBeVisible()
+  const modes = await page.evaluate(() => {
+    const read = (id: string) => {
+      const el = document.getElementById(id) as HTMLElement | null
+      return el ? { attached: el.dataset.captionAutocomplete === '1', mode: el.dataset.capAcMode || 'comma' } : null
+    }
+    return {
+      datasetBlacklist: read('dataset-blacklist'),
+      tagPreBlacklist: read('tag-pre-blacklist'),
+      batchExportBlacklist: read('batch-export-blacklist'),
+      plPrompt: read('pl-build-prompt'),
+      plNegative: read('pl-build-negative'),
+    }
+  })
+  expect(modes.datasetBlacklist).toEqual({ attached: true, mode: 'comma' })
+  expect(modes.tagPreBlacklist).toEqual({ attached: true, mode: 'comma' })
+  expect(modes.batchExportBlacklist).toEqual({ attached: true, mode: 'comma' })
+  expect(modes.plPrompt).toEqual({ attached: true, mode: 'insert' })
+  expect(modes.plNegative).toEqual({ attached: true, mode: 'insert' })
+})
+
+test('insert mode completes the caret word without adding a comma', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('#view-gallery')).toBeVisible()
+  // The build editor only shows after loading a prompt source; its display
+  // logic isn't under test here, so reveal it directly.
+  await page.evaluate(() => {
+    ;(window as any).App.switchView('promptlab')
+  })
+  await page.locator('.promptlab-tab[data-mode="build"]').click()
+  await page.evaluate(() => {
+    const editor = document.getElementById('pl-build-editor')
+    if (editor) (editor as HTMLElement).style.display = ''
+  })
+  const input = page.locator('#pl-build-prompt')
+  await expect(input).toBeVisible()
+
+  await input.click()
+  await input.pressSequentially('masterpiece, (hatsune_mi', { delay: 10 })
+  const dropdown = page.locator('.caption-autocomplete-dropdown')
+  await expect(dropdown).toBeVisible({ timeout: 5_000 })
+  await expect(dropdown.locator('.caption-autocomplete-item').first()).toContainText('hatsune_miku')
+
+  await input.press('Enter')
+  // Insert mode: the word under the caret is completed in place — no ", "
+  // separator, and the "(" boundary is preserved.
+  await expect(input).toHaveValue('masterpiece, (hatsune_miku')
+  await expect(dropdown).toBeHidden()
+})
