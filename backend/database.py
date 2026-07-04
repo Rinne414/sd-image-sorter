@@ -332,6 +332,8 @@ def iter_filtered_image_id_chunks(
     exclude_loras: Optional[List[str]] = None,
     exclude_prompts: Optional[List[str]] = None,
     exclude_colors: Optional[List[str]] = None,
+    color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue include
+    exclude_color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue exclude
     collection_id: Optional[int] = None,
     folder: Optional[str] = None,
     has_metadata: Optional[bool] = None,
@@ -386,6 +388,8 @@ def iter_filtered_image_id_chunks(
             exclude_loras=exclude_loras,
             exclude_prompts=exclude_prompts,
             exclude_colors=exclude_colors,
+            color_hues=color_hues,
+            exclude_color_hues=exclude_color_hues,
             collection_id=collection_id,
             folder=folder,
             has_metadata=has_metadata,

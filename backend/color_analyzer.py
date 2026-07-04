@@ -65,8 +65,10 @@ def _analyze_pil_image(img: Image.Image) -> Dict[str, Any]:
     # Color temperature based on average hue (PIL HSV: H is 0-255)
     temperature = _classify_temperature(avg_h, avg_s)
 
+    dominant_json = json.dumps(dominant, separators=(",", ":"))
     return {
-        "dominant_colors": json.dumps(dominant, separators=(",", ":")),
+        "dominant_colors": dominant_json,
+        "dominant_color_tags": dominant_color_tags_from_json(dominant_json),
         "avg_brightness": float(avg_v),
         "color_temperature": temperature,
         "color_saturation": float(avg_s),
@@ -210,3 +212,119 @@ def _brightness_distribution(img: Image.Image) -> Tuple[List[int], float, str]:
 def needs_color_analysis(image_row: Dict[str, Any]) -> bool:
     """Check if an image row needs color analysis (for lazy backfill)."""
     return image_row.get("avg_brightness") is None
+
+
+# ---------------------------------------------------------------------------
+# Dominant-hue tagging (v3.5.0 color filter completion)
+#
+# Classifies each stored dominant color into a small human vocabulary so the
+# gallery can answer `color:red`. Derived ENTIRELY from the dominant_colors
+# JSON — backfill never has to reopen image files.
+# ---------------------------------------------------------------------------
+
+# The queryable vocabulary, ordered for UI display.
+DOMINANT_COLOR_TAGS = [
+    "red", "orange", "yellow", "green", "cyan", "blue",
+    "purple", "pink", "brown", "white", "black", "gray",
+]
+
+# A dominant color must cover at least this share of the frame to count as
+# "this image is <color>".
+MIN_DOMINANT_PCT = 15.0
+
+
+def classify_hex_color(hex_color: str) -> Optional[str]:
+    """Map a #RRGGBB color to one tag from DOMINANT_COLOR_TAGS.
+
+    Returns None for colors that carry no search signal (skin tones — an
+    anime library would drown "orange" in face close-ups otherwise).
+    """
+    try:
+        raw = hex_color.lstrip("#")
+        r, g, b = int(raw[0:2], 16), int(raw[2:4], 16), int(raw[4:6], 16)
+    except (ValueError, IndexError):
+        return None
+
+    rf, gf, bf = r / 255.0, g / 255.0, b / 255.0
+    mx, mn = max(rf, gf, bf), min(rf, gf, bf)
+    v = mx
+    s = 0.0 if mx == 0 else (mx - mn) / mx
+    if mx == mn:
+        h = 0.0
+    elif mx == rf:
+        h = (60 * ((gf - bf) / (mx - mn))) % 360
+    elif mx == gf:
+        h = 60 * ((bf - rf) / (mx - mn)) + 120
+    else:
+        h = 60 * ((rf - gf) / (mx - mn)) + 240
+
+    # Achromatic ladder first.
+    if v < 0.14:
+        return "black"
+    if s < 0.10:
+        if v > 0.82:
+            return "white"
+        return "gray"
+
+    # Skin tones: warm hue, moderate saturation, bright — no search signal.
+    if 15 <= h <= 45 and 0.10 <= s <= 0.45 and v > 0.72:
+        return None
+
+    # Brown = dark, muted warm hues.
+    if 15 <= h <= 50 and v <= 0.62:
+        return "brown"
+
+    # Pink = light desaturated reds OR the magenta band. Deep saturated
+    # reds near the wrap (crimson, hue ~348) must stay red, so the magenta
+    # band ends at 340.
+    if (h >= 340 or h < 15) and s <= 0.45 and v > 0.75:
+        return "pink"
+    if 315 <= h < 340:
+        return "pink"
+
+    if h >= 340 or h < 15:
+        return "red"
+    if h < 42:
+        return "orange"
+    if h < 68:
+        return "yellow"
+    if h < 165:
+        return "green"
+    if h < 195:
+        return "cyan"
+    if h < 255:
+        return "blue"
+    return "purple"  # 255-315
+
+
+def dominant_color_tags_from_json(dominant_colors_json: Optional[str]) -> str:
+    """Build the stored dominant_color_tags value from a dominant_colors JSON.
+
+    Returns a comma-wrapped tag list (",red,white,") so SQL can match single
+    tags with LIKE '%,red,%'. Empty string when nothing qualifies.
+    """
+    if not dominant_colors_json:
+        return ""
+    try:
+        entries = json.loads(dominant_colors_json)
+    except (ValueError, TypeError):
+        return ""
+    if not isinstance(entries, list):
+        return ""
+
+    tags: List[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            pct = float(entry.get("pct") or 0)
+        except (TypeError, ValueError):
+            pct = 0.0
+        if pct < MIN_DOMINANT_PCT:
+            continue
+        tag = classify_hex_color(str(entry.get("hex") or ""))
+        if tag and tag not in tags:
+            tags.append(tag)
+    if not tags:
+        return ""
+    return "," + ",".join(tags) + ","

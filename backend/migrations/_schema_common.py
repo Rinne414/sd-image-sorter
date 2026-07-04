@@ -260,6 +260,9 @@ LEGACY_IMAGE_COLUMNS: tuple[tuple[str, str], ...] = (
     ("brightness_histogram", "TEXT"),
     ("brightness_skew", "REAL"),
     ("brightness_distribution", "TEXT"),
+    # v3.5.0 dominant-hue tags (",red,white," wrapped list derived from
+    # dominant_colors; backfilled from existing JSON by migration 022)
+    ("dominant_color_tags", "TEXT"),
 )
 
 

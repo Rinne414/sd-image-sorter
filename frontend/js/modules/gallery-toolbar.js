@@ -116,6 +116,9 @@
             // List tokens ADD to the existing filters (removal happens via the
             // sidebar summary ✕ / Clear all, same as modal-added values).
             const addUnique = (values, field, label) => {
+                // Filters restored from an older localStorage snapshot may
+                // predate newer list fields (e.g. colorHues) — heal in place.
+                if (!Array.isArray(filters[field])) filters[field] = [];
                 (values || []).forEach((value) => {
                     if (!filters[field].includes(value)) {
                         filters[field].push(value);
@@ -134,6 +137,8 @@
             addUnique(parsed.excludeGenerators, 'excludeGenerators', '-generator');
             addUnique(parsed.excludeRatings, 'excludeRatings', '-rating');
             addUnique(parsed.excludeColors, 'excludeColors', '-color');
+            addUnique(parsed.colorHues, 'colorHues', 'color');
+            addUnique(parsed.excludeColorHues, 'excludeColorHues', '-color');
 
             // generator:/rating: NARROW their default-everything lists while the
             // token is present; removing the token restores the default set.

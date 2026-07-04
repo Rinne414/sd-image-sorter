@@ -149,7 +149,8 @@ function formatDimensionsSummary(filters, labels = {}) {
 
 function formatColorSummary(filters, labels = {}) {
     const f = filters || {};
-    const hasColorFilter = f.brightnessMin || f.brightnessMax || f.colorTemperature || f.brightnessDistribution;
+    const hasHues = (f.colorHues || []).length > 0 || (f.excludeColorHues || []).length > 0;
+    const hasColorFilter = f.brightnessMin || f.brightnessMax || f.colorTemperature || f.brightnessDistribution || hasHues;
     if (!hasColorFilter) {
         return labels.anyLabel || 'Any';
     }
@@ -165,6 +166,12 @@ function formatColorSummary(filters, labels = {}) {
     };
     if (f.colorTemperature) {
         parts.push(temperatureLabels[f.colorTemperature] || f.colorTemperature);
+    }
+    if ((f.colorHues || []).length) {
+        parts.push(f.colorHues.join('/'));
+    }
+    if ((f.excludeColorHues || []).length) {
+        parts.push(f.excludeColorHues.map((h) => `-${h}`).join('/'));
     }
     if (f.brightnessDistribution) {
         parts.push(labels.distributionLabels?.[f.brightnessDistribution] || f.brightnessDistribution);

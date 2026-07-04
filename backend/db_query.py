@@ -856,6 +856,37 @@ def _apply_color_filter(conditions: List[str], params: List[Any],
     return conditions, params
 
 
+def _apply_color_hues_filter(conditions: List[str], params: List[Any],
+                             color_hues: Optional[List[str]] = None,
+                             exclude_color_hues: Optional[List[str]] = None) -> tuple:
+    """v3.5.0 dominant-hue filter over the comma-wrapped dominant_color_tags.
+
+    ``color_hues`` matches images whose dominant colors include ANY of the
+    requested hues (OR semantics, like the other list filters).
+    ``exclude_color_hues`` rejects images containing ANY of them; rows with
+    NULL/empty tags are NOT excluded — they merely lack the attribute,
+    mirroring _apply_exclude_colors_filter.
+    Values outside color_analyzer.DOMINANT_COLOR_TAGS are ignored.
+    """
+    from color_analyzer import DOMINANT_COLOR_TAGS
+
+    valid = set(DOMINANT_COLOR_TAGS)
+    if color_hues:
+        wanted = [h.lower() for h in color_hues if h and h.lower() in valid]
+        if wanted:
+            ors = " OR ".join(["i.dominant_color_tags LIKE ?"] * len(wanted))
+            conditions.append(f"({ors})")
+            params.extend([f"%,{h},%" for h in wanted])
+    if exclude_color_hues:
+        banned = [h.lower() for h in exclude_color_hues if h and h.lower() in valid]
+        for h in banned:
+            conditions.append(
+                "(i.dominant_color_tags IS NULL OR i.dominant_color_tags NOT LIKE ?)"
+            )
+            params.append(f"%,{h},%")
+    return conditions, params
+
+
 def _apply_artist_filter(query: str, conditions: List[str], params: List[Any],
                          artist: Optional[str]) -> tuple:
     """Apply artist filter by joining with artist_predictions table.

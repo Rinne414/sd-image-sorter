@@ -1729,6 +1729,8 @@ class SortingService:
         # v3.3.x gallery-scope parity (None preserves pre-existing behavior)
         exclude_prompts = request.exclude_prompts if request.exclude_prompts else None
         exclude_colors = request.exclude_colors if request.exclude_colors else None
+        color_hues = request.color_hues if request.color_hues else None
+        exclude_color_hues = request.exclude_color_hues if request.exclude_color_hues else None
         min_user_rating = request.min_user_rating
         brightness_min = request.brightness_min
         brightness_max = request.brightness_max
@@ -1763,6 +1765,8 @@ class SortingService:
             exclude_loras=exclude_loras,
             exclude_prompts=exclude_prompts,
             exclude_colors=exclude_colors,
+            color_hues=color_hues,
+            exclude_color_hues=exclude_color_hues,
             min_user_rating=min_user_rating,
             brightness_min=brightness_min,
             brightness_max=brightness_max,
@@ -1870,6 +1874,8 @@ class SortingService:
                     exclude_loras=exclude_loras,
                     exclude_prompts=exclude_prompts,
                     exclude_colors=exclude_colors,
+                    color_hues=color_hues,
+                    exclude_color_hues=exclude_color_hues,
                     min_user_rating=min_user_rating,
                     brightness_min=brightness_min,
                     brightness_max=brightness_max,
@@ -2078,6 +2084,8 @@ class SortingService:
         brightness_distribution: Optional[str] = None,
         exclude_prompts: Optional[Any] = None,
         exclude_colors: Optional[Any] = None,
+        color_hues: Optional[Any] = None,
+        exclude_color_hues: Optional[Any] = None,
         collection_id: Optional[int] = None,
         folder: Optional[str] = None,
         has_metadata: Optional[bool] = None,
@@ -2153,6 +2161,8 @@ class SortingService:
             exclude_loras=self._coerce_sort_filter_values(exclude_loras),
             exclude_prompts=self._coerce_sort_filter_values(exclude_prompts),
             exclude_colors=self._coerce_sort_filter_values(exclude_colors),
+            color_hues=self._coerce_sort_filter_values(color_hues),
+            exclude_color_hues=self._coerce_sort_filter_values(exclude_color_hues),
             min_user_rating=min_user_rating,
             brightness_min=brightness_min,
             brightness_max=brightness_max,

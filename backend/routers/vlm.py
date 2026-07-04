@@ -578,6 +578,8 @@ def _filters_to_selection_kwargs(filters: Dict[str, Any]) -> Dict[str, Any]:
         "exclude_loras": pick("excludeLoras", "exclude_loras"),
         "exclude_prompts": pick("excludePrompts", "exclude_prompts"),
         "exclude_colors": pick("excludeColors", "exclude_colors"),
+        "color_hues": pick("colorHues", "color_hues"),
+        "exclude_color_hues": pick("excludeColorHues", "exclude_color_hues"),
         "collection_id": pick("collectionId", "collection_id"),
         "folder": pick("folder"),
         "has_metadata": pick("hasMetadata", "has_metadata"),

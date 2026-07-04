@@ -283,6 +283,8 @@ function createDefaultFilterState() {
         excludeLoras: [],
         excludePrompts: [],
         excludeColors: [],
+        colorHues: [],
+        excludeColorHues: [],
         folder: null,
         hasMetadata: null,
     };
@@ -329,6 +331,8 @@ function cloneFilterState(filters) {
         excludeLoras: [...(source.excludeLoras || [])],
         excludePrompts: [...(source.excludePrompts || [])],
         excludeColors: [...(source.excludeColors || [])],
+        colorHues: [...(source.colorHues || [])],
+        excludeColorHues: [...(source.excludeColorHues || [])],
         collectionId: source.collectionId ?? null,
         folder: source.folder ? String(source.folder).trim() : null,
         hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
@@ -416,6 +420,8 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
         excludeLoras: [...(source.excludeLoras || [])],
         excludePrompts: [...(source.excludePrompts || [])],
         excludeColors: [...(source.excludeColors || [])],
+        colorHues: [...(source.colorHues || [])],
+        excludeColorHues: [...(source.excludeColorHues || [])],
         collectionId: source.collectionId ?? null,
         folder: source.folder ? String(source.folder).trim() : null,
         hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
@@ -464,6 +470,8 @@ function buildAdvancedFilterContract(filters = AppState?.filters || createDefaul
         excludeLoras: request.excludeLoras,
         excludePrompts: request.excludePrompts,
         excludeColors: request.excludeColors,
+        colorHues: request.colorHues,
+        excludeColorHues: request.excludeColorHues,
         collectionId: request.collectionId ?? null,
         folder: request.folder || null,
         hasMetadata: request.hasMetadata ?? null,
@@ -630,6 +638,8 @@ window.AppFilterAccess = {
         if (filters.brightnessMin) params.set('brightness_min', filters.brightnessMin);
         if (filters.brightnessMax) params.set('brightness_max', filters.brightnessMax);
         if (filters.colorTemperature) params.set('color_temperature', filters.colorTemperature);
+        if (filters.colorHues?.length) params.set('color_hues', filters.colorHues.join(','));
+        if (filters.excludeColorHues?.length) params.set('exclude_color_hues', filters.excludeColorHues.join(','));
         if (filters.brightnessDistribution) params.set('brightness_distribution', filters.brightnessDistribution);
         // v3.2.2 per-item exclude filters
         if (filters.excludeTags?.length) params.set('exclude_tags', filters.excludeTags.join(','));
@@ -656,7 +666,10 @@ const AppState = {
     currentView: 'gallery',
     viewMode: localStorage.getItem(GALLERY_VIEW_MODE_KEY) || 'grid',
     images: [],
-    filters: AppFilterStore ? AppFilterStore.getState() : (savedFilters || createDefaultFilterState()),
+    // cloneFilterState normalizes snapshots persisted by OLDER builds: any
+    // list/scalar field added since (e.g. colorHues) gets its default instead
+    // of being undefined and crashing list operations downstream.
+    filters: AppFilterStore ? AppFilterStore.getState() : cloneFilterState(savedFilters || createDefaultFilterState()),
     selectedImage: null,
     isLoading: false,
     galleryNeedsRefresh: false,
@@ -823,6 +836,7 @@ function _galleryHasActiveFilter() {
     if (f.minUserRating != null) return true;
     if (f.brightnessMin != null || f.brightnessMax != null) return true;
     if (f.colorTemperature) return true;
+    if (f.colorHues?.length || f.excludeColorHues?.length) return true;
     if (f.brightnessDistribution) return true;
     // generators/ratings start as "all selected" - flag only when a strict
     // subset is selected
@@ -1253,6 +1267,8 @@ const API = {
         if (filters.brightnessMin) params.set('brightness_min', filters.brightnessMin);
         if (filters.brightnessMax) params.set('brightness_max', filters.brightnessMax);
         if (filters.colorTemperature) params.set('color_temperature', filters.colorTemperature);
+        if (filters.colorHues?.length) params.set('color_hues', filters.colorHues.join(','));
+        if (filters.excludeColorHues?.length) params.set('exclude_color_hues', filters.excludeColorHues.join(','));
         if (filters.brightnessDistribution) params.set('brightness_distribution', filters.brightnessDistribution);
         if (filters.excludeTags?.length) params.set('exclude_tags', filters.excludeTags.join(','));
         if (filters.excludeGenerators?.length) params.set('exclude_generators', filters.excludeGenerators.join(','));
@@ -1310,6 +1326,8 @@ const API = {
         if (filters.brightnessMin) params.set('brightness_min', filters.brightnessMin);
         if (filters.brightnessMax) params.set('brightness_max', filters.brightnessMax);
         if (filters.colorTemperature) params.set('color_temperature', filters.colorTemperature);
+        if (filters.colorHues?.length) params.set('color_hues', filters.colorHues.join(','));
+        if (filters.excludeColorHues?.length) params.set('exclude_color_hues', filters.excludeColorHues.join(','));
         if (filters.brightnessDistribution) params.set('brightness_distribution', filters.brightnessDistribution);
 
         // v3.2.2 per-item exclude filters
@@ -11035,6 +11053,9 @@ async function openFilterModal(options = {}) {
     $$('input[name="color-temperature"]').forEach(radio => {
         radio.checked = radio.value === (filterState.colorTemperature || '');
     });
+    $$('input[name="color-hue"]').forEach(cb => {
+        cb.checked = (filterState.colorHues || []).includes(cb.value);
+    });
     $$('input[name="brightness-distribution"]').forEach(radio => {
         radio.checked = radio.value === (filterState.brightnessDistribution || '');
     });
@@ -12690,7 +12711,8 @@ function updateFilterModalSummary() {
     const brightnessMax = parseFloat($('#filter-brightness-max')?.value) || null;
     const colorTemperature = $('input[name="color-temperature"]:checked')?.value || '';
     const brightnessDistribution = $('input[name="brightness-distribution"]:checked')?.value || '';
-    const colorCount = [brightnessMin, brightnessMax].filter(Boolean).length + (colorTemperature ? 1 : 0) + (brightnessDistribution ? 1 : 0);
+    const colorHueCount = $$('input[name="color-hue"]:checked').length;
+    const colorCount = [brightnessMin, brightnessMax].filter(Boolean).length + (colorTemperature ? 1 : 0) + (brightnessDistribution ? 1 : 0) + (colorHueCount ? 1 : 0);
 
     setCount('filter-modal-count-generators', `${generatorCount}/${generatorTotal}`);
     setCount('filter-modal-count-ratings', `${ratingCount}/${ratingTotal}`);
@@ -12984,6 +13006,7 @@ function readFilterModalDomInto(filterState) {
     filterState.brightnessMin = parseFloat($('#filter-brightness-min')?.value) || null;
     filterState.brightnessMax = parseFloat($('#filter-brightness-max')?.value) || null;
     filterState.colorTemperature = colorTemperatureRadio ? colorTemperatureRadio.value : '';
+    filterState.colorHues = Array.from($$('input[name="color-hue"]:checked'), cb => cb.value);
     filterState.brightnessDistribution = brightnessDistributionRadio ? brightnessDistributionRadio.value : '';
 
     // Aurora Phase 3 (24d): saturation range (0-255, needs color analysis).
@@ -13090,6 +13113,7 @@ function resetAllFilters() {
     if (brightnessMinInput) brightnessMinInput.value = '';
     if (brightnessMaxInput) brightnessMaxInput.value = '';
     $$('input[name="color-temperature"]').forEach(r => r.checked = r.value === '');
+    $$('input[name="color-hue"]').forEach(cb => cb.checked = false);
     $$('input[name="brightness-distribution"]').forEach(r => r.checked = r.value === '');
     renderModalActiveTags();
     renderModalActivePrompts();

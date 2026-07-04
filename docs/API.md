@@ -131,6 +131,8 @@ Retrieve images with filters and cursor pagination.
 | `brightness_min` | float | - | Minimum average brightness, `0..255`; requires color analysis data |
 | `brightness_max` | float | - | Maximum average brightness, `0..255`; requires color analysis data |
 | `color_temperature` | string | - | `warm`, `cool`, `neutral`; requires color analysis data |
+| `color_hues` | string | - | Comma-separated dominant hues (ANY match): `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple`, `pink`, `brown`, `white`, `black`, `gray`; requires color analysis data (v3.5.0) |
+| `exclude_color_hues` | string | - | Comma-separated dominant hues to exclude; unanalyzed images are kept (v3.5.0) |
 | `brightness_distribution` | string | - | `left_heavy`, `right_heavy`, `middle_heavy`, `edge_heavy`, `balanced`; requires color analysis data |
 | `folder` | string | - | v3.3.2: absolute directory path; restricts results to that folder **and all subfolders** (recursive, case-insensitive). Forward- or back-slashes accepted. Composes with every other filter. |
 | `has_metadata` | bool | - | v3.3.2: tri-state "has SD generation parameters" filter. Omit for all images; `true` keeps only images with a known generator **or** a non-empty prompt; `false` keeps only images with neither (e.g. plain PNGs). Distinct from `metadata_status` (parse-pipeline state). Composes with every other filter. |

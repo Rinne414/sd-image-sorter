@@ -92,6 +92,25 @@
     background: #6b7280;
 }
 
+/* v3.5.0 filter-modal dominant-hue dots: base shape + the hues the caption
+   palette lacks (the rest reuse cap-ac-dot-* colors above/below). */
+.filter-hue-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+    background: #6b7280;
+}
+.hue-dot-red    { background: #ef4444; }
+.hue-dot-green  { background: #22c55e; }
+.hue-dot-purple { background: #9333ea; } /* data-viz hue, not a UI accent (banned-accent contract) */
+.hue-dot-brown  { background: #92400e; }
+.hue-dot-white  { background: #f8fafc; border: 1px solid rgba(255, 255, 255, 0.35); }
+.hue-dot-black  { background: #0b0b0f; border: 1px solid rgba(255, 255, 255, 0.30); }
+
+.hue-choice-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+
 .cap-ac-dot-character  { background: #f472b6; }
 .cap-ac-dot-artist     { background: #d946ef; }
 .cap-ac-dot-outfit     { background: #a78bfa; }

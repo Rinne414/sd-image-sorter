@@ -143,6 +143,8 @@ class SelectionIdsRequest(BaseModel):
     excludeLoras: List[str] = Field(default_factory=list)
     excludePrompts: List[str] = Field(default_factory=list)
     excludeColors: List[str] = Field(default_factory=list)
+    colorHues: List[str] = Field(default_factory=list)  # v3.5.0 dominant-hue include
+    excludeColorHues: List[str] = Field(default_factory=list)  # v3.5.0 dominant-hue exclude
     collectionId: Optional[int] = Field(default=None, ge=1)
     # Aurora Phase 3 gallery filters (compose with selection tokens)
     noCaption: Optional[bool] = Field(default=None)
@@ -553,6 +555,14 @@ async def get_images(
         default=None,
         description="Comma-separated color temperatures to exclude: warm/cool/neutral (v3.3.0)",
     ),
+    color_hues: Optional[str] = Query(
+        default=None,
+        description="Comma-separated dominant hues to require (ANY match): red/orange/yellow/green/cyan/blue/purple/pink/brown/white/black/gray (v3.5.0)",
+    ),
+    exclude_color_hues: Optional[str] = Query(
+        default=None,
+        description="Comma-separated dominant hues to exclude (v3.5.0)",
+    ),
     collection_id: Optional[int] = Query(
         default=None,
         ge=1,
@@ -651,6 +661,8 @@ async def get_images(
         exclude_loras=exclude_loras,
         exclude_prompts=exclude_prompts,
         exclude_colors=exclude_colors,
+        color_hues=color_hues,
+        exclude_color_hues=exclude_color_hues,
         collection_id=collection_id,
         folder=folder,
         has_metadata=has_metadata,
@@ -736,6 +748,8 @@ async def create_selection_token(
         exclude_loras=request.excludeLoras,
         exclude_prompts=request.excludePrompts,
         exclude_colors=request.excludeColors,
+        color_hues=request.colorHues,
+        exclude_color_hues=request.excludeColorHues,
         collection_id=request.collectionId,
         folder=request.folder,
         has_metadata=request.hasMetadata,
@@ -958,6 +972,8 @@ async def count_images(
     exclude_loras: Optional[str] = Query(default=None),
     exclude_prompts: Optional[str] = Query(default=None),
     exclude_colors: Optional[str] = Query(default=None),
+    color_hues: Optional[str] = Query(default=None),
+    exclude_color_hues: Optional[str] = Query(default=None),
     collection_id: Optional[int] = Query(default=None, ge=1),
     folder: Optional[str] = Query(default=None, max_length=4096),
     has_metadata: Optional[bool] = Query(default=None),
@@ -1013,6 +1029,8 @@ async def count_images(
         exclude_loras=exclude_loras,
         exclude_prompts=exclude_prompts,
         exclude_colors=exclude_colors,
+        color_hues=color_hues,
+        exclude_color_hues=exclude_color_hues,
         collection_id=collection_id,
         folder=folder,
         has_metadata=has_metadata,
@@ -1141,6 +1159,8 @@ async def get_selection_ids(
         exclude_loras=request.excludeLoras,
         exclude_prompts=request.excludePrompts,
         exclude_colors=request.excludeColors,
+        color_hues=request.colorHues,
+        exclude_color_hues=request.excludeColorHues,
         collection_id=request.collectionId,
         folder=request.folder,
         has_metadata=request.hasMetadata,

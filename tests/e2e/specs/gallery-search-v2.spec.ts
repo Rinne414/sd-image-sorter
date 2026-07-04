@@ -184,7 +184,10 @@ test('parser maps the full grammar onto FilterStore shapes', async ({ page }) =>
       colorZh: q.parse('主题:暖').scalars,
       contains: q.parse('contains(red)').freeText,
       quoted: q.parse('prompt:"long hair"').prompts,
-      warnColor: q.parse('color:red').warnings.length,
+      hueRed: q.parse('color:red').colorHues,
+      hueZh: q.parse('color:蓝').colorHues,
+      negHue: q.parse('-color:粉').excludeColorHues,
+      warnColor: q.parse('color:sparkly').warnings.length,
       warnStars: q.parse('stars<=2').warnings.length,
       starsOk: q.parse('stars>=4').scalars,
       hasNo: { has: q.parse('has:params').scalars, no: q.parse('no:caption').scalars },
@@ -206,6 +209,9 @@ test('parser maps the full grammar onto FilterStore shapes', async ({ page }) =>
   expect(parsed.colorZh.colorTemperature).toBe('warm')
   expect(parsed.contains).toEqual(['red'])
   expect(parsed.quoted).toEqual(['long hair'])
+  expect(parsed.hueRed).toEqual(['red'])
+  expect(parsed.hueZh).toEqual(['blue'])
+  expect(parsed.negHue).toEqual(['pink'])
   expect(parsed.warnColor).toBe(1)
   expect(parsed.warnStars).toBe(1)
   expect(parsed.starsOk.minUserRating).toBe(4)
@@ -218,7 +224,7 @@ test('typing a compound query applies filters; clearing restores box-owned field
   await openGallery(page)
   const input = page.locator('#gallery-search-input')
 
-  await input.fill('score>=7 width>=1024 -tag:blurry gen:nai rating:g aspect:portrait color:warm no:caption')
+  await input.fill('score>=7 width>=1024 -tag:blurry gen:nai rating:g aspect:portrait color:warm color:red -color:粉 no:caption')
   await input.press('Enter')
 
   await expect.poll(async () => (await filterState(page)).minAesthetic).toBe(7)
@@ -229,6 +235,8 @@ test('typing a compound query applies filters; clearing restores box-owned field
   expect(applied.ratings).toEqual(['general'])
   expect(applied.aspectRatio).toBe('portrait')
   expect(applied.colorTemperature).toBe('warm')
+  expect(applied.colorHues).toEqual(['red'])
+  expect(applied.excludeColorHues).toEqual(['pink'])
   expect(applied.noCaption).toBe(true)
 
   // The preview line narrates the parse.
@@ -259,13 +267,26 @@ test('typing a compound query applies filters; clearing restores box-owned field
   expect((await filterState(page)).minAesthetic).toBe(7)
 })
 
+test('color:red reaches the backend as color_hues', async ({ page }) => {
+  await openGallery(page)
+  const urls: string[] = []
+  page.on('request', (req) => {
+    if (req.url().includes('/api/images')) urls.push(req.url())
+  })
+  const input = page.locator('#gallery-search-input')
+  await input.fill('color:red -color:gray')
+  await input.press('Enter')
+  await expect.poll(async () => (await filterState(page)).colorHues).toEqual(['red'])
+  await expect.poll(() => urls.some((u) => u.includes('color_hues=red') && u.includes('exclude_color_hues=gray'))).toBe(true)
+})
+
 test('bad values surface warning chips instead of silently vanishing', async ({ page }) => {
   await openGallery(page)
   const input = page.locator('#gallery-search-input')
-  await input.fill('color:red')
+  await input.fill('color:sparkly')
   const warn = page.locator('#gallery-search-preview .gsq-chip-warn')
   await expect(warn).toBeVisible()
-  await expect(warn).toContainText('color:red')
+  await expect(warn).toContainText('color:sparkly')
 })
 
 test('tag autocomplete suggests from the library and accepts via keyboard', async ({ page }) => {

@@ -622,6 +622,7 @@ def update_image_colors(image_id: int, color_data: Dict[str, Any]) -> None:
             """
             UPDATE images
             SET dominant_colors = ?,
+                dominant_color_tags = ?,
                 avg_brightness = ?,
                 color_temperature = ?,
                 color_saturation = ?,
@@ -632,6 +633,7 @@ def update_image_colors(image_id: int, color_data: Dict[str, Any]) -> None:
             """,
             (
                 color_data.get("dominant_colors"),
+                color_data.get("dominant_color_tags"),
                 color_data.get("avg_brightness"),
                 color_data.get("color_temperature"),
                 color_data.get("color_saturation"),

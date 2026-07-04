@@ -41,6 +41,7 @@ from db_query import (
     _apply_exclude_loras_filter,
     _apply_exclude_prompts_filter,
     _apply_exclude_colors_filter,
+    _apply_color_hues_filter,
     _apply_search_filter,
     _apply_prompt_terms_filter,
     _apply_dimension_filters,
@@ -186,6 +187,8 @@ def get_images(
     exclude_loras: Optional[List[str]] = None,
     exclude_prompts: Optional[List[str]] = None,
     exclude_colors: Optional[List[str]] = None,
+    color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue include
+    exclude_color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue exclude
     collection_id: Optional[int] = None,
     folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
@@ -313,6 +316,7 @@ def get_images(
         conditions, params = _apply_exclude_loras_filter(conditions, params, exclude_loras)
         conditions, params = _apply_exclude_prompts_filter(conditions, params, exclude_prompts, prompt_match_mode)
         conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
+        conditions, params = _apply_color_hues_filter(conditions, params, color_hues, exclude_color_hues)
         conditions, params = _apply_collection_filter(conditions, params, collection_id)
 
         # Apply artist filter (JOIN)
@@ -390,6 +394,8 @@ def get_filtered_image_count(
     exclude_loras: Optional[List[str]] = None,
     exclude_prompts: Optional[List[str]] = None,
     exclude_colors: Optional[List[str]] = None,
+    color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue include
+    exclude_color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue exclude
     collection_id: Optional[int] = None,
     folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
@@ -500,6 +506,7 @@ def get_filtered_image_count(
         conditions, params = _apply_exclude_loras_filter(conditions, params, exclude_loras)
         conditions, params = _apply_exclude_prompts_filter(conditions, params, exclude_prompts, prompt_match_mode)
         conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
+        conditions, params = _apply_color_hues_filter(conditions, params, color_hues, exclude_color_hues)
         conditions, params = _apply_collection_filter(conditions, params, collection_id)
 
         # Apply artist filter (JOIN)
@@ -558,6 +565,8 @@ def get_filtered_image_ids(
     exclude_loras: Optional[List[str]] = None,
     exclude_prompts: Optional[List[str]] = None,
     exclude_colors: Optional[List[str]] = None,
+    color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue include
+    exclude_color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue exclude
     collection_id: Optional[int] = None,
     folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
@@ -667,6 +676,7 @@ def get_filtered_image_ids(
         conditions, params = _apply_exclude_loras_filter(conditions, params, exclude_loras)
         conditions, params = _apply_exclude_prompts_filter(conditions, params, exclude_prompts, prompt_match_mode)
         conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
+        conditions, params = _apply_color_hues_filter(conditions, params, color_hues, exclude_color_hues)
         conditions, params = _apply_collection_filter(conditions, params, collection_id)
 
         # Apply artist filter (JOIN)
@@ -764,6 +774,8 @@ def get_images_paginated(
     exclude_loras: Optional[List[str]] = None,
     exclude_prompts: Optional[List[str]] = None,
     exclude_colors: Optional[List[str]] = None,
+    color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue include
+    exclude_color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue exclude
     collection_id: Optional[int] = None,
     folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
@@ -884,6 +896,7 @@ def get_images_paginated(
         conditions, params = _apply_exclude_loras_filter(conditions, params, exclude_loras)
         conditions, params = _apply_exclude_prompts_filter(conditions, params, exclude_prompts, prompt_match_mode)
         conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
+        conditions, params = _apply_color_hues_filter(conditions, params, color_hues, exclude_color_hues)
         conditions, params = _apply_collection_filter(conditions, params, collection_id)
 
         # Apply artist filter (JOIN)
@@ -998,6 +1011,8 @@ def get_images_paginated(
                 exclude_loras=exclude_loras,
                 exclude_prompts=exclude_prompts,
                 exclude_colors=exclude_colors,
+            color_hues=color_hues,
+            exclude_color_hues=exclude_color_hues,
             )
 
         # Determine next cursor from the last row returned in this page
@@ -1060,6 +1075,8 @@ def _get_filtered_count(
     exclude_loras: Optional[List[str]] = None,
     exclude_prompts: Optional[List[str]] = None,
     exclude_colors: Optional[List[str]] = None,
+    color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue include
+    exclude_color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue exclude
 ) -> int:
     """Get total count for filtered images.
 

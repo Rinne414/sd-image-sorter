@@ -145,6 +145,8 @@ class SortFilterRequest(BaseModel):
     # v3.3.0 exclude filters
     exclude_prompts: Optional[List[str]] = Field(default=None)
     exclude_colors: Optional[List[str]] = Field(default=None)
+    color_hues: Optional[List[str]] = Field(default=None)  # v3.5.0 dominant-hue include
+    exclude_color_hues: Optional[List[str]] = Field(default=None)  # v3.5.0 dominant-hue exclude
     # v3.3.1 collection scope
     collection_id: Optional[int] = Field(default=None, ge=1)
     # v3.3.2 Library Navigation: recursive folder-subtree scope

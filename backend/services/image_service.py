@@ -2006,6 +2006,8 @@ class ImageService:
                     exclude_loras=contract.get("excludeLoras"),
                     exclude_prompts=contract.get("excludePrompts"),
                     exclude_colors=contract.get("excludeColors"),
+                    color_hues=contract.get("colorHues"),
+                    exclude_color_hues=contract.get("excludeColorHues"),
                     collection_id=contract.get("collectionId"),
                     folder=contract.get("folder"),
                     has_metadata=contract.get("hasMetadata"),
@@ -2087,6 +2089,8 @@ class ImageService:
         # v3.3.0 FEAT-EXCLUDE-EXTRA
         exclude_prompts: Optional[str] = None,
         exclude_colors: Optional[str] = None,
+        color_hues: Optional[str] = None,  # v3.5.0 dominant-hue include (CSV)
+        exclude_color_hues: Optional[str] = None,  # v3.5.0 dominant-hue exclude (CSV)
         collection_id: Optional[int] = None,
         folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
         has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
@@ -2165,6 +2169,8 @@ class ImageService:
         # v3.3.0 FEAT-EXCLUDE-EXTRA
         ex_prompt_list = _sanitize_filter_values(exclude_prompts)
         ex_color_list = _sanitize_filter_values(exclude_colors)
+        color_hue_list = _sanitize_filter_values(color_hues)
+        ex_color_hue_list = _sanitize_filter_values(exclude_color_hues)
 
         cursor_payload = None
         if cursor:
@@ -2225,6 +2231,8 @@ class ImageService:
                     exclude_loras=ex_lr_list,
                     exclude_prompts=ex_prompt_list,
                     exclude_colors=ex_color_list,
+                    color_hues=color_hue_list,
+                    exclude_color_hues=ex_color_hue_list,
                     collection_id=collection_id,
                     skip_count=total >= 0,
                 )
@@ -2302,6 +2310,8 @@ class ImageService:
                 exclude_loras=ex_lr_list,
                 exclude_prompts=ex_prompt_list,
                 exclude_colors=ex_color_list,
+                color_hues=color_hue_list,
+                exclude_color_hues=ex_color_hue_list,
                 collection_id=collection_id,
             )
             if not batch:
@@ -2356,6 +2366,8 @@ class ImageService:
             exclude_loras=ex_lr_list,
             exclude_prompts=ex_prompt_list,
             exclude_colors=ex_color_list,
+            color_hues=color_hue_list,
+            exclude_color_hues=ex_color_hue_list,
             collection_id=collection_id,
         )
 
@@ -2399,6 +2411,8 @@ class ImageService:
         exclude_loras: Optional[str] = None,
         exclude_prompts: Optional[str] = None,
         exclude_colors: Optional[str] = None,
+        color_hues: Optional[str] = None,  # v3.5.0 dominant-hue include (CSV)
+        exclude_color_hues: Optional[str] = None,  # v3.5.0 dominant-hue exclude (CSV)
         collection_id: Optional[int] = None,
         folder: Optional[str] = None,
         has_metadata: Optional[bool] = None,
@@ -2463,6 +2477,8 @@ class ImageService:
             exclude_loras=_sanitize_filter_values(exclude_loras),
             exclude_prompts=_sanitize_filter_values(exclude_prompts),
             exclude_colors=_sanitize_filter_values(exclude_colors),
+            color_hues=_sanitize_filter_values(color_hues),
+            exclude_color_hues=_sanitize_filter_values(exclude_color_hues),
             collection_id=collection_id,
             folder=folder,
             has_metadata=has_metadata,
@@ -2532,6 +2548,8 @@ class ImageService:
         exclude_loras: Optional[List[str]] = None,
         exclude_prompts: Optional[List[str]] = None,
         exclude_colors: Optional[List[str]] = None,
+        color_hues: Optional[List[str]] = None,
+        exclude_color_hues: Optional[List[str]] = None,
         collection_id: Optional[int] = None,
         folder: Optional[str] = None,  # v3.3.2 Library Navigation
         has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
@@ -2613,6 +2631,8 @@ class ImageService:
             "excludeLoras": _sanitize_filter_values(exclude_loras) or [],
             "excludePrompts": _sanitize_filter_values(exclude_prompts) or [],
             "excludeColors": _sanitize_filter_values(exclude_colors) or [],
+            "colorHues": _sanitize_filter_values(color_hues) or [],
+            "excludeColorHues": _sanitize_filter_values(exclude_color_hues) or [],
             "collectionId": collection_id,
             "folder": _coerce_optional_string_filter(folder, "folder"),
             "hasMetadata": _coerce_optional_bool_filter(has_metadata, "hasMetadata"),
@@ -2663,6 +2683,8 @@ class ImageService:
             exclude_loras=contract.get("excludeLoras"),
             exclude_prompts=contract.get("excludePrompts"),
             exclude_colors=contract.get("excludeColors"),
+            color_hues=contract.get("colorHues"),
+            exclude_color_hues=contract.get("excludeColorHues"),
             collection_id=contract.get("collectionId"),
             folder=contract.get("folder"),
             has_metadata=contract.get("hasMetadata"),
@@ -2708,6 +2730,8 @@ class ImageService:
             exclude_loras=contract.get("excludeLoras"),
             exclude_prompts=contract.get("excludePrompts"),
             exclude_colors=contract.get("excludeColors"),
+            color_hues=contract.get("colorHues"),
+            exclude_color_hues=contract.get("excludeColorHues"),
             collection_id=contract.get("collectionId"),
             folder=contract.get("folder"),
             has_metadata=contract.get("hasMetadata"),
@@ -2791,6 +2815,8 @@ class ImageService:
                 exclude_loras=filters.get("excludeLoras"),
                 exclude_prompts=filters.get("excludePrompts"),
                 exclude_colors=filters.get("excludeColors"),
+                color_hues=filters.get("colorHues"),
+                exclude_color_hues=filters.get("excludeColorHues"),
                 collection_id=filters.get("collectionId") or filters.get("collection_id"),
                 folder=filters.get("folder"),
                 has_metadata=filters.get("hasMetadata"),
@@ -2879,6 +2905,8 @@ class ImageService:
         exclude_loras: Optional[List[str]] = None,
         exclude_prompts: Optional[List[str]] = None,
         exclude_colors: Optional[List[str]] = None,
+        color_hues: Optional[List[str]] = None,
+        exclude_color_hues: Optional[List[str]] = None,
         collection_id: Optional[int] = None,
         folder: Optional[str] = None,
         has_metadata: Optional[bool] = None,
@@ -2921,6 +2949,8 @@ class ImageService:
             exclude_loras=exclude_loras,
             exclude_prompts=exclude_prompts,
             exclude_colors=exclude_colors,
+            color_hues=color_hues,
+            exclude_color_hues=exclude_color_hues,
             collection_id=collection_id,
             folder=folder,
             has_metadata=has_metadata,

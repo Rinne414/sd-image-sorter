@@ -134,6 +134,8 @@ class BulkTagFilterContract(BaseModel):
     excludeLoras: List[str] = Field(default_factory=list)
     excludePrompts: List[str] = Field(default_factory=list)
     excludeColors: List[str] = Field(default_factory=list)
+    colorHues: List[str] = Field(default_factory=list)  # v3.5.0
+    excludeColorHues: List[str] = Field(default_factory=list)  # v3.5.0
     collectionId: Optional[int] = Field(default=None, ge=1)
     folder: Optional[str] = Field(default=None, max_length=4096)
     hasMetadata: Optional[bool] = None
@@ -293,6 +295,8 @@ def _filter_contract_db_kwargs(filters: BulkTagFilterContract) -> Dict[str, Any]
         "exclude_loras": _list_or_none(filters.excludeLoras),
         "exclude_prompts": _list_or_none(filters.excludePrompts),
         "exclude_colors": _list_or_none(filters.excludeColors),
+        "color_hues": _list_or_none(filters.colorHues),
+        "exclude_color_hues": _list_or_none(filters.excludeColorHues),
         "collection_id": filters.collectionId,
         "folder": filters.folder,
         "has_metadata": filters.hasMetadata,

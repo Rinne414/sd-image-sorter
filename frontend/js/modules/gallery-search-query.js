@@ -49,6 +49,28 @@
         neutral: 'neutral', 中性: 'neutral',
     };
 
+    // v3.5.0: dominant-hue values for color:. Backed by the
+    // dominant_color_tags column (write-time classification of the top-5
+    // dominant colors). Temperature words above keep their old meaning.
+    const HUE_ALIASES = {
+        red: 'red', 红: 'red', 红色: 'red',
+        orange: 'orange', 橙: 'orange', 橙色: 'orange',
+        yellow: 'yellow', 黄: 'yellow', 黄色: 'yellow',
+        green: 'green', 绿: 'green', 绿色: 'green',
+        cyan: 'cyan', 青: 'cyan', 青色: 'cyan',
+        blue: 'blue', 蓝: 'blue', 蓝色: 'blue',
+        purple: 'purple', 紫: 'purple', 紫色: 'purple',
+        pink: 'pink', 粉: 'pink', 粉色: 'pink', 粉红: 'pink',
+        brown: 'brown', 棕: 'brown', 棕色: 'brown', 褐色: 'brown',
+        white: 'white', 白: 'white', 白色: 'white',
+        black: 'black', 黑: 'black', 黑色: 'black',
+        gray: 'gray', grey: 'gray', 灰: 'gray', 灰色: 'gray',
+    };
+    const HUE_VALUES = [
+        'red', 'orange', 'yellow', 'green', 'cyan', 'blue',
+        'purple', 'pink', 'brown', 'white', 'black', 'gray',
+    ];
+
     const DISTRIBUTION_VALUES = [
         'left_heavy', 'right_heavy', 'middle_heavy', 'edge_heavy', 'balanced',
     ];
@@ -92,7 +114,9 @@
         generator: GENERATOR_VALUES,
         rating: ['general', 'sensitive', 'questionable', 'explicit'],
         aspect: ['square', 'portrait', 'landscape'],
-        color: ['warm', 'cool', 'neutral'],
+        color: ['warm', 'cool', 'neutral',
+            'red', 'orange', 'yellow', 'green', 'cyan', 'blue',
+            'purple', 'pink', 'brown', 'white', 'black', 'gray'],
         light: DISTRIBUTION_VALUES,
         has: ['params'],
         no: ['params', 'caption'],
@@ -137,6 +161,7 @@
             generators: [], excludeGenerators: [],
             ratings: [], excludeRatings: [],
             excludeColors: [],
+            colorHues: [], excludeColorHues: [],
             scalars: {},
             freeText: [],
             parts: [],
@@ -360,17 +385,30 @@
                 return;
             }
             case 'color': {
-                const temperature = TEMPERATURE_ALIASES[value.toLowerCase()];
-                if (!temperature) {
-                    pushWarning(result, token, 'searchWarn.color', 'warm / cool / neutral');
+                const lowered = value.toLowerCase();
+                const temperature = TEMPERATURE_ALIASES[lowered];
+                if (temperature) {
+                    if (negated) {
+                        result.excludeColors.push(temperature);
+                        pushFilterPart(result, '-color', '', temperature);
+                    } else {
+                        result.scalars.colorTemperature = temperature;
+                        pushFilterPart(result, 'color', '', temperature);
+                    }
+                    return;
+                }
+                const hue = HUE_ALIASES[lowered];
+                if (!hue) {
+                    pushWarning(result, token, 'searchWarn.color',
+                        `warm / cool / neutral / ${HUE_VALUES.join(' / ')}`);
                     return;
                 }
                 if (negated) {
-                    result.excludeColors.push(temperature);
-                    pushFilterPart(result, '-color', '', temperature);
+                    result.excludeColorHues.push(hue);
+                    pushFilterPart(result, '-color', '', hue);
                 } else {
-                    result.scalars.colorTemperature = temperature;
-                    pushFilterPart(result, 'color', '', temperature);
+                    result.colorHues.push(hue);
+                    pushFilterPart(result, 'color', '', hue);
                 }
                 return;
             }

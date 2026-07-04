@@ -10,6 +10,16 @@
         'swarmui', 'drawthings', 'gemini', 'gpt-image',
     ]);
 
+    // v3.5.0 dominant-hue vocabulary (mirrors backend color_analyzer.DOMINANT_COLOR_TAGS).
+    const DOMINANT_HUES = Object.freeze([
+        'red', 'orange', 'yellow', 'green', 'cyan', 'blue',
+        'purple', 'pink', 'brown', 'white', 'black', 'gray',
+    ]);
+
+    function sanitizeHues(values) {
+        return [...new Set((values || []).filter((v) => DOMINANT_HUES.includes(v)))];
+    }
+
     function createDefaultFilterState() {
         return {
             generators: [...DEFAULT_FILTER_GENERATORS],
@@ -46,6 +56,9 @@
             // v3.3.0 FEAT-EXCLUDE-EXTRA
             excludePrompts: [],
             excludeColors: [],
+            // v3.5.0 dominant-hue filter (dominant_color_tags column)
+            colorHues: [],
+            excludeColorHues: [],
             // v3.3.1: browse within a collection (Favorites view = favorites collection id).
             // null = no collection constraint (normal gallery listing).
             collectionId: null,
@@ -109,6 +122,9 @@
             // v3.3.0 FEAT-EXCLUDE-EXTRA
             excludePrompts: [...(source.excludePrompts || [])],
             excludeColors: [...(source.excludeColors || [])],
+            // v3.5.0 dominant-hue filter (whitelisted + deduped)
+            colorHues: sanitizeHues(source.colorHues),
+            excludeColorHues: sanitizeHues(source.excludeColorHues),
             // v3.3.1 collection browse
             collectionId: source.collectionId ?? null,
             // v3.3.2 Library Navigation
