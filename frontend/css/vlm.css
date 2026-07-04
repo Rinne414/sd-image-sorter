@@ -554,6 +554,114 @@
     align-self: flex-start;
 }
 
+/* Aurora #25c: per-image caption type (booru | both | nl) + NL sentence box —
+   the batch-export editor consolidated with the Dataset Maker two-box editor.
+   Purple = AI output per the Aurora color contract. */
+.export-preview-captype {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.export-preview-captype-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.export-preview-captype-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+.export-preview-captype-seg {
+    display: inline-flex;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+.export-preview-captype-btn {
+    padding: 4px 12px;
+    border: none;
+    background: var(--bg-card-solid);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+.export-preview-captype-btn + .export-preview-captype-btn {
+    border-left: 1px solid var(--border-color);
+}
+.export-preview-captype-btn:hover {
+    color: var(--text-primary);
+}
+.export-preview-captype-btn.is-active {
+    background: rgba(var(--accent-secondary-rgb), 0.18);
+    color: var(--accent-secondary);
+    font-weight: 600;
+}
+.export-preview-captype-bulk {
+    display: inline-flex;
+    gap: 6px;
+    margin-left: auto;
+}
+.export-preview-captype-hint {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+.export-preview-nl {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+/* [hidden] guard: the flex display rules above would otherwise beat the UA
+   default and keep the boxes visible (known pitfall). */
+.export-preview-nl[hidden],
+.export-preview-willexport[hidden],
+.export-preview-captype[hidden] {
+    display: none;
+}
+.export-preview-nl-label {
+    font-size: 12px;
+    color: var(--accent-secondary);
+}
+.export-preview-nl-textarea {
+    min-height: 64px;
+    border-color: rgba(var(--accent-secondary-rgb), 0.4);
+}
+.export-preview-willexport {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px dashed rgba(var(--accent-secondary-rgb), 0.4);
+    background: rgba(var(--accent-secondary-rgb), 0.06);
+    font-size: 12px;
+}
+.export-preview-willexport strong {
+    flex-shrink: 0;
+    color: var(--accent-secondary);
+    font-size: 11px;
+}
+.export-preview-willexport-text {
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    max-height: 64px;
+    overflow-y: auto;
+}
+.export-preview-queue-captype {
+    position: absolute;
+    left: 4px;
+    top: 4px;
+    padding: 1px 5px;
+    border-radius: var(--radius-xs);
+    font-size: 10px;
+    line-height: 1.4;
+    background: rgba(var(--accent-secondary-rgb), 0.9);
+    color: var(--accent-contrast, #12141A);
+    pointer-events: none;
+}
+
 .export-preview-token-list,
 .export-preview-common-tags {
     display: flex;

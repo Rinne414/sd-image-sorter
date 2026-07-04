@@ -11,6 +11,11 @@ declare global {
     ArtistIdent?: any
     CensorEdit?: any
     EntryPage?: any
+    V321Integration?: any
+    CaptionCore?: any
+    // app.js is a classic script, so its top-level functions are globals.
+    getSelectedGalleryCount?: any
+    showBatchExportModal?: any
     __taggerSystemInfoStatus?: any
   }
 }

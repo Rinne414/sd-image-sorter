@@ -625,8 +625,10 @@ Export one same-name sidecar per selected image. Text modes write `.txt`; `json`
 | `blacklist` | string[] | `[]` | Tags excluded from tag/caption outputs |
 | `content_mode` | string | `tags` | `tags`, `prompt`, `negative`, `prompt_negative`, `a1111`, `caption_tags`, `caption_merged`, or `json` |
 | `overwrite_policy` | string | `unique` | `unique` creates non-colliding filenames, `skip` leaves existing sidecars untouched, `overwrite` replaces sidecars |
+| `image_types` | object | `{}` | v3.5.0 (caption editor): per-image caption type `{image_id: "booru"\|"nl"\|"both"}`. `nl`/`both` fold the stored (or overridden) natural-language sentence into the caption; absent keys mean `booru` and reproduce the pre-v3.5.0 output byte-for-byte |
+| `image_nl_overrides` | object | `{}` | v3.5.0 (caption editor): per-image edited NL sentence `{image_id: text}`. An explicit empty string suppresses the stored sentence |
 
-Mode rules: `prompt`, `negative`, `prompt_negative`, `a1111`, and `json` preserve the stored Prompt / generation data and ignore `prefix`. `tags` exports only tags after blacklist filtering. `caption_tags` writes optional Class Token + AI caption + Tags. `caption_merged` writes optional Class Token + AI caption + Prompt + Tags as one LoRA-training caption line.
+Mode rules: `prompt`, `negative`, `prompt_negative`, `a1111`, and `json` preserve the stored Prompt / generation data and ignore `prefix`. `tags` exports only tags after blacklist filtering. `caption_tags` writes optional Class Token + AI caption + Tags. `caption_merged` writes optional Class Token + AI caption + Prompt + Tags as one LoRA-training caption line. `image_types` / `image_nl_overrides` apply only in `template` and `tags` modes (the same gate as `/api/dataset/export`) and are also accepted by `POST /api/tags/export-combined`.
 
 Response includes `status` (`ok`, `partial`, or `error`), `exported`, `skipped`, numeric `errors`/`error_count`, `error_messages`, `total`, `content_mode`, and `overwrite_policy`. `overwrite_policy=skip` returns `partial` when existing sidecars are intentionally left untouched.
 

@@ -58,10 +58,12 @@ from services.dataset_session_service import (
     virtual_image_record_for_path,
 )
 from services.tag_export_service import (
+    NL_COMPOSE_MODES,
     VALID_OUTPUT_MODES,
     VALID_CONTENT_MODES,
     apply_caption_transforms,
     build_sidecar_content,
+    compose_caption_with_nl,
 )
 from utils.path_validation import normalize_user_path, validate_folder_path
 
@@ -467,7 +469,8 @@ def _split_image_overrides(request: Any) -> Tuple[Dict[int, str], Dict[str, str]
 # per-image NL compose (point 3) layers the natural-language sentence on top of
 # these. NL-aware modes (tags_nl, nl_caption, prompt_nl, caption_*) already emit
 # the sentence globally, so compose is skipped for them to avoid doubling it.
-_NL_COMPOSE_MODES = {"template", "tags"}
+# Shared with tag_export_service so both export engines gate identically.
+_NL_COMPOSE_MODES = NL_COMPOSE_MODES
 
 
 def _compose_nl_caption(
@@ -513,14 +516,8 @@ def _compose_nl_caption(
         # Fall back to the stored pure NL, then the fused ai_caption for rows
         # tagged before the nl_caption split existed.
         nl_text = str(record.get("nl_caption") or record.get("ai_caption") or "")
-    nl_text = nl_text.strip()
-    booru = str(rendered or "").strip()
-    if caption_type == "nl":
-        return nl_text or booru
-    # 'both' — tags first, then the sentence (matches the tags_nl mode order).
-    if booru and nl_text:
-        return f"{booru}, {nl_text}"
-    return booru or nl_text
+    # Join via the shared rule so the two export engines can never drift.
+    return compose_caption_with_nl(rendered, caption_type, nl_text)
 
 
 

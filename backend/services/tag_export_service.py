@@ -455,6 +455,75 @@ def apply_caption_transforms(content: str, transforms: Optional[Dict[str, Any]])
     return ", ".join(merged)
 
 
+# Content modes whose rendered caption is booru-tags / template only — the
+# per-image NL compose (caption editor's Booru/NL/Both control) layers the
+# natural-language sentence on top of these. NL-aware modes (tags_nl,
+# nl_caption, prompt_nl, caption_*) already emit the sentence globally, so
+# compose is skipped for them to avoid doubling it. Shared with
+# dataset_export_service — both export engines must gate identically.
+NL_COMPOSE_MODES = {"template", "tags"}
+
+
+def compose_caption_with_nl(rendered: str, caption_type: str, nl_text: str) -> str:
+    """Join rule for the per-image Booru/NL/Both caption type.
+
+    Single source of truth for both export engines; the frontend
+    ``CaptionCore.compose`` mirrors this exactly — change them together.
+    Returns ``rendered`` verbatim for any type other than "nl"/"both".
+    """
+    ctype = str(caption_type or "").strip().lower()
+    if ctype not in ("nl", "both"):
+        return rendered
+    booru = str(rendered or "").strip()
+    text = str(nl_text or "").strip()
+    if ctype == "nl":
+        return text or booru
+    # 'both' — tags first, then the sentence (matches the tags_nl mode order).
+    if booru and text:
+        return f"{booru}, {text}"
+    return booru or text
+
+
+def _coerce_int_str_map(raw: Optional[Dict[Any, Any]]) -> Dict[int, str]:
+    """Normalise a JSON object keyed by image id into ``{int: str}``."""
+    result: Dict[int, str] = {}
+    if isinstance(raw, dict):
+        for key, value in raw.items():
+            try:
+                result[int(key)] = str(value or "")
+            except (TypeError, ValueError):
+                continue
+    return result
+
+
+def _compose_nl_for_image(
+    rendered: str,
+    image: Dict[str, Any],
+    image_id: int,
+    *,
+    content_mode: str,
+    image_types: Dict[int, str],
+    nl_overrides: Dict[int, str],
+) -> str:
+    """Apply the per-image caption type to an already-rendered caption.
+
+    An explicit empty-string entry in ``nl_overrides`` intentionally
+    suppresses the stored sentence (mirrors dataset_export_service).
+    """
+    caption_type = str(image_types.get(image_id, "") or "").strip().lower()
+    if caption_type not in ("nl", "both"):
+        return rendered
+    if str(content_mode or "").strip().lower() not in NL_COMPOSE_MODES:
+        return rendered
+    if image_id in nl_overrides:
+        nl_text = nl_overrides[image_id]
+    else:
+        # Fall back to the stored pure NL, then the fused ai_caption for rows
+        # tagged before the nl_caption split existed.
+        nl_text = str(image.get("nl_caption") or image.get("ai_caption") or "")
+    return compose_caption_with_nl(rendered, caption_type, nl_text)
+
+
 def _filter_text_caption_tokens(value: str, blacklist: set[str]) -> List[str]:
     blocked = {" ".join(str(tag or "").split()).strip().lower() for tag in blacklist if str(tag or "").strip()}
     if not blocked:
@@ -756,6 +825,10 @@ def export_tags_batch_request(
             except (TypeError, ValueError):
                 continue
 
+    # Aurora #25c: per-image caption type + edited NL sentence (caption editor).
+    image_types_map = _coerce_int_str_map(getattr(request, "image_types", None))
+    nl_overrides_map = _coerce_int_str_map(getattr(request, "image_nl_overrides", None))
+
     # v3.2.1 follow-up: LoRA-trainer underscore convention. None == follow
     # per-content-mode default. Explicit True / False is the user's
     # checkbox override from the export modal.
@@ -804,6 +877,17 @@ def export_tags_batch_request(
                         template_options=template_options,
                         normalize_tag_underscores=normalize_tag_underscores_request,
                     )
+                # Aurora #25c: fold in the per-image NL sentence BEFORE the
+                # transforms, matching dataset_export_service's order
+                # (override/render -> compose -> transforms).
+                file_content = _compose_nl_for_image(
+                    file_content,
+                    image,
+                    image_id,
+                    content_mode=content_mode,
+                    image_types=image_types_map,
+                    nl_overrides=nl_overrides_map,
+                )
                 file_content = apply_caption_transforms(file_content, caption_transforms)
                 # In ``beside_image`` mode each image lands in its own
                 # source directory. We do NOT auto-create directories on
@@ -925,6 +1009,10 @@ def export_tags_combined_request(
             except (TypeError, ValueError):
                 continue
 
+    # Aurora #25c: per-image caption type + edited NL sentence (caption editor).
+    image_types_map = _coerce_int_str_map(getattr(request, "image_types", None))
+    nl_overrides_map = _coerce_int_str_map(getattr(request, "image_nl_overrides", None))
+
     normalize_tag_underscores_request = getattr(request, "normalize_tag_underscores", None)
     caption_transforms = getattr(request, "caption_transforms", None) or {}
 
@@ -968,6 +1056,14 @@ def export_tags_combined_request(
                                 template_options=template_options,
                                 normalize_tag_underscores=normalize_tag_underscores_request,
                             )
+                        rendered = _compose_nl_for_image(
+                            rendered,
+                            image,
+                            image_id,
+                            content_mode=content_mode,
+                            image_types=image_types_map,
+                            nl_overrides=nl_overrides_map,
+                        )
                         rendered = apply_caption_transforms(rendered, caption_transforms)
                         if not rendered:
                             continue

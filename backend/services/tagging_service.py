@@ -958,6 +958,14 @@ class BatchTagExportRequest(BaseModel):
     # "add/remove from all" working for selection tokens without sending
     # every image ID or caption to the browser.
     caption_transforms: Optional[Dict[str, Any]] = Field(default=None)
+    # Aurora #25c caption consolidation: per-image caption type + edited NL
+    # sentence — the same contract the Dataset Maker export already speaks.
+    # ``image_types`` values: "booru" | "nl" | "both"; an absent key means
+    # "booru" and reproduces the pre-feature output byte-for-byte.
+    # ``image_nl_overrides`` carries the caption editor's NL-box text; when a
+    # key is absent the stored nl_caption (then ai_caption) is used instead.
+    image_types: Optional[Dict[int, str]] = Field(default=None)
+    image_nl_overrides: Optional[Dict[int, str]] = Field(default=None)
     # v3.2.1 follow-up: convert danbooru-style tag underscores to spaces while
     # preserving ``score_*`` prefixes (LoRA-trainer convention). ``None``
     # (default) means "follow the per-content-mode default" — tag modes

@@ -1,8 +1,8 @@
 ## v3.5.0 — 清爽极光重设计 + 任务入口页 / Fresh Aurora Redesign + Mission Entry
 
-全局换新 v4.0「清爽极光」设计语言：左侧导航栏、任务入口页，图库搜索工具栏与底部批量操作条、排序专注模式与命名预设、打码审核流水线、「智能一趟」打标入口。超大库批量操作转为可取消的后台任务，AI 队列跨重启持久化，Linux NVIDIA 修复 GPU 打标。功能零删除。
+全局换新 v4.0「清爽极光」设计语言：左侧导航栏、任务入口页，图库搜索工具栏与底部批量操作条、排序专注模式与命名预设、打码审核流水线、「智能一趟」打标入口、Caption 双框编辑器统一。超大库批量操作转为可取消的后台任务，AI 队列跨重启持久化，Linux NVIDIA 修复 GPU 打标。功能零删除。
 
-The v4.0 "Fresh Aurora" redesign lands: a left navigation rail, a mission entry page, gallery toolbar search + a bottom batch action bar, sort focus mode & named presets, a censor review conveyor, and a one-pass Smart Tag entry. Huge-library bulk ops become cancellable background jobs, the AI queue survives restarts, and Linux NVIDIA machines get GPU tagging. Zero feature removals.
+The v4.0 "Fresh Aurora" redesign lands: a left navigation rail, a mission entry page, gallery toolbar search + a bottom batch action bar, sort focus mode & named presets, a censor review conveyor, a one-pass Smart Tag entry, and the caption editors consolidated into one two-box model. Huge-library bulk ops become cancellable background jobs, the AI queue survives restarts, and Linux NVIDIA machines get GPU tagging. Zero feature removals.
 
 ---
 
@@ -28,6 +28,9 @@ The v4.0 "Fresh Aurora" redesign lands: a left navigation rail, a mission entry 
 
 - **Caption preview health strip + trigger check / Caption 预览健康条 + 触发词检查**: the batch-export caption preview always shows a checks strip (edited / empty / blacklist hits / duplicates / max tokens, plus missing-trigger when a trigger word is set); images missing the trigger word carry a ⚑ badge.
   - 批量导出 caption 预览常驻「检查」健康条（已编辑 / 空 caption / 黑名单命中 / 重复词 / 最多标签，设触发词时统计「缺触发词」）；缺触发词的图片带 ⚑ 徽章。
+
+- **Caption editors consolidated / Caption 编辑器统一 (双框模型)**: the batch-export Caption Editor adopts the Dataset Maker two-box model — per-image Booru / Both / NL segment, an editable NL box seeded from the stored VLM sentence, a live "Will export" composed line, B+N / NL queue chips, bulk set/auto-assign. `/api/tags/export-batch` + `/api/tags/export-combined` accept the same `image_types` + `image_nl_overrides` as the dataset export (absent = unchanged output); both engines share one compose rule, so the preview text is exactly what lands in the sidecar.
+  - 批量导出 Caption 编辑器与 Dataset Maker 双框编辑器统一：逐图 Booru / 两者 / NL 分段、可编辑 NL 框（带出已存 VLM 句子）、实时「导出效果」合成行、队列 B+N / NL 徽章、批量设置/自动分配。`/api/tags/export-batch` 与 `/api/tags/export-combined` 接受与数据集导出相同的 `image_types` + `image_nl_overrides`（不传=输出不变）；两套引擎共用同一条合成规则，预览即所得。
 
 - **Dataset export manifest / 数据集导出清单**: every dataset export writes an `export_manifest.json` — settings snapshot, per-image results, and counts — so a training set's provenance is reproducible.
   - 数据集导出附带 `export_manifest.json`：设置快照、逐图结果与统计，训练集来源可复现。
@@ -86,7 +89,7 @@ The v4.0 "Fresh Aurora" redesign lands: a left navigation rail, a mission entry 
 
 ## Validation / 验证
 
-- Full 7-gate CI green: backend pytest 2318 passed / 7 skipped; Playwright e2e 165 passed / 3 skipped; ruff, strict tsc, JS syntax, lock freshness, and dependency audit all clean.
+- Full 7-gate CI green: backend pytest 2328 passed / 7 skipped; Playwright e2e 166 passed / 3 skipped; ruff, strict tsc, JS syntax, lock freshness, and dependency audit all clean.
 
 ---
 

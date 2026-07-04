@@ -11,6 +11,10 @@ const V321Integration = {
     selectedPreset: 'illustrious_pony',  // default
     previewCache: new Map(),  // image_id -> rendered caption (auto-generated)
     editedCaptions: new Map(),  // image_id -> user-edited caption
+    // Aurora #25c caption consolidation (two-box editor, shared w/ Dataset Maker):
+    nlCache: new Map(),       // image_id -> stored NL sentence (nl_caption || ai_caption)
+    editedNl: new Map(),      // image_id -> user-edited NL sentence
+    captionTypes: new Map(),  // image_id -> explicit 'nl' | 'both' (absent = 'booru')
     previewResults: [],    // legacy array OR sparse metadata cache (kept for compat)
     previewMetadata: new Map(), // image_id -> {filename, thumbnail_path}
     queueImageIds: [],     // explicit IDs or the currently cached token window
@@ -1405,6 +1409,7 @@ const V321Integration = {
             for (const item of (data.results || [])) {
                 this.previewCache.set(item.image_id, item.rendered || '');
                 this.previewMetadata.set(item.image_id, { filename: item.filename || '', thumbnail_path: item.thumbnail_path || '' });
+                this._seedNlFromPreviewItem(item);
             }
         } catch (e) {
             list.innerHTML = `<p style="padding:8px;color:var(--accent-danger)">Preview error: ${e.message}</p>`;
@@ -1628,6 +1633,121 @@ const V321Integration = {
         }
     },
 
+    // ---- Aurora #25c: per-image caption type + NL sentence (CaptionCore) ----
+
+    /** IDs whose caption state is client-side known (preview loaded or edited). */
+    _loadedPreviewIds() {
+        return Array.from(new Set([
+            ...Array.from(this.previewCache.keys()).map(Number),
+            ...Array.from(this.editedCaptions.keys()).map(Number),
+            ...Array.from(this.editedNl.keys()).map(Number),
+        ])).filter((id) => Number.isFinite(id) && id > 0);
+    },
+
+    _getNlText(imageId) {
+        const id = Number(imageId);
+        return this.editedNl.has(id) ? (this.editedNl.get(id) || '') : (this.nlCache.get(id) || '');
+    },
+
+    _setNlEdit(imageId, value) {
+        const id = Number(imageId);
+        const text = String(value || '');
+        // Track only real deviations from the stored sentence; an explicit
+        // empty string is a valid override (suppresses the stored NL).
+        if (text !== (this.nlCache.get(id) || '')) {
+            this.editedNl.set(id, text);
+        } else {
+            this.editedNl.delete(id);
+        }
+    },
+
+    _getCaptionType(imageId) {
+        const id = Number(imageId);
+        const explicit = this.captionTypes.get(id) || null;
+        // Explicit-only: unlike the Dataset Maker (autoBoth), the batch-export
+        // editor defaults every image to 'booru' so export output never
+        // changes without a user action.
+        return window.CaptionCore
+            ? window.CaptionCore.effectiveType(explicit, false, {})
+            : (explicit || 'booru');
+    },
+
+    _setCaptionType(imageId, type) {
+        const id = Number(imageId);
+        if (type === 'nl' || type === 'both') {
+            this.captionTypes.set(id, type);
+        } else {
+            this.captionTypes.delete(id);
+        }
+    },
+
+    /** The NL compose only applies in template/tags modes (backend gate). */
+    _composeEligible() {
+        const mode = document.getElementById('batch-export-content-mode')?.value || 'caption_merged';
+        return mode === 'template' || mode === 'tags';
+    },
+
+    /** The string the export will actually write for this image — same order
+     *  as the backend: (edit | render) -> NL compose -> caption_transforms. */
+    _getExportedCaption(imageId) {
+        const id = Number(imageId);
+        const raw = this.editedCaptions.has(id)
+            ? (this.editedCaptions.get(id) || '')
+            : (this.previewCache.get(id) || this._getPreviewItem(id)?.rendered || '');
+        const composed = (window.CaptionCore && this._composeEligible())
+            ? window.CaptionCore.compose(raw, this._getNlText(id), this._getCaptionType(id))
+            : raw;
+        return this._applyCaptionTransformsToText(composed);
+    },
+
+    _seedNlFromPreviewItem(item) {
+        const id = Number(item?.image_id);
+        if (!Number.isFinite(id) || id <= 0) return;
+        if (item.nl_caption !== undefined || item.ai_caption !== undefined) {
+            this.nlCache.set(id, String(item.nl_caption || item.ai_caption || ''));
+        }
+    },
+
+    _captionTypeDisplayLabel(type) {
+        if (type === 'both') return this._i18n('dataset.captionTypeBoth', 'Both');
+        if (type === 'nl') return this._i18n('dataset.captionTypeNl', 'NL');
+        return this._i18n('dataset.captionTypeBooru', 'Booru');
+    },
+
+    _applyCaptionTypeToLoaded(type) {
+        const ids = this._loadedPreviewIds();
+        if (!ids.length) return;
+        for (const id of ids) this._setCaptionType(id, type);
+        if (typeof window.showToast === 'function') {
+            window.showToast(
+                this._i18n('dataset.captionTypeApplied', 'Set {count} image(s) to "{type}".',
+                    { count: ids.length, type: this._captionTypeDisplayLabel(type) }),
+                'success'
+            );
+        }
+        this._renderPreviewWorkbench();
+    },
+
+    _autoAssignTypesLoaded() {
+        const ids = this._loadedPreviewIds();
+        if (!ids.length) return;
+        let both = 0;
+        let booru = 0;
+        for (const id of ids) {
+            const hasNl = String(this._getNlText(id) || '').trim().length > 0;
+            this._setCaptionType(id, hasNl ? 'both' : 'booru');
+            if (hasNl) both += 1; else booru += 1;
+        }
+        if (typeof window.showToast === 'function') {
+            window.showToast(
+                this._i18n('dataset.captionTypeAutoDone', 'Auto: {both} both (have a sentence), {booru} booru.',
+                    { both, booru }),
+                'success'
+            );
+        }
+        this._renderPreviewWorkbench();
+    },
+
     _normalizeTransformToken(token) {
         return String(token || '').replace(/_/g, ' ').split(/\s+/).join(' ').trim().toLowerCase();
     },
@@ -1784,6 +1904,7 @@ const V321Integration = {
                             if (!this.previewCache.has(itemId)) {
                                 this.previewCache.set(itemId, item.rendered || '');
                             }
+                            this._seedNlFromPreviewItem(item);
                         }
                     }
                 } catch (_) { /* best effort */ }
@@ -1902,6 +2023,8 @@ const V321Integration = {
 
     _resetPreviewCaption(imageId) {
         this.editedCaptions.delete(Number(imageId));
+        this.editedNl.delete(Number(imageId));
+        this.captionTypes.delete(Number(imageId));
         this._renderPreviewWorkbench();
     },
 
@@ -1909,6 +2032,8 @@ const V321Integration = {
         const ids = this.queueImageIds.length ? this.queueImageIds : this.previewResults.map(item => Number(item.image_id));
         for (const id of ids) {
             this.editedCaptions.delete(Number(id));
+            this.editedNl.delete(Number(id));
+            this.captionTypes.delete(Number(id));
         }
         this.captionTransforms = { prepend: [], append: [], remove: [], remove_categories: [], dedupe: false };
         this._renderPreviewWorkbench();
@@ -1923,6 +2048,30 @@ const V321Integration = {
             }
         }
         return Object.keys(overrides).length ? overrides : null;
+    },
+
+    /** Aurora #25c: explicit per-image caption types for the export payload. */
+    collectCaptionTypes() {
+        const map = {};
+        for (const [id, type] of this.captionTypes.entries()) {
+            const numericId = Number(id);
+            if (Number.isFinite(numericId) && numericId > 0 && (type === 'nl' || type === 'both')) {
+                map[numericId] = type;
+            }
+        }
+        return Object.keys(map).length ? map : null;
+    },
+
+    /** Aurora #25c: user-edited NL sentences ('' = suppress the stored one). */
+    collectNlOverrides() {
+        const map = {};
+        for (const [id, text] of this.editedNl.entries()) {
+            const numericId = Number(id);
+            if (Number.isFinite(numericId) && numericId > 0) {
+                map[numericId] = String(text || '');
+            }
+        }
+        return Object.keys(map).length ? map : null;
     },
 
     _buildPreviewQueue() {
@@ -2044,7 +2193,7 @@ const V321Integration = {
         btn.type = 'button';
         btn.className = 'export-preview-queue-item';
         if (id === Number(this.activePreviewImageId)) btn.classList.add('active');
-        if (this.editedCaptions.has(id)) btn.classList.add('edited');
+        if (this.editedCaptions.has(id) || this.editedNl.has(id)) btn.classList.add('edited');
         btn.dataset.imageId = String(id);
 
         if (meta) {
@@ -2054,7 +2203,7 @@ const V321Integration = {
             copy.innerHTML = `<span></span><strong></strong><small></small>`;
             copy.querySelector('span').textContent = `#${id}`;
             copy.querySelector('strong').textContent = meta.filename || '';
-            copy.querySelector('small').textContent = this.editedCaptions.has(id)
+            copy.querySelector('small').textContent = (this.editedCaptions.has(id) || this.editedNl.has(id))
                 ? this._i18n('batchExport.previewEdited', 'Edited')
                 : this._i18n('batchExport.previewGenerated', 'Generated');
             btn.append(img, copy);
@@ -2065,8 +2214,9 @@ const V321Integration = {
             btn.appendChild(placeholder);
         }
 
-        // Aurora Phase 3 (#25c): flag a loaded caption that's missing the
-        // trigger word (no-op when no trigger is set or the caption is unloaded).
+        // Aurora Phase 3 (#25c): caption-type chip + missing-trigger flag
+        // (both no-ops for unloaded captions / default states).
+        this._decorateQueueItemType(btn, id);
         this._decorateQueueItemTrigger(btn, id);
 
         btn.addEventListener('click', () => {
@@ -2077,13 +2227,29 @@ const V321Integration = {
         return btn;
     },
 
+    /** Append the caption-type chip (B+N / NL) when this image will export the
+     *  NL sentence — same chip language as the Dataset Maker queue. */
+    _decorateQueueItemType(btn, id) {
+        const ctype = this._getCaptionType(id);
+        if (ctype !== 'nl' && ctype !== 'both') return;
+        const chip = document.createElement('span');
+        chip.className = `export-preview-queue-captype export-preview-queue-captype-${ctype}`;
+        chip.textContent = ctype === 'both'
+            ? this._i18n('dataset.captionTypeChipBoth', 'B+N')
+            : this._i18n('dataset.captionTypeChipNl', 'NL');
+        chip.title = ctype === 'both'
+            ? this._i18n('dataset.captionTypeBothTip', 'Exports tags, then the sentence')
+            : this._i18n('dataset.captionTypeNlTip', 'Exports the sentence only');
+        btn.appendChild(chip);
+    },
+
     /** Append a small ⚑ badge when this queue item's loaded caption is missing
      *  the Dataset Maker trigger word. Lazy/unloaded captions get no badge. */
     _decorateQueueItemTrigger(btn, id) {
         const triggerRaw = (document.getElementById('dataset-trigger')?.value || '').trim();
         if (!triggerRaw) return;
         if (!this.editedCaptions.has(id) && !this.previewCache.has(id)) return;
-        const tokens = this._splitCaptionTokens(this._getRenderedCaption(id));
+        const tokens = this._splitCaptionTokens(this._getExportedCaption(id));
         if (!tokens.length) return;
         const triggerKey = this._normalizeCaptionToken(triggerRaw);
         if (tokens.some((t) => this._normalizeCaptionToken(t) === triggerKey)) return;
@@ -2131,6 +2297,7 @@ const V321Integration = {
                 if (item.filename && !this.previewMetadata.has(item.image_id)) {
                     this.previewMetadata.set(item.image_id, { filename: item.filename, thumbnail_path: item.thumbnail_path || '' });
                 }
+                this._seedNlFromPreviewItem(item);
             }
             return this.previewCache.get(id) || '';
         } catch (e) {
@@ -2170,6 +2337,7 @@ const V321Integration = {
                     if (item.rendered && !this.previewCache.has(itemId)) {
                         this.previewCache.set(itemId, item.rendered);
                     }
+                    this._seedNlFromPreviewItem(item);
                 }
             }
         } catch (e) {
@@ -2225,7 +2393,7 @@ const V321Integration = {
 
         const meta = document.createElement('div');
         meta.className = 'export-preview-current-meta';
-        const edited = this.editedCaptions.has(id);
+        const edited = this.editedCaptions.has(id) || this.editedNl.has(id);
         meta.innerHTML = `
             <span>${this._i18n('batchExport.previewCurrent', 'Current image')}</span>
             <strong></strong>
@@ -2247,14 +2415,21 @@ const V321Integration = {
             'Edit this caption here. Queue items marked Edited are used only when you export, copy, or download.'
         );
 
+        // Aurora #25c: live "what the export writes" text — created before the
+        // textareas so both input handlers can refresh it without a rerender.
+        const willExportText = document.createElement('span');
+        willExportText.className = 'export-preview-willexport-text';
+        const refreshWillExport = () => { willExportText.textContent = this._getExportedCaption(id); };
+
         const textarea = document.createElement('textarea');
         textarea.className = 'export-preview-textarea export-preview-main-textarea';
-        if (edited) textarea.classList.add('edited');
+        if (this.editedCaptions.has(id)) textarea.classList.add('edited');
         textarea.dataset.imageId = String(id);
         textarea.value = caption;
         textarea.addEventListener('input', () => {
             this._setPreviewCaption(id, textarea.value);
             textarea.classList.toggle('edited', this.editedCaptions.has(id));
+            refreshWillExport();
         });
         textarea.addEventListener('blur', () => this._renderPreviewWorkbench());
 
@@ -2276,6 +2451,100 @@ const V321Integration = {
         }
         this._recolorTokensWhenCategorized(captionTokens);
 
+        // Aurora #25c: per-image caption type (booru | both | nl) + NL box —
+        // consolidated with the Dataset Maker two-box editor. CaptionCore owns
+        // the semantics; the backend composes identically at export time.
+        const ctype = this._getCaptionType(id);
+        const showNl = ctype === 'nl' || ctype === 'both';
+
+        const captype = document.createElement('div');
+        captype.className = 'export-preview-captype';
+        const captypeRow = document.createElement('div');
+        captypeRow.className = 'export-preview-captype-row';
+        const captypeLabel = document.createElement('span');
+        captypeLabel.className = 'export-preview-captype-label';
+        captypeLabel.textContent = this._i18n('dataset.captionTypeLabel', 'This image:');
+        const seg = document.createElement('div');
+        seg.className = 'export-preview-captype-seg';
+        seg.setAttribute('role', 'radiogroup');
+        seg.setAttribute('aria-label', captypeLabel.textContent);
+        for (const value of ['booru', 'both', 'nl']) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'export-preview-captype-btn';
+            b.dataset.captionType = value;
+            b.textContent = this._captionTypeDisplayLabel(value);
+            const on = value === ctype;
+            b.classList.toggle('is-active', on);
+            b.setAttribute('role', 'radio');
+            b.setAttribute('aria-checked', on ? 'true' : 'false');
+            b.addEventListener('click', () => {
+                this._setCaptionType(id, value);
+                this._renderPreviewWorkbench();
+            });
+            seg.appendChild(b);
+        }
+        const bulk = document.createElement('div');
+        bulk.className = 'export-preview-captype-bulk';
+        const loadedCount = this._loadedPreviewIds().length;
+        const applyAllBtn = document.createElement('button');
+        applyAllBtn.type = 'button';
+        applyAllBtn.className = 'btn btn-small btn-ghost';
+        applyAllBtn.textContent = this._i18n('batchExport.captypeApplyLoaded', 'Set loaded {count} to this type', { count: loadedCount });
+        applyAllBtn.addEventListener('click', () => this._applyCaptionTypeToLoaded(this._getCaptionType(id)));
+        const autoBtn = document.createElement('button');
+        autoBtn.type = 'button';
+        autoBtn.className = 'btn btn-small btn-ghost';
+        autoBtn.textContent = this._i18n('batchExport.captypeAutoLoaded', 'Auto-assign (loaded {count})', { count: loadedCount });
+        autoBtn.addEventListener('click', () => this._autoAssignTypesLoaded());
+        bulk.append(applyAllBtn, autoBtn);
+        captypeRow.append(captypeLabel, seg, bulk);
+        const captypeHint = document.createElement('small');
+        captypeHint.className = 'export-preview-captype-hint';
+        captypeHint.textContent = this._i18n('batchExport.captypeHint',
+            'Booru = tags only · Both = tags + sentence · NL = sentence only (applies in template/tags modes)');
+        captype.append(captypeRow, captypeHint);
+
+        const nlWrap = document.createElement('div');
+        nlWrap.className = 'export-preview-nl';
+        nlWrap.hidden = !showNl;
+        const nlLabel = document.createElement('span');
+        nlLabel.className = 'export-preview-nl-label';
+        nlLabel.textContent = this._i18n('batchExport.nlBoxLabel', 'Natural-language caption (NL)');
+        const nlBox = document.createElement('textarea');
+        nlBox.className = 'export-preview-textarea export-preview-nl-textarea';
+        if (this.editedNl.has(id)) nlBox.classList.add('edited');
+        nlBox.value = this._getNlText(id);
+        let nlTimer = null;
+        nlBox.addEventListener('input', () => {
+            if (nlTimer) clearTimeout(nlTimer);
+            nlTimer = setTimeout(() => {
+                nlTimer = null;
+                this._setNlEdit(id, nlBox.value);
+                nlBox.classList.toggle('edited', this.editedNl.has(id));
+                refreshWillExport();
+            }, 200);
+        });
+        nlBox.addEventListener('blur', () => {
+            // Flush a pending debounce BEFORE the rerender, otherwise a fast
+            // type -> blur re-renders the box from state that's 200ms behind.
+            if (nlTimer) {
+                clearTimeout(nlTimer);
+                nlTimer = null;
+                this._setNlEdit(id, nlBox.value);
+            }
+            this._renderPreviewWorkbench();
+        });
+        nlWrap.append(nlLabel, nlBox);
+
+        const willExport = document.createElement('div');
+        willExport.className = 'export-preview-willexport';
+        willExport.hidden = !showNl;
+        const willExportLabel = document.createElement('strong');
+        willExportLabel.textContent = this._i18n('batchExport.willExportPreview', 'Will export:');
+        refreshWillExport();
+        willExport.append(willExportLabel, willExportText);
+
         const actions = document.createElement('div');
         actions.className = 'export-preview-editor-actions';
         const reset = document.createElement('button');
@@ -2290,7 +2559,7 @@ const V321Integration = {
         resetAll.addEventListener('click', () => this._resetAllPreviewCaptions());
         actions.append(reset, resetAll);
 
-        panel.append(top, helper, textarea, chips, actions);
+        panel.append(top, helper, textarea, chips, captype, nlWrap, willExport, actions);
         return panel;
     },
 
@@ -2598,7 +2867,9 @@ const V321Integration = {
         let missingTrigger = 0;
         // Use previewResults for diagnostics (only covers loaded items)
         for (const item of this.previewResults) {
-            const tokens = this._splitCaptionTokens(this._getRenderedCaption(item.image_id));
+            // #25c: measure the COMPOSED final caption (type + NL + transforms)
+            // so the checks strip reflects what the export will actually write.
+            const tokens = this._splitCaptionTokens(this._getExportedCaption(item.image_id));
             if (!tokens.length) empty += 1;
             maxTokens = Math.max(maxTokens, tokens.length);
             const seen = new Set();
@@ -2614,7 +2885,10 @@ const V321Integration = {
         }
         return {
             total: this.queueTotalCount || this.queueImageIds.length || this.previewResults.length,
-            edited: this.editedCaptions.size,
+            edited: new Set([
+                ...Array.from(this.editedCaptions.keys()).map(Number),
+                ...Array.from(this.editedNl.keys()).map(Number),
+            ]).size,
             empty,
             blockedHits,
             duplicateHits,
@@ -2692,6 +2966,16 @@ const V321Integration = {
                     const transforms = self.collectCaptionTransforms();
                     if (transforms) {
                         body.caption_transforms = transforms;
+                    }
+
+                    // Aurora #25c: per-image caption types + edited NL sentences
+                    const captionTypes = self.collectCaptionTypes();
+                    if (captionTypes) {
+                        body.image_types = captionTypes;
+                    }
+                    const nlOverrides = self.collectNlOverrides();
+                    if (nlOverrides) {
+                        body.image_nl_overrides = nlOverrides;
                     }
 
                     // v3.2.1 follow-up: forward the LoRA underscore checkbox.
@@ -2853,6 +3137,10 @@ const V321Integration = {
         if (overrides) payload.image_overrides = overrides;
         const transforms = this.collectCaptionTransforms();
         if (transforms) payload.caption_transforms = transforms;
+        const captionTypes = this.collectCaptionTypes();
+        if (captionTypes) payload.image_types = captionTypes;
+        const nlOverrides = this.collectNlOverrides();
+        if (nlOverrides) payload.image_nl_overrides = nlOverrides;
         if (normalizeCheckbox) payload.normalize_tag_underscores = !!normalizeCheckbox.checked;
         return payload;
     },

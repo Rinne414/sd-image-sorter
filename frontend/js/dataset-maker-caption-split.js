@@ -38,10 +38,17 @@
     // Effective type. An explicit user choice wins; otherwise "auto": images
     // that have a natural-language sentence default to "both" (so VLM captions
     // surface and export), the rest to "booru" (the pre-feature behavior).
+    // The rule itself lives in CaptionCore so this editor and the v321
+    // batch-export caption editor can never drift apart.
     DM._captionTypeFor = function (id) {
         const n = Number(id);
-        if (this.captionType.has(n)) return this.captionType.get(n);
-        return String(this._nlTextFor(n) || '').trim() ? 'both' : 'booru';
+        const explicit = this.captionType.has(n) ? this.captionType.get(n) : null;
+        const hasNl = String(this._nlTextFor(n) || '').trim().length > 0;
+        if (window.CaptionCore) {
+            return window.CaptionCore.effectiveType(explicit, hasNl, { autoBoth: true });
+        }
+        if (explicit) return explicit;
+        return hasNl ? 'both' : 'booru';
     };
 
     // ---------- visibility ----------
