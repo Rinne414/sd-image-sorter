@@ -2816,7 +2816,17 @@ const Gallery = {
         const alternateTarget = this._getAlternatePromptTarget(promptView.sourceFormat);
 
         if (promptText) {
-            promptText.textContent = promptView.promptText || this._t('modal.noPrompt', null, 'No prompt');
+            // Metadata L3: a ComfyUI/unknown image with no prompt usually
+            // means the graph's text lives at runtime (wildcards, dynamic
+            // prompts) or was stripped — say so instead of a bare "No prompt".
+            const generator = String(this._lastModalImage?.generator || '').toLowerCase();
+            const isUnrecoverable = !promptView.promptText
+                && (generator === 'comfyui' || generator === 'unknown');
+            promptText.textContent = promptView.promptText
+                || (isUnrecoverable
+                    ? this._t('modal.promptUnrecoverable', null, 'No prompt could be recovered from this file — it may be generated at runtime (wildcards / dynamic prompts) or stripped on export.')
+                    : this._t('modal.noPrompt', null, 'No prompt'));
+            promptText.classList.toggle('prompt-unrecoverable-note', isUnrecoverable);
         }
         if (negText) {
             negText.textContent = promptView.negativeText || '-';

@@ -1,0 +1,17 @@
+{
+  "name": "wildcard-runtime-with-showtext-snapshot",
+  "description": "Wildcard/dynamic-prompt node whose live text is generated at RUNTIME (not in the graph) but a downstream ShowText holds the queue-time snapshot — the snapshot must be used, and the wildcard TEMPLATE (with __wildcards__) must not leak into the result.",
+  "prompt_data": {
+    "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "meinamix_v11.safetensors"}},
+    "2": {"class_type": "ImpactWildcardProcessor", "inputs": {"wildcard_text": "__quality__, 1girl, __hairstyle__, __outfit__, __location__", "populated_text": "masterpiece, best quality, 1girl, twin braids, sailor uniform, rooftop, sunset sky", "mode": true, "seed": 123}},
+    "3": {"class_type": "ShowText|pysssss", "inputs": {"text": ["2", 0], "text_0": "masterpiece, best quality, 1girl, twin braids, sailor uniform, rooftop, sunset sky"}},
+    "4": {"class_type": "CLIPTextEncode", "inputs": {"text": ["3", 0], "clip": ["1", 1]}},
+    "5": {"class_type": "CLIPTextEncode", "inputs": {"text": "worst quality, low quality, lowres, bad anatomy, watermark, username", "clip": ["1", 1]}},
+    "6": {"class_type": "EmptyLatentImage", "inputs": {"width": 832, "height": 1216, "batch_size": 1}},
+    "7": {"class_type": "KSampler", "inputs": {"seed": 123, "steps": 26, "cfg": 7.0, "sampler_name": "dpmpp_2m_sde", "scheduler": "karras", "denoise": 1.0, "model": ["1", 0], "positive": ["4", 0], "negative": ["5", 0], "latent_image": ["6", 0]}}
+  },
+  "expect": {
+    "positive_contains": ["twin braids", "sailor uniform"],
+    "negative_contains": ["worst quality"]
+  }
+}

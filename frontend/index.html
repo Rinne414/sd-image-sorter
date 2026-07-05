@@ -4425,6 +4425,10 @@
                                 <p data-i18n="audit.subtitle">Check metadata coverage, duplicate filenames, and unreadable files before publishing a dataset or flattening archives.</p>
                             </div>
                             <div class="health-hero-actions">
+                                <!-- Metadata L3: replays raw envelopes stored at scan time
+                                     (plus the files themselves) through the current parser.
+                                     Hidden until the health endpoint reports missing prompts. -->
+                                <button class="btn btn-ghost btn-small" id="btn-metadata-reparse" type="button" hidden>🔧 <span id="metadata-reparse-label" data-i18n="health.reparse">Re-parse Missing Prompts</span></button>
                                 <button class="btn btn-primary btn-small" id="btn-health-refresh">↻ <span data-i18n="health.refresh">Refresh Audit</span></button>
                             </div>
                         </header>

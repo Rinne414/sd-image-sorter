@@ -1,6 +1,7 @@
 """
 Image manager for file operations (scanning, moving, copying).
 """
+import gzip
 import logging
 import os
 import shutil
@@ -331,6 +332,21 @@ def _build_placeholder_record(
     }
 
 
+def _compress_raw_metadata_text(raw_text: Any) -> Optional[bytes]:
+    """Gzip the L3 raw-metadata envelope captured by the parser.
+
+    Returns None for anything unusable so scans never fail because of the
+    optional retention feature.
+    """
+    if not isinstance(raw_text, str) or not raw_text.strip():
+        return None
+    try:
+        return gzip.compress(raw_text.encode("utf-8"))
+    except Exception as exc:
+        logger.debug("raw metadata compression failed: %s", exc)
+        return None
+
+
 def _build_metadata_success_record(
     image_path: str,
     filename: str,
@@ -367,6 +383,7 @@ def _build_metadata_success_record(
         "source_size": int(stat_result.st_size),
         "metadata_status": "complete",
         "content_fingerprint": content_fingerprint,
+        "raw_metadata_gz": _compress_raw_metadata_text(metadata.get("raw_metadata_text")),
     }
 
 

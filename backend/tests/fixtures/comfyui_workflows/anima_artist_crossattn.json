@@ -1,0 +1,30 @@
+{
+  "name": "anima-artist-crossattn",
+  "description": "Anima node pack (owner folder 26_06_27, sanitized): KSampler.positive rides AnimaArtistCrossAttn -> AnimaArtistPack(base_prompt) -> ShowText -> CR Text Concatenate -> two Text literals. Negative is a plain CLIPTextEncode. Regression for the conditioning bridge + the fallback shadowing bug (0/657 positives).",
+  "prompt_data": {
+    "1": {"class_type": "AnimaBoosterLoader", "inputs": {"model_name": "Anima\\anime\\example_model_v13.safetensors", "sage_attention": "auto", "torch_compile": false}},
+    "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors", "type": "anima"}},
+    "3": {"class_type": "VAELoader", "inputs": {"vae_name": "anima_vae.safetensors"}},
+    "10": {"class_type": "LoraLoader", "inputs": {"lora_name": "detail_slider_v4.safetensors", "strength_model": 0.6, "strength_clip": 0.6, "model": ["1", 0], "clip": ["2", 0]}},
+    "11": {"class_type": "LoraLoader", "inputs": {"lora_name": "style_helper.safetensors", "strength_model": 0.8, "strength_clip": 0.8, "model": ["10", 0], "clip": ["10", 1]}},
+    "12": {"class_type": "Text", "inputs": {"text": "masterpiece, best quality, year 2025, newest, highres,"}},
+    "13": {"class_type": "Text", "inputs": {"text": "masterpiece, best quality, year 2025, newest, highres, 1girl, black hair, hime cut, purple eyes, classroom, sitting, smile"}},
+    "14": {"class_type": "CR Text Concatenate", "inputs": {"separator": "", "text1": ["12", 0], "text2": ["13", 0]}},
+    "15": {"class_type": "ShowText|pysssss", "inputs": {"text": ["14", 0], "text_0": "stale display cache from a previous run"}},
+    "16": {"class_type": "AnimaArtistPack", "inputs": {"artist_chain": "0.6::@artist_one@0.0-0.8::, 1.1::@artist_two::", "base_prompt": ["15", 0], "clip": ["11", 1]}},
+    "17": {"class_type": "AnimaArtistPreset", "inputs": {"preset": "drift_auto", "intensity": 1.0, "normalize_weights": true, "layer_mode": "auto", "custom_layer_filter": ""}},
+    "18": {"class_type": "AnimaArtistCrossAttn", "inputs": {"combine_mode": "output_avg", "fusion_mode": "interpolate", "strength": 1.0, "enabled": true, "apply_to_uncond": false, "model": ["11", 0], "artist_pack": ["16", 0], "advanced_options": ["17", 1], "preset": ["17", 0]}},
+    "19": {"class_type": "AnimaLatentImage", "inputs": {"width": 1024, "height": 1536, "batch_size": 1}},
+    "20": {"class_type": "CLIPTextEncode", "inputs": {"text": "worst quality, low quality, bad anatomy, extra fingers, fewer fingers, watermark, text, blurry", "clip": ["11", 1]}},
+    "21": {"class_type": "KSampler", "inputs": {"seed": 102952134394752, "steps": 48, "cfg": 4.4, "sampler_name": "dpmpp_2m_sde", "scheduler": "sgm_uniform", "denoise": 1.0, "model": ["18", 0], "positive": ["18", 1], "negative": ["20", 0], "latent_image": ["19", 0]}},
+    "22": {"class_type": "VAEDecode", "inputs": {"samples": ["21", 0], "vae": ["3", 0]}},
+    "23": {"class_type": "SaveImage", "inputs": {"filename_prefix": "output/render", "images": ["22", 0]}}
+  },
+  "expect": {
+    "positive_contains": ["1girl", "black hair", "hime cut", "classroom"],
+    "positive_not_contains": ["worst quality", "stale display cache"],
+    "negative_contains": ["worst quality", "bad anatomy"],
+    "checkpoint_contains": "example_model_v13",
+    "loras_contain": ["detail_slider_v4", "style_helper"]
+  }
+}

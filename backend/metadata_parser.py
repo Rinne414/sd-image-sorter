@@ -173,6 +173,13 @@ class MetadataParser:
         ".onnx",
     )
 
+    # Metadata L3 (raw retention): when parsing fails to produce a positive
+    # prompt, the original text chunks are preserved (gzipped) in the DB so a
+    # future parser can re-parse the image without the file. Caps keep
+    # pathological workflows (embedded base64 images etc.) out of the DB.
+    RAW_METADATA_CHUNK_CAP = 2 * 1024 * 1024
+    RAW_METADATA_TOTAL_CAP = 4 * 1024 * 1024
+
     COMFYUI_MODEL_KEY_TYPES = {
         "ckpt_name": "checkpoint",
         "checkpoint_name": "checkpoint",
@@ -282,11 +289,50 @@ class MetadataParser:
                 "civitai_resources": parsed.get("civitai_resources"),
             }
 
+            # Metadata L3: parsing produced no positive prompt but the file
+            # DOES carry metadata chunks — keep the originals so "Re-parse
+            # failed images" can replay them through a future, better parser
+            # even if the file is later moved or deleted. metadata_json is not
+            # enough for that: it truncates large chunks during compaction.
+            if not (result["prompt"] and str(result["prompt"]).strip()):
+                raw_text = self._capture_raw_metadata_text(metadata["metadata"])
+                if raw_text:
+                    result["raw_metadata_text"] = raw_text
+
         except Exception as e:
             result["parse_error"] = str(e)
             logger.debug("Failed to parse metadata for %s: %s", image_path, e, exc_info=True)
 
         return result
+
+    def _capture_raw_metadata_text(self, metadata: Dict[str, Any]) -> Optional[str]:
+        """Serialize the original string metadata chunks for L3 retention.
+
+        Returns a JSON envelope of every string chunk (``{"prompt": "...",
+        "workflow": "...", ...}``) — the same shape ``_detect_and_parse``
+        consumes, so the re-parse job can replay it directly. Returns None
+        when there is nothing worth keeping or the caps are exceeded.
+        """
+        try:
+            envelope: Dict[str, str] = {}
+            total = 0
+            for key, value in metadata.items():
+                if not isinstance(key, str) or not isinstance(value, str):
+                    continue
+                if not value.strip():
+                    continue
+                if len(value) > self.RAW_METADATA_CHUNK_CAP:
+                    continue
+                envelope[key] = value
+                total += len(value)
+                if total > self.RAW_METADATA_TOTAL_CAP:
+                    return None
+            if not envelope:
+                return None
+            return json.dumps(envelope, ensure_ascii=False)
+        except Exception as exc:
+            logger.debug("raw metadata capture failed: %s", exc)
+            return None
 
     def _load_image_metadata(self, image_path: str) -> Dict[str, Any]:
         """Load dimensions and raw metadata with format-specific fast paths.
@@ -2692,9 +2738,13 @@ class MetadataParser:
             if fallback:
                 prompt_nodes = fallback
 
-        # Fallback
-        if not positive_text:
-            positive_text, negative_text = self._collect_text_from_nodes(nodes)
+        # Fallback — fill ONLY the missing side. The old unconditional
+        # unpack overwrote a traced negative with the fallback's (possibly
+        # None) value whenever the positive was missing.
+        if not positive_text or not negative_text:
+            fallback_pos, fallback_neg = self._collect_text_from_nodes(nodes)
+            positive_text = positive_text or fallback_pos
+            negative_text = negative_text or fallback_neg
 
         workflow_assets = self._extract_comfyui_model_assets_from_workflow_widgets(workflow_data)
 
@@ -3835,12 +3885,12 @@ class MetadataParser:
 
             # Trace positive conditioning
             if pos_ref:
-                texts = self._trace_to_text(pos_ref, nodes, set())
+                texts = self._trace_to_text(pos_ref, nodes, set(), side="positive")
                 positive_texts.extend(texts)
 
             # Trace negative conditioning
             if neg_ref:
-                texts = self._trace_to_text(neg_ref, nodes, set())
+                texts = self._trace_to_text(neg_ref, nodes, set(), side="negative")
                 negative_texts.extend(texts)
 
         pos_result = "\n".join(positive_texts) if positive_texts else None
@@ -3878,23 +3928,27 @@ class MetadataParser:
                 prompts.append(prompt.strip())
         return ", ".join(prompts) if prompts else None
 
-    def _trace_to_text(self, ref: Any, nodes: Dict[str, dict], visited: Set[str], depth: int = 0) -> List[str]:
+    def _trace_to_text(self, ref: Any, nodes: Dict[str, dict], visited: Set[str], depth: int = 0,
+                       side: Optional[str] = None) -> List[str]:
         """
         Recursively trace a node reference back to find text content.
         Handles node connections (lists like [node_id, output_index])
-        and direct string values.
+        and direct string values. ``side`` ("positive"/"negative") keeps a
+        trace from resolving through the OTHER side's input on
+        dual-conditioning nodes (ControlNet, guiders).
         """
-        traced = self._trace_to_text_with_source(ref, nodes, visited, depth)
+        traced = self._trace_to_text_with_source(ref, nodes, visited, depth, side=side)
         return [item["text"] for item in traced if item.get("text")]
 
-    def _trace_to_text_with_source(self, ref: Any, nodes: Dict[str, dict], visited: Set[str], depth: int = 0) -> List[Dict[str, Any]]:
+    def _trace_to_text_with_source(self, ref: Any, nodes: Dict[str, dict], visited: Set[str], depth: int = 0,
+                                   side: Optional[str] = None) -> List[Dict[str, Any]]:
         """Trace text and keep source node metadata."""
         if depth > 20:
             return []
 
         if isinstance(ref, str):
             if ref in nodes:
-                return self._extract_text_from_node_with_source(ref, nodes, visited, depth)
+                return self._extract_text_from_node_with_source(ref, nodes, visited, depth, side=side)
             return [{
                 "text": ref,
                 "source_node_id": None,
@@ -3904,7 +3958,7 @@ class MetadataParser:
 
         if isinstance(ref, list) and len(ref) >= 2:
             target_id = str(ref[0])
-            return self._extract_text_from_node_with_source(target_id, nodes, visited, depth)
+            return self._extract_text_from_node_with_source(target_id, nodes, visited, depth, side=side)
 
         return []
 
@@ -4098,8 +4152,14 @@ class MetadataParser:
 
         return texts
 
-    def _extract_text_from_node_with_source(self, node_id: str, nodes: Dict[str, dict], visited: Set[str], depth: int = 0) -> List[Dict[str, Any]]:
-        """Extract text plus source metadata from a node."""
+    def _extract_text_from_node_with_source(self, node_id: str, nodes: Dict[str, dict], visited: Set[str], depth: int = 0,
+                                             side: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Extract text plus source metadata from a node.
+
+        ``side`` ("positive"/"negative"/None) marks which sampler input the
+        trace started from, so dual-conditioning nodes (ControlNetApply,
+        guiders) resolve through THEIR side's link and never the other one.
+        """
         if node_id in visited:
             return []
 
@@ -4130,7 +4190,7 @@ class MetadataParser:
             for key in ["text", "string"]:
                 val = inputs.get(key)
                 if isinstance(val, (list, tuple)):
-                    traced = self._trace_to_text_with_source(val, nodes, nested_visited, depth + 1)
+                    traced = self._trace_to_text_with_source(val, nodes, nested_visited, depth + 1, side=side)
                     if traced:
                         return traced
             for key in ["text_0", "text", "string"]:
@@ -4171,18 +4231,20 @@ class MetadataParser:
                         "source_key": key,
                     })
                 elif isinstance(val, (list, tuple)):
-                    traced = self._trace_to_text_with_source(val, nodes, nested_visited, depth + 1)
+                    traced = self._trace_to_text_with_source(val, nodes, nested_visited, depth + 1, side=side)
                     results.extend(traced)
             if results:
                 return results
 
-        # "base_prompt" (AnimaArtistPack), "positive"/"conditioning"
-        # (ControlNet/guider-style processors) are link channels that carry
-        # the prompt through custom conditioning nodes. "negative" is
-        # deliberately absent: on a positive-side trace a mixed node must
-        # never resolve through its negative input.
+        # "base_prompt" (AnimaArtistPack) and the SAME-side conditioning
+        # channel (ControlNet/guider-style processors) carry the prompt
+        # through custom conditioning nodes. The OTHER side's channel is
+        # excluded: tracing KSampler.negative through ControlNetApply must
+        # ride its "negative" input, never resolve via "positive" (corpus
+        # case controlnet-apply-chain caught exactly that).
+        side_channel = "negative" if side == "negative" else "positive"
         for key in ["text_0", "text", "prompt", "base_prompt", "user_prompt",
-                    "positive", "string", "String", "value", "result",
+                    side_channel, "string", "String", "value", "result",
                     "conditioning"]:
             value = inputs.get(key)
             if isinstance(value, str) and value.strip():
@@ -4195,7 +4257,7 @@ class MetadataParser:
             if isinstance(value, (list, tuple)):
                 nested_visited = set(visited)
                 nested_visited.add(node_id)
-                traced = self._trace_to_text_with_source(value, nodes, nested_visited, depth + 1)
+                traced = self._trace_to_text_with_source(value, nodes, nested_visited, depth + 1, side=side)
                 if traced:
                     return traced
 
@@ -4207,7 +4269,7 @@ class MetadataParser:
         for key in self.COMFYUI_IMAGE_BRIDGE_KEYS:
             val = inputs.get(key)
             if isinstance(val, (list, tuple)) and len(val) >= 2:
-                traced = self._trace_to_text_with_source(val, nodes, bridge_visited, depth + 1)
+                traced = self._trace_to_text_with_source(val, nodes, bridge_visited, depth + 1, side=side)
                 if traced:
                     return traced
 
@@ -4217,7 +4279,8 @@ class MetadataParser:
         # text key missed, follow the remaining links except known non-text
         # plumbing — the first chain that yields text wins. Only reached when
         # the node would otherwise dead-end, so already-parsing workflows are
-        # unaffected.
+        # unaffected. The opposite side's channel stays off-limits here too.
+        opposite_channel = "positive" if side == "negative" else "negative"
         for key, val in inputs.items():
             if not isinstance(val, (list, tuple)) or len(val) < 2:
                 continue
@@ -4226,68 +4289,34 @@ class MetadataParser:
                 continue
             if lowered in self.COMFYUI_IMAGE_BRIDGE_KEYS:
                 continue
-            traced = self._trace_to_text_with_source(val, nodes, bridge_visited, depth + 1)
+            if lowered == opposite_channel:
+                continue
+            traced = self._trace_to_text_with_source(val, nodes, bridge_visited, depth + 1, side=side)
             if traced:
                 return traced
 
         return []
 
     def _collect_text_from_nodes(self, nodes: Dict[str, dict]) -> Tuple[Optional[str], Optional[str]]:
+        """Generic last-resort harvest: score EVERY string in the graph.
+
+        v3.5.0 L2 rewrite. The old version had two stages where a partial
+        hit in stage 1 (e.g. only the negative CLIPTextEncode is a literal,
+        the positive rides custom links) returned early and PERMANENTLY
+        shadowed the whole-graph scan — one of the two reasons an owner
+        folder of 657 images parsed with empty positives. Now every node's
+        every string value is scored for prompt-likeness (danbooru-vocab
+        hit ratio OR comma structure — see prompt_text_scorer) in a single
+        pass; encoder-ish nodes only add a prior bonus, never a monopoly.
         """
-        Fallback: collect text from all text-bearing nodes.
-        Uses heuristics to separate positive from negative prompts.
-        """
-        positive_candidates = []
-        negative_candidates = []
+        try:
+            from prompt_text_scorer import harvest_prompt_candidates, pick_positive_negative
 
-        for node_id, node in nodes.items():
-            class_type = node.get("class_type", "")
-            inputs = node.get("inputs", {})
-
-            # Get text from text encoder nodes
-            if any(ct in class_type for ct in ["CLIPTextEncode", "NewBieCLIPTextEncode"]):
-                text = inputs.get("text", inputs.get("user_prompt", ""))
-                if isinstance(text, str) and text.strip() and len(text.strip()) > 3:
-                    if self._looks_like_negative_prompt(text):
-                        negative_candidates.append(text)
-                    else:
-                        positive_candidates.append(text)
-
-        # If we found text encoders, use those
-        if positive_candidates or negative_candidates:
-            pos = "\n".join(positive_candidates) if positive_candidates else None
-            neg = "\n".join(negative_candidates) if negative_candidates else None
-            return (pos, neg)
-
-        # Second fallback: scan ALL nodes for any string value that looks like a prompt
-        # This catches StringFunction|pysssss result fields, easy pipe nodes, etc.
-        all_text_candidates = []
-        for node_id, node in nodes.items():
-            class_type = node.get("class_type", "")
-            inputs = node.get("inputs", {})
-
-            # Check all input keys for long string values
-            for key in ["text", "string", "String", "prompt", "user_prompt", "positive",
-                         "result", "text_0", "value", "user_text"]:
-                val = inputs.get(key)
-                if isinstance(val, str) and val.strip() and len(val.strip()) > 20:
-                    all_text_candidates.append((class_type, key, val))
-
-        if all_text_candidates:
-            # Sort by length descending
-            all_text_candidates.sort(key=lambda x: len(x[2]), reverse=True)
-            pos_strs = []
-            neg_strs = []
-            for ct, key, text in all_text_candidates:
-                if self._looks_like_negative_prompt(text):
-                    neg_strs.append(text)
-                else:
-                    pos_strs.append(text)
-            pos = pos_strs[0] if pos_strs else None
-            neg = neg_strs[0] if neg_strs else None
-            return (pos, neg)
-
-        return (None, None)
+            candidates = harvest_prompt_candidates(nodes, self.COMFYUI_TEXT_NODE_TYPES)
+            return pick_positive_negative(candidates)
+        except Exception as exc:  # scorer must never take the parser down
+            logger.debug("prompt text harvest failed: %s", exc)
+            return (None, None)
 
     def _looks_like_negative_prompt(self, text: str) -> bool:
         """Heuristic to detect if a text is a negative prompt."""

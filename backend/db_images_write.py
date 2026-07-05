@@ -111,6 +111,7 @@ def add_image(
     source_size: Optional[int] = None,
     metadata_status: str = "complete",
     content_fingerprint: Optional[str] = None,
+    raw_metadata_gz: Optional[bytes] = None,
     return_status: bool = False,
 ) -> Union[int, Tuple[int, str]]:
     """Add an image to the database.
@@ -144,6 +145,7 @@ def add_image(
         "source_size": source_size,
         "metadata_status": metadata_status,
         "content_fingerprint": content_fingerprint,
+        "raw_metadata_gz": raw_metadata_gz,
     }
 
     with get_db() as conn:
@@ -309,6 +311,11 @@ def _upsert_image_record(
                 library_order_time = COALESCE(library_order_time, created_at, ?),
                 source_file_mtime = COALESCE(?, source_file_mtime),
                 created_at = COALESCE(library_order_time, created_at, ?),
+                raw_metadata_gz = CASE
+                    WHEN ? IS NOT NULL THEN ?
+                    WHEN ? IS NOT NULL AND TRIM(?) != '' THEN NULL
+                    ELSE raw_metadata_gz
+                END,
                 indexed_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -334,6 +341,14 @@ def _upsert_image_record(
                 record.get("library_order_time"),
                 record.get("source_file_mtime"),
                 record.get("created_at"),
+                # raw_metadata_gz invariant: rows only keep a raw envelope
+                # while their prompt is missing. New raw wins; a successful
+                # parse clears any stale raw; otherwise the stored raw
+                # survives placeholder/rescan updates.
+                record.get("raw_metadata_gz"),
+                record.get("raw_metadata_gz"),
+                record.get("prompt"),
+                record.get("prompt"),
                 image_id,
             ),
         )
@@ -345,8 +360,8 @@ def _upsert_image_record(
             (path, filename, generator, prompt, negative_prompt, metadata_json,
              width, height, file_size, checkpoint, checkpoint_normalized, loras, model_hash, is_readable, read_error,
              source_mtime_ns, source_size, metadata_status, content_fingerprint,
-             library_order_time, source_file_mtime, created_at, indexed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+             library_order_time, source_file_mtime, created_at, raw_metadata_gz, indexed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """,
             (
                 path,
@@ -371,6 +386,7 @@ def _upsert_image_record(
                 record.get("library_order_time"),
                 record.get("source_file_mtime"),
                 record.get("created_at"),
+                record.get("raw_metadata_gz"),
             ),
         )
         image_id = cursor.lastrowid
@@ -947,6 +963,10 @@ def update_image_metadata(
                 source_size = COALESCE(?, source_size),
                 metadata_status = COALESCE(?, metadata_status),
                 content_fingerprint = COALESCE(?, content_fingerprint),
+                raw_metadata_gz = CASE
+                    WHEN ? IS NOT NULL AND TRIM(?) != '' THEN NULL
+                    ELSE raw_metadata_gz
+                END,
                 indexed_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -968,12 +988,78 @@ def update_image_metadata(
                 source_size,
                 metadata_status,
                 content_fingerprint,
+                # L3 invariant: a successful re-parse clears the stored raw
+                # envelope; a failed one keeps it for future parser upgrades.
+                prompt,
+                prompt,
                 image_id,
             )
         )
         _sync_image_loras(cursor, image_id, loras, prompt)
         _sync_image_prompt_tokens(cursor, image_id, prompt)
     _invalidate_tags_cache()
+
+def update_reparsed_prompt_fields(
+    image_id: int,
+    *,
+    prompt: str,
+    negative_prompt: Optional[str] = None,
+    checkpoint: Optional[str] = None,
+    loras: Optional[List[str]] = None,
+    generator: Optional[str] = None,
+) -> None:
+    """Targeted write for the metadata re-parse job (L3).
+
+    Unlike ``update_image_metadata`` this touches ONLY prompt-derived
+    fields, so a replay from the stored raw envelope can never wipe
+    width/height/source bookkeeping it knows nothing about. Checkpoint,
+    loras, negative prompt and generator only fill in when the replay
+    produced them (scan-time values may already be correct). Clears
+    ``raw_metadata_gz`` — a recovered row no longer needs repair.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        serialized_loras = _serialize_loras(loras) if loras else None
+        cursor.execute(
+            """
+            UPDATE images
+            SET prompt = ?,
+                negative_prompt = COALESCE(?, negative_prompt),
+                generator = COALESCE(?, generator),
+                checkpoint = COALESCE(?, checkpoint),
+                checkpoint_normalized = COALESCE(?, checkpoint_normalized),
+                loras = COALESCE(?, loras),
+                raw_metadata_gz = NULL,
+                indexed_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (
+                prompt,
+                negative_prompt,
+                generator,
+                checkpoint,
+                normalize_checkpoint_name(checkpoint) if checkpoint else None,
+                serialized_loras,
+                image_id,
+            ),
+        )
+        # The lora/token indexes must mirror the post-COALESCE row, so
+        # read the merged values back instead of trusting the arguments.
+        final_row = cursor.execute(
+            "SELECT prompt, loras FROM images WHERE id = ?",
+            (image_id,),
+        ).fetchone()
+        final_prompt = final_row["prompt"] if final_row else prompt
+        final_loras_serialized = (final_row["loras"] if final_row else None) or ""
+        cursor.execute("DELETE FROM image_loras WHERE image_id = ?", (image_id,))
+        for lora_name in extract_lora_names(final_loras_serialized, final_prompt or ""):
+            cursor.execute(
+                "INSERT OR IGNORE INTO image_loras (image_id, lora_name) VALUES (?, ?)",
+                (image_id, lora_name),
+            )
+        _sync_image_prompt_tokens(cursor, image_id, final_prompt)
+    _invalidate_tags_cache()
+    _invalidate_facet_caches()
 
 def delete_image(image_id: int):
     """Delete an image from the database."""

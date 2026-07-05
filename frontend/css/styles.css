@@ -7842,6 +7842,13 @@ input[type="radio"] {
     z-index: 1;
 }
 
+/* Metadata L3: detail-modal note shown instead of a bare "No prompt" when
+   a ComfyUI graph's text genuinely is not in the file. */
+#modal-prompt-text.prompt-unrecoverable-note {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
 .health-status-card {
     display: grid;
     grid-template-columns: auto 1fr;

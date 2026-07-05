@@ -5,8 +5,15 @@
         initialized: false,
         loading: false,
         loaded: false,
-        data: null
+        data: null,
+        reparse: {
+            running: false,
+            jobId: null,
+            pollTimer: null
+        }
     };
+
+    var REPARSE_POLL_MS = 1200;
 
     var ISSUE_KEYS = [
         'unreadable',
@@ -291,6 +298,7 @@
                 });
             state.loaded = true;
             render(data || {});
+            updateReparseVisibility();
         } catch (error) {
             setText('#health-status-title', t('health.failedTitle', 'Could not load library health'));
             setText('#health-status-detail', t('health.failedDetail', 'The audit endpoint failed. Try again after the current scan finishes.'));
@@ -302,11 +310,160 @@
         }
     }
 
+    // ------------------------------------------------------------------
+    // Metadata L3: re-parse missing-prompt images (raw envelopes + files)
+    // ------------------------------------------------------------------
+
+    function apiGet(url) {
+        var api = window.App && window.App.API;
+        if (api && typeof api.get === 'function') return api.get(url);
+        return fetch(url).then(function (response) {
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return response.json();
+        });
+    }
+
+    function toast(message, kind) {
+        if (window.App && typeof window.App.showToast === 'function') {
+            window.App.showToast(message, kind || 'info');
+        }
+    }
+
+    function setReparseButton(running, progressText) {
+        var button = $('#btn-metadata-reparse');
+        var label = $('#metadata-reparse-label');
+        if (!button) return;
+        button.disabled = running;
+        button.classList.toggle('is-loading', running);
+        if (label) {
+            label.textContent = running
+                ? (progressText || t('health.reparseRunning', 'Re-parsing…'))
+                : t('health.reparse', 'Re-parse Missing Prompts');
+        }
+    }
+
+    function updateReparseVisibility() {
+        var button = $('#btn-metadata-reparse');
+        if (!button) return;
+        apiGet('/api/metadata/health').then(function (health) {
+            var missing = health && health.totals ? Number(health.totals.missing_prompt || 0) : 0;
+            button.hidden = !(missing > 0 || state.reparse.running);
+            if (!state.reparse.running && missing > 0) {
+                button.title = t('health.reparseTitle',
+                    'Retry {count} images with no prompt through the current parser (uses stored raw metadata, then the files).',
+                    { count: formatNumber(missing) });
+            }
+        }).catch(function () {
+            button.hidden = !state.reparse.running;
+        });
+    }
+
+    function stopReparsePolling() {
+        if (state.reparse.pollTimer) {
+            clearTimeout(state.reparse.pollTimer);
+            state.reparse.pollTimer = null;
+        }
+    }
+
+    function finishReparse(job) {
+        stopReparsePolling();
+        state.reparse.running = false;
+        state.reparse.jobId = null;
+        setReparseButton(false);
+        var result = (job && job.result) || {};
+        var recovered = Number(result.recovered || 0);
+        var stillMissing = Number(result.still_missing || 0) + Number(result.missing_source || 0);
+        if (job && job.status === 'done') {
+            toast(t('health.reparseDone', 'Re-parse finished: {recovered} prompts recovered, {still} still missing.', {
+                recovered: formatNumber(recovered),
+                still: formatNumber(stillMissing)
+            }), recovered > 0 ? 'success' : 'info');
+        } else if (job && job.status === 'cancelled') {
+            toast(t('health.reparseCancelled', 'Metadata re-parse cancelled.'), 'info');
+        } else {
+            toast(t('health.reparseFailed', 'Metadata re-parse failed.'), 'error');
+        }
+        refresh();
+        updateReparseVisibility();
+        // Recovered prompts change gallery rows; let an open gallery refetch.
+        if (recovered > 0 && window.App && typeof window.App.loadImages === 'function') {
+            try { window.App.loadImages(); } catch (_e) { /* gallery view may be closed */ }
+        }
+    }
+
+    function pollReparseJob() {
+        if (!state.reparse.jobId) return;
+        apiGet('/api/bulk-jobs/' + encodeURIComponent(state.reparse.jobId)).then(function (job) {
+            if (!job || !job.status) throw new Error('no job');
+            if (job.status === 'queued' || job.status === 'running') {
+                var total = Number(job.total || 0);
+                var processed = Number(job.processed || 0);
+                setReparseButton(true, t('health.reparseRunningCount', 'Re-parsing… {processed}/{total}', {
+                    processed: formatNumber(processed),
+                    total: formatNumber(total)
+                }));
+                state.reparse.pollTimer = setTimeout(pollReparseJob, REPARSE_POLL_MS);
+                return;
+            }
+            finishReparse(job);
+        }).catch(function () {
+            finishReparse(null);
+        });
+    }
+
+    function startReparse() {
+        if (state.reparse.running) return;
+        state.reparse.running = true;
+        setReparseButton(true);
+        var api = window.App && window.App.API;
+        var request = api && typeof api.post === 'function'
+            ? api.post('/api/metadata/reparse', { scope: 'missing_prompt' })
+            : fetch('/api/metadata/reparse', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ scope: 'missing_prompt' })
+            }).then(function (response) {
+                if (response.status === 409) { var err = new Error('busy'); err.busy = true; throw err; }
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                return response.json();
+            });
+        Promise.resolve(request).then(function (data) {
+            if (!data || !data.job_id) throw new Error('no job id');
+            state.reparse.jobId = data.job_id;
+            pollReparseJob();
+        }).catch(function (error) {
+            state.reparse.running = false;
+            setReparseButton(false);
+            var isBusy = !!(error && (error.busy || error.apiStatus === 409 || /409/.test(String(error && error.message))));
+            toast(isBusy
+                ? t('health.reparseBusy', 'A metadata re-parse is already running.')
+                : t('health.reparseFailed', 'Metadata re-parse failed.'), isBusy ? 'info' : 'error');
+        });
+    }
+
+    function reattachRunningReparse() {
+        apiGet('/api/metadata/reparse-status').then(function (status) {
+            if (status && status.active && status.job_id) {
+                state.reparse.running = true;
+                state.reparse.jobId = status.job_id;
+                setReparseButton(true);
+                var button = $('#btn-metadata-reparse');
+                if (button) button.hidden = false;
+                pollReparseJob();
+            }
+        }).catch(function () { /* endpoint unavailable — keep the button hidden */ });
+    }
+
     function bind() {
         var refreshButton = $('#btn-health-refresh');
         if (refreshButton && refreshButton.dataset.healthBound !== '1') {
             refreshButton.dataset.healthBound = '1';
             refreshButton.addEventListener('click', refresh);
+        }
+        var reparseButton = $('#btn-metadata-reparse');
+        if (reparseButton && reparseButton.dataset.healthBound !== '1') {
+            reparseButton.dataset.healthBound = '1';
+            reparseButton.addEventListener('click', startReparse);
         }
         // Keep the audit hero (eyebrow + subtitle) on screen the moment
         // the user expands the Dataset Audit details. Without this, the
@@ -332,6 +489,7 @@
         if (!$('#audit-section') && !$('#health-score-ring')) return;
         bind();
         if (!state.loaded) refresh();
+        if (!state.initialized) reattachRunningReparse();
         state.initialized = true;
     }
 

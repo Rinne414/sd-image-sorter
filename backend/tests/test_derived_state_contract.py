@@ -45,6 +45,9 @@ EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
         "tagged_at = NULL, ai_caption = NULL, nl_caption = NULL, aesthetic_score = NULL WHERE id = ?",
     ): 1,
     (
+        # Metadata L3 (v3.5.0): the scan upsert also maintains the
+        # raw_metadata_gz invariant (raw envelopes only live on rows whose
+        # prompt is missing) — same statement, no new fingerprint writer.
         "db_images_write.py",
         "UPDATE images SET filename = ?, generator = ?, prompt = ?, negative_prompt = ?, "
         "metadata_json = ?, width = ?, height = ?, file_size = ?, checkpoint = ?, "
@@ -55,6 +58,9 @@ EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
         "library_order_time = COALESCE(library_order_time, created_at, ?), "
         "source_file_mtime = COALESCE(?, source_file_mtime), "
         "created_at = COALESCE(library_order_time, created_at, ?), "
+        "raw_metadata_gz = CASE WHEN ? IS NOT NULL THEN ? "
+        "WHEN ? IS NOT NULL AND TRIM(?) != '' THEN NULL "
+        "ELSE raw_metadata_gz END, "
         "indexed_at = CURRENT_TIMESTAMP WHERE id = ?",
     ): 1,
     (
@@ -74,14 +80,18 @@ EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
         "content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
     ): 1,
     (
+        # Metadata L3 (v3.5.0): file-based re-parse clears the stored raw
+        # envelope once a prompt is recovered (same invariant as above).
         "db_images_write.py",
         "UPDATE images SET generator = ?, prompt = ?, negative_prompt = ?, metadata_json = ?, "
         "width = ?, height = ?, file_size = ?, checkpoint = ?, checkpoint_normalized = ?, "
         "loras = ?, model_hash = COALESCE(?, model_hash), is_readable = COALESCE(?, is_readable), "
         "read_error = ?, source_mtime_ns = COALESCE(?, source_mtime_ns), "
         "source_size = COALESCE(?, source_size), metadata_status = COALESCE(?, metadata_status), "
-        "content_fingerprint = COALESCE(?, content_fingerprint), indexed_at = CURRENT_TIMESTAMP "
-        "WHERE id = ?",
+        "content_fingerprint = COALESCE(?, content_fingerprint), "
+        "raw_metadata_gz = CASE WHEN ? IS NOT NULL AND TRIM(?) != '' THEN NULL "
+        "ELSE raw_metadata_gz END, "
+        "indexed_at = CURRENT_TIMESTAMP WHERE id = ?",
     ): 1,
     (
         "services/derived_state_service.py",

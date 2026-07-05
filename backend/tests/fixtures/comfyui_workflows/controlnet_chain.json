@@ -1,0 +1,19 @@
+{
+  "name": "controlnet-apply-chain",
+  "description": "KSampler conditioning passes through ControlNetApplyAdvanced — the tracer must ride positive/negative THROUGH the ControlNet node and must not wander into its hint image.",
+  "prompt_data": {
+    "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "anything_v5.safetensors"}},
+    "2": {"class_type": "CLIPTextEncode", "inputs": {"text": "1girl, silver hair, red scarf, snowy street, night, lantern light", "clip": ["1", 1]}},
+    "3": {"class_type": "CLIPTextEncode", "inputs": {"text": "worst quality, low quality, bad anatomy, blurry, watermark, extra digits", "clip": ["1", 1]}},
+    "4": {"class_type": "ControlNetLoader", "inputs": {"control_net_name": "control_openpose.safetensors"}},
+    "5": {"class_type": "LoadImage", "inputs": {"image": "pose_reference.png"}},
+    "6": {"class_type": "ControlNetApplyAdvanced", "inputs": {"strength": 0.85, "start_percent": 0.0, "end_percent": 1.0, "positive": ["2", 0], "negative": ["3", 0], "control_net": ["4", 0], "image": ["5", 0]}},
+    "7": {"class_type": "EmptyLatentImage", "inputs": {"width": 768, "height": 1152, "batch_size": 1}},
+    "8": {"class_type": "KSampler", "inputs": {"seed": 99, "steps": 28, "cfg": 7.0, "sampler_name": "euler_ancestral", "scheduler": "normal", "denoise": 1.0, "model": ["1", 0], "positive": ["6", 0], "negative": ["6", 1], "latent_image": ["7", 0]}}
+  },
+  "expect": {
+    "positive_contains": ["silver hair", "snowy street"],
+    "positive_not_contains": ["worst quality", "pose_reference"],
+    "negative_contains": ["worst quality"]
+  }
+}

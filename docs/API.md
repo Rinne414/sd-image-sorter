@@ -565,6 +565,15 @@ Return `{ "active", "job_id", "job" }` for the running duplicate scan (if any) s
 #### GET /api/duplicates/groups
 Page through the last completed duplicate scan. Query: `offset`, `limit` (1-200). Returns `{ "available", "scanned_at", "threshold", "summary": { "embedded_count", "group_count", "redundant_count", "reclaimable_bytes" }, "groups": [{ "group_id", "similarity", "members": [{ "id", "path", "filename", "width", "height", "file_size", "aesthetic_score", "user_rating", "suggested_keep" }] }], "total_groups", "has_more" }`. Deletion reuses the existing delete endpoints.
 
+#### GET /api/metadata/health
+Per-generator prompt-parse coverage (metadata L3, v3.5.0). Returns `{ "generators": [{ "generator", "total", "missing_prompt", "with_raw" }], "totals": { "total", "missing_prompt", "with_raw" } }`. `missing_prompt` counts readable+unreadable rows with an empty positive prompt; `with_raw` counts rows carrying a stored raw metadata envelope (re-parseable without the original file). Drives the settings-page metadata health row.
+
+#### POST /api/metadata/reparse
+Re-parse missing-prompt images through the current parser (metadata L3, v3.5.0). Body: `{ "scope": "missing_prompt" }` (only supported scope, 422 otherwise). For every readable image with an empty positive prompt, replays the gzipped raw metadata envelope stored at scan time first (`used_raw`), then falls back to fully re-parsing the file if it still exists (`used_file`); rows with neither count as `missing_source`. Runs as a bulk background job — poll `GET /api/bulk-jobs/{job_id}`; 409 while another re-parse runs. Job result: `{ "recovered", "still_missing", "used_raw", "used_file", "missing_source" }`.
+
+#### GET /api/metadata/reparse-status
+Return `{ "active", "job_id", "job" }` for the running metadata re-parse (if any) so a reopened UI can re-attach to the progress poll.
+
 #### POST /api/publish/censor-pairs
 Resolve censored variants for a publish set (v3.5.0). Body: `{ "image_ids": [int, ...], "censor_suffix": "_censored" }` (suffix optional, sanitized to `[A-Za-z0-9_-]`). For each image, probes `{stem}{suffix}.{png|jpg|jpeg|webp}` — first next to the original on disk (`censored_source: "disk"`), then anywhere in the library by exact filename, newest indexed copy first (`censored_source: "library"`). Response preserves request order (duplicates removed): `{ "pairs": [{ "image_id", "missing", "filename", "path", "width", "height", "file_size", "found", "censored_path", "censored_filename", "censored_source" }], "total", "found_count", "censor_suffix" }`. Unknown ids come back with `missing: true`.
 

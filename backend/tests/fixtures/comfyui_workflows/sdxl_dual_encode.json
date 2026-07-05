@@ -1,0 +1,16 @@
+{
+  "name": "sdxl-dual-clip-text-encode",
+  "description": "CLIPTextEncodeSDXL carries the prompt in text_g/text_l (NOT the generic 'text' key) — historic gap class: encoder recognized, keys unknown.",
+  "prompt_data": {
+    "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "juggernautXL_v9.safetensors"}},
+    "2": {"class_type": "CLIPTextEncodeSDXL", "inputs": {"width": 1024, "height": 1024, "crop_w": 0, "crop_h": 0, "target_width": 1024, "target_height": 1024, "text_g": "cinematic photo of a lighthouse on a stormy coast, dramatic clouds, crashing waves", "text_l": "cinematic photo of a lighthouse on a stormy coast", "clip": ["1", 1]}},
+    "3": {"class_type": "CLIPTextEncodeSDXL", "inputs": {"width": 1024, "height": 1024, "crop_w": 0, "crop_h": 0, "target_width": 1024, "target_height": 1024, "text_g": "worst quality, low quality, blurry, watermark, oversaturated, deformed", "text_l": "worst quality, low quality, blurry", "clip": ["1", 1]}},
+    "4": {"class_type": "EmptyLatentImage", "inputs": {"width": 1024, "height": 1024, "batch_size": 1}},
+    "5": {"class_type": "KSampler", "inputs": {"seed": 7, "steps": 30, "cfg": 6.5, "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 1.0, "model": ["1", 0], "positive": ["2", 0], "negative": ["3", 0], "latent_image": ["4", 0]}}
+  },
+  "expect": {
+    "positive_contains": ["lighthouse", "stormy coast"],
+    "positive_not_contains": ["worst quality"],
+    "negative_contains": ["worst quality"]
+  }
+}

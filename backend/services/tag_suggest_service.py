@@ -178,6 +178,22 @@ def _ensure_loaded() -> None:
         _VOCAB = vocab
 
 
+def get_vocab_tag_index() -> Optional[Dict[str, int]]:
+    """Expose the loaded tag→index map for membership tests.
+
+    Used by prompt_text_scorer to judge whether an arbitrary string from a
+    ComfyUI graph "reads like a prompt" (v3.5.0 metadata L2 fallback).
+    Returns None when the bundled vocabulary is unavailable — callers must
+    fail open to structure-only heuristics.
+    """
+    try:
+        _ensure_loaded()
+    except Exception as exc:  # pragma: no cover - defensive: parser must not die
+        logger.warning("danbooru vocab unavailable for prompt scoring: %s", exc)
+        return None
+    return _VOCAB_INDEX
+
+
 def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 

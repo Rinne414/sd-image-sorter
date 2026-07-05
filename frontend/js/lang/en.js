@@ -1624,6 +1624,7 @@ window.I18nLang_en = {
     'modal.viewAsNAI': 'View as NAI',
     'modal.viewOriginal': 'View Original',
     'modal.noPrompt': 'No prompt',
+    'modal.promptUnrecoverable': 'No prompt could be recovered from this file — it may be generated at runtime (wildcards / dynamic prompts) or stripped on export.',
     // Closed-source AI provider hint shown in the image-detail modal
     // for gemini / gpt-image. Reminds users we currently identify
     // these images via Content Credentials / EXIF metadata only — the
@@ -3500,6 +3501,14 @@ window.I18nLang_en = {
     'health.reason.missingDimensions': 'Missing dimensions',
     'health.reason.untagged': 'Not tagged',
     'health.reason.review': 'Review',
+    'health.reparse': 'Re-parse Missing Prompts',
+    'health.reparseTitle': 'Retry {count} images with no prompt through the current parser (uses stored raw metadata, then the files).',
+    'health.reparseRunning': 'Re-parsing…',
+    'health.reparseRunningCount': 'Re-parsing… {processed}/{total}',
+    'health.reparseDone': 'Re-parse finished: {recovered} prompts recovered, {still} still missing.',
+    'health.reparseCancelled': 'Metadata re-parse cancelled.',
+    'health.reparseFailed': 'Metadata re-parse failed.',
+    'health.reparseBusy': 'A metadata re-parse is already running.',
 
     // ==== Dataset Maker (v3.2.2 issue #5 follow-up) ====
     'dataset.title': 'Dataset Maker',

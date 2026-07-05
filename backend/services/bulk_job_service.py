@@ -36,11 +36,15 @@ JOB_KIND_REMOVE_FROM_GALLERY = "remove_from_gallery"
 JOB_KIND_EXPORT_SIDECARS = "export_sidecars"
 # v3.5.0 Tier 1: whole-library near-duplicate group scan (progress + cancel).
 JOB_KIND_DUPLICATE_SCAN = "duplicate_scan"
+# v3.5.0 metadata L3: re-parse missing-prompt images from stored raw
+# envelopes (or the files themselves) through the current parser.
+JOB_KIND_REPARSE_METADATA = "reparse_metadata"
 VALID_JOB_KINDS = {
     JOB_KIND_DELETE_FILES,
     JOB_KIND_REMOVE_FROM_GALLERY,
     JOB_KIND_EXPORT_SIDECARS,
     JOB_KIND_DUPLICATE_SCAN,
+    JOB_KIND_REPARSE_METADATA,
 }
 
 STATUS_QUEUED = "queued"

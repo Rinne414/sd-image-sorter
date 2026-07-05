@@ -1801,6 +1801,7 @@ window.I18nLang_zhCN = {
     'modal.viewAsNAI': '查看 NAI 格式',
     'modal.viewOriginal': '查看原始格式',
     'modal.noPrompt': '无提示词',
+    'modal.promptUnrecoverable': '未能从文件中还原提示词——可能由运行时节点生成（如 wildcard / 动态提示词），或在导出时被去除。',
     // 闭源 AI 厂商（Gemini / gpt-image）的提示信息：当前只读了文件
     // 的 Content Credentials / EXIF 元数据来识别厂商。像素层的隐形
     // 水印（Gemini 的 SynthID、OpenAI 的内嵌信号）目前还没在本 App
@@ -3500,6 +3501,14 @@ window.I18nLang_zhCN = {
     'health.reason.missingDimensions': '缺少尺寸',
     'health.reason.untagged': '未打标签',
     'health.reason.review': '需要检查',
+    'health.reparse': '重新解析缺失提示词',
+    'health.reparseTitle': '让当前解析器重试 {count} 张没有提示词的图片（优先使用扫描时保存的原始元数据，其次读取文件本身）。',
+    'health.reparseRunning': '重新解析中…',
+    'health.reparseRunningCount': '重新解析中… {processed}/{total}',
+    'health.reparseDone': '重新解析完成：找回 {recovered} 条提示词，{still} 张仍缺失。',
+    'health.reparseCancelled': '重新解析已取消。',
+    'health.reparseFailed': '重新解析失败。',
+    'health.reparseBusy': '已有一个重新解析任务在运行。',
 
     // ==== 数据集制作工具 (v3.2.2 issue #5 follow-up) ====
     'dataset.title': '数据集制作',

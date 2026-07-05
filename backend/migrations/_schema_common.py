@@ -263,6 +263,11 @@ LEGACY_IMAGE_COLUMNS: tuple[tuple[str, str], ...] = (
     # v3.5.0 dominant-hue tags (",red,white," wrapped list derived from
     # dominant_colors; backfilled from existing JSON by migration 022)
     ("dominant_color_tags", "TEXT"),
+    # v3.5.0 metadata L3: gzipped raw ComfyUI prompt-chunk JSON, stored ONLY
+    # when parsing failed to recover a positive prompt — parser upgrades can
+    # then re-parse from the database even after the source file is gone
+    # (migration 023).
+    ("raw_metadata_gz", "BLOB"),
 )
 
 
