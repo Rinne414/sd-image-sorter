@@ -165,6 +165,15 @@
                     return;
                 }
                 const data = await resp.json();
+                // Nothing queued (everything already analyzed) — say so and
+                // skip the progress toast, which would sit at "0/0 0%" forever.
+                if (!Number(data.total)) {
+                    this._toast(
+                        this.t("All images already have color analysis.", "所有图片都已完成色彩分析。"),
+                        "info",
+                    );
+                    return;
+                }
                 this._toast(
                     this.t(
                         `Color analysis started — ${data.total.toLocaleString()} images queued.`,
@@ -243,6 +252,12 @@
 
             this._renderChip(data);
             this._renderToast(data);
+
+            // Stale-toast guard: idle with nothing processed reads as a stuck
+            // "0/0 0%" job — close it (v3.5.0 audit).
+            if (!data.running && !this.doneState && !(Number(data.total) > 0)) {
+                this.closeToast();
+            }
 
             if (data.running) {
                 this.startPolling();

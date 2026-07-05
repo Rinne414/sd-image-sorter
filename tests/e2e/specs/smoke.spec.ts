@@ -2391,7 +2391,7 @@ test.describe('Smoke Tests', () => {
       return (window as any).DatasetMaker.captionEdits.get(302)
     })).toBe('1girl, sitting, outdoors')
 
-    await panel.getByRole('button', { name: /Open next/i }).click()
+    await panel.getByRole('button', { name: /Switch to this one/i }).click()
     await expect(panel).toContainText('third.png')
   })
 
@@ -6658,7 +6658,11 @@ test.describe('Smoke Tests', () => {
       expect(fit.clientWidth).toBeGreaterThan(0)
       expect(fit.scrollWidth).toBeGreaterThanOrEqual(fit.clientWidth)
 
-      if (fit.moreVisible) {
+      // v3.5.0 audit: the More ▾ toggle is ALWAYS visible now (Dup Cleaner /
+      // Publish Set live only there). Direct Prompt/Artist tabs hide only
+      // when the priority ladder is actually in overflow mode.
+      expect(fit.moreVisible).toBeTruthy()
+      if (fit.classes.includes('nav-priority-overflow')) {
         expect(fit.promptVisible).toBeFalsy()
         expect(fit.artistVisible).toBeFalsy()
       } else {

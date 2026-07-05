@@ -102,7 +102,9 @@ test('WASD slot folder buttons stay inside their cards', async ({ page }) => {
   await expect(page.locator('#view-gallery')).toBeVisible()
 
   await page.evaluate(() => document.getElementById('nav-tab-sorting')?.click())
-  await page.getByText('手动排序', { exact: true }).first().click()
+  // v3.5.0 naming unification made 手动排序 appear on the (hidden) entry tile
+  // too — target the sub-tab directly instead of ambiguous display text.
+  await page.locator('.sorting-sub-tab[data-sorting-sub="manual"]').click()
   await expect(page.locator('.folder-config.sort-slot-only')).toBeVisible()
 
   const overflow = await page.evaluate(() => {

@@ -401,7 +401,14 @@
             'entry-mission-organize': () => navigate('sorting'),
             'entry-anchor-continue': () => navigate('sorting'),
             'entry-fn-gallery': () => navigate('gallery'),
-            'entry-fn-sort': () => navigate('sorting'),
+            // Tile promises "Manual Sort" — land on that sub-tab, not
+            // whichever one (usually Auto-Separate) was last active.
+            'entry-fn-sort': () => {
+                navigate('sorting');
+                if (typeof window._switchSortingSub === 'function') {
+                    window._switchSortingSub('manual');
+                }
+            },
             'entry-fn-censor': () => navigate('censor'),
             'entry-fn-reader': () => navigate('reader'),
             'entry-fn-similar': () => navigate('similar'),

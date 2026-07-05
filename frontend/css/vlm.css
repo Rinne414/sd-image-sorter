@@ -2007,6 +2007,16 @@
     gap: 16px;
 }
 
+/* v3.5.0 audit: with align-items:stretch the action pane matches the tall
+   preview pane and margin-top:auto left a ~240px naked void between the
+   settings card and the CTA. The settings card now absorbs that slack as
+   interior room instead. (An align-self:start pane was tried and reverted:
+   sibling panes stopped sharing heights, which shifted the preview-more
+   button mid-load and pushed the CTA below the fold under UI scale.) */
+.autosep-pane-action-body .autosep-action-settings {
+    flex: 1 1 auto;
+}
+
 .autosep-action-block {
     display: flex;
     flex-direction: column;

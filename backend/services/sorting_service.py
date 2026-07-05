@@ -1044,7 +1044,7 @@ class SortingService:
                 "metadata_total": 0,
                 "metadata_total_final": False,
                 "metadata_pending": 0,
-                "message": "Syncing folder index..." if request.cleanup_missing else "Counting images before import...",
+                "message": "正在同步文件夹索引 / Syncing folder index..." if request.cleanup_missing else "导入前统计图片数量 / Counting images before import...",
                 "current_item": None,
                 "started_at": started_at,
                 "updated_at": started_at,
@@ -1128,7 +1128,7 @@ class SortingService:
                     metadata_pending = int(details.get("metadata_pending", prev_progress.get("metadata_pending", 0)) or 0) if isinstance(details, dict) else int(prev_progress.get("metadata_pending", 0) or 0)
                     state_current = import_processed
                     state_total = import_total or total
-                    message = f"Processing: {filename}" if filename else "Scanning files..."
+                    message = f"正在处理 / Processing: {filename}" if filename else "正在扫描文件 / Scanning files..."
                     current_item = filename or None
                     step = "importing"
                     status = "running"
@@ -1137,17 +1137,18 @@ class SortingService:
                     if phase == "counting":
                         state_current = counted or current
                         state_total = 0
-                        message = f"Counting images... ({state_current} found)"
+                        message = f"正在统计图片（已发现 {state_current} 张）/ Counting images ({state_current} found)"
                         current_item = None
                         step = "counting"
                     elif phase == "counted":
                         state_current = 0
                         state_total = import_total or total
-                        message = f"Found {state_total} images. Starting import..."
+                        message = f"共发现 {state_total} 张图片，开始导入 / Found {state_total} images, importing..."
                         current_item = None
                         step = "importing"
                     elif phase == "cleanup":
                         message = (
+                            f"文件夹同步完成，移除 {removed_count} 条失效记录 / "
                             f"Folder sync complete. Removed {removed_count} missing entr"
                             f"{'y' if removed_count == 1 else 'ies'}."
                         )
@@ -1157,41 +1158,41 @@ class SortingService:
                         step = "metadata" if import_complete and metadata_total > metadata_processed else "importing"
                         current_item = None
                         if import_complete and metadata_total > 0:
-                            message = f"Library ready. Finishing metadata in background ({metadata_processed}/{metadata_total})..."
+                            message = f"图库已就绪，后台补齐图片详情（{metadata_processed}/{metadata_total}）/ Library ready, finishing metadata ({metadata_processed}/{metadata_total})..."
                         else:
-                            message = f"Library is browseable. Importing continues in background ({state_current}/{state_total or '?'})..."
+                            message = f"图库已可浏览，后台继续导入（{state_current}/{state_total or '?'}）/ Library browseable, import continues ({state_current}/{state_total or '?'})..."
                     elif phase == "metadata":
                         if import_complete:
                             step = "metadata"
-                            message = f"Reading image details: {filename}" if filename else "Reading image details..."
+                            message = f"正在读取图片详情 / Reading details: {filename}" if filename else "正在读取图片详情 / Reading image details..."
                             current_item = filename or None
                         else:
                             step = "importing"
                             message = (
-                                f"Importing library and reading details... ({state_current}/{state_total})"
+                                f"正在导入并读取详情（{state_current}/{state_total}）/ Importing and reading details ({state_current}/{state_total})"
                                 if state_total > 0
-                                else "Importing library and reading details..."
+                                else "正在导入并读取详情 / Importing and reading details..."
                             )
                             current_item = None
                     elif not total_final:
                         state_current = counted or current
                         state_total = 0
-                        message = f"Counting images... ({state_current} found)"
+                        message = f"正在统计图片（已发现 {state_current} 张）/ Counting images ({state_current} found)"
                         current_item = None
                         step = "counting"
 
                     if last_error:
                         message = (
-                            f"Skipped unreadable image: {last_error.get('filename', filename)}"
+                            f"已跳过无法读取的图片 / Skipped unreadable image: {last_error.get('filename', filename)}"
                             f" ({last_error.get('error', 'Unreadable image')})"
                         )
                     if cancel_event.is_set():
                         status = "cancelling"
                         step = "cancelling"
                         message = (
-                            f"Cancelling scan... ({state_current}/{state_total})"
+                            f"正在取消扫描（{state_current}/{state_total}）/ Cancelling scan ({state_current}/{state_total})"
                             if total_final and state_total > 0
-                            else f"Cancelling scan... ({state_current} scanned)"
+                            else f"正在取消扫描（已扫 {state_current}）/ Cancelling scan ({state_current} scanned)"
                         )
                     self._update_scan_progress_if_current(
                         run_id,
@@ -1230,17 +1231,17 @@ class SortingService:
                 new_count = result.get("new", 0)
                 updated_count = result.get("updated", 0)
                 removed_count = result.get("removed", 0)
-                summary = f"Completed! {new_count} images indexed."
+                summary = f"完成！已索引 {new_count} 张图片 / Done! {new_count} images indexed."
                 if updated_count:
-                    summary += f" {updated_count} updated."
+                    summary += f" 更新 {updated_count} 张 / {updated_count} updated."
                 if removed_count:
-                    summary += f" {removed_count} missing entries removed."
+                    summary += f" 移除 {removed_count} 条失效记录 / {removed_count} missing removed."
                 if errors:
-                    summary += f" {errors} failed."
+                    summary += f" {errors} 张失败 / {errors} failed."
                 recent_errors = result.get("recent_errors") or []
                 if recent_errors:
                     filenames = ", ".join(item.get("filename", "unknown") for item in recent_errors[-3:])
-                    summary += f" Bad files: {filenames}."
+                    summary += f" 问题文件 / Bad files: {filenames}."
                 duration_seconds = max(0.0, now - float(self._scan_progress.get("started_at") or now))
                 metadata_processed = result.get("metadata_processed", 0)
                 metadata_total = result.get("metadata_total", 0)
@@ -1348,9 +1349,9 @@ class SortingService:
                             "metadata_total_final": current_state.get("metadata_total_final", False),
                             "metadata_pending": current_state.get("metadata_pending", 0),
                             "message": (
-                                f"Scan cancelled at {current_state.get('processed', current_state.get('current', 0))}/{current_state.get('total', 0)}."
+                                f"扫描已取消（{current_state.get('processed', current_state.get('current', 0))}/{current_state.get('total', 0)}）/ Scan cancelled at {current_state.get('processed', current_state.get('current', 0))}/{current_state.get('total', 0)}."
                                 if current_state.get("total_final", False) and current_state.get("total", 0)
-                                else f"Scan cancelled after {current_state.get('processed', current_state.get('current', 0))} scanned."
+                                else f"扫描已取消（已扫 {current_state.get('processed', current_state.get('current', 0))}）/ Scan cancelled after {current_state.get('processed', current_state.get('current', 0))} scanned."
                             ),
                             "current_item": current_state.get("current_item"),
                             "started_at": current_state.get("started_at"),
@@ -1387,7 +1388,7 @@ class SortingService:
                             "metadata_total": current_state.get("metadata_total", 0),
                             "metadata_total_final": current_state.get("metadata_total_final", False),
                             "metadata_pending": current_state.get("metadata_pending", 0),
-                            "message": "Scan failed due to an internal error",
+                            "message": "扫描因内部错误失败 / Scan failed due to an internal error",
                             "current_item": current_state.get("current_item"),
                             "started_at": current_state.get("started_at"),
                             "updated_at": now,
@@ -1404,13 +1405,13 @@ class SortingService:
                         run_id,
                         status="error",
                         step="error",
-                        message="Scan ended unexpectedly",
+                        message="扫描意外中止 / Scan ended unexpectedly",
                         updated_at=time.time(),
                     )
                 self._clear_scan_worker_refs_if_current(run_id)
 
         background_tasks.add_task(run_scan)
-        return {"status": "started", "message": "Scan started in background"}
+        return {"status": "started", "message": "扫描已在后台开始 / Scan started in background"}
 
     def _move_one_image(
         self,
@@ -1535,7 +1536,7 @@ class SortingService:
         image_ids = self._expand_move_request_ids(request)
         total_count = len(image_ids)
         if total_count == 0:
-            return {"status": "done", "message": "No images to move", "results": [], "total": 0}
+            return {"status": "done", "message": "没有需要移动的图片 / No images to move", "results": [], "total": 0}
 
         cancel_event = threading.Event()
         with self._move_lock:
@@ -1548,7 +1549,7 @@ class SortingService:
                 "step": "starting",
                 "current": 0,
                 "total": total_count,
-                "message": f"Starting {operation} of {total_count} images...",
+                "message": f"正在准备{'复制' if operation == 'copy' else '移动'} {total_count} 张图片 / Starting {operation} of {total_count} images...",
                 "errors": 0,
                 "moved": 0,
                 "current_item": None,
@@ -1579,6 +1580,7 @@ class SortingService:
                             "errors": len(errors),
                             "moved": moved,
                             "message": (
+                                f"已取消（{processed}/{total_count}），已{'复制' if operation == 'copy' else '移动'} {moved} 张 / "
                                 f"Cancelled at {processed}/{total_count}. "
                                 f"{completed_verb_local} {moved} images so far."
                             ),
@@ -1626,7 +1628,7 @@ class SortingService:
                             total=total_count,
                             errors=len(errors),
                             moved=moved,
-                            message=f"Processed {filename} ({processed}/{total_count})",
+                            message=f"已处理 / Processed: {filename} ({processed}/{total_count})",
                             current_item=filename,
                             recent_errors=errors[-3:],
                             operation=operation,
@@ -1644,7 +1646,7 @@ class SortingService:
                         "total": total_count,
                         "errors": len(errors),
                         "moved": moved,
-                        "message": f"Completed! {completed_verb} {moved} images." + (f" {len(errors)} errors." if errors else ""),
+                        "message": f"完成！已{'复制' if operation == 'copy' else '移动'} {moved} 张图片 / Done! {completed_verb} {moved} images." + (f" {len(errors)} 张失败 / {len(errors)} errors." if errors else ""),
                         "current_item": None,
                         "recent_errors": errors[-3:],
                         "operation": operation,
@@ -1667,7 +1669,7 @@ class SortingService:
                         "total": total_count,
                         "errors": len(errors),
                         "moved": moved,
-                        "message": "Move failed due to an internal error",
+                        "message": "移动因内部错误失败 / Move failed due to an internal error",
                         "current_item": None,
                         "recent_errors": errors[-3:],
                         "operation": operation,
@@ -1687,7 +1689,7 @@ class SortingService:
         background_tasks.add_task(run_move)
         return {
             "status": "started",
-            "message": f"{progress_verb} {total_count} images in background",
+            "message": f"后台{'复制' if operation == 'copy' else '移动'} {total_count} 张图片中 / {progress_verb} {total_count} images in background",
             "total": total_count,
             "count": total_count,
             "operation": operation,
@@ -1778,7 +1780,7 @@ class SortingService:
         )
 
         if total_count == 0:
-            return {"message": "No images match the filters", "count": 0}
+            return {"message": "没有符合筛选条件的图片 / No images match the filters", "count": 0}
 
         # Run actual move in background with progress tracking. The
         # cancel event is allocated under the same lock as run_id so
@@ -1796,7 +1798,7 @@ class SortingService:
                 "step": "starting",
                 "current": 0,
                 "total": total_count,
-                "message": f"Starting {operation} of {total_count} images...",
+                "message": f"正在准备{'复制' if operation == 'copy' else '移动'} {total_count} 张图片 / Starting {operation} of {total_count} images...",
                 "errors": 0,
                 "moved": 0,
                 "current_item": None,
@@ -1837,6 +1839,7 @@ class SortingService:
                             "errors": len(errors),
                             "moved": moved,
                             "message": (
+                                f"已取消（{processed}/{total_count}），已{'复制' if operation == 'copy' else '移动'} {moved} 张 / "
                                 f"Cancelled at {processed}/{total_count}. "
                                 f"{completed_verb_local} {moved} images so far."
                             ),
@@ -1942,7 +1945,7 @@ class SortingService:
                                 total=total_count,
                                 errors=len(errors),
                                 moved=moved,
-                                message=f"Processed {filename} ({processed}/{total_count})",
+                                message=f"已处理 / Processed: {filename} ({processed}/{total_count})",
                                 current_item=filename,
                                 recent_errors=errors[-3:],
                                 operation=operation,
@@ -1963,7 +1966,7 @@ class SortingService:
                             "step": "done",
                             "current": 0,
                             "total": 0,
-                            "message": "No images match the filters",
+                            "message": "没有符合筛选条件的图片 / No images match the filters",
                             "errors": 0,
                             "moved": 0,
                             "current_item": None,
@@ -1985,7 +1988,7 @@ class SortingService:
                         "total": total_count,
                         "errors": len(errors),
                         "moved": moved,
-                        "message": f"Completed! {completed_verb} {moved} images." + (f" {len(errors)} errors." if errors else ""),
+                        "message": f"完成！已{'复制' if operation == 'copy' else '移动'} {moved} 张图片 / Done! {completed_verb} {moved} images." + (f" {len(errors)} 张失败 / {len(errors)} errors." if errors else ""),
                         "current_item": None,
                         "recent_errors": errors[-3:],
                         "operation": operation,
@@ -2013,7 +2016,7 @@ class SortingService:
                         "total": total_count,
                         "errors": errors_count,
                         "moved": moved_count,
-                        "message": "Batch move failed due to an internal error",
+                        "message": "批量移动因内部错误失败 / Batch move failed due to an internal error",
                         "current_item": None,
                         "recent_errors": self._batch_move_progress.get("recent_errors", []) if run_id == self._batch_move_run_id else [],
                         "operation": operation,
@@ -2037,7 +2040,7 @@ class SortingService:
         progress_verb = "Copying" if operation == "copy" else "Moving"
         return {
             "status": "started",
-            "message": f"{progress_verb} {total_count} images in background",
+            "message": f"后台{'复制' if operation == 'copy' else '移动'} {total_count} 张图片中 / {progress_verb} {total_count} images in background",
             "total": total_count,
             "count": total_count,
             "operation": operation,

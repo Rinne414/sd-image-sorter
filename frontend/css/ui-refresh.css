@@ -2647,8 +2647,16 @@ textarea:focus,
     font-weight: 600;
 }
 
-/* Compact on-stage sound mute toggle in the sort HUD. */
+/* Compact on-stage sound mute toggle in the sort HUD.
+   v3.5.0 audit HIGH: zen/mute/progress were unpositioned flow children of
+   the centered .sort-interface — they rendered UNDER the z-index:10 image
+   container: invisible, unclickable (rule 2). They are now pinned to stage
+   corners like the exit button (top-left pair mirrors the top-right exit). */
 .sort-hud-mute {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 100;
     width: 44px;
     min-width: 44px;
     padding: 8px;
@@ -2664,6 +2672,10 @@ textarea:focus,
    Engaged state uses the blue "active" accent (not a primary CTA, so it does
    not conflict with the one-blue-primary rule; the stage has no blue CTA). */
 .sort-hud-zen {
+    position: absolute;
+    top: 20px;
+    left: 74px;
+    z-index: 100;
     width: 44px;
     min-width: 44px;
     padding: 8px;
@@ -2674,6 +2686,146 @@ textarea:focus,
     color: var(--blue);
     border-color: rgba(var(--blue-rgb), 0.5);
     background: rgba(var(--blue-rgb), 0.10);
+}
+
+/* Progress + stats: bottom-right so the S slot keeps the bottom center.
+   Was invisible for the same stacking reason as zen/mute above. */
+.sort-interface .sort-progress-enhanced {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    z-index: 90;
+    width: min(380px, 26vw);
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+}
+
+/* Minimap moves to the bottom-left for the same reason (it used to sit
+   800px wide dead-center ON TOP of the S drop zone). */
+.sort-interface .gallery-preview-bar {
+    left: 16px;
+    right: auto;
+    bottom: 16px;
+    transform: none;
+    width: min(480px, 30vw);
+    max-width: 480px;
+}
+
+/* Segmented sorted/skipped bar — markup + JS existed, CSS never did. */
+.progress-bar-segmented {
+    display: flex;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 8px;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+.progress-fill-sorted {
+    height: 100%;
+    width: 0%;
+    background: var(--accent-success);
+    transition: width var(--transition-normal);
+}
+.progress-fill-skipped {
+    height: 100%;
+    width: 0%;
+    background: var(--warning);
+    transition: width var(--transition-normal);
+}
+
+/* Compact metrics inside the 380px-wide corner widget. */
+.sort-interface .sort-progress-enhanced .progress-summary-line {
+    margin-bottom: 8px;
+    font-size: 12px;
+    gap: 8px;
+}
+.sort-interface .sort-progress-enhanced .progress-summary-item {
+    padding: 3px 8px;
+}
+.sort-interface .sort-progress-enhanced .progress-bar {
+    margin-bottom: 8px;
+}
+.sort-interface .sort-progress-enhanced .progress-info {
+    margin-top: 6px;
+    font-size: 12px;
+}
+
+/* ---- Manual Sort setup: rule-6 two-column layout (v3.5.0 audit) ----
+   The setup form was a 1900px+ single column inside a 980px card. At
+   desktop widths the card widens and splits: destinations (left) |
+   scope + behavior (right). Header and the start CTA stay full-width. */
+#view-manual .manual-sort-container {
+    max-width: 1500px;
+}
+#view-manual .sort-setup {
+    max-width: 1460px;
+}
+#view-manual .setup-title {
+    font-size: 30px;
+    margin-bottom: 8px;
+}
+#view-manual .setup-description {
+    margin-bottom: 20px;
+}
+@media (min-width: 1280px) {
+    .sort-setup-columns {
+        display: grid;
+        grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+        column-gap: 28px;
+        align-items: start;
+        text-align: left;
+        margin-bottom: 16px;
+    }
+    .sort-setup-col {
+        min-width: 0;
+    }
+    .sort-setup-col-main .folder-config {
+        margin-bottom: 0;
+    }
+    /* The A | SPACE | D flex row needs ~730px of content width — too wide
+       for a half card. Regrid: A and D side by side, SPACE hint spanning. */
+    .sort-setup-col-main .folder-row-middle {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 12px 16px;
+    }
+    .sort-setup-col-main .folder-row-middle .folder-slot {
+        max-width: none;
+    }
+    .sort-setup-col-main .folder-row-middle .folder-slot[data-key="a"] {
+        grid-column: 1;
+        grid-row: 1;
+    }
+    .sort-setup-col-main .folder-row-middle .folder-slot[data-key="d"] {
+        grid-column: 2;
+        grid-row: 1;
+    }
+    .sort-setup-col-main .folder-row-middle .space-indicator {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        flex-direction: row;
+        justify-content: center;
+        padding: 8px 12px;
+    }
+    .sort-setup-col-main .folder-row-middle .space-key {
+        padding: 8px 24px;
+    }
+    /* Count + start CTA + resume banner live at the end of the left column
+       (balances the taller right column); keep them centered like before. */
+    .sort-setup-col-main .sort-scope-count {
+        justify-content: center;
+    }
+    .sort-setup-col-main #btn-start-sorting {
+        display: block;
+        margin: 14px auto 0;
+    }
+    .sort-setup-col-main #sort-resume-banner {
+        margin-top: 14px;
+    }
 }
 
 /* Live scoped image count above the Start button. Informational: it previews
@@ -4417,10 +4569,38 @@ textarea:focus,
        scrollable grid overlap its neighbors. */
     grid-template-rows: auto auto auto minmax(0, 1fr) auto;
     gap: 10px;
-    max-height: min(92vh, 960px);
+    max-height: min(94vh, 1200px);
     overflow: hidden;
-    width: min(1100px, 96vw);
+    /* v3.5.0 rule-6: was 1100px with ~3000px of stacked panels inside.
+       Wider shell + multi-column panel flow (below) cut the scroll ~3x. */
+    width: min(1560px, 96vw);
 }
+
+/* Panels flow into side-by-side sub-columns instead of one tall stack.
+   CSS multicol handles the unequal panel heights (grid rows would not).
+   Selector carries the .filter-modal-grid prefix to outrank the later
+   `.filter-column { display: flex }` base rule — a flex display would
+   silently disable the column flow. */
+@media (min-width: 1280px) {
+    /* The base grid pins the primary column at 340px — useless for a
+       two-up panel flow. Give it real width alongside the wider shell.
+       (.filter-modal-shell prefix outranks the base rule further down.) */
+    .filter-modal-shell .filter-modal-grid {
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    }
+    .filter-modal-grid .filter-column-primary {
+        display: block;
+        columns: 2;
+        column-gap: 14px;
+    }
+    .filter-modal-grid .filter-column-primary > .filter-panel {
+        break-inside: avoid;
+        margin-bottom: 14px;
+    }
+}
+/* NOTE: the secondary column is NOT multicol'd — its models panel already
+   lays checkpoints and LoRA lists side by side internally; halving its width
+   mangles those lists (verified visually at 1920). */
 
 .filter-modal-hero {
     display: flex;

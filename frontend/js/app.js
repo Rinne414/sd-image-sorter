@@ -7531,6 +7531,7 @@ async function startScan() {
         _scanLibraryReadyHandled = false;
         _scanLastAutoRefreshAt = 0;
         $('#scan-progress-text').textContent = appT('progress.countingImages', 'Counting images... {count} found').replace('{count}', '0');
+        _scanStartToastAt = Date.now();
         showToast(
             appT('scan.startedToast', 'Import started. The first images will appear soon, and the rest of the details will keep filling in.'),
             'info'
@@ -8088,10 +8089,12 @@ async function pollScanProgress(retryCount = 0, generation = _scanPollGeneration
                 refreshGallery: true,
                 pageSizeOverride: SCAN_PREVIEW_PAGE_SIZE,
             });
-            showToast(
-                appT('scan.libraryReadyToast', 'Library is ready. Metadata is still loading in the background.'),
-                'info'
-            );
+            if (Date.now() - _scanStartToastAt > 3000) {
+                showToast(
+                    appT('scan.libraryReadyToast', 'Library is ready. Metadata is still loading in the background.'),
+                    'info'
+                );
+            }
         }
 
         if (progress.status === 'running' && progress.library_ready) {
@@ -8307,6 +8310,10 @@ const SCAN_DIAGNOSTICS_HOLD_MS = 10000;
 let _scanDiagnosticsHoldUntil = 0;
 let _scanLibraryReadyHandled = false;
 let _scanLastAutoRefreshAt = 0;
+// v3.5.0 audit: on tiny libraries library_ready fires <1s after the start
+// toast — two stacked info toasts read as spam. Track when the start toast
+// was shown so the ready toast can be skipped if it would stack.
+let _scanStartToastAt = 0;
 // v3.4.3: folder of the most recent scan, for the "Create collection" CTA —
 // lets users keep each imported dataset separated without manual selection.
 let _scanLastFolderPath = '';
@@ -11018,6 +11025,21 @@ async function openFilterModal(options = {}) {
     }
     if (resetButton) {
         resetButton.textContent = FilterModalController.resetButtonText || appT('filter.reset', 'Reset All');
+    }
+    // v3.5.0 audit: the footer note used to always talk about "gallery
+    // results" even when the modal was opened from Manual Sort / Auto-Separate.
+    const footerNote = document.querySelector('#filter-modal .filter-modal-footer-note');
+    if (footerNote) {
+        const footerByMode = {
+            'manual-sort': ['filter.footerHintManual', 'Applies only to the images Manual Sort will go through — Gallery filters stay unchanged.'],
+            'auto-separate': ['filter.footerHintAutosep', 'Applies only to what Auto-Separate will match — Gallery filters stay unchanged.'],
+            'queue-profile': ['filter.footerHintQueue', 'Applies only to the censor queue selection — Gallery filters stay unchanged.'],
+            'queue-solitaire': ['filter.footerHintQueue', 'Applies only to the censor queue selection — Gallery filters stay unchanged.'],
+        };
+        const footerEntry = footerByMode[FilterModalController.mode]
+            || ['filter.footerHint', 'Apply filters to refresh the gallery results. Press Enter inside tag or prompt search to add multiple values separated by commas.'];
+        footerNote.setAttribute('data-i18n', footerEntry[0]);
+        footerNote.textContent = appT(footerEntry[0], footerEntry[1]);
     }
     $$('#modal-generator-filters input').forEach(cb => {
         cb.checked = filterState.generators.includes(cb.value);

@@ -93,7 +93,7 @@ const OnboardingTour = (function() {
                     <li>扫描文件夹，自动读取 SD 元数据</li>
                     <li>WD14 AI 自动打标</li>
                     <li>按筛选条件自动分类</li>
-                    <li>WASD 键盘快速手动分拣</li>
+                    <li>WASD 键盘快速手动排序</li>
                     <li>画布式打码编辑</li>
                 </ul>`,
             target: null,
@@ -106,7 +106,7 @@ const OnboardingTour = (function() {
                 <ul>
                     <li><strong>图片库</strong> - 浏览、筛选、打标</li>
                     <li><strong>读图</strong> - 查看完整元数据 + 隐私工具</li>
-                    <li><strong>整理图片</strong> - 按筛选自动分类，或 WASD 手动分拣</li>
+                    <li><strong>整理图片</strong> - 按筛选自动分类，或 WASD 手动排序</li>
                     <li><strong>打码编辑</strong> - 画布式打码</li>
                     <li><strong>找相似</strong> - CLIP 视觉相似 &amp; 查重</li>
                     <li><strong>数据集</strong> - 制作 LoRA 训练集（caption + 导出）</li>

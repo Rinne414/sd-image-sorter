@@ -621,7 +621,7 @@ function markManualSortScopeSyncedFromGallery() {
 }
 
 function getManualSortToolLabel() {
-    return manualSortText('nav.manual', 'Manual Sort', '手动分类');
+    return manualSortText('nav.manual', 'Manual Sort', '手动排序');
 }
 
 // ============== Sort enhancements (Aurora Phase 3 Slice 2) ==============
@@ -1302,9 +1302,9 @@ async function initManualSort() {
             if (window.App && window.App.openFilterModal) {
                 window.App.openFilterModal({
                     mode: 'manual-sort',
-                    titleText: manualSortText('manual.filterTitle', 'Manual Sort Filters', '手动分类筛选'),
-                    applyButtonText: manualSortText('manual.applyFilters', 'Apply to Manual Sort', '应用到手动分类'),
-                    resetButtonText: manualSortText('manual.resetFilters', 'Reset Manual Sort Filters', '重置手动分类筛选'),
+                    titleText: manualSortText('manual.filterTitle', 'Manual Sort Filters', '手动排序筛选'),
+                    applyButtonText: manualSortText('manual.applyFilters', 'Apply to Manual Sort', '应用到手动排序'),
+                    resetButtonText: manualSortText('manual.resetFilters', 'Reset Manual Sort Filters', '重置手动排序筛选'),
                     filterState: getManualSortFilters(),
                     onApply: (filters) => {
                         setManualSortFilters(filters);
@@ -1432,7 +1432,7 @@ async function initManualSort() {
                 manualSortText(
                     'manual.discardSessionMessage',
                     'Delete the saved manual-sort session and lose the remaining progress? This cannot be undone.',
-                    '要删除已保存的手动分类会话，并丢失剩余进度吗？此操作无法撤销。'
+                    '要删除已保存的手动排序会话，并丢失剩余进度吗？此操作无法撤销。'
                 ),
                 async () => {
                     try {
@@ -1507,7 +1507,7 @@ async function confirmResumeSavedSessionFromStart(savedSession) {
 
     return new Promise(resolve => {
         window.App.showConfirm(
-            manualSortText('manual.resumeInsteadTitle', 'Resume saved Manual Sort session?', '恢复已保存的手动分类会话？'),
+            manualSortText('manual.resumeInsteadTitle', 'Resume saved Manual Sort session?', '恢复已保存的手动排序会话？'),
             body,
             async () => {
                 await resumeSavedSession(savedSession);
@@ -1669,7 +1669,7 @@ async function startSorting() {
 
         if (result.total_images === 0) {
             showToast(
-                manualSortText('manual.noImages', 'No images match Manual Sort filters', '没有图片匹配手动分类筛选'),
+                manualSortText('manual.noImages', 'No images match Manual Sort filters', '没有图片匹配手动排序筛选'),
                 'error'
             );
             return;
@@ -2048,7 +2048,7 @@ async function startBracketSorting() {
 
         const totalImages = Number(result?.total_images ?? 0);
         if (totalImages === 0) {
-            showToast(manualSortText('manual.noImages', 'No images match Manual Sort filters', '没有图片匹配手动分类筛选'), 'error');
+            showToast(manualSortText('manual.noImages', 'No images match Manual Sort filters', '没有图片匹配手动排序筛选'), 'error');
             return;
         }
         if (totalImages < 2) {
@@ -2609,7 +2609,7 @@ async function startCullSorting() {
 
         const totalImages = Number(result?.total_images ?? 0);
         if (totalImages === 0) {
-            showToast(manualSortText('manual.noImages', 'No images match Manual Sort filters', '没有图片匹配手动分类筛选'), 'error');
+            showToast(manualSortText('manual.noImages', 'No images match Manual Sort filters', '没有图片匹配手动排序筛选'), 'error');
             return;
         }
 
