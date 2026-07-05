@@ -4602,6 +4602,15 @@ textarea:focus,
    lays checkpoints and LoRA lists side by side internally; halving its width
    mangles those lists (verified visually at 1920). */
 
+/* Similar tab → Duplicate Cleanup bridge row (v3.5.0 audit). */
+.similar-dup-bridge {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 6px 0 10px;
+}
+
 .filter-modal-hero {
     display: flex;
     justify-content: space-between;

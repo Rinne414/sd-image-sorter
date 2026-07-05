@@ -791,8 +791,13 @@ class TestMove:
         assert not img_path.exists()
         assert (dest_dir / "move_me.png").exists()
 
-    def test_copy_image_file_keeps_source_and_creates_indexed_copy(self, test_client, test_db, tmp_path: Path):
-        """Copy mode should preserve the source file and create a second indexed row."""
+    def test_copy_image_file_keeps_source_and_does_not_index_copy(self, test_client, test_db, tmp_path: Path):
+        """Copy mode preserves the source and writes a file-only copy.
+
+        v3.5.0 owner decision: copies are NOT indexed — copy-based sorting
+        used to show every sorted image twice in the gallery. The copied
+        file only enters the library if its folder is scanned later.
+        """
         import database as db
         from PIL import Image
 
@@ -812,29 +817,8 @@ class TestMove:
             metadata_json="{}",
             created_at=datetime(2024, 1, 2, 3, 4, 5),
         )
-        db.add_tags(image_id, [{"tag": "copied_tag", "confidence": 0.91}])
         with db.get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                UPDATE images
-                SET tagged_at = ?, ai_caption = ?, aesthetic_score = ?, embedding = ?
-                WHERE id = ?
-                """,
-                ("2024-02-03 04:05:06", "copy caption", 7.25, b"\x01\x02\x03\x04", image_id),
-            )
-            cursor.execute(
-                """
-                INSERT INTO artist_predictions (image_id, artist, confidence, top_predictions)
-                VALUES (?, ?, ?, ?)
-                """,
-                (
-                    image_id,
-                    "artist_copy",
-                    0.93,
-                    json.dumps([{"artist": "artist_copy", "confidence": 0.93}]),
-                ),
-            )
+            rows_before = conn.execute("SELECT COUNT(*) FROM images").fetchone()[0]
 
         response = test_client.post(
             "/api/move",
@@ -849,42 +833,17 @@ class TestMove:
         payload = response.json()["results"][0]
         assert payload["success"] is True
         assert payload["operation"] == "copy"
+        assert payload["new_image_id"] is None
         assert img_path.exists()
         copied_path = dest_dir / "copy_me.png"
         assert copied_path.exists()
 
         original_row = db.get_image_by_id(image_id)
-        copied_row = db.get_image_by_id(payload["new_image_id"])
         assert original_row["path"] == str(img_path)
-        assert copied_row["path"] == str(copied_path)
-        assert copied_row["prompt"] == "copy flow"
-        assert copied_row["created_at"] == original_row["created_at"]
-        assert copied_row["ai_caption"] == original_row["ai_caption"]
-        assert copied_row["aesthetic_score"] == original_row["aesthetic_score"]
-        assert {tag["tag"] for tag in db.get_image_tags(copied_row["id"])} == {"copied_tag"}
+        assert db.get_image_by_path(str(copied_path)) is None
         with db.get_db() as conn:
-            cursor = conn.cursor()
-            original_derived = cursor.execute(
-                "SELECT tagged_at, embedding FROM images WHERE id = ?",
-                (image_id,),
-            ).fetchone()
-            copied_derived = cursor.execute(
-                "SELECT tagged_at, embedding FROM images WHERE id = ?",
-                (copied_row["id"],),
-            ).fetchone()
-            original_artist = cursor.execute(
-                "SELECT artist, confidence, top_predictions FROM artist_predictions WHERE image_id = ?",
-                (image_id,),
-            ).fetchone()
-            copied_artist = cursor.execute(
-                "SELECT artist, confidence, top_predictions FROM artist_predictions WHERE image_id = ?",
-                (copied_row["id"],),
-            ).fetchone()
-        assert copied_derived["tagged_at"] == original_derived["tagged_at"]
-        assert copied_derived["embedding"] == original_derived["embedding"]
-        assert copied_artist["artist"] == original_artist["artist"]
-        assert copied_artist["confidence"] == pytest.approx(original_artist["confidence"])
-        assert copied_artist["top_predictions"] == original_artist["top_predictions"]
+            rows_after = conn.execute("SELECT COUNT(*) FROM images").fetchone()[0]
+        assert rows_after == rows_before
 
     def test_move_rejects_unreadable_image_even_if_file_exists(self, test_client, test_db, tmp_path: Path):
         """A truncated image should not be moved just because the file still exists on disk."""
@@ -1723,7 +1682,8 @@ class TestSortSession:
         assert image_path.exists()
         copied_path = destination / image_path.name
         assert copied_path.exists()
-        assert db.get_image_count() == 2
+        # v3.5.0: copies are file-only — the library row count never changes.
+        assert db.get_image_count() == 1
 
         undo_response = test_client.post("/api/sort/action?action=undo")
         assert undo_response.status_code == 200
@@ -1741,7 +1701,7 @@ class TestSortSession:
         assert redo_payload["operation_mode"] == "copy"
         assert image_path.exists()
         assert copied_path.exists()
-        assert db.get_image_count() == 2
+        assert db.get_image_count() == 1
 
     def test_sort_collect_adds_membership_without_moving_file(self, test_client, test_db, tmp_path: Path):
         """v3.3.1: a collection-typed slot adds the image to the collection by

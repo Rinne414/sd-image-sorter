@@ -17,8 +17,6 @@ import json
 from config import ALLOWED_IMAGE_EXTENSIONS as IMAGE_EXTENSIONS
 from database import (
     add_images_batch,
-    add_copied_image_with_state,
-    get_image_by_id,
     update_image_path,
     update_image_metadata,
     get_image_scan_state_by_paths,
@@ -29,7 +27,7 @@ from database import (
     STALE_PENDING_METADATA_READ_ERROR,
 )
 from image_fingerprint import compute_image_content_fingerprint
-from metadata_storage import compact_existing_metadata_json, compact_metadata_json
+from metadata_storage import compact_metadata_json
 from metadata_parser import PARSED_METADATA_VERSION, parse_image
 from exceptions import ScanError, ScanCancelledError, FileOperationError
 from utils.path_validation import validate_folder_path
@@ -1249,47 +1247,6 @@ def _prepare_destination_path(
     return image_path, new_path
 
 
-def _build_copied_image_record(
-    source_row: Dict[str, Any],
-    new_path: str,
-    stat_result: os.stat_result,
-) -> Dict[str, Any]:
-    """Create a new database row for a copied image using source metadata."""
-    return {
-        "path": new_path,
-        "filename": os.path.basename(new_path),
-        "generator": source_row.get("generator") or "unknown",
-        "prompt": source_row.get("prompt"),
-        "negative_prompt": source_row.get("negative_prompt"),
-        "metadata_json": compact_existing_metadata_json(source_row.get("metadata_json")) or compact_metadata_json({}),
-        "width": source_row.get("width"),
-        "height": source_row.get("height"),
-        "file_size": int(stat_result.st_size),
-        "checkpoint": source_row.get("checkpoint"),
-        "loras": _deserialize_loras(source_row.get("loras")) or [],
-        # Preserve the original gallery sort date so copy workflows do not
-        # scramble chronology when users need a reversible export.
-        "library_order_time": (
-            source_row.get("library_order_time")
-            or source_row.get("created_at")
-            or datetime.fromtimestamp(stat_result.st_mtime)
-        ),
-        "source_file_mtime": datetime.fromtimestamp(stat_result.st_mtime),
-        "created_at": (
-            source_row.get("library_order_time")
-            or source_row.get("created_at")
-            or datetime.fromtimestamp(stat_result.st_mtime)
-        ),
-        "model_hash": source_row.get("model_hash"),
-        "is_readable": bool(source_row.get("is_readable", 1)),
-        "read_error": source_row.get("read_error"),
-        "source_mtime_ns": int(stat_result.st_mtime_ns),
-        "source_size": int(stat_result.st_size),
-        "metadata_status": source_row.get("metadata_status") or "complete",
-        "content_fingerprint": source_row.get("content_fingerprint"),
-    }
-
-
 def move_image(image_id: int, destination_folder: str, image_path: str) -> str:
     """
     Move an image to a new folder.
@@ -1354,19 +1311,24 @@ def copy_image(
     image_id: int,
     destination_folder: str,
     image_path: str,
-    source_row: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Copy an image to a new folder.
+    Copy an image file to a new folder WITHOUT indexing the copy.
+
+    v3.5.0 (owner decision): a copy is a plain file output. It no longer
+    gets its own database row, so copy-based sorting does not double every
+    image in the gallery. The copy only enters the library if its folder
+    is scanned later. ``new_image_id`` stays in the payload for callers
+    and persisted sort histories, but it is always None now.
 
     Args:
-        image_id: Database ID of the source image
-        image_path: Path of the image to copy
+        image_id: Database ID of the source image (kept for signature
+            symmetry with move_image; the copy itself needs no DB access)
         destination_folder: Target folder path
-        source_row: Optional already-fetched DB row for the source image
+        image_path: Path of the image to copy
 
     Returns:
-        Dict with the copied path and database ID
+        Dict with the copied path and ``new_image_id: None``
 
     Raises:
         FileOperationError: If the copy operation fails
@@ -1375,30 +1337,10 @@ def copy_image(
         image_path, new_path = _prepare_destination_path(image_path, destination_folder, "copy")
 
         shutil.copy2(image_path, new_path)
-        stat_result = os.stat(new_path)
-        source = source_row or get_image_by_id(image_id) or {}
-        copied_record = _build_copied_image_record(source, new_path, stat_result)
-        try:
-            copied_image_id = add_copied_image_with_state(image_id, copied_record)
-        except Exception as db_error:
-            try:
-                if os.path.exists(new_path):
-                    os.remove(new_path)
-            except Exception as rollback_error:
-                raise FileOperationError(
-                    f"Database update failed after copying file, and rollback failed: {db_error}; rollback error: {rollback_error}",
-                    path=image_path,
-                    operation="copy",
-                ) from db_error
-            raise FileOperationError(
-                f"Database update failed after copying file; copied file was removed: {db_error}",
-                path=image_path,
-                operation="copy",
-            ) from db_error
 
         return {
             "new_path": new_path,
-            "new_image_id": copied_image_id,
+            "new_image_id": None,
         }
     except FileOperationError:
         raise

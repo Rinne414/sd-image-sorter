@@ -43,114 +43,34 @@ def test_move_image_restores_file_when_database_update_fails(test_db, tmp_path: 
     assert db.get_image_by_id(image_id)["path"] == str(source_path)
 
 
-def test_copy_image_removes_copied_file_when_database_update_fails(test_db, tmp_path: Path, monkeypatch):
+def test_copy_image_is_file_only_and_never_indexes_the_copy(test_db, tmp_path: Path):
+    """v3.5.0 owner decision: a copy is a plain file output — no DB row.
+
+    Copy-based sorting used to double every image in the gallery because
+    each copy got its own indexed row. The copy now only enters the
+    library if its destination folder is scanned later.
+    """
     source_dir = tmp_path / "copy-source"
     destination_dir = tmp_path / "copy-dest"
     source_dir.mkdir()
     destination_dir.mkdir()
-    source_path = source_dir / "rollback-copy.png"
+    source_path = source_dir / "file-only-copy.png"
     Image.new("RGB", (32, 32), color="purple").save(source_path)
     image_id = db.add_image(path=str(source_path), filename=source_path.name)
+    with db.get_db() as conn:
+        rows_before = conn.execute("SELECT COUNT(*) FROM images").fetchone()[0]
 
-    def fail_copy_state(*_args, **_kwargs):
-        raise RuntimeError("simulated database failure")
+    result = image_manager.copy_image(image_id, str(destination_dir), str(source_path))
 
-    monkeypatch.setattr(image_manager, "add_copied_image_with_state", fail_copy_state)
-
-    with pytest.raises(FileOperationError, match="copied file was removed"):
-        image_manager.copy_image(image_id, str(destination_dir), str(source_path), db.get_image_by_id(image_id))
-
+    copied_path = destination_dir / source_path.name
+    assert copied_path.exists()
     assert source_path.exists()
-    assert not (destination_dir / source_path.name).exists()
-    assert db.get_image_by_path(str(destination_dir / source_path.name)) is None
-
-
-def test_copy_image_replaces_stale_target_row_state(test_db, tmp_path: Path):
-    source_dir = tmp_path / "copy-source"
-    destination_dir = tmp_path / "copy-dest"
-    source_dir.mkdir()
-    destination_dir.mkdir()
-    source_path = source_dir / "stale-copy.png"
-    target_path = destination_dir / source_path.name
-    Image.new("RGB", (32, 32), color="orange").save(source_path)
-    source_id = db.add_image(path=str(source_path), filename=source_path.name)
-    stale_id = db.add_image(path=str(target_path), filename=target_path.name)
-    db.add_tags(source_id, [{"tag": "fresh_tag", "confidence": 0.9}])
-    db.add_tags(stale_id, [{"tag": "stale_tag", "confidence": 0.8}])
-    with db.get_db() as conn:
-        conn.execute(
-            "INSERT INTO artist_predictions (image_id, artist, confidence, top_predictions) VALUES (?, ?, ?, ?)",
-            (stale_id, "stale_artist", 0.5, "[]"),
-        )
-
-    result = image_manager.copy_image(source_id, str(destination_dir), str(source_path), db.get_image_by_id(source_id))
-
-    copied_id = result["new_image_id"]
-    assert copied_id == stale_id
-    assert target_path.exists()
-    assert {tag["tag"] for tag in db.get_image_tags(copied_id)} == {"fresh_tag"}
-    with db.get_db() as conn:
-        artist_count = conn.execute(
-            "SELECT COUNT(*) FROM artist_predictions WHERE image_id = ?",
-            (copied_id,),
-        ).fetchone()[0]
-    assert artist_count == 0
-
-
-def test_copied_image_record_compacts_legacy_raw_metadata(test_db, tmp_path: Path):
-    source_path = tmp_path / "source-raw.png"
-    copied_path = tmp_path / "copied-raw.png"
-    Image.new("RGB", (32, 32), color="purple").save(source_path)
-    raw_metadata = json.dumps({
-        "xmp": "x" * 20_000,
-        "Description": "legacy raw description",
-        "_parsed": {
-            "generation_params": {"steps": 24},
-        },
-    })
-    source_row = {
-        "generator": "webui",
-        "prompt": "prompt",
-        "negative_prompt": None,
-        "metadata_json": raw_metadata,
-        "width": 32,
-        "height": 32,
-        "file_size": source_path.stat().st_size,
-        "checkpoint": None,
-        "loras": "[]",
-        "is_readable": 1,
-        "metadata_status": "complete",
-    }
-
-    record = image_manager._build_copied_image_record(source_row, str(copied_path), source_path.stat())
-
-    stored = json.loads(record["metadata_json"])
-    assert stored == {
-        "_compact": {"version": 1},
-        "_parsed": {"generation_params": {"steps": 24}},
-    }
-    assert len(record["metadata_json"]) < 512
-
-
-def test_add_copied_image_with_state_rolls_back_partial_database_rows(test_db, tmp_path: Path):
-    source_path = tmp_path / "source.png"
-    copied_path = tmp_path / "copied.png"
-    Image.new("RGB", (32, 32), color="blue").save(source_path)
-    source_id = db.add_image(path=str(source_path), filename=source_path.name)
-    source_row = db.get_image_by_id(source_id)
-    record = image_manager._build_copied_image_record(source_row, str(copied_path), source_path.stat())
-
-    with pytest.raises(Exception):
-        db.add_copied_image_with_state(
-            source_id,
-            record,
-            [
-                {"tag": "duplicate_tag", "confidence": 0.9},
-                {"tag": "duplicate_tag", "confidence": 0.8},
-            ],
-        )
-
+    assert result["new_path"] == str(copied_path)
+    assert result["new_image_id"] is None
     assert db.get_image_by_path(str(copied_path)) is None
+    with db.get_db() as conn:
+        rows_after = conn.execute("SELECT COUNT(*) FROM images").fetchone()[0]
+    assert rows_after == rows_before
 
 
 def test_scan_folder_default_uses_count_first_then_import(test_db, tmp_path: Path):

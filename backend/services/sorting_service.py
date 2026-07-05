@@ -822,16 +822,19 @@ class SortingService:
         image_id: int,
         destination_folder: str,
         source_path: str,
-        source_row: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Execute either a move or a copy and return a normalized result payload."""
+        """Execute either a move or a copy and return a normalized result payload.
+
+        Copies are file-only (v3.5.0 owner decision): the copy is NOT
+        indexed into the library, so ``new_image_id`` is always None on
+        the copy branch too.
+        """
         normalized_operation = self._validate_file_operation(operation)
         if normalized_operation == "copy":
             result = copy_image(
                 image_id=image_id,
                 destination_folder=destination_folder,
                 image_path=source_path,
-                source_row=source_row,
             )
             return {
                 "operation": "copy",
@@ -1443,7 +1446,6 @@ class SortingService:
                 image_id=image_id,
                 destination_folder=destination_folder,
                 source_path=source_path,
-                source_row=image,
             )
             return {
                 "id": image_id,
@@ -1928,7 +1930,6 @@ class SortingService:
                                             image_id=image["id"],
                                             destination_folder=destination_folder,
                                             source_path=source_path,
-                                            source_row=image,
                                         )
                                         moved += 1
                                     except Exception as e:
@@ -2814,7 +2815,6 @@ class SortingService:
                             image_id=target_image["id"],
                             destination_folder=folder,
                             source_path=target_path,
-                            source_row=target_image,
                         )
                         redo_entry["new_path"] = operation_result["new_path"]
                         redo_entry["copied_image_id"] = operation_result.get("new_image_id")
@@ -2952,7 +2952,6 @@ class SortingService:
                         image_id=current["id"],
                         destination_folder=folder,
                         source_path=current_path,
-                        source_row=current,
                     )
                     self._sort_session["redo_stack"] = []
                     self._sort_session["history"].append({

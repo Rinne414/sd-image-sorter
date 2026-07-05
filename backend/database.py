@@ -162,7 +162,6 @@ from db_images_write import (
     mark_pending_images_metadata_error,
     _copy_image_derived_state,
     copy_image_derived_state,
-    add_copied_image_with_state,
     update_image_caption,
     set_user_rating,
     update_image_colors,

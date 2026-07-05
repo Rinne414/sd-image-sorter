@@ -1328,6 +1328,12 @@ const SimilarImages = {
             this.findDuplicates();
         });
 
+        // v3.5.0 audit: bridge to the whole-library group-based Duplicate
+        // Cleanup so the two dedup surfaces know about each other.
+        document.getElementById('btn-similar-open-dup-cleaner')?.addEventListener('click', () => {
+            window.DupCleaner?.open?.();
+        });
+
         // Threshold slider
         const thresholdSlider = document.getElementById('similar-dup-threshold');
         const thresholdValue = document.getElementById('similar-dup-threshold-value');

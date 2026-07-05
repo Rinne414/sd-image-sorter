@@ -1299,6 +1299,7 @@ window.I18nLang_zhCN = {
     'similar.scopeAll': '全部图片',
     'similar.searchEmpty': '输入图片 ID 或上传图片来查找相似图片。',
     'similar.duplicatesEmpty': '点击「查找重复」扫描重复图片。',
+    'similar.dupBridgeHint': '这里是快速的成对查重。要整库分组审查、一键清理，请用「查重清理」。',
     'similar.needMoreEmbeddings': '至少需要 {count} 张已建立 embedding 的图片，查重才有意义。',
     'similar.startIndexing': '建立相似索引',
     'similar.indexingNow': '建立索引中...',

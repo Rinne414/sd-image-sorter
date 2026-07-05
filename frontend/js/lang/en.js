@@ -1288,6 +1288,7 @@ window.I18nLang_en = {
     'similar.scopeAll': 'All images',
     'similar.searchEmpty': 'Enter an image ID or upload an image to find similar images.',
     'similar.duplicatesEmpty': 'Click "Find Duplicates" to scan for duplicate images.',
+    'similar.dupBridgeHint': 'This is a quick pair check. For whole-library group review with one-click cleanup, use Duplicate Cleanup.',
     'similar.needMoreEmbeddings': 'Need at least {count} embedded images before duplicate search is meaningful.',
     'similar.startIndexing': 'Build Similarity Index',
     'similar.indexingNow': 'Indexing...',

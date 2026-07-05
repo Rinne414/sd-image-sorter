@@ -35,7 +35,6 @@ from db_helpers import (
     _normalize_content_fingerprint,
     _row_value,
     _row_to_dict,
-    _rows_to_dicts,
     _is_source_fingerprint_changed,
     _should_clear_derived_state,
 )
@@ -730,42 +729,6 @@ def copy_image_derived_state(source_image_id: int, target_image_id: int) -> None
     """Copy cached derived fields that remain valid for file duplicates."""
     with get_db() as conn:
         _copy_image_derived_state(conn.cursor(), source_image_id, target_image_id)
-
-def add_copied_image_with_state(
-    source_image_id: int,
-    copied_record: Dict[str, Any],
-    source_tags: Optional[List[Dict[str, Any]]] = None,
-) -> int:
-    """Insert a copied image row plus copied tags/derived state in one transaction."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        copied_image_id, _ = _upsert_image_record(cursor, copied_record)
-        cursor.execute("DELETE FROM tags WHERE image_id = ?", (copied_image_id,))
-        cursor.execute("DELETE FROM artist_predictions WHERE image_id = ?", (copied_image_id,))
-        tags_to_copy = source_tags
-        if tags_to_copy is None:
-            cursor.execute(
-                "SELECT tag, confidence FROM tags WHERE image_id = ? ORDER BY confidence DESC",
-                (source_image_id,),
-            )
-            tags_to_copy = _rows_to_dicts(cursor.fetchall())
-
-        tag_values = [
-            (copied_image_id, tag_data.get("tag", ""), tag_data.get("confidence", 1.0))
-            for tag_data in tags_to_copy
-            if tag_data.get("tag")
-        ]
-        if tag_values:
-            cursor.executemany(
-                "INSERT INTO tags (image_id, tag, confidence) VALUES (?, ?, ?)",
-                tag_values,
-            )
-            _mark_image_tagged(cursor, copied_image_id, copied_record.get("content_fingerprint"))
-
-        _copy_image_derived_state(cursor, source_image_id, copied_image_id)
-
-    _invalidate_tags_cache()
-    return copied_image_id
 
 def update_image_path(image_id: int, new_path: str):
     """Update the path of an image after a successful move.

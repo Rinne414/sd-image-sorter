@@ -392,6 +392,8 @@ class ArtistService:
         }
 
     def get_stats(self) -> Dict[str, Any]:
+        from artist_identifier import ARTIST_THRESHOLD_DEFAULT
+
         with db.get_db() as conn:
             cursor = conn.cursor()
 
@@ -401,17 +403,25 @@ class ArtistService:
             cursor.execute("SELECT COUNT(*) FROM artist_predictions")
             identified_images = int(cursor.fetchone()[0] or 0)
 
-            cursor.execute("SELECT COUNT(*) FROM artist_predictions WHERE artist = 'undefined'")
+            # Sub-threshold rows (legacy data written before the identify
+            # pipeline enforced its confidence floor) fold into "undefined"
+            # instead of surfacing 0.1%-confidence noise as a found artist
+            # (v3.5.0 audit).
+            cursor.execute(
+                "SELECT COUNT(*) FROM artist_predictions WHERE artist = 'undefined' OR confidence < ?",
+                (ARTIST_THRESHOLD_DEFAULT,),
+            )
             undefined_count = int(cursor.fetchone()[0] or 0)
 
             cursor.execute(
                 """
                 SELECT artist, COUNT(*) as count, AVG(confidence) as avg_confidence, MAX(confidence) as max_confidence
                 FROM artist_predictions
-                WHERE artist != 'undefined'
+                WHERE artist != 'undefined' AND confidence >= ?
                 GROUP BY artist
                 ORDER BY count DESC
-                """
+                """,
+                (ARTIST_THRESHOLD_DEFAULT,),
             )
             artist_counts: Dict[str, int] = {}
             artist_stats: Dict[str, Dict[str, float]] = {}
