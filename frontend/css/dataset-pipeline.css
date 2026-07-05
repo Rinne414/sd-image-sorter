@@ -293,28 +293,19 @@
     padding: 0;
     list-style: none;
 }
+/* v3.5.0 audit LOW-8: these are static facts, not toggles — the old dark
+   pill + badge treatment read as checked switches. Plain bullets now. */
 .dataset-import-card-benefits li {
     min-width: 0;
-    padding: 10px 12px;
-    border: 1px solid rgba(191, 219, 254, 0.10);
-    border-radius: 12px;
-    background: rgba(15, 23, 42, 0.48);
+    padding: 2px 0;
     color: var(--text-secondary, #94a3b8);
     font-size: 12px;
     line-height: 1.35;
 }
 .dataset-import-card-benefits li::before {
-    content: '✓';
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
+    content: '·';
     margin-right: 6px;
-    border-radius: 999px;
-    background: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.20);
     color: var(--accent-primary);
-    font-size: 10px;
     font-weight: 800;
 }
 .dataset-import-card-folder .dataset-folder-bar {

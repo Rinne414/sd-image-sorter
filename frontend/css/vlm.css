@@ -2146,3 +2146,75 @@
         max-height: 60vh;
     }
 }
+
+/* ============================================================
+   v3.5.0 audit — VLM Settings modal, design rule 6 (one page).
+   Before: a plain modal-large stretched every input to ~1650px
+   (Endpoint/API-key/Model hold ~30 chars) in one tall ribbon,
+   and the chained Smart-Tag (1360px) → VLM (1728px) dialogs
+   jumped widths. Now: same 1360px cap as Smart Tag, two-column
+   grid — connection fields left, the always-tuned Prompt
+   Configuration OPEN on the right — with the genuinely wide
+   sections (local model cards, advanced grid, proxy, vertex)
+   spanning both columns below. Fits 1080p without scrolling in
+   the common case.
+   ============================================================ */
+#vlm-settings-modal .modal-content {
+    max-width: min(1360px, calc(100vw - 32px)) !important;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+        "title    title"
+        "desc     desc"
+        "provider prompt"
+        "endpoint prompt"
+        "apikey   prompt"
+        "model    prompt"
+        "output   prompt"
+        "advanced advanced"
+        "localm   localm"
+        "proxy    proxy"
+        "vertex   vertex"
+        "status   status"
+        "actions  actions";
+    align-content: start;
+    column-gap: 26px;
+}
+
+#vlm-settings-modal .modal-content > h3 { grid-area: title; }
+#vlm-settings-modal .modal-content > .modal-description { grid-area: desc; }
+#vlm-settings-modal .modal-content > .form-group:has(#vlm-provider) { grid-area: provider; }
+#vlm-settings-modal .modal-content > .form-group:has(#vlm-endpoint) { grid-area: endpoint; }
+#vlm-settings-modal .modal-content > .form-group:has(#vlm-api-key) { grid-area: apikey; }
+#vlm-settings-modal .modal-content > .form-group:has(#vlm-model) { grid-area: model; }
+#vlm-settings-modal .modal-content > .vlm-output-format-group { grid-area: output; }
+#vlm-settings-modal .modal-content > #vlm-prompt-details { grid-area: prompt; }
+#vlm-settings-modal .modal-content > details:has(#vlm-max-retries) { grid-area: advanced; }
+#vlm-settings-modal .modal-content > details:has(#vlm-local-models) { grid-area: localm; }
+#vlm-settings-modal .modal-content > #vlm-proxy-details { grid-area: proxy; }
+#vlm-settings-modal .modal-content > #vlm-vertex-details { grid-area: vertex; }
+#vlm-settings-modal .modal-content > #vlm-status { grid-area: status; }
+#vlm-settings-modal .modal-content > .modal-actions { grid-area: actions; }
+
+/* Inputs sized to their content, not the modal (rule: a field's width
+   should match what it holds). The two-column split already halves them;
+   these caps stop the wide spanning sections from re-stretching theirs. */
+#vlm-settings-modal #vlm-http-proxy,
+#vlm-settings-modal #vlm-https-proxy,
+#vlm-settings-modal #vlm-socks-proxy,
+#vlm-settings-modal #vlm-vertex-project,
+#vlm-settings-modal #vlm-vertex-location,
+#vlm-settings-modal #vlm-nsfw-retry-prompt {
+    max-width: 480px;
+}
+#vlm-settings-modal .vlm-segmented {
+    max-width: 520px;
+}
+#vlm-settings-modal #vlm-vertex-sa-json {
+    max-width: 720px;
+}
+
+/* The prompt panel is the right-hand workspace: keep its textareas
+   roomy so system/user prompts are editable without scrolling. */
+#vlm-settings-modal #vlm-prompt-details #vlm-system-prompt { min-height: 84px; }
+#vlm-settings-modal #vlm-prompt-details #vlm-user-prompt { min-height: 128px; }

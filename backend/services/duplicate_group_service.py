@@ -103,7 +103,7 @@ def _load_embeddings(handle) -> tuple:
     import database as db
     from similarity import bytes_to_embedding
 
-    handle.set_progress(processed=0, total=100, message="Loading embeddings")
+    handle.set_progress(processed=0, total=100, message="正在读取嵌入向量 / Loading embeddings")
     with db.get_db() as conn:
         rows = conn.execute(
             """

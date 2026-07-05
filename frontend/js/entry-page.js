@@ -388,14 +388,15 @@
     function wire() {
         const clicks = {
             'entry-mission-lora': () => navigate('dataset'),
-            // v3.5.0: the Pixiv mission tile now opens the publish-set
-            // workbench it always promised (Pick → Censor → Rename → Export)
-            // on top of the gallery, instead of just navigating there.
+            // v3.5.0: the Pixiv mission tile routes through the batch-bar
+            // button so it inherits its guard — with a selection it opens the
+            // publish-set workbench with those ids; with none it shows the
+            // "pick images first" toast instead of an empty modal blocking
+            // the very gallery the user needs to pick from.
             'entry-mission-pixiv': () => {
                 navigate('gallery');
-                if (window.PublishSet && typeof window.PublishSet.open === 'function') {
-                    window.PublishSet.open();
-                }
+                const publishButton = document.getElementById('btn-publish-selected');
+                if (publishButton) publishButton.click();
             },
             'entry-mission-organize': () => navigate('sorting'),
             'entry-anchor-continue': () => navigate('sorting'),
@@ -405,7 +406,14 @@
             'entry-fn-reader': () => navigate('reader'),
             'entry-fn-similar': () => navigate('similar'),
             'entry-free-mode': () => navigate('gallery'),
-            'entry-all-tools': () => navigate('gallery'),
+            // "All tools" promised a tools launcher but only opened the
+            // gallery (v3.5.0 audit). Now it also drops the nav More menu
+            // so the tool list is actually on screen.
+            'entry-all-tools': () => {
+                navigate('gallery');
+                const toggle = document.getElementById('nav-tools-toggle');
+                if (toggle && toggle.getAttribute('aria-expanded') !== 'true') toggle.click();
+            },
         };
         Object.entries(clicks).forEach(([id, handler]) => {
             const node = el(id);

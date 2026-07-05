@@ -1153,7 +1153,9 @@
         if (outputMode === 'beside_image' || preset === 'keep') {
             stem = imgPlaceholder;
         } else if (preset === 'renumber') {
-            stem = `${trigger || triggerPlaceholder}_001`;
+            // Mirror _effectivePattern: an empty trigger exports plain
+            // '001.png', so the chip must not promise 'trigger_001.png'.
+            stem = trigger ? `${trigger}_001` : '001';
         } else {
             const pattern = (document.getElementById('dataset-naming-pattern')?.value || '{trigger}_{index:03d}');
             stem = pattern

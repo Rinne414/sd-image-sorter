@@ -832,10 +832,13 @@
             return;
         }
         const idx = this.imageIds.indexOf(Number(this.activeId));
-        const nextIdx = idx + 1;
-        if (nextIdx >= this.imageIds.length) {
+        // Compare with the next image; on the last one fall back to the
+        // previous so the button still works everywhere. Only a 1-image
+        // queue genuinely has nothing to compare with.
+        const partnerIdx = idx + 1 < this.imageIds.length ? idx + 1 : idx - 1;
+        if (partnerIdx < 0) {
             this._toast(this._t('dataset.splitNoNext',
-                'No next image to compare with.'), 'info');
+                'This is the only image in the queue — nothing to compare with.'), 'info');
             this._splitActive = false;
             const btn = document.getElementById('btn-dataset-split-view');
             if (btn) btn.classList.remove('active');
@@ -843,8 +846,9 @@
             editorPane?.classList.remove('dataset-split-mode');
             return;
         }
+        const partnerIsNext = partnerIdx > idx;
         editorPane?.classList.add('dataset-split-mode');
-        const nextId = this.imageIds[nextIdx];
+        const nextId = this.imageIds[partnerIdx];
         const panel = document.createElement('div');
         panel.id = 'dataset-split-panel';
         panel.className = 'dataset-split-panel';
@@ -862,7 +866,7 @@
         const openNext = document.createElement('button');
         openNext.type = 'button';
         openNext.className = 'btn btn-secondary btn-small';
-        openNext.textContent = this._t('dataset.splitOpenNext', 'Open next');
+        openNext.textContent = this._t('dataset.splitOpenNext', 'Switch to this one');
         openNext.addEventListener('click', () => this._setActive(nextId));
         const close = document.createElement('button');
         close.type = 'button';
@@ -876,7 +880,9 @@
         grid.className = 'dataset-split-grid';
         grid.append(
             this._buildSplitCard(Number(this.activeId), this._t('dataset.splitCurrent', 'Current')),
-            this._buildSplitCard(nextId, this._t('dataset.splitNext', 'Next'))
+            this._buildSplitCard(nextId, partnerIsNext
+                ? this._t('dataset.splitNext', 'Next')
+                : this._t('dataset.splitPrev', 'Previous'))
         );
         panel.append(header, grid);
         wrap.before(panel);

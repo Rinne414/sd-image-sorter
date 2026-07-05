@@ -51,6 +51,7 @@
     min-height: 0;
     flex: 1 1 auto;
     padding-right: 4px;
+    scrollbar-gutter: stable;
 }
 
 .pub-item {
@@ -254,6 +255,11 @@
     max-height: 160px;
     overflow-y: auto;
     font-size: 0.85rem;
+}
+
+/* display:flex above would defeat the hidden attribute — keep empty results gone */
+.pub-result[hidden] {
+    display: none;
 }
 
 .pub-result-ok {

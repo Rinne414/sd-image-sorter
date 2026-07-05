@@ -25,7 +25,7 @@
     function $(id) { return document.getElementById(id); }
 
     function t(key, fallback, params) {
-        const i18n = window.i18n;
+        const i18n = window.I18n;
         if (i18n && typeof i18n.t === 'function') {
             const value = i18n.t(key, params);
             if (value && value !== key) return value;

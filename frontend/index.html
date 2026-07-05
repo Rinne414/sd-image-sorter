@@ -4310,6 +4310,24 @@
                         <p class="modal-description" data-i18n="models.description">Control app preferences, AI models, cache, and setup from one place.</p>
                     </div>
                 </div>
+                <!-- v3.5.0 audit (design rule 6): the modal stacked settings +
+                     models + disk + audit into a 3000-4700px scrolling column.
+                     Four tabs keep each area near one viewport tall. -->
+                <div class="settings-modal-tabs" id="settings-modal-tabs" role="tablist" aria-label="Settings sections">
+                    <button type="button" class="settings-modal-tab active" data-settings-tab="general" role="tab" aria-selected="true">
+                        <span aria-hidden="true">⚙️</span> <span data-i18n="settings.tabGeneral">Settings</span>
+                    </button>
+                    <button type="button" class="settings-modal-tab" data-settings-tab="models" role="tab" aria-selected="false">
+                        <span aria-hidden="true">📦</span> <span data-i18n="settings.tabModels">AI Models</span>
+                    </button>
+                    <button type="button" class="settings-modal-tab" data-settings-tab="disk" role="tab" aria-selected="false">
+                        <span aria-hidden="true">💾</span> <span data-i18n="settings.tabDisk">Disk & Cache</span>
+                    </button>
+                    <button type="button" class="settings-modal-tab" data-settings-tab="audit" role="tab" aria-selected="false">
+                        <span aria-hidden="true">📊</span> <span data-i18n="settings.tabAudit">Dataset Audit</span>
+                    </button>
+                </div>
+                <div data-settings-panel="general">
                 <section class="settings-home-panel" aria-labelledby="settings-home-title">
                     <div class="settings-home-header">
                         <h3 id="settings-home-title" data-i18n="settings.title">Settings</h3>
@@ -4388,6 +4406,8 @@
                         </div>
                     </details>
                 </section>
+                </div>
+                <div data-settings-panel="models" hidden>
                 <div class="model-manager-summary" id="model-manager-summary"></div>
                 <div class="model-manager-bulk-actions" id="model-manager-bulk-actions">
                     <button class="btn btn-primary btn-bulk-download" id="btn-bulk-download-models" type="button" data-i18n="models.bulkDownload" data-i18n-title="models.bulkDownloadTitle" title="Download all recommended models in one go (skips Wenaka Privacy YOLO and ToriiGate; uses default WD14 only)">
@@ -4402,6 +4422,8 @@
                      every model then shows "missing" even though nothing was lost. -->
                 <p class="model-manager-migrate-hint helper-text" data-i18n="models.manualUpgradeHint">Models suddenly missing after upgrading to a new folder? Your downloads live in the old folder's "data" directory — copy that whole folder into the new installation and restart.</p>
                 <div class="model-manager-grid" id="model-manager-grid"></div>
+                </div>
+                <div data-settings-panel="disk" hidden>
                 <section class="disk-usage-section" id="disk-usage-section" aria-labelledby="disk-usage-title">
                     <header class="disk-usage-header">
                         <h3 id="disk-usage-title" data-i18n="disk.title">Disk Usage</h3>
@@ -4411,7 +4433,9 @@
                         <div class="disk-usage-loading" data-i18n="disk.loading">Reading disk usage…</div>
                     </div>
                 </section>
+                </div>
 
+                <div data-settings-panel="audit" hidden>
                 <details class="audit-section" id="audit-section">
                     <summary class="audit-summary">
                         <span class="audit-summary-title" data-i18n="audit.title">Dataset Audit</span>
@@ -4509,6 +4533,7 @@
                         </section>
                     </div>
                 </details>
+                </div>
             </div>
         </div>
 
@@ -6601,6 +6626,7 @@
     <script src="/static/js/modules/gallery-search-query.js"></script>
     <script src="/static/js/modules/gallery-toolbar.js"></script>
     <script src="/static/js/modules/repair-review.js"></script>
+    <script src="/static/js/modules/settings-tabs.js"></script>
     <script>
     /* Sorting sub-tab toggle (Auto-Separate / Manual Sort) */
     window._switchSortingSub = function(sub) {
@@ -6897,7 +6923,10 @@
                 </small>
             </div>
 
-            <details class="form-group">
+            <!-- v3.5.0 audit: prompts are what users actually tune, so this
+                 panel ships EXPANDED and lives in the right column of the
+                 two-column settings grid (vlm-settings.css). -->
+            <details class="form-group" id="vlm-prompt-details" open>
                 <summary data-i18n="vlmSettings.promptConfig">Prompt Configuration</summary>
                 <div style="padding-top:8px">
                     <div class="form-group">

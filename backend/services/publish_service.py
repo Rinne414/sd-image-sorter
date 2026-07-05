@@ -197,12 +197,12 @@ def _resolve_export_source(conn, row: Dict[str, Any], use_censored: bool,
         resolved = _resolve_censored_path(conn, row, suffix)
         if resolved is None:
             raise FileNotFoundError(
-                f"No censored variant ({Path(row['filename']).stem}{suffix}.*) found"
+                f"未找到打码版 / No censored variant ({Path(row['filename']).stem}{suffix}.*) found"
             )
         return {"path": resolved["path"], "used_censored": True}
     source = row.get("path") or ""
     if not source or not os.path.isfile(source):
-        raise FileNotFoundError("Original file is missing on disk")
+        raise FileNotFoundError("原图文件已不在磁盘上 / Original file is missing on disk")
     return {"path": source, "used_censored": False}
 
 

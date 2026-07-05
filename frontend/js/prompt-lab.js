@@ -653,7 +653,7 @@ const PromptLab = {
                         ${hasConflict ? '<span class="conflict-icon" title="Exclusion rule conflict">⚠️</span>' : ''}
                     </div>
                     <div class="slot-tags">
-                        ${selected.length > 0 ? selected.map((tag) => this._buildSlotTag(tag, cat)).join('') : '<span class="slot-empty">Click tags from browser to add</span>'}
+                        ${selected.length > 0 ? selected.map((tag) => this._buildSlotTag(tag, cat)).join('') : `<span class="slot-empty">${this._escapeValue(this._t('promptlab.slotEmpty', 'Click tags in the browser to add'))}</span>`}
                     </div>
                     <div class="slot-weight">
                         <input type="range" min="0" max="100" value="${weight}"

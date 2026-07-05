@@ -11643,7 +11643,7 @@ function initSettingsControls() {
     syncSettingsControls();
 }
 
-async function openModelManager() {
+async function openModelManager(initialTab) {
     // Remove first-run pulse indicator once user has found the button
     const setupBtn = $('#btn-open-model-manager');
     if (setupBtn && setupBtn.classList.contains('setup-pulse')) {
@@ -11658,6 +11658,11 @@ async function openModelManager() {
     if (gridEl) gridEl.innerHTML = '';
     syncSettingsControls();
     showModal('model-manager-modal');
+    // v3.5.0: the modal is tabbed (rule 6). Openers can land on a specific
+    // section; the settings gear resets to the first tab.
+    if (window.SettingsTabs && typeof window.SettingsTabs.activate === 'function') {
+        window.SettingsTabs.activate(typeof initialTab === 'string' ? initialTab : 'general');
+    }
 
     // Disk usage loads independently so a slow model probe doesn't block it.
     loadDiskUsage();

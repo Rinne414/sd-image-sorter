@@ -2674,12 +2674,14 @@
 }
 
 /* v3.4.4 fix #6: workbench controls live in the scrolling right column; let
-   the textareas breathe without the old vh clamps that fought the grid. */
+   the textareas breathe without the old vh clamps that fought the grid.
+   v3.5.0 audit MED-4: they now GROW to fill the column — the old 220px cap
+   left a ~470px dead void under the caption controls in Booru-only mode. */
 #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-controls .dataset-editor-textarea,
 #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-controls .dataset-editor-nl {
-    flex: 0 0 auto;
+    flex: 1 1 96px;
     min-height: 96px;
-    max-height: 220px;
+    max-height: none;
     overflow-y: auto;
     resize: vertical;
     margin-bottom: 0;
@@ -2705,6 +2707,13 @@
 #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-split-panel {
     min-height: 0;
     flex: 1 1 auto;
+    /* v3.5.0 audit: the workbench editor pane is a 2-column grid
+       (image | controls). Without an explicit placement the split panel
+       auto-flowed into the 640px image column, leaving a dead void on the
+       right half of the pane. Compare mode replaces the whole editor, so
+       it takes the full row under the header. */
+    grid-column: 1 / -1;
+    grid-row: 2 / -1;
 }
 
 /* v3.4.4 fix #4: "export-time only" banner + preview-updated cue. */

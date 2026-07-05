@@ -16,6 +16,8 @@ async function openModelManager(page: Page) {
   await page.waitForLoadState('domcontentloaded')
   await page.locator('#btn-open-model-manager').click()
   await expect(page.locator('#model-manager-modal')).toBeVisible()
+  // v3.5.0: the modal is tabbed (rule 6); model cards live in the AI Models tab.
+  await page.locator('[data-settings-tab="models"]').click()
   await expect(page.locator('.model-card').first()).toBeVisible({ timeout: 15_000 })
 }
 
@@ -286,6 +288,7 @@ test.describe('Model Manager', () => {
     })
 
     await openModelManager(page)
+    await page.locator('[data-settings-tab="disk"]').click()
 
     const diskBody = page.locator('#disk-usage-body')
     await expect(diskBody).toContainText(/Thumbnail cache limit|缩略图缓存上限/)
@@ -335,6 +338,7 @@ test.describe('Model Manager', () => {
     })
 
     await openModelManager(page)
+    await page.locator('[data-settings-tab="disk"]').click()
 
     await page.locator('#btn-rebuild-core-runtime').click()
     await expect(page.locator('#confirm-modal.visible')).toBeVisible()
@@ -383,6 +387,7 @@ test.describe('Model Manager', () => {
     })
 
     await openModelManager(page)
+    await page.locator('[data-settings-tab="disk"]').click()
 
     await page.locator('.disk-cache-checkbox').evaluateAll((checkboxes) => {
       for (const checkbox of checkboxes) (checkbox as HTMLInputElement).checked = false

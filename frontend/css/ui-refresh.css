@@ -1905,6 +1905,54 @@ textarea:focus,
     margin-bottom: 18px;
 }
 
+/* v3.5.0 audit (rule 6): Settings & Models section tabs — one area per
+   viewport instead of a 3000px+ scrolling column. */
+.settings-modal-tabs {
+    display: flex;
+    gap: 6px;
+    margin: 0 0 16px;
+    padding: 4px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    background: var(--surface-card);
+    position: sticky;
+    top: 0;
+    z-index: 3;
+}
+
+.settings-modal-tab {
+    flex: 1 1 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition-normal), color var(--transition-normal);
+}
+
+.settings-modal-tab:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+}
+
+.settings-modal-tab.active {
+    background: rgba(var(--accent-primary-rgb), 0.16);
+    border-color: rgba(var(--accent-primary-rgb), 0.35);
+    color: var(--text-primary);
+}
+
+.settings-modal-tab:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
+
 .settings-home-panel {
     display: grid;
     gap: 10px;
@@ -9307,18 +9355,23 @@ html.lang-zh #view-censor .queue-action-btn span {
 /* ============================================================
    v3.4.3 — responsive "More" nav fallback
    Prompt Helper + Style Finder stay in the main bar when there is
-   room. More appears only when the direct advanced tabs would make
-   the navigation overflow in long translations or narrow windows.
+   room and only their MIRROR menu items hide. The More toggle
+   itself is ALWAYS visible: Duplicate Cleanup and Publish Set live
+   only inside this menu (no direct tab), so hiding the toggle on
+   wide screens made both features unreachable from the nav at
+   1920px (v3.5.0 audit).
    ============================================================ */
 .nav-tools {
     position: relative;
-    display: none;
+    display: inline-flex;
     align-items: stretch;
     flex-shrink: 0;
 }
 
-.nav-bar.nav-priority-overflow .nav-tools {
-    display: inline-flex;
+/* Wide bar: direct Prompt Helper / Style Finder tabs are visible,
+   so their duplicates inside the More menu stay hidden. */
+.nav-bar:not(.nav-priority-overflow) .nav-tools-mirror {
+    display: none !important;
 }
 
 .nav-bar.nav-priority-overflow .nav-priority-advanced,

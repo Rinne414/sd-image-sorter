@@ -210,8 +210,10 @@ test('dataset audit hero shows the re-parse button while prompts are missing', a
   await page.locator('#btn-open-model-manager').click()
   await expect(page.locator('#model-manager-modal')).toBeVisible()
 
+  // The settings modal is tabbed (v3.5.0 rule 6); the audit lives in its
+  // own tab and auto-opens its <details> when the tab activates.
+  await page.locator('[data-settings-tab="audit"]').click()
   const auditSection = page.locator('#audit-section')
-  await auditSection.locator('summary').click()
   await expect(auditSection).toHaveAttribute('open', '')
 
   const reparseButton = page.locator('#btn-metadata-reparse')

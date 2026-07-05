@@ -453,9 +453,13 @@
     DM._effectivePattern = function () {
         const preset = this._currentPreset();
         if (preset === 'keep') return '{filename}';
-        if (preset === 'renumber') return '{trigger}_{index:03d}';
+        // v3.5.0 audit MED-5: with no trigger word, '{trigger}_{index}'
+        // exported files named '_001.png'. Drop the orphaned underscore.
+        const hasTrigger = !!(document.getElementById('dataset-trigger')?.value || '').trim();
+        const renumberPattern = hasTrigger ? '{trigger}_{index:03d}' : '{index:03d}';
+        if (preset === 'renumber') return renumberPattern;
         // custom
-        return document.getElementById('dataset-naming-pattern')?.value || '{trigger}_{index:03d}';
+        return document.getElementById('dataset-naming-pattern')?.value || renumberPattern;
     };
 
     DM._onPresetChange = function () {
@@ -473,13 +477,15 @@
             previewEl.textContent = '';
             return;
         }
-        const trigger = document.getElementById('dataset-trigger')?.value?.trim() || 'subject';
-        const sampleStem = trigger;
+        // Mirror _effectivePattern exactly: no trigger word -> plain '001',
+        // so the preview never promises a name the export won't produce.
+        const trigger = document.getElementById('dataset-trigger')?.value?.trim() || '';
+        const sampleStem = trigger ? `${trigger}_001` : '001';
         const firstId = (this.imageIds || [])[0];
         const filename = this.meta?.get?.(firstId)?.filename || '';
         const match = String(filename).match(/\.([^.]+)$/);
         const ext = match ? match[1].toLowerCase() : 'png';
-        previewEl.textContent = `${sampleStem}_001.${ext}  +  ${sampleStem}_001.txt`;
+        previewEl.textContent = `${sampleStem}.${ext}  +  ${sampleStem}.txt`;
     };
 
     // ---------- Export readiness ----------

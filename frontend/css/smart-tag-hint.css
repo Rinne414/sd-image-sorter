@@ -77,25 +77,45 @@
     padding-block: 9px;
 }
 
-/* Owner 2026-07-05: the modal read as "unnecessarily large and noisy" —
-   inputs holding 3 digits spanned full grid columns. Width tightened, the
-   booru grid packs Tagger pickers (wide) and numeric fields (narrow) onto
-   two rows, and number inputs stop pretending to be text areas. */
+/* Owner 2026-07-05 (design rule 6: one page if it can be one page): the
+   880px single-column cap made the modal a scrolling ribbon at 1920×1080
+   with ~1000px of horizontal space unused, and the sticky action bar
+   covered the "will run on N images" summary. Now a 1360px TWO-column
+   layout — basics + toggles left, natural-language captioner right, the
+   wide booru tagger grid across both — that fits 1080p without scrolling. */
 #smart-tag-modal .smart-tag-modal-content {
     /* !important: the global ".modal.visible > .modal-content" viewport
        clamp in ui-refresh.css is itself !important; this value keeps the
        same viewport protection via min() while capping the modal width. */
-    max-width: min(880px, calc(100vw - 32px)) !important;
+    max-width: min(1360px, calc(100vw - 32px)) !important;
     max-height: calc(100vh - 40px);
     overflow-y: auto;
 }
 
 #smart-tag-modal .smart-tag-form {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+        "basic    natural"
+        "toggle1  natural"
+        "toggle2  natural"
+        "booru    booru"
+        "note     summary"
+        "progress progress";
+    align-items: start;
+    gap: 12px 16px;
     margin-top: 12px;
 }
+
+#smart-tag-modal .smart-tag-basic-grid { grid-area: basic; }
+#smart-tag-modal .smart-tag-form > .smart-tag-inline-toggle:nth-of-type(1) { grid-area: toggle1; }
+#smart-tag-modal .smart-tag-form > .smart-tag-inline-toggle:nth-of-type(2) { grid-area: toggle2; }
+#smart-tag-modal #smart-tag-booru-section { grid-area: booru; }
+#smart-tag-modal #smart-tag-natural-section { grid-area: natural; height: 100%; }
+#smart-tag-modal .smart-tag-safety-note { grid-area: note; }
+#smart-tag-modal .smart-tag-summary { grid-area: summary; align-self: center; }
+#smart-tag-modal .smart-tag-progress { grid-area: progress; }
+#smart-tag-modal .smart-tag-progress[hidden] { display: none; }
 
 #smart-tag-modal .smart-tag-basic-grid,
 #smart-tag-modal .smart-tag-vote-grid,
@@ -107,6 +127,13 @@
 
 #smart-tag-modal .smart-tag-basic-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* The natural-language section now lives in a half-width column — three
+   sub-columns squeezed its checkbox labels into 3-line wraps. One control
+   per row reads cleanly there. */
+#smart-tag-modal .smart-tag-natural-grid {
+    grid-template-columns: 1fr;
 }
 
 #smart-tag-modal .smart-tag-basic-grid .form-label:first-child {
