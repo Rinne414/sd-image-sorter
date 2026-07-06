@@ -512,6 +512,14 @@ TAGGER_MODELS: dict = {
         "input_layout": "nchw",
         "input_normalization": "imagenet",
         "output_activation": "sigmoid",
+        # Camie v2 ONNX has 3 outputs: initial_predictions(70527),
+        # refined_predictions(70527), selected_candidates(256). The refined
+        # head is the model's real output; index 0 (initial) is a coarse
+        # intermediate that misses characters/halo/guitar-level content and
+        # emits contradictions (open_mouth + closed_mouth). A/B on a real
+        # image: initial had no character and guitar at 0.79; refined gave
+        # kayoko_(blue_archive) 0.99, 1girl 1.00, halo 0.88.
+        "output_index": 1,
         "pad_color": [124, 116, 104],
         "default_threshold": 0.62,
         "default_character_threshold": 0.78,

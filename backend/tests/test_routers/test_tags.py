@@ -112,6 +112,17 @@ class TestTaggerModels:
         assert models["toriigate-0.5"]["gpu_confirmation_required"] is False
         assert models["toriigate-0.5"]["custom_profile_supported"] is False
 
+    def test_camie_reads_refined_predictions_head(self):
+        """Camie v2 ONNX exposes initial_predictions (index 0) and
+        refined_predictions (index 1). Index 0 is a coarse intermediate head:
+        on a real image it missed the character, halo, and horns entirely and
+        emitted open_mouth + closed_mouth together, while index 1 scored
+        kayoko_(blue_archive) at 0.99. The config must pin the refined head —
+        without output_index the tagger silently falls back to index 0."""
+        from config import TAGGER_MODELS
+
+        assert TAGGER_MODELS["camie-tagger-v2"]["output_index"] == 1
+
 
 class TestTagsLibrary:
     """Tests for GET /api/tags/library endpoint."""

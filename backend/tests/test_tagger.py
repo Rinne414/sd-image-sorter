@@ -471,11 +471,18 @@ class _CamieBatchSession:
     def run(self, _outputs, inputs):
         batch = inputs["input"]
         self.last_input_shape = batch.shape
-        output = np.zeros((batch.shape[0], 30), dtype=np.float32)
-        output[:, 20] = 6.0
-        output[:, 24] = 4.0
-        output[:, 25] = -1.0
-        return [output]
+        # Mirror the real Camie v2 export: [initial_predictions,
+        # refined_predictions, selected_candidates]. The initial head
+        # deliberately carries garbage logits so this test fails if the
+        # runtime ever reads output index 0 again (the pre-fix behavior
+        # that missed characters/halo entirely on real images).
+        initial = np.full((batch.shape[0], 30), -3.0, dtype=np.float32)
+        refined = np.zeros((batch.shape[0], 30), dtype=np.float32)
+        refined[:, 20] = 6.0
+        refined[:, 24] = 4.0
+        refined[:, 25] = -1.0
+        candidates = np.zeros((batch.shape[0], 8), dtype=np.float32)
+        return [initial, refined, candidates]
 
 
 class _CamieOrtModule(_FakeOrtModule):
