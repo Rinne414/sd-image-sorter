@@ -1,0 +1,213 @@
+# Curated danbooru tag implications (child,parent) — P2-18 implication dedup.
+# A present child collapses its (transitive) parents at export when the user
+# enables the toggle. This is a hand-curated high-confidence CORE subset of
+# the danbooru implication graph, not the full dump. Extend or override by
+# dropping a full CSV at data/danbooru_implications.csv (same 2-column
+# format; both files are merged). Keep the graph acyclic.
+# -- animal ears --
+cat_ears,animal_ears
+dog_ears,animal_ears
+fox_ears,animal_ears
+rabbit_ears,animal_ears
+wolf_ears,animal_ears
+mouse_ears,animal_ears
+horse_ears,animal_ears
+cow_ears,animal_ears
+bear_ears,animal_ears
+tiger_ears,animal_ears
+lion_ears,animal_ears
+sheep_ears,animal_ears
+deer_ears,animal_ears
+squirrel_ears,animal_ears
+monkey_ears,animal_ears
+goat_ears,animal_ears
+pig_ears,animal_ears
+raccoon_ears,animal_ears
+# -- tails --
+cat_tail,tail
+dog_tail,tail
+fox_tail,tail
+wolf_tail,tail
+rabbit_tail,tail
+horse_tail,tail
+cow_tail,tail
+dragon_tail,tail
+demon_tail,tail
+tiger_tail,tail
+lion_tail,tail
+monkey_tail,tail
+pig_tail,tail
+snake_tail,tail
+fish_tail,tail
+squirrel_tail,tail
+multiple_tails,tail
+# -- hair length / style --
+very_long_hair,long_hair
+absurdly_long_hair,very_long_hair
+twin_braids,braid
+side_braid,braid
+single_braid,braid
+french_braid,braid
+crown_braid,braid
+braided_ponytail,braid
+braided_ponytail,ponytail
+low_twintails,twintails
+short_twintails,twintails
+side_ponytail,ponytail
+high_ponytail,ponytail
+low_ponytail,ponytail
+folded_ponytail,ponytail
+single_hair_bun,hair_bun
+double_bun,hair_bun
+# -- hair ornaments --
+hair_flower,hair_ornament
+hair_ribbon,hair_ornament
+hair_ribbon,ribbon
+hair_bow,hair_ornament
+hair_bow,bow
+hairclip,hair_ornament
+hair_bobbles,hair_ornament
+x_hair_ornament,hair_ornament
+butterfly_hair_ornament,hair_ornament
+star_hair_ornament,hair_ornament
+food-themed_hair_ornament,hair_ornament
+# -- ribbons --
+neck_ribbon,ribbon
+red_ribbon,ribbon
+blue_ribbon,ribbon
+white_ribbon,ribbon
+black_ribbon,ribbon
+pink_ribbon,ribbon
+yellow_ribbon,ribbon
+green_ribbon,ribbon
+purple_ribbon,ribbon
+orange_ribbon,ribbon
+# -- wings --
+angel_wings,wings
+demon_wings,wings
+bat_wings,wings
+butterfly_wings,wings
+fairy_wings,wings
+feathered_wings,wings
+dragon_wings,wings
+mini_wings,wings
+low_wings,wings
+white_wings,wings
+black_wings,wings
+multiple_wings,wings
+# -- horns --
+demon_horns,horns
+dragon_horns,horns
+cow_horns,horns
+goat_horns,horns
+sheep_horns,horns
+curled_horns,horns
+single_horn,horns
+# -- clothing: tops / dresses --
+serafuku,school_uniform
+collared_shirt,shirt
+dress_shirt,collared_shirt
+t-shirt,shirt
+sundress,dress
+wedding_dress,dress
+china_dress,dress
+pinafore_dress,dress
+track_jacket,jacket
+letterman_jacket,jacket
+blazer,jacket
+sports_bra,bra
+bra,underwear
+panties,underwear
+white_panties,panties
+black_panties,panties
+striped_panties,panties
+# -- clothing: skirts --
+pleated_skirt,skirt
+miniskirt,skirt
+long_skirt,skirt
+plaid_skirt,skirt
+# -- swimwear --
+bikini,swimsuit
+micro_bikini,bikini
+string_bikini,bikini
+one-piece_swimsuit,swimsuit
+school_swimsuit,one-piece_swimsuit
+competition_swimsuit,one-piece_swimsuit
+# -- japanese clothes --
+kimono,japanese_clothes
+yukata,kimono
+hakama,japanese_clothes
+haori,japanese_clothes
+# -- legwear / footwear --
+white_thighhighs,thighhighs
+black_thighhighs,thighhighs
+striped_thighhighs,thighhighs
+black_pantyhose,pantyhose
+white_pantyhose,pantyhose
+kneehighs,socks
+knee_boots,boots
+thigh_boots,boots
+ankle_boots,boots
+sneakers,shoes
+mary_janes,shoes
+loafers,shoes
+# -- gloves --
+white_gloves,gloves
+black_gloves,gloves
+fingerless_gloves,gloves
+elbow_gloves,gloves
+# -- headwear --
+witch_hat,hat
+top_hat,hat
+straw_hat,hat
+sun_hat,hat
+mini_hat,hat
+baseball_cap,hat
+beret,hat
+santa_hat,hat
+nurse_cap,hat
+peaked_cap,hat
+cowboy_hat,hat
+party_hat,hat
+# -- jewelry --
+earrings,jewelry
+necklace,jewelry
+bracelet,jewelry
+ring,jewelry
+hoop_earrings,earrings
+stud_earrings,earrings
+# -- flowers --
+rose,flower
+sunflower,flower
+lily_(flower),flower
+white_flower,flower
+red_flower,flower
+blue_flower,flower
+pink_flower,flower
+yellow_flower,flower
+purple_flower,flower
+# -- weapons --
+sword,weapon
+gun,weapon
+polearm,weapon
+axe,weapon
+knife,weapon
+scythe,weapon
+whip,weapon
+bow_(weapon),weapon
+katana,sword
+rapier,sword
+rifle,gun
+handgun,gun
+shotgun,gun
+sniper_rifle,rifle
+assault_rifle,rifle
+submachine_gun,gun
+machine_gun,gun
+revolver,handgun
+spear,polearm
+lance,polearm
+dagger,knife
+# -- expression / nudity --
+grin,smile
+completely_nude,nude

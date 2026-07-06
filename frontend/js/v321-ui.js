@@ -1149,6 +1149,43 @@ const V321Integration = {
                 this.refreshPreview();
             });
         }
+
+        // P2-19 / P2-18: purpose filter + implication dedup re-render the
+        // preview immediately and persist like the underscore checkbox, so a
+        // recurring LoRA workflow keeps its setup across sessions.
+        const purposeSelect = document.getElementById('batch-export-training-purpose');
+        if (purposeSelect) {
+            try {
+                const storedPurpose = localStorage.getItem('batchExport.trainingPurpose');
+                if (storedPurpose !== null) purposeSelect.value = storedPurpose;
+            } catch (_) { /* localStorage unavailable, keep default */ }
+            purposeSelect.addEventListener('change', () => {
+                try { localStorage.setItem('batchExport.trainingPurpose', purposeSelect.value); } catch (_) { /* noop */ }
+                this.refreshPreview();
+            });
+        }
+        const implicationsCheckbox = document.getElementById('batch-export-dedupe-implications');
+        if (implicationsCheckbox) {
+            try {
+                const storedDedupe = localStorage.getItem('batchExport.dedupeImplications');
+                if (storedDedupe === '1' || storedDedupe === 'true') implicationsCheckbox.checked = true;
+            } catch (_) { /* localStorage unavailable, keep default */ }
+            implicationsCheckbox.addEventListener('change', () => {
+                try { localStorage.setItem('batchExport.dedupeImplications', implicationsCheckbox.checked ? '1' : '0'); } catch (_) { /* noop */ }
+                this.refreshPreview();
+            });
+        }
+
+        // P1-17: trait-pruning checklist feeding the export blacklist.
+        window.TraitPruner?.attach({
+            button: document.getElementById('btn-export-trait-pruner'),
+            textarea: document.getElementById('batch-export-blacklist'),
+            separator: ', ',
+            getSelectionToken: () => this.queueSelectionToken || this._getActiveSelectionTokenForExport(),
+            getImageIds: () => this.queueImageIds.length
+                ? this.queueImageIds
+                : this._getExplicitSelectedImageIds(Infinity),
+        });
     },
 
     /** v3.2.1 task #33: open the dedicated full-screen Caption Editor. */
@@ -1448,6 +1485,7 @@ const V321Integration = {
                 opts.underscore_to_space_override = false;
                 opts.preserve_underscore_prefixes_override = ['score_'];
             }
+            this._applyTrainingFilterOptions(opts);
             return opts;
         }
         // P1-7 preview unification: non-template modes send the real
@@ -1466,6 +1504,19 @@ const V321Integration = {
         };
         const transforms = this.collectCaptionTransforms();
         if (transforms) opts.caption_transforms = transforms;
+        this._applyTrainingFilterOptions(opts);
+        return opts;
+    },
+
+    /** P2-19 / P2-18: inject the training-purpose filter + implication-dedup
+     *  flags into a preview/export options object. Single seam so every
+     *  preview path stays WYSIWYG with the actual export payload. */
+    _applyTrainingFilterOptions(opts) {
+        const purpose = document.getElementById('batch-export-training-purpose')?.value || '';
+        if (purpose) opts.training_purpose = purpose;
+        if (document.getElementById('batch-export-dedupe-implications')?.checked) {
+            opts.dedupe_implications = true;
+        }
         return opts;
     },
 
@@ -3085,6 +3136,7 @@ const V321Integration = {
         const nlOverrides = this.collectNlOverrides();
         if (nlOverrides) payload.image_nl_overrides = nlOverrides;
         if (normalizeCheckbox) payload.normalize_tag_underscores = !!normalizeCheckbox.checked;
+        this._applyTrainingFilterOptions(payload);
         return payload;
     },
 };

@@ -24,6 +24,7 @@ from services.tagging_pipeline_service import (
     get_tagging_pipeline_service,
 )
 from services.tag_export_service import combined_export_path
+from services.trait_pruning_service import TraitCandidatesRequest
 
 
 router = APIRouter(prefix="/api", tags=["tags"])
@@ -205,6 +206,39 @@ def suggest_tags(
     from services import tag_suggest_service
 
     return tag_suggest_service.suggest(q=q, limit=limit)
+
+
+@router.post(
+    "/tags/trait-candidates",
+    summary="Compute character-trait pruning candidates",
+    description="""
+P1-17 (character LoRA practice): frequency-ranked innate-trait tags (hair /
+eyes / skin / body families) across the selected images, so the export UI can
+offer a reviewable "absorb traits into the trigger" checklist. Selected tags
+feed the ordinary export blacklist — nothing is ever removed silently.
+    """,
+    responses={
+        200: {
+            "description": "Trait candidates ranked by frequency",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "total_images": 25,
+                        "candidates": [
+                            {"tag": "silver_hair", "family": "hair", "count": 24, "ratio": 0.96},
+                            {"tag": "red_eyes", "family": "eyes", "count": 23, "ratio": 0.92},
+                        ],
+                    }
+                }
+            }
+        }
+    },
+)
+def trait_candidates(request: TraitCandidatesRequest):
+    """Frequency-ranked innate-trait tags for the trait-pruning checklist."""
+    from services.trait_pruning_service import compute_trait_candidates
+
+    return compute_trait_candidates(request)
 
 
 @router.get("/prompts/library")

@@ -979,6 +979,13 @@ class BatchTagExportRequest(BaseModel):
     # text so each file stands alone as a training caption.
     nl_sidecar: bool = Field(default=False)
     nl_sidecar_suffix: str = Field(default="_nl", min_length=1, max_length=32, pattern=r"^[A-Za-z0-9._-]+$")
+    # P2-19 (2026-07-07): purpose-aware filtering in the export engine —
+    # '' = off; character/style/concept reuse Smart Tag's semantics
+    # (services.tag_training_filters) on the stored tag rows.
+    training_purpose: str = Field(default="", max_length=24)
+    # P2-18 (2026-07-07): collapse danbooru implication parents (cat_ears
+    # present drops animal_ears) behind an explicit opt-in toggle.
+    dedupe_implications: bool = Field(default=False)
     # Debt-22 opt-in: when true, POST /api/tags/export-batch starts a durable-id
     # background job (BulkJobService) with per-image progress and mid-run cancel
     # instead of exporting synchronously in the request.
@@ -1018,6 +1025,10 @@ class ExportPreviewRequest(BaseModel):
     # actually write. None = follow preset default.
     underscore_to_space_override: Optional[bool] = None
     preserve_underscore_prefixes_override: Optional[List[str]] = None
+    # P2-19 / P2-18: preview twins of the export request fields so the live
+    # preview shows exactly what the sidecars will contain.
+    training_purpose: str = Field(default="", max_length=24)
+    dedupe_implications: bool = Field(default=False)
 
 
 class CombinedTagExportRequest(BatchTagExportRequest):

@@ -607,6 +607,8 @@ def build_sidecar_content(
     prefix: str = "",
     template_options: Optional[Dict[str, Any]] = None,
     normalize_tag_underscores: Optional[bool] = None,
+    training_purpose: str = "",
+    dedupe_implications: bool = False,
 ) -> str:
     """Build export content for one image according to a Pro SD workflow mode.
 
@@ -626,6 +628,20 @@ def build_sidecar_content(
     mode = str(content_mode or "tags").strip().lower()
     if mode not in VALID_CONTENT_MODES:
         raise HTTPException(status_code=400, detail=f"Invalid content_mode: {content_mode}")
+
+    # P2-19 / P2-18 (2026-07-07): purpose filtering + implication dedup happen
+    # on the tag ROWS before any mode dispatch, so every content mode —
+    # including 'template', which receives the raw rows below — inherits them
+    # and the export preview stays WYSIWYG with the written sidecars.
+    if str(training_purpose or "").strip() or dedupe_implications:
+        from services.tag_training_filters import apply_training_filters
+        trigger_word = str((template_options or {}).get("trigger") or prefix or "")
+        tags = apply_training_filters(
+            tags,
+            training_purpose=training_purpose,
+            trigger_word=trigger_word,
+            dedupe_implications=dedupe_implications,
+        )
 
     blacklist = blacklist or set()
     filtered_tags = _filter_tags(tags, blacklist)
@@ -953,6 +969,9 @@ def export_tags_batch_request(
     # checkbox override from the export modal.
     normalize_tag_underscores_request = getattr(request, "normalize_tag_underscores", None)
     caption_transforms = getattr(request, "caption_transforms", None) or {}
+    # P2-19 / P2-18 export-engine filters (both default off).
+    training_purpose_request = str(getattr(request, "training_purpose", "") or "")
+    dedupe_implications_request = bool(getattr(request, "dedupe_implications", False))
 
     exported = 0
     skipped = 0
@@ -1001,6 +1020,8 @@ def export_tags_batch_request(
                         prefix=prefix,
                         template_options=template_options,
                         normalize_tag_underscores=normalize_tag_underscores_request,
+                        training_purpose=training_purpose_request,
+                        dedupe_implications=dedupe_implications_request,
                     )
                 # Aurora #25c: fold in the per-image NL sentence BEFORE the
                 # transforms, matching dataset_export_service's order
@@ -1206,6 +1227,9 @@ def export_tags_combined_request(
 
     normalize_tag_underscores_request = getattr(request, "normalize_tag_underscores", None)
     caption_transforms = getattr(request, "caption_transforms", None) or {}
+    # P2-19 / P2-18 export-engine filters (both default off).
+    training_purpose_request = str(getattr(request, "training_purpose", "") or "")
+    dedupe_implications_request = bool(getattr(request, "dedupe_implications", False))
 
     if id_chunks is None:
         id_chunks = _iter_id_list_chunks(getattr(request, "image_ids", []) or [], EXPORT_DB_CHUNK_SIZE)
@@ -1246,6 +1270,8 @@ def export_tags_combined_request(
                                 prefix=prefix,
                                 template_options=template_options,
                                 normalize_tag_underscores=normalize_tag_underscores_request,
+                                training_purpose=training_purpose_request,
+                                dedupe_implications=dedupe_implications_request,
                             )
                         rendered = _compose_nl_for_image(
                             rendered,
@@ -1309,17 +1335,35 @@ def render_export_preview(request: Any) -> Dict[str, Any]:
     tags_map = db.get_image_tags_map(image_ids)
     results: List[Dict[str, Any]] = []
 
+    # P2-19 / P2-18: apply the training filters to the rows BEFORE either
+    # preview branch so the template path (which calls build_export_caption
+    # directly) matches the export engine's output. Row filtering is
+    # idempotent, so the native branch below stays in sync too.
+    preview_training_purpose = str(getattr(request, "training_purpose", "") or "")
+    preview_dedupe = bool(getattr(request, "dedupe_implications", False))
+    preview_trigger = str(getattr(request, "trigger", "") or getattr(request, "prefix", "") or "")
+
     for image_id in image_ids:
         image = images_map.get(image_id)
         if not image:
             results.append({"image_id": image_id, "error": "not_found", "rendered": ""})
             continue
 
+        preview_rows = tags_map.get(image_id, []) or []
+        if preview_training_purpose or preview_dedupe:
+            from services.tag_training_filters import apply_training_filters
+            preview_rows = apply_training_filters(
+                preview_rows,
+                training_purpose=preview_training_purpose,
+                trigger_word=preview_trigger,
+                dedupe_implications=preview_dedupe,
+            )
+
         try:
             if use_native_mode:
                 rendered = build_sidecar_content(
                     image,
-                    tags_map.get(image_id, []) or [],
+                    preview_rows,
                     content_mode=str(content_mode),
                     blacklist=set(getattr(request, "blacklist", []) or []),
                     prefix=str(getattr(request, "prefix", "") or ""),
@@ -1328,7 +1372,7 @@ def render_export_preview(request: Any) -> Dict[str, Any]:
             else:
                 rendered = build_export_caption(
                 image,
-                tags_map.get(image_id, []) or [],
+                preview_rows,
                 preset_id=getattr(request, "preset_id", "custom"),
                 template_override=getattr(request, "template_override", None),
                 trigger=getattr(request, "trigger", ""),

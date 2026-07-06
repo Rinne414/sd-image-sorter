@@ -372,31 +372,14 @@ PROMPT_PRESETS: Dict[str, str] = {
 }
 
 # Allowed values for the API. style / character / general / concept cover the
-# common LoRA training intents. nsfw is a routing-only alias of general — it
-# uses the same prompt but flags the request so a future iteration can pick
-# a less-restrictive provider / route if one is available.
-TRAINING_PURPOSE_ALIASES: Dict[str, str] = {
-    "style": "style",
-    "style_lora": "style",
-    "art": "style",
-    "art_style": "style",
-    "character": "character",
-    "character_lora": "character",
-    "char": "character",
-    "general": "general",
-    "concept": "concept",
-    "concept_lora": "concept",
-    "nsfw": "general",  # Same prompt, flagged differently in routing
-    "nsfw_lora": "general",
-}
-
-
-def normalize_training_purpose(value: Optional[str]) -> str:
-    """Map a user-provided training purpose to a canonical preset key."""
-    if not value:
-        return "general"
-    key = str(value).strip().lower().replace("-", "_")
-    return TRAINING_PURPOSE_ALIASES.get(key, "general")
+# common LoRA training intents. The vocabulary moved to
+# services.tag_training_filters (2026-07-07, P2-19) so the export engine
+# shares it — re-exported here because callers across the codebase import
+# these names from this module.
+from services.tag_training_filters import (  # noqa: E402
+    TRAINING_PURPOSE_ALIASES,  # noqa: F401 — re-exported for existing importers
+    normalize_training_purpose,  # noqa: F401 — re-exported for existing importers
+)
 
 
 # Hosts that resolve to the user's own machine. Local OpenAI-compatible

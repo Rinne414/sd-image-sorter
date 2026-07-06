@@ -497,6 +497,20 @@
                 });
             }
 
+            // P1-17: trait-pruning checklist feeding the dataset blacklist.
+            // Local-import items have no gallery tag rows, so only real
+            // gallery ids go to the endpoint. Newline separator matches the
+            // #dataset-blacklist convention (line breaks, not commas).
+            window.TraitPruner?.attach({
+                button: document.getElementById('btn-dataset-trait-pruner'),
+                textarea: document.getElementById('dataset-blacklist'),
+                separator: '\n',
+                getImageIds: () => (this.imageIds || [])
+                    .filter((id) => !(this.isLocalId && this.isLocalId(id)))
+                    .map(Number)
+                    .filter(Number.isFinite),
+            });
+
             // Output folder validation + export-button enable
             document.getElementById('dataset-output-folder')?.addEventListener('input', () => {
                 this._validateOutputFolder();

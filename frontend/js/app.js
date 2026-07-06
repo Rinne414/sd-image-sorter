@@ -2029,6 +2029,12 @@ const API = {
         if (options.nlSidecar === true) {
             payload.nl_sidecar = true;
         }
+        if (options.trainingPurpose) {
+            payload.training_purpose = options.trainingPurpose;
+        }
+        if (options.dedupeImplications === true) {
+            payload.dedupe_implications = true;
+        }
         if (options.selectionToken) {
             payload.selection_token = options.selectionToken;
         } else {
@@ -10837,6 +10843,10 @@ async function executeBatchExport() {
         // backend 400s otherwise), so the checkbox is ignored for NL modes.
         const nlSidecar = ($('#batch-export-nl-sidecar')?.checked === true)
             && (contentMode === 'tags' || contentMode === 'template');
+        // P2-19 / P2-18: training-purpose filter + implication dedup, same
+        // controls the live preview reads so the export matches what was shown.
+        const trainingPurpose = $('#batch-export-training-purpose')?.value || '';
+        const dedupeImplications = $('#batch-export-dedupe-implications')?.checked === true;
         const exportOptions = {
             selectionToken,
             outputMode,
@@ -10847,6 +10857,8 @@ async function executeBatchExport() {
             imageNlOverrides,
             normalizeTagUnderscores,
             nlSidecar,
+            trainingPurpose,
+            dedupeImplications,
         };
         let result;
         if (shouldUseBulkJob(selectionToken, imageIds.length)) {

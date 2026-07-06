@@ -585,6 +585,9 @@ Export an ordered publish set with sequential platform-style names (v3.5.0). Bod
 #### GET /api/tags/suggest
 Type-ahead tag suggestions for autocomplete inputs (v3.5.0). Query params: `q=<partial token>`, `limit=<1..50, default 20>`. Merges the user's library tags (frequency-ranked, `source: "library"`) with the bundled danbooru vocabulary `backend/assets/danbooru_tags.csv` (popularity-ranked, alias-aware, `source: "danbooru"`). Each suggestion carries a 14-category `category` (same palette as Dataset Maker tag pills) and an optional `zh` display string. CJK queries fuzzy-match Chinese aliases when the optional `danbooru_zh.csv` drop-in is present (see `backend/assets/README.md`). Returns `{ "suggestions": [{ "tag", "count", "source", "category", "zh" }], "danbooru_loaded", "zh_loaded" }`. Empty `q` returns the library's most frequent tags.
 
+#### POST /api/tags/trait-candidates
+Compute character-trait pruning candidates (P1-17, v3.5.0). Body: `{ "image_ids": [..] }` or `{ "selection_token": "..." }` (exactly one), optional `min_ratio` (0.05–1.0, default 0.6) and `limit` (1–200, default 60). Returns `{ "total_images", "candidates": [{ "tag", "family", "count", "ratio" }] }` — innate-trait tags (hair / eyes / skin / body families, general-category rows only) present in at least `min_ratio` of the selected images, ranked by frequency. The export UI surfaces these as a reviewable checklist whose picks feed the ordinary export blacklist; nothing is removed silently.
+
 #### GET /api/prompts/library
 Get prompt token library. Optional query params: `q=<text>`, `limit=<n>`. Search runs across the full prompt-token index before applying `limit`.
 
@@ -660,6 +663,8 @@ Export one same-name sidecar per selected image. Text modes write `.txt`; `json`
 | `image_nl_overrides` | object | `{}` | v3.5.0 (caption editor): per-image edited NL sentence `{image_id: text}`. An explicit empty string suppresses the stored sentence |
 | `nl_sidecar` | bool | `false` | v3.5.0 (diffusion-pipe split export): additionally write each image's natural-language caption to a `{stem}{suffix}.txt` twin beside the tag sidecar. Only valid for `tags`/`template` content modes (400 otherwise). The twin is single-line with the trigger (template trigger, else `prefix`) injected up front; images without NL text get no twin. Under `unique` policy a clash on the twin fails that row atomically (no half-pairs) |
 | `nl_sidecar_suffix` | string | `"_nl"` | Filename suffix for the NL twin (`[A-Za-z0-9._-]+`) |
+| `training_purpose` | string | `""` | v3.5.0 (P2-19): purpose-aware filtering on the stored tag rows before rendering — `style` drops style/artist tags, `character` drops character-name tags when a trigger (template trigger or `prefix`) is present. Same semantics as Smart Tag's purpose filter; `""` disables |
+| `dedupe_implications` | bool | `false` | v3.5.0 (P2-18): collapse danbooru implication parents when a more specific child is present (`cat_ears` drops `animal_ears`, transitive). Table: bundled `backend/assets/danbooru_implications.csv` + optional `data/danbooru_implications.csv` drop-in |
 
 Mode rules: `prompt`, `negative`, `prompt_negative`, `a1111`, and `json` preserve the stored Prompt / generation data and ignore `prefix`. `tags` exports only tags after blacklist filtering. `caption_tags` writes optional Class Token + AI caption + Tags. `caption_merged` writes optional Class Token + AI caption + Prompt + Tags as one LoRA-training caption line. `image_types` / `image_nl_overrides` apply only in `template` and `tags` modes (the same gate as `/api/dataset/export`) and are also accepted by `POST /api/tags/export-combined`.
 
@@ -1249,7 +1254,7 @@ Drop tags below a confidence threshold and deduplicate by case-insensitive tag n
 List built-in tag/caption export presets used by the LoRA training template engine (Anima Tags+NL, Anima Tags-only, Illustrious / Pony, NoobAI, FLUX, Kohya SD1.5, Custom).
 
 #### POST /api/tags/export-preview
-Render sample caption files without writing to disk. Body: `{image_ids, preset_id|template_override, options}`. Returns rendered captions keyed by image id plus the resolved template variables. v3.5.0 (preview unification): pass `content_mode` (any real export mode, plus optional `prefix` and `normalize_tag_underscores`) to render through `build_sidecar_content` — the exact engine `/api/tags/export-batch` writes with — so the preview can never drift from the exported sidecar. Omit `content_mode` (or send `template`) for the template-designer path.
+Render sample caption files without writing to disk. Body: `{image_ids, preset_id|template_override, options}`. Returns rendered captions keyed by image id plus the resolved template variables. v3.5.0 (preview unification): pass `content_mode` (any real export mode, plus optional `prefix` and `normalize_tag_underscores`) to render through `build_sidecar_content` — the exact engine `/api/tags/export-batch` writes with — so the preview can never drift from the exported sidecar. Omit `content_mode` (or send `template`) for the template-designer path. Also accepts `training_purpose` and `dedupe_implications` (P2-19/P2-18) so the preview mirrors those export filters on both the native and template paths.
 
 #### POST /api/tags/export-combined
 Build a single combined export bundle for the current selection across multiple presets. Body: `{image_ids|selection_token, presets: [{preset_id|template, options}], filename_template}`. Returns `{token, total_files}` — pass the token to the download endpoint below.

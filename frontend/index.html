@@ -3890,6 +3890,11 @@
                                               placeholder="watermark&#10;low quality&#10;bad anatomy"
                                               data-i18n-placeholder="dataset.blacklistPlaceholder"></textarea>
                                 </label>
+                                <!-- P1-17: same trait-pruning checklist as the batch-export modal -->
+                                <button type="button" class="btn btn-small btn-ghost" id="btn-dataset-trait-pruner">
+                                    <span aria-hidden="true">🎯</span>
+                                    <span data-i18n="traitPruner.button">Suggest character traits to prune</span>
+                                </button>
                                 <details class="dataset-vocab-panel" id="dataset-vocab-panel">
                                     <summary class="dataset-vocab-summary">
                                         <span aria-hidden="true">#</span>
@@ -5842,6 +5847,34 @@
                             <textarea id="batch-export-blacklist" class="input-field" rows="3"
                                 placeholder="e.g., 1girl, solo, simple background"></textarea>
                             <small class="helper-text" data-i18n="batchExport.tagBlacklistHelper">Comma-separated tags to exclude from training-caption outputs.</small>
+                            <!-- P1-17: reviewable character-trait pruning checklist
+                                 (panel is rendered by modules/trait-pruner.js) -->
+                            <button type="button" class="btn btn-small btn-ghost" id="btn-export-trait-pruner">
+                                <span aria-hidden="true">🎯</span>
+                                <span data-i18n="traitPruner.button">Suggest character traits to prune</span>
+                            </button>
+                        </div>
+
+                        <!-- P2-19: purpose-aware export filtering (same vocabulary as Smart Tag) -->
+                        <div class="form-group">
+                            <label for="batch-export-training-purpose" data-i18n="batchExport.trainingPurposeLabel">Training purpose filter</label>
+                            <select id="batch-export-training-purpose" class="input-field">
+                                <option value="" data-i18n="batchExport.purposeGeneral">Off — keep every tag</option>
+                                <option value="character" data-i18n="batchExport.purposeCharacter">Character LoRA — drop character-name tags (needs trigger word)</option>
+                                <option value="style" data-i18n="batchExport.purposeStyle">Style LoRA — drop style / artist tags</option>
+                                <option value="concept" data-i18n="batchExport.purposeConcept">Concept LoRA — keep every tag</option>
+                            </select>
+                            <small class="helper-text" data-i18n="batchExport.trainingPurposeHelper">Character mode only drops detected character names when a trigger word carries the identity; style mode drops style/artist tags so the target style stays unnamed.</small>
+                        </div>
+
+                        <!-- P2-18: danbooru implication dedup (cat_ears present → drop animal_ears) -->
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="batch-export-dedupe-implications">
+                                <span class="checkbox-custom" aria-hidden="true"></span>
+                                <span class="checkbox-text" data-i18n="batchExport.dedupeImplicationsLabel">Drop redundant parent tags (<code>cat_ears</code> ⇒ remove <code>animal_ears</code>)</span>
+                            </label>
+                            <small class="helper-text" data-i18n="batchExport.dedupeImplicationsHelp">Uses a curated danbooru implication table; extend it by dropping <code>danbooru_implications.csv</code> into <code>data/</code>.</small>
                         </div>
 
                         <!-- v3.2.1 follow-up: LoRA-trainer underscore convention.
@@ -6806,6 +6839,7 @@
     <script src="/static/js/modules/settings-tabs.js"></script>
     <script src="/static/js/modules/nav-missions.js"></script>
     <script src="/static/js/modules/entry-catalog.js"></script>
+    <script src="/static/js/modules/trait-pruner.js"></script>
     <script>
     /* Sorting sub-tab toggle (Auto-Separate / Manual Sort) */
     window._switchSortingSub = function(sub) {
