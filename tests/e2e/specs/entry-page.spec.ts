@@ -115,8 +115,10 @@ test.describe('Entry page (opted in)', () => {
     await expect(page.locator('#entry-count-models')).toHaveText(/\d+\/\d+/)
     await tile.click()
     // Owner 2026-07-07: deep-links to the Models tab of the combined
-    // Settings & Models modal, not its default Settings tab.
+    // Settings & Models modal, not its default Settings tab — and the modal
+    // title follows the active tab so the room matches the door.
     await expect(page.locator('[data-settings-tab="models"]')).toHaveAttribute('aria-selected', 'true')
+    await expect(page.locator('#model-manager-title')).toHaveText(/Model Center|模型中心/)
   })
 
   test('all-features tile opens the function catalog', async ({ page }) => {

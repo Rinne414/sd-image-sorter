@@ -3332,7 +3332,7 @@ window.I18nLang_zhCN = {
     'tools.compatSmallTomatoHelp': '适合只想快速做分享保护时使用。不带密码，也不会保留 PNG Info。',
     'tools.password': '密码（可选）',
     'tools.passwordNotUsed': '小番茄模式不使用密码',
-    'tools.bigTomatoPasswordHint': '如果你只想要固定的重排效果，可以留空不填密码。',
+    'tools.bigTomatoPasswordHint': '留空即固定重排。想在番茄站上也能解开，请用 4 位纯数字密码（如 0512）——其他格式在站点那边会出错。',
     'tools.smallTomatoPasswordHint': '小番茄不使用密码位。要做密码兼容，请切回大番茄模式。',
     'tools.outputFolder': '输出文件夹路径',
     'tools.legacyPngInfo': '使用旧版 PNG Info 算法',

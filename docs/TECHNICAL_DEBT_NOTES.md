@@ -406,19 +406,34 @@ These are worth auditing, but they are not recorded here as confirmed debt yet.
 Do not promote them to confirmed debt without direct verification.
 
 ### Audit Target A: Obfuscation engine parity
-- Status: unverified
-- Priority: high
-- Why audit:
-  Drift between frontend JS and backend/Python obfuscation logic would create silent output inconsistency.
-- Likely failure mode:
-  Users get different obfuscation output depending on route, engine, or save path and only discover it after comparing results.
-- Verify when:
-  Before major obfuscation refactors, output-format changes, or performance work.
-- Candidate files:
-  `backend/obfuscation.py`
-  `backend/routers/obfuscation.py`
-  `frontend/js/image-obfuscate.js`
-  `frontend/js/obfuscate-engine.js`
+- Status: verified (2026-07-07) — three-way byte-exact parity, now regression-guarded
+- Priority: high (closed; guards below keep it closed)
+- How it was verified:
+  A node harness loaded the SAVED reference-site JavaScript
+  (`reference/大番茄图片混淆_files`: hilbert.js / imageData.js / encrypt.js /
+  exif.js) alongside `frontend/js/obfuscate-engine.js` and byte-compared:
+  gilbert curves (15 sizes), pixel scramble + edge padding (11 sizes × 5
+  numeric passwords), cross-decoding of site-encrypted bytes, and text crypto
+  (modern base64 + legacy, 3 texts × 4 keys). All exact. The site outputs were
+  dumped as golden vectors and the Python backend compared against them —
+  also exact. A full scan of every pixel count 1..40,000,000 found ZERO cases
+  where Python `round()` (half-even) diverges from JS `Math.round` (half-up)
+  on the golden-ratio offset, so the one numeric-semantics difference between
+  the languages never bites in the supported size range.
+- Permanent guards:
+  `backend/tests/assets/obfuscation_reference_golden.json` (site-generated vectors)
+  `backend/tests/test_obfuscation_reference_parity.py` (backend ≡ site)
+  `tests/e2e/specs/obfuscation-parity.spec.ts` (frontend engine ≡ site)
+- Known site-side quirks (documented, deliberately NOT mirrored):
+  non-numeric passwords make the SITE scramble zero times (parseInt→NaN);
+  1-3 char passwords break the site's own canvas (NaN padding); legacy
+  PNG-info mode corrupts astral characters (emoji) on the site side because
+  it shifts UTF-16 units. Cross-site use should stick to 4-digit numeric
+  passwords; our engines are lenient with other inputs but the UI password
+  hints recommend the safe form. Small-tomato mode shares the verified core
+  with a fixed (1,0,0) password and no metadata; the singularpoint page was
+  never captured, so its parity is inferred from the shared core, not
+  independently pinned.
 
 ### Audit Target B: Visible i18n gaps
 - Status: unverified

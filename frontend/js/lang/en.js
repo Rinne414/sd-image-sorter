@@ -3165,7 +3165,7 @@ window.I18nLang_en = {
     'tools.compatSmallTomatoHelp': 'Best when you just want a quick share-safe version. No password, and no PNG Info is kept.',
     'tools.password': 'Password (optional)',
     'tools.passwordNotUsed': 'Not used in Small Tomato mode',
-    'tools.bigTomatoPasswordHint': 'Leave empty if you only want deterministic scrambling without a custom secret.',
+    'tools.bigTomatoPasswordHint': 'Leave empty for a fixed scramble. For decoding on the site too, use a 4-digit numeric password (e.g. 0512) — other formats break on the site side.',
     'tools.smallTomatoPasswordHint': 'Small Tomato does not use password digits. Switch back to Big Tomato mode if you need password-based compatibility.',
     'tools.outputFolder': 'Output folder path',
     'tools.legacyPngInfo': 'Use old PNG Info algorithm',

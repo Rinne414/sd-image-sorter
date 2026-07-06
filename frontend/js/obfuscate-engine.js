@@ -604,6 +604,14 @@
             encryptText,
             decryptText,
             calculateCrc,
+            // Pixel-level hooks for the cross-implementation parity harness
+            // (reference-site JS vs this engine vs backend/obfuscation.py).
+            resolvePassword,
+            gilbert2d,
+            encryptPixels,
+            decryptPixels,
+            addPadding,
+            cropPadding,
         },
     };
 })();
