@@ -661,6 +661,8 @@ Mode rules: `prompt`, `negative`, `prompt_negative`, `a1111`, and `json` preserv
 
 Response includes `status` (`ok`, `partial`, or `error`), `exported`, `skipped`, numeric `errors`/`error_count`, `error_messages`, `total`, `content_mode`, and `overwrite_policy`. `overwrite_policy=skip` returns `partial` when existing sidecars are intentionally left untouched.
 
+v3.5.0: the response also carries a `validation` block — a trainer-consumability report over every written sidecar: `{checked, ok, warnings: [{code, count, examples, message}]}`. Warning codes: `unpaired_sidecar` (caption filename no longer matches its image, e.g. a `_1` collision rename), `empty_caption`, `multiline_caption` (kohya-style trainers read only the first line; not raised for the by-design multi-line modes `prompt_negative`/`a1111`/`json`/`prompt_nl`), `missing_trigger` (template mode with a configured trigger), and `conflicting_ratings` (two different rating tokens in one caption). `examples` lists at most 3 filenames per code.
+
 #### POST /api/tags/export-batch/start
 Run the same sidecar export as a background job so a large selection does not block the request. Accepts the same body as `POST /api/tags/export-batch`. This is a coarse background wrap (no mid-run cancel). Response includes `status` and `message`.
 

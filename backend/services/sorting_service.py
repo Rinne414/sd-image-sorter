@@ -3369,6 +3369,7 @@ class SortingService:
             "exported": result["exported"],
             "total": result["total"],
             "errors": result["error_messages"] if result["error_messages"] else None,
+            "validation": result.get("validation"),
         }
 
     def load_session_from_disk(self) -> None:

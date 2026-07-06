@@ -13,6 +13,7 @@ from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional
 from fastapi import HTTPException
 
 import database as db
+from services.export_validation import ExportValidator
 from utils.path_validation import normalize_user_path, sanitize_filename, validate_folder_path
 
 
@@ -844,6 +845,9 @@ def export_tags_batch_request(
     error_count = 0
     error_messages: List[str] = []
     used_output_paths = set()
+    validator = ExportValidator(
+        content_mode=content_mode, template_options=template_options
+    )
 
     if id_chunks is None:
         id_chunks = _iter_id_list_chunks(getattr(request, "image_ids", []) or [], EXPORT_DB_CHUNK_SIZE)
@@ -942,6 +946,11 @@ def export_tags_batch_request(
 
                 used_output_paths.add(output_path)
                 exported += 1
+                validator.add(
+                    output_path=output_path,
+                    content=file_content,
+                    image_path=str(image.get("path") or ""),
+                )
             except HTTPException:
                 raise
             except Exception as exc:
@@ -960,6 +969,9 @@ def export_tags_batch_request(
         "content_mode": content_mode,
         "overwrite_policy": overwrite_policy,
         "output_mode": output_mode,
+        # Trainer-consumability report over every written sidecar (P0 batch):
+        # pairing, single-line, trigger presence, rating consistency, emptiness.
+        "validation": validator.summary(),
     }
 
 

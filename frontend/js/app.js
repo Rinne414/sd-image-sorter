@@ -10866,12 +10866,32 @@ async function executeBatchExport() {
                 reason: errorMessages.join(', ') || appT('common.unknownError', 'Unknown error'),
             }), 'error');
         }
+
+        _showExportValidationWarnings(result?.validation);
     } catch (e) {
         showToast(formatUserError(e, appT('export.failed', 'Export failed')), "error");
     } finally {
         $('#batch-export-progress').style.display = 'none';
         $('#btn-start-batch-export').disabled = false;
     }
+}
+
+// Trainer-consumability report from the backend export validator: pairing,
+// single-line, trigger presence, rating consistency, emptiness. Only speaks
+// up when something is actually wrong with the written caption files.
+function _showExportValidationWarnings(validation) {
+    const warnings = Array.isArray(validation?.warnings) ? validation.warnings : [];
+    if (!warnings.length) return;
+    const parts = warnings.map((w) => {
+        const label = appT(`exportValidation.${w.code}`, w.message || w.code);
+        const example = Array.isArray(w.examples) && w.examples.length ? ` (${w.examples[0]}…)` : '';
+        return `${label} ×${w.count}${example}`;
+    });
+    showToast(
+        `${appT('exportValidation.title', 'Training-data check')}: ${parts.join(' · ')}`,
+        'warning',
+        { duration: 12000 },
+    );
 }
 
 // ============== Filters ==============

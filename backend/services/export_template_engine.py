@@ -35,9 +35,17 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         "separator": ", ",
         "underscore_to_space": True,
         "preserve_underscore_prefixes": ["score_"],
-        "default_quality": "masterpiece, best quality, score_5",
-        "default_safety": "safe",
+        "default_quality": "masterpiece, best quality",
+        "default_safety": "",
         "default_append": "",
+        "single_line": True,
+        # Anima model-card safety vocabulary: safe / sensitive / nsfw / explicit.
+        "safety_vocab": {
+            "general": "safe",
+            "sensitive": "sensitive",
+            "questionable": "nsfw",
+            "explicit": "explicit",
+        },
     },
     "anima_tags_only": {
         "name": "Anima (Tags only)",
@@ -46,9 +54,16 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         "separator": ", ",
         "underscore_to_space": True,
         "preserve_underscore_prefixes": ["score_"],
-        "default_quality": "newest, highres, normal quality, score_5",
-        "default_safety": "safe",
+        "default_quality": "newest, highres, normal quality",
+        "default_safety": "",
         "default_append": "",
+        "single_line": True,
+        "safety_vocab": {
+            "general": "safe",
+            "sensitive": "sensitive",
+            "questionable": "nsfw",
+            "explicit": "explicit",
+        },
     },
     "illustrious_pony": {
         "name": "Illustrious / Pony",
@@ -60,6 +75,7 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         "default_quality": "",
         "default_safety": "",
         "default_append": "masterpiece, best_quality",
+        "single_line": True,
     },
     "noobai": {
         "name": "NoobAI",
@@ -71,6 +87,7 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         "default_quality": "",
         "default_safety": "",
         "default_append": "masterpiece, best_quality",
+        "single_line": True,
     },
     "flux": {
         "name": "FLUX (NL only)",
@@ -82,6 +99,7 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         "default_quality": "",
         "default_safety": "",
         "default_append": "",
+        "single_line": True,
     },
     "kohya_sd15": {
         "name": "Kohya SD 1.5",
@@ -93,6 +111,7 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         "default_quality": "",
         "default_safety": "",
         "default_append": "",
+        "single_line": True,
     },
     "custom": {
         "name": "Custom Template",
@@ -104,6 +123,9 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         "default_quality": "",
         "default_safety": "",
         "default_append": "",
+        # Custom templates may deliberately span multiple lines (v3.4.3);
+        # never flatten them behind the author's back.
+        "single_line": False,
     },
 }
 
@@ -116,11 +138,11 @@ TEMPLATE_VARIABLES: List[Dict[str, str]] = [
     {"name": "{nl_caption}", "description": "VLM-generated natural language caption (ai_caption field)"},
     {"name": "{prompt}", "description": "Original generation prompt"},
     {"name": "{negative}", "description": "Original negative prompt"},
-    {"name": "{rating}", "description": "Rating tag (general/sensitive/questionable/explicit) or 'safe'"},
+    {"name": "{rating}", "description": "Per-image rating resolved from the tagger's rating tag (safe/sensitive/questionable/explicit); empty when the image was never rated"},
     {"name": "{characters}", "description": "Character tags only (heuristic detection)"},
     {"name": "{general}", "description": "Non-character tags only"},
-    {"name": "{quality}", "description": "Quality tag string (preset default or user override)"},
-    {"name": "{safety}", "description": "Safety tag string (preset default or user override)"},
+    {"name": "{quality}", "description": "Quality tags: user override > aesthetic-score bucket > preset default"},
+    {"name": "{safety}", "description": "Per-image rating in the preset's model-card vocabulary (Anima: questionable→nsfw); preset default only when unrated"},
     {"name": "{count}", "description": "Subject-count tag (1girl/1boy/2girls/etc.) extracted from tags"},
     {"name": "{append}", "description": "User-supplied or preset-default append text"},
 ]
@@ -244,6 +266,110 @@ def normalize_lora_tag(tag: str, preserve_prefixes: Optional[List[str]] = None) 
 # convention discoverable and lets the same-name ``.txt`` exporter reuse it
 # without re-declaring the list.
 DEFAULT_LORA_PRESERVE_PREFIXES: List[str] = ["score_"]
+
+
+# ====================================================================
+# Per-image rating / quality resolution
+# ====================================================================
+
+# Rating markers as they appear in stored tag rows: WD14-family taggers write
+# the bare category-9 word (general/sensitive/questionable/explicit),
+# OppaiOracle writes "rating:x" markers, and manual edits may use the
+# single-letter danbooru shorthand. All map to the canonical danbooru word.
+RATING_TAG_CANON: Dict[str, str] = {
+    "general": "general", "g": "general", "safe": "general",
+    "rating:general": "general", "rating:safe": "general",
+    "sensitive": "sensitive", "s": "sensitive", "rating:sensitive": "sensitive",
+    "questionable": "questionable", "q": "questionable",
+    "rating:questionable": "questionable",
+    "explicit": "explicit", "e": "explicit", "rating:explicit": "explicit",
+}
+
+# Vocabulary the generic ``{rating}`` slot renders (matches the pre-v3.5.0
+# word choice: danbooru words with ``general`` shown as ``safe``). Presets
+# with a stricter model-card vocabulary override via ``safety_vocab``.
+DEFAULT_RATING_VOCAB: Dict[str, str] = {
+    "general": "safe",
+    "sensitive": "sensitive",
+    "questionable": "questionable",
+    "explicit": "explicit",
+}
+
+_RATING_SLOT_PATTERN = re.compile(r"\{(?:rating|safety)\}")
+
+
+def canonical_rating_word(tag: str) -> Optional[str]:
+    """Map a stored tag to its canonical danbooru rating word, or None."""
+    return RATING_TAG_CANON.get(str(tag or "").strip().lower())
+
+
+def resolve_canonical_rating(
+    image: Dict[str, Any],
+    tags: List[Dict[str, Any]],
+    override: Optional[str] = None,
+) -> str:
+    """Resolve the image's rating: override > image field > tag rows > "".
+
+    Ratings live only as tag rows today (the tagger pipelines store the
+    winning rating category as a normal tag/confidence row); the ``rating``
+    dict field is honored first so a future column keeps working unchanged.
+    Returns the canonical danbooru word or "" when the image was never rated.
+    """
+    if override is not None and str(override).strip():
+        text = str(override).strip().lower()
+        return RATING_TAG_CANON.get(text, text)
+    field_value = str(image.get("rating") or "").strip().lower()
+    if field_value:
+        return RATING_TAG_CANON.get(field_value, field_value)
+    best, best_conf = "", -1.0
+    for row in tags or []:
+        canon = canonical_rating_word(str(row.get("tag") or ""))
+        if canon is None:
+            continue
+        try:
+            conf = float(row.get("confidence") or 0.0)
+        except (TypeError, ValueError):
+            conf = 0.0
+        if conf > best_conf:
+            best, best_conf = canon, conf
+    return best
+
+
+# Aesthetic-score buckets → danbooru-style quality ladder (the vocabulary the
+# Anima card trains with). ``predict_score`` returns ~1-10; thresholds are a
+# judgment call documented here rather than hidden: most anime renders land
+# in the 4-7 band, so 7+ is genuinely rare-good and <3 is genuinely broken.
+_QUALITY_BUCKETS: List[tuple] = [
+    (7.0, "masterpiece, best quality"),
+    (6.0, "best quality"),
+    (5.0, "good quality"),
+    (4.0, ""),  # normal band — no token beats a meaningless one
+    (3.0, "low quality"),
+]
+
+
+def quality_from_aesthetic_score(score: Any) -> Optional[str]:
+    """Map an aesthetic score (~1-10) to quality tags; None when unscored."""
+    if score is None:
+        return None
+    try:
+        value = float(score)
+    except (TypeError, ValueError):
+        return None
+    for threshold, label in _QUALITY_BUCKETS:
+        if value >= threshold:
+            return label
+    return "worst quality"
+
+
+def flatten_single_line(text: str) -> str:
+    """Collapse all whitespace (incl. newlines) to single spaces.
+
+    kohya-style trainers read only the first line of a caption file (or one
+    random line with ``enable_wildcard``); multi-paragraph NL captions must
+    be flattened before they hit a single-caption ``.txt``.
+    """
+    return " ".join(str(text or "").split())
 
 
 def _normalize_blacklist_item(value: str, config: TagProcessingConfig) -> str:
@@ -511,6 +637,18 @@ def build_export_caption(
     template = template_override if template_override else preset["template"]
     separator = preset.get("separator", ", ")
 
+    # Resolve the image's actual rating once (canonical danbooru word or "").
+    canonical_rating = resolve_canonical_rating(image, tags, rating_override)
+
+    # When the template carries a dedicated {rating}/{safety} slot, keep the
+    # raw rating-marker tags out of every tag variable so one caption can
+    # never state two contradictory ratings (F1: "safe, …, explicit").
+    if _RATING_SLOT_PATTERN.search(template):
+        tags = [
+            t for t in tags
+            if canonical_rating_word(str(t.get("tag") or "")) is None
+        ]
+
     effective_underscore = (
         bool(underscore_to_space_override)
         if underscore_to_space_override is not None
@@ -552,23 +690,45 @@ def build_export_caption(
             if _normalize_blacklist_item(tag, proc_config) not in blocked
         ]
 
-    # Determine rating
-    rating = rating_override if rating_override is not None else _extract_rating(image)
+    # {rating}: explicit override wins verbatim; otherwise render the
+    # per-image canonical rating through the generic vocabulary. Unrated
+    # images render nothing — never a guessed "safe" (F1).
+    if rating_override is not None and str(rating_override).strip():
+        rating = str(rating_override).strip()
+    else:
+        rating = DEFAULT_RATING_VOCAB.get(canonical_rating, "")
     rating = _filter_template_value(rating, proc_config, separator)
+
+    # {safety}: same resolution, but through the preset's model-card
+    # vocabulary (Anima: questionable→nsfw). ``default_safety`` only fills
+    # in when the image was never rated.
+    if safety_override is not None:
+        safety = safety_override
+    elif canonical_rating:
+        safety_vocab = preset.get("safety_vocab") or DEFAULT_RATING_VOCAB
+        safety = safety_vocab.get(canonical_rating, canonical_rating)
+    else:
+        safety = preset.get("default_safety", "")
+    safety = _filter_template_value(safety, proc_config, separator)
+
+    # {quality}: user override > aesthetic-score bucket > preset default.
+    # A scored image in the normal band deliberately renders "" — a uniform
+    # quality token on every caption carries no training signal.
+    if quality_override is not None:
+        quality = quality_override
+    else:
+        derived_quality = quality_from_aesthetic_score(image.get("aesthetic_score"))
+        quality = (
+            derived_quality
+            if derived_quality is not None
+            else preset.get("default_quality", "")
+        )
+    quality = _filter_template_value(quality, proc_config, separator)
+
     trigger_text = _filter_template_value(trigger.strip(), proc_config, separator)
     nl_caption = _filter_template_value(str(image.get("nl_caption") or image.get("ai_caption") or "").strip(), proc_config, separator)
     prompt = _filter_template_value(str(image.get("prompt") or "").strip(), proc_config, separator)
     negative = _filter_template_value(str(image.get("negative_prompt") or "").strip(), proc_config, separator)
-    quality = _filter_template_value(
-        quality_override if quality_override is not None else preset.get("default_quality", ""),
-        proc_config,
-        separator,
-    )
-    safety = _filter_template_value(
-        safety_override if safety_override is not None else preset.get("default_safety", ""),
-        proc_config,
-        separator,
-    )
     append_text = "" if append else _filter_template_value(preset.get("default_append", ""), proc_config, separator)
 
     # Build context
@@ -586,24 +746,17 @@ def build_export_caption(
         separator=separator,
     )
 
-    return render_template(template, context)
+    rendered = render_template(template, context)
 
+    # Single-line guarantee (F2): kohya-family trainers read only the first
+    # line of a caption file, so built-in presets flatten variable-injected
+    # newlines (multi-paragraph NL captions, prompts with line breaks).
+    # Author-written multi-line templates (custom preset, or an override
+    # that itself contains "\n") are left untouched.
+    if preset.get("single_line") and "\n" not in template:
+        rendered = flatten_single_line(rendered)
 
-def _extract_rating(image: Dict[str, Any]) -> str:
-    """Get rating from image record. Falls back to 'safe' if not set."""
-    rating = str(image.get("rating") or "").strip().lower()
-    rating_map = {
-        "general": "safe",
-        "g": "safe",
-        "safe": "safe",
-        "sensitive": "sensitive",
-        "s": "sensitive",
-        "questionable": "questionable",
-        "q": "questionable",
-        "explicit": "explicit",
-        "e": "explicit",
-    }
-    return rating_map.get(rating, "safe" if not rating else rating)
+    return rendered
 
 
 def list_presets() -> List[Dict[str, Any]]:

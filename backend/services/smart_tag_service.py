@@ -1191,6 +1191,35 @@ def _flatten_tag_names(items: List[Any]) -> List[str]:
     return out
 
 
+_RATING_LABEL_CANON = {
+    "general": "general", "g": "general", "safe": "general",
+    "rating:general": "general", "rating:safe": "general",
+    "sensitive": "sensitive", "s": "sensitive", "rating:sensitive": "sensitive",
+    "questionable": "questionable", "q": "questionable",
+    "rating:questionable": "questionable",
+    "explicit": "explicit", "e": "explicit", "rating:explicit": "explicit",
+}
+
+
+def _rating_row_from(rating: Any) -> Tuple[str, float]:
+    """Normalize a pipeline rating (``{label, score}`` dict or plain string)
+    to the bare danbooru word + confidence the plain tagging pipeline stores.
+    Returns ``("", 0.0)`` when there is no usable rating."""
+    label, score = "", 1.0
+    if isinstance(rating, dict):
+        label = str(rating.get("label") or "").strip().lower()
+        try:
+            score = float(rating.get("score") or 1.0)
+        except (TypeError, ValueError):
+            score = 1.0
+    elif rating:
+        label = str(rating).strip().lower()
+    canon = _RATING_LABEL_CANON.get(label, "")
+    if not canon:
+        return "", 0.0
+    return canon, max(0.0, min(1.0, score))
+
+
 def _normalize_tag_rows(items: List[Any], category: str) -> List[Dict[str, Any]]:
     """Keep model confidence rows intact while accepting legacy string tags."""
     rows: List[Dict[str, Any]] = []
@@ -1537,6 +1566,10 @@ def _assemble_result_dict(
         "rating": partial["rating"],
         "nl_text": nl_text,
         "noise_stripped_count": partial["noise_stripped"],
+        # Persisted by _persist_result as a top-confidence tag row so
+        # tags-mode exports keep a subject token even after character-mode
+        # filtering removed the character name (P1-16).
+        "trigger_word": (req.trigger_word or "").strip(),
     }
 
 
@@ -1775,6 +1808,30 @@ def _persist_result(image_id: int, result: Dict[str, Any], merge_strategy: str) 
     tag_rows.extend(character_rows)
     tag_rows.extend(general_rows)
     tag_rows.extend(copyright_rows)
+
+    # P1-16: persist the trigger as a top-confidence tag row. The caption
+    # string alone does not survive a ``content_mode=tags`` export, so after
+    # character-mode filtering removed the character name the exported
+    # captions would carry no subject token at all.
+    trigger_word = str(result.get("trigger_word") or "").strip()
+    if trigger_word:
+        existing_keys = {
+            str(row.get("tag") or "").strip().lower().replace(" ", "_")
+            for row in tag_rows
+        }
+        if trigger_word.lower().replace(" ", "_") not in existing_keys:
+            tag_rows.insert(
+                0, {"tag": trigger_word, "confidence": 1.0, "category": "trigger"}
+            )
+
+    # P0-1: persist the tagger's rating verdict as a tag row — the same
+    # convention the plain tagging pipeline uses — so {rating}/{safety}
+    # template slots resolve per image no matter which pipeline tagged it.
+    rating_label, rating_score = _rating_row_from(result.get("rating"))
+    if rating_label:
+        tag_rows.append(
+            {"tag": rating_label, "confidence": rating_score, "category": "rating"}
+        )
 
     try:
         db.add_tags_batch([

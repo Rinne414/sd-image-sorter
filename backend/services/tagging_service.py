@@ -1926,6 +1926,7 @@ class TaggingService:
             "content_mode": result.get("content_mode", request.content_mode),
             "overwrite_policy": result.get("overwrite_policy", request.overwrite_policy),
             "output_mode": result.get("output_mode", getattr(request, "output_mode", "folder")),
+            "validation": result.get("validation"),
         }
 
     @staticmethod
