@@ -1,12 +1,21 @@
-## v3.5.0 — 清爽极光重设计 + 任务入口页 / Fresh Aurora Redesign + Mission Entry
+## v3.5.0 — 清爽极光重设计 + 搜索语法 + LoRA 导出大修 / Fresh Aurora + Search Query + LoRA Export Overhaul
 
-全局换新 v4.0「清爽极光」设计语言：任务入口页（顶栏保持经典布局、品牌区一键回入口），图库搜索工具栏、底部批量操作条与可视缩图大小控制、排序专注模式与命名预设、打码审核流水线、「智能一趟」打标入口、Caption 双框编辑器统一。超大库批量操作转为可取消的后台任务，AI 队列跨重启持久化，Linux NVIDIA 修复 GPU 打标。功能零删除。
+全局换新「清爽极光」设计语言与任务入口页；图库搜索升级为完整查询语法 + danbooru 自动补全；LoRA 训练导出大修：逐图分级/画质、训练目的过滤、蕴含去重、角色特征修剪清单、预览所见即所得；camie 打标器修复后角色识别 0/4 → 4/4。功能零删除。
 
-The v4.0 "Fresh Aurora" redesign lands: a mission entry page (the top bar keeps its classic layout, brand click returns to the entry), gallery toolbar search + a bottom batch action bar + a visible thumbnail-size control, sort focus mode & named presets, a censor review conveyor, a one-pass Smart Tag entry, and the caption editors consolidated into one two-box model. Huge-library bulk ops become cancellable background jobs, the AI queue survives restarts, and Linux NVIDIA machines get GPU tagging. Zero feature removals.
+The "Fresh Aurora" redesign lands with a mission entry page; the gallery search becomes a full query language with danbooru autocomplete; LoRA training export is overhauled end to end (per-image rating/quality, purpose filter, implication dedup, trait pruning, WYSIWYG preview). Zero feature removals.
 
 ---
 
 ## Added / 新增
+
+- **Mission-scoped smart nav + customizable tab bar + function catalog / 任务智能导航 + 自定义标签栏 + 所有功能清单**: picking a mission on the entry page scopes the top bar to only that pipeline's tabs, in order, with ①② step numbers and an exit chip; a checklist under More ▾ decides which tabs stay visible (everything tucked remains reachable via More-menu mirrors); and a 所有功能 catalog modal lists every feature with a one-line usage — each row jumps straight there. 隐私处理 gets its own entry tile, the Library becomes the biggest tile, and the Model Center tile deep-links to the AI Models tab (with a 从这里开始 badge while the core tagger is missing). Language switch + update check join the entry page corner.
+  - 在入口页点任务后，顶栏只显示该流程需要的页面（按顺序带 ①② 步骤编号，配可退出的任务 chip）；「更多 ▾」新增自定义标签栏勾选清单（被收起的页面都能从「更多」镜像到达）；新增「所有功能」清单弹窗——每个功能一句用途、点击直达。隐私处理升级为入口磁贴，图片库变成最大磁贴，模型中心磁贴直达「AI 模型」页签（核心打标模型未装时挂「从这里开始」徽章）。语言切换与检查更新加入入口页右上角。
+
+- **Entry cover display modes / 门面四挡展示**: the one-way "不想展示" link becomes a four-state switch — 无 / 单张 (manual 换一张) / 轮播 (auto slideshow) / 胶卷 (four oblique film strips rolling your works, reduced-motion aware). ★5 works first, then newest, so a fresh unrated library still gets a living wall; the full image is letterboxed over a blurred echo of itself, nothing cropped.
+  - 门面从单向「不想展示」改为四挡：无 / 单张（手动换一张）/ 轮播（自动）/ 胶卷（四条斜向胶卷滚动播放你的作品，尊重减弱动效）。★5 优先、其余按最新，新库也有滚动墙；完整原图以适应模式垫在自身的全屏模糊回声上，一点不裁。
+
+- **LoRA export: purpose filter + implication dedup + trait pruning / LoRA 导出：训练目的过滤 + 蕴含去重 + 角色特征修剪**: three opt-in tools in the batch-export Advanced panel. Training-purpose filter shares Smart Tag's vocabulary (style LoRA drops style/artist tags; character LoRA drops detected character names when a trigger word carries the identity). Implication dedup collapses redundant danbooru parents (`cat_ears` ⇒ drop `animal_ears`, transitive; extend via `data/danbooru_implications.csv`). The 🎯 trait-pruning checklist (also in Dataset Maker) surfaces innate traits — hair/eyes/skin/body — shared across the selection so the picked ones feed the blacklist and the trigger word absorbs the identity. All applied inside the real export engine; the preview shows exactly what will be written.
+  - 批量导出「高级选项」新增三个可选工具：训练目的过滤与智能打标共用词表（画风 LoRA 删画风/画师标签；角色 LoRA 在触发词承载身份时删角色名）；蕴含去重折叠冗余父标签（有 `cat_ears` 就删 `animal_ears`，可传递，放 `data/danbooru_implications.csv` 扩充）；🎯 角色特征修剪清单（数据集制作页同款）列出选中图片共有的发/眼/肤/体貌特征，勾选加入黑名单、身份交给触发词。全部在真实导出引擎内生效，预览所见即所得。
 
 - **Mission entry page / 任务入口页**: launch surface with the four mission lanes (LoRA dataset / Pixiv set publishing / batch organize / free mode), live-count function tiles, a resume slab for saved manual-sort sessions, a daily ★5 full-bleed cover with 换一张 / 不想展示, and an activity streak. Top-level ESC returns to the entry without losing view state; Settings gains 跳过入口页 and ★5 门面 toggles. Backed by `GET /api/entry/summary` + `activity_log` daily counters (migration 020).
   - 新增任务入口页：四条任务动线（LoRA 数据集 / Pixiv 成套发布 / 批量整理 / 自由模式）、实时数字功能马赛克、手动分拣「接着上次」锚块、每日 ★5 全屏门面（换一张 / 不想展示）、连续整理天数。顶层 ESC 随时回入口且不丢视图状态；设置新增「跳过入口页」「★5 门面」开关。后端新增 `GET /api/entry/summary` 与 `activity_log` 日计数（migration 020）。
@@ -69,6 +78,15 @@ The v4.0 "Fresh Aurora" redesign lands: a mission entry page (the top bar keeps 
 
 ## Fixed / 修复
 
+- **LoRA training-data correctness / LoRA 训练数据正确性 (tagger audit)**: exported captions now tell the truth — per-image rating and aesthetic quality replace the hardcoded `safe`/`score_5`; multi-paragraph captions flatten to one line (kohya reads line 1 only); the Smart Tag trigger word persists as a real top-confidence tag row; sidecar name collisions are reported instead of silently renamed to an unpaired `_1.txt`; every export returns a trainer-consumability health report; and the preview renders through the exact engine the export writes with. Also: diffusion-pipe split export (`image.txt` + `image_nl.txt` twin), kaomoji tags (`^_^`, `:3`) survive every formatter, transparent PNGs composite onto white before tagging, and Anima presets follow the official model-card category order.
+  - 导出的训练标注句句属实——逐图分级与美学画质取代硬编码的 `safe`/`score_5`；多段字幕压平成单行（kohya 只读第一行）；智能打标的触发词落库为置顶置信度的真实标签行；标注撞名如实报错而不是悄悄改名成配不上对的 `_1.txt`；每次导出返回训练可用性体检报告；预览与导出完全同引擎。另有 diffusion-pipe 双文件导出（`image.txt` + `image_nl.txt`）、颜文字标签（`^_^`、`:3`）全链路保留、透明 PNG 打标前先合成白底、Anima 预设按官方模型卡分类顺序输出。
+
+- **camie-tagger-v2 read the wrong ONNX output head / camie-tagger-v2 读错 ONNX 输出头**: the runtime silently read the coarse intermediate head, so characters never resolved (0/4 known characters) and ratings ran soft; after the one-line fix a 29-image re-run restored WD-family quality (characters 4/4, ground-truth recall 35/52 → 48/52). Model cards in the tagger UI now state measured verdicts for all six taggers, and ToriiGate is captioner-only by owner decision (it emitted 5-7 loose invented tags as a tagger; Smart Tag captions keep it).
+  - camie-tagger-v2 此前静默读取粗预测中间头，角色全部认不出（4 个已知角色 0 命中）；一行修复后 29 张实图复测恢复 WD 系列水平（角色 4/4，真值命中 35/52 → 48/52）。打标 UI 的模型卡写明六个打标器的实测结论；ToriiGate 按所有者决定定位为字幕模型（当打标器用时每张只吐 5-7 个编造的松散词）。
+
+- **Tag provenance: re-tagging never destroys manual tags / 标签来源追踪：重打标不再毁掉手动标签**: every tag row records its source (tagger / vlm / manual / trigger) and category via migration 024; pipeline re-tags replace only their own rows, imports mark rows manual, and VLM-generated tags pass a danbooru-vocabulary gate before persisting (hallucinated non-vocabulary tags dropped with a count).
+  - 每条标签记录来源（tagger / vlm / manual / trigger）与类别（migration 024）；管线重打标只替换自己写的行，导入的行记为 manual，VLM 生成的标签落库前过 danbooru 词表闸门（幻觉词丢弃并统计）。
+
 - **UI text coverage + Simplified-Chinese purity / 界面文案补全与简体统一**: 13 toast/button strings that silently fell back to English now have proper entries in both language packs, and ~20 Dataset template-help strings that shipped in Traditional Chinese are converted to Simplified Chinese.
   - 13 条此前静默回退英文的提示/按钮文案补上双语词条；Dataset 模板帮助区约 20 条繁体中文全部转换为简体。
 
@@ -85,8 +103,8 @@ The v4.0 "Fresh Aurora" redesign lands: a mission entry page (the top bar keeps 
 
 ## Upgrading / 升级注意
 
-- Database migrations 020 (`activity_log`) and 021 (`reconnect_reviews`) run automatically on first start — no manual steps, existing data untouched.
-  - 数据库迁移 020（`activity_log`）与 021（`reconnect_reviews`）首次启动自动执行，无需手动操作，现有数据不受影响。
+- Database migrations 018-024 (NL captions, activity log, reconnect reviews, color backfill, tag provenance) run automatically on first start — no manual steps, existing data untouched.
+  - 数据库迁移 018-024（自然语言字幕、活动日志、找回审查、颜色回填、标签来源追踪）首次启动自动执行，无需手动操作，现有数据不受影响。
 - First launch shows the new mission entry page; click any lane (or press ESC later to come back to it). Prefer the old behavior? Settings → 跳过入口页.
   - 首次启动会看到新的任务入口页；点任意动线进入，之后按 ESC 可随时回来。想跳过它：设置 → 「跳过入口页」。
 - Navigation stays the familiar top bar; the brand block on its left now returns to the entry page. No workflow, shortcut, or destructive-action default changed; Auto-Separate / Manual Sort defaults stay `copy`.
@@ -98,7 +116,9 @@ The v4.0 "Fresh Aurora" redesign lands: a mission entry page (the top bar keeps 
 
 ## Validation / 验证
 
-- Full 7-gate CI green: backend pytest 2373 passed / 7 skipped; Playwright e2e 184 passed / 3 skipped; ruff, strict tsc, JS syntax, lock freshness, and dependency audit all clean.
+- Full CI green: backend pytest 2537 passed / 7 skipped; Playwright e2e 206 passed / 3 skipped; ruff, strict tsc, JS syntax, lock freshness, and dependency audit all clean.
+- Real-package boot smokes: Windows portable served `/`, `/docs`, `/api` (HTTP 200) after a fresh first-run install; the Linux tar.gz did the same in WSL2 Ubuntu via `./run.sh` (a missing execute bit on `run.sh` was found by this QA and fixed in the build).
+- Linux QA round (WSL2 Ubuntu + RTX 3090): freedesktop trash verified on ext4 and a mounted NTFS drive; 51,716-image scan count timed on the mounted drive; the Linux GPU repair installed `onnxruntime-gpu[cuda,cudnn]` and `CUDAExecutionProvider` loaded on real hardware.
 
 ---
 
@@ -118,6 +138,14 @@ The v4.0 "Fresh Aurora" redesign lands: a mission entry page (the top bar keeps 
 
 ---
 
-## Checksums
+## Checksums (SHA256)
 
-See `sd-image-sorter-v3.5.0-release-manifest.json` after release package build.
+| Asset | SHA256 |
+|---|---|
+| `windows-portable.zip` | `80f7bed35d09949defafa2c7a027adfb3b2873b677d54529d21fcc5209df62f0` |
+| `app-patch.zip` | `357fd1d1b85fb8f9721f7140c18f78a9a3819f9987ea118507171cc33fab80ed` |
+| `linux.tar.gz` | `cfd27e40f6a94c0a860f06e1af3300590e3c92cfa0a296a4d455e8344443c956` |
+| `linux-portable-x86_64.tar.gz` | `1777d7b3f9847f9aedf1a373fa0dcc0bf94041cbf2c33c498428cc63137716fb` |
+| `linux-portable-aarch64.tar.gz` | `c96d0bb5217aae50117aeff288be260affd3641da3725abb12b947936ea30b89` |
+
+(Also machine-readable in `sd-image-sorter-v3.5.0-release-manifest.json`.)

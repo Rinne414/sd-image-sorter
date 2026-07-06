@@ -1,6 +1,6 @@
 # SD Image Sorter - Technical Debt Notes
 
-**Updated:** 2026-07-03 (full status verification sweep against the v3.5.0 tree; stale entries corrected: Debt-11, Debt-25, Debt-27/Roadmap-D, Debt-DM-7. Same-day fix pass: Debt-15 and Debt-19 resolved; Debt-12 Windows leg and Debt-13 local-disk timing validated on real hardware)
+**Updated:** 2026-07-07 (v3.5.0 pre-release Linux QA round in WSL2 Ubuntu: Debt-12 Linux ext4 + mounted-NTFS trash legs validated; Debt-13 WSL-mount timing measured; Linux GPU repair validated end-to-end on an RTX 3090 — `onnxruntime-gpu[cuda,cudnn]` installed and `CUDAExecutionProvider` loaded; the same round caught and fixed a missing execute bit on `run.sh` inside `linux.tar.gz` built on Windows hosts. Previous sweep: 2026-07-03.)
 **Purpose:** Record confirmed structural debt found during recent stability fixes, and provide a reusable prompt for deeper whole-repo debt audits.
 
 ## Scope
@@ -272,7 +272,7 @@ Use this structure for future confirmed-debt entries:
   The current pass fixed the confirmed database lookup bottleneck and reduced scan-time gallery work without risking a broader image-serving scheduler change during release hardening.
 
 ### Debt-12: Trash / Recycle Bin behavior still needs real OS matrix validation
-- Status: partially validated (2026-07-03). Real Windows 11 Recycle Bin smoke passed: `send2trash==2.1.0` (the pinned production path, no monkeypatching) moved a probe file off its origin successfully. Remaining unvalidated legs: macOS Trash, Linux freedesktop trash, WSL-mounted/network/external drives. Side-finding: the local dev venv was missing the pinned `send2trash` (backend tests monkeypatch the mover, so pytest never notices) — release installs are unaffected because both requirements locks pin it. Owner decision 2026-07-03: run a dedicated Linux QA round before the next release (covers this leg plus Debt-13's mount timing and the Linux GPU-tagger repair path).
+- Status: validated on 3 of 4 legs (2026-07-07 Linux QA round, WSL2 Ubuntu 24.04 + real hardware). Windows 11 Recycle Bin: passed 2026-07-03. Linux freedesktop trash (ext4): `send2trash==2.1.0` moved the probe into `~/.local/share/Trash/files/` ✓. WSL-mounted NTFS drive (`/mnt/l`): send2trash succeeded via a mount-root `.Trash-{uid}` directory — moved off origin, recoverable, no error ✓. Remaining unvalidated leg: macOS Trash (no macOS hardware available; send2trash uses the native API there and is the library's best-tested path). Side-finding 2026-07-03 stands: the local dev venv was missing the pinned `send2trash` (tests monkeypatch the mover) — release installs unaffected, both locks pin it.
 - Type: file lifecycle / operability / platform compatibility
 - Impact: medium
 - Risk if ignored:
@@ -294,7 +294,7 @@ Use this structure for future confirmed-debt entries:
   The current code blocks permanent deletion and reports per-file failures, which is the safe release-hardening behavior. Full OS trash matrix validation requires real platform runs outside the current targeted unit tests.
 
 ### Debt-13: Scan count pass needs real large-folder timing validation
-- Status: largely resolved (2026-07-03). Real-hardware measurement on a local NTFS library of 51,545 images (`L:\Pictures\AAA Reference`, faithful replica of `image_manager._iter_images`: scandir stack walk + suffix filter + per-entry stat): 0.31s cold, 0.21s warm. The count pass is far below any user-noticeable threshold on local disks at the 50k scale. Remaining unmeasured: network shares, WSL-mounted drives, and slow external disks — revisit only if users report a long pre-thumbnail pause on those mounts.
+- Status: largely resolved (2026-07-03 local + 2026-07-07 WSL leg). Local NTFS, 51,545 images (`L:\Pictures\AAA Reference`, faithful `_iter_images` replica): 0.31s cold / 0.21s warm — far below noticeable. WSL2-mounted leg (same library via `/mnt/l`, 51,716 images): 21.5s cold / 18.5s warm — the 9P protocol makes per-entry stat ~60x slower. Verdict: not a blocker — anyone scanning 50k images over a WSL mount will spend orders of magnitude longer in the metadata pass itself, and the count runs under the existing progress UI; but if a Linux-package-on-WSL user reports a long pre-thumbnail pause, this measurement is the explanation and the "counted path spool" shape below is the fix. Remaining unmeasured: real network shares and slow external disks.
 - Type: performance / release validation
 - Impact: medium
 - Risk if ignored:

@@ -5,7 +5,7 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.5.0] - 2026-07-04
+## [3.5.0] - 2026-07-07
 
 v3.5.0 落地 v4.0「清爽极光」重设计：全局配色收束到全新的 `frontend/css/tokens.css`（蓝=下一步、粉=用户决定、紫=AI 产物），新增任务入口页（顶部导航栏保持经典布局，品牌区可一键回入口页），图库/排序/打码/打标四大工作流同步升级——工具栏搜索与底部批量操作条、可视缩图大小控制、排序专注模式与命名预设、打码审核流水线、「智能一趟」打标入口。技术债清扫同批落地：超大库批量删除/移除/导出升级为可取消的后台任务、AI 任务队列跨重启持久化、Linux NVIDIA 用户修复 GPU 打标，并完成 main.py/sorting/image_service 的模块拆分收尾与依赖安全清理。
 
