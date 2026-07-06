@@ -10761,3 +10761,116 @@ html.lang-zh #view-censor .queue-action-btn span {
     color: var(--text-secondary);
     line-height: 1.5;
 }
+
+/* ============== Mission-scoped nav + customizable tabs (owner 2026-07-07) ============== */
+
+/* Tucked direct tabs: hidden by mission mode or the customize checklist.
+   !important beats the ladder's own display rules; programmatic .click()
+   still works so entry-page navigate() and mirrors stay functional. */
+.nav-tab.nav-tab-tucked {
+    display: none !important;
+}
+
+.nav-mission-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    align-self: center;
+    margin-right: 6px;
+    padding: 4px 6px 4px 12px;
+    border-radius: var(--r-pill, 999px);
+    background: rgba(var(--pink-rgb, 255 137 197), 0.14);
+    border: 1px solid rgba(var(--pink-rgb, 255 137 197), 0.45);
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+
+.nav-mission-chip[hidden] {
+    display: none;
+}
+
+.nav-mission-chip .chip-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.nav-mission-chip .chip-exit {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1;
+    padding: 3px 5px;
+    border-radius: 50%;
+    transition: color 120ms ease, background 120ms ease;
+}
+
+.nav-mission-chip .chip-exit:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.12);
+}
+
+/* Pipeline step number on mission-mode tabs (1 → 2), so the bar reads as
+   "how to go" (owner's words), not just fewer buttons. */
+.nav-step-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-right: 4px;
+    border-radius: 50%;
+    background: rgba(var(--blue-rgb), 0.22);
+    border: 1px solid rgba(var(--blue-rgb), 0.55);
+    color: var(--text);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    flex: 0 0 auto;
+}
+
+/* customize-tabs modal rows */
+.nav-customize-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 8px 0 14px;
+}
+
+.nav-customize-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--r-card, 10px);
+    cursor: pointer;
+    font-size: 13px;
+    transition: border-color 120ms ease, background 120ms ease;
+}
+
+.nav-customize-row:hover {
+    border-color: rgba(var(--blue-rgb), 0.5);
+    background: rgba(var(--blue-rgb), 0.06);
+}
+
+.nav-customize-row input[type='checkbox'] {
+    accent-color: var(--accent-primary);
+}
+
+.nav-customize-row .row-icon {
+    font-size: 14px;
+}
+
+.nav-customize-foot {
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* [hidden] guard — .nav-tab's own display rule would beat the UA
+   [hidden]{display:none} (same trap as the More menu, 2026-07-04). */
+.nav-custom-mirror[hidden] {
+    display: none !important;
+}

@@ -492,48 +492,100 @@ body.entry-active {
     border-color: var(--blue);
 }
 
-/* free mode row — dashed tier */
-.entry-free {
-    background: none;
-    border: 1px dashed rgba(255, 255, 255, 0.25);
-    border-radius: var(--r-card);
-    padding: 11px 16px;
+/* Library XL tile — the app's home gets the biggest button
+   (owner FB 2026-07-07; replaces the removed dashed free-mode row). */
+.entry-fn-xl {
+    padding: 20px 20px 16px;
+}
+
+.entry-fn-xl .fn-count {
+    font-size: 40px;
+}
+
+.entry-fn-xl .fn-title {
+    font-size: 18px;
+}
+
+.entry-fn-xl .fn-sub {
+    font-size: 12px;
+}
+
+/* function catalog modal — rows built by modules/entry-catalog.js */
+.entry-catalog-body {
     display: flex;
-    align-items: baseline;
-    gap: 10px;
+    flex-direction: column;
+    gap: 6px;
+    max-height: min(62vh, 720px);
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.catalog-group-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(237, 240, 247, 0.45);
+    margin: 10px 2px 2px;
+}
+
+.catalog-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.catalog-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--r-card);
+    padding: 10px 14px;
     cursor: pointer;
     color: var(--text);
     text-align: left;
-    transition: border-color 150ms ease;
+    transition: border-color 150ms ease, background 150ms ease;
 }
 
-.entry-free:hover {
-    border-color: rgba(var(--blue-rgb), 0.5);
+.catalog-item:hover {
+    border-color: rgba(var(--blue-rgb), 0.55);
+    background: rgba(var(--blue-rgb), 0.08);
 }
 
-.entry-free-main { flex: 1.6; align-items: baseline; }
+.catalog-icon {
+    font-size: 18px;
+    flex: 0 0 auto;
+}
 
-.entry-free-main .free-title {
-    font-size: 14px;
+.catalog-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.catalog-name {
+    font-size: 13px;
     font-weight: 700;
-    color: rgba(237, 240, 247, 0.85);
 }
 
-.entry-free-main .free-hint {
+.catalog-desc {
     font-size: 11px;
-    color: rgba(237, 240, 247, 0.45);
+    color: rgba(237, 240, 247, 0.55);
 }
 
-.entry-free-main .tile-arrow {
+.catalog-arrow {
     margin-left: auto;
     font-size: 14px;
-    color: rgba(237, 240, 247, 0.5);
+    color: rgba(237, 240, 247, 0.4);
 }
 
-.entry-free-all {
-    flex: 0.9;
-    justify-content: center;
-    align-items: center;
+.catalog-item:hover .catalog-arrow {
+    color: var(--blue);
 }
 
 .entry-free-all .free-all-label {

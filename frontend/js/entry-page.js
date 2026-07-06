@@ -618,40 +618,62 @@
     // ------------------------------------------------------------------
 
     function wire() {
+        // Mission tiles scope the top bar to their pipeline (nav-missions.js);
+        // plain tool tiles are free exploration and clear any active mission.
+        const enterMission = (key) => {
+            if (window.NavMissions) window.NavMissions.enter(key);
+        };
+        const freeNavigate = (view) => {
+            if (window.NavMissions) window.NavMissions.exit();
+            navigate(view);
+        };
         const clicks = {
-            'entry-mission-lora': () => navigate('dataset'),
+            'entry-mission-lora': () => {
+                enterMission('lora');
+                navigate('dataset');
+            },
             // v3.5.0: the Pixiv mission tile routes through the batch-bar
             // button so it inherits its guard — with a selection it opens the
             // publish-set workbench with those ids; with none it shows the
             // "pick images first" toast instead of an empty modal blocking
             // the very gallery the user needs to pick from.
             'entry-mission-pixiv': () => {
+                enterMission('pixiv');
                 navigate('gallery');
                 const publishButton = document.getElementById('btn-publish-selected');
                 if (publishButton) publishButton.click();
             },
-            'entry-mission-organize': () => navigate('sorting'),
-            'entry-anchor-continue': () => navigate('sorting'),
-            'entry-fn-gallery': () => navigate('gallery'),
+            'entry-mission-organize': () => {
+                enterMission('organize');
+                navigate('sorting');
+            },
+            'entry-anchor-continue': () => {
+                enterMission('organize');
+                navigate('sorting');
+            },
+            'entry-fn-gallery': () => freeNavigate('gallery'),
             // Tile promises "Manual Sort" — land on that sub-tab, not
             // whichever one (usually Auto-Separate) was last active.
             'entry-fn-sort': () => {
-                navigate('sorting');
+                freeNavigate('sorting');
                 if (typeof window._switchSortingSub === 'function') {
                     window._switchSortingSub('manual');
                 }
             },
-            'entry-fn-censor': () => navigate('censor'),
-            'entry-fn-reader': () => navigate('reader'),
-            'entry-fn-similar': () => navigate('similar'),
-            'entry-free-mode': () => navigate('gallery'),
-            // "All tools" promised a tools launcher but only opened the
-            // gallery (v3.5.0 audit). Now it also drops the nav More menu
-            // so the tool list is actually on screen.
+            'entry-fn-censor': () => freeNavigate('censor'),
+            'entry-fn-reader': () => freeNavigate('reader'),
+            // Owner FB (2026-07-07): 隐私处理 surfaced from the Reader's tool
+            // tabs onto the main page.
+            'entry-fn-privacy': () => {
+                if (window.NavMissions) window.NavMissions.exit();
+                hide();
+                if (window.EntryCatalog) window.EntryCatalog.openReaderTool('obfuscation');
+            },
+            'entry-fn-similar': () => freeNavigate('similar'),
+            // Owner FB (2026-07-07): 自由模式 was redundant with the Library
+            // tile; 全部工具 is now the function catalog.
             'entry-all-tools': () => {
-                navigate('gallery');
-                const toggle = document.getElementById('nav-tools-toggle');
-                if (toggle && toggle.getAttribute('aria-expanded') !== 'true') toggle.click();
+                if (window.EntryCatalog) window.EntryCatalog.open();
             },
         };
         Object.entries(clicks).forEach(([id, handler]) => {
@@ -659,19 +681,46 @@
             if (node) node.addEventListener('click', handler);
         });
 
-        const openModelManager = () => {
+        const openSettingsOn = (tab) => {
+            if (window.EntryCatalog) {
+                window.EntryCatalog.openSettingsTab(tab);
+                return;
+            }
             const opener = document.getElementById('btn-open-model-manager');
             if (opener) opener.click();
         };
 
         const settingsBtn = el('entry-settings-btn');
-        if (settingsBtn) settingsBtn.addEventListener('click', openModelManager);
+        if (settingsBtn) settingsBtn.addEventListener('click', () => openSettingsOn('general'));
 
-        // Owner FB (2026-07-06): new users start by downloading models — the
-        // tile opens the same model manager the gear icon does, as a modal
-        // above the entry page.
+        // Owner FB (2026-07-07): the Model Center tile lands on the AI Models
+        // tab directly — before, the combined Settings & Models modal opened
+        // on its Settings tab, which read as "this only goes to settings?".
         const modelsTile = el('entry-fn-models');
-        if (modelsTile) modelsTile.addEventListener('click', openModelManager);
+        if (modelsTile) modelsTile.addEventListener('click', () => openSettingsOn('models'));
+
+        // Owner FB (2026-07-07): language + update check on the main page —
+        // proxy the top bar's buttons so behavior can't drift.
+        const langBtn = el('entry-lang-btn');
+        if (langBtn) {
+            langBtn.addEventListener('click', () => {
+                const proxy = document.getElementById('btn-language-toggle');
+                if (proxy) proxy.click();
+            });
+        }
+        const updateBtn = el('entry-update-btn');
+        if (updateBtn) {
+            updateBtn.addEventListener('click', () => {
+                const proxy = document.getElementById('btn-app-update');
+                if (proxy) proxy.click();
+            });
+        }
+
+        // Dynamic strings (credit line, tile subs, stats) re-render on
+        // language switch; data-i18n nodes are handled by I18n.applyToDOM.
+        window.addEventListener('languageChanged', () => {
+            if (state.visible) render();
+        });
 
         const swap = el('entry-hero-swap');
         if (swap) {

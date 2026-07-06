@@ -130,6 +130,15 @@
                 <span id="entry-sys-cache" hidden></span>
                 <span id="entry-sys-vram" hidden></span>
                 <span id="entry-sys-clock"></span>
+                <!-- Owner 2026-07-07: language switch + update check reachable
+                     from the main page, not only inside the Library's top bar.
+                     They proxy the top-bar buttons' handlers. -->
+                <button type="button" class="entry-settings-btn" id="entry-lang-btn"
+                        aria-label="Switch language" data-i18n-aria="lang.switchLabel"
+                        data-i18n-title="lang.switchTooltip" title="Switch language">🌐</button>
+                <button type="button" class="entry-settings-btn" id="entry-update-btn"
+                        aria-label="Check for application updates" data-i18n-aria="update.checkTitle"
+                        data-i18n-title="update.checkTitle" title="Check for application updates">⬆</button>
                 <button type="button" class="entry-settings-btn" id="entry-settings-btn"
                         aria-label="Settings" data-i18n-aria="entry.settingsBtn">⚙</button>
             </div>
@@ -185,27 +194,26 @@
             </div>
 
             <div class="entry-eyebrow"><span data-i18n="entry.groupTools">Tools</span></div>
-            <!-- Owner FB (2026-07-06): new users start by downloading models —
-                 give that a first-class tile instead of hiding it behind the
-                 gear icon. Gains the blue attention ring while the core booru
-                 tagger (WD14) is missing. -->
+            <!-- Owner FB (2026-07-07): the Library is the app's home and gets
+                 the biggest button; the Model Center moves to the bottom row
+                 (its wd14-missing attention ring + badge still glow there, so
+                 new users find it without old users misclicking it daily). -->
             <div class="entry-row">
-                <button type="button" class="entry-tile entry-fn entry-fn-models" id="entry-fn-models">
-                    <span class="fn-head">
-                        <span class="fn-count" id="entry-count-models"></span>
-                        <span class="fn-title" data-i18n="entry.tileModels">Model Center</span>
-                        <span class="fn-models-badge" id="entry-models-badge" data-i18n="entry.tileModelsBadge" hidden>Start here</span>
-                    </span>
-                    <span class="fn-sub" id="entry-sub-models" data-i18n="entry.tileModelsSub">Download & manage the AI models</span>
-                </button>
-            </div>
-            <div class="entry-row">
-                <button type="button" class="entry-tile entry-fn entry-fn-gallery" id="entry-fn-gallery">
+                <button type="button" class="entry-tile entry-fn entry-fn-xl entry-fn-gallery" id="entry-fn-gallery">
                     <span class="fn-head">
                         <span class="fn-count" id="entry-count-gallery"></span>
                         <span class="fn-title" data-i18n="entry.tileGallery">Library</span>
                     </span>
                     <span class="fn-sub" id="entry-sub-gallery" data-i18n="entry.tileGallerySubQuiet">Browse, filter, and pick images</span>
+                </button>
+            </div>
+            <div class="entry-row">
+                <button type="button" class="entry-tile entry-fn entry-fn-censor" id="entry-fn-censor">
+                    <span class="fn-head">
+                        <span class="fn-count" id="entry-count-censor"></span>
+                        <span class="fn-title" data-i18n="entry.tileCensor">Censor Editor</span>
+                    </span>
+                    <span class="fn-sub" data-i18n="entry.tileCensorSub">Brush, detect, and export safely</span>
                 </button>
                 <button type="button" class="entry-tile entry-fn entry-fn-sort" id="entry-fn-sort">
                     <span class="fn-head">
@@ -217,18 +225,19 @@
             </div>
 
             <div class="entry-row">
-                <button type="button" class="entry-tile entry-fn entry-fn-censor" id="entry-fn-censor">
-                    <span class="fn-head">
-                        <span class="fn-count" id="entry-count-censor"></span>
-                        <span class="fn-title" data-i18n="entry.tileCensor">Censor Editor</span>
-                    </span>
-                    <span class="fn-sub" data-i18n="entry.tileCensorSub">Brush, detect, and export safely</span>
-                </button>
                 <button type="button" class="entry-tile entry-fn entry-fn-reader" id="entry-fn-reader">
                     <span class="fn-head">
                         <span class="fn-title" data-i18n="entry.tileReader">Reader</span>
                     </span>
                     <span class="fn-sub" data-i18n="entry.tileReaderSub">Drop an image to read its params</span>
+                </button>
+                <!-- Owner FB (2026-07-07): 隐私处理 was buried inside the Reader's
+                     tool tabs where nobody found it — surface it on the main page. -->
+                <button type="button" class="entry-tile entry-fn entry-fn-privacy" id="entry-fn-privacy">
+                    <span class="fn-head">
+                        <span class="fn-title" data-i18n="tools.obfuscation">Privacy Tools</span>
+                    </span>
+                    <span class="fn-sub" data-i18n="entry.tilePrivacySub">Obfuscate images for upload · restore back</span>
                 </button>
                 <button type="button" class="entry-tile entry-fn entry-fn-similar" id="entry-fn-similar">
                     <span class="fn-head">
@@ -239,13 +248,21 @@
             </div>
 
             <div class="entry-row">
-                <button type="button" class="entry-free entry-free-main" id="entry-free-mode">
-                    <span class="free-title" data-i18n="entry.freeMode">Free mode</span>
-                    <span class="free-hint" data-i18n="entry.freeModeHint">Skip missions, open the tools directly</span>
-                    <span class="tile-arrow" aria-hidden="true">→</span>
+                <button type="button" class="entry-tile entry-fn entry-fn-models" id="entry-fn-models">
+                    <span class="fn-head">
+                        <span class="fn-count" id="entry-count-models"></span>
+                        <span class="fn-title" data-i18n="entry.tileModels">Model Center</span>
+                        <span class="fn-models-badge" id="entry-models-badge" data-i18n="entry.tileModelsBadge" hidden>Start here</span>
+                    </span>
+                    <span class="fn-sub" id="entry-sub-models" data-i18n="entry.tileModelsSub">Download & manage the AI models</span>
                 </button>
-                <button type="button" class="entry-free entry-free-all" id="entry-all-tools">
-                    <span class="free-all-label" data-i18n="entry.allTools">All tools →</span>
+                <!-- Owner FB (2026-07-07): 自由模式 and 全部工具 were the same thing;
+                     the survivor is a catalog listing every function + its usage. -->
+                <button type="button" class="entry-tile entry-fn entry-fn-catalog" id="entry-all-tools">
+                    <span class="fn-head">
+                        <span class="fn-title" data-i18n="entry.tileCatalog">All Features</span>
+                    </span>
+                    <span class="fn-sub" data-i18n="entry.tileCatalogSub">Everything this app can do, in one list</span>
                 </button>
             </div>
         </div>
@@ -317,6 +334,14 @@
                      reorder. Glyphs disambiguated: Sort 🗂️ (was 📁), Similar 🔎
                      (was 🔍), Style Finder 🖌️ (was 🎨 = the brand logo). -->
                 <div class="nav-tabs" role="tablist" aria-label="Application views">
+                    <!-- Mission mode chip (owner 2026-07-07): shown while a mission
+                         scopes the bar to its pipeline tabs; ✕ restores the full set. -->
+                    <span class="nav-mission-chip" id="nav-mission-chip" hidden>
+                        <span class="chip-label" id="nav-mission-chip-label"></span>
+                        <button type="button" class="chip-exit" id="nav-mission-exit"
+                                aria-label="Exit mission mode, show all tabs" data-i18n-aria="navMission.exit"
+                                data-i18n-title="navMission.exit" title="Exit mission mode, show all tabs">✕</button>
+                    </span>
                     <button class="nav-tab active" id="nav-tab-gallery" data-view="gallery" role="tab" aria-selected="true" aria-controls="view-gallery"
                             data-i18n-title="nav.gallery" title="Gallery">
                         <span class="tab-icon" aria-hidden="true">🖼️</span>
@@ -382,17 +407,50 @@
                                 <span class="tab-text" data-i18n="nav.artist">Style Finder</span>
                                 <span class="nav-tools-badge" data-i18n="nav.experimental">Experimental</span>
                             </button>
+                            <!-- Owner 2026-07-07: mirrors for tucked core tabs (dataset
+                                 leaves the default bar; the customize checklist can tuck
+                                 the rest). data-mirror-view, NOT data-view — page objects
+                                 click plain [data-view=...] locators and a duplicate
+                                 would trip Playwright strict mode. nav-missions.js shows
+                                 each mirror only while its direct tab is tucked. -->
+                            <button class="nav-tab nav-tools-item nav-custom-mirror" id="nav-tools-reader" data-mirror-view="reader" type="button" hidden
+                                    data-i18n-title="nav.reader" title="Read Image">
+                                <span class="tab-icon" aria-hidden="true">📖</span>
+                                <span class="tab-text" data-i18n="nav.reader">Read Image</span>
+                            </button>
+                            <button class="nav-tab nav-tools-item nav-custom-mirror" id="nav-tools-sorting" data-mirror-view="sorting" type="button" hidden
+                                    data-i18n-title="nav.sorting" title="Organize">
+                                <span class="tab-icon" aria-hidden="true">🗂️</span>
+                                <span class="tab-text" data-i18n="nav.sorting">Organize</span>
+                            </button>
+                            <button class="nav-tab nav-tools-item nav-custom-mirror" id="nav-tools-censor" data-mirror-view="censor" type="button" hidden
+                                    data-i18n-title="nav.censor" title="Censor Edit">
+                                <span class="tab-icon" aria-hidden="true">🔳</span>
+                                <span class="tab-text" data-i18n="nav.censor">Censor Edit</span>
+                            </button>
+                            <button class="nav-tab nav-tools-item nav-custom-mirror" id="nav-tools-similar" data-mirror-view="similar" type="button" hidden
+                                    data-i18n-title="nav.similar" title="Find Similar">
+                                <span class="tab-icon" aria-hidden="true">🔎</span>
+                                <span class="tab-text" data-i18n="nav.similar">Find Similar</span>
+                            </button>
+                            <button class="nav-tab nav-tools-item nav-custom-mirror" id="nav-tools-dataset" data-mirror-view="dataset" type="button" hidden
+                                    data-i18n-title="nav.dataset" title="Dataset">
+                                <span class="tab-icon" aria-hidden="true">📦</span>
+                                <span class="tab-text" data-i18n="nav.dataset">Dataset</span>
+                            </button>
                             <!-- v3.5.0 Tier 1: whole-library duplicate cleanup (opens a modal, not a view) -->
                             <button class="nav-tab nav-tools-item" id="nav-tools-dup-cleaner" type="button"
                                     data-i18n-title="dup.navTitle" title="Duplicate Cleanup">
                                 <span class="tab-icon" aria-hidden="true">🧹</span>
                                 <span class="tab-text" data-i18n="dup.navTitle">Duplicate Cleanup</span>
                             </button>
-                            <!-- v3.5.0 Tier 1: Pixiv publish-set workbench (opens a modal, not a view) -->
-                            <button class="nav-tab nav-tools-item" id="nav-tools-publish-set" type="button"
-                                    data-i18n-title="pub.navTitle" title="Publish Set">
-                                <span class="tab-icon" aria-hidden="true">📤</span>
-                                <span class="tab-text" data-i18n="pub.navTitle">Publish Set</span>
+                            <!-- Owner 2026-07-07: 成套发布 left the More menu — the Pixiv
+                                 mission, the gallery batch bar's publish button, and the
+                                 function catalog are its entrances now. -->
+                            <button class="nav-tab nav-tools-item" id="nav-tools-customize" type="button"
+                                    data-i18n-title="navCustom.open" title="Customize tabs">
+                                <span class="tab-icon" aria-hidden="true">🎛️</span>
+                                <span class="tab-text" data-i18n="navCustom.open">Customize tabs</span>
                             </button>
                         </div>
                     </div>
@@ -4340,6 +4398,71 @@
 
         </main>
 
+        <!-- Customize tabs (owner 2026-07-07): pick which views stay in the
+             top bar; everything tucked stays reachable via More mirrors. -->
+        <div class="modal" id="nav-customize-modal" role="dialog" aria-modal="true" aria-labelledby="nav-customize-title">
+            <div class="modal-backdrop" aria-hidden="true"></div>
+            <div class="modal-content modal-small">
+                <button class="modal-close" id="nav-customize-close" aria-label="Close">
+                    <span aria-hidden="true">✕</span>
+                </button>
+                <div class="modal-header">
+                    <div>
+                        <h2 id="nav-customize-title" data-i18n="navCustom.title">Customize tabs</h2>
+                        <p class="modal-description" data-i18n="navCustom.body">Pick which views stay in the top bar. Everything else waits under More. The Library is always shown.</p>
+                    </div>
+                </div>
+                <div class="nav-customize-list">
+                    <label class="nav-customize-row">
+                        <input type="checkbox" data-custom-view="reader">
+                        <span class="row-icon" aria-hidden="true">📖</span>
+                        <span data-i18n="nav.reader">Read Image</span>
+                    </label>
+                    <label class="nav-customize-row">
+                        <input type="checkbox" data-custom-view="sorting">
+                        <span class="row-icon" aria-hidden="true">🗂️</span>
+                        <span data-i18n="nav.sorting">Organize</span>
+                    </label>
+                    <label class="nav-customize-row">
+                        <input type="checkbox" data-custom-view="censor">
+                        <span class="row-icon" aria-hidden="true">🔳</span>
+                        <span data-i18n="nav.censor">Censor Edit</span>
+                    </label>
+                    <label class="nav-customize-row">
+                        <input type="checkbox" data-custom-view="similar">
+                        <span class="row-icon" aria-hidden="true">🔎</span>
+                        <span data-i18n="nav.similar">Find Similar</span>
+                    </label>
+                    <label class="nav-customize-row">
+                        <input type="checkbox" data-custom-view="dataset">
+                        <span class="row-icon" aria-hidden="true">📦</span>
+                        <span data-i18n="nav.dataset">Dataset</span>
+                    </label>
+                </div>
+                <div class="nav-customize-foot">
+                    <button type="button" class="btn btn-ghost btn-small" id="nav-customize-reset" data-i18n="navCustom.reset">Restore defaults</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Function catalog (owner 2026-07-07): every feature + its usage in
+             one list; rows are rendered by modules/entry-catalog.js. -->
+        <div class="modal" id="entry-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="entry-catalog-title">
+            <div class="modal-backdrop" aria-hidden="true"></div>
+            <div class="modal-content">
+                <button class="modal-close" id="entry-catalog-close" aria-label="Close">
+                    <span aria-hidden="true">✕</span>
+                </button>
+                <div class="modal-header">
+                    <div>
+                        <h2 id="entry-catalog-title" data-i18n="entry.tileCatalog">All Features</h2>
+                        <p class="modal-description" data-i18n="catalog.body">Everything this app can do — click any row to go there.</p>
+                    </div>
+                </div>
+                <div class="entry-catalog-body" id="entry-catalog-body"></div>
+            </div>
+        </div>
+
         <div class="modal" id="model-manager-modal" role="dialog" aria-modal="true" aria-labelledby="model-manager-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-large">
@@ -6681,6 +6804,8 @@
     <script src="/static/js/modules/gallery-toolbar.js"></script>
     <script src="/static/js/modules/repair-review.js"></script>
     <script src="/static/js/modules/settings-tabs.js"></script>
+    <script src="/static/js/modules/nav-missions.js"></script>
+    <script src="/static/js/modules/entry-catalog.js"></script>
     <script>
     /* Sorting sub-tab toggle (Auto-Separate / Manual Sort) */
     window._switchSortingSub = function(sub) {

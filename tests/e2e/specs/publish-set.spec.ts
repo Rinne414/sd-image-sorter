@@ -222,16 +222,25 @@ test('workbench renders pairs, drag reorders, and exports through the UI', async
   expect(fsSync.readFileSync(path.join(outDir, 'set_01.png')).equals(fsSync.readFileSync(censoredSource))).toBe(true)
 })
 
-test('Escape closes the workbench; nav Tools menu reopens it', async ({ page }) => {
+test('Escape closes the workbench and it reopens; the More-menu item is gone', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('#view-gallery')).toBeVisible()
 
+  // Owner 2026-07-07: 成套发布 left the More menu — the Pixiv mission, the
+  // gallery batch bar's publish button, and the function catalog are its
+  // entrances now (the always-empty modal entrance was the complaint).
   await page.locator('#nav-tools-toggle').click()
-  await page.locator('#nav-tools-publish-set').click()
+  await expect(page.locator('#nav-tools-publish-set')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+
+  await page.evaluate((ids) => (window as any).PublishSet.open(ids), fixtureIds)
   await expect(page.locator('#publish-set-modal.visible')).toBeVisible()
-  await expect(page.locator('#pub-empty')).toBeVisible()
 
   await page.keyboard.press('Escape')
   await expect(page.locator('#publish-set-modal.visible')).toHaveCount(0)
   await expect(page.locator('#view-gallery')).toBeVisible()
+
+  // Reopening still works after an Escape-close.
+  await page.evaluate((ids) => (window as any).PublishSet.open(ids), fixtureIds)
+  await expect(page.locator('#publish-set-modal.visible')).toBeVisible()
 })

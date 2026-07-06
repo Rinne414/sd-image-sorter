@@ -169,6 +169,19 @@ async function openView(page: Page, view: string) {
     }
   }
 
+  // Owner 2026-07-07: core tabs tucked by the customize set (dataset by
+  // default) are reached through their More-menu mirrors, which carry
+  // data-mirror-view instead of data-view (Playwright strict-mode safety).
+  const mirrorItem = page.locator(`#nav-tools-menu [data-mirror-view="${view}"]`)
+  if (await mirrorItem.count()) {
+    const toggle = page.locator('#nav-tools-toggle')
+    if (await toggle.isVisible().catch(() => false)) {
+      await toggle.click({ force: true })
+      await mirrorItem.click({ force: true })
+      return
+    }
+  }
+
   const mobileToggle = page.locator('#mobile-menu-toggle')
   if (await mobileToggle.isVisible().catch(() => false)) {
     await mobileToggle.click({ force: true })

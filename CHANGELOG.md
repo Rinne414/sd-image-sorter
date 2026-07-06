@@ -11,6 +11,16 @@ v3.5.0 落地 v4.0「清爽极光」重设计：全局配色收束到全新的 `
 
 v3.5.0 ships the v4.0 "Fresh Aurora" redesign: the global palette moves to the new `frontend/css/tokens.css` (blue = next action, pink = user decisions, purple = AI output), a mission entry page lands (the top navigation bar keeps its classic layout, with the brand block returning to the entry page), and the Gallery / Sort / Censor / Tagging workflows get their Aurora upgrades — toolbar search + a bottom batch action bar, a visible thumbnail-size control, sort focus mode & named presets, a censor review conveyor, and a one-pass Smart Tag entry. A debt sweep ships in the same batch: huge-library bulk delete/remove/export become cancellable background jobs, the AI job queue survives restarts, Linux NVIDIA users get GPU tagging, and the main.py / sorting / image_service module extraction plus dependency security cleanup are completed.
 
+### Changed / 变更 (function entrances rework, owner feedback 2026-07-07)
+- **Mission-scoped smart nav bar / 任务智能导航栏**: clicking a mission tile on the entry page now scopes the top bar to only that pipeline's tabs, in order and with step numbers (LoRA → ①Library ②Dataset; Pixiv → ①Library ②Censor; Organize → ①Library ②Sort), plus a mission chip whose ✕ restores your full bar. The choice persists across restarts.
+  - 在入口页点任务磁贴后，顶栏只显示该任务需要的页面（带 ①② 步骤编号），配一个任务 chip，点 ✕ 恢复完整标签栏。选择跨重启记住。
+- **Customizable tab bar / 自定义标签栏**: a new checklist under the More menu decides which views stay in the top bar; everything tucked stays reachable through More-menu mirrors. Dataset leaves the default bar (reached via the LoRA mission, its mirror, or the catalog), and 成套发布 leaves the More menu (the Pixiv mission, the gallery publish button, and the catalog are its entrances).
+  - 「更多」菜单新增「自定义标签栏」勾选清单；被收起的页面都能从「更多」的镜像入口到达。数据集移出默认顶栏（走 LoRA 任务/镜像/功能清单），成套发布移出「更多」（走 Pixiv 任务/图库发布按钮/功能清单）。
+- **Function catalog / 所有功能清单**: 自由模式 and 全部工具 were the same thing — the survivor is a catalog modal listing every feature with a one-line usage, grouped into core views / pipelines / tools; each row jumps straight there. 隐私处理 (buried inside the Reader's tool tabs) also gets its own entry tile.
+  - 自由模式与全部工具重复——合并为「所有功能」清单弹窗：核心页面/成套流程/工具三组，每行一句用途、点击直达。藏在读图页里的「隐私处理」同时升级为入口页磁贴。
+- **Entry tile hierarchy / 入口磁贴层级**: the Library is the app's home and gets the biggest full-width tile; the Model Center moves to the bottom row (its wd14-missing badge still glows) and now deep-links to the AI Models tab instead of landing on Settings. Language switch + update check join the entry page's corner.
+  - 图片库升级为最大的通栏磁贴；模型中心移到底排（缺核心模型时徽章依旧高亮），点开直达「AI 模型」页签而不再落在设置页。语言切换和检查更新加入入口页右上角。
+
 ### Changed / 变更 (entry page facelift, owner feedback 2026-07-06)
 - **Cover art now shows the whole image / 门面图完整显示**: the entry cover switched from a hard crop (only a slice of the artwork visible) to a two-layer fit — the full image letterboxed in the left canvas over a blurred full-bleed echo of itself, so nothing is cut off and the page still feels covered edge to edge.
   - 入口页门面从硬裁切（只能看到画的一角）改为双层贴合：完整原图以适应模式放在左侧画布，底下垫一层它自己的全屏模糊回声——画面一点不切，页面依旧铺满。

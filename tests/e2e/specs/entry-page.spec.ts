@@ -37,7 +37,14 @@ test.describe('Entry page (opted in)', () => {
     await expect(page.locator('#entry-mission-lora')).toBeVisible()
     await expect(page.locator('#entry-mission-pixiv')).toBeVisible()
     await expect(page.locator('#entry-fn-gallery')).toBeVisible()
-    await expect(page.locator('#entry-free-mode')).toBeVisible()
+    // Owner 2026-07-07: 自由模式 removed (redundant with the Library tile);
+    // 隐私处理 surfaced; 全部工具 became the function catalog; language +
+    // update check live in the entry corner now.
+    await expect(page.locator('#entry-free-mode')).toHaveCount(0)
+    await expect(page.locator('#entry-fn-privacy')).toBeVisible()
+    await expect(page.locator('#entry-all-tools')).toBeVisible()
+    await expect(page.locator('#entry-lang-btn')).toBeVisible()
+    await expect(page.locator('#entry-update-btn')).toBeVisible()
     // No saved manual-sort session in the e2e fixture DB → the continue slab
     // stays hidden and its mission tile stays visible.
     await expect(page.locator('#entry-anchor')).toBeHidden()
@@ -52,10 +59,18 @@ test.describe('Entry page (opted in)', () => {
     await expect(page.locator('#view-gallery')).toBeVisible()
   })
 
-  test('mission tile enters its host view (LoRA → dataset)', async ({ page }) => {
+  test('mission tile enters its host view and scopes the nav bar (LoRA → dataset)', async ({ page }) => {
     await page.click('#entry-mission-lora')
     await expect(page.locator('#entry-page')).toBeHidden()
     await expect(page.locator('#view-dataset')).toBeVisible()
+    // Owner 2026-07-07: missions scope the top bar to their pipeline tabs.
+    await expect(page.locator('#nav-mission-chip')).toBeVisible()
+    await expect(page.locator('#nav-tab-dataset')).toBeVisible()
+    await expect(page.locator('#nav-tab-reader')).toBeHidden()
+    // The chip's ✕ restores the user's own tab set.
+    await page.click('#nav-mission-exit')
+    await expect(page.locator('#nav-mission-chip')).toBeHidden()
+    await expect(page.locator('#nav-tab-reader')).toBeVisible()
   })
 
   test('top-level ESC returns to the entry overlay', async ({ page }) => {
@@ -93,14 +108,31 @@ test.describe('Entry page (opted in)', () => {
     expect(await page.evaluate(() => window.localStorage.getItem('aurora-entry-hero-off'))).toBe('1')
   })
 
-  test('model-center tile shows readiness and opens the model manager', async ({ page }) => {
+  test('model-center tile shows readiness and lands on the AI Models tab', async ({ page }) => {
     const tile = page.locator('#entry-fn-models')
     await expect(tile).toBeVisible()
     // Live ready/total count from /api/models/status.
     await expect(page.locator('#entry-count-models')).toHaveText(/\d+\/\d+/)
     await tile.click()
-    // Same modal the gear icon opens.
-    await expect(page.locator('#btn-settings-entry-toggle')).toBeVisible()
+    // Owner 2026-07-07: deep-links to the Models tab of the combined
+    // Settings & Models modal, not its default Settings tab.
+    await expect(page.locator('[data-settings-tab="models"]')).toHaveAttribute('aria-selected', 'true')
+  })
+
+  test('all-features tile opens the function catalog', async ({ page }) => {
+    await page.click('#entry-all-tools')
+    await expect(page.locator('#entry-catalog-modal.visible')).toBeVisible()
+    // Rows render for every group; 隐私处理 is finally discoverable here.
+    await expect(page.locator('#entry-catalog-body .catalog-item').first()).toBeVisible()
+    await page.click('#entry-catalog-close')
+    await expect(page.locator('#entry-catalog-modal.visible')).toHaveCount(0)
+  })
+
+  test('privacy tile reaches the Reader obfuscation tool', async ({ page }) => {
+    await page.click('#entry-fn-privacy')
+    await expect(page.locator('#entry-page')).toBeHidden()
+    await expect(page.locator('#view-reader')).toBeVisible()
+    await expect(page.locator('#reader-tool-panel-obfuscation')).toBeVisible()
   })
 
   test('跳过入口页 setting suppresses the entry at next launch', async ({ page }) => {
