@@ -73,6 +73,15 @@
     --booru-copyright: #C9A6FF;
     --booru-meta: #FFC46B;
 
+    /* ===== Aurora canonical: motion (docs/DESIGN.md §motion) =====
+       These names were already consumed via var(..., fallback) across
+       ui-refresh.css / vlm.css without ever being defined — the values below
+       equal those live fallbacks, so defining them changes nothing visually
+       and closes the undefined-token class of bug. */
+    --duration-fast: 150ms;    /* hover / focus / toggles / chips */
+    --duration-normal: 250ms;  /* panels, modals, view reveals */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);  /* entrances: menus, toasts */
+
     /* ===== Aurora canonical: radii ===== */
     --r-ctl: 10px;              /* buttons, inputs */
     --r-card: 12px;             /* cards */

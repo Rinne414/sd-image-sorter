@@ -1,9 +1,9 @@
-/* VLM Captioning UI */
+/* VLM Captioning UI — status chips use the Aurora semantic tokens. */
 .vlm-status { padding: 6px 10px; border-radius: 6px; font-size: 0.82rem; margin-top: 6px; }
-.vlm-status-success { background: rgba(34, 197, 94, 0.12); color: #22c55e; }
-.vlm-status-error { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
-.vlm-status-warning { background: rgba(234, 179, 8, 0.12); color: #eab308; }
-.vlm-status-info { background: rgba(59, 130, 246, 0.12); color: #3b82f6; }
+.vlm-status-success { background: rgba(var(--success-rgb), 0.12); color: var(--success); }
+.vlm-status-error { background: rgba(var(--danger-rgb), 0.12); color: var(--danger); }
+.vlm-status-warning { background: rgba(var(--warning-rgb), 0.12); color: var(--warning); }
+.vlm-status-info { background: rgba(var(--blue-rgb), 0.12); color: var(--blue); }
 
 /* Output-format segmented control (NL caption / Tags / Both).
    Picks up the same visual language as the LoRA preset chips, but laid out

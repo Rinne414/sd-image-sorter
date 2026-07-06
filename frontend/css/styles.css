@@ -996,9 +996,9 @@ body::before {
     }
 
     .header-status-chip.is-info {
-        color: #93c5fd;
-        border-color: rgba(59, 130, 246, 0.25);
-        background: rgba(59, 130, 246, 0.08);
+        color: var(--blue);
+        border-color: rgba(var(--blue-rgb), 0.25);
+        background: rgba(var(--blue-rgb), 0.08);
     }
 
     .view-options {
@@ -1944,9 +1944,13 @@ body::before {
         box-shadow: 0 4px 16px rgba(239, 68, 68, 0.4);
     }
 
+    /* The right key is AMBER by the direction coding (green/blue/red/amber).
+       It was written as var(--accent-primary) when that token WAS orange;
+       the Aurora remap silently turned it blue and collided with the left
+       key — pin the intended amber explicitly (data-viz, not a UI accent). */
     .folder-slot[data-direction="right"] .folder-key {
-        background: linear-gradient(135deg, var(--accent-primary), #d97706);
-        box-shadow: 0 4px 16px rgba(var(--accent-primary-rgb), 0.4);
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+        box-shadow: 0 4px 16px rgba(245, 158, 11, 0.4);
     }
 
     .folder-key {
@@ -2266,22 +2270,25 @@ body::before {
         box-shadow: 0 10px 50px rgba(59, 130, 246, 0.3), 0 0 40px rgba(59, 130, 246, 0.2);
     }
 
+    /* Right slot is AMBER by the direction coding (see .folder-key note):
+       var(--accent-primary) predates the Aurora remap and now renders blue,
+       colliding with the left slot — pin the intended amber. */
     .sort-folder-right {
         right: 30px;
         top: 50%;
         transform: translateY(-50%);
-        border-color: rgba(var(--accent-primary-rgb), 0.3);
+        border-color: rgba(245, 158, 11, 0.3);
     }
 
     .sort-folder-right .key-hint {
-        background: linear-gradient(135deg, var(--accent-primary), #d97706);
-        box-shadow: 0 4px 24px rgba(var(--accent-primary-rgb), 0.5);
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+        box-shadow: 0 4px 24px rgba(245, 158, 11, 0.5);
     }
 
     .sort-folder-right:hover,
     .sort-folder-right.active {
-        border-color: var(--accent-primary);
-        box-shadow: 0 10px 50px rgba(var(--accent-primary-rgb), 0.3), 0 0 40px rgba(var(--accent-primary-rgb), 0.2);
+        border-color: #f59e0b;
+        box-shadow: 0 10px 50px rgba(245, 158, 11, 0.3), 0 0 40px rgba(245, 158, 11, 0.2);
     }
 
     /* Active state with scale transform */
@@ -8547,11 +8554,11 @@ input[type="radio"] {
     transform: rotate(-12deg) scale(0.8);
     pointer-events: none;
 }
-.cull-stamp-keep { right: 22px; color: #43d39e; }
-.cull-stamp-reject { left: 22px; color: #ff6b6b; }
-.cull-card.cull-flash-keep { border-color: #43d39e; box-shadow: 0 0 0 2px #43d39e, 0 10px 30px rgba(0, 0, 0, 0.35); transform: translateX(8px); }
-.cull-card.cull-flash-reject { border-color: #ff6b6b; box-shadow: 0 0 0 2px #ff6b6b, 0 10px 30px rgba(0, 0, 0, 0.35); transform: translateX(-8px); }
-.cull-card.cull-flash-skip { border-color: #7aa2ff; box-shadow: 0 0 0 2px #7aa2ff, 0 10px 30px rgba(0, 0, 0, 0.35); }
+.cull-stamp-keep { right: 22px; color: var(--success); }
+.cull-stamp-reject { left: 22px; color: var(--danger); }
+.cull-card.cull-flash-keep { border-color: var(--success); box-shadow: 0 0 0 2px var(--success), 0 10px 30px rgba(0, 0, 0, 0.35); transform: translateX(8px); }
+.cull-card.cull-flash-reject { border-color: var(--danger); box-shadow: 0 0 0 2px var(--danger), 0 10px 30px rgba(0, 0, 0, 0.35); transform: translateX(-8px); }
+.cull-card.cull-flash-skip { border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue), 0 10px 30px rgba(0, 0, 0, 0.35); }
 .cull-card.cull-flash-keep .cull-stamp-keep,
 .cull-card.cull-flash-reject .cull-stamp-reject {
     opacity: 1;

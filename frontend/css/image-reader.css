@@ -522,8 +522,10 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    background: rgba(var(--accent-primary-rgb), 0.12);
-    color: #c084fc;
+    /* LoRA chips are model/AI-domain → purple family (the old blue tint +
+       drifted violet text predate the Aurora accent semantics). */
+    background: rgba(var(--purple-rgb), 0.12);
+    color: var(--purple);
     padding: 4px 8px;
     border-radius: 999px;
     font-size: 0.78rem;

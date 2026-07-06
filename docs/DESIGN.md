@@ -182,6 +182,80 @@ Do NOT:
 
 ---
 
+## §color-exemptions — Data-viz palettes are exempt from the accent semantics
+
+(v3.5.0 color audit, 2026-07-07. Rule 12 in §principles says blue/pink/purple
+are semantic accents. A hardcoded hue is legitimate ONLY when it encodes data,
+not UI meaning — these registered palettes may keep literal hex values.)
+
+Registered data-viz palettes:
+- **WASD direction coding** (`styles.css` folder slots / sort folders):
+  up=green, left=indigo `#3b82f6`, down=red, right=amber `#f59e0b`. The left
+  key is deliberately indigo, NOT `var(--blue)` — a direction must not read as
+  "the next action". The right key is pinned literal amber because it predates
+  Aurora: it was written as `var(--accent-primary)` when that token WAS orange,
+  and the remap silently turned it blue (fixed 2026-07-07).
+- **Cull flash/stamps**: keep/reject/skip map to `--success`/`--danger`/`--blue`
+  (semantic tokens, not literals — they ARE state feedback).
+- **Danbooru category dots** (`caption-autocomplete.css`): 14 fixed hues,
+  annotated in-file as "data-viz hue, not a UI accent".
+- **Queue Solitaire section colors** (`queue-solitaire.css`): user-picked
+  labels, a data palette by definition.
+- **Generator badges** (`image-reader.css` `.gen-*`): third-party branding hues.
+- **Prompt Lab diff coding** (`ui-refresh.css`): common=green, A=blue tint,
+  B=amber tint (only-b was another accent-primary remap casualty, fixed).
+
+Audit checklist for new hardcoded colors:
+1. Does it encode data (category, direction, diff-side, brand)? → register here.
+2. Is it a status (info/success/warning/danger)? → use the semantic tokens.
+3. Is it an accent (action/selection/AI)? → `--blue`/`--pink`/`--purple` only.
+4. Grep trap: any pre-Aurora `var(--accent-primary)` paired with warm colors
+   was probably orange-intent — the remap turned those blue silently.
+
+Do NOT:
+- Introduce a new blue/purple/pink hex for UI chrome — that is what rule 12's
+  "one solid-blue primary per screen" exists to protect.
+- "Fix" the WASD left key to `var(--blue)` — the collision with the semantic
+  blue is exactly why it stays indigo.
+
+---
+
+## §motion — Motion clarifies state; it never decorates
+
+(v3.5.0, 2026-07-07. Written down from what the code already does, so new
+surfaces stop inventing their own timing.)
+
+The vocabulary (tokens in `tokens.css`):
+- `--duration-fast` (150ms) — hover, focus, toggles, chips, tab underlines.
+  Usually paired with plain `ease` (legacy `--transition-fast` bundles both).
+- `--duration-normal` (250ms) — panels, modals, view reveals, collapses.
+- `--ease-out` (`cubic-bezier(0.16, 1, 0.3, 1)`) — entrances only (dropdown
+  menus, toasts, popovers): fast start, soft landing. Exits may simply fade;
+  nothing bounces.
+
+Rules:
+1. Animate compositor-friendly properties (`transform`, `opacity`) for
+   anything that runs repeatedly or over a large area. Color/border
+   transitions are fine at `--duration-fast` on small controls.
+2. One duration per interaction: an element's hover state and its container's
+   reveal must not race two different clocks on the same property.
+3. Ambient/long-running animation is BUDGETED like the gradient: the entry
+   film strip is the one sanctioned ambient loop, and it stops under
+   `prefers-reduced-motion` with a static fallback that still shows content.
+4. The global reduced-motion kill-switch in `styles.css` (`0.01ms` everything)
+   stays; a new long-running animation must ALSO ship its own semantic
+   fallback (what does the user see instead?), not just rely on the kill.
+5. No scroll-jacking, no parallax, no attention-seeking idle loops — this is a
+   desktop work tool; motion answers "what just changed", nothing else.
+
+Do NOT:
+- Introduce a new easing curve or a 400ms+ transition without adding it here.
+- Use `var(--duration-fast, …)`-style fallbacks as a substitute for defining
+  the token — two undefined-token bugs (`--accent`, `--ease-out`) shipped that
+  way before the 2026-07-07 audit caught them.
+
+---
+
 ## Maintenance
 
 - Update this file when reverting or revising any rule above.
