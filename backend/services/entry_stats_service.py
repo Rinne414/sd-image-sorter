@@ -90,6 +90,29 @@ def _pick_hero(conn, hero_seed: int) -> Optional[Dict[str, Any]]:
     return {"id": int(row[0]), "filename": str(row[1] or ""), "pool": len(rows)}
 
 
+def get_hero_pool(limit: int = 60) -> Dict[str, Any]:
+    """Image ids for the entry page's slideshow / film-strip display modes.
+
+    ★5-rated images lead (the same pool the daily hero draws from); the rest
+    fills with the newest library images so a fresh install with zero ratings
+    still gets a living wall. Ids only — the client renders thumbnails.
+    """
+    conn = db.get_connection()
+    capped = max(1, min(int(limit or 60), 200))
+    rows = conn.execute(
+        """
+        SELECT id, (user_rating = 5) AS starred
+        FROM images
+        ORDER BY (user_rating = 5) DESC, indexed_at DESC, id DESC
+        LIMIT ?
+        """,
+        (capped,),
+    ).fetchall()
+    ids = [int(row[0]) for row in rows]
+    starred = sum(1 for row in rows if row[1])
+    return {"ids": ids, "starred": starred, "total": len(ids)}
+
+
 def get_entry_summary(
     last_seen: Optional[str] = None,
     hero_seed: int = 0,

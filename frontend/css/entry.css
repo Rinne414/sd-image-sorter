@@ -38,9 +38,10 @@ body.entry-active {
 }
 
 /* --- art layer --- */
-/* The gradient layers are the NO-COVER state (owner FB-2: the empty canvas
-   read as a black void). entry-page.js sets an inline background-image for
-   the ★5 cover, which replaces these layers; clearing it brings them back. */
+/* The gradient IS the OFF / empty state (owner FB-2: the empty canvas read
+   as a black void). Cover content renders in child layers built by
+   entry-page.js — .hero-slide (single / slideshow) or .hero-film (film
+   strips) — stacked above this gradient, so clearing them brings it back. */
 .entry-hero {
     position: absolute;
     inset: 0;
@@ -52,6 +53,122 @@ body.entry-active {
     background-size: cover;
     background-repeat: no-repeat;
     background-color: var(--stage);
+}
+
+/* Owner FB (2026-07-06, "the image is too large and it only showing a part"):
+   each slide keeps the FULL image visible — a contain-fit layer over a
+   blurred cover-fit underlay that fills the letterbox. The contain band sits
+   in the left 62% of the canvas so the mosaic column never covers the art. */
+.entry-hero .hero-slide {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 1100ms ease;
+    pointer-events: none;
+}
+
+.entry-hero .hero-slide.active {
+    opacity: 1;
+}
+
+.entry-hero .hero-slide::before {
+    content: '';
+    position: absolute;
+    inset: -48px;
+    background-image: var(--hero-url);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    filter: blur(30px) saturate(1.05);
+    opacity: 0.5;
+}
+
+.entry-hero .hero-slide::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 62%;
+    background-image: var(--hero-url);
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+/* --- film-strip mode (owner FB 2026-07-06: "using film as the frame, three
+   to four columns or rows rolling those images, horizontal or obliquely") ---
+   3-4 sprocket-framed strips of thumbnails rolling on an oblique wall.
+   transform-only animation (compositor-friendly). */
+.entry-hero .hero-film {
+    position: absolute;
+    inset: -16%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 30px;
+    transform: rotate(-8deg);
+    pointer-events: none;
+}
+
+.entry-hero .film-strip {
+    position: relative;
+    flex: 0 0 auto;
+    height: 19%;
+    max-height: 218px;
+    background: rgba(4, 5, 8, 0.94);
+    padding: 17px 0;
+    overflow: hidden;
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
+}
+
+/* sprocket holes — the film frame */
+.entry-hero .film-strip::before,
+.entry-hero .film-strip::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 8px;
+    background: repeating-linear-gradient(90deg,
+        transparent 0 10px,
+        rgba(237, 240, 247, 0.20) 10px 17px,
+        transparent 17px 27px);
+    z-index: 1;
+}
+
+.entry-hero .film-strip::before { top: 4px; }
+.entry-hero .film-strip::after { bottom: 4px; }
+
+.entry-hero .film-track {
+    display: flex;
+    height: 100%;
+    width: max-content;
+    animation: entry-film-roll var(--film-duration, 110s) linear infinite;
+    will-change: transform;
+}
+
+.entry-hero .film-strip-rev .film-track {
+    animation-direction: reverse;
+}
+
+.entry-hero .film-track img {
+    height: 100%;
+    width: auto;
+    object-fit: cover;
+    margin-right: 10px;
+    border-radius: 2px;
+    opacity: 0.92;
+}
+
+@keyframes entry-film-roll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .entry-hero .film-track { animation: none; }
+    .entry-hero .hero-slide { transition: none; }
 }
 
 .entry-veil-x {
@@ -140,14 +257,19 @@ body.entry-active {
 }
 
 /* --- mosaic column --- */
+/* Owner FB (2026-07-06): the right side carried too much dead space — the
+   column now vertically centers between the top bar and the identity block,
+   with a slightly tighter rhythm. */
 .entry-mosaic {
     position: absolute;
-    top: 64px;
+    top: 56px;
+    bottom: 150px;
     right: 32px;
     width: 640px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    justify-content: center;
+    gap: 10px;
     z-index: 2;
 }
 
@@ -345,6 +467,31 @@ body.entry-active {
     color: rgba(237, 240, 247, 0.55);
 }
 
+/* model-center tile — the new-user starting point (owner FB 2026-07-06).
+   Blue = next action: the attention ring shows while the core booru tagger
+   is missing, then the tile settles into a normal tool card. */
+.entry-fn-models .fn-models-badge {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--on-accent);
+    background: var(--blue);
+    border-radius: var(--r-pill);
+    padding: 3px 9px;
+}
+
+.entry-fn-models-attention {
+    border-color: rgba(var(--blue-rgb), 0.65);
+    background: rgba(var(--blue-rgb), 0.10);
+}
+
+.entry-fn-models-attention:hover {
+    border-color: var(--blue);
+}
+
 /* free mode row — dashed tier */
 .entry-free {
     background: none;
@@ -468,6 +615,36 @@ body.entry-active {
 }
 
 .entry-identity .hero-link:hover {
+    color: var(--text);
+}
+
+/* display-mode switch (off / single / slideshow / film) */
+.entry-identity .hero-mode-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: var(--r-pill);
+    padding: 2px;
+}
+
+.entry-identity .hero-mode-btn {
+    background: none;
+    border: none;
+    font: inherit;
+    color: rgba(237, 240, 247, 0.55);
+    padding: 2px 9px;
+    border-radius: var(--r-pill);
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
+}
+
+.entry-identity .hero-mode-btn:hover {
+    color: var(--text);
+}
+
+.entry-identity .hero-mode-btn.active {
+    background: rgba(var(--blue-rgb), 0.30);
     color: var(--text);
 }
 

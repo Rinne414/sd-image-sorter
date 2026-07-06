@@ -847,6 +847,9 @@ Set the favorite state of one image. Body carries `image_id` and `favorited` (de
 #### GET /api/entry/summary
 Aggregate stats for the v4.0 mission entry page in one call: `library_total`, `added_today`, `unviewed` (images indexed after the `last_seen` watermark the client stored from a previous call's `server_now`), activity `streak_days` / `today_touched` (fed by the `activity_log` daily counters), and the deterministic daily ★5 `hero` pick (`hero_seed` query param offsets the pick for 换一张; `null` when no image is rated ★5).
 
+#### GET /api/entry/hero-pool
+Image ids for the entry page's slideshow / film-strip display modes (v3.5.0). Query: `limit` (1–200, default 60). Returns `{ids, starred, total}` — ★5-rated images first (the same pool the daily hero draws from), then the newest library images, so a fresh install with zero ratings still gets a living wall. The client renders them via the thumbnail endpoint.
+
 ### Model Manager
 
 #### GET /api/models/status

@@ -76,6 +76,33 @@ test.describe('Entry page (opted in)', () => {
     await expect(page.locator('#entry-page')).toBeHidden()
   })
 
+  test('cover display-mode switch persists and keeps the legacy flag in sync', async ({ page }) => {
+    const switcher = page.locator('#entry-hero-mode-switch')
+    await expect(switcher).toBeVisible()
+    // Default mode is single (no stored preference in the fixture profile).
+    await expect(switcher.locator('[data-mode="single"]')).toHaveClass(/active/)
+
+    await switcher.locator('[data-mode="film"]').click()
+    await expect(switcher.locator('[data-mode="film"]')).toHaveClass(/active/)
+    expect(await page.evaluate(() => window.localStorage.getItem('aurora-entry-hero-mode'))).toBe('film')
+
+    // "off" replaces the removed one-way 不想展示 link and keeps the legacy
+    // flag in sync so the settings toggle agrees.
+    await switcher.locator('[data-mode="off"]').click()
+    await expect(switcher.locator('[data-mode="off"]')).toHaveClass(/active/)
+    expect(await page.evaluate(() => window.localStorage.getItem('aurora-entry-hero-off'))).toBe('1')
+  })
+
+  test('model-center tile shows readiness and opens the model manager', async ({ page }) => {
+    const tile = page.locator('#entry-fn-models')
+    await expect(tile).toBeVisible()
+    // Live ready/total count from /api/models/status.
+    await expect(page.locator('#entry-count-models')).toHaveText(/\d+\/\d+/)
+    await tile.click()
+    // Same modal the gear icon opens.
+    await expect(page.locator('#btn-settings-entry-toggle')).toBeVisible()
+  })
+
   test('跳过入口页 setting suppresses the entry at next launch', async ({ page }) => {
     await page.click('#entry-settings-btn')
     const toggle = page.locator('#btn-settings-entry-toggle')

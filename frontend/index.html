@@ -185,6 +185,20 @@
             </div>
 
             <div class="entry-eyebrow"><span data-i18n="entry.groupTools">Tools</span></div>
+            <!-- Owner FB (2026-07-06): new users start by downloading models —
+                 give that a first-class tile instead of hiding it behind the
+                 gear icon. Gains the blue attention ring while the core booru
+                 tagger (WD14) is missing. -->
+            <div class="entry-row">
+                <button type="button" class="entry-tile entry-fn entry-fn-models" id="entry-fn-models">
+                    <span class="fn-head">
+                        <span class="fn-count" id="entry-count-models"></span>
+                        <span class="fn-title" data-i18n="entry.tileModels">Model Center</span>
+                        <span class="fn-models-badge" id="entry-models-badge" data-i18n="entry.tileModelsBadge" hidden>Start here</span>
+                    </span>
+                    <span class="fn-sub" id="entry-sub-models" data-i18n="entry.tileModelsSub">Download & manage the AI models</span>
+                </button>
+            </div>
             <div class="entry-row">
                 <button type="button" class="entry-tile entry-fn entry-fn-gallery" id="entry-fn-gallery">
                     <span class="fn-head">
@@ -265,7 +279,16 @@
             <div class="identity-hero-line">
                 <span id="entry-hero-credit" data-i18n="entry.heroEmpty">Rate an image ★5 and it becomes the cover here</span>
                 <button type="button" class="hero-link" id="entry-hero-swap" data-i18n="entry.heroSwap" hidden>Swap ↻</button>
-                <button type="button" class="hero-link" id="entry-hero-hide" data-i18n="entry.heroHide" hidden>Don't show</button>
+                <!-- Owner FB (2026-07-06): 不想展示 was a one-way door — replaced
+                     by a four-state display-mode switch (off / single / slideshow
+                     / film strips). -->
+                <span class="hero-mode-switch" id="entry-hero-mode-switch" role="group"
+                      aria-label="Cover display mode" data-i18n-aria="entry.showModeLabel">
+                    <button type="button" class="hero-mode-btn" data-mode="off" data-i18n="entry.showModeOff" title="No cover" data-i18n-title="entry.showModeOffTip">Off</button>
+                    <button type="button" class="hero-mode-btn" data-mode="single" data-i18n="entry.showModeSingle" title="One cover, swap manually" data-i18n-title="entry.showModeSingleTip">Single</button>
+                    <button type="button" class="hero-mode-btn" data-mode="slideshow" data-i18n="entry.showModeSlideshow" title="Auto-rotating covers" data-i18n-title="entry.showModeSlideshowTip">Slideshow</button>
+                    <button type="button" class="hero-mode-btn" data-mode="film" data-i18n="entry.showModeFilm" title="Rolling film strips" data-i18n-title="entry.showModeFilmTip">Film</button>
+                </span>
                 <span data-i18n="entry.localNote">· Runs locally — images never leave this PC</span>
             </div>
         </footer>

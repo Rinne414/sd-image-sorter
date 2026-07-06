@@ -174,3 +174,34 @@ class TestEntrySummaryEndpoint:
         response = test_client.get("/api/entry/summary?hero_seed=-2")
         # The app's global validation handler maps FastAPI 422s to 400.
         assert response.status_code == 400
+
+
+class TestHeroPool:
+    def test_starred_lead_then_newest(self, test_db):
+        plain_ids = []
+        for n in range(4):
+            plain_ids.append(_add_image(test_db, f"/lib/p{n}.png", f"p{n}.png"))
+        starred_id = _add_image(test_db, "/lib/star.png", "star.png")
+        test_db.set_user_rating(starred_id, 5)
+
+        pool = entry_stats_service.get_hero_pool(limit=3)
+
+        assert pool["ids"][0] == starred_id
+        assert pool["starred"] == 1
+        assert pool["total"] == 3
+        # Non-starred fill is newest-first.
+        assert pool["ids"][1:] == sorted(plain_ids, reverse=True)[:2]
+
+    def test_empty_library(self, test_db):
+        pool = entry_stats_service.get_hero_pool()
+        assert pool == {"ids": [], "starred": 0, "total": 0}
+
+    def test_endpoint_shape_and_limit_validation(self, test_client):
+        response = test_client.get("/api/entry/hero-pool?limit=5")
+        assert response.status_code == 200
+        body = response.json()
+        assert set(body.keys()) == {"ids", "starred", "total"}
+
+        # Global validation handler maps FastAPI 422s to 400.
+        assert test_client.get("/api/entry/hero-pool?limit=0").status_code == 400
+        assert test_client.get("/api/entry/hero-pool?limit=999").status_code == 400

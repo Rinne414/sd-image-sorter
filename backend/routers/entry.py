@@ -36,3 +36,15 @@ def get_entry_summary(
         last_seen=last_seen,
         hero_seed=hero_seed,
     )
+
+
+@router.get(
+    "/hero-pool",
+    summary="Image ids for the entry page's slideshow / film display modes",
+    description=(
+        "★5-rated images first, then the newest library images up to "
+        "``limit``. The client renders them via the thumbnail endpoint."
+    ),
+)
+def get_hero_pool(limit: int = Query(default=60, ge=1, le=200)):
+    return entry_stats_service.get_hero_pool(limit=limit)

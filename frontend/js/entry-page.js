@@ -7,16 +7,21 @@
  *   via ESC never loses view state ("Esc 永远回上一级且不丢进度").
  * - Every tile is a shortcut into an existing view (missions are shortcuts,
  *   never cages); navigation reuses the nav-tab click bindings.
- * - Daily ★5 hero with 换一张 (seed re-roll) and 不想展示 (persistent off).
+ * - Cover display modes (owner FB 2026-07-06, replacing the one-way
+ *   不想展示): off / single (换一张) / slideshow / rolling film strips.
  */
 (function () {
     'use strict';
 
     const SKIP_KEY = 'aurora-entry-skip';
-    const HERO_OFF_KEY = 'aurora-entry-hero-off';
+    const HERO_OFF_KEY = 'aurora-entry-hero-off'; // legacy flag, kept in sync for the settings toggle
+    const HERO_MODE_KEY = 'aurora-entry-hero-mode';
     const HERO_SEED_KEY = 'aurora-entry-hero-seed';
     const LAST_SEEN_KEY = 'aurora-entry-last-seen';
 
+    const HERO_MODES = ['off', 'single', 'slideshow', 'film'];
+    const SLIDESHOW_INTERVAL_MS = 8000;
+    const FILM_ROWS = 4;
     const PROMPT_TEXTURE_MAX_CHARS = 90;
     const CLOCK_TICK_MS = 30 * 1000;
 
@@ -24,6 +29,10 @@
         visible: false,
         summary: null,
         clockTimer: null,
+        heroPool: null,
+        slideshowTimer: null,
+        slideshowIndex: 0,
+        activeSlideLayer: 0,
     };
 
     function t(key, params, fallback) {
@@ -60,8 +69,31 @@
         }
     }
 
+    function heroMode() {
+        try {
+            const stored = localStorage.getItem(HERO_MODE_KEY);
+            if (HERO_MODES.includes(stored)) return stored;
+            // Legacy migration: the old one-way 不想展示 flag.
+            return localStorage.getItem(HERO_OFF_KEY) === '1' ? 'off' : 'single';
+        } catch (e) {
+            return 'single';
+        }
+    }
+
+    function setHeroMode(mode) {
+        const next = HERO_MODES.includes(mode) ? mode : 'single';
+        try {
+            localStorage.setItem(HERO_MODE_KEY, next);
+            // Keep the legacy flag in sync so the settings toggle and any
+            // older readers agree with the switch.
+            localStorage.setItem(HERO_OFF_KEY, next === 'off' ? '1' : '0');
+        } catch (e) { /* ignore */ }
+        refreshSettingsButtons();
+        renderHero(state.summary ? state.summary.hero : null);
+    }
+
     function isHeroOff() {
-        try { return localStorage.getItem(HERO_OFF_KEY) === '1'; } catch (e) { return true; }
+        return heroMode() === 'off';
     }
 
     function heroSeed() {
@@ -72,32 +104,205 @@
     // Rendering
     // ------------------------------------------------------------------
 
+    // --- hero display modes -------------------------------------------
+
+    function stopSlideshow() {
+        if (state.slideshowTimer) {
+            clearInterval(state.slideshowTimer);
+            state.slideshowTimer = null;
+        }
+    }
+
+    function clearHeroLayers() {
+        const bg = el('entry-hero');
+        if (bg) bg.textContent = '';
+        state.activeSlideLayer = 0;
+    }
+
+    function ensureSlideLayers(bg) {
+        let layers = bg.querySelectorAll('.hero-slide');
+        if (layers.length !== 2) {
+            bg.textContent = '';
+            for (let i = 0; i < 2; i += 1) {
+                const layer = document.createElement('div');
+                layer.className = 'hero-slide';
+                bg.appendChild(layer);
+            }
+            layers = bg.querySelectorAll('.hero-slide');
+            state.activeSlideLayer = 0;
+        }
+        return layers;
+    }
+
+    function showSlide(imageId) {
+        const bg = el('entry-hero');
+        if (!bg) return;
+        const layers = ensureSlideLayers(bg);
+        const nextIndex = state.activeSlideLayer ^ 1;
+        layers[nextIndex].style.setProperty('--hero-url', `url("/api/image-file/${imageId}")`);
+        layers[state.activeSlideLayer].classList.remove('active');
+        layers[nextIndex].classList.add('active');
+        state.activeSlideLayer = nextIndex;
+    }
+
+    async function ensureHeroPool() {
+        if (state.heroPool) return state.heroPool;
+        const pool = await api('/api/entry/hero-pool?limit=60');
+        state.heroPool = (pool && Array.isArray(pool.ids)) ? pool : { ids: [], starred: 0, total: 0 };
+        return state.heroPool;
+    }
+
+    function renderPromptTexture(imageId) {
+        const texture = el('entry-prompt-texture');
+        if (!texture) return;
+        if (!imageId) {
+            texture.textContent = '';
+            return;
+        }
+        api(`/api/images/${imageId}`).then((image) => {
+            if (!texture || !state.visible) return;
+            const prompt = (image && image.prompt) ? String(image.prompt) : '';
+            texture.textContent = prompt ? prompt.slice(0, PROMPT_TEXTURE_MAX_CHARS) : '';
+        });
+    }
+
+    function poolEmptyCredit(credit) {
+        // An empty pool means an empty library — "rate ★5" would be wrong
+        // advice here; the actual next step is scanning a folder.
+        if (credit) credit.textContent = t('entry.heroPoolEmpty', {}, 'The library is empty — scan a folder and art shows up here');
+    }
+
+    function renderSlideshow() {
+        ensureHeroPool().then((pool) => {
+            if (heroMode() !== 'slideshow' || !state.visible) return;
+            const credit = el('entry-hero-credit');
+            if (!pool.ids.length) {
+                poolEmptyCredit(credit);
+                return;
+            }
+            const advance = () => {
+                const id = pool.ids[state.slideshowIndex % pool.ids.length];
+                state.slideshowIndex += 1;
+                showSlide(id);
+            };
+            advance();
+            stopSlideshow();
+            state.slideshowTimer = setInterval(advance, SLIDESHOW_INTERVAL_MS);
+            if (credit) {
+                credit.textContent = t('entry.heroSlideshow', { total: pool.ids.length }, 'Slideshow · {total} images');
+            }
+        });
+    }
+
+    function renderFilm() {
+        ensureHeroPool().then((pool) => {
+            if (heroMode() !== 'film' || !state.visible) return;
+            const bg = el('entry-hero');
+            const credit = el('entry-hero-credit');
+            if (!bg) return;
+            if (!pool.ids.length) {
+                poolEmptyCredit(credit);
+                return;
+            }
+            clearHeroLayers();
+            const wall = document.createElement('div');
+            wall.className = 'hero-film';
+            const perRow = Math.max(6, Math.ceil(pool.ids.length / FILM_ROWS));
+            for (let row = 0; row < FILM_ROWS; row += 1) {
+                const strip = document.createElement('div');
+                strip.className = `film-strip${row % 2 ? ' film-strip-rev' : ''}`;
+                strip.style.setProperty('--film-duration', `${92 + row * 17}s`);
+                const track = document.createElement('div');
+                track.className = 'film-track';
+                const slice = [];
+                for (let n = 0; n < perRow; n += 1) {
+                    slice.push(pool.ids[(row * perRow + n) % pool.ids.length]);
+                }
+                // Content is doubled so the -50% translate loops seamlessly.
+                slice.concat(slice).forEach((id) => {
+                    const img = document.createElement('img');
+                    img.loading = 'lazy';
+                    img.decoding = 'async';
+                    img.alt = '';
+                    img.src = `/api/image-thumbnail/${id}`;
+                    track.appendChild(img);
+                });
+                strip.appendChild(track);
+                wall.appendChild(strip);
+            }
+            bg.appendChild(wall);
+            if (credit) {
+                credit.textContent = t('entry.heroFilm', { total: pool.ids.length }, 'Film strips · {total} images');
+            }
+        });
+    }
+
+    function refreshModeSwitch() {
+        const mode = heroMode();
+        document.querySelectorAll('#entry-hero-mode-switch .hero-mode-btn').forEach((button) => {
+            const active = button.dataset.mode === mode;
+            button.classList.toggle('active', active);
+            button.setAttribute('aria-pressed', String(active));
+        });
+    }
+
     function renderHero(hero) {
         const bg = el('entry-hero');
         const credit = el('entry-hero-credit');
         const swap = el('entry-hero-swap');
-        const hide = el('entry-hero-hide');
-        const texture = el('entry-prompt-texture');
         if (!bg || !credit) return;
 
-        if (isHeroOff() || !hero) {
-            bg.style.backgroundImage = '';
-            texture.textContent = '';
-            credit.textContent = t('entry.heroEmpty', {}, 'Rate an image ★5 and it becomes the cover here');
-            swap.hidden = true;
-            hide.hidden = true;
+        const mode = heroMode();
+        refreshModeSwitch();
+        stopSlideshow();
+        state.slideshowIndex = 0;
+        swap.hidden = true;
+        renderPromptTexture(null);
+
+        if (mode === 'off') {
+            clearHeroLayers();
+            credit.textContent = t('entry.heroModeOff', {}, 'Cover off');
             return;
         }
 
-        bg.style.backgroundImage = `url("/api/image-file/${hero.id}")`;
+        if (mode === 'slideshow') {
+            ensureSlideLayers(bg);
+            renderSlideshow();
+            return;
+        }
+
+        if (mode === 'film') {
+            renderFilm();
+            return;
+        }
+
+        // single (default)
+        if (!hero) {
+            renderSingleFallback(credit, swap);
+            return;
+        }
+        showSlide(hero.id);
         credit.textContent = t('entry.heroCredit', { filename: hero.filename }, "Today's cover: {filename} · ★5");
         swap.hidden = hero.pool <= 1;
-        hide.hidden = false;
+        renderPromptTexture(hero.id);
+    }
 
-        api(`/api/images/${hero.id}`).then((image) => {
-            if (!texture || !state.visible) return;
-            const prompt = (image && image.prompt) ? String(image.prompt) : '';
-            texture.textContent = prompt ? prompt.slice(0, PROMPT_TEXTURE_MAX_CHARS) : '';
+    // No ★5 image yet (fresh install / unrated library): fall back to the
+    // hero pool (newest works) instead of a blank half-canvas, and keep 换一张
+    // usable by walking the pool. slideshowIndex doubles as the cursor.
+    function renderSingleFallback(credit, swap) {
+        ensureHeroPool().then((pool) => {
+            if (heroMode() !== 'single' || !state.visible) return;
+            if (!pool.ids.length) {
+                clearHeroLayers();
+                poolEmptyCredit(credit);
+                return;
+            }
+            const id = pool.ids[state.slideshowIndex % pool.ids.length];
+            showSlide(id);
+            credit.textContent = t('entry.heroLatestFallback', {}, 'Latest works — rate one ★5 to make it the cover');
+            swap.hidden = pool.ids.length <= 1;
+            renderPromptTexture(id);
         });
     }
 
@@ -234,12 +439,38 @@
         });
     }
 
+    function renderModelCenter() {
+        api('/api/models/status').then((status) => {
+            const tile = el('entry-fn-models');
+            if (!tile || !status || !Array.isArray(status.models) || !status.models.length) return;
+            const models = status.models;
+            const ready = models.filter((model) => (model.status || '') === 'ready').length;
+            const count = el('entry-count-models');
+            if (count) count.textContent = `${ready}/${models.length}`;
+
+            // "Start here" while the core booru tagger is missing — without
+            // WD14 every mission's first step (tagging) is a dead end.
+            const wd14 = models.find((model) => model.id === 'wd14');
+            const coreMissing = Boolean(wd14 && wd14.status !== 'ready');
+            tile.classList.toggle('entry-fn-models-attention', coreMissing);
+            const badge = el('entry-models-badge');
+            if (badge) badge.hidden = !coreMissing;
+            const sub = el('entry-sub-models');
+            if (sub) {
+                sub.textContent = coreMissing
+                    ? t('entry.tileModelsMissing', {}, 'The core tagger is not installed — download it here first')
+                    : t('entry.tileModelsSub', {}, 'Download & manage the AI models');
+            }
+        });
+    }
+
     async function render() {
         const versionEl = el('entry-version');
         const brandVersion = document.getElementById('brand-version');
         if (versionEl && brandVersion) versionEl.textContent = brandVersion.textContent || '';
 
         renderSystemLine();
+        renderModelCenter();
 
         let lastSeen = null;
         try { lastSeen = localStorage.getItem(LAST_SEEN_KEY); } catch (e) { /* ignore */ }
@@ -276,6 +507,7 @@
         page.hidden = true;
         document.body.classList.remove('entry-active');
         state.visible = false;
+        stopSlideshow();
         if (state.clockTimer) {
             clearInterval(state.clockTimer);
             state.clockTimer = null;
@@ -334,9 +566,9 @@
         const heroBtn = el('btn-settings-entry-hero-toggle');
         if (heroBtn) {
             heroBtn.addEventListener('click', () => {
-                try { localStorage.setItem(HERO_OFF_KEY, isHeroOff() ? '0' : '1'); } catch (e) { /* ignore */ }
-                refreshSettingsButtons();
-                if (state.visible && state.summary) renderHero(state.summary.hero);
+                // The settings toggle is the coarse on/off; the entry page's
+                // mode switch picks between the "on" variants.
+                setHeroMode(isHeroOff() ? 'single' : 'off');
             });
         }
         refreshSettingsButtons();
@@ -427,17 +659,31 @@
             if (node) node.addEventListener('click', handler);
         });
 
+        const openModelManager = () => {
+            const opener = document.getElementById('btn-open-model-manager');
+            if (opener) opener.click();
+        };
+
         const settingsBtn = el('entry-settings-btn');
-        if (settingsBtn) {
-            settingsBtn.addEventListener('click', () => {
-                const opener = document.getElementById('btn-open-model-manager');
-                if (opener) opener.click();
-            });
-        }
+        if (settingsBtn) settingsBtn.addEventListener('click', openModelManager);
+
+        // Owner FB (2026-07-06): new users start by downloading models — the
+        // tile opens the same model manager the gear icon does, as a modal
+        // above the entry page.
+        const modelsTile = el('entry-fn-models');
+        if (modelsTile) modelsTile.addEventListener('click', openModelManager);
 
         const swap = el('entry-hero-swap');
         if (swap) {
             swap.addEventListener('click', async () => {
+                const starredHero = state.summary && state.summary.hero;
+                if (heroMode() === 'single' && !starredHero) {
+                    // Fallback single (no ★5 yet): walk the pool directly —
+                    // re-fetching the summary would just return null again.
+                    state.slideshowIndex += 1;
+                    renderSingleFallback(el('entry-hero-credit'), swap);
+                    return;
+                }
                 try { localStorage.setItem(HERO_SEED_KEY, String((heroSeed() + 1) % 1000000)); } catch (e) { /* ignore */ }
                 const summary = await api(`/api/entry/summary?hero_seed=${heroSeed()}`);
                 if (summary) {
@@ -447,14 +693,9 @@
             });
         }
 
-        const hideLink = el('entry-hero-hide');
-        if (hideLink) {
-            hideLink.addEventListener('click', () => {
-                try { localStorage.setItem(HERO_OFF_KEY, '1'); } catch (e) { /* ignore */ }
-                refreshSettingsButtons();
-                renderHero(null);
-            });
-        }
+        document.querySelectorAll('#entry-hero-mode-switch .hero-mode-btn').forEach((button) => {
+            button.addEventListener('click', () => setHeroMode(button.dataset.mode));
+        });
 
         wireSettings();
         document.addEventListener('keydown', onKeydownCapture, true);
