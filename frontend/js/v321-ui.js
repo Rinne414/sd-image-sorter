@@ -37,7 +37,6 @@ const V321Integration = {
         this.bindTaggerBackendSwitch();
         this.bindExportPresetUI();
         this.bindLivePreview();
-        this.interceptExportSubmit();
         this.interceptCombinedExportClick();
         this.interceptTagSubmit();
         this.bindHardRefreshButton();
@@ -1425,24 +1424,6 @@ const V321Integration = {
         this._renderPreviewWorkbench();
     },
 
-    /** For non-template content modes, give a quick template that approximates the same output. */
-    _fallbackTemplateForMode(mode) {
-        switch (mode) {
-            case 'tags': return '{tags:filtered}';
-            case 'prompt': return '{prompt}';
-            case 'negative': return '{negative}';
-            case 'prompt_negative': return '{prompt}\nNegative prompt: {negative}';
-            case 'nl_caption': return '{nl_caption}';
-            case 'tags_nl': return '{tags:filtered}, {nl_caption}';
-            case 'prompt_nl': return '{prompt}\n{nl_caption}';
-            case 'caption_tags': return '{nl_caption}, {tags:filtered}';
-            case 'caption_merged': return '{nl_caption}, {prompt}, {tags:filtered}';
-            case 'a1111': return '{prompt}\nNegative prompt: {negative}';
-            case 'json': return '{tags:filtered}';
-            default: return '{tags:filtered}';
-        }
-    },
-
     _getCurrentExportOptions() {
         const contentMode = document.getElementById('batch-export-content-mode')?.value || 'tags';
         return this._previewOptionsForContentMode(contentMode);
@@ -1455,8 +1436,6 @@ const V321Integration = {
         // LoRA-friendly underscore convention.
         const normalizeCheckbox = document.getElementById('batch-export-normalize-underscores');
         const normalize = normalizeCheckbox ? normalizeCheckbox.checked : true;
-        const danbooruTagModes = new Set(['tags', 'caption_tags', 'caption_merged', 'tags_nl']);
-        const wantsNormalization = normalize && danbooruTagModes.has(contentMode);
 
         if (contentMode === 'template') {
             const opts = this.collectTemplateOptions();
@@ -1471,28 +1450,20 @@ const V321Integration = {
             }
             return opts;
         }
+        // P1-7 preview unification: non-template modes send the real
+        // content_mode so the backend previews through build_sidecar_content —
+        // the exact engine the export writes with. (Previously this built a
+        // template that only approximated each mode, so the preview could
+        // disagree with the exported sidecar.)
         const blacklistText = document.getElementById('batch-export-blacklist')?.value || '';
         const prefix = document.getElementById('batch-export-prefix')?.value || '';
         const blacklist = blacklistText.split(',').map(s => s.trim()).filter(Boolean);
-        const template = this._fallbackTemplateForMode(contentMode);
         const opts = {
-            preset_id: 'custom',
-            template_override: prefix && (contentMode === 'caption_tags' || contentMode === 'caption_merged' || contentMode === 'nl_caption' || contentMode === 'tags_nl' || contentMode === 'prompt_nl')
-                ? `{trigger}, ${template}`
-                : template,
-            trigger: prefix,
+            content_mode: contentMode,
+            prefix,
             blacklist,
-            replace_rules: {},
-            max_tags: 0,
-            append: [],
+            normalize_tag_underscores: normalize,
         };
-        if (wantsNormalization) {
-            opts.underscore_to_space_override = true;
-            opts.preserve_underscore_prefixes_override = ['score_'];
-        } else if (!normalize && danbooruTagModes.has(contentMode)) {
-            opts.underscore_to_space_override = false;
-            opts.preserve_underscore_prefixes_override = ['score_'];
-        }
         const transforms = this.collectCaptionTransforms();
         if (transforms) opts.caption_transforms = transforms;
         return opts;
@@ -1664,12 +1635,15 @@ const V321Integration = {
     _getCaptionType(imageId) {
         const id = Number(imageId);
         const explicit = this.captionTypes.get(id) || null;
-        // Explicit-only: unlike the Dataset Maker (autoBoth), the batch-export
-        // editor defaults every image to 'booru' so export output never
-        // changes without a user action.
+        // Unified with the Dataset Maker (autoBoth): an image that carries an NL
+        // sentence defaults to 'both' so its VLM caption exports without the
+        // user ticking every row; images without NL stay 'booru'. Explicit user
+        // choices still win. The rule lives in CaptionCore so the two editors
+        // never drift.
+        const hasNl = String(this._getNlText(id) || '').trim().length > 0;
         return window.CaptionCore
-            ? window.CaptionCore.effectiveType(explicit, false, {})
-            : (explicit || 'booru');
+            ? window.CaptionCore.effectiveType(explicit, hasNl, { autoBoth: true })
+            : (explicit || (hasNl ? 'both' : 'booru'));
     },
 
     _setCaptionType(imageId, type) {
@@ -2050,16 +2024,27 @@ const V321Integration = {
         return Object.keys(overrides).length ? overrides : null;
     },
 
-    /** Aurora #25c: explicit per-image caption types for the export payload. */
+    /** Aurora #25c: per-image caption types for the export payload. Resolves
+     *  every loaded image through _getCaptionType so the auto-both rule
+     *  (NL-bearing images default to 'both') reaches the backend exactly as the
+     *  Dataset Maker's _buildExportPayload does — the export matches the
+     *  preview. A missing key means 'booru' on the backend, so only 'nl'/'both'
+     *  need sending; explicit user choices are already resolved in _getCaptionType. */
     collectCaptionTypes() {
         // If caption-core.js somehow failed to load, the preview never
         // composes — keep the payload consistent so the user can't get an
         // export that differs from what the editor showed.
         if (!window.CaptionCore) return null;
         const map = {};
-        for (const [id, type] of this.captionTypes.entries()) {
-            const numericId = Number(id);
-            if (Number.isFinite(numericId) && numericId > 0 && (type === 'nl' || type === 'both')) {
+        const ids = new Set([
+            ...this._loadedPreviewIds(),
+            ...Array.from(this.captionTypes.keys()).map(Number),
+        ]);
+        for (const rawId of ids) {
+            const numericId = Number(rawId);
+            if (!Number.isFinite(numericId) || numericId <= 0) continue;
+            const type = this._getCaptionType(numericId);
+            if (type === 'nl' || type === 'both') {
                 map[numericId] = type;
             }
         }
@@ -2945,66 +2930,15 @@ const V321Integration = {
         return (translated && translated !== key) ? translated : fallback;
     },
 
-    /** Hook into existing export submit — inject template_options + image_overrides */
-    interceptExportSubmit() {
-        const startBtn = document.getElementById('btn-start-batch-export');
-        if (!startBtn) {
-            setTimeout(() => this.interceptExportSubmit(), 500);
-            return;
-        }
-        // Use a fetch wrapper instead of intercepting click — wrap window.fetch
-        const origFetch = window.fetch.bind(window);
-        const self = this;
-        window.fetch = async function(url, options) {
-            // Match the export-batch endpoint
-            if (typeof url === 'string' && url.includes('/api/tags/export-batch') && options?.method === 'POST') {
-                try {
-                    const body = JSON.parse(options.body);
-                    const mode = body.content_mode;
-
-                    // Inject template_options when needed
-                    if (mode === 'template') {
-                        body.template_options = self.collectTemplateOptions();
-                    }
-
-                    // Inject image_overrides for any user-edited captions
-                    const overrides = self.collectEditedCaptionOverrides();
-                    if (overrides) {
-                        body.image_overrides = overrides;
-                    }
-                    const transforms = self.collectCaptionTransforms();
-                    if (transforms) {
-                        body.caption_transforms = transforms;
-                    }
-
-                    // Aurora #25c: per-image caption types + edited NL sentences
-                    const captionTypes = self.collectCaptionTypes();
-                    if (captionTypes) {
-                        body.image_types = captionTypes;
-                    }
-                    const nlOverrides = self.collectNlOverrides();
-                    if (nlOverrides) {
-                        body.image_nl_overrides = nlOverrides;
-                    }
-
-                    // v3.2.1 follow-up: forward the LoRA underscore checkbox.
-                    // Default behavior (when the field is omitted) is the
-                    // backend per-mode default (ON for danbooru-tag modes,
-                    // OFF for prompt/NL/a1111). Only send a value when the
-                    // checkbox exists, so older callers stay on default.
-                    const normalizeCheckbox = document.getElementById('batch-export-normalize-underscores');
-                    if (normalizeCheckbox) {
-                        body.normalize_tag_underscores = !!normalizeCheckbox.checked;
-                    }
-
-                    options.body = JSON.stringify(body);
-                } catch (e) {
-                    console.warn('Failed to inject template_options', e);
-                }
-            }
-            return origFetch(url, options);
-        };
-    },
+    // Aurora #25c: the export payload injection used to live in an
+    // interceptExportSubmit() that monkey-patched window.fetch for every
+    // /api/tags/export-batch POST. It now flows through explicit plumbing —
+    // executeBatchExport (app.js) collects collectTemplateOptions /
+    // collectEditedCaptionOverrides / collectCaptionTransforms /
+    // collectCaptionTypes / collectNlOverrides and passes them into
+    // API._buildExportBatchPayload as template_options / image_overrides /
+    // caption_transforms / image_types / image_nl_overrides (plus the
+    // normalize_tag_underscores checkbox). No global fetch override remains.
 
     /** v3.2.1: short-circuit the Start button when the user picked clipboard
      *  or download as the output destination. Both paths build the combined

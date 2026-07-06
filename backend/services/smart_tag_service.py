@@ -53,6 +53,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
 from config import ALLOWED_IMAGE_EXTENSIONS, DEFAULT_TAGGER_MODEL, TAGGER_MODELS
+from services.export_template_engine import is_kaomoji_tag
 from services.tag_export_service import count_selection_token_ids, iter_selection_token_id_chunks
 from tag_rules import categorize_tag
 from utils.path_validation import normalize_user_path
@@ -137,11 +138,12 @@ DEFAULT_NOISE_TAGS: frozenset = (
 
 _SCORE_RE: re.Pattern = re.compile(r"^score[\s_]\d+(_up)?$", re.IGNORECASE)
 _YEAR_RE: re.Pattern = re.compile(r"^(?:year\s*)?\d{4}$", re.IGNORECASE)
+# Prompt-syntax fragments (``::``, ``--``, ``//`` …) that leak in as "tags".
+# Real danbooru emoticon vocabulary (``^_^``, ``:d``, ``^^^`` …) used to be
+# listed here too — that deleted legitimate WD14 expression tags from every
+# caption (audit P1-4), so emoticons are now exempted via ``is_kaomoji_tag``
+# before this regex runs.
 _SYMBOLIC_TAG_RE: re.Pattern = re.compile(r"^(?:[:;=][a-z0-9]?|[xX][dDpP3]|[<>^@!;:=_\\/-]{2,}|[<>^@!;:=_\\/-]+[a-z0-9])$")
-SYMBOL_NOISE_TAGS: frozenset = frozenset({
-    ":3", ":d", ":o", ":p", ":q", ":t", ":i", ";3", ";d", ";p",
-    ">_<", "<_<", ">_>", "-_-", "^_^", "^^^", "@_@", "=_=", "!?",
-})
 
 
 def is_noise_tag(tag: str, noise_set: Iterable[str] = DEFAULT_NOISE_TAGS) -> bool:
@@ -157,7 +159,10 @@ def is_noise_tag(tag: str, noise_set: Iterable[str] = DEFAULT_NOISE_TAGS) -> boo
         return True
     if _SCORE_RE.match(lowered) or _YEAR_RE.match(lowered):
         return True
-    if lowered in SYMBOL_NOISE_TAGS or _SYMBOLIC_TAG_RE.match(lowered):
+    # Emoticons are legitimate WD14 expression vocabulary, never noise.
+    if is_kaomoji_tag(lowered):
+        return False
+    if _SYMBOLIC_TAG_RE.match(lowered):
         return True
     return False
 
@@ -520,14 +525,16 @@ def _normalize_tag(tag: str) -> str:
     """Normalize a single tag: strip, lowercase, swap underscores to spaces.
 
     The score_N family is preserved verbatim because the upstream Pony /
-    Animagine prompt prefix relies on the literal ``score_7_up`` form.
+    Animagine prompt prefix relies on the literal ``score_7_up`` form, and
+    emoticon tags keep their underscores (``^_^`` must not become ``^ ^``).
     """
     stripped = (tag or "").strip()
     if not stripped:
         return ""
-    if _SCORE_RE.match(stripped.lower()):
-        return stripped.lower()
-    return stripped.replace("_", " ").lower()
+    lowered = stripped.lower()
+    if _SCORE_RE.match(lowered) or is_kaomoji_tag(lowered):
+        return lowered
+    return lowered.replace("_", " ")
 
 
 def _dedupe_preserving_order(items: Iterable[str]) -> List[str]:
@@ -1119,7 +1126,7 @@ def _resolve_tagger(req: SmartTagRequest):
     everything else routes through the WD14 wrapper.
     """
     name = (req.tagger_model or "").strip().lower()
-    if name.startswith("toriigate"):
+    if name.startswith("toriigate") or TAGGER_MODELS.get(name, {}).get("captioner_only"):
         raise ValueError("ToriiGate is a natural-language caption model. Use natural_language_mode='toriigate' instead of the booru tagger slot.")
     if name.startswith("oppai-oracle"):
         from oppai_oracle_tagger import get_oppai_oracle_tagger
@@ -1157,7 +1164,7 @@ def _resolve_tagger_by_model(
     ``_resolve_tagger``.
     """
     name = (model_name or "").strip().lower()
-    if name.startswith("toriigate"):
+    if name.startswith("toriigate") or TAGGER_MODELS.get(name, {}).get("captioner_only"):
         raise ValueError("ToriiGate cannot be used as a booru consensus tagger.")
     if name.startswith("oppai-oracle"):
         from oppai_oracle_tagger import get_oppai_oracle_tagger
@@ -1821,7 +1828,8 @@ def _persist_result(image_id: int, result: Dict[str, Any], merge_strategy: str) 
         }
         if trigger_word.lower().replace(" ", "_") not in existing_keys:
             tag_rows.insert(
-                0, {"tag": trigger_word, "confidence": 1.0, "category": "trigger"}
+                0,
+                {"tag": trigger_word, "confidence": 1.0, "source": "trigger", "category": "trigger"},
             )
 
     # P0-1: persist the tagger's rating verdict as a tag row — the same
@@ -1834,14 +1842,18 @@ def _persist_result(image_id: int, result: Dict[str, Any], merge_strategy: str) 
         )
 
     try:
-        db.add_tags_batch([
-            {
-                "image_id": image_id,
-                "tags": tag_rows,
-                "ai_caption": final_caption or None,
-                "nl_caption": final_nl or None,
-            }
-        ])
+        db.add_tags_batch(
+            [
+                {
+                    "image_id": image_id,
+                    "tags": tag_rows,
+                    "ai_caption": final_caption or None,
+                    "nl_caption": final_nl or None,
+                }
+            ],
+            default_source="tagger",
+            replace_scope="pipeline",
+        )
     except Exception as exc:  # noqa: BLE001
         logger.error("smart-tag DB write failed for %s: %s", image_id, exc)
 

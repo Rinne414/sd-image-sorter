@@ -339,14 +339,17 @@ def test_make_prompt_brief_mode_uses_short_query():
     assert "do not output json" in prompt.lower()
 
 
-def test_make_prompt_appends_grounding_tags():
+def test_make_prompt_grounds_tags_in_official_format():
+    """P2-13c: grounding uses the exact ToriiGate model-card format — a
+    '# Booru tags' block ahead of the query, tags in brackets."""
     prompt = _bare_tagger("detailed")._make_prompt(["1girl", "solo", "long_hair"])
-    assert "Here are grounding tags for better understanding: 1girl, solo, long_hair" in prompt
+    assert prompt.startswith("# Booru tags for the image\n[1girl, solo, long_hair]\n\n")
+    assert "long and detailed" in prompt.lower()  # the query follows the block
 
 
 def test_make_prompt_without_tags_has_no_grounding_section():
     prompt = _bare_tagger("detailed")._make_prompt()
-    assert "Grounding tags" not in prompt
+    assert "Booru tags" not in prompt
     assert _bare_tagger("detailed")._make_prompt([]) == prompt
 
 

@@ -144,8 +144,8 @@ PROMPT_PRESETS: Dict[str, Dict[str, str]] = {
         "user_prompt": (
             "Output only a comma-separated list of danbooru tags for this image. "
             "Include: subject count (1girl, 2boys, etc), character features (hair color/length/style, eye color, "
-            "ethnicity if relevant), clothing, pose, action, expression, setting, accessories, art style, and rating "
-            "(safe, sensitive, questionable, explicit). Aim for 15-30 specific tags. "
+            "ethnicity if relevant), clothing, pose, action, expression, setting, accessories, and art style. "
+            "Aim for 15-30 specific tags. "
             "Format: tag1, tag2, tag3, ..."
         ),
         "user_prompt_with_tags": (

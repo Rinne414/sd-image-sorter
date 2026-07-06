@@ -555,6 +555,13 @@ TAGGER_MODELS: dict = {
         "tags_file": "",
         "runtime_backend": "toriigate",
         "runtime_safety_tier": "vlm",
+        # Owner decision (2026-07-06): ToriiGate is a captioner, not a
+        # tagger. As a gallery tagger it produced 5-7 tags/image with
+        # non-danbooru words ("buttocks") and invented anatomy — measured
+        # unusable. It stays registered here for model download/prepare and
+        # for Smart Tag's natural-language stage, but /api/tag rejects it
+        # and the gallery tagger dropdown hides it.
+        "captioner_only": True,
         # Hardware floors are calibrated to the actual ToriiGate-0.5
         # checkpoint (Qwen3.5-VL, ~9.6 GB BF16 weights, image capped to
         # 1 MP via TORIIGATE_MAX_IMAGE_PIXELS).

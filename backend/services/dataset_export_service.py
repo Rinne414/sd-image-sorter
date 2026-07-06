@@ -963,7 +963,8 @@ def export_dataset(
         try:
             os.makedirs(dst_caption_path.parent, exist_ok=True)
             tmp_caption_path = dst_caption_path.with_suffix(dst_caption_path.suffix + ".tmp")
-            with open(tmp_caption_path, "w", encoding="utf-8") as handle:
+            # newline="\n" (P3-14): keep caption sidecars LF on Windows too.
+            with open(tmp_caption_path, "w", encoding="utf-8", newline="\n") as handle:
                 handle.write(caption_text)
                 handle.flush()
                 try:

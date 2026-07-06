@@ -17,6 +17,7 @@ from vlm_providers.base import (
     assert_safe_request_url,
     encode_image_base64,
     make_async_client,
+    strip_reasoning,
 )
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,7 @@ class OpenAICompatProvider(VLMProvider):
                 )
                 raw_text = result.get("caption", "").strip()
                 tokens = result.get("tokens", 0)
+                truncated = bool(result.get("truncated", False))
 
                 if not raw_text:
                     retries += 1
@@ -114,6 +116,7 @@ class OpenAICompatProvider(VLMProvider):
                         continue
                     parsed = self.parse_output(raw_text)
                     parsed.tokens_used = tokens
+                    parsed.truncated = truncated
                     parsed.error = "NSFW content refused by model"
                     parsed.error_type = "nsfw_refused"
                     parsed.retries_used = retries
@@ -122,6 +125,7 @@ class OpenAICompatProvider(VLMProvider):
 
                 parsed = self.parse_output(raw_text)
                 parsed.tokens_used = tokens
+                parsed.truncated = truncated
                 parsed.retries_used = retries
                 parsed.model = self.config.model
                 return parsed
@@ -211,15 +215,36 @@ class OpenAICompatProvider(VLMProvider):
             raise ProviderError("Invalid JSON response", error_type="parse_error", retryable=False)
 
         caption = ""
+        finish_reason = ""
         choices = data.get("choices") or []
         if choices:
-            msg = choices[0].get("message") or {}
+            first = choices[0] or {}
+            msg = first.get("message") or {}
+            # Only the assistant's answer content is used. A sibling
+            # ``reasoning_content`` field (DeepSeek/QwQ-style vendors expose
+            # chain-of-thought there) is deliberately ignored — never
+            # concatenated — so reasoning never leaks into captions or tags.
             caption = msg.get("content") or ""
+            finish_reason = str(first.get("finish_reason") or "").lower()
+
+        # Strip inline <think>..</think> reasoning that some models emit inside
+        # the content field itself, before the text is parsed into caption/tags.
+        caption = strip_reasoning(caption)
+
+        # finish_reason == "length" means the model hit the token cap mid-output
+        # (a partial caption or a cut-off tag list). Flag it so callers can warn;
+        # we deliberately do NOT auto-retry — that would just burn tokens.
+        truncated = finish_reason == "length"
+        if truncated:
+            logger.warning(
+                "VLM output truncated (finish_reason=length) — raise max tokens "
+                "for complete captions/tags."
+            )
 
         usage = data.get("usage") or {}
         tokens = usage.get("total_tokens") or usage.get("completion_tokens") or 0
 
-        return {"caption": caption, "tokens": tokens}
+        return {"caption": caption, "tokens": tokens, "truncated": truncated}
 
     async def test_connection(self) -> Dict[str, Any]:
         url = self.config.endpoint.rstrip("/") + "/models"

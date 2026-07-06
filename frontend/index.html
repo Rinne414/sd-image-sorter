@@ -4062,6 +4062,11 @@
                                            placeholder="replacement text"
                                            data-i18n-placeholder="dataset.replacePlaceholder">
                                 </label>
+                                <label class="checkbox-label" style="margin:6px 0;">
+                                    <input type="checkbox" id="dataset-find-substring">
+                                    <span class="checkbox-custom" aria-hidden="true"></span>
+                                    <span class="checkbox-text" data-i18n="dataset.findSubstringMode">Substring mode</span>
+                                </label>
                                 <button type="button" class="btn btn-secondary full-width" id="btn-dataset-find-replace"
                                         data-i18n="dataset.replaceAllBtn">Replace in all captions</button>
                             </details>
@@ -5705,6 +5710,18 @@
                                 <span class="checkbox-text" data-i18n="batchExport.normalizeUnderscoresLabel">Convert tag underscores to spaces (preserve <code>score_*</code>)</span>
                             </label>
                             <small class="helper-text" data-i18n="batchExport.normalizeUnderscoresHelp">Default ON for LoRA training: <code>multiple_girls</code> → <code>multiple girls</code>; <code>score_5</code> / <code>score_9_up</code> stay intact. Untick if your trainer expects raw danbooru underscores (Pony / NoobAI / Kohya legacy).</small>
+                        </div>
+
+                        <!-- P0-3: diffusion-pipe style split export — tags in
+                             {stem}.txt plus the NL caption in {stem}_nl.txt.
+                             Only meaningful for Tags/Template content modes. -->
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="batch-export-nl-sidecar">
+                                <span class="checkbox-custom" aria-hidden="true"></span>
+                                <span class="checkbox-text" data-i18n="batchExport.nlSidecarLabel">Also write NL caption to <code>_nl.txt</code> twin (diffusion-pipe)</span>
+                            </label>
+                            <small class="helper-text" data-i18n="batchExport.nlSidecarHelp">Tags/Template modes only: writes <code>image.txt</code> (tags) plus <code>image_nl.txt</code> (natural-language caption, trigger injected). Images without an NL caption get no twin.</small>
                         </div>
                     </div>
                 </details>

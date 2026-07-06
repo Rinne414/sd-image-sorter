@@ -128,6 +128,7 @@ class WD14Tagger:
         self.character_tags: List[Tuple[int, str]] = []
         self.rating_tags: List[Tuple[int, str]] = []
         self.rating_indices: Dict[str, int] = {}  # Map rating name to index
+        self._general_category_overrides: Dict[str, str] = {}
 
         self._loaded = False
         # Guards load() so two concurrent callers can't double-load the ~1GB
@@ -413,6 +414,9 @@ class WD14Tagger:
         self.character_tags = []
         self.rating_tags = []
         self.rating_indices = {}
+        # tag name -> true category for tags that live in the general bucket
+        # but aren't 'general' (camie's artist/meta/year entries).
+        self._general_category_overrides = {}
 
         if self._metadata_format == "camie_v2" or tags_path.lower().endswith('.json'):
             with open(tags_path, "r", encoding="utf-8") as f:
@@ -438,7 +442,13 @@ class WD14Tagger:
                 if category == "copyright":
                     self.copyright_tags.append((tag_idx, tag_name))
                 elif category in {"general", "meta", "year", "artist"}:
+                    # Bucket membership stays 'general' (downstream pipelines
+                    # read the three classic buckets), but remember the true
+                    # category so persisted rows can carry it (P3-11: the
+                    # export engine's {artists} section reads tags.category).
                     self.general_tags.append((tag_idx, tag_name))
+                    if category != "general":
+                        self._general_category_overrides[tag_name] = category
                 elif category == "character":
                     self.character_tags.append((tag_idx, tag_name))
                 elif category == "rating":
@@ -611,22 +621,23 @@ class WD14Tagger:
             if tag_id < len(probs):
                 conf = float(probs[tag_id])
                 if conf >= general_thresh:
-                    result["general_tags"].append({"tag": tag_name, "confidence": conf})
-                    result["all_tags"].append({"tag": tag_name, "confidence": conf})
+                    category = self._general_category_overrides.get(tag_name, "general")
+                    result["general_tags"].append({"tag": tag_name, "confidence": conf, "category": category})
+                    result["all_tags"].append({"tag": tag_name, "confidence": conf, "category": category})
 
         for tag_id, tag_name in self.copyright_tags:
             if tag_id < len(probs):
                 conf = float(probs[tag_id])
                 if conf >= copyright_thresh:
-                    result["copyright_tags"].append({"tag": tag_name, "confidence": conf})
-                    result["all_tags"].append({"tag": tag_name, "confidence": conf})
+                    result["copyright_tags"].append({"tag": tag_name, "confidence": conf, "category": "copyright"})
+                    result["all_tags"].append({"tag": tag_name, "confidence": conf, "category": "copyright"})
 
         for tag_id, tag_name in self.character_tags:
             if tag_id < len(probs):
                 conf = float(probs[tag_id])
                 if conf >= char_thresh:
-                    result["character_tags"].append({"tag": tag_name, "confidence": conf})
-                    result["all_tags"].append({"tag": tag_name, "confidence": conf})
+                    result["character_tags"].append({"tag": tag_name, "confidence": conf, "category": "character"})
+                    result["all_tags"].append({"tag": tag_name, "confidence": conf, "category": "character"})
 
         rating_probs = []
         for tag_id, tag_name in self.rating_tags:
@@ -638,12 +649,12 @@ class WD14Tagger:
         if rating_probs:
             best_rating = max(rating_probs, key=lambda x: x[1])
             result["rating"] = best_rating[0]
-            result["all_tags"].append({"tag": best_rating[0], "confidence": best_rating[1]})
+            result["all_tags"].append({"tag": best_rating[0], "confidence": best_rating[1], "category": "rating"})
         elif self._rating_fallback_mode == "derive_from_tags":
             result["rating"] = self._derive_fallback_rating(result)
             if result["rating"] != "unknown":
                 result["rating_confidences"][result["rating"]] = 1.0
-                result["all_tags"].append({"tag": result["rating"], "confidence": 1.0})
+                result["all_tags"].append({"tag": result["rating"], "confidence": 1.0, "category": "rating"})
 
         result["general_tags"].sort(key=lambda x: x["confidence"], reverse=True)
         result["copyright_tags"].sort(key=lambda x: x["confidence"], reverse=True)
@@ -1092,7 +1103,17 @@ class WD14Tagger:
         """Preprocess image for inference."""
         width, height = self._input_hw
 
-        image = image.convert("RGB")
+        # P2-13a: composite transparency onto white before dropping alpha —
+        # bare convert("RGB") turns transparent pixels black, which reads as
+        # a black background to the tagger. Matches SmilingWolf's official
+        # wd14 preprocessing (white canvas alpha_composite).
+        if image.mode in ("RGBA", "LA", "PA") or (image.mode == "P" and "transparency" in image.info):
+            rgba = image.convert("RGBA")
+            canvas = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+            canvas.alpha_composite(rgba)
+            image = canvas.convert("RGB")
+        else:
+            image = image.convert("RGB")
 
         if self._resize_mode == "stretch":
             processed_image = image.resize((width, height), Image.Resampling.BILINEAR)
@@ -1100,7 +1121,9 @@ class WD14Tagger:
             old_size = image.size
             ratio = min(float(width) / max(1, old_size[0]), float(height) / max(1, old_size[1]))
             new_size = (int(old_size[0] * ratio), int(old_size[1] * ratio))
-            resized_image = image.resize(new_size, Image.Resampling.LANCZOS)
+            # P2-13a: BICUBIC matches the official wd14 letterbox resample
+            # (LANCZOS produced slightly different tag confidences).
+            resized_image = image.resize(new_size, Image.Resampling.BICUBIC)
             processed_image = Image.new("RGB", (width, height), self._pad_color)
             paste_pos = ((width - new_size[0]) // 2, (height - new_size[1]) // 2)
             processed_image.paste(resized_image, paste_pos)

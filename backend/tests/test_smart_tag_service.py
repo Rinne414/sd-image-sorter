@@ -100,9 +100,22 @@ def test_real_tags_are_kept() -> None:
         assert is_noise_tag(tag) is False, tag
 
 
-def test_symbol_noise_tags_are_stripped() -> None:
-    for tag in [":3", ":p", "@_@", ">_<", "^^^"]:
-        assert is_noise_tag(tag)
+def test_symbolic_junk_is_stripped_but_kaomoji_survive() -> None:
+    # Prompt-syntax fragments are still junk...
+    for tag in ["::", "--", "//", ";;"]:
+        assert is_noise_tag(tag), tag
+    # ...but real danbooru emoticon tags are vocabulary, not noise (audit P1-4).
+    for tag in [":3", ":p", "@_@", ">_<", "^^^", "^_^", "=_=", "0_0", "!?"]:
+        assert is_noise_tag(tag) is False, tag
+
+
+def test_kaomoji_keep_underscores_through_caption_normalize() -> None:
+    from services.smart_tag_service import _normalize_tag
+
+    assert _normalize_tag("^_^") == "^_^"
+    assert _normalize_tag("O_O") == "o_o"
+    assert _normalize_tag("long_hair") == "long hair"
+    assert _normalize_tag("score_9_up") == "score_9_up"
 
 
 def test_filter_noise_tags_preserves_order_and_drops_noise() -> None:
@@ -885,11 +898,16 @@ def test_single_tagger_pipeline_preserves_confidence_rows() -> None:
 
 def test_persist_result_writes_model_confidences(monkeypatch) -> None:
     captured = []
+    captured_kwargs = {}
+
+    def _fake_add_tags_batch(rows, **kwargs):
+        captured.extend(rows)
+        captured_kwargs.update(kwargs)
 
     monkeypatch.setitem(
         sys.modules,
         "database",
-        SimpleNamespace(add_tags_batch=lambda rows: captured.extend(rows)),
+        SimpleNamespace(add_tags_batch=_fake_add_tags_batch),
     )
 
     smart_tag_service._persist_result(
@@ -922,6 +940,9 @@ def test_persist_result_writes_model_confidences(monkeypatch) -> None:
         {"tag": "blue_eyes", "confidence": 0.81, "category": "general"},
         {"tag": "blue_archive", "confidence": 0.74, "category": "copyright"},
     ]
+    # Provenance contract: smart-tag writes are pipeline-scoped tagger rows,
+    # so user-added manual tags survive a re-run (audit P1-5).
+    assert captured_kwargs == {"default_source": "tagger", "replace_scope": "pipeline"}
 
 
 def test_coerce_request_uses_model_specific_smart_tag_defaults(monkeypatch) -> None:
@@ -965,7 +986,9 @@ def test_smart_tag_strips_noise_rows_and_caps_general_tags() -> None:
                 "general_tags": [
                     {"tag": "absurdres", "confidence": 0.99},
                     {"tag": "2024", "confidence": 0.98},
-                    {"tag": ":3", "confidence": 0.97},
+                    # "::" is prompt-syntax junk; emoticons like ":3" are
+                    # real vocabulary and would legitimately survive (P1-4).
+                    {"tag": "::", "confidence": 0.97},
                     {"tag": "keep_a", "confidence": 0.96},
                     {"tag": "keep_b", "confidence": 0.95},
                 ],

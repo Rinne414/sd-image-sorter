@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit, urlunsplit
@@ -243,6 +244,7 @@ class VLMResult:
     retries_used: int = 0
     model: str = ""
     raw_text: str = ""          # Original raw output for debugging
+    truncated: bool = False     # True when the provider cut output at the token cap
 
 
 def encode_image_base64(image_path: str, max_size: int = 1024) -> str:
@@ -347,6 +349,28 @@ def detect_provider(endpoint: str) -> str:
     if "googleapis.com" in lower or "generativelanguage" in lower or "aiplatform" in lower:
         return "gemini"
     return "openai_compat"
+
+
+_THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
+
+
+def strip_reasoning(text: str) -> str:
+    """Strip ``<think>...</think>`` reasoning blocks from raw model output.
+
+    Reasoning models (DeepSeek-R1 distills, QwQ, some Qwen builds) wrap their
+    chain-of-thought in ``<think>`` tags before the real answer. Left in, that
+    CoT leaks into captions and danbooru tags. Handles a complete
+    ``<think>..</think>`` block and the common truncated case where only the
+    closing ``</think>`` survived (keep everything after it). Shared by the
+    OpenAI-compatible provider and the ToriiGate tagger so the behaviour cannot
+    drift between the two.
+    """
+    if not text:
+        return text
+    cleaned = _THINK_BLOCK_RE.sub("", text)
+    if "</think>" in cleaned:
+        cleaned = cleaned.split("</think>", 1)[-1]
+    return cleaned.strip()
 
 
 class VLMProvider:

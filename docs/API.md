@@ -547,6 +547,8 @@ Parse uploaded image metadata without inserting into library DB.
 
 ### Tags
 
+**Tag provenance (v3.5.0, migration 024):** every tag row now carries `source` (`tagger` | `vlm` | `manual` | `trigger`; `NULL` = pre-migration legacy) and `category` (`general` | `character` | `copyright` | `artist` | `rating` | `meta` | `trigger`). Tag arrays returned by image endpoints include both fields. Pipeline re-tags (gallery tagger, Smart Tag) replace only their own rows (`source` in tagger/vlm/trigger or `NULL`) — user-added `manual` rows survive re-tagging, and the tag import endpoint marks imported rows `manual`. The export template engine uses `category` for the `{characters}` / `{copyright}` / `{artists}` sections.
+
 #### GET /api/tags
 Get all tags with counts.
 
@@ -593,7 +595,7 @@ Get LoRA library. Optional query params: `q=<text>`, `limit=<n>`. Search runs ac
 Get the checkpoint (base model) library for the Library tab's Checkpoints facet. Returns `{ "checkpoints": [{ "name", "count" }], "total" }` aggregated across the full indexed library.
 
 #### GET /api/tagger/models
-Get available tagger models and runtime guidance. Each model item includes default thresholds, GPU/runtime guidance, and Custom profile metadata such as `custom_profile_supported`, `custom_metadata_format`, and `custom_tags_file_hint`.
+Get available tagger models and runtime guidance. Each model item includes default thresholds, GPU/runtime guidance, and Custom profile metadata such as `custom_profile_supported`, `custom_metadata_format`, and `custom_tags_file_hint`. v3.5.0: each item also carries `captioner_only` — `true` marks caption-only models (ToriiGate) that stay in the catalog for Smart Tag and model downloads but are hidden from the gallery tagger dropdown and rejected by `/api/tag` with a 400.
 
 #### POST /api/tag/start
 Start background tagging (alias for POST /api/tag).
@@ -609,7 +611,7 @@ Start background tagging.
 | `threshold` | float | 0.35 | Threshold for general tags after score normalization |
 | `character_threshold` | float | 0.85 | Threshold for character tags after score normalization |
 | `retag_all` | bool | false | Re-tag already tagged images when no explicit `image_ids` are supplied |
-| `model_name` | string \| null | default tagger | Built-in tagger model name, or the selected Custom profile when `model_path` is used |
+| `model_name` | string \| null | default tagger | Built-in tagger model name, or the selected Custom profile when `model_path` is used. Captioner-only models (`toriigate-0.5`) are rejected with 400 — caption with Smart Tag's natural-language mode instead (v3.5.0 owner decision) |
 | `model_path` | string \| null | null | Local Custom ONNX model path; must exist and end in `.onnx`. User-supplied files are never deleted or re-downloaded by the repair path |
 | `tags_path` | string \| null | null | Optional local tag metadata path for Custom ONNX only; requires `model_path`. If supplied, it must exist and match the selected profile extension. If omitted, the tagger auto-detects profile-specific metadata next to the model: WD14/PixAI use `selected_tags.csv`; Camie uses `camie-tagger-v2-metadata.json` or `metadata.json` |
 | `custom_profile` | string \| null | null | Custom ONNX profile: `wd14`, `camie-tagger-v2`, or `pixai-tagger-v0.9`. `toriigate-0.5` is rejected because ToriiGate is not ONNX |
@@ -653,15 +655,17 @@ Export one same-name sidecar per selected image. Text modes write `.txt`; `json`
 | `prefix` | string | "" | Optional Class Token prepended only to training-caption modes (`caption_tags`, `caption_merged`) |
 | `blacklist` | string[] | `[]` | Tags excluded from tag/caption outputs |
 | `content_mode` | string | `tags` | `tags`, `prompt`, `negative`, `prompt_negative`, `a1111`, `caption_tags`, `caption_merged`, or `json` |
-| `overwrite_policy` | string | `unique` | `unique` creates non-colliding filenames, `skip` leaves existing sidecars untouched, `overwrite` replaces sidecars |
+| `overwrite_policy` | string | `unique` | `unique` keeps each sidecar's image-matched name and reports a per-image error if that name is already taken — it never renames to `{stem}_1`, which would pair the caption with no image (in `beside_image` mode a caption already sitting next to the image is skipped instead of erroring). `skip` leaves existing sidecars untouched. `overwrite` replaces sidecars |
 | `image_types` | object | `{}` | v3.5.0 (caption editor): per-image caption type `{image_id: "booru"\|"nl"\|"both"}`. `nl`/`both` fold the stored (or overridden) natural-language sentence into the caption; absent keys mean `booru` and reproduce the pre-v3.5.0 output byte-for-byte |
 | `image_nl_overrides` | object | `{}` | v3.5.0 (caption editor): per-image edited NL sentence `{image_id: text}`. An explicit empty string suppresses the stored sentence |
+| `nl_sidecar` | bool | `false` | v3.5.0 (diffusion-pipe split export): additionally write each image's natural-language caption to a `{stem}{suffix}.txt` twin beside the tag sidecar. Only valid for `tags`/`template` content modes (400 otherwise). The twin is single-line with the trigger (template trigger, else `prefix`) injected up front; images without NL text get no twin. Under `unique` policy a clash on the twin fails that row atomically (no half-pairs) |
+| `nl_sidecar_suffix` | string | `"_nl"` | Filename suffix for the NL twin (`[A-Za-z0-9._-]+`) |
 
 Mode rules: `prompt`, `negative`, `prompt_negative`, `a1111`, and `json` preserve the stored Prompt / generation data and ignore `prefix`. `tags` exports only tags after blacklist filtering. `caption_tags` writes optional Class Token + AI caption + Tags. `caption_merged` writes optional Class Token + AI caption + Prompt + Tags as one LoRA-training caption line. `image_types` / `image_nl_overrides` apply only in `template` and `tags` modes (the same gate as `/api/dataset/export`) and are also accepted by `POST /api/tags/export-combined`.
 
-Response includes `status` (`ok`, `partial`, or `error`), `exported`, `skipped`, numeric `errors`/`error_count`, `error_messages`, `total`, `content_mode`, and `overwrite_policy`. `overwrite_policy=skip` returns `partial` when existing sidecars are intentionally left untouched.
+Response includes `status` (`ok`, `partial`, or `error`), `exported`, `skipped`, numeric `errors`/`error_count`, `error_messages`, `total`, `content_mode`, `overwrite_policy`, and `nl_sidecars_written` (count of `{stem}_nl.txt` twins; 0 when `nl_sidecar` is off). `overwrite_policy=skip` returns `partial` when existing sidecars are intentionally left untouched. `overwrite_policy=unique` returns `partial` (or `error` if nothing was exported) when a name clash is reported: `error_messages` names the taken sidecar and the source image that already owns it.
 
-v3.5.0: the response also carries a `validation` block — a trainer-consumability report over every written sidecar: `{checked, ok, warnings: [{code, count, examples, message}]}`. Warning codes: `unpaired_sidecar` (caption filename no longer matches its image, e.g. a `_1` collision rename), `empty_caption`, `multiline_caption` (kohya-style trainers read only the first line; not raised for the by-design multi-line modes `prompt_negative`/`a1111`/`json`/`prompt_nl`), `missing_trigger` (template mode with a configured trigger), and `conflicting_ratings` (two different rating tokens in one caption). `examples` lists at most 3 filenames per code.
+v3.5.0: the response also carries a `validation` block — a trainer-consumability report over every written sidecar: `{checked, ok, warnings: [{code, count, examples, message}]}`. Warning codes: `unpaired_sidecar` (caption filename no longer matches its image, e.g. an `overwrite`-mode `_1` de-dup rename), `empty_caption`, `multiline_caption` (kohya-style trainers read only the first line; not raised for the by-design multi-line modes `prompt_negative`/`a1111`/`json`/`prompt_nl`), `missing_trigger` (template mode with a configured trigger), and `conflicting_ratings` (two different rating tokens in one caption). `examples` lists at most 3 filenames per code.
 
 #### POST /api/tags/export-batch/start
 Run the same sidecar export as a background job so a large selection does not block the request. Accepts the same body as `POST /api/tags/export-batch`. This is a coarse background wrap (no mid-run cancel). Response includes `status` and `message`.
@@ -1242,7 +1246,7 @@ Drop tags below a confidence threshold and deduplicate by case-insensitive tag n
 List built-in tag/caption export presets used by the LoRA training template engine (Anima Tags+NL, Anima Tags-only, Illustrious / Pony, NoobAI, FLUX, Kohya SD1.5, Custom).
 
 #### POST /api/tags/export-preview
-Render up to 20 sample caption files for a given preset without writing to disk. Body: `{image_ids, preset_id|template, options}`. Returns rendered captions keyed by image id plus the resolved template variables.
+Render sample caption files without writing to disk. Body: `{image_ids, preset_id|template_override, options}`. Returns rendered captions keyed by image id plus the resolved template variables. v3.5.0 (preview unification): pass `content_mode` (any real export mode, plus optional `prefix` and `normalize_tag_underscores`) to render through `build_sidecar_content` — the exact engine `/api/tags/export-batch` writes with — so the preview can never drift from the exported sidecar. Omit `content_mode` (or send `template`) for the template-designer path.
 
 #### POST /api/tags/export-combined
 Build a single combined export bundle for the current selection across multiple presets. Body: `{image_ids|selection_token, presets: [{preset_id|template, options}], filename_template}`. Returns `{token, total_files}` — pass the token to the download endpoint below.

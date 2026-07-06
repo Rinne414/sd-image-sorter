@@ -7,6 +7,7 @@ import json
 import os
 import time
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional
 
@@ -475,12 +476,16 @@ def compose_caption_with_nl(rendered: str, caption_type: str, nl_text: str) -> s
     Single source of truth for both export engines; the frontend
     ``CaptionCore.compose`` mirrors this exactly — change them together.
     Returns ``rendered`` verbatim for any type other than "nl"/"both".
+
+    The NL sentence is whitespace-flattened (P1-7): stored ai_caption text can
+    span multiple lines, and kohya-style trainers read caption line 1 only, so
+    a multi-line sentence would silently truncate the training caption.
     """
     ctype = str(caption_type or "").strip().lower()
     if ctype not in ("nl", "both"):
         return rendered
     booru = str(rendered or "").strip()
-    text = str(nl_text or "").strip()
+    text = " ".join(str(nl_text or "").split())
     if ctype == "nl":
         return text or booru
     # 'both' — tags first, then the sentence (matches the tags_nl mode order).
@@ -499,6 +504,18 @@ def _coerce_int_str_map(raw: Optional[Dict[Any, Any]]) -> Dict[int, str]:
             except (TypeError, ValueError):
                 continue
     return result
+
+
+def _image_nl_source_text(image: Dict[str, Any], image_id: int, nl_overrides: Dict[int, str]) -> str:
+    """Resolve one image's natural-language caption text.
+
+    Editor override first (an explicit empty string intentionally suppresses
+    the stored sentence), then the stored pure NL, then the fused ai_caption
+    for rows tagged before the nl_caption split existed.
+    """
+    if image_id in nl_overrides:
+        return str(nl_overrides[image_id] or "")
+    return str(image.get("nl_caption") or image.get("ai_caption") or "")
 
 
 def _compose_nl_for_image(
@@ -520,13 +537,24 @@ def _compose_nl_for_image(
         return rendered
     if str(content_mode or "").strip().lower() not in NL_COMPOSE_MODES:
         return rendered
-    if image_id in nl_overrides:
-        nl_text = nl_overrides[image_id]
-    else:
-        # Fall back to the stored pure NL, then the fused ai_caption for rows
-        # tagged before the nl_caption split existed.
-        nl_text = str(image.get("nl_caption") or image.get("ai_caption") or "")
+    nl_text = _image_nl_source_text(image, image_id, nl_overrides)
     return compose_caption_with_nl(rendered, caption_type, nl_text)
+
+
+def _build_nl_sidecar_content(nl_text: str, trigger: str) -> str:
+    """Build the split-export NL twin's content: single line, trigger first.
+
+    kohya-style trainers read caption line 1 only, so the sentence is
+    whitespace-flattened. The trigger is prepended unless already present
+    (case-insensitive), because each sidecar must stand alone as a caption.
+    """
+    flattened = " ".join(str(nl_text or "").split())
+    trigger_clean = str(trigger or "").strip().strip(",")
+    if not trigger_clean:
+        return flattened
+    if trigger_clean.lower() in flattened.lower():
+        return flattened
+    return f"{trigger_clean}, {flattened}" if flattened else trigger_clean
 
 
 def _filter_text_caption_tokens(value: str, blacklist: set[str]) -> List[str]:
@@ -698,13 +726,61 @@ def _sanitized_fallback_stem(image: Dict[str, Any]) -> str:
     return os.path.splitext(sanitized)[0] or "unnamed"
 
 
+@dataclass(frozen=True)
+class _SidecarAllocation:
+    """Outcome of resolving one image's caption sidecar destination.
+
+    ``outcome`` is one of:
+      - ``"write"``  — write the caption to ``path``.
+      - ``"skip"``   — write nothing; count toward ``skipped`` (an existing
+                       sidecar is intentionally left in place).
+      - ``"error"``  — write nothing; count toward ``error_count`` and surface
+                       ``message`` (a name clash that renaming would only paper
+                       over by breaking image/caption pairing).
+    """
+
+    outcome: str
+    path: Optional[str] = None      # set iff outcome == "write"
+    message: Optional[str] = None   # set iff outcome == "error"
+
+
+def _unique_collision_message(sidecar_name: str, taken_by: str) -> str:
+    """Per-image error text for a ``unique``-policy sidecar name clash."""
+    return (
+        f"Sidecar name '{sidecar_name}' already taken (by {taken_by}); "
+        "rename the image, or use overwrite/skip."
+    )
+
+
 def _allocate_output_path(
     output_folder: str,
     image: Dict[str, Any],
     content_mode: str,
     overwrite_policy: str,
-    used_output_paths: set[str],
-) -> Optional[str]:
+    used_output_paths: Dict[str, str],
+    output_mode: str = "folder",
+) -> _SidecarAllocation:
+    """Resolve where (or whether) one image's caption sidecar is written.
+
+    The sidecar stem is pinned to the image's on-disk stem so the caption pairs
+    with the image by exact basename — the invariant LoRA trainers rely on.
+    Returns a :class:`_SidecarAllocation`:
+
+    - ``write`` + ``path``: write the caption there.
+    - ``skip``: write nothing, keeping an existing sidecar — ``skip`` policy
+      with the name already present, or ``unique`` policy in ``beside_image``
+      mode where a caption already sits next to the image ("already exported").
+    - ``error`` + ``message``: a ``unique``-policy name clash that must not be
+      worked around. Renaming to ``{stem}_1{ext}`` would produce a caption that
+      pairs with no image, so the clash is reported instead. Raised when the
+      name is already claimed by an earlier image in this run (folder mode: two
+      sources share a stem), or by a pre-existing file in ``folder`` mode.
+
+    ``overwrite`` and ``skip`` policies keep their prior behavior; only
+    ``unique`` collisions changed (they used to rename to ``{stem}_N``).
+    ``used_output_paths`` maps each already-allocated sidecar path to the source
+    image path that claimed it, so an in-run clash can name the first owner.
+    """
     extension = _sidecar_extension(content_mode)
     # v3.2.2: derive the sidecar stem from the actual on-disk image
     # filename rather than ``sanitize_filename(image["filename"])``.
@@ -736,37 +812,56 @@ def _allocate_output_path(
             basename = _sanitized_fallback_stem(image)
     if not basename:
         basename = f"image_{image.get('id') or 'unknown'}"
-    # The sidecar filename is always `{basename}{extension}` (e.g. `image_001.txt`).
-    # We deliberately do NOT fall back to `{filename}{extension}`
-    # (e.g. `image_001.json.txt`) when the basename is taken — that pattern
-    # produces the dual-extension `<orig_ext>.<sidecar_ext>` filenames
-    # (`123.json.txt`, `123.gif.txt`) that LoRA training pipelines do not
-    # recognize as caption sidecars. Instead we use a numeric suffix
-    # (`image_001_1.txt`, `image_001_2.txt`, ...) which every trainer
-    # accepts as the same image's caption when paired by basename match.
-    primary_path = os.path.join(output_folder, f"{basename}{extension}")
+
+    sidecar_name = f"{basename}{extension}"
+    primary_path = os.path.join(output_folder, sidecar_name)
+
     if overwrite_policy == "overwrite":
+        # Overwrite replaces any pre-existing sidecar on disk. The one clash we
+        # still resolve is two images in the SAME run mapping onto one name —
+        # the second write would clobber the first image's caption, so both get
+        # kept via a numeric suffix. (This path never fires in the default
+        # ``unique`` policy below.)
         if primary_path not in used_output_paths:
-            return primary_path
-    elif overwrite_policy == "skip":
-        if os.path.exists(primary_path):
-            return None
-        if primary_path not in used_output_paths:
-            return primary_path
-    elif primary_path not in used_output_paths and not os.path.exists(primary_path):
-        return primary_path
+            return _SidecarAllocation("write", path=primary_path)
+        counter = 1
+        while counter <= 10000:
+            candidate = os.path.join(output_folder, f"{basename}_{counter}{extension}")
+            if candidate not in used_output_paths and not os.path.exists(candidate):
+                return _SidecarAllocation("write", path=candidate)
+            counter += 1
+        return _SidecarAllocation("skip")
 
     if overwrite_policy == "skip":
-        return None
+        # Leave any existing sidecar untouched — one on disk before the run, or
+        # one written earlier in it. Only a free name is written.
+        if os.path.exists(primary_path) or primary_path in used_output_paths:
+            return _SidecarAllocation("skip")
+        return _SidecarAllocation("write", path=primary_path)
 
-    counter = 1
-    while counter <= 10000:
-        candidate_path = os.path.join(output_folder, f"{basename}_{counter}{extension}")
-        if candidate_path not in used_output_paths and not os.path.exists(candidate_path):
-            return candidate_path
-        counter += 1
-
-    return None
+    # overwrite_policy == "unique": the sidecar stem is pinned to the image
+    # stem so image/caption pairing always holds. We therefore never rename a
+    # collision to ``{stem}_1{ext}`` — a renamed caption pairs with no image
+    # (LoRA trainers match by exact basename), i.e. a silently broken training
+    # sample. A taken name is reported so the user can rename the offending
+    # image or switch to overwrite/skip.
+    if primary_path in used_output_paths:
+        # An earlier image THIS run already claimed the name. In folder mode
+        # that means two sources share a stem; in beside_image it can only mean
+        # two DB rows point at one file. Either way two images want one caption
+        # name — a real data-loss risk → error.
+        taken_by = used_output_paths[primary_path] or "an earlier image in this export"
+        return _SidecarAllocation("error", message=_unique_collision_message(sidecar_name, taken_by))
+    if os.path.exists(primary_path):
+        # The name is taken by a file already on disk. In beside_image mode a
+        # caption already sitting next to the image is the "already exported"
+        # case → a benign skip. In folder mode it is a genuine clash to surface.
+        if output_mode == "beside_image":
+            return _SidecarAllocation("skip")
+        return _SidecarAllocation(
+            "error", message=_unique_collision_message(sidecar_name, "an existing file on disk")
+        )
+    return _SidecarAllocation("write", path=primary_path)
 
 
 def export_tags_batch_request(
@@ -820,6 +915,25 @@ def export_tags_batch_request(
         else:
             template_options = None
 
+    # P0-3: diffusion-pipe style split export — write each image's NL caption
+    # to a ``{stem}{suffix}.txt`` twin beside the tag sidecar.
+    nl_sidecar_enabled = bool(getattr(request, "nl_sidecar", False))
+    nl_sidecar_suffix = str(getattr(request, "nl_sidecar_suffix", "_nl") or "_nl")
+    if nl_sidecar_enabled and content_mode not in NL_COMPOSE_MODES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "nl_sidecar requires a tag-only content mode ('tags' or 'template'); "
+                f"'{content_mode}' already carries the NL caption in the main file."
+            ),
+        )
+    nl_sidecar_trigger = ""
+    if nl_sidecar_enabled:
+        if isinstance(template_options, dict):
+            nl_sidecar_trigger = str(template_options.get("trigger") or "").strip()
+        if not nl_sidecar_trigger:
+            nl_sidecar_trigger = str(getattr(request, "prefix", "") or "").strip()
+
     # v3.2.1: image_overrides — per-image manually-edited caption that bypasses the engine
     image_overrides_raw = getattr(request, "image_overrides", None) or {}
     image_overrides: Dict[int, str] = {}
@@ -843,8 +957,11 @@ def export_tags_batch_request(
     exported = 0
     skipped = 0
     error_count = 0
+    nl_sidecars_written = 0
     error_messages: List[str] = []
-    used_output_paths = set()
+    # Maps each allocated sidecar path -> the source image path that claimed it,
+    # so a unique-policy in-run name clash can point at the first owner.
+    used_output_paths: Dict[str, str] = {}
     validator = ExportValidator(
         content_mode=content_mode, template_options=template_options
     )
@@ -929,10 +1046,51 @@ def export_tags_batch_request(
                 else:
                     target_folder = output_folder
 
-                output_path = _allocate_output_path(target_folder, image, content_mode, overwrite_policy, used_output_paths)
-                if output_path is None:
+                allocation = _allocate_output_path(
+                    target_folder, image, content_mode, overwrite_policy,
+                    used_output_paths, output_mode=output_mode,
+                )
+                if allocation.outcome == "skip":
                     skipped += 1
                     continue
+                if allocation.outcome == "error":
+                    error_count += 1
+                    if len(error_messages) < 20:
+                        error_messages.append(f"Image {image_id}: {allocation.message}")
+                    elif len(error_messages) == 20:
+                        error_messages.append("... and more errors (total: showing first 20)")
+                    continue
+                output_path = str(allocation.path)
+
+                # P0-3: resolve the NL twin BEFORE writing the tag sidecar so a
+                # unique-policy clash on the twin fails the row atomically —
+                # never a tag file without its NL half.
+                nl_twin_path: Optional[str] = None
+                nl_twin_content = ""
+                if nl_sidecar_enabled:
+                    nl_twin_content = _build_nl_sidecar_content(
+                        _image_nl_source_text(image, image_id, nl_overrides_map),
+                        nl_sidecar_trigger,
+                    )
+                    if nl_twin_content:
+                        stem_no_ext, sidecar_ext = os.path.splitext(output_path)
+                        candidate = f"{stem_no_ext}{nl_sidecar_suffix}{sidecar_ext}"
+                        twin_taken = candidate in used_output_paths or os.path.exists(candidate)
+                        if overwrite_policy == "unique" and twin_taken:
+                            error_count += 1
+                            if len(error_messages) < 20:
+                                error_messages.append(
+                                    f"Image {image_id}: NL sidecar name "
+                                    f"'{os.path.basename(candidate)}' already taken; "
+                                    "rename the image, or use overwrite/skip."
+                                )
+                            elif len(error_messages) == 20:
+                                error_messages.append("... and more errors (total: showing first 20)")
+                            continue
+                        if overwrite_policy == "skip" and twin_taken:
+                            nl_twin_path = None  # leave the existing twin in place
+                        else:
+                            nl_twin_path = candidate
 
                 if output_mode == "folder" and not output_folder_ready:
                     try:
@@ -941,16 +1099,30 @@ def export_tags_batch_request(
                         raise HTTPException(status_code=400, detail=f"Cannot create output folder: {exc}") from exc
                     output_folder_ready = True
 
-                with open(output_path, "w", encoding="utf-8") as handle:
+                # newline="\n" (P3-14): keep sidecars LF on Windows too —
+                # some trainer stacks treat a CRLF caption line as content.
+                with open(output_path, "w", encoding="utf-8", newline="\n") as handle:
                     handle.write(file_content)
 
-                used_output_paths.add(output_path)
+                used_output_paths[output_path] = str(image.get("path") or image.get("filename") or "")
                 exported += 1
                 validator.add(
                     output_path=output_path,
                     content=file_content,
                     image_path=str(image.get("path") or ""),
                 )
+
+                if nl_twin_path:
+                    with open(nl_twin_path, "w", encoding="utf-8", newline="\n") as handle:
+                        handle.write(nl_twin_content)
+                    used_output_paths[nl_twin_path] = str(image.get("path") or image.get("filename") or "")
+                    nl_sidecars_written += 1
+                    validator.add(
+                        output_path=nl_twin_path,
+                        content=nl_twin_content,
+                        image_path=str(image.get("path") or ""),
+                        pair_suffix=nl_sidecar_suffix,
+                    )
             except HTTPException:
                 raise
             except Exception as exc:
@@ -969,6 +1141,9 @@ def export_tags_batch_request(
         "content_mode": content_mode,
         "overwrite_policy": overwrite_policy,
         "output_mode": output_mode,
+        # P0-3 split export: how many {stem}_nl.txt twins were written (0 when
+        # the option is off or no image had NL text).
+        "nl_sidecars_written": nl_sidecars_written,
         # Trainer-consumability report over every written sidecar (P0 batch):
         # pairing, single-line, trigger presence, rating consistency, emptiness.
         "validation": validator.summary(),
@@ -1120,9 +1295,14 @@ def render_export_preview(request: Any) -> Dict[str, Any]:
 
     from services.export_template_engine import build_export_caption
 
-    # Modes that cannot be represented as templates — use build_sidecar_content directly
-    content_mode = getattr(request, "content_mode", None)
-    use_native_mode = content_mode in ("json", "a1111", "prompt_negative")
+    # P1-7 preview unification: any real content mode previews through
+    # build_sidecar_content — the exact engine the export writes with — so the
+    # preview can never drift from the sidecar. Only the template designer
+    # (content_mode absent or "template") goes through build_export_caption.
+    content_mode = str(getattr(request, "content_mode", None) or "").strip().lower() or None
+    use_native_mode = content_mode is not None and content_mode != "template"
+    if use_native_mode and content_mode not in VALID_CONTENT_MODES:
+        raise HTTPException(status_code=400, detail=f"Invalid content_mode: {content_mode}")
     caption_transforms = getattr(request, "caption_transforms", None) or {}
 
     images_map = db.get_images_by_ids(image_ids)
@@ -1140,8 +1320,10 @@ def render_export_preview(request: Any) -> Dict[str, Any]:
                 rendered = build_sidecar_content(
                     image,
                     tags_map.get(image_id, []) or [],
-                    content_mode=content_mode,
+                    content_mode=str(content_mode),
                     blacklist=set(getattr(request, "blacklist", []) or []),
+                    prefix=str(getattr(request, "prefix", "") or ""),
+                    normalize_tag_underscores=getattr(request, "normalize_tag_underscores", None),
                 )
             else:
                 rendered = build_export_caption(

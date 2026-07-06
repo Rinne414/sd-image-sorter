@@ -96,7 +96,7 @@ test.describe('Tagger Runtime UI', () => {
     await expect(page.locator('#similar-embed-text')).toContainText('4 embedded, 1 failed')
   })
 
-  test('ToriiGate runtime UI shows actual backend, fallback reason, and memory pressure warning', async ({ page }) => {
+  test('captioner-only ToriiGate is hidden from the dropdown; runtime UI shows actual backend, fallback reason, and memory pressure warning', async ({ page }) => {
     await page.route('**/api/system-info', async (route) => {
       await route.fulfill({
         status: 200,
@@ -117,7 +117,7 @@ test.describe('Tagger Runtime UI', () => {
             recommended_use_gpu: true,
             recommended_session_refresh_interval: 180,
             risk_level: 'low',
-            message: 'CUDA is available for ToriiGate.',
+            message: 'CUDA is available.',
           },
         }),
       })
@@ -128,7 +128,13 @@ test.describe('Tagger Runtime UI', () => {
     await page.locator('#btn-tag').click()
     await expect(page.locator('#tag-modal.visible')).toBeVisible()
 
-    await page.locator('#tag-model-select').selectOption('toriigate-0.5')
+    // v3.5.0 owner decision: ToriiGate is a captioner, not a tagger — the
+    // gallery model dropdown must not offer it (Smart Tag NL mode owns it).
+    await expect(page.locator('#tag-model-select option[value="toriigate-0.5"]')).toHaveCount(0)
+
+    // The truthful-runtime UI (target vs actual backend, fallback reason,
+    // memory pressure) is model-generic; drive it with the heavy EVA02 model.
+    await page.locator('#tag-model-select').selectOption('wd-eva02-large-tagger-v3')
     await openTagRuntimeAdvanced(page)
     await page.evaluate(() => {
       const gpuCheckbox = document.getElementById('tag-use-gpu') as HTMLInputElement | null

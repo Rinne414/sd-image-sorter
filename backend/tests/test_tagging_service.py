@@ -113,6 +113,10 @@ def test_toriigate_validation_blocks_gpu_when_system_ram_is_below_minimum():
     workstation - including the user's 32 GB / RTX 3090 setup that can
     actually run the model fine - so this test now uses an 8 GB RAM box to
     exercise the same code path with a value that's still below the floor.
+
+    v3.5.0: ToriiGate is captioner-only, so the request path 400s before this
+    gate runs. The gate stays as the safety net behind the captioner_only flag
+    (v3.4.3 black-screen incident) and is tested directly here.
     """
     service = TaggingService()
 
@@ -128,12 +132,7 @@ def test_toriigate_validation_blocks_gpu_when_system_ram_is_below_minimum():
         },
     ):
         try:
-            service._validate_tag_request(
-                TagRequest(
-                    model_name="toriigate-0.5",
-                    use_gpu=True,
-                )
-            )
+            service._validate_model_hardware_requirements("toriigate-0.5", use_gpu=True)
         except HTTPException as exc:
             assert exc.status_code == 409
             assert "ToriiGate GPU mode is blocked" in exc.detail
@@ -143,9 +142,9 @@ def test_toriigate_validation_blocks_gpu_when_system_ram_is_below_minimum():
 
 
 def test_toriigate_validation_allows_32gb_ram_24gb_vram_box():
-    """User-facing scenario: 32 GB RAM + RTX 3090 (24 GB VRAM, ~14 GB free
-    after closing other apps) should now run ToriiGate. This test pins that
-    promise so any future regression is caught immediately."""
+    """Hardware-floor scenario: 32 GB RAM + RTX 3090 (24 GB VRAM, ~14 GB free
+    after closing other apps) passes the safety-net gate. Direct-call test —
+    the request path 400s earlier because ToriiGate is captioner-only."""
     service = TaggingService()
 
     with patch(
@@ -160,12 +159,7 @@ def test_toriigate_validation_allows_32gb_ram_24gb_vram_box():
         },
     ):
         # Should not raise
-        service._validate_tag_request(
-            TagRequest(
-                model_name="toriigate-0.5",
-                use_gpu=True,
-            )
-        )
+        service._validate_model_hardware_requirements("toriigate-0.5", use_gpu=True)
 
 
 def test_toriigate_validation_allows_gpu_when_minimums_are_met():
@@ -182,12 +176,7 @@ def test_toriigate_validation_allows_gpu_when_minimums_are_met():
             "onnx_providers": ["CPUExecutionProvider"],
         },
     ):
-        service._validate_tag_request(
-            TagRequest(
-                model_name="toriigate-0.5",
-                use_gpu=True,
-            )
-        )
+        service._validate_model_hardware_requirements("toriigate-0.5", use_gpu=True)
 
 
 def test_progress_state_preserves_actual_runtime_and_memory_pressure_fields():
@@ -565,7 +554,8 @@ def test_import_tags_overwrite_uses_shared_batch_writer_and_refreshes_tag_cache(
     assert result == {"imported": 1, "skipped": 0}
 
     tags_after = db.get_image_tags(image_id)
-    assert tags_after == [{"tag": "new_tag", "confidence": 0.9}]
+    # Imported rows carry source='manual' so pipeline re-tags never clobber them.
+    assert tags_after == [{"tag": "new_tag", "confidence": 0.9, "source": "manual", "category": None}]
 
     with db.get_db() as conn:
         row = conn.execute(
@@ -632,7 +622,9 @@ def test_import_tags_skips_duplicate_rows_for_same_image_when_not_overwriting(te
     )
 
     assert result == {"imported": 1, "skipped": 1}
-    assert db.get_image_tags(image_id) == [{"tag": "first_tag", "confidence": 0.6}]
+    assert db.get_image_tags(image_id) == [
+        {"tag": "first_tag", "confidence": 0.6, "source": "manual", "category": None}
+    ]
 
 
 class _DeadWorker:

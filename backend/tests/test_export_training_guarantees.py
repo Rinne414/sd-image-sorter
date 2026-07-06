@@ -193,6 +193,83 @@ class TestSingleLineGuarantee:
 
 
 # ====================================================================
+# P3-11 — Anima category sections from tags.category
+# ====================================================================
+
+class TestAnimaCategorySections:
+    def _category_tags(self):
+        return [
+            {"tag": "1girl", "confidence": 0.99, "category": "general"},
+            {"tag": "long_hair", "confidence": 0.9, "category": "general"},
+            {"tag": "shiroko_(blue_archive)", "confidence": 0.8, "category": "character"},
+            {"tag": "blue_archive", "confidence": 0.7, "category": "copyright"},
+            {"tag": "some_artist", "confidence": 0.6, "category": "artist"},
+        ]
+
+    def test_anima_official_section_order(self):
+        """quality → safety → count → trigger → characters → copyright →
+        @artists → general, sentence last (official Anima model card)."""
+        image = {"nl_caption": "A girl stands in the rain."}
+        rendered = build_export_caption(
+            image, self._category_tags(), preset_id="anima", trigger="sks"
+        )
+
+        chars = rendered.index("shiroko (blue archive)")
+        copy = rendered.index("blue archive,")
+        artist = rendered.index("@some artist")
+        general = rendered.index("long hair")
+        assert rendered.index("sks") < chars < copy < artist < general
+        assert rendered.rstrip().endswith("A girl stands in the rain.")
+
+    def test_artist_at_modifier_prefixes_each_artist(self):
+        rendered = build_export_caption(
+            {}, self._category_tags(), preset_id="custom",
+            template_override="{artists:@}",
+        )
+        assert rendered == "@some_artist"
+
+    def test_category_split_falls_back_to_heuristic_without_category(self):
+        """Legacy rows (source/category NULL) keep the parenthesized-suffix
+        character heuristic."""
+        tags = [
+            {"tag": "1girl", "confidence": 0.99},
+            {"tag": "hatsune_miku_(vocaloid)", "confidence": 0.8},
+        ]
+        rendered = build_export_caption(
+            {}, tags, preset_id="custom",
+            template_override="{characters} | {general}",
+        )
+        assert rendered.startswith("hatsune_miku_(vocaloid)")
+        assert "1girl" in rendered.split("|")[1]
+
+    def test_count_pattern_accepts_open_ended_danbooru_counts(self):
+        tags = [{"tag": "6+girls", "confidence": 0.9, "category": "general"}]
+        rendered = build_export_caption(
+            {}, tags, preset_id="custom", template_override="{count}",
+        )
+        assert rendered == "6+girls"
+
+    def test_sentence_zone_survives_dedup_and_sheds_tag_echo(self):
+        """P3-14: with an ai_caption fallback (fused tags+sentence), the tag
+        echo ahead of the sentence is stripped; the sentence itself is prose
+        and must not lose comma segments to token dedup."""
+        image = {"ai_caption": "1girl, long hair, A girl, with long hair, stands."}
+        tags = [
+            {"tag": "1girl", "confidence": 0.99, "category": "general"},
+            {"tag": "long_hair", "confidence": 0.9, "category": "general"},
+        ]
+        rendered = build_export_caption(
+            image, tags, preset_id="anima", trigger="",
+        )
+        # The echoed "1girl, long hair" tag run is deduped away; the prose
+        # tail (which still contains commas) survives intact. (The final
+        # period may be trimmed by the pre-existing trailing-separator
+        # heuristic for short tails — not under test here.)
+        assert rendered.count("1girl") == 1
+        assert "A girl, with long hair, stands" in rendered
+
+
+# ====================================================================
 # P1-16 + P0-1b — Smart Tag persists trigger and rating rows
 # ====================================================================
 
@@ -200,11 +277,14 @@ class TestSmartTagPersistence:
     def _captured_batch(self, monkeypatch, result):
         captured = {}
 
-        def fake_add_tags_batch(batch):
+        def fake_add_tags_batch(batch, **kwargs):
             captured["batch"] = batch
+            captured["kwargs"] = kwargs
 
         monkeypatch.setattr(database, "add_tags_batch", fake_add_tags_batch)
         _persist_result(1, result, merge_strategy="replace")
+        # Provenance contract: smart-tag writes are pipeline-scoped tagger rows.
+        assert captured["kwargs"] == {"default_source": "tagger", "replace_scope": "pipeline"}
         return captured["batch"][0]
 
     def test_trigger_persisted_as_top_confidence_row(self, monkeypatch):

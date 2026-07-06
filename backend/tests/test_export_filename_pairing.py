@@ -186,3 +186,119 @@ def test_special_char_filenames_dont_become_underscores(test_client, test_db, tm
         f"sidecar filename was sanitized — got '{bad.name}' but should keep "
         f"the parentheses to pair with image 'my (lora char).png'."
     )
+
+
+# ============== P1-6: unique-policy collision keeps image↔caption pairing ==============
+#
+# Under the default ``unique`` policy the sidecar stem is pinned to the image
+# stem so pairing always holds. A name clash is therefore reported (folder
+# mode) or skipped (beside_image, when a caption already sits next to the
+# image) rather than renamed to ``{stem}_1.txt`` — a renamed caption pairs
+# with no image and is a silently broken LoRA training sample.
+
+
+def _stage_image(tmp_path: Path, subdir: str, filename: str, tag: str) -> tuple[int, Path]:
+    """Create one on-disk image with a single tag; return its DB id + path."""
+    import database as db
+
+    folder = tmp_path / subdir
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / filename
+    Image.new("RGB", (16, 16), color=(90, 120, 150)).save(path)
+    image_id = db.add_image(path=str(path), filename=filename)
+    db.add_tags(image_id, [{"tag": tag, "confidence": 0.9}])
+    return image_id, path
+
+
+def test_folder_unique_collision_first_wins_second_errors(test_client, test_db, tmp_path: Path):
+    """(a) folder mode, two images sharing a stem, unique → the first exports,
+    the second is a per-image error, and no ``{stem}_1.txt`` lands on disk."""
+    id_a, _ = _stage_image(tmp_path, "a", "dup.png", "alpha_tag")
+    id_b, _ = _stage_image(tmp_path, "b", "dup.jpg", "beta_tag")  # same stem 'dup'
+
+    out = tmp_path / "out"
+    out.mkdir()
+    resp = test_client.post("/api/tags/export-batch", json={
+        "image_ids": [id_a, id_b],
+        "output_folder": str(out),
+        "output_mode": "folder",
+        "content_mode": "tags",
+        "overwrite_policy": "unique",
+    })
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    assert data["exported"] == 1
+    assert data["error_count"] == 1
+    assert data["skipped"] == 0
+    assert data["status"] == "partial"
+
+    # Winner is on disk; the collision produced no rename or dual-extension name.
+    assert (out / "dup.txt").exists()
+    assert not (out / "dup_1.txt").exists()
+    assert not (out / "dup.jpg.txt").exists()
+    assert not (out / "dup.png.txt").exists()
+    assert [p.name for p in out.glob("*.txt")] == ["dup.txt"]
+
+    # The error names the taken sidecar, its first owner, and the remedy.
+    message = " ".join(data["error_messages"])
+    assert "dup.txt" in message
+    assert "dup.png" in message  # first owner's source path
+    assert "already taken" in message
+    assert "overwrite/skip" in message
+
+
+def test_beside_image_unique_preexisting_sidecar_is_skipped(test_client, test_db, tmp_path: Path):
+    """(b) beside_image mode, a caption already sits next to the image, unique →
+    the image is skipped (not errored) and the existing sidecar is left
+    untouched with no ``_1`` rename."""
+    image_id, path = _stage_image(tmp_path, "lib", "hero.png", "fresh_tag")
+    existing = path.with_suffix(".txt")
+    existing.write_text("preexisting caption", encoding="utf-8")
+
+    resp = test_client.post("/api/tags/export-batch", json={
+        "image_ids": [image_id],
+        "output_folder": "",  # ignored in beside_image mode
+        "output_mode": "beside_image",
+        "content_mode": "tags",
+        "overwrite_policy": "unique",
+    })
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    assert data["exported"] == 0
+    assert data["skipped"] == 1
+    assert data["error_count"] == 0
+    assert data["status"] == "partial"
+
+    # The pre-existing caption is untouched; no rename was created.
+    assert existing.read_text(encoding="utf-8") == "preexisting caption"
+    assert not path.with_name("hero_1.txt").exists()
+
+
+def test_folder_unique_overwrite_still_overwrites(test_client, test_db, tmp_path: Path):
+    """(c) overwrite policy still replaces a pre-existing sidecar in place, with
+    no ``_1`` rename."""
+    image_id, _ = _stage_image(tmp_path, "src", "pic.png", "fresh_tag")
+
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "pic.txt").write_text("stale caption", encoding="utf-8")
+
+    resp = test_client.post("/api/tags/export-batch", json={
+        "image_ids": [image_id],
+        "output_folder": str(out),
+        "output_mode": "folder",
+        "content_mode": "tags",
+        "overwrite_policy": "overwrite",
+        "normalize_tag_underscores": False,
+    })
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    assert data["exported"] == 1
+    assert data["error_count"] == 0
+    content = (out / "pic.txt").read_text(encoding="utf-8")
+    assert content == "fresh_tag"
+    assert "stale" not in content
+    assert not (out / "pic_1.txt").exists()

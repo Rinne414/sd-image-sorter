@@ -51,42 +51,125 @@ def _dedupe_tags(tags: List[Tuple[str, float]]) -> List[Tuple[str, float]]:
     return result
 
 
-def add_tags(image_id: int, tags: List[Dict[str, Any]], content_fingerprint: Optional[str] = None) -> None:
-    """REPLACE all tags for an image. Each tag dict should have 'tag' and optionally 'confidence'.
+# Provenance values a pipeline re-tag OWNS and may replace. Rows written by
+# a user ('manual') survive tagger/Smart-Tag re-runs; NULL covers every
+# pre-migration-024 row (all of which came from tagger pipelines).
+PIPELINE_TAG_SOURCES: Tuple[str, ...] = ("tagger", "vlm", "trigger")
+
+
+def _dedupe_tag_rows(tags: List[Dict[str, Any]], default_source: Optional[str]) -> List[Tuple[str, float, Optional[str], Optional[str]]]:
+    """Normalize tag dicts to (tag, confidence, source, category) rows,
+    deduplicating case-insensitively with highest confidence winning
+    (same semantics as ``_dedupe_tags``, plus provenance columns)."""
+    seen: Dict[str, Tuple[str, float, Optional[str], Optional[str]]] = {}
+    order: List[str] = []
+    for tag_data in tags:
+        tag = str(tag_data.get("tag") or "")
+        if not tag:
+            continue
+        try:
+            conf = float(tag_data.get("confidence", 1.0))
+        except (TypeError, ValueError):
+            conf = 1.0
+        source = tag_data.get("source") or default_source
+        category = tag_data.get("category") or None
+        key = tag.lower()
+        if key not in seen:
+            order.append(key)
+            seen[key] = (tag, conf, source, category)
+        elif conf > seen[key][1]:
+            seen[key] = (tag, conf, source, category)
+    return [seen[key] for key in order]
+
+
+def _replace_tag_rows(
+    cursor,
+    image_id: int,
+    tags: List[Dict[str, Any]],
+    *,
+    default_source: Optional[str],
+    replace_scope: str,
+) -> None:
+    """Shared DELETE+INSERT body for add_tags / add_tags_batch.
+
+    ``replace_scope``:
+      * ``"all"`` — historical behavior: every existing row is replaced.
+        Used by user-driven writes (bulk editor merges, tag import, VLM
+        merge routes) where the caller passes the full authoritative list.
+      * ``"pipeline"`` — replace only rows owned by pipelines
+        (source in PIPELINE_TAG_SOURCES or NULL). Manual rows survive, and
+        incoming rows that would duplicate a surviving manual tag are
+        dropped (the user's row wins). This is the F5 fix: re-tagging no
+        longer destroys manually added tags.
+    """
+    if replace_scope == "pipeline":
+        placeholders = ",".join("?" * len(PIPELINE_TAG_SOURCES))
+        cursor.execute(
+            f"DELETE FROM tags WHERE image_id = ? AND (source IN ({placeholders}) OR source IS NULL)",
+            (image_id, *PIPELINE_TAG_SOURCES),
+        )
+        surviving = {
+            str(row[0]).lower()
+            for row in cursor.execute(
+                "SELECT tag FROM tags WHERE image_id = ?", (image_id,)
+            )
+        }
+    else:
+        cursor.execute("DELETE FROM tags WHERE image_id = ?", (image_id,))
+        surviving = set()
+
+    deduped = _dedupe_tag_rows(tags, default_source)
+    tag_values = [
+        (image_id, tag, conf, source, category)
+        for tag, conf, source, category in deduped
+        if tag.lower() not in surviving
+    ]
+    if tag_values:
+        cursor.executemany(
+            "INSERT INTO tags (image_id, tag, confidence, source, category) VALUES (?, ?, ?, ?, ?)",
+            tag_values,
+        )
+
+
+def add_tags(
+    image_id: int,
+    tags: List[Dict[str, Any]],
+    content_fingerprint: Optional[str] = None,
+    *,
+    default_source: Optional[str] = None,
+    replace_scope: str = "all",
+) -> None:
+    """REPLACE tags for an image. Each tag dict has 'tag' and optionally
+    'confidence' / 'source' / 'category'.
 
     .. warning::
-        The name is historical. This is a **DELETE + INSERT** operation — every
-        existing tag row for ``image_id`` is removed before ``tags`` is inserted.
-        To append a single tag, fetch the existing list first, append in memory,
-        and pass the merged list. See ``backend/routers/tags_bulk.py`` for the
-        canonical merge pattern used by bulk add / remove / cleanup operations.
+        The name is historical. With the default ``replace_scope="all"`` this
+        is a **DELETE + INSERT** — every existing tag row for ``image_id`` is
+        removed before ``tags`` is inserted. To append a single tag, fetch the
+        existing list first, append in memory, and pass the merged list. See
+        ``backend/routers/tags_bulk.py`` for the canonical merge pattern.
+        Tagger/Smart-Tag pipelines pass ``replace_scope="pipeline"`` so
+        manually added rows (source='manual') survive re-tagging (F5 fix).
 
     Uses executemany for batch insert performance.
     """
     with get_db() as conn:
         cursor = conn.cursor()
         content_fingerprint = _ensure_content_fingerprint_value(cursor, image_id, content_fingerprint)
-        # Clear existing tags
-        cursor.execute("DELETE FROM tags WHERE image_id = ?", (image_id,))
-        # Extract tag tuples and deduplicate (Bug 3 fix)
-        tag_tuples = [
-            (tag_data.get("tag", ""), tag_data.get("confidence", 1.0))
-            for tag_data in tags
-            if tag_data.get("tag")
-        ]
-        deduped = _dedupe_tags(tag_tuples)
-        # Batch insert new tags (N+1 fix: use executemany instead of loop)
-        tag_values = [(image_id, tag, conf) for tag, conf in deduped]
-        if tag_values:
-            cursor.executemany(
-                "INSERT INTO tags (image_id, tag, confidence) VALUES (?, ?, ?)",
-                tag_values
-            )
+        _replace_tag_rows(
+            cursor, image_id, tags,
+            default_source=default_source, replace_scope=replace_scope,
+        )
         _mark_image_tagged(cursor, image_id, content_fingerprint)
     _invalidate_tags_cache()
 
 
-def add_tags_batch(image_tags_list: List[Dict[str, Any]]) -> None:
+def add_tags_batch(
+    image_tags_list: List[Dict[str, Any]],
+    *,
+    default_source: Optional[str] = None,
+    replace_scope: str = "all",
+) -> None:
     """Add tags for multiple images in a single transaction.
 
     More efficient than calling add_tags() repeatedly for batch tagging operations.
@@ -95,10 +178,14 @@ def add_tags_batch(image_tags_list: List[Dict[str, Any]]) -> None:
     Args:
         image_tags_list: List of dicts, each with:
             - image_id: int
-            - tags: List[Dict] with 'tag' and 'confidence' keys
+            - tags: List[Dict] with 'tag', optional 'confidence'/'source'/'category'
             - ai_caption: Optional[str] - composed display caption (may include tags)
             - nl_caption: Optional[str] - pure natural-language caption from a VLM
             - content_fingerprint: Optional[str] - metadata-independent image hash
+        default_source: provenance for rows that carry no 'source' key
+            ('tagger' | 'vlm' | 'manual' | 'trigger'); None keeps legacy NULL.
+        replace_scope: "all" (historical full replace) or "pipeline"
+            (manual rows survive — see ``_replace_tag_rows``).
     """
     if not image_tags_list:
         return
@@ -113,23 +200,10 @@ def add_tags_batch(image_tags_list: List[Dict[str, Any]]) -> None:
             nl_caption = item.get("nl_caption") or None
             content_fingerprint = _ensure_content_fingerprint_value(cursor, image_id, item.get("content_fingerprint"))
 
-            # Clear existing tags
-            cursor.execute("DELETE FROM tags WHERE image_id = ?", (image_id,))
-
-            # Extract tag tuples and deduplicate (Bug 3 fix)
-            tag_tuples = [
-                (tag_data.get("tag", ""), tag_data.get("confidence", 1.0))
-                for tag_data in tags
-                if tag_data.get("tag")
-            ]
-            deduped = _dedupe_tags(tag_tuples)
-            # Batch insert new tags
-            tag_values = [(image_id, tag, conf) for tag, conf in deduped]
-            if tag_values:
-                cursor.executemany(
-                    "INSERT INTO tags (image_id, tag, confidence) VALUES (?, ?, ?)",
-                    tag_values
-                )
+            _replace_tag_rows(
+                cursor, image_id, tags,
+                default_source=default_source, replace_scope=replace_scope,
+            )
 
             # Update tagged timestamp and captions. COALESCE preserves an
             # existing value when the caller passes None (a tag-only run, or a
@@ -145,11 +219,12 @@ def add_tags_batch(image_tags_list: List[Dict[str, Any]]) -> None:
 
 
 def get_image_tags(image_id: int) -> List[Dict[str, Any]]:
-    """Get all tags for an image."""
+    """Get all tags for an image (incl. provenance columns so merge-style
+    callers can pass rows back through add_tags without losing source)."""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT tag, confidence FROM tags WHERE image_id = ? ORDER BY confidence DESC",
+            "SELECT tag, confidence, source, category FROM tags WHERE image_id = ? ORDER BY confidence DESC",
             (image_id,)
         )
         return _rows_to_dicts(cursor.fetchall())
@@ -170,7 +245,7 @@ def get_image_tags_map(image_ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
             placeholders = ",".join("?" * len(batch))
             cursor.execute(
                 f"""
-                SELECT image_id, tag, confidence
+                SELECT image_id, tag, confidence, source, category
                 FROM tags
                 WHERE image_id IN ({placeholders})
                 ORDER BY image_id ASC, confidence DESC, tag ASC
@@ -179,7 +254,12 @@ def get_image_tags_map(image_ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
             )
             for row in cursor.fetchall():
                 result.setdefault(row["image_id"], []).append(
-                    {"tag": row["tag"], "confidence": row["confidence"]}
+                    {
+                        "tag": row["tag"],
+                        "confidence": row["confidence"],
+                        "source": row["source"],
+                        "category": row["category"],
+                    }
                 )
 
     return result

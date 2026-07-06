@@ -83,6 +83,8 @@ FULL_SCHEMA_STATEMENTS: tuple[str, ...] = (
         image_id INTEGER NOT NULL,
         tag TEXT NOT NULL,
         confidence REAL DEFAULT 1.0,
+        source TEXT,
+        category TEXT,
         FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
     )
     """,

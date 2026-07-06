@@ -2017,8 +2017,17 @@ const API = {
         if (options.captionTransforms && typeof options.captionTransforms === 'object') {
             payload.caption_transforms = options.captionTransforms;
         }
+        if (options.imageTypes && typeof options.imageTypes === 'object') {
+            payload.image_types = options.imageTypes;
+        }
+        if (options.imageNlOverrides && typeof options.imageNlOverrides === 'object') {
+            payload.image_nl_overrides = options.imageNlOverrides;
+        }
         if (typeof options.normalizeTagUnderscores === 'boolean') {
             payload.normalize_tag_underscores = options.normalizeTagUnderscores;
+        }
+        if (options.nlSidecar === true) {
+            payload.nl_sidecar = true;
         }
         if (options.selectionToken) {
             payload.selection_token = options.selectionToken;
@@ -8433,7 +8442,11 @@ async function loadTaggerModels() {
 
     try {
         const result = await API.getTaggerModels();
-        const models = Array.isArray(result.models) ? result.models : [];
+        // Captioner-only entries (ToriiGate) never belong in the gallery
+        // tagger dropdown — measured unusable as a tagger; caption via
+        // Smart Tag's natural-language stage instead.
+        const models = (Array.isArray(result.models) ? result.models : [])
+            .filter((model) => !model?.captioner_only);
         const defaultModel = normalizeTaggerModelName(result.default, 'wd-swinv2-tagger-v3');
         const currentValue = normalizeTaggerModelName(select.value, defaultModel);
         _taggerModelCatalog = models;
@@ -10808,16 +10821,32 @@ async function executeBatchExport() {
         const captionTransforms = window.V321Integration?.collectCaptionTransforms
             ? window.V321Integration.collectCaptionTransforms()
             : null;
+        // Aurora #25c: per-image caption types + edited NL sentences, collected
+        // explicitly here (replacing the old window.fetch monkey-patch) so both
+        // export paths below carry them in the payload.
+        const imageTypes = window.V321Integration?.collectCaptionTypes
+            ? window.V321Integration.collectCaptionTypes()
+            : null;
+        const imageNlOverrides = window.V321Integration?.collectNlOverrides
+            ? window.V321Integration.collectNlOverrides()
+            : null;
         const normalizeTagUnderscores = $('#batch-export-normalize-underscores')
             ? !!$('#batch-export-normalize-underscores').checked
             : undefined;
+        // P0-3 split export: only tag-only modes may carry the NL twin (the
+        // backend 400s otherwise), so the checkbox is ignored for NL modes.
+        const nlSidecar = ($('#batch-export-nl-sidecar')?.checked === true)
+            && (contentMode === 'tags' || contentMode === 'template');
         const exportOptions = {
             selectionToken,
             outputMode,
             templateOptions,
             imageOverrides,
             captionTransforms,
+            imageTypes,
+            imageNlOverrides,
             normalizeTagUnderscores,
+            nlSidecar,
         };
         let result;
         if (shouldUseBulkJob(selectionToken, imageIds.length)) {

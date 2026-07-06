@@ -12,10 +12,10 @@ import { expect, test, type Page } from '@playwright/test'
  * natural-language box — and forwards image_types + image_nl_overrides in
  * the export payload. Backend compose correctness is locked by
  * backend/tests/test_tag_export_nl_types.py; this spec locks the UI wiring:
- *   1. the type segment renders with 'booru' active by default (no output
- *      change without a user action),
- *   2. switching to Both reveals the NL box seeded from the stored
- *      nl_caption and updates the "Will export" composed line,
+ *   1. an NL-bearing image renders with 'both' active by default (unified
+ *      auto-both with the Dataset Maker); images without NL stay 'booru',
+ *   2. the Both NL box is seeded from the stored nl_caption and editing it
+ *      updates the "Will export" composed line,
  *   3. the export-batch payload carries image_types + image_nl_overrides.
  */
 
@@ -209,15 +209,19 @@ test('caption editor two-box merge: type segment, NL box, composed preview, expo
   await expect(firstQueueItem).toBeVisible({ timeout: 15000 })
   await firstQueueItem.click()
 
-  // 1. Default state: segment present, booru active, NL box hidden.
+  // 1. Default state (Aurora #25c unified auto-both): the first fixture image
+  //    carries a stored NL sentence, so it defaults to 'both' — the NL box and
+  //    composed "will export" line are visible without a user action, matching
+  //    the Dataset Maker. Images without an NL sentence still default to 'booru'.
   const seg = page.locator('#caption-editor-list .export-preview-captype-seg')
   await expect(seg).toBeVisible()
-  await expect(seg.locator('.export-preview-captype-btn[data-caption-type="booru"]')).toHaveClass(/is-active/)
-  await expect(page.locator('#caption-editor-list .export-preview-nl')).toBeHidden()
-  await expect(page.locator('#caption-editor-list .export-preview-willexport')).toBeHidden()
+  await expect(seg.locator('.export-preview-captype-btn[data-caption-type="both"]')).toHaveClass(/is-active/)
+  await expect(page.locator('#caption-editor-list .export-preview-nl')).toBeVisible()
+  await expect(page.locator('#caption-editor-list .export-preview-willexport')).toBeVisible()
 
-  // 2. Switch to Both: NL box appears seeded with the stored sentence and the
-  //    composed "will export" line shows tags followed by the sentence.
+  // 2. Both is the default here; re-affirm it, then check the NL box is seeded
+  //    with the stored sentence and the composed "will export" line shows tags
+  //    followed by the sentence.
   await seg.locator('.export-preview-captype-btn[data-caption-type="both"]').click()
   const nlBox = page.locator('#caption-editor-list .export-preview-nl-textarea')
   await expect(nlBox).toBeVisible()

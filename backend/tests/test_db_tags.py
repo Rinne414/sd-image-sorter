@@ -77,7 +77,7 @@ def test_dedupe_no_duplicates():
     assert result == tags
 
 
-def test_add_tags_deduplicates(tmp_path):
+def test_add_tags_deduplicates(test_db, tmp_path):
     """add_tags() should deduplicate case-insensitive tags, keeping highest confidence."""
     image_id = db.add_image(path=str(tmp_path / "test.png"), filename="test.png")
 
@@ -103,7 +103,7 @@ def test_add_tags_deduplicates(tmp_path):
     assert tag_dict["blue_eyes"]["confidence"] == 0.95
 
 
-def test_add_tags_batch_deduplicates(tmp_path):
+def test_add_tags_batch_deduplicates(test_db, tmp_path):
     """add_tags_batch() should deduplicate case-insensitive tags for each image."""
     image1_id = db.add_image(path=str(tmp_path / "test1.png"), filename="test1.png")
     image2_id = db.add_image(path=str(tmp_path / "test2.png"), filename="test2.png")
@@ -140,3 +140,84 @@ def test_add_tags_batch_deduplicates(tmp_path):
     assert len(stored2) == 1
     assert stored2[0]["tag"].lower() == "taga"
     assert stored2[0]["confidence"] == 0.95  # Higher kept
+
+
+# ---------------------------------------------------------------------------
+# Tag provenance (audit P1-5): pipeline re-tags must not clobber manual tags
+# ---------------------------------------------------------------------------
+
+
+def test_manual_tags_survive_pipeline_retag(test_db, tmp_path):
+    """replace_scope='pipeline' replaces tagger/vlm/trigger rows only."""
+    image_id = db.add_image(path=str(tmp_path / "keep.png"), filename="keep.png")
+
+    db.add_tags(image_id, [{"tag": "my_oc_name", "confidence": 1.0}], default_source="manual")
+    db.add_tags(
+        image_id,
+        [{"tag": "1girl", "confidence": 0.9}],
+        default_source="tagger",
+        replace_scope="pipeline",
+    )
+    # Re-tag: old tagger rows go away, the manual row survives.
+    db.add_tags(
+        image_id,
+        [{"tag": "solo", "confidence": 0.8}],
+        default_source="tagger",
+        replace_scope="pipeline",
+    )
+
+    by_tag = {t["tag"]: t for t in db.get_image_tags(image_id)}
+    assert "my_oc_name" in by_tag
+    assert by_tag["my_oc_name"]["source"] == "manual"
+    assert "solo" in by_tag
+    assert by_tag["solo"]["source"] == "tagger"
+    assert "1girl" not in by_tag
+
+
+def test_manual_tag_wins_dedupe_against_pipeline_duplicate(test_db, tmp_path):
+    """When a re-tag emits a tag the user already added manually, the manual
+    row keeps its provenance instead of being demoted to source='tagger'."""
+    image_id = db.add_image(path=str(tmp_path / "dup.png"), filename="dup.png")
+
+    db.add_tags(image_id, [{"tag": "blue_eyes", "confidence": 1.0}], default_source="manual")
+    db.add_tags(
+        image_id,
+        [{"tag": "blue_eyes", "confidence": 0.42}, {"tag": "1girl", "confidence": 0.9}],
+        default_source="tagger",
+        replace_scope="pipeline",
+    )
+
+    stored = db.get_image_tags(image_id)
+    rows = [t for t in stored if t["tag"] == "blue_eyes"]
+    assert len(rows) == 1
+    assert rows[0]["source"] == "manual"
+
+
+def test_replace_scope_all_still_clobbers_everything(test_db, tmp_path):
+    image_id = db.add_image(path=str(tmp_path / "all.png"), filename="all.png")
+
+    db.add_tags(image_id, [{"tag": "manual_one", "confidence": 1.0}], default_source="manual")
+    db.add_tags(
+        image_id,
+        [{"tag": "fresh", "confidence": 0.9}],
+        default_source="tagger",
+        replace_scope="all",
+    )
+
+    assert [t["tag"] for t in db.get_image_tags(image_id)] == ["fresh"]
+
+
+def test_legacy_null_source_rows_replaced_by_pipeline_scope(test_db, tmp_path):
+    """Rows written before migration 024 have source=NULL; a pipeline re-tag
+    treats them as pipeline output (matches historical replace semantics)."""
+    image_id = db.add_image(path=str(tmp_path / "legacy.png"), filename="legacy.png")
+
+    db.add_tags(image_id, [{"tag": "old_row", "confidence": 0.5}])  # source=NULL
+    db.add_tags(
+        image_id,
+        [{"tag": "new_row", "confidence": 0.9}],
+        default_source="tagger",
+        replace_scope="pipeline",
+    )
+
+    assert [t["tag"] for t in db.get_image_tags(image_id)] == ["new_row"]

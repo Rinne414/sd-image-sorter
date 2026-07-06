@@ -85,7 +85,7 @@ TORIIGATE_LOAD_HEARTBEAT_SECONDS = 5.0
 
 TAGGER_MODEL_HINTS = {
     "wd-eva02-large-tagger-v3": {
-        "summary": "Most accurate overall. The app now drives it with adaptive runtime limits instead of forcing CPU by default.",
+        "summary": "Most accurate overall — confirmed best in the v3.5.0 live test (highest precision at default threshold, zero hallucinations). The app drives it with adaptive runtime limits instead of forcing CPU by default.",
         "speed": "Slow",
         "memory": "High",
         "best_for": "Max Quality / final library cleanup",
@@ -148,7 +148,7 @@ TAGGER_MODEL_HINTS = {
         "stability_score": 3,
     },
     "camie-tagger-v2": {
-        "summary": "Much newer danbooru-era tag space. Strong artist / character / copyright coverage, but it can emit many more tags if the threshold is set too low.",
+        "summary": "Much newer danbooru-era tag space with WD-level accuracy (v3.5.0 live test: 4/4 characters found). Strong artist / character / copyright / year coverage, but it can emit many more tags if the threshold is set too low.",
         "speed": "Medium-slow",
         "memory": "High",
         "best_for": "Modern tag coverage / deeper library enrichment",
@@ -157,29 +157,29 @@ TAGGER_MODEL_HINTS = {
         "gpu_confirmation_required": False,
         "gpu_locked": False,
         "runtime_note": "Adaptive runtime with denser modern tags. Better coverage than older WD models, but heavier and noisier if you lower the threshold too much.",
-        "quality_score": 5,
+        "quality_score": 4,
         "speed_score": 2,
         "stability_score": 3,
     },
     "pixai-tagger-v0.9": {
-        "summary": "PixAI v0.9 ONNX export with a newer tag space than classic WD models. Strong for modern danbooru-style tagging, and the app now fills rating from a local fallback so library workflows stay complete.",
+        "summary": "Highest recall of all bundled taggers (v3.5.0 live test), but it also produces confident hallucinations — wrong tags ABOVE the confidence threshold that thresholding cannot remove. Best used inside multi-tagger consensus, which removed 11/12 hallucinations in testing.",
         "speed": "Medium-slow",
         "memory": "High",
-        "best_for": "Modern general + character tags with lower default threshold",
-        "safe_mode_note": "Uses direct 448 resize and [-1, 1] normalization. This ONNX export has no native rating head, so the app derives a practical rating fallback from the returned tags.",
+        "best_for": "Recall-heavy passes / multi-tagger consensus member",
+        "safe_mode_note": "Uses direct 448 resize and [-1, 1] normalization. This ONNX export has no native rating head, so the app derives a practical rating fallback from the returned tags. Review its solo output before training on it.",
         "gpu_default": True,
         "gpu_confirmation_required": False,
         "gpu_locked": False,
         "runtime_note": "Adaptive runtime with newer PixAI tags. Heavier than the small WD models and should still be watched on long GPU runs.",
-        "quality_score": 5,
+        "quality_score": 4,
         "speed_score": 2,
         "stability_score": 3,
     },
     "toriigate-0.5": {
-        "summary": "Large anime-art multimodal caption tagger with strong NSFW, character, and copyright knowledge.",
+        "summary": "Large anime-art multimodal CAPTIONER — writes excellent natural-language captions with strong NSFW, character, and copyright knowledge. Not a tagger: measured as one it emitted 5-7 loose tags per image with invented details, so tag mode is disabled (owner decision, v3.5.0).",
         "speed": "Slow",
         "memory": "Very high",
-        "best_for": "Rich VLM tagging / difficult anime image understanding",
+        "best_for": "Natural-language captions via Smart Tag (not booru tagging)",
         "gpu_default": True,
         "gpu_confirmation_required": False,
         "gpu_locked": False,
@@ -193,7 +193,7 @@ TAGGER_MODEL_HINTS = {
         "speed": "Slow",
         "memory": "High",
         "best_for": "Highest-quality general tagging on anime / illustration images",
-        "safe_mode_note": "Two-input ONNX (pixel_values + padding_mask). General-only vocabulary; rating tags exposed via the rating:* head.",
+        "safe_mode_note": "Two-input ONNX (pixel_values + padding_mask). General-only vocabulary; rating tags exposed via the rating:* head. v3.5.0 live test: its ratings run about one level looser than WD models (explicit content can rate as questionable) — don't rely on it alone for strict rating gates.",
         "gpu_default": True,
         "gpu_confirmation_required": False,
         "gpu_locked": False,
@@ -837,8 +837,6 @@ def _tagging_worker_main(
                                 "tags": filtered_tags,
                                 "content_fingerprint": content_fingerprint,
                             }
-                            if result.get("raw_text"):
-                                entry["ai_caption"] = result["raw_text"]
                             tags_batch.append(entry)
                             total_tagged += 1
 
@@ -850,7 +848,7 @@ def _tagging_worker_main(
                         )
 
                         if len(tags_batch) >= commit_interval:
-                            worker_db.add_tags_batch(tags_batch)
+                            worker_db.add_tags_batch(tags_batch, default_source="tagger", replace_scope="pipeline")
                             tags_batch = []
 
                         if total_processed % gc_interval == 0:
@@ -868,7 +866,7 @@ def _tagging_worker_main(
                     )
 
             if tags_batch:
-                worker_db.add_tags_batch(tags_batch)
+                worker_db.add_tags_batch(tags_batch, default_source="tagger", replace_scope="pipeline")
                 tags_batch = []
 
             del batch_images
@@ -973,6 +971,14 @@ class BatchTagExportRequest(BaseModel):
     # is an explicit user override surfaced as a checkbox in the export
     # modal.
     normalize_tag_underscores: Optional[bool] = Field(default=None)
+    # P0-3 (diffusion-pipe style split export): additionally write each image's
+    # natural-language caption to a second sidecar ``{stem}{suffix}.txt`` next
+    # to the tag sidecar. Only valid for tag-only content modes (tags,
+    # template) — NL-bearing modes already embed the sentence. The trigger
+    # (template trigger, else ``prefix``) is injected at the front of the NL
+    # text so each file stands alone as a training caption.
+    nl_sidecar: bool = Field(default=False)
+    nl_sidecar_suffix: str = Field(default="_nl", min_length=1, max_length=32, pattern=r"^[A-Za-z0-9._-]+$")
     # Debt-22 opt-in: when true, POST /api/tags/export-batch starts a durable-id
     # background job (BulkJobService) with per-image progress and mid-run cancel
     # instead of exporting synchronously in the request.
@@ -998,6 +1004,12 @@ class ExportPreviewRequest(BaseModel):
     max_tags: int = 0
     append: List[str] = Field(default_factory=list)
     caption_transforms: Optional[Dict[str, Any]] = Field(default=None)
+    # P1-7 preview unification: when set to a real (non-template) content
+    # mode, the preview renders through build_sidecar_content — the exact
+    # engine the export writes with — instead of a template approximation.
+    content_mode: Optional[str] = Field(default=None, max_length=32)
+    prefix: str = Field(default="", max_length=256)
+    normalize_tag_underscores: Optional[bool] = Field(default=None)
     quality_override: Optional[str] = None
     safety_override: Optional[str] = None
     rating_override: Optional[str] = None
@@ -1196,6 +1208,7 @@ class TaggingService:
                 "speed_score": TAGGER_MODEL_HINTS.get(name, {}).get("speed_score", 3),
                 "stability_score": TAGGER_MODEL_HINTS.get(name, {}).get("stability_score", 3),
                 "runtime_backend": config.get("runtime_backend", "wd14"),
+                "captioner_only": bool(config.get("captioner_only", False)),
                 "smart_tag_role": "natural_language" if config.get("runtime_backend") == "toriigate" else "booru",
                 "prepare_model_id": (
                     "toriigate" if config.get("runtime_backend") == "toriigate"
@@ -1365,7 +1378,9 @@ class TaggingService:
                 imported += 1
 
         if batched_updates:
-            db.add_tags_batch(batched_updates)
+            # User-supplied import data: mark rows 'manual' so later tagger
+            # re-runs (pipeline scope) don't wipe what the user brought in.
+            db.add_tags_batch(batched_updates, default_source="manual")
 
         return {"imported": imported, "skipped": skipped}
 
@@ -1484,6 +1499,18 @@ class TaggingService:
             raise HTTPException(
                 status_code=409,
                 detail=model_config.get("disabled_reason") or f"Model {model_name} is not available in the current build.",
+            )
+        if model_config.get("captioner_only"):
+            # Owner decision (2026-07-06): ToriiGate is a captioner, not a
+            # tagger. Measured as a gallery tagger it emitted 5-7 tags/image
+            # with non-danbooru words and invented anatomy. Caption with it
+            # via Smart Tag's natural-language stage instead.
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"{model_name} is a captioner, not a tagger. "
+                    "Use Smart Tag (natural-language mode) for captions."
+                ),
             )
         if not request.model_path:
             self._validate_model_hardware_requirements(model_name, request.use_gpu)
@@ -1926,6 +1953,7 @@ class TaggingService:
             "content_mode": result.get("content_mode", request.content_mode),
             "overwrite_policy": result.get("overwrite_policy", request.overwrite_policy),
             "output_mode": result.get("output_mode", getattr(request, "output_mode", "folder")),
+            "nl_sidecars_written": result.get("nl_sidecars_written", 0),
             "validation": result.get("validation"),
         }
 
@@ -2109,6 +2137,8 @@ class TaggingService:
                 "content_mode": result.get("content_mode", request.content_mode),
                 "overwrite_policy": result.get("overwrite_policy", request.overwrite_policy),
                 "output_mode": result.get("output_mode", getattr(request, "output_mode", "folder")),
+                "nl_sidecars_written": result.get("nl_sidecars_written", 0),
+                "validation": result.get("validation"),
             })
 
         background_tasks.add_task(bulk_jobs.run_job, job_id, worker)

@@ -1437,6 +1437,14 @@
             btn.textContent = this._t('dataset.replaceLoading', 'Loading captions...');
         }
         const replace = replaceEl.value;
+        // Default is whole-tag: a caption is comma-separated tags, so the user
+        // means "rename this tag", not "edit this substring wherever it lands".
+        // The opt-in checkbox restores the raw substring behavior.
+        const substringMode = !!document.getElementById('dataset-find-substring')?.checked;
+        // trim + collapse whitespace + fold _<->space + case-insensitive, so
+        // "long_hair" matches "long hair" / "Long  Hair".
+        const normalizeTag = (s) => String(s || '').replace(/[\s_]+/g, ' ').trim().toLowerCase();
+        const findKey = normalizeTag(find);
         let count = 0;
         try {
             const scopeIds = typeof this._captionScopeIds === 'function' ? this._captionScopeIds() : this.imageIds;
@@ -1455,8 +1463,23 @@
                 const caption = this.captionEdits.has(id)
                     ? this.captionEdits.get(id)
                     : (this.captions.get(id) || '');
-                if (!caption.includes(find)) continue;
-                const updated = caption.split(find).join(replace);
+                let updated;
+                if (substringMode) {
+                    if (!caption.includes(find)) continue;
+                    updated = caption.split(find).join(replace);
+                } else {
+                    // Whole-tag: split on commas, match tokens whose normalized
+                    // form equals the find term, and swap the replacement in
+                    // verbatim while keeping each token's surrounding spacing.
+                    let changed = false;
+                    updated = caption.split(',').map((part) => {
+                        if (!findKey || normalizeTag(part) !== findKey) return part;
+                        changed = true;
+                        const m = part.match(/^(\s*)[\s\S]*?(\s*)$/);
+                        return `${m ? m[1] : ''}${replace}${m ? m[2] : ''}`;
+                    }).join(',');
+                    if (!changed) continue;
+                }
                 this.captionEdits.set(id, updated);
                 count++;
             }

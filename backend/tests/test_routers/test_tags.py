@@ -123,6 +123,26 @@ class TestTaggerModels:
 
         assert TAGGER_MODELS["camie-tagger-v2"]["output_index"] == 1
 
+    def test_toriigate_is_captioner_only(self, test_client):
+        """Owner decision: ToriiGate is a captioner, not a tagger. It stays
+        in the catalog (Smart Tag + model download need its metadata) but the
+        gallery dropdown hides it and /api/tag rejects it."""
+        response = test_client.get("/api/tagger/models")
+        models = {model["name"]: model for model in response.json()["models"]}
+
+        assert models["toriigate-0.5"]["captioner_only"] is True
+        assert models["wd-swinv2-tagger-v3"]["captioner_only"] is False
+
+    def test_tag_rejects_captioner_only_model(self, test_client, test_db_with_images):
+        response = test_client.post("/api/tag", json={
+            "image_ids": [1],
+            "model_name": "toriigate-0.5",
+        })
+
+        assert response.status_code == 400
+        # main.py's HTTPException handler reshapes detail into {"error": ...}
+        assert "captioner" in response.json()["error"].lower()
+
 
 class TestTagsLibrary:
     """Tests for GET /api/tags/library endpoint."""
@@ -679,11 +699,10 @@ class TestTaggingPipeline:
         data = response.json()
         assert ".onnx" in data["error"]
 
-    def test_start_tagging_allows_toriigate_builtin_model(self, test_client):
-        from routers import tags as tags_router
-
-        tags_router.get_tagging_service().set_tagger_getter(lambda **kwargs: object())
-
+    def test_start_tagging_rejects_toriigate_captioner_only(self, test_client):
+        """Owner decision (2026-07-06): ToriiGate is a captioner, not a tagger.
+        Even with ample hardware, /api/tag/start must reject it with guidance
+        toward Smart Tag's natural-language mode."""
         with patch("hardware_monitor.get_system_info", return_value={
             "total_ram_gb": 64,
             "available_ram_gb": 28,
@@ -691,7 +710,7 @@ class TestTaggingPipeline:
             "gpu_vram_available_mb": 20000,
             "torch_cuda_available": True,
             "onnx_providers": ["CPUExecutionProvider"],
-        }), patch.object(tags_router.TaggingService, "_run_tagging_job", return_value=None):
+        }):
             response = test_client.post(
                 "/api/tag/start",
                 json={
@@ -700,13 +719,14 @@ class TestTaggingPipeline:
                 }
             )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "started"
+        assert response.status_code == 400
+        assert "captioner" in response.json()["error"].lower()
 
-    def test_start_tagging_rejects_toriigate_when_hardware_is_below_minimum(self, test_client):
-        """8 GB RAM is clearly below ToriiGate's 16 GB minimum (v3.2.2 retuned
-        floors), so this should still get a clean 409 with the field names."""
+    def test_captioner_rejection_precedes_hardware_gate(self, test_client):
+        """On weak hardware the captioner-only 400 must fire before the 409
+        ToriiGate hardware gate — the user should hear "wrong tool", not
+        "insufficient RAM". The hardware gate itself stays as the safety net
+        behind the captioner_only flag (v3.4.3 black-screen incident)."""
         response = None
         with patch("hardware_monitor.get_system_info", return_value={
             "total_ram_gb": 8,
@@ -725,9 +745,8 @@ class TestTaggingPipeline:
             )
 
         assert response is not None
-        assert response.status_code == 409
-        data = response.json()
-        assert "ToriiGate GPU mode is blocked" in (data.get("detail") or data.get("error") or "")
+        assert response.status_code == 400
+        assert "captioner" in response.json()["error"].lower()
 
     def test_start_tagging_rejects_non_onnx_custom_model_with_path(self, test_client):
         """Custom tagger path with tags_path should also reject unsupported model formats."""
@@ -901,6 +920,129 @@ class TestExportTagsBatch:
         # Returns 200 with exported=0 if image not found, or error count
         assert response.status_code == 200
 
+    def test_export_batch_nl_sidecar_writes_twin_files(self, test_client, test_db, tmp_path: Path):
+        """P0-3 split export: tags in {stem}.txt, NL in {stem}_nl.txt.
+
+        The NL twin is single-line with the trigger injected up front, and the
+        validator must not flag the deliberately-suffixed twin as unpaired."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "split_case.png"
+        Image.new("RGB", (32, 32), color="white").save(img_path)
+        image_id = db.add_image(path=str(img_path), filename="split_case.png")
+        db.add_tags(image_id, [{"tag": "1girl", "confidence": 0.9}])
+
+        output_dir = tmp_path / "split_out"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "content_mode": "tags",
+                "prefix": "sks person",
+                "nl_sidecar": True,
+                "image_nl_overrides": {str(image_id): "A girl standing\nin the rain."},
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["exported"] == 1
+        assert data["nl_sidecars_written"] == 1
+
+        tag_file = output_dir / "split_case.txt"
+        nl_file = output_dir / "split_case_nl.txt"
+        assert tag_file.exists()
+        assert nl_file.exists()
+        nl_content = nl_file.read_text(encoding="utf-8")
+        assert nl_content == "sks person, A girl standing in the rain."
+        assert "\n" not in nl_content
+
+        warnings = {w["code"] for w in (data.get("validation") or {}).get("warnings", [])}
+        assert "unpaired_sidecar" not in warnings
+
+    def test_export_batch_nl_sidecar_skips_twin_when_no_nl_text(self, test_client, test_db, tmp_path: Path):
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "no_nl.png"
+        Image.new("RGB", (32, 32), color="white").save(img_path)
+        image_id = db.add_image(path=str(img_path), filename="no_nl.png")
+        db.add_tags(image_id, [{"tag": "1girl", "confidence": 0.9}])
+
+        output_dir = tmp_path / "no_nl_out"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "content_mode": "tags",
+                "nl_sidecar": True,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["exported"] == 1
+        assert data["nl_sidecars_written"] == 0
+        assert (output_dir / "no_nl.txt").exists()
+        assert not (output_dir / "no_nl_nl.txt").exists()
+
+    def test_export_batch_nl_sidecar_unique_collision_is_atomic(self, test_client, test_db, tmp_path: Path):
+        """A unique-policy clash on the NL twin fails the whole row — never a
+        tag file without its NL half."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "atomic.png"
+        Image.new("RGB", (32, 32), color="white").save(img_path)
+        image_id = db.add_image(path=str(img_path), filename="atomic.png")
+        db.add_tags(image_id, [{"tag": "1girl", "confidence": 0.9}])
+
+        output_dir = tmp_path / "atomic_out"
+        output_dir.mkdir()
+        (output_dir / "atomic_nl.txt").write_text("stale twin", encoding="utf-8")
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "content_mode": "tags",
+                "overwrite_policy": "unique",
+                "nl_sidecar": True,
+                "image_nl_overrides": {str(image_id): "Some caption."},
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["exported"] == 0
+        assert data["error_count"] == 1
+        assert "atomic_nl.txt" in (data["error_messages"][0] or "")
+        assert not (output_dir / "atomic.txt").exists()
+        assert (output_dir / "atomic_nl.txt").read_text(encoding="utf-8") == "stale twin"
+
+    def test_export_batch_nl_sidecar_rejects_nl_content_modes(self, test_client, test_db, tmp_path: Path):
+        """Modes that already embed the NL caption cannot double it into a twin."""
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [1],
+                "output_folder": str(tmp_path),
+                "content_mode": "tags_nl",
+                "nl_sidecar": True,
+            },
+        )
+
+        assert response.status_code == 400
+        assert "nl_sidecar" in response.json()["error"]
+
     def test_export_batch_with_prefix(self, test_client, test_db, tmp_path: Path):
         """Exporting with prefix should prepend it once per file."""
         import database as db
@@ -1066,8 +1208,16 @@ class TestExportTagsBatch:
         # the contract).
         assert (output_dir / "contract_test.txt").read_text() == "contract tag"
 
-    def test_export_batch_keeps_same_basename_files_distinct(self, test_client, test_db, tmp_path: Path):
-        """Files that only differ by extension should not overwrite each other on export."""
+    def test_export_batch_same_basename_unique_surfaces_collision(self, test_client, test_db, tmp_path: Path):
+        """P1-6: under the default ``unique`` policy, two images sharing a stem
+        export the first and then surface the second as a per-image error —
+        never a ``sample_1.txt`` rename.
+
+        A renamed sidecar pairs with no image (LoRA trainers match by exact
+        basename), so the clash is reported instead of silently worked around.
+        The dual-extension sidecars (``sample.gif.txt``) the old bug produced
+        stay banned regardless.
+        """
         import database as db
         from PIL import Image
 
@@ -1089,26 +1239,69 @@ class TestExportTagsBatch:
             json={
                 "image_ids": [jpg_id, gif_id],
                 "output_folder": str(output_dir),
+                "overwrite_policy": "unique",
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        # First image wins the shared name; the second is a reported error.
+        assert data["exported"] == 1
+        assert data["error_count"] == 1
+        assert data["skipped"] == 0
+        assert data["status"] == "partial"
+        assert (output_dir / "sample.txt").exists()
+        # No rename, no dual-extension sidecars — exactly one .txt produced.
+        assert not (output_dir / "sample_1.txt").exists()
+        assert not (output_dir / "sample.jpg.txt").exists()
+        assert not (output_dir / "sample.gif.txt").exists()
+        assert len(list(output_dir.glob("sample*.txt"))) == 1
+        # The error names the taken sidecar, the source that owns it, and the fix.
+        message = " ".join(data["error_messages"])
+        assert "sample.txt" in message
+        assert "sample.jpg" in message  # the first owner's source path
+        assert "already taken" in message
+        assert "overwrite/skip" in message
+
+    def test_export_batch_same_basename_overwrite_dedupes_with_suffix(self, test_client, test_db, tmp_path: Path):
+        """``overwrite`` policy is unchanged by P1-6: two images sharing a stem
+        in one run both land, the second via a ``sample_1.txt`` numeric suffix,
+        so neither caption is lost. Dual-extension sidecars stay banned.
+        """
+        import database as db
+        from PIL import Image
+
+        jpg_path = tmp_path / "sample.jpg"
+        gif_path = tmp_path / "sample.gif"
+        Image.new("RGB", (100, 100), color="red").save(jpg_path)
+        Image.new("RGB", (100, 100), color="blue").save(gif_path)
+
+        jpg_id = db.add_image(path=str(jpg_path), filename="sample.jpg")
+        gif_id = db.add_image(path=str(gif_path), filename="sample.gif")
+        db.add_tags(jpg_id, [{"tag": "jpg_tag", "confidence": 0.9}])
+        db.add_tags(gif_id, [{"tag": "gif_tag", "confidence": 0.9}])
+
+        output_dir = tmp_path / "collision_out"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [jpg_id, gif_id],
+                "output_folder": str(output_dir),
+                "overwrite_policy": "overwrite",
             }
         )
 
         assert response.status_code == 200
         data = response.json()
         assert data["exported"] == 2
+        assert data["error_count"] == 0
         assert (output_dir / "sample.txt").exists()
+        assert (output_dir / "sample_1.txt").exists()
         assert len(list(output_dir.glob("sample*.txt"))) == 2
-        # LoRA training pipelines look for `<basename>.txt` paired with
-        # `<basename>.<image_ext>`. They do not recognize dual-extension
-        # sidecars like `sample.gif.txt` as captions for `sample.gif`.
-        # The collision-disambiguation fallback must therefore use a
-        # numeric suffix (`sample_1.txt`) rather than embedding the
-        # source extension in the sidecar name.
         assert not (output_dir / "sample.jpg.txt").exists()
         assert not (output_dir / "sample.gif.txt").exists()
-        # Exactly one of the two collision paths must be present.
-        # The order depends on which image_id was processed first, so we
-        # accept either `_1` suffix mapped to jpg or to gif.
-        assert (output_dir / "sample_1.txt").exists()
 
     def test_export_batch_keeps_lora_friendly_sidecar_for_dotted_filenames(self, test_client, test_db, tmp_path: Path):
         """Source images with extra dots in their stored filename (e.g. ``123.json``,
@@ -1120,8 +1313,10 @@ class TestExportTagsBatch:
         dual-extension sidecars are silently ignored at training time and
         the model never sees the captions. This regression test pins the
         new behavior: the sidecar is always ``{basename}{extension}`` for
-        the first occurrence, and ``{basename}_N{extension}`` for any
-        basename collisions.
+        the first occurrence. A same-stem collision under the default
+        ``unique`` policy (P1-6) is reported as a per-image error rather than
+        renamed to ``{basename}_N`` — a renamed caption pairs with no image —
+        so only the first of a colliding pair is written.
         """
         import database as db
         from PIL import Image
@@ -1163,7 +1358,11 @@ class TestExportTagsBatch:
         )
 
         assert response.status_code == 200
-        assert response.json()["exported"] == 3
+        data = response.json()
+        # 123.png exports 123.txt; 123.json then collides on that stem and is
+        # reported (not renamed); photo.bak.png exports photo.bak.txt.
+        assert data["exported"] == 2
+        assert data["error_count"] == 1
 
         # The dual-extension filenames the bug used to produce.
         assert not (output_dir / "123.json.txt").exists(), (
@@ -1180,15 +1379,15 @@ class TestExportTagsBatch:
         assert (output_dir / "photo.bak.txt").exists()
         assert not (output_dir / "photo.txt").exists()
 
-        # The 3 exported files must all use the clean basename + counter pattern.
+        # Every produced sidecar uses the clean basename (never a `_N` rename).
         produced = sorted(p.name for p in output_dir.glob("*.txt"))
-        # 123.png stems to '123', 123.json also stems to '123' → collision
-        # between id_a and id_b. photo.bak.png stems to 'photo.bak' → no
-        # collision with the others.
+        # 123.png stems to '123'; 123.json also stems to '123' → the second is
+        # a reported collision, so no 123_1.txt is written. photo.bak.png stems
+        # to 'photo.bak' → no collision with the others.
         assert "123.txt" in produced
-        assert "123_1.txt" in produced
+        assert "123_1.txt" not in produced
         assert "photo.bak.txt" in produced
-        assert len(produced) == 3
+        assert produced == ["123.txt", "photo.bak.txt"]
 
     def test_export_batch_sanitizes_sidecar_filename_from_bad_indexed_data(self, test_client, test_db, tmp_path: Path):
         """Sidecar export must never let a stored filename escape the chosen output folder.

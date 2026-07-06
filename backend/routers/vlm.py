@@ -479,11 +479,12 @@ async def caption_single(request: CaptionSingleRequest):
     result = await provider.caption_image(image_path, tags=tags)
 
     # Persist results based on output format
+    dropped_tags = 0
     if not result.error:
         if result.caption:
             db.update_image_caption(request.image_id, result.caption, nl_caption=result.caption)
         if result.tags:
-            _persist_tags(db, request.image_id, result.tags)
+            dropped_tags = _persist_tags(db, request.image_id, result.tags)
 
     return {
         "caption": result.caption,
@@ -494,32 +495,57 @@ async def caption_single(request: CaptionSingleRequest):
         "error_type": result.error_type,
         "model": result.model,
         "output_format": config.output_format,
+        "dropped_tags": dropped_tags,
     }
 
 
-def _persist_tags(db, image_id: int, vlm_tags: List[str]) -> None:
-    """Merge VLM-generated tags with existing local-tagger tags.
+def _persist_tags(db, image_id: int, vlm_tags: List[str]) -> int:
+    """Merge gated VLM-generated tags with existing local-tagger tags.
 
-    Strategy: keep existing tags (with their confidence), append VLM tags that
-    aren't already present. VLM tags use confidence=0.85 (manual-tier marker).
+    VLM tags pass through the vocabulary gate (services.vlm_tag_gate) first:
+    hallucinated non-vocabulary tags and rating words are dropped so they never
+    become permanent library tags. Surviving tags (normalized) are appended to
+    the existing tags; existing tags keep their confidence, new VLM tags use
+    confidence=0.85 (a manual-tier marker). Returns the number of tags the gate
+    dropped so callers can surface "N invalid tags dropped".
     """
     if not vlm_tags:
-        return
+        return 0
+    from services.vlm_tag_gate import filter_vlm_tags
+
+    accepted, dropped = filter_vlm_tags(vlm_tags)
+    if dropped:
+        logger.info(
+            "VLM tag gate dropped %d invalid tag(s) for image %s", dropped, image_id
+        )
+    if not accepted:
+        return dropped
     try:
         existing = db.get_image_tags(image_id) or []
         existing_lower = {(t.get("tag") or "").lower() for t in existing}
-        new_tags = [t for t in vlm_tags if t and t.lower() not in existing_lower]
+        # ``accepted`` is already lowercase_with_underscores, so a direct
+        # membership test against the lowercased existing set is correct.
+        new_tags = [t for t in accepted if t not in existing_lower]
         if not new_tags:
-            return
+            return dropped
+        # Full-list merge (replace_scope stays "all"): existing rows keep
+        # their provenance columns; VLM additions are marked source='vlm' so
+        # a later pipeline re-tag may replace them but never the user's rows.
         merged = [
-            {"tag": t.get("tag"), "confidence": float(t.get("confidence") or 1.0)}
+            {
+                "tag": t.get("tag"),
+                "confidence": float(t.get("confidence") or 1.0),
+                "source": t.get("source"),
+                "category": t.get("category"),
+            }
             for t in existing if t.get("tag")
         ] + [
-            {"tag": t, "confidence": 0.85} for t in new_tags
+            {"tag": t, "confidence": 0.85, "source": "vlm"} for t in new_tags
         ]
         db.add_tags(image_id, merged)
     except Exception as e:
         logger.warning(f"Failed to persist VLM tags for image {image_id}: {e}")
+    return dropped
 
 
 _BATCH_ID_CHUNK_SIZE = 500

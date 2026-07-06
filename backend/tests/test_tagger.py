@@ -1015,3 +1015,30 @@ def test_release_session_resets_state_and_is_idempotent(monkeypatch):
     tagger.release_session()  # idempotent: nothing to release, no error
     assert tagger.session is None
     assert tagger._loaded is False
+
+
+def test_preprocess_composites_transparency_onto_white():
+    """P2-13a: transparent pixels must read as a WHITE background, not black.
+
+    Bare convert("RGB") maps alpha=0 to black; the official wd14 pipeline
+    composites onto a white canvas first."""
+    tagger = tagger_module.WD14Tagger(model_name="wd-swinv2-tagger-v3", use_gpu=False)
+
+    transparent = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    arr = tagger._preprocess(transparent)
+
+    # Square image → letterbox fills the whole canvas; every pixel must be
+    # white (255) in the default BGR 0-255 pipeline.
+    assert float(arr.min()) == 255.0
+    assert float(arr.max()) == 255.0
+
+
+def test_preprocess_opaque_images_unchanged_by_alpha_handling():
+    tagger = tagger_module.WD14Tagger(model_name="wd-swinv2-tagger-v3", use_gpu=False)
+
+    red = Image.new("RGB", (64, 64), (255, 0, 0))
+    arr = tagger._preprocess(red)
+
+    # BGR layout: channel 0 = blue (0), channel 2 = red (255).
+    assert float(arr[..., 0].max()) == 0.0
+    assert float(arr[..., 2].min()) == 255.0

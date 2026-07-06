@@ -30,8 +30,10 @@ logger = logging.getLogger(__name__)
 PRESETS: Dict[str, Dict[str, Any]] = {
     "anima": {
         "name": "Anima (Tags + NL)",
-        "description": "Anima base model: quality/safety prefix, danbooru tags (spaces not underscores), then NL caption separated by period. Official tag order: quality → safety → count → trigger → general tags → NL.",
-        "template": "{quality}, {safety}, {count}, {trigger}, {tags:filtered}. {nl_caption}",
+        "description": "Anima base model: quality/safety prefix, danbooru tags (spaces not underscores), then NL caption separated by period. Official model-card order: quality → safety → count → trigger → characters → copyright → @artists → general tags → NL.",
+        # P3-11: official Anima caption order with dedicated category sections
+        # (characters / copyright / @-prefixed artists ahead of general tags).
+        "template": "{quality}, {safety}, {count}, {trigger}, {characters}, {copyright}, {artists:@}, {general}. {nl_caption}",
         "separator": ", ",
         "underscore_to_space": True,
         "preserve_underscore_prefixes": ["score_"],
@@ -50,11 +52,13 @@ PRESETS: Dict[str, Dict[str, Any]] = {
     "anima_tags_only": {
         "name": "Anima (Tags only)",
         "description": "Anima format without NL caption — pure danbooru tags with quality/safety prefix.",
-        "template": "{quality}, {safety}, {count}, {trigger}, {tags:filtered}",
+        "template": "{quality}, {safety}, {count}, {trigger}, {characters}, {copyright}, {artists:@}, {general}",
         "separator": ", ",
         "underscore_to_space": True,
         "preserve_underscore_prefixes": ["score_"],
-        "default_quality": "newest, highres, normal quality",
+        # P3-14: match the tags+NL preset — "newest, highres, normal quality"
+        # was a time/meta mix, not a quality default any trainer documents.
+        "default_quality": "masterpiece, best quality",
         "default_safety": "",
         "default_append": "",
         "single_line": True,
@@ -139,8 +143,11 @@ TEMPLATE_VARIABLES: List[Dict[str, str]] = [
     {"name": "{prompt}", "description": "Original generation prompt"},
     {"name": "{negative}", "description": "Original negative prompt"},
     {"name": "{rating}", "description": "Per-image rating resolved from the tagger's rating tag (safe/sensitive/questionable/explicit); empty when the image was never rated"},
-    {"name": "{characters}", "description": "Character tags only (heuristic detection)"},
-    {"name": "{general}", "description": "Non-character tags only"},
+    {"name": "{characters}", "description": "Character tags only (tagger-recorded category, heuristic fallback)"},
+    {"name": "{copyright}", "description": "Copyright/series tags only (tagger-recorded category)"},
+    {"name": "{artists}", "description": "Artist tags only (tagger-recorded category)"},
+    {"name": "{artists:@}", "description": "Artist tags with the Anima-style @ prefix (@artist_name)"},
+    {"name": "{general}", "description": "Tags not in the character/copyright/artist buckets"},
     {"name": "{quality}", "description": "Quality tags: user override > aesthetic-score bucket > preset default"},
     {"name": "{safety}", "description": "Per-image rating in the preset's model-card vocabulary (Anima: questionable→nsfw); preset default only when unrated"},
     {"name": "{count}", "description": "Subject-count tag (1girl/1boy/2girls/etc.) extracted from tags"},
@@ -233,8 +240,47 @@ def process_tags(
     return processed
 
 
+# Danbooru emoticon ("kaomoji") vocabulary. These are REAL general tags that
+# WD-family taggers emit (they live in the SmilingWolf v3 selected_tags.csv),
+# so they must survive underscore→space formatting — ``^_^`` would corrupt to
+# ``^ ^`` — and must never be stripped as "symbolic noise". Curated from the
+# WD14 v3 vocab plus common danbooru emoticon aliases that arrive via
+# prompt-imported tags.
+KAOMOJI_TAGS: frozenset = frozenset({
+    "0_0", "(o)_(o)", "+_+", "+_-", "._.", "3_3", "6_9", "<o>_<o>",
+    "<|>_<|>", "=_=", ">_<", ">_o", "@_@", "^_^", "^o^", "|_|", "||_||",
+    "o_o", "u_u", "x_x", "n_n", "t_t", ";_;", "<_<", ">_>", "-_-",
+    ":3", ":d", ":i", ":o", ":p", ":q", ":t", ":x", ":|", ":>", ":<",
+    ":c", ":/", ";3", ";d", ";o", ";p", ";q", ";)", ";(", ">:(", ">:)",
+    "!", "!!", "!?", "?", "??", "+++", "...", "^^^", "\\m/", "\\o/",
+    "\\||/", "o3o", "0w0", "uwu", ">o<", "d:",
+})
+
+
+def is_kaomoji_tag(tag: str) -> bool:
+    """True when ``tag`` is a danbooru emoticon that must keep its exact glyphs.
+
+    Curated-set membership first, then a shape heuristic: an underscore tag
+    whose every ``_``-separated segment is at most one character (``o_o``,
+    ``=_=``, ``0_0``, ``v_v``) is an emoticon face, never words joined by
+    underscores, so spacing its underscores would corrupt it.
+    """
+    lowered = (tag or "").strip().lower()
+    if not lowered:
+        return False
+    if lowered in KAOMOJI_TAGS:
+        return True
+    if "_" in lowered:
+        segments = lowered.split("_")
+        if all(len(seg) <= 1 for seg in segments) and any(segments):
+            return True
+    return False
+
+
 def _format_tag_underscore(tag: str, preserve_prefixes: List[str]) -> str:
     """Convert underscores to spaces unless tag starts with a preserved prefix."""
+    if is_kaomoji_tag(tag):
+        return tag
     for prefix in preserve_prefixes:
         if tag.startswith(prefix):
             return tag
@@ -418,7 +464,16 @@ def _filter_template_value(value: str, config: TagProcessingConfig, separator: s
 # Heuristic character tag patterns (anime character names usually contain underscores
 # or are multi-word names with parentheses indicating series)
 _CHARACTER_TAG_HINTS = re.compile(r"\([^)]+\)$")  # tags ending in (series_name)
-_COUNT_TAG_PATTERN = re.compile(r"^\d+(girl|boy|girls|boys|other|others|female|male)s?$", re.IGNORECASE)
+# P3-14: danbooru also uses the open-ended forms ``6+girls`` / ``6+boys``.
+_COUNT_TAG_PATTERN = re.compile(r"^\d+\+?(girl|boy|girls|boys|other|others|female|male)s?$", re.IGNORECASE)
+
+# tags.category (migration 024) → template bucket. Categories outside this
+# map (general/meta/rating/trigger/None) fall through to the heuristic.
+_TAG_CATEGORY_BUCKETS: Dict[str, str] = {
+    "character": "characters",
+    "copyright": "copyright",
+    "artist": "artists",
+}
 
 
 def _is_character_tag(tag: str) -> bool:
@@ -427,18 +482,36 @@ def _is_character_tag(tag: str) -> bool:
 
 
 def _extract_count_tag(tags: List[str]) -> str:
-    """Find subject-count tag (1girl, 2boys, etc.) in the tag list."""
+    """Find subject-count tag (1girl, 2boys, 6+girls, etc.) in the tag list."""
     for tag in tags:
         if _COUNT_TAG_PATTERN.match(tag):
             return tag
     return ""
 
 
-def _split_tags_by_type(filtered_tags: List[str]) -> Dict[str, List[str]]:
-    """Split tags into character vs general."""
-    characters = [t for t in filtered_tags if _is_character_tag(t)]
-    general = [t for t in filtered_tags if not _is_character_tag(t)]
-    return {"characters": characters, "general": general}
+def _category_norm(tag: str) -> str:
+    """Category-lookup key: case-insensitive with ``_``/space folded."""
+    return " ".join(str(tag or "").replace("_", " ").lower().split())
+
+
+def _split_tags_by_type(
+    filtered_tags: List[str],
+    category_by_norm: Optional[Dict[str, str]] = None,
+) -> Dict[str, List[str]]:
+    """Split tags into characters / copyright / artists / general.
+
+    The tagger-recorded ``tags.category`` decides when present (P3-11); tags
+    without one — legacy rows, replace-rule renames — fall back to the
+    parenthesized-suffix character heuristic, everything else is general.
+    """
+    buckets: Dict[str, List[str]] = {"characters": [], "copyright": [], "artists": [], "general": []}
+    lookup = category_by_norm or {}
+    for tag in filtered_tags:
+        bucket = _TAG_CATEGORY_BUCKETS.get(str(lookup.get(_category_norm(tag)) or ""))
+        if bucket is None:
+            bucket = "characters" if _is_character_tag(tag) else "general"
+        buckets[bucket].append(tag)
+    return buckets
 
 
 @dataclass
@@ -456,10 +529,13 @@ class TemplateContext:
     safety: str = ""
     append: str = ""
     separator: str = ", "
+    # P3-11: normalized tag → tags.category, so the category sections render
+    # from tagger provenance instead of guessing.
+    category_by_norm: Dict[str, str] = field(default_factory=dict)
 
     def resolve(self) -> Dict[str, str]:
         """Build dict of variable name -> resolved string."""
-        split = _split_tags_by_type(self.tags_filtered)
+        split = _split_tags_by_type(self.tags_filtered, self.category_by_norm)
         count = _extract_count_tag(self.tags_filtered)
         sep = self.separator
 
@@ -472,6 +548,10 @@ class TemplateContext:
             "negative": self.negative,
             "rating": self.rating,
             "characters": sep.join(split["characters"]),
+            "copyright": sep.join(split["copyright"]),
+            "artists": sep.join(split["artists"]),
+            # Anima model-card convention: artists carry an @ prefix.
+            "artists:@": sep.join(f"@{a}" for a in split["artists"]),
             "general": sep.join(split["general"]),
             "quality": self.quality,
             "safety": self.safety,
@@ -484,8 +564,8 @@ class TemplateContext:
 # Template rendering
 # ====================================================================
 
-# Match {variable} or {tags:N} where N is digit
-_TEMPLATE_VAR_PATTERN = re.compile(r"\{([a-zA-Z_]+(?::\w+)?)\}")
+# Match {variable}, {tags:N} (digit N), or modifier forms like {artists:@}
+_TEMPLATE_VAR_PATTERN = re.compile(r"\{([a-zA-Z_]+(?::[\w@]+)?)\}")
 
 
 def render_template(template: str, context: TemplateContext) -> str:
@@ -547,11 +627,25 @@ def _dedup_tokens(text: str, separator: str) -> str:
     once with an underscore (``my_oc``) and once after underscore
     normalisation (``my oc``); a real trainer would treat those as
     two distinct BPE tokens.
+
+    P3-14: the first ``". "`` marks the tag→sentence boundary (anima-style
+    ``{general}. {nl_caption}``). The sentence is prose, so it is no longer
+    token-deduped (which could delete commas mid-sentence) — but a leading
+    run of already-seen tag tokens is stripped, because an ``ai_caption``
+    fallback (fused tags+sentence) echoes the whole tag list there.
     """
     if not text:
         return ""
     sep = separator if separator else ", "
-    parts = [p.strip() for p in text.split(sep)]
+
+    boundary = text.find(". ")
+    sentence = ""
+    tag_zone = text
+    if boundary != -1:
+        tag_zone = text[:boundary]
+        sentence = text[boundary + 2:]
+
+    parts = [p.strip() for p in tag_zone.split(sep)]
     seen: set = set()
     kept: list = []
     for p in parts:
@@ -564,7 +658,21 @@ def _dedup_tokens(text: str, separator: str) -> str:
             continue
         seen.add(norm)
         kept.append(p)
-    return sep.join(kept)
+    result = sep.join(kept)
+
+    if sentence:
+        stokens = [s.strip() for s in sentence.split(sep)]
+        index = 0
+        while index < len(stokens):
+            norm = " ".join(stokens[index].replace("_", " ").lower().split())
+            if norm and norm in seen:
+                index += 1
+            else:
+                break
+        sentence_clean = sep.join(s for s in stokens[index:] if s).strip()
+        if sentence_clean:
+            result = f"{result}. {sentence_clean}" if result else sentence_clean
+    return result
 
 
 def _cleanup_separators(text: str, separator: str) -> str:
@@ -670,6 +778,17 @@ def build_export_caption(
         preserve_underscore_prefixes=effective_preserve,
     )
 
+    # P3-11: record each tag's stored category BEFORE the processing pipeline
+    # reshapes the strings — the lookup key folds underscores/case, so
+    # underscore formatting keeps matching; replace-rule renames simply fall
+    # back to the heuristic.
+    category_by_norm: Dict[str, str] = {}
+    for t in tags:
+        name = str(t.get("tag") or "").strip()
+        cat = str(t.get("category") or "").strip().lower()
+        if name and cat:
+            category_by_norm[_category_norm(name)] = cat
+
     # Process tags
     all_tag_strings = [
         str(t.get("tag") or "").strip()
@@ -744,6 +863,7 @@ def build_export_caption(
         safety=safety,
         append=append_text,
         separator=separator,
+        category_by_norm=category_by_norm,
     )
 
     rendered = render_template(template, context)

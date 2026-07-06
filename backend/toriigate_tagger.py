@@ -351,14 +351,18 @@ class ToriiGateTagger:
             else TORIIGATE_SHORT_QUERY
         )
         # ToriiGate is trained to accept booru tags as grounding input; feeding
-        # the WD14 results in markedly improves caption accuracy (official
-        # model-card usage).
+        # the WD14 results in markedly improves caption accuracy. P2-13c: use
+        # the exact model-card format — a "# Booru tags" block AHEAD of the
+        # query with the tag list in brackets. The previous free-form phrasing
+        # ("Here are grounding tags…") was wording the model was never
+        # trained on.
         if tags:
             tag_str = ", ".join(str(tag).strip() for tag in tags if str(tag).strip())
             if tag_str:
-                query += (
-                    "\n# Grounding tags:\n"
-                    f"Here are grounding tags for better understanding: {tag_str}\n"
+                query = (
+                    "# Booru tags for the image\n"
+                    f"[{tag_str}]\n\n"
+                    f"{query}"
                 )
         return query
 
@@ -497,10 +501,12 @@ class ToriiGateTagger:
 
     @staticmethod
     def _strip_reasoning(text: str) -> str:
-        text = re.sub(r"<think>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL)
-        if "</think>" in text:
-            text = text.split("</think>", 1)[-1]
-        return text.strip()
+        # Delegates to the shared VLM helper so the <think>-stripping behaviour
+        # stays identical to the OpenAI-compatible provider (audit P2-9). Lazy
+        # import keeps toriigate_tagger free of an import-time vlm_providers dep.
+        from vlm_providers.base import strip_reasoning
+
+        return strip_reasoning(text)
 
     @staticmethod
     def _strip_json_fence(text: str) -> str:

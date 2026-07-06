@@ -3369,6 +3369,7 @@ class SortingService:
             "exported": result["exported"],
             "total": result["total"],
             "errors": result["error_messages"] if result["error_messages"] else None,
+            "nl_sidecars_written": result.get("nl_sidecars_written", 0),
             "validation": result.get("validation"),
         }
 

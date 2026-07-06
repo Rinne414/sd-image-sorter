@@ -1452,6 +1452,13 @@
             return;
         }
 
+        // OFFLINE FALLBACK ONLY — this mirrors backend
+        // services/dataset_naming.render_stem, which is the source of truth for
+        // output stems. It is reached only when DM._buildExportPayload() is
+        // unavailable or returns null; in the normal path the server
+        // /api/dataset/export-preview call above renders item.output_image_name /
+        // output_caption_name (from render_stem) and returns before here. Keep
+        // this token grammar in sync with render_stem if that ever changes.
         const buildStem = (id, index) => {
             const meta = DM.meta?.get?.(id) || {};
             const sourceBase = meta.filename ? meta.filename.replace(/\.[^.]+$/, '') : `image_${index + 1}`;

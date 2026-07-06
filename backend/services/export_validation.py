@@ -70,8 +70,13 @@ class ExportValidator:
         if example and len(entry["examples"]) < _MAX_EXAMPLES:
             entry["examples"].append(example)
 
-    def add(self, *, output_path: str, content: str, image_path: str = "") -> None:
-        """Record one written sidecar for validation."""
+    def add(self, *, output_path: str, content: str, image_path: str = "", pair_suffix: str = "") -> None:
+        """Record one written sidecar for validation.
+
+        ``pair_suffix`` marks a deliberately-suffixed twin file (the split
+        export's ``{stem}_nl.txt``): the suffix is stripped before the
+        pairing check so the twin is not flagged as an unpaired sidecar.
+        """
         self.checked += 1
         text = str(content or "")
         name = os.path.basename(str(output_path or ""))
@@ -86,6 +91,8 @@ class ExportValidator:
         if image_path:
             image_stem = os.path.splitext(os.path.basename(str(image_path)))[0]
             sidecar_stem = os.path.splitext(name)[0]
+            if pair_suffix and sidecar_stem.endswith(pair_suffix):
+                sidecar_stem = sidecar_stem[: -len(pair_suffix)]
             if image_stem and sidecar_stem and sidecar_stem != image_stem:
                 self._hit("unpaired_sidecar", name)
 

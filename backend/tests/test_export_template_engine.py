@@ -221,3 +221,38 @@ def test_template_replace_normalizes_consistently_with_blacklist():
     assert "multiple girls" not in rendered
     assert "keep_tag" in rendered or "keep tag" in rendered
 
+
+def test_kaomoji_survive_underscore_to_space_formatting():
+    """Audit P1-4: emoticon tags are real WD14 vocabulary and must keep their
+    exact glyphs — ``^_^`` exported as ``^ ^`` is a corrupted training tag."""
+    from services.export_template_engine import is_kaomoji_tag, normalize_lora_tag
+
+    # Curated vocabulary + short-segment heuristic
+    for tag in ["^_^", "0_0", "o_o", "=_=", "+_+", ">_<", "@_@", "v_v", "<o>_<o>"]:
+        assert is_kaomoji_tag(tag), tag
+        assert normalize_lora_tag(tag) == tag, tag
+    # Ordinary words-joined tags still get spaced; score_ prefix still preserved
+    assert is_kaomoji_tag("long_hair") is False
+    assert normalize_lora_tag("long_hair") == "long hair"
+    assert normalize_lora_tag("score_9_up") == "score_9_up"
+
+
+def test_kaomoji_survive_full_export_render():
+    image = {"id": 1}
+    tags = [
+        {"tag": "1girl", "confidence": 0.99},
+        {"tag": "^_^", "confidence": 0.9},
+        {"tag": "long_hair", "confidence": 0.85},
+    ]
+    rendered = build_export_caption(
+        image, tags,
+        preset_id="custom",
+        template_override="{tags:filtered}",
+        trigger="",
+        underscore_to_space_override=True,
+        preserve_underscore_prefixes_override=["score_"],
+    )
+    assert "^_^" in rendered
+    assert "^ ^" not in rendered
+    assert "long hair" in rendered
+

@@ -15,22 +15,27 @@
 
     /**
      * Resolve the effective caption type for an image.
-     * An explicit valid choice always wins. Without one, the Dataset Maker
-     * defaults images that already carry an NL sentence to 'both'
-     * (opts.autoBoth = true); the v321 batch-export editor keeps 'booru' so
-     * existing export output never changes without a user action.
+     * An explicit valid choice always wins. Without one, both the Dataset Maker
+     * and the v321 batch-export editor default images that already carry an NL
+     * sentence to 'both' and everything else to 'booru' (opts.autoBoth = true).
+     * The autoBoth=false path remains for callers that want the strict "no
+     * output change without a user action" default.
      */
     function effectiveType(explicitType, hasNl, opts = {}) {
         if (TYPES.includes(explicitType)) return explicitType;
         return (opts.autoBoth && hasNl) ? 'both' : 'booru';
     }
 
-    /** Join rule — keep byte-identical to compose_caption_with_nl (backend). */
+    /**
+     * Join rule — keep byte-identical to compose_caption_with_nl (backend).
+     * The NL sentence is whitespace-flattened (P1-7): kohya-style trainers
+     * read caption line 1 only, so a multi-line sentence would truncate.
+     */
     function compose(booru, nl, type) {
         const ctype = TYPES.includes(type) ? type : 'booru';
         if (ctype === 'booru') return String(booru ?? '');
         const base = String(booru || '').trim();
-        const text = String(nl || '').trim();
+        const text = String(nl || '').split(/\s+/).filter(Boolean).join(' ');
         if (ctype === 'nl') return text || base;
         if (base && text) return `${base}, ${text}`;
         return base || text;
