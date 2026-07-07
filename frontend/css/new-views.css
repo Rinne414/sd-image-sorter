@@ -463,6 +463,14 @@
     gap: 8px;
 }
 
+/* Honor the `hidden` attribute similar.js sets on this row when the index is
+   not yet built: without this guard the `display:flex` above overrides the
+   weak `[hidden]` UA rule, so the disabled #btn-similar-embed leaks through and
+   duplicates the "建立相似索引" button inside the workflow-status card. */
+.similar-embed-row[hidden] {
+    display: none;
+}
+
 .similar-embed-progress {
     display: none;
     flex: 1;

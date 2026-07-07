@@ -556,7 +556,20 @@ function loadAutoSepConfigs() {
 }
 
 function saveAutoSepConfigs() {
-    localStorage.setItem(AUTOSEP_CONFIGS_KEY, JSON.stringify(AutoSepState.configs));
+    // localStorage.setItem throws on quota-exceeded or when storage is disabled
+    // (private mode / locked-down browser). Swallowing it silently let a config
+    // vanish while the UI still claimed "Saved". Report and signal failure.
+    try {
+        localStorage.setItem(AUTOSEP_CONFIGS_KEY, JSON.stringify(AutoSepState.configs));
+        return true;
+    } catch (e) {
+        if (window.Logger) Logger.error('Failed to persist auto-separate configs:', e);
+        window.App?.showToast?.(
+            tKey('autosep.configSaveFailed', 'Could not save config — browser storage is unavailable', '配置保存失败 — 浏览器存储不可用'),
+            'error'
+        );
+        return false;
+    }
 }
 
 function getSelectedAutoSepConfigId() {
@@ -634,15 +647,19 @@ async function createAutoSepConfig() {
     if (!name) return;
 
     AutoSepState.configs.push(buildAutoSepConfigPayload(name.trim()));
-    saveAutoSepConfigs();
+    const persisted = saveAutoSepConfigs();
     renderAutoSepConfigControls();
     const select = document.getElementById('autosep-config-select');
     if (select) select.value = AutoSepState.configs[AutoSepState.configs.length - 1].id;
     renderAutoSepConfigControls();
-    window.App?.showToast?.(
-        tKey('autosep.configSaved', 'Saved config "{name}"', '已保存配置“{name}”').replace('{name}', name.trim()),
-        'success'
-    );
+    // saveAutoSepConfigs already surfaced its own error toast on failure — only
+    // claim success when the config actually persisted.
+    if (persisted) {
+        window.App?.showToast?.(
+            tKey('autosep.configSaved', 'Saved config "{name}"', '已保存配置“{name}”').replace('{name}', name.trim()),
+            'success'
+        );
+    }
 }
 
 async function saveCurrentAutoSepConfig() {
@@ -659,14 +676,16 @@ async function saveCurrentAutoSepConfig() {
     const index = AutoSepState.configs.findIndex((entry) => entry.id === config.id);
     if (index >= 0) {
         AutoSepState.configs[index] = updated;
-        saveAutoSepConfigs();
+        const persisted = saveAutoSepConfigs();
         renderAutoSepConfigControls();
         const select = document.getElementById('autosep-config-select');
         if (select) select.value = config.id;
-        window.App?.showToast?.(
-            tKey('autosep.configUpdated', 'Updated config "{name}"', '已更新配置“{name}”').replace('{name}', config.name),
-            'success'
-        );
+        if (persisted) {
+            window.App?.showToast?.(
+                tKey('autosep.configUpdated', 'Updated config "{name}"', '已更新配置“{name}”').replace('{name}', config.name),
+                'success'
+            );
+        }
     }
 }
 
@@ -1003,6 +1022,11 @@ function updateAutoSepSummary() {
     for (const { id, key, field } of fields) {
         const el = $(id);
         if (!el) continue;
+        // Strip the data-i18n default so a later I18n.applyToDOM (languageChanged)
+        // cannot reset this JS-owned scope value back to "All"/"None". The value
+        // is already localized by formatFilterSummary. Matches the gallery
+        // sidebar / manual-sort summary writers.
+        el.removeAttribute('data-i18n');
         el.textContent = summary[key];
         _applyAutoSepChip(el, field, filters);
     }

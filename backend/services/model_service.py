@@ -606,6 +606,13 @@ class ModelService:
                 "path": health["wd14"]["model_path"] or wd14_primary_path,
                 "download_supported": True,
                 "variants": [item["name"] for item in health["wd14"]["installed_models"]],
+                # The variant list follows TAGGER_MODELS insertion order (eva02
+                # is first), but the recommended default is swinv2. Surface the
+                # default so the card's <select> pre-selects it and one-click
+                # Prepare downloads the recommended model, not the heavy eva02.
+                # .get(): production health always sets default_model, but a
+                # partial/mocked health dict must not crash the whole inventory.
+                "default_variant": health["wd14"].get("default_model"),
                 "installed_variants": installed_wd14,
                 "setup_steps": [
                     "Click Prepare / Download to download the selected WD14 model files if missing.",

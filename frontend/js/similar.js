@@ -321,6 +321,12 @@ const SimilarImages = {
         const uploadInput = document.getElementById('similar-upload-input');
         const uploadDropzone = document.getElementById('similar-upload-dropzone');
 
+        // Building the index needs CLIP: don't leave the blue "Generate
+        // Embeddings" primary enabled while the model is missing — the real next
+        // action is Open Setup / Download (promoted to primary in the banner).
+        const btnEmbed = document.getElementById('btn-similar-embed');
+        if (btnEmbed) btnEmbed.disabled = !modelReady || this.isEmbedding || this.isCheckingEmbeddingStatus;
+
         if (searchInput) searchInput.disabled = disableSearchActions;
         if (btnSearch) btnSearch.disabled = disableSearchActions;
         if (btnUpload) btnUpload.disabled = disableSearchActions;
@@ -529,8 +535,11 @@ const SimilarImages = {
                 : '';
             // ENTRY-06: shared "needs setup -> open Model Manager" affordance.
             // The data-action button reuses the global delegated handler.
+            // When CLIP is missing this IS the screen's next action, so it gets
+            // the single blue primary — the Generate Embeddings button is
+            // disabled (updateActionAvailability) because it can't succeed yet.
             const setupBtnHtml = result.available ? '' : `
-                <button type="button" class="btn btn-secondary btn-small model-health-setup-btn" data-action="open-model-guidance">
+                <button type="button" class="btn btn-primary btn-small model-health-setup-btn" data-action="open-model-guidance">
                     ⚙️ ${escapeHtml(this._t('models.openSetup', 'Open Setup / Download'))}
                 </button>
             `;

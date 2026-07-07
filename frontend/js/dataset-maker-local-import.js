@@ -631,10 +631,13 @@
         const normalize = !!document.getElementById('dataset-underscore-to-space')?.checked;
         const contentMode = this._exportContentMode?.() || 'template';
         const prefix = document.getElementById('dataset-export-prefix')?.value || '';
+        // Newline OR comma separated — #dataset-blacklist is newline by
+        // convention (TraitPruner appends with '\n'); comma-only split dropped
+        // trait-pruned entries on this local-import export path too.
         const blacklist = (document.getElementById('dataset-blacklist')?.value || '')
-            .split(',').map((s) => s.trim()).filter(Boolean);
+            .split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
         const commonTags = (document.getElementById('dataset-common-tags')?.value || '')
-            .split(',').map((s) => s.trim()).filter(Boolean);
+            .split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
 
         const galleryIds = [];
         const localPaths = [];

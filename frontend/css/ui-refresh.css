@@ -2944,8 +2944,12 @@ textarea:focus,
     background: rgba(48, 24, 7, 0.44);
 }
 
+/* "Synced" is success/state feedback, so it uses the semantic --success token
+   (DESIGN.md §color-exemptions permits --success for state feedback) rather
+   than an off-palette literal green. The values below already matched --success
+   (#5FDBA7 ≈ rgb 95,219,167) — this just makes the intent token-driven. */
 .scope-status-card.is-synced {
-    border-color: rgba(97, 214, 169, 0.26);
+    border-color: rgba(var(--success-rgb), 0.26);
     background: rgba(12, 37, 28, 0.38);
 }
 
@@ -2972,8 +2976,8 @@ textarea:focus,
 }
 
 .scope-status-card.is-synced .scope-status-badge {
-    background: rgba(97, 214, 169, 0.16);
-    color: #8cf2c8;
+    background: rgba(var(--success-rgb), 0.16);
+    color: var(--success);
 }
 
 .scope-status-meta,
@@ -4039,6 +4043,15 @@ textarea:focus,
     position: sticky;
     top: 16px;
     margin: 0 0 -44px auto;
+}
+
+/* §modal — stable settings-dialog size. The dialog auto-sized to each tab's
+   content (max-height:90vh), so General rendered short + vertically centered
+   while Models/Disk/Audit filled the viewport + top-anchored — every tab switch
+   visibly re-sized and re-anchored the whole dialog. Pin the height so a tab
+   switch only swaps the panel inside; the modal-content scrolls within. */
+#model-manager-modal .modal-content.modal-large {
+    height: min(88vh, 820px);
 }
 
 #smart-tag-modal .modal-close {
@@ -9798,9 +9811,14 @@ html.lang-zh #view-censor .queue-action-btn span {
    ========================================================================== */
 .pipeline-next-step {
     position: fixed;
-    top: calc(var(--nav-height, 72px) + 14px);
+    /* Anchored bottom-center, not below the nav: a top-center strip covered the
+       gallery generator tabs + censor toolbar (interactive rows) and collided
+       with the top-right toasts. 80px clears the bottom batch action bar
+       (bottom:12, ~56px tall). Slides up into view. */
+    bottom: 80px;
+    top: auto;
     left: 50%;
-    transform: translateX(-50%) translateY(-12px);
+    transform: translateX(-50%) translateY(12px);
     z-index: 240; /* above content, below modals */
     display: flex;
     align-items: center;
@@ -10001,6 +10019,19 @@ html.lang-zh #view-censor .queue-action-btn span {
         transform: translateY(-100%);
         opacity: 0;
         pointer-events: none;
+    }
+
+    /* Focus mode must do something PERCEIVABLE on the fixed sort stage (which
+       already covers the nav): clear the minimap and recede the progress HUD so
+       only the image + WASD folder cards remain. */
+    html.sort-zen .gallery-preview-bar {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 200ms var(--ease-out, ease);
+    }
+    html.sort-zen .sort-progress-enhanced {
+        opacity: 0.32;
+        transition: opacity 200ms var(--ease-out, ease);
     }
 }
 

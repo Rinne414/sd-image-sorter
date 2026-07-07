@@ -1248,6 +1248,13 @@ class ArtistIdentifier:
         self.threshold = threshold
         self.use_gpu = ARTIST_USE_GPU if use_gpu is None else bool(use_gpu)
         self.artists = artists_list or DEFAULT_ARTISTS
+        # True only when a real label source is present (an explicit
+        # ``artists_list``, a Kaloscope class_mapping.csv, or a transformers
+        # ``id2label``). Local ONNX / generic torch models have no label
+        # source, so ``identify`` must NOT map their raw class indices through
+        # the hardcoded DEFAULT_ARTISTS sample list and pass them off as real
+        # predictions. See ``identify`` for the honest-refusal path.
+        self._has_class_mapping: bool = artists_list is not None
         self._model: Any = None
         self._session: Any = None
         self._processor: Any = None
@@ -1384,6 +1391,7 @@ class ArtistIdentifier:
         self._processor = None
         self._transform = transform
         self.artists = artists
+        self._has_class_mapping = True
         self._backend = "kaloscope"
         logger.info("Loaded Kaloscope model '%s' with %d artist classes", model_name, len(self.artists))
 
@@ -1501,6 +1509,7 @@ class ArtistIdentifier:
                 if hasattr(self._model.config, 'id2label'):
                     self.artists = [self._model.config.id2label.get(i, f"unknown_{i}")
                                    for i in range(len(self._model.config.id2label))]
+                    self._has_class_mapping = True
 
                 logger.info(f"Loaded model with {len(self.artists)} styles")
             self._load_error = None
@@ -1577,13 +1586,42 @@ class ArtistIdentifier:
             # Get top predictions
             top_indices = np.argsort(predictions)[::-1][:top_k]
 
-            for idx in top_indices:
-                artist_name = self.artists[idx] if idx < len(self.artists) else f"unknown_{idx}"
+            for raw_idx in top_indices:
+                idx = int(raw_idx)
+                if self._has_class_mapping and idx < len(self.artists):
+                    artist_name = self.artists[idx]
+                else:
+                    # No real label source (e.g. a local ONNX / generic torch
+                    # model without a class_mapping.csv or embedded id2label).
+                    # Surface the raw class index honestly instead of inventing
+                    # a name from the hardcoded DEFAULT_ARTISTS sample list.
+                    artist_name = f"class_{idx}"
                 confidence = float(predictions[idx])
                 result["top_predictions"].append({
                     "artist": artist_name,
                     "confidence": round(confidence, 4),
                 })
+
+            if not self._has_class_mapping:
+                # Refuse to label: raw class indices are not artist names, so we
+                # must not pass the top prediction off as an identified artist.
+                top_conf = (
+                    float(result["top_predictions"][0]["confidence"])
+                    if result["top_predictions"]
+                    else 0.0
+                )
+                result["artist"] = "undefined"
+                result["confidence"] = top_conf
+                result["error"] = (
+                    "No artist label mapping found for this local model "
+                    "(expected a class_mapping.csv beside the model file, or an "
+                    "embedded id2label). Predictions are raw class indices, not "
+                    "artist names. / "
+                    "此本地模型未找到画师标签映射（需在模型文件旁放置 "
+                    "class_mapping.csv，或模型自带 id2label）。下面是原始类别索引，"
+                    "并非真实画师名。"
+                )
+                return result
 
             # Set main result based on threshold
             if result["top_predictions"]:

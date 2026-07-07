@@ -862,6 +862,14 @@ class ImageService:
                     progress_callback=progress_cb,
                     stop_requested=cancel_event.is_set,
                 )
+                # Reconnecting flips matched rows from unreadable->readable, so
+                # the cached library-health report (and the "N images can't open"
+                # banner this flow's own CTA leads to) is stale. The frontend
+                # force-refreshes the banner on completion, but that read would
+                # hit the 60s backend cache — invalidate it so the banner drops
+                # to the real post-reconnect count right away.
+                from services.sorting_service import invalidate_library_health_cache
+                invalidate_library_health_cache()
                 now = time.time()
                 self._set_reconnect_progress_if_current(
                     run_id,
@@ -1617,6 +1625,15 @@ class ImageService:
         }
         removed = db.delete_images_by_ids(normalized_ids)
         missing_ids = [image_id for image_id in normalized_ids if image_id not in existing_ids]
+
+        if removed:
+            # Removing rows (e.g. deleting the broken/unreadable images) changes
+            # the cached library-health counts that feed the "N images can't
+            # open" gallery banner. Same staleness class as clear_gallery — drop
+            # the cache so the banner reflects the smaller library immediately
+            # instead of lingering on the pre-delete count for the 60s TTL.
+            from services.sorting_service import invalidate_library_health_cache
+            invalidate_library_health_cache()
 
         return {"removed": removed, "missing_ids": missing_ids}
 

@@ -183,6 +183,23 @@
                 panel.classList.toggle('active', active);
                 panel.hidden = !active;
             });
+
+            // Title follows the active tool (mirrors the settings-modal title).
+            // Swap BOTH data-i18n and textContent so I18n.applyToDOM keeps the
+            // tool-appropriate heading on languageChanged instead of reverting
+            // to the metadata title while the 隐私处理 tool is active.
+            const titleEl = document.querySelector('#view-reader .reader-tools-title');
+            const subEl = document.querySelector('#view-reader .reader-tools-subtitle');
+            const titleKey = tool === 'obfuscation' ? 'reader.workspaceTitleObfuscation' : 'reader.workspaceTitle';
+            const subKey = tool === 'obfuscation' ? 'reader.workspaceSubtitleObfuscation' : 'reader.workspaceSubtitle';
+            if (titleEl) {
+                titleEl.setAttribute('data-i18n', titleKey);
+                titleEl.textContent = this._t(titleKey, titleEl.textContent);
+            }
+            if (subEl) {
+                subEl.setAttribute('data-i18n', subKey);
+                subEl.textContent = this._t(subKey, subEl.textContent);
+            }
         },
 
         _t(key, fallback, params) {

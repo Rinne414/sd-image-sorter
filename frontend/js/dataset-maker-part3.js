@@ -149,9 +149,12 @@
     DM._captionOptions = function () {
         const trigger = document.getElementById('dataset-trigger')?.value?.trim() || '';
         const blacklistText = document.getElementById('dataset-blacklist')?.value || '';
-        const blacklist = blacklistText.split(',').map(s => s.trim()).filter(Boolean);
+        // #dataset-blacklist is newline-separated by convention (TraitPruner
+        // appends with '\n', see dataset-maker.js) but users/paste may use
+        // commas — accept BOTH so trait-pruned entries are not silently dropped.
+        const blacklist = blacklistText.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
         const commonText = document.getElementById('dataset-common-tags')?.value || '';
-        const append = commonText.split(',').map(s => s.trim()).filter(Boolean);
+        const append = commonText.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
         const normalize = !!document.getElementById('dataset-underscore-to-space')?.checked;
         const opts = {
             preset_id: 'custom',
@@ -673,10 +676,12 @@
         const normalize = !!document.getElementById('dataset-underscore-to-space')?.checked;
         const contentMode = this._exportContentMode();
         const prefix = document.getElementById('dataset-export-prefix')?.value || '';
+        // Newline OR comma separated (TraitPruner appends blacklist tags with
+        // '\n'); splitting on comma alone silently dropped trait-pruned entries.
         const blacklist = (document.getElementById('dataset-blacklist')?.value || '')
-            .split(',').map(s => s.trim()).filter(Boolean);
+            .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
         const commonTags = (document.getElementById('dataset-common-tags')?.value || '')
-            .split(',').map(s => s.trim()).filter(Boolean);
+            .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
         const image_overrides = {};
         for (const [id, val] of this.captionEdits.entries()) {
             image_overrides[String(id)] = val;

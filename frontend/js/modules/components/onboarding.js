@@ -50,7 +50,7 @@ const OnboardingTour = (function() {
         {
             id: 'scan-folder',
             title: 'Scan Your Images',
-            content: `<p>Click <strong>Scan Folder</strong> to load images from a directory.</p>
+            content: `<p>Click <strong>Import Images</strong> to load images from a folder.</p>
                 <ul>
                     <li>Detect the generator (ComfyUI, NAI, WebUI, Forge)</li>
                     <li>Extract prompts, checkpoints, and LoRAs</li>
@@ -111,14 +111,14 @@ const OnboardingTour = (function() {
                     <li><strong>找相似</strong> - CLIP 视觉相似 &amp; 查重</li>
                     <li><strong>数据集</strong> - 制作 LoRA 训练集（caption + 导出）</li>
                 </ul>
-                <p>更多工具（提示词助手、画风识别）在 <strong>工具 ▾</strong> 菜单里。</p>`,
+                <p>更多工具（提示词助手、画风识别）在 <strong>更多 ▾</strong> 菜单里。</p>`,
             target: '.nav-tabs',
             position: 'bottom'
         },
         {
             id: 'scan-folder',
             title: '扫描图片',
-            content: `<p>点击 <strong>Scan Folder</strong> 导入图片文件夹。</p>
+            content: `<p>点击 <strong>导入图片</strong> 选择一个图片文件夹。</p>
                 <ul>
                     <li>自动识别生成器（ComfyUI、NAI、WebUI、Forge）</li>
                     <li>提取 prompt、checkpoint、LoRA 信息</li>

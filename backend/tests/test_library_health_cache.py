@@ -72,6 +72,64 @@ def test_library_health_cache_invalidation(test_client, test_db_with_images):
     assert _LIBRARY_HEALTH_CACHE == {}
 
 
+def test_clear_gallery_invalidates_library_health_cache(test_client, test_db_with_images):
+    """Clearing the gallery must drop the cached library-health report.
+
+    Regression: clear_gallery ran ``DELETE FROM images`` but never invalidated
+    the 60s-TTL library-health cache, so /api/library-health kept returning the
+    pre-clear counts. The gallery's "N images can't open — their original files
+    are missing" banner reads issue_counts.unreadable from that report, so it
+    lingered on a stale count after a clear (it looked permanent because nothing
+    re-polled). The clear must recompute the report to an empty library.
+    """
+    from services.sorting_service import _LIBRARY_HEALTH_CACHE
+
+    # Warm the cache against the seeded (non-empty) library.
+    before = test_client.get("/api/library-health?sample_limit=4").json()
+    assert before["summary"]["total_images"] > 0
+    assert 4 in _LIBRARY_HEALTH_CACHE  # now cached
+
+    # Clearing the gallery must invalidate that cache as part of the operation.
+    cleared = test_client.delete("/api/clear-gallery")
+    assert cleared.status_code == 200, cleared.text
+    assert _LIBRARY_HEALTH_CACHE == {}, "clear_gallery must invalidate the library-health cache"
+
+    # A fresh report reflects the now-empty library: 0 images, 0 unreadable, so
+    # the frontend banner hides instead of showing the stale pre-clear count.
+    after = test_client.get("/api/library-health?sample_limit=4").json()
+    assert after["summary"]["total_images"] == 0
+    assert after["issue_counts"]["unreadable"] == 0
+
+
+def test_remove_selected_images_invalidates_library_health_cache(test_client, test_db_with_images):
+    """Removing images from the gallery must drop the cached health report.
+
+    Same staleness class as clear_gallery: deleting rows (e.g. the broken
+    images the "N images can't open" banner points at) changes the cached
+    counts, so the removal must invalidate the cache instead of leaving the
+    banner on the pre-delete number for the 60s TTL.
+    """
+    from services.sorting_service import _LIBRARY_HEALTH_CACHE
+
+    before = test_client.get("/api/library-health?sample_limit=4").json()
+    total_before = before["summary"]["total_images"]
+    assert total_before > 0
+    assert 4 in _LIBRARY_HEALTH_CACHE  # warm
+
+    from database import get_db
+    with get_db() as conn:
+        image_id = conn.execute("SELECT id FROM images LIMIT 1").fetchone()["id"]
+    resp = test_client.post("/api/images/remove-selected", json={"image_ids": [image_id]})
+    assert resp.status_code == 200, resp.text
+    assert int(resp.json().get("removed", 0)) >= 1
+
+    # The removal must have invalidated the cache...
+    assert _LIBRARY_HEALTH_CACHE == {}, "remove-selected must invalidate the library-health cache"
+    # ...and a fresh report reflects the smaller library.
+    after = test_client.get("/api/library-health?sample_limit=4").json()
+    assert after["summary"]["total_images"] == total_before - 1
+
+
 def test_library_health_concurrent_reads_complete(test_client, test_db_with_images):
     """50 concurrent /api/library-health reads must all succeed.
 

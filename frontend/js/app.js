@@ -2886,11 +2886,21 @@ function setUpdateChannelFeedback(popup, message, tone = 'info') {
 
 async function _showUpdatePopup(anchorBtn) {
     const popup = _createUpdatePopup();
-    const currentVersion = AppState.appVersion || appT('update.versionUnknown', '?');
-    const githubUrl = AppState.githubUrl || '';
+    // Source the current version from any channel that already knows it — the
+    // gallery-stats-fed AppState.appVersion may not have arrived yet right after
+    // launch, but the update check payload (current_version) and the brand
+    // badge ('v3.5.0') do. Only fall back to the localized "unknown" as a last
+    // resort, and never prefix 'v' onto that fallback (was "vunknown").
     const status = AppState.update.status;
+    const knownCurrent = AppState.appVersion
+        || status?.current_version
+        || (document.getElementById('brand-version')?.textContent || '').replace(/^v/i, '').trim();
+    const currentVersion = knownCurrent || appT('update.versionUnknown', 'unknown');
+    const githubUrl = AppState.githubUrl || '';
     const hasUpdate = status?.has_update;
-    const latestVersion = status?.latest_version || currentVersion;
+    const latestVersion = status?.latest_version || knownCurrent || currentVersion;
+    // Prefix 'v' only for a real numeric version, not the "unknown" fallback.
+    const fmtVersion = (v) => /^\d/.test(String(v)) ? 'v' + escapeHtml(String(v)) : escapeHtml(String(v));
     const releaseUrl = status?.release_url || (githubUrl ? githubUrl + '/releases/latest' : '');
     const releaseNotes = status?.release_notes || '';
     let channel = AppState.update.channel;
@@ -2932,11 +2942,11 @@ async function _showUpdatePopup(anchorBtn) {
         </div>
         <div class="update-popup-row">
             <span class="update-popup-label">${escapeHtml(appT('update.currentLabel', 'Current Version'))}</span>
-            <span class="update-popup-value">v${escapeHtml(currentVersion)}</span>
+            <span class="update-popup-value">${fmtVersion(currentVersion)}</span>
         </div>
         <div class="update-popup-row">
             <span class="update-popup-label">${escapeHtml(appT('update.latestLabel', 'Latest Version'))}</span>
-            <span class="update-popup-value${hasUpdate ? ' has-update' : ''}">v${escapeHtml(latestVersion)}${hasUpdate ? ' ✦' : ''}</span>
+            <span class="update-popup-value${hasUpdate ? ' has-update' : ''}">${fmtVersion(latestVersion)}${hasUpdate ? ' ✦' : ''}</span>
         </div>
         ${releaseUrl ? `<div class="update-popup-row">
             <span class="update-popup-label">${escapeHtml(appT('update.releasePageLabel', 'Release Page'))}</span>
@@ -3332,6 +3342,12 @@ function getLocalizedTaggerMeta(modelName, meta) {
         safe_mode_note: meta.safe_mode_note ? appT(`${prefix}.safeModeNote`, meta.safe_mode_note) : meta.safe_mode_note,
     };
 }
+
+// v321-ui.js (SmartTag model picker) reads the localized catalog meta through
+// this window hook to show each tagger card's description/best-for line. Without
+// it the call site got `undefined` and every card fell back to a bare title.
+window.getTaggerModelMetaForV321 = (modelName) =>
+    getLocalizedTaggerMeta(modelName, getTaggerModelMeta(modelName));
 
 function getCustomTaggerProfile() {
     return normalizeTaggerModelName($('#tag-custom-profile-select')?.value || 'wd14', 'wd14');
@@ -5326,6 +5342,12 @@ async function requestBulkJobCancel(operation) {
         return true;
     } catch (error) {
         Logger?.warn?.('Failed to request bulk job cancellation:', error);
+        // Don't leave the cancel button looking dead: tell the user the request
+        // didn't land (the job may still be running).
+        showToast(
+            formatUserError(error, appT('bulk.cancelRequestFailed', 'Could not send the cancel request — the job may still be running')),
+            'error'
+        );
         return false;
     }
 }
@@ -6138,6 +6160,13 @@ function initEventListeners() {
                     showToast(appT('gallery.clearSuccess', 'Gallery cleared successfully'));
                     loadImages();
                     loadStats();
+                    // The "N images can't open" banner reads a 60s-cached
+                    // library-health count. Clearing emptied the library, so drop
+                    // the cache and force an immediate recheck — otherwise the
+                    // stale count lingers until the TTL lapses (it looked
+                    // permanent because nothing re-polled after a clear).
+                    window.UnreadableBanner?.invalidate?.();
+                    window.UnreadableBanner?.refresh?.(true);
                 } catch (e) {
                     showToast(formatUserError(e, appT('gallery.clearFailed', 'Failed to clear gallery')), "error");
                 }
@@ -7993,6 +8022,7 @@ function _initBgScanProgressButtons() {
                 await API.cancelDelete();
             } catch (error) {
                 Logger.warn('Failed to request delete cancellation:', error);
+                showToast(formatUserError(error, appT('bulk.cancelRequestFailed', 'Could not send the cancel request — the job may still be running')), 'error');
             }
         });
     }
@@ -8009,6 +8039,7 @@ function _initBgScanProgressButtons() {
                 await API.cancelRemove();
             } catch (error) {
                 Logger.warn('Failed to request remove cancellation:', error);
+                showToast(formatUserError(error, appT('bulk.cancelRequestFailed', 'Could not send the cancel request — the job may still be running')), 'error');
             }
         });
     }
@@ -9847,6 +9878,9 @@ function renderLibraryFacet(tab, items) {
 function setLibraryStatsText(tab, count) {
     const statsText = $('#library-stats-text');
     if (!statsText) return;
+    // Defensive: this field is JS-owned; make sure no stray data-i18n can let a
+    // later applyToDOM reset the count back to "Loading...".
+    statsText.removeAttribute('data-i18n');
     const t = (key, params, fallback) => {
         const translated = window.I18n?.t?.(key, params);
         return translated && translated !== key ? translated : (fallback || key);
@@ -12114,8 +12148,12 @@ function renderModelManager(models = []) {
         const sourceOptions = Array.isArray(model.sources) ? model.sources.map((source) => `
             <option value="${escapeHtml(source)}">${escapeHtml(source)}</option>
         `).join('') : '';
+        // Pre-select the backend-recommended default variant (e.g. wd-swinv2)
+        // so the card's Prepare downloads the recommended model, not whichever
+        // variant happens to be first in the list (eva02-large is heavy/opt-in).
+        const defaultVariant = model.default_variant || '';
         const variantOptions = Array.isArray(model.variants) ? model.variants.map((variant) => `
-            <option value="${escapeHtml(variant)}">${escapeHtml(variant)}</option>
+            <option value="${escapeHtml(variant)}"${variant === defaultVariant ? ' selected' : ''}>${escapeHtml(variant)}</option>
         `).join('') : '';
         const installedVariants = Array.isArray(model.installed_variants) && model.installed_variants.length
             ? `<div class="model-card-hint">${escapeHtml(appT('models.installedVariants', 'Installed variants'))}: ${escapeHtml(model.installed_variants.join(', '))}</div>`
@@ -13465,37 +13503,27 @@ function updateFilterSummary() {
     // Use shared filter summary formatter for common fields
     const summary = window.formatFilterSummary(f);
 
-    // Generators
-    $('#summary-generators').textContent = summary.generators;
+    // These summary values are JS-owned (formatFilterSummary already localizes
+    // every default via I18n.t). The spans ship a data-i18n default so the
+    // pre-JS render is translated, but once we write a real scope value the
+    // attribute MUST be stripped — otherwise the next I18n.applyToDOM (fires on
+    // languageChanged) resets the span to "All"/"None" and the sidebar lies
+    // about the active filter on a destructive mass-move surface. See §filter.
+    const setSummary = (id, value) => {
+        const el = $(id);
+        if (!el) return;
+        el.removeAttribute('data-i18n');
+        el.textContent = value;
+    };
 
-    // Ratings
-    $('#summary-ratings').textContent = summary.ratings;
-
-    // Tags
-    $('#summary-tags').textContent = summary.tags;
-
-    // Checkpoints
-    $('#summary-checkpoints').textContent = summary.checkpoints;
-
-    // Loras
-    $('#summary-loras').textContent = summary.loras;
-
-    // Prompt (now uses prompts array)
-    const promptSummary = $('#summary-prompt');
-    if (promptSummary) {
-        promptSummary.textContent = summary.prompts;
-    }
-
-    const searchSummary = $('#summary-search');
-    if (searchSummary) {
-        searchSummary.textContent = summary.search;
-    }
-
-    const colorSummary = $('#summary-colors');
-    if (colorSummary) {
-        colorSummary.removeAttribute('data-i18n');
-        colorSummary.textContent = summary.colors || appT('filter.any', 'Any');
-    }
+    setSummary('#summary-generators', summary.generators);
+    setSummary('#summary-ratings', summary.ratings);
+    setSummary('#summary-tags', summary.tags);
+    setSummary('#summary-checkpoints', summary.checkpoints);
+    setSummary('#summary-loras', summary.loras);
+    setSummary('#summary-prompt', summary.prompts);
+    setSummary('#summary-search', summary.search);
+    setSummary('#summary-colors', summary.colors || appT('filter.any', 'Any'));
 
     // Artist filter
     const artistRow = $('#artist-filter-row');

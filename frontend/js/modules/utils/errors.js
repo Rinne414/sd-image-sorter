@@ -96,24 +96,33 @@ function formatUserError(error, context = '') {
     const errorMsg = error instanceof Error ? error.message : String(error);
     const errorMessageMap = getErrorMessageMap();
     const errorPatterns = getErrorPatterns();
-    
+
+    // Prefix the caller's context, but drop it when the resolved message already
+    // equals the context label — otherwise a backend "Detection failed" under a
+    // "Detection failed" context read as "Detection failed: Detection failed".
+    const withContext = (msg) => {
+        if (!context) return msg;
+        if (String(msg).trim().toLowerCase() === String(context).trim().toLowerCase()) return String(msg);
+        return `${context}${isZhCn() ? '：' : ': '}${msg}`;
+    };
+
     // Check for exact match first
     if (errorMessageMap[errorMsg]) {
-        return context ? `${context}${isZhCn() ? '：' : ': '}${errorMessageMap[errorMsg]}` : errorMessageMap[errorMsg];
+        return withContext(errorMessageMap[errorMsg]);
     }
-    
+
     // Check patterns
     for (const { pattern, message } of errorPatterns) {
         if (pattern.test(errorMsg)) {
-            return context ? `${context}${isZhCn() ? '：' : ': '}${message}` : message;
+            return withContext(message);
         }
     }
-    
+
     // Preserve short, human-readable backend messages instead of collapsing them
     const hasTechnicalJargon = /(?:\b(?:ENOENT|EACCES|EPERM|ENOSPC|CUDA|undefined|null|TypeError|ReferenceError|SyntaxError)\b|https?:\/\/|\/api\/|[A-Za-z]:\\| at .+\(|stack trace)/i.test(errorMsg);
 
     if (!hasTechnicalJargon && errorMsg.length < 180) {
-        return context ? `${context}${isZhCn() ? '：' : ': '}${errorMsg}` : errorMsg;
+        return withContext(errorMsg);
     }
     
     // Return generic message with context

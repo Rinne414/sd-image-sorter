@@ -34,6 +34,16 @@
     min-width: 200px;
 }
 
+/* [hidden] guard (§nav-bar trap): setScanUiRunning() toggles the `hidden`
+   attribute when a scan settles, but the display:flex above (and the .btn
+   display rule) beat the UA [hidden]{display:none}, so the cancel button and
+   progress row — with their stale "Loading embeddings" text — stayed visible
+   forever after a finished scan. */
+.dup-scan-progress[hidden],
+#btn-dup-cancel-scan[hidden] {
+    display: none !important;
+}
+
 .dup-scan-progress-bar {
     flex: 1 1 auto;
     height: 8px;

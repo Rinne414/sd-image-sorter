@@ -84,7 +84,11 @@ const CensorState = {
     style: 'mosaic',
     blockSize: 16,
     targetClasses: ['breasts', 'pussy', 'dick', 'penis', 'anus', 'buttocks'], // Covers the main privacy classes used by Wenaka + NudeNet
-    metadataOption: 'keep', // 'keep', 'minimal', or 'strip'
+    // Default to STRIP: this is a censor-for-publishing tool, so exporting the
+    // full generation prompt/metadata by default was a privacy leak. Matches the
+    // 'strip' fallback every save function already uses. Users can still pick
+    // keep/minimal per export. ('keep', 'minimal', or 'strip')
+    metadataOption: 'strip',
     outputFormat: 'png', // 'png', 'jpg', or 'webp'
     sam3Confidence: 0.5, // SAM3 confidence threshold
     maskShape: localStorage.getItem('censor_mask_shape') === 'box' ? 'box' : 'precise', // 'precise': use YOLO-seg/SAM3 polygon masks; 'box': censor rectangles
@@ -657,6 +661,20 @@ function cleanupGlobalListeners() {
 
 // ============== Init ==============
 
+// An item carries real censoring worth saving (and worth an unsaved-work
+// warning) when it has been rendered (isProcessed / currentDataUrl) OR holds
+// proxy-mode edit operations — large-image strokes that persist via
+// /save-operations rather than baked pixels, so isProcessed stays false while
+// the edits are real. This is the single source of truth for "did the user
+// actually censor this?"; keep saveAllProcessed and the beforeunload guard on it
+// so the never-fallback-to-uncensored invariant never skips a real proxy stroke.
+function itemHasCensorContent(item) {
+    return Boolean(item && (
+        item.isProcessed || item.currentDataUrl ||
+        (Array.isArray(item.editOperations) && item.editOperations.length > 0)
+    ));
+}
+
 // Guard flag to prevent duplicate event binding
 let censorEventsInitialized = false;
 
@@ -667,6 +685,23 @@ function initCensorEdit() {
     if (!boundHandlers.resize) {
         boundHandlers.resize = _handleCensorResize;
         window.addEventListener('resize', _handleCensorResize);
+    }
+
+    // Warn before reload/close when the queue holds unsaved censoring work — the
+    // in-memory queue and edits are not persisted, so an accidental F5 silently
+    // discarded them. Mirrors the dataset-maker beforeunload guard (Chrome/Edge
+    // need returnValue set as well as preventDefault). Registered once.
+    if (!boundHandlers.beforeUnload) {
+        boundHandlers.beforeUnload = (e) => {
+            const hasUnsaved = Array.isArray(CensorState.queue) && CensorState.queue.some(
+                (it) => it && it.batchStatus !== 'saved' && itemHasCensorContent(it)
+            );
+            if (hasUnsaved) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        };
+        window.addEventListener('beforeunload', boundHandlers.beforeUnload);
     }
 
     // Load saved settings (use optional chaining for elements that may not exist)
@@ -1120,8 +1155,8 @@ function bindEvents() {
             return;
         }
         window.App.showConfirm(
-            'Reset All Edits',
-            'This will revert all edits to the original image. Continue?',
+            censorT('censor.resetEditsTitle', null, 'Reset All Edits'),
+            censorT('censor.resetEditsConfirm', null, 'This will revert all edits to the original image. Continue?'),
             clearAllEdits
         );
     });
@@ -2644,6 +2679,10 @@ async function loadCanvasImage(id) {
     // UI Updates
     const noImageEl = document.getElementById('censor-no-image');
     const filenameEl = document.getElementById('censor-filename');
+    // Show the filename immediately, not only inside the RAF swap below — a
+    // superseded load request early-returns before the RAF write, which used to
+    // leave the status bar stuck on the empty-state text.
+    if (filenameEl && item) filenameEl.textContent = item.outputFilename || item.originalFilename || '';
     showLoading(true, censorT('censor.loadingImage', null, 'Loading image...'));
 
     try {
@@ -3801,7 +3840,9 @@ function clearCanvas() {
     }
     document.getElementById('censor-no-image').style.display = 'flex';
     setCensorEditorHasImage(false);
-    document.getElementById('censor-filename').textContent = '-';
+    // Localized empty state (the element no longer carries data-i18n, so JS owns
+    // both the live filename and this reset text).
+    document.getElementById('censor-filename').textContent = censorT('censor.noImageSelected', null, 'No image selected');
 }
 
 // ============== Drawing Tools ==============
@@ -4176,12 +4217,29 @@ async function runAutoCensorBatch() {
     renderQueue();
     // Reload canvas if active item was updated
     if (CensorState.activeId) loadCanvasImage(CensorState.activeId);
-    showToast(
-        executionPlan.switchMessage
-            ? censorT('censor.batchProcessingCompleteAutoRestored', null, 'Batch processing complete. The app auto-restored the privacy detector before running.')
-            : censorT('censor.batchProcessingComplete', { count, total: result.total }, 'Batch processing complete'),
-        'success'
-    );
+
+    // Honest summary: runDetectionForImage now marks item.batchStatus in silent
+    // mode, so a run where every detection threw no longer shows a green
+    // "complete" toast. renderQueue() already red-outlines failed thumbs.
+    const { failedCount } = _summarizeBatchFailures();
+    if (failedCount > 0) {
+        const okCount = Math.max(0, count - failedCount);
+        showToast(
+            censorT(
+                'censor.batchProcessingPartial',
+                { ok: okCount, failed: failedCount, total: result.total },
+                `Auto-censor finished — ${okCount} done, ${failedCount} failed (of ${result.total}).`
+            ),
+            failedCount >= count ? 'error' : 'warning'
+        );
+    } else {
+        showToast(
+            executionPlan.switchMessage
+                ? censorT('censor.batchProcessingCompleteAutoRestored', null, 'Batch processing complete. The app auto-restored the privacy detector before running.')
+                : censorT('censor.batchProcessingComplete', { count, total: result.total }, 'Batch processing complete'),
+            'success'
+        );
+    }
 }
 
 // Bake a set of detected regions into an item (proxy edit-op path or full
@@ -4274,6 +4332,12 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
             item.previewDataUrl = null;
             item.editOperations = [];
             item.isProcessed = false;
+            // Silent (batch) callers rely on batchStatus for an honest summary —
+            // a detector that never started is a failure, not a success.
+            if (silent) {
+                item.batchStatus = 'failed';
+                item.batchError = plan?.message || 'Quick Auto Censor could not start.';
+            }
             if (!silent && item.id === CensorState.activeId) {
                 loadCanvasImage(item.id);
                 window.App.showToast(
@@ -4327,6 +4391,9 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
         // The geometry flags come back so the toast below can describe what ran.
         const bakeResult = await applyDetectedRegionsToItem(item, regions, data);
         reloadedActiveItem = bakeResult.reloadedActiveItem;
+        // Detection + bake succeeded (0 regions is a valid result, not a
+        // failure). Record it so a batch summary can report ok vs failed.
+        if (silent) item.batchStatus = 'done';
 
         if (!silent && item.id === CensorState.activeId) {
             if (!reloadedActiveItem) {
@@ -4352,6 +4419,12 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
 
     } catch (e) {
         Logger.error(e);
+        // Batch callers: mark the item failed so runAutoCensorBatch reports an
+        // honest ok/failed split instead of an unconditional success toast.
+        if (silent) {
+            item.batchStatus = 'failed';
+            item.batchError = formatUserError(e, censorT('censor.detectFailed', null, 'Detection failed'));
+        }
         if (!silent) {
             window.App.showToast(
                 formatUserError(e, censorT('censor.detectFailed', null, 'Detection failed')),
@@ -4987,7 +5060,21 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
 
     let count = 0;
     let failedCount = 0;
+    let skippedCount = 0;
     await processCensorBatchItems(async (item, { index, total }) => {
+        // "Save All Processed" must never write an un-censored original as if it
+        // were done — that would violate the never-fallback-to-uncensored
+        // invariant (an item can reach the original-bytes save path in
+        // saveCensorQueueItem when it has no edits, or via proxy mode with empty
+        // operations). Items with no applied censoring are skipped, not exported.
+        // NOTE: proxy-mode strokes leave isProcessed=false but carry real
+        // editOperations — itemHasCensorContent() covers that so large-image
+        // edits are saved, not silently skipped.
+        if (!itemHasCensorContent(item)) {
+            item.batchStatus = 'skipped';
+            skippedCount += 1;
+            return;
+        }
         try {
             showLoading(true, window.App.buildProgressText({
                 progress: { message: item.outputFilename || item.originalFilename || `Image ${item.id}` },
@@ -5018,6 +5105,19 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
                 count,
                 failedCount,
             }, 'Saved {count} images · {failedCount} failed (red-outlined thumbnails)'),
+            'warning'
+        );
+    } else if (count === 0 && skippedCount > 0) {
+        // Nothing was censored — say so plainly instead of a green "Saved 0".
+        window.App.showToast(
+            censorT('censor.saveNothingProcessed', { skipped: skippedCount },
+                'Nothing saved — none of the {skipped} queued image(s) are censored yet. Run auto-detect or draw a region first.'),
+            'warning'
+        );
+    } else if (skippedCount > 0) {
+        window.App.showToast(
+            censorT('censor.saveSkippedUnprocessed', { count, skipped: skippedCount },
+                'Saved {count} censored · skipped {skipped} un-censored image(s) (not exported).'),
             'warning'
         );
     } else {
@@ -5315,6 +5415,12 @@ function handleKeydown(e) {
         e.preventDefault();
     } else if (key === 'r') {
         setTool('remove-bg');
+        e.preventDefault();
+    }
+    // Rename shortcut (F2) — R is taken by Remove Background above, so the
+    // rename button's "(R)" tooltip used to advertise a key that did nothing.
+    else if (e.key === 'F2') {
+        promptSingleRename();
         e.preventDefault();
     }
     // Show Changes shortcut ('H' for Highlight changes)

@@ -2786,15 +2786,27 @@ async function collectCullDecisions() {
     const keepDest = getCullDest('keep');
     const rejectDest = getCullDest('reject');
 
+    let attempted = 0;
+    let failed = 0;
+
+    // Returns false only when a real write throws, so finishCullSorting can
+    // report honestly instead of always showing a green success toast even
+    // when every keep/reject failed (e.g. the destination collection was
+    // deleted mid-session). A falsy/invalid dest is "nothing to write", not a
+    // failure.
     const route = async (id, dest) => {
-        if (!dest) return;
+        if (!dest) return true;
+        const cid = dest === 'fav' ? null : Number(dest);
+        if (dest !== 'fav' && (!Number.isInteger(cid) || cid <= 0)) return true;
+        attempted += 1;
         try {
-            if (dest === 'fav') { await API.setFavorite(id, true); return; }
-            const cid = Number(dest);
-            if (!Number.isInteger(cid) || cid <= 0) return;
-            await API.setCollectionMembership(cid, id, true);
+            if (dest === 'fav') await API.setFavorite(id, true);
+            else await API.setCollectionMembership(cid, id, true);
+            return true;
         } catch (e) {
+            failed += 1;
             if (window.Logger) Logger.error('Failed to route cull decision:', e);
+            return false;
         }
     };
 
@@ -2802,6 +2814,7 @@ async function collectCullDecisions() {
         if (decision === 'keep') await route(id, keepDest);
         else if (decision === 'reject') await route(id, rejectDest);
     }
+    return { attempted, failed };
 }
 
 async function finishCullSorting(result) {
@@ -2826,16 +2839,28 @@ async function finishCullSorting(result) {
         else if (decision === 'reject') rejectedCount += 1;
     }
 
-    await collectCullDecisions();
+    const routeStats = await collectCullDecisions();
 
-    showToast(
-        formatManualSortI18n(
-            'manual.cullComplete',
-            'Cull complete — kept {kept}, rejected {rejected}.',
-            { kept: keptCount, rejected: rejectedCount }
-        ),
-        'success'
-    );
+    if (routeStats.failed > 0) {
+        showToast(
+            formatManualSortText(
+                'manual.cullCompletePartial',
+                'Cull done — kept {kept}, rejected {rejected}, but {failed} could not be saved to your collections/favorites.',
+                '整理完成 — 保留 {kept}、剔除 {rejected}，但有 {failed} 张未能写入收藏夹/收藏。',
+                { kept: keptCount, rejected: rejectedCount, failed: routeStats.failed }
+            ),
+            'warning'
+        );
+    } else {
+        showToast(
+            formatManualSortI18n(
+                'manual.cullComplete',
+                'Cull complete — kept {kept}, rejected {rejected}.',
+                { kept: keptCount, rejected: rejectedCount }
+            ),
+            'success'
+        );
+    }
 
     window.App.API.delete('/api/sort/session').catch(e => {
         if (window.Logger) Logger.warn('Failed to clean up cull session:', e);
@@ -3448,37 +3473,25 @@ function updateManualSortFilterSummary() {
     // Use shared filter summary formatter
     const summary = window.formatFilterSummary(filters);
 
-    // Generators
-    const genEl = $('#manual-sort-summary-generators');
-    if (genEl) genEl.textContent = summary.generators;
+    // Strip each span's data-i18n default when writing the real (already
+    // localized) scope value, so a later I18n.applyToDOM on languageChanged
+    // cannot reset it to "All"/"None" and misreport the sort scope. Matches the
+    // gallery sidebar / auto-separate summary writers.
+    const setSummary = (id, value) => {
+        const el = $(id);
+        if (!el) return;
+        el.removeAttribute('data-i18n');
+        el.textContent = value;
+    };
 
-    // Tags
-    const tagEl = $('#manual-sort-summary-tags');
-    if (tagEl) tagEl.textContent = summary.tags;
-
-    // Ratings
-    const ratingEl = $('#manual-sort-summary-ratings');
-    if (ratingEl) ratingEl.textContent = summary.ratings;
-
-    // Checkpoints
-    const cpEl = $('#manual-sort-summary-checkpoints');
-    if (cpEl) cpEl.textContent = summary.checkpoints;
-
-    // Loras
-    const loraEl = $('#manual-sort-summary-loras');
-    if (loraEl) loraEl.textContent = summary.loras;
-
-    // Prompts
-    const promptEl = $('#manual-sort-summary-prompts');
-    if (promptEl) promptEl.textContent = summary.prompts;
-
-    // Search
-    const searchEl = $('#manual-sort-summary-search');
-    if (searchEl) searchEl.textContent = summary.search;
-
-    // Dimensions
-    const dimEl = $('#manual-sort-summary-dimensions');
-    if (dimEl) dimEl.textContent = summary.dimensions;
+    setSummary('#manual-sort-summary-generators', summary.generators);
+    setSummary('#manual-sort-summary-tags', summary.tags);
+    setSummary('#manual-sort-summary-ratings', summary.ratings);
+    setSummary('#manual-sort-summary-checkpoints', summary.checkpoints);
+    setSummary('#manual-sort-summary-loras', summary.loras);
+    setSummary('#manual-sort-summary-prompts', summary.prompts);
+    setSummary('#manual-sort-summary-search', summary.search);
+    setSummary('#manual-sort-summary-dimensions', summary.dimensions);
 
     updateManualSortScopeStatus();
     updateManualSortExecutionScopeSummary();

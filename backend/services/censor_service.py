@@ -641,6 +641,74 @@ class CensorService:
             "reconciled_image_id": int(indexed_output["id"]) if indexed_output else None,
         }
 
+    @staticmethod
+    def _detection_error_to_http(exc: Exception) -> HTTPException:
+        """Map an unexpected detection failure to a categorized, actionable HTTP error.
+
+        Distinguishes the three causes users can actually act on instead of a
+        cause-free 500 "Detection failed":
+          1. model file missing / unreadable / unloadable  -> 503
+          2. required dependency missing (onnxruntime / nudenet / opencv) -> 503
+          3. image unreadable / corrupt / unsupported       -> 422
+        Anything else keeps a 500 but now echoes the real error text (no longer
+        cause-free). Reuses the detectors' own RuntimeError messages (e.g.
+        nudenet's "nudenet not installed. Run: pip install nudenet"), so the
+        actionable "pip install X" survives to the client.
+        """
+        from PIL import UnidentifiedImageError
+
+        message = str(exc) or exc.__class__.__name__
+        lowered = message.lower()
+
+        # (3) Image unreadable / corrupt — most specific type first
+        # (UnidentifiedImageError subclasses OSError, so check it before models).
+        if isinstance(exc, UnidentifiedImageError) or any(
+            hint in lowered
+            for hint in ("cannot identify image", "broken data stream", "image file is truncated")
+        ):
+            return HTTPException(
+                status_code=422,
+                detail=(
+                    "The image could not be read for detection; it may be corrupt "
+                    f"or an unsupported format. ({message}) / "
+                    f"无法读取该图片进行检测，图片可能已损坏或格式不受支持。（{message}）"
+                ),
+            )
+
+        # (2) Required Python dependency missing.
+        if isinstance(exc, ImportError) or any(
+            hint in lowered
+            for hint in ("not installed", "pip install", "no module named", "modulenotfounderror")
+        ):
+            return HTTPException(
+                status_code=503,
+                detail=(
+                    "A required detection dependency is missing. Install it and "
+                    f"restart the app, then retry. ({message}) / "
+                    f"缺少检测所需的依赖，请安装后重启应用再重试。（{message}）"
+                ),
+            )
+
+        # (1) Model file missing / unreadable / could not be loaded.
+        if isinstance(exc, FileNotFoundError) or any(
+            hint in lowered
+            for hint in ("model file not found", "model not loaded", "failed to load")
+        ):
+            return HTTPException(
+                status_code=503,
+                detail=(
+                    "The censor model is missing or could not be loaded. Download "
+                    f"or select a detection model, then retry. ({message}) / "
+                    f"打码模型缺失或无法加载，请先下载或选择检测模型后重试。（{message}）"
+                ),
+            )
+
+        # Fallback: still a 500, but no longer cause-free — surface the real error.
+        return HTTPException(
+            status_code=500,
+            detail=f"Detection failed: {message} / 检测失败：{message}",
+        )
+
     def detect(self, request: CensorDetectRequest) -> Dict[str, Any]:
         """
         Run detection on an image to find regions to censor.
@@ -794,10 +862,10 @@ class CensorService:
             }
         except HTTPException:
             raise
-        except Exception:
+        except Exception as exc:
             error_trace = traceback.format_exc()
             logger.error("Detection error:\n%s", error_trace)
-            raise HTTPException(status_code=500, detail="Detection failed")
+            raise self._detection_error_to_http(exc) from exc
 
     def preview(self, request: CensorApplyRequest) -> Dict[str, str]:
         """Apply censoring and return base64 preview image."""

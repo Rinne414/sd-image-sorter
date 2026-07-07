@@ -297,31 +297,49 @@ def test_release_default_version_follows_app_info():
     assert release_builder.DEFAULT_VERSION == _read_app_version()
 
 
+def _stable_base_version(app_version: str) -> str:
+    """Strip a prerelease suffix (``-beta.1`` / ``-rc.2`` / ``-alpha.3``) so
+    the public front-door docs can be checked against the STABLE line.
+
+    The README badge + ``/releases/latest/download/`` links must resolve to
+    the latest *stable* release (GitHub's "Latest" excludes prereleases), so
+    they advertise the base version (``3.5.0``) even while app_info.py carries
+    a prerelease string (``3.5.0-beta.1``). The prerelease suffix lives in the
+    app version, the version-specific release notes, and the release artifacts
+    — not on the repo's landing page. For a plain stable version this strip is
+    a no-op, so stable releases behave exactly as before.
+    """
+    return re.split(r"-(?:alpha|beta|rc)\b", app_version, maxsplit=1)[0]
+
+
 def test_release_public_docs_versions_follow_app_info():
     app_version = _read_app_version()
+    base_version = _stable_base_version(app_version)
     readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
     changelog_text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
-    assert f"version-{app_version}-ff8a00" in readme_text
-    assert f"sd-image-sorter-v{app_version}-windows-portable.zip" in readme_text
-    assert f"sd-image-sorter-v{app_version}-linux.tar.gz" in readme_text
+    # README (the stable front door) tracks the base version; a prerelease
+    # must not rewrite the landing page or its latest-download links.
+    assert f"version-{base_version}-ff8a00" in readme_text
+    assert f"sd-image-sorter-v{base_version}-windows-portable.zip" in readme_text
+    assert f"sd-image-sorter-v{base_version}-linux.tar.gz" in readme_text
     # The Linux portable bundle is the recommended path for non-Windows
     # users on distros without a working Python 3.12+. Phase 2 ships both
     # x86_64 (PCs / laptops / x86 servers) and aarch64 (Raspberry Pi 5,
     # AWS Graviton, ARM Linux servers); README must keep BOTH download
     # links alive in lockstep with app_info.py.
-    assert f"sd-image-sorter-v{app_version}-linux-portable-x86_64.tar.gz" in readme_text
-    assert f"sd-image-sorter-v{app_version}-linux-portable-aarch64.tar.gz" in readme_text
+    assert f"sd-image-sorter-v{base_version}-linux-portable-x86_64.tar.gz" in readme_text
+    assert f"sd-image-sorter-v{base_version}-linux-portable-aarch64.tar.gz" in readme_text
     assert re.search(
-        rf"^## \[{re.escape(app_version)}\] - \d{{4}}-\d{{2}}-\d{{2}}$",
+        rf"^## \[{re.escape(base_version)}\] - \d{{4}}-\d{{2}}-\d{{2}}$",
         changelog_text,
         re.MULTILINE,
     )
     assert "sd-image-sorter-v3.2.0-" not in readme_text
-    assert f"tar xzf sd-image-sorter-v{app_version}-linux.tar.gz" in readme_text
+    assert f"tar xzf sd-image-sorter-v{base_version}-linux.tar.gz" in readme_text
     # Mirrors the bash example for the portable variant so the doc test
     # catches a stale ``tar xzf`` name on the next version bump.
-    assert f"tar xzf sd-image-sorter-v{app_version}-linux-portable-x86_64.tar.gz" in readme_text
+    assert f"tar xzf sd-image-sorter-v{base_version}-linux-portable-x86_64.tar.gz" in readme_text
 
 
 def test_release_packages_use_version_specific_release_notes(tmp_path):

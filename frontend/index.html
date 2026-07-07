@@ -294,7 +294,12 @@
                 </div>
             </div>
             <div class="identity-hero-line">
-                <span id="entry-hero-credit" data-i18n="entry.heroEmpty">Rate an image ★5 and it becomes the cover here</span>
+                <!-- JS-owned: entry-page.js renderHero()/poolEmptyCredit() set this
+                     for every cover mode and re-render on languageChanged. It must
+                     NOT carry data-i18n or I18n.applyToDOM resets the live caption
+                     back to the empty-state hint (and shows "Rate ★5" on an empty
+                     library, where the real next step is scanning a folder). -->
+                <span id="entry-hero-credit"></span>
                 <button type="button" class="hero-link" id="entry-hero-swap" data-i18n="entry.heroSwap" hidden>Swap ↻</button>
                 <!-- Owner FB (2026-07-06): 不想展示 was a one-way door — replaced
                      by a four-state display-mode switch (off / single / slideshow
@@ -1462,7 +1467,7 @@
             <!-- Sorting View (Auto-Separate + Manual Sort) -->
             <section id="view-sorting" class="view">
                 <div class="sorting-sub-tabs">
-                    <button class="btn btn-primary sorting-sub-tab active" data-sorting-sub="autosep" onclick="window._switchSortingSub('autosep')">
+                    <button class="btn btn-ghost sorting-sub-tab active" data-sorting-sub="autosep" onclick="window._switchSortingSub('autosep')">
                         <span data-i18n="nav.autosep">Auto-Separate</span>
                     </button>
                     <button class="btn btn-ghost sorting-sub-tab" data-sorting-sub="manual" onclick="window._switchSortingSub('manual')">
@@ -1510,7 +1515,7 @@
                                         <select id="autosep-config-select" class="input-field"></select>
                                         <div class="autosep-config-controls-row">
                                             <button class="btn btn-secondary btn-small" id="btn-autosep-load-config" type="button" data-i18n="autosep.loadConfig">Load</button>
-                                            <button class="btn btn-primary btn-small" id="btn-autosep-save-config" type="button" data-i18n="autosep.saveCurrentConfig">Save</button>
+                                            <button class="btn btn-secondary btn-small" id="btn-autosep-save-config" type="button" data-i18n="autosep.saveCurrentConfig">Save</button>
                                             <button class="btn btn-ghost btn-small" id="btn-autosep-delete-config" type="button" data-i18n="autosep.deleteConfig">Delete</button>
                                             <button class="btn btn-ghost btn-small" id="btn-autosep-rename-config" type="button" data-i18n="autosep.renameConfig" hidden>Rename</button>
                                         </div>
@@ -1842,7 +1847,7 @@
                         <div class="filter-section">
                             <div class="filter-header-compact">
                                 <h4 data-i18n="filter.imagesToSort">Filter Images to Sort</h4>
-                                <button class="btn btn-primary btn-small" id="btn-manual-sort-filters"><span>🔍</span>
+                                <button class="btn btn-secondary btn-small" id="btn-manual-sort-filters"><span>🔍</span>
                                     <span data-i18n="gallery.editFilters">Edit Filters</span></button>
                             </div>
                             <div class="helper-text" id="manual-sort-scope-note" data-i18n="manual.scopeNote">Manual Sort uses the filters shown below. Later Gallery filter changes are not copied automatically.</div>
@@ -2423,9 +2428,13 @@
                         <!-- Footer Bars -->
                         <div class="censor-footer-bars">
                             <div class="censor-status-bar">
-                                <div class="status-filename" id="censor-filename" data-i18n="censor.noImageSelected">No image selected</div>
+                                <!-- JS-owned: loadCanvasImage() writes the live filename and
+                                     the reset path writes the localized empty state. No data-i18n,
+                                     or I18n.applyToDOM overwrites the loaded filename with the
+                                     "No image selected" default while an image is being edited. -->
+                                <div class="status-filename" id="censor-filename">No image selected</div>
                                 <button class="btn-icon-small" id="btn-rename-single"
-                                    title="Rename this image (R)">✏️</button>
+                                    title="Rename this image (F2)">✏️</button>
                                 <div class="status-divider-h"></div>
                                 <details class="censor-shortcuts-disclosure">
                                     <summary><span aria-hidden="true">⌨️</span> <span data-i18n="censor.shortcuts">Shortcuts</span></summary>
@@ -3471,7 +3480,7 @@
                                     </label>
                                     <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-folder-import-browse"
                                             data-i18n="common.browse">Browse</button>
-                                    <button type="button" class="btn btn-primary btn-small" id="btn-dataset-folder-import-go"
+                                    <button type="button" class="btn btn-secondary btn-small" id="btn-dataset-folder-import-go"
                                             data-i18n="dataset.folderImportGo">Scan</button>
                                     <div class="dataset-folder-browser-host" id="dataset-folder-import-browser"></div>
                                 </div>
@@ -3612,7 +3621,7 @@
                                 <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-out" title="Zoom out">−</button>
                                 <span class="dataset-zoom-label" id="dataset-zoom-label">100%</span>
                                 <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-in" title="Zoom in">+</button>
-                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-reset" title="Reset zoom to 100%">100%</button>
+                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-reset" title="Reset zoom to 100%" aria-label="Reset zoom to 100%">⟲</button>
                             </div>
                             <div class="dataset-editor-image-wrap" id="dataset-editor-image-wrap">
                                 <img class="dataset-editor-image" id="dataset-editor-image" alt="" hidden>
@@ -4500,7 +4509,7 @@
                 <div data-settings-panel="general">
                 <section class="settings-home-panel" aria-labelledby="settings-home-title">
                     <div class="settings-home-header">
-                        <h3 id="settings-home-title" data-i18n="settings.title">Settings</h3>
+                        <h3 id="settings-home-title" data-i18n="settings.homePanelTitle">General</h3>
                     </div>
                     <div class="settings-row">
                         <div class="settings-row-copy">
@@ -6620,6 +6629,7 @@
                     <div class="form-group">
                         <label class="checkbox-label">
                             <input type="checkbox" id="save-allow-overwrite">
+                            <span class="checkbox-custom" aria-hidden="true"></span>
                             <span data-i18n="save.allowOverwrite">Allow replacing existing files</span>
                         </label>
                         <small class="helper-text" data-i18n="save.allowOverwriteHelper">Leave off to block accidental overwrites. Turn on only when you intentionally want to replace matching output files.</small>
@@ -6747,7 +6757,10 @@
                 </div>
 
                 <div class="library-stats">
-                    <span id="library-stats-text" data-i18n="library.loading">Loading...</span>
+                    <!-- JS-owned by loadLibraryContent()/setLibraryStatsText(): shows a
+                         loading label during fetch, then the real count. No data-i18n, or
+                         I18n.applyToDOM resets the count back to "Loading..." on every tab. -->
+                    <span id="library-stats-text">Loading...</span>
                 </div>
 
                 <div class="modal-actions">
@@ -6867,7 +6880,9 @@
         var btns = document.querySelectorAll('.sorting-sub-tab');
         btns.forEach(function(b) {
             var isActive = b.getAttribute('data-sorting-sub') === sub;
-            b.className = 'btn sorting-sub-tab ' + (isActive ? 'btn-primary active' : 'btn-ghost');
+            // Active sub-tab is a SELECTED TAB, not the screen's primary action —
+            // keep the one solid-blue primary for the execute/start CTA (rule 12).
+            b.className = 'btn btn-ghost sorting-sub-tab' + (isActive ? ' active' : '');
         });
     };
     </script>

@@ -97,7 +97,7 @@ def post_dataset_export(payload: DatasetExportRequest) -> DatasetExportResponse:
         logger.exception("Dataset export failed")
         raise HTTPException(
             status_code=500,
-            detail="Dataset export failed. / 資料集匯出失敗。",
+            detail="Dataset export failed. / 数据集导出失败。",
         ) from exc
 
 
@@ -118,7 +118,7 @@ def post_dataset_export_preview(payload: DatasetExportPreviewRequest) -> Dict[st
         logger.exception("Dataset export preview failed")
         raise HTTPException(
             status_code=500,
-            detail="Dataset export preview failed. / 資料集匯出預覽失敗。",
+            detail="Dataset export preview failed. / 数据集导出预览失败。",
         ) from exc
 
 
@@ -147,7 +147,7 @@ def post_dataset_export_start(payload: DatasetExportRequest) -> DatasetExportSta
         logger.exception("Dataset export start failed")
         raise HTTPException(
             status_code=500,
-            detail="Dataset export start failed. / 資料集匯出啟動失敗。",
+            detail="Dataset export start failed. / 数据集导出启动失败。",
         ) from exc
 
 
@@ -164,7 +164,7 @@ def get_dataset_export_job_progress(job_id: Optional[str] = None) -> Dict[str, A
         logger.exception("Dataset export progress failed")
         raise HTTPException(
             status_code=500,
-            detail="Dataset export progress failed. / 取得匯出進度失敗。",
+            detail="Dataset export progress failed. / 获取导出进度失败。",
         ) from exc
 
 
@@ -183,7 +183,7 @@ def post_dataset_export_cancel(
         logger.exception("Dataset export cancel failed")
         raise HTTPException(
             status_code=500,
-            detail="Dataset export cancel failed. / 取消匯出失敗。",
+            detail="Dataset export cancel failed. / 取消导出失败。",
         ) from exc
 
 
@@ -243,7 +243,7 @@ def post_dataset_folder_scan(payload: DatasetFolderScanRequest) -> Dict[str, Any
         logger.exception("Dataset folder-scan failed")
         raise HTTPException(
             status_code=500,
-            detail="Folder scan failed. / 資料夾掃描失敗。",
+            detail="Folder scan failed. / 文件夹扫描失败。",
         ) from exc
 
 
@@ -419,7 +419,7 @@ def post_dataset_audit(payload: DatasetAuditRequest) -> Dict[str, Any]:
         logger.exception("Dataset audit failed")
         raise HTTPException(
             status_code=500,
-            detail="Audit failed. / 資料集稽核失敗。",
+            detail="Audit failed. / 数据集审核失败。",
         ) from exc
 
 
@@ -568,5 +568,5 @@ async def post_dataset_upload_files(
         logger.exception("Dataset upload-files failed")
         raise HTTPException(
             status_code=500,
-            detail="Upload failed. / 上傳失敗。",
+            detail="Upload failed. / 上传失败。",
         ) from exc

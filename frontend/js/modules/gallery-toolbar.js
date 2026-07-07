@@ -42,11 +42,17 @@
 
     const SUGGEST_DEBOUNCE_MS = 200;
     const SUGGEST_LIMIT = 12;
+    // Library facet endpoints. checkpoints/loras/prompts live at the ROOT
+    // /api/{facet}/library (backend/routers/tags.py APIRouter prefix '/api',
+    // routes get_{checkpoints,loras,prompts}_library) — NOT under /api/tags/.
+    // They were shipped with a stray '/tags/' segment in search-v2 (@92fa8c2),
+    // which 404'd and, because refreshSuggest() silently hides the dropdown on
+    // !resp.ok, left checkpoint:/lora:/prompt: autocomplete invisibly dead.
     const LIBRARY_ENDPOINTS = {
         tags: '/api/tags/library',
-        checkpoints: '/api/tags/checkpoints/library',
-        loras: '/api/tags/loras/library',
-        prompts: '/api/tags/prompts/library',
+        checkpoints: '/api/checkpoints/library',
+        loras: '/api/loras/library',
+        prompts: '/api/prompts/library',
     };
 
     let searchTimer = null;

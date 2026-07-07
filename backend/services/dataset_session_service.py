@@ -902,7 +902,7 @@ async def _extract_rar_into_dataset(
                     raise ValueError(
                         "RAR archive contains too many entries "
                         f"(> {_MAX_ARCHIVE_ENTRIES}); refusing to extract a "
-                        "possible decompression bomb. / RAR 內含過多檔案，已拒絕解壓。"
+                        "possible decompression bomb. / RAR 内含过多文件，已拒绝解压。"
                     )
                 total_uncompressed_bytes = 0
                 for member in members:
@@ -914,7 +914,7 @@ async def _extract_rar_into_dataset(
                             "RAR archive uncompressed size exceeds the safe "
                             f"limit ({_MAX_ARCHIVE_UNCOMPRESSED_BYTES} bytes); "
                             "refusing to extract a possible decompression bomb. "
-                            "/ RAR 解壓後體積過大，已拒絕解壓。"
+                            "/ RAR 解压后体积过大，已拒绝解压。"
                         )
                     raw_name = (member.filename or "").replace("\\", "/")
                     if not raw_name:
@@ -1004,7 +1004,7 @@ async def upload_files_for_dataset(files, *, recursive: bool = True) -> Dict[str
                         raise ValueError(
                             "ZIP archive contains too many entries "
                             f"(> {_MAX_ARCHIVE_ENTRIES}); refusing to extract a "
-                            "possible decompression bomb. / ZIP 內含過多檔案，已拒絕解壓。"
+                            "possible decompression bomb. / ZIP 内含过多文件，已拒绝解压。"
                         )
                     total_uncompressed_bytes = 0
                     for member in members:
@@ -1016,7 +1016,7 @@ async def upload_files_for_dataset(files, *, recursive: bool = True) -> Dict[str
                                 "ZIP archive uncompressed size exceeds the safe "
                                 f"limit ({_MAX_ARCHIVE_UNCOMPRESSED_BYTES} bytes); "
                                 "refusing to extract a possible decompression bomb. "
-                                "/ ZIP 解壓後體積過大，已拒絕解壓。"
+                                "/ ZIP 解压后体积过大，已拒绝解压。"
                             )
                         raw_name = member.filename.replace("\\", "/")
                         posix = PurePosixPath(raw_name)

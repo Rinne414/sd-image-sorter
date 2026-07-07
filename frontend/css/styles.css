@@ -1927,28 +1927,32 @@ body::before {
         transform: translateY(-2px);
     }
 
-    /* Direction-specific folder key colors */
-    .folder-slot[data-direction="up"] .folder-key,
-    .folder-slot:first-child .folder-key {
+    /* Direction-specific folder key colors (WASD data-viz palette, §color-exemptions:
+       up/W=green, left/A=indigo, down/S=red, right/D=amber). The setup panel keys
+       carry data-key (w/a/s/d), NOT data-direction — the old data-direction
+       selectors matched nothing and only a `:first-child` fallback colored one
+       slot, so A/S/D fell back to the default gradient and contradicted the sort
+       session's palette. Target the attribute that actually exists. */
+    .folder-slot[data-key="w"] .folder-key {
         background: linear-gradient(135deg, var(--accent-success), #059669);
         box-shadow: 0 4px 16px rgba(16, 185, 129, 0.4);
     }
 
-    .folder-slot[data-direction="left"] .folder-key {
+    .folder-slot[data-key="a"] .folder-key {
         background: linear-gradient(135deg, #3b82f6, #2563eb);
         box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4);
     }
 
-    .folder-slot[data-direction="down"] .folder-key {
+    .folder-slot[data-key="s"] .folder-key {
         background: linear-gradient(135deg, #ef4444, #dc2626);
         box-shadow: 0 4px 16px rgba(239, 68, 68, 0.4);
     }
 
-    /* The right key is AMBER by the direction coding (green/blue/red/amber).
+    /* The right key is AMBER by the direction coding (green/indigo/red/amber).
        It was written as var(--accent-primary) when that token WAS orange;
        the Aurora remap silently turned it blue and collided with the left
        key — pin the intended amber explicitly (data-viz, not a UI accent). */
-    .folder-slot[data-direction="right"] .folder-key {
+    .folder-slot[data-key="d"] .folder-key {
         background: linear-gradient(135deg, #f59e0b, #d97706);
         box-shadow: 0 4px 16px rgba(245, 158, 11, 0.4);
     }
@@ -2375,8 +2379,14 @@ body::before {
     }
 
     .image-stack {
-        width: 500px;
-        height: 500px;
+        /* Keep the card stack square, but shrink it on short laptops so the
+           absolutely-positioned W/S folder cards (top:50px / bottom:100px, each
+           ~110px tall) never overlap the image being judged. At >=900px tall it
+           stays the full 500px (no change for 1080/1440); at 768px it drops to
+           ~368px, clearing both folder bands. */
+        --stack-size: min(500px, calc(100vh - 400px));
+        width: var(--stack-size);
+        height: var(--stack-size);
         position: relative;
         perspective: 1500px;
     }
@@ -7688,6 +7698,16 @@ input[type="radio"] {
     border-radius: 14px;
 }
 
+/* Selected sub-tab reads as a chosen tab, not a solid-blue primary button —
+   the screen's single blue CTA is reserved for Execute / Start (rule 12). */
+.sorting-sub-tab.active {
+    color: var(--text-primary);
+    font-weight: 650;
+    background: rgba(var(--accent-primary-rgb), 0.16);
+    border: 1px solid rgba(var(--accent-primary-rgb), 0.45);
+    box-shadow: none;
+}
+
 #view-autosep,
 #view-manual {
     width: 100%;
@@ -8199,10 +8219,14 @@ input[type="radio"] {
     background: rgba(var(--accent-primary-rgb), 0.12);
 }
 .sort-mode-btn.is-active {
-    color: #0a0c12;
+    /* Selected segment, not a cross-step action: rule 12 reserves the
+       blue→purple gradient for cross-step CTAs, and a mode selector is neither.
+       Use a subtle tinted fill so it reads as "selected tab". */
+    color: var(--text-primary);
     font-weight: 700;
-    background-image: linear-gradient(120deg, var(--accent-primary), var(--accent-secondary));
-    box-shadow: 0 6px 16px -6px rgba(var(--accent-primary-rgb), 0.6);
+    background: rgba(var(--accent-primary-rgb), 0.16);
+    border-color: rgba(var(--accent-primary-rgb), 0.45);
+    box-shadow: none;
 }
 .sort-mode-soon {
     margin-left: auto;

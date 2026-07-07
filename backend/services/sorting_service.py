@@ -128,7 +128,20 @@ _LIBRARY_HEALTH_CACHE: Dict[int, Tuple[float, Dict[str, Any]]] = {}
 
 
 def invalidate_library_health_cache() -> None:
-    """Force the next /api/library-health call to recompute (used by tests)."""
+    """Force the next /api/library-health call to recompute.
+
+    INVARIANT: any operation that mutates the row count or `is_readable` state
+    of the `images` table MUST call this, or the cached report goes stale for up
+    to the 60s TTL. That report feeds the gallery "N images can't open" banner
+    and the diagnostics panel, so a stale cache shows counts that no longer match
+    the library. Current callers:
+      * clear_gallery()                         (DELETE FROM images)
+      * ImageService._remove_selected_image_id_chunk  (bulk gallery removal)
+      * ImageService.run_reconnect              (relink flips unreadable->readable)
+    Lower-impact writers (move/scan/tag, mark_image_unreadable during background
+    scoring) currently rely on the 60s TTL self-healing; wire them here too if a
+    stale count after those flows is ever reported.
+    """
     with _LIBRARY_HEALTH_CACHE_LOCK:
         _LIBRARY_HEALTH_CACHE.clear()
 
@@ -3109,6 +3122,12 @@ class SortingService:
         with db.get_db() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM images")
+        # The library-health report (which drives the "N images can't open"
+        # gallery banner) is cached for 60s and counts unreadable rows straight
+        # from `images`. Without this invalidation the banner keeps showing the
+        # pre-clear count until the TTL lapses — the report is now empty, so make
+        # the next /api/library-health call recompute it to zero immediately.
+        invalidate_library_health_cache()
         return {"status": "ok", "message": "Gallery cleared"}
 
     def get_analytics(

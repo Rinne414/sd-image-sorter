@@ -464,7 +464,9 @@
                 alphabetical: 'library.sortAlpha'
             });
             this._setPlaceholder('#library-search', 'library.search');
-            this._setText('#library-stats-text', 'library.loading');
+            // #library-stats-text is JS-owned (loadLibraryContent/setLibraryStatsText):
+            // forcing it back to "Loading..." on every languageChanged wiped the
+            // rendered count. Leave it to the library loader.
             this._setButton('#btn-close-tags-library-2', 'library.close');
         },
 

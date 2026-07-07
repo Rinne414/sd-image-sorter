@@ -157,7 +157,7 @@ async def encode_single(request: SingleProcessRequest):
         logger.exception("Encode failed")
         raise HTTPException(
             status_code=500,
-            detail="Encode failed. / 加密失敗。",
+            detail="Encode failed. / 加密失败。",
         )
 
 
@@ -188,7 +188,7 @@ async def decode_single(request: SingleProcessRequest):
         logger.exception("Decode failed")
         raise HTTPException(
             status_code=500,
-            detail="Decode failed. / 解密失敗。",
+            detail="Decode failed. / 解密失败。",
         )
 
 

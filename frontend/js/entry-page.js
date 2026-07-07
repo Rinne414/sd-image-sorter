@@ -314,11 +314,22 @@
         if (galleryCount) galleryCount.textContent = String(summary.library_total ?? '');
         const gallerySub = el('entry-sub-gallery');
         if (gallerySub) {
+            // JS-owned: strip the data-i18n default so applyToDOM can't reset it.
+            gallerySub.removeAttribute('data-i18n');
             const added = Number(summary.added_today || 0);
             const unviewed = Number(summary.unviewed || 0);
-            gallerySub.textContent = (added > 0 || unviewed > 0)
-                ? t('entry.tileGallerySub', { added, unviewed }, '{added} new today · {unviewed} not seen yet')
-                : t('entry.tileGallerySubQuiet', {}, 'Browse, filter, and pick images');
+            const total = Number(summary.library_total || 0);
+            if (total === 0) {
+                // Empty library: the Library is the biggest button, so make it
+                // carry the first real step (scan) instead of a browse blurb.
+                gallerySub.textContent = t('entry.tileGalleryScanCta', {}, 'Scan a folder to get started →');
+                gallerySub.classList.add('is-cta');
+            } else {
+                gallerySub.classList.remove('is-cta');
+                gallerySub.textContent = (added > 0 || unviewed > 0)
+                    ? t('entry.tileGallerySub', { added, unviewed }, '{added} new today · {unviewed} not seen yet')
+                    : t('entry.tileGallerySubQuiet', {}, 'Browse, filter, and pick images');
+            }
         }
 
         const streakNum = el('entry-streak-num');
@@ -418,7 +429,14 @@
         api('/api/disk/cache-status').then((status) => {
             const slot = el('entry-sys-cache');
             if (!slot) return;
-            const total = status && (status.total_bytes ?? status.total_size_bytes);
+            // /api/disk/cache-status has no top-level total_bytes; it returns a
+            // safe_to_clean[] list (each with size_bytes) plus a thumbnail_cache
+            // block. Sum the cleanable caches (with the thumbnail cache as a
+            // fallback) so the stat actually renders. Null endpoint → stay hidden.
+            const cleanable = Array.isArray(status?.safe_to_clean)
+                ? status.safe_to_clean.reduce((sum, e) => sum + (Number(e?.size_bytes) || 0), 0)
+                : null;
+            const total = cleanable != null ? cleanable : (status?.thumbnail_cache?.total_size_bytes ?? null);
             if (total != null) {
                 slot.textContent = t('entry.sysCache', { size: formatBytes(total) }, 'Cache {size}');
                 slot.hidden = false;

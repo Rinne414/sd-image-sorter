@@ -1222,10 +1222,18 @@
     box-shadow: 0 8px 22px rgba(var(--accent-primary-rgb, 124, 139, 255), 0.40);
 }
 #view-dataset .dataset-export-cta:disabled {
-    background: rgba(255,255,255,0.10);
+    /* A 10% white full-width bar at opacity 0.7 still read as the brightest
+       clickable element on the tab. Recess it clearly: near-invisible fill,
+       muted text, desaturated, half opacity — so the prerequisite fields draw
+       the eye instead of an un-clickable CTA. */
+    background: rgba(255, 255, 255, 0.045);
+    color: var(--text-disabled, rgba(255, 255, 255, 0.4));
     box-shadow: none;
     cursor: not-allowed;
-    opacity: 0.7;
+    opacity: 0.5;
+    filter: grayscale(0.5);
+    transform: none;
+    font-weight: 600;
 }
 #view-dataset .dataset-export-disabled-hint {
     font-size: 11px;

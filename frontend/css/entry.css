@@ -111,6 +111,30 @@ body.entry-active {
     pointer-events: none;
 }
 
+/* Legibility scrim for film mode. Single/slideshow modes darken their art via
+   the blurred underlay (.hero-slide::before, opacity 0.5); film mode ran the
+   strips at full brightness under the eyebrows, greeting, 4-stat block and the
+   bottom-left identity line. This straight (non-rotated) scrim sits above the
+   rotated strips but below the text/tiles, darkening the bottom + left bands
+   where the copy lives. Comfort-first (§principles 2). */
+.entry-hero:has(.hero-film)::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background:
+        linear-gradient(to top,
+            rgba(6, 8, 16, 0.94) 0%,
+            rgba(6, 8, 16, 0.60) 20%,
+            rgba(6, 8, 16, 0.12) 44%,
+            transparent 60%),
+        linear-gradient(to right,
+            rgba(6, 8, 16, 0.82) 0%,
+            rgba(6, 8, 16, 0.34) 26%,
+            transparent 52%);
+}
+
 .entry-hero .film-strip {
     position: relative;
     flex: 0 0 auto;
@@ -311,6 +335,15 @@ body.entry-active {
     background: rgba(13, 17, 22, 0.84);
 }
 
+/* Film mode runs bright strips behind the tiles; lift the tile surface opacity
+   so the strips don't bleed through the tile labels (批量整理 / 所有功能). */
+.entry-page:has(.hero-film) .entry-tile {
+    background: rgba(9, 12, 18, 0.93);
+}
+.entry-page:has(.hero-film) .entry-tile:hover {
+    background: rgba(13, 17, 24, 0.95);
+}
+
 .entry-tile .tile-head {
     display: flex;
     align-items: baseline;
@@ -465,6 +498,13 @@ body.entry-active {
 .entry-fn .fn-sub {
     font-size: 11px;
     color: rgba(237, 240, 247, 0.55);
+}
+
+/* Empty-library scan CTA on the Library tile: lift it out of the quiet-subtitle
+   grey so the first real step reads as actionable (blue = next action). */
+.entry-fn .fn-sub.is-cta {
+    color: var(--blue, #6ea8ff);
+    font-weight: 600;
 }
 
 /* model-center tile — the new-user starting point (owner FB 2026-07-06).

@@ -878,9 +878,13 @@
     };
 
     function readTextareaList(id) {
+        // Accept newline OR comma separators: #dataset-blacklist is newline by
+        // convention (TraitPruner appends with '\n'), while writeTextareaList
+        // joins with ', '. Splitting on comma alone turned a trait-pruned,
+        // newline-joined blacklist into one unmatchable blob.
         return new Set(
             String(document.getElementById(id)?.value || '')
-                .split(',').map((s) => s.trim()).filter(Boolean)
+                .split(/[\n,]+/).map((s) => s.trim()).filter(Boolean)
         );
     }
 

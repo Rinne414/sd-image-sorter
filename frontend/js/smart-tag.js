@@ -993,10 +993,11 @@
             && !form.selection_token
             && !form.dataset_scan_token
         ) {
+            const noImagesMsg = t('smartTag.noImages', 'No images in Dataset Maker. Add images first.');
             if (typeof window.showToast === 'function') {
-                window.showToast('No images in Dataset Maker. Add images first.', 'warning');
+                window.showToast(noImagesMsg, 'warning');
             } else {
-                alert('No images in Dataset Maker. Add images first.');
+                alert(noImagesMsg);
             }
             return;
         }
@@ -1079,9 +1080,9 @@
             // feedback instead of watching the progress bar keep moving
             // for ~1s until the worker checks the cancel flag.
             if (cancelBtn) cancelBtn.disabled = true;
-            setProgressUI({ text: 'Cancelling — already-tagged results will be kept' });
+            setProgressUI({ text: t('smartTag.cancellingKept', 'Cancelling — already-tagged results will be kept') });
             if (typeof window.showToast === 'function') {
-                window.showToast('Smart Tag cancellation requested', 'info');
+                window.showToast(t('smartTag.cancelRequested', 'Smart Tag cancellation requested'), 'info');
             }
         } catch (err) {
             // 404 means the job already finished between the user
@@ -1089,7 +1090,7 @@
             // explicitly instead of swallowing it silently.
             if (err && err.status === 404) {
                 if (typeof window.showToast === 'function') {
-                    window.showToast('Job already finished', 'info');
+                    window.showToast(t('smartTag.jobAlreadyFinished', 'Job already finished'), 'info');
                 }
             }
         }
