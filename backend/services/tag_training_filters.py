@@ -65,6 +65,32 @@ def _effective_category(row: Dict[str, Any]) -> str:
     return categorize_tag(str(row.get("tag") or ""))
 
 
+# Categories that name the *style itself* (an art style, medium, era, or an
+# artist) — what a style LoRA's trigger must absorb, so they are stripped.
+_STYLE_FAMILY = {"style", "artist"}
+
+
+def _is_style_family_row(row: Dict[str, Any]) -> bool:
+    """True when a row names the style itself and so must be dropped for a style LoRA.
+
+    Why not a hardcoded word list (the thing this replaces): a blacklist can never
+    enumerate every style/era/medium tag. But boorus/WD14 dump these descriptors —
+    ``1990s_(style)``, ``retro_artstyle``, ``anime_coloring``, ``*_(medium)`` — into
+    the coarse ``general`` bucket, so the *stored* category alone misses them. The
+    pattern-based ``categorize_tag`` recognises them by SHAPE (``*_(style)`` /
+    ``*_(medium)`` / ``*style`` / ``*_coloring`` / ``@artist`` / the STYLE set), which
+    generalises to tags no list would contain. We only let the classifier *upgrade* a
+    ``general``/empty row — never override a real character/copyright/meta call — so a
+    count like ``1girl`` (semantically "character") or a body tag is left untouched.
+    """
+    stored = str(row.get("category") or "").strip().lower()
+    if stored in _STYLE_FAMILY:
+        return True
+    if stored in ("", "general"):
+        return categorize_tag(str(row.get("tag") or "")) in _STYLE_FAMILY
+    return False
+
+
 def filter_tag_rows_by_training_purpose(
     rows: List[Dict[str, Any]],
     training_purpose: str,
@@ -72,18 +98,17 @@ def filter_tag_rows_by_training_purpose(
 ) -> List[Dict[str, Any]]:
     """Row-level twin of Smart Tag's ``filter_tags_by_training_purpose``.
 
-    Style mode removes style/artist tags so the target style is not named in
-    every caption. Character mode removes detected character names only when
-    a trigger word is present to carry that identity. Other purposes pass
-    everything through — the app cannot guess which tag is the user's target.
+    Style mode removes style/medium/era/artist tags — detected by category AND by
+    the semantic classifier's shape rules, not a word list — so the target style is
+    never named in a caption and the trigger carries it. Character mode removes
+    detected character names only when a trigger word is present to carry that
+    identity. General/concept pass everything through — the app cannot guess which
+    tag is the user's target.
     """
     canonical = normalize_training_purpose(training_purpose)
 
     if canonical == "style":
-        return [
-            row for row in rows
-            if _effective_category(row) not in {"style", "artist"}
-        ]
+        return [row for row in rows if not _is_style_family_row(row)]
     if canonical == "character" and str(trigger_word or "").strip():
         return [row for row in rows if _effective_category(row) != "character"]
     return list(rows)
@@ -93,7 +118,9 @@ def filter_tag_rows_by_training_purpose(
 # Implication dedup (P2-18)
 # ---------------------------------------------------------------------------
 
-_BUNDLED_IMPLICATIONS = Path(__file__).resolve().parents[1] / "assets" / "danbooru_implications.csv"
+_BUNDLED_IMPLICATIONS = (
+    Path(__file__).resolve().parents[1] / "assets" / "danbooru_implications.csv"
+)
 _implication_lock = threading.Lock()
 _implication_cache: Optional[Dict[str, set]] = None
 
@@ -104,6 +131,7 @@ def _implication_key(tag: str) -> str:
 
 def _dropin_implications_path() -> Path:
     from config import DATA_DIR
+
     return Path(DATA_DIR) / "danbooru_implications.csv"
 
 
@@ -140,7 +168,9 @@ def _implication_table() -> Dict[str, set]:
         dropin = _read_implication_csv(_dropin_implications_path(), table)
         if dropin:
             logger.info("Loaded %d drop-in tag implications from data/", dropin)
-        logger.debug("Implication table ready: %d bundled + %d drop-in", bundled, dropin)
+        logger.debug(
+            "Implication table ready: %d bundled + %d drop-in", bundled, dropin
+        )
         _implication_cache = table
         return table
 
@@ -192,7 +222,11 @@ def collapse_implication_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]
     for key in present:
         implied.update(_transitive_parents(key, table))
 
-    return [row for row in rows if _implication_key(str(row.get("tag") or "")) not in implied]
+    return [
+        row
+        for row in rows
+        if _implication_key(str(row.get("tag") or "")) not in implied
+    ]
 
 
 def apply_training_filters(
@@ -206,7 +240,9 @@ def apply_training_filters(
     semantics), then implication collapse on what remains."""
     result = rows
     if str(training_purpose or "").strip():
-        result = filter_tag_rows_by_training_purpose(result, training_purpose, trigger_word)
+        result = filter_tag_rows_by_training_purpose(
+            result, training_purpose, trigger_word
+        )
     if dedupe_implications:
         result = collapse_implication_rows(result)
     return result if result is not rows else list(rows)

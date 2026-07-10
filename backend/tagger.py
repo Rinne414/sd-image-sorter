@@ -2,6 +2,7 @@
 WD14 Tagger using ONNX Runtime for image tagging.
 Supports automatic model download from HuggingFace and local model loading.
 """
+
 import csv
 import gc
 import os
@@ -74,6 +75,7 @@ def _ensure_imports():
 
             prepare_onnxruntime_environment()
             import onnxruntime as ort_module  # type: ignore
+
             ort = ort_module
             preload = getattr(ort, "preload_dlls", None)
             if callable(preload):
@@ -83,6 +85,7 @@ def _ensure_imports():
                     logger.debug("onnxruntime.preload_dlls() was not usable: %s", exc)
         if hf_hub is None:
             import huggingface_hub as hf_module
+
             hf_hub = hf_module
 
 
@@ -97,7 +100,7 @@ class WD14Tagger:
         model_dir: Optional[str] = None,
         threshold: float = TAGGER_GENERAL_THRESHOLD,
         character_threshold: float = TAGGER_CHARACTER_THRESHOLD,
-        use_gpu: bool = TAGGER_USE_GPU
+        use_gpu: bool = TAGGER_USE_GPU,
     ):
         """
         Initialize the tagger.
@@ -183,13 +186,22 @@ class WD14Tagger:
         if gpu_enabled:
             num_threads = 2
         else:
-            num_threads = min(cpu_count, max(2, cpu_count // 2))
+            # Leave headroom instead of pinning every core: a long CPU tagging run held at
+            # 100% on all cores can trip a CPU machine-check / thermal event on marginal
+            # hardware. Default to half-minus-one core; override with TAGGER_CPU_THREADS.
+            env_threads = os.environ.get("TAGGER_CPU_THREADS", "").strip()
+            if env_threads.isdigit() and int(env_threads) > 0:
+                num_threads = min(cpu_count, int(env_threads))
+            else:
+                num_threads = min(cpu_count, max(2, (cpu_count // 2) - 1))
 
         sess_options.intra_op_num_threads = num_threads
         sess_options.inter_op_num_threads = max(1, num_threads // 2)
         sess_options.add_session_config_entry("session.intra_op.allow_spinning", "0")
         sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-        sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        sess_options.graph_optimization_level = (
+            ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        )
         sess_options.enable_cpu_mem_arena = not gpu_enabled
         sess_options.enable_mem_pattern = not gpu_enabled
 
@@ -211,10 +223,15 @@ class WD14Tagger:
     ) -> "ort.InferenceSession":
         """Create an ONNX session, retrying once after repairing a corrupted model."""
         try:
-            return ort.InferenceSession(model_path, sess_options=sess_options, providers=providers)
+            return ort.InferenceSession(
+                model_path, sess_options=sess_options, providers=providers
+            )
         except Exception as e:
             error_msg = str(e)
-            if not self.model_path and ("INVALID_PROTOBUF" in error_msg or "Protobuf parsing failed" in error_msg):
+            if not self.model_path and (
+                "INVALID_PROTOBUF" in error_msg
+                or "Protobuf parsing failed" in error_msg
+            ):
                 logger.error(f"Model file is corrupted: {model_path}")
                 logger.info("Attempting to delete and re-download...")
 
@@ -227,12 +244,16 @@ class WD14Tagger:
                 logger.info("Re-downloading model...")
                 model_path, tags_path = self._download_model()
                 try:
-                    return ort.InferenceSession(model_path, sess_options=sess_options, providers=providers)
+                    return ort.InferenceSession(
+                        model_path, sess_options=sess_options, providers=providers
+                    )
                 except Exception as e2:
-                    raise RuntimeError(f"Failed to load model even after re-download. Error: {e2}") from e2
+                    raise RuntimeError(
+                        f"Failed to load model even after re-download. Error: {e2}"
+                    ) from e2
 
             raise RuntimeError(f"Failed to load ONNX model: {error_msg}") from e
-    
+
     def _validate_model_file(self, model_path: str) -> bool:
         """
         Validate that an ONNX model file is not corrupted.
@@ -240,19 +261,21 @@ class WD14Tagger:
         """
         if not os.path.exists(model_path):
             return False
-        
+
         # Check file size - ONNX models should be at least 1MB
         try:
             file_size = os.path.getsize(model_path)
             if file_size < 1024 * 1024:  # Less than 1MB is suspicious
-                logger.warning(f"Model file {model_path} is suspiciously small ({file_size} bytes)")
+                logger.warning(
+                    f"Model file {model_path} is suspiciously small ({file_size} bytes)"
+                )
                 return False
         except OSError:
             return False
 
         # Try to read the file header to verify it's a valid ONNX file
         try:
-            with open(model_path, 'rb') as f:
+            with open(model_path, "rb") as f:
                 header = f.read(4)
                 # ONNX files start with specific protobuf bytes
                 if len(header) < 4:
@@ -260,23 +283,29 @@ class WD14Tagger:
         except Exception as e:
             logger.error(f"Error reading model file header: {e}")
             return False
-        
+
         return True
-    
+
     def _get_model_paths(self) -> Tuple[str, str]:
         """Get model and tags file paths."""
         # If direct paths are provided, use them. Explicit local paths are hard contracts:
         # a typo must fail loudly, not fall back to downloading or auto-discovery.
         if self.model_path:
             if not os.path.exists(self.model_path):
-                raise FileNotFoundError(f"Custom ONNX model file not found: {self.model_path}")
+                raise FileNotFoundError(
+                    f"Custom ONNX model file not found: {self.model_path}"
+                )
 
             model_config = MODELS.get(self.model_name, {})
-            metadata_format = str(model_config.get("metadata_format", "wd14_csv")).lower()
+            metadata_format = str(
+                model_config.get("metadata_format", "wd14_csv")
+            ).lower()
             allowed_tag_exts = {".json"} if metadata_format == "camie_v2" else {".csv"}
             if self.tags_path:
                 if not os.path.exists(self.tags_path):
-                    raise FileNotFoundError(f"Custom tags/metadata file not found: {self.tags_path}")
+                    raise FileNotFoundError(
+                        f"Custom tags/metadata file not found: {self.tags_path}"
+                    )
                 tags_ext = os.path.splitext(self.tags_path)[1].lower()
                 if tags_ext not in allowed_tag_exts:
                     allowed_text = " or ".join(sorted(allowed_tag_exts))
@@ -291,7 +320,9 @@ class WD14Tagger:
             if configured_tags_file:
                 candidate_names.append(configured_tags_file)
             if metadata_format == "camie_v2":
-                candidate_names.extend(["camie-tagger-v2-metadata.json", "metadata.json"])
+                candidate_names.extend(
+                    ["camie-tagger-v2-metadata.json", "metadata.json"]
+                )
             else:
                 candidate_names.append("selected_tags.csv")
 
@@ -319,27 +350,31 @@ class WD14Tagger:
                 f"Tags/metadata file not found for {self.model_name}. Expected {expected}. "
                 "Please provide tags_path for custom model."
             )
-        
+
         # Otherwise, download from HuggingFace
         return self._download_model()
-    
+
     def _download_model(self) -> Tuple[str, str]:
         """Download model from HuggingFace if not present."""
         if self.model_name not in MODELS:
-            raise ValueError(f"Unknown model: {self.model_name}. Available: {list(MODELS.keys())}")
-        
+            raise ValueError(
+                f"Unknown model: {self.model_name}. Available: {list(MODELS.keys())}"
+            )
+
         config = MODELS[self.model_name]
         repo_id = config["repo_id"]
-        
+
         model_path = os.path.join(self.model_dir, self.model_name, config["model_file"])
         tags_path = os.path.join(self.model_dir, self.model_name, config["tags_file"])
-        
+
         # Check if model exists and is valid
         needs_download = False
         if not os.path.exists(model_path):
             needs_download = True
         elif not self._validate_model_file(model_path):
-            logger.warning(f"Model file {model_path} appears corrupted. Re-downloading...")
+            logger.warning(
+                f"Model file {model_path} appears corrupted. Re-downloading..."
+            )
             needs_download = True
             # Delete corrupted file
             try:
@@ -362,7 +397,9 @@ class WD14Tagger:
 
                 # Validate after download
                 if not self._validate_model_file(model_path):
-                    raise ValueError("Downloaded model file is invalid. Please check your internet connection and try again.")
+                    raise ValueError(
+                        "Downloaded model file is invalid. Please check your internet connection and try again."
+                    )
             except Exception as e:
                 logger.error(f"Error downloading model: {e}")
                 raise
@@ -378,7 +415,9 @@ class WD14Tagger:
 
         return model_path, tags_path
 
-    def _download_with_fallback(self, repo_id: str, filename: str, local_dir: str) -> str:
+    def _download_with_fallback(
+        self, repo_id: str, filename: str, local_dir: str
+    ) -> str:
         assert hf_hub is not None
         endpoints = get_hf_endpoint_order(model_name=f"WD14 {self.model_name}")
 
@@ -390,7 +429,12 @@ class WD14Tagger:
                 continue
             seen.add(key)
             try:
-                logger.info("Downloading %s from %s via %s", filename, repo_id, endpoint_label(endpoint))
+                logger.info(
+                    "Downloading %s from %s via %s",
+                    filename,
+                    repo_id,
+                    endpoint_label(endpoint),
+                )
                 kwargs = {
                     "repo_id": repo_id,
                     "filename": filename,
@@ -400,12 +444,17 @@ class WD14Tagger:
                 return hf_hub.hf_hub_download(**kwargs)
             except Exception as exc:
                 last_error = exc
-                logger.warning("Download failed for %s via %s: %s", filename, endpoint_label(endpoint), exc)
+                logger.warning(
+                    "Download failed for %s via %s: %s",
+                    filename,
+                    endpoint_label(endpoint),
+                    exc,
+                )
 
         if last_error is None:
             raise RuntimeError(f"Failed to download {filename} from {repo_id}")
         raise last_error
-    
+
     def _load_tags(self, tags_path: str):
         """Load tag metadata for classic WD CSV files, PixAI CSV exports, or Camie JSON metadata."""
         self.tags = []
@@ -418,7 +467,7 @@ class WD14Tagger:
         # but aren't 'general' (camie's artist/meta/year entries).
         self._general_category_overrides = {}
 
-        if self._metadata_format == "camie_v2" or tags_path.lower().endswith('.json'):
+        if self._metadata_format == "camie_v2" or tags_path.lower().endswith(".json"):
             with open(tags_path, "r", encoding="utf-8") as f:
                 metadata = json.load(f)
             dataset_info = metadata.get("dataset_info", {})
@@ -427,9 +476,9 @@ class WD14Tagger:
             tag_to_category = tag_mapping.get("tag_to_category", {})
 
             def normalize_rating_name(name: str) -> str:
-                lowered = str(name or '').strip().lower()
-                if lowered.startswith('rating_'):
-                    lowered = lowered.split('rating_', 1)[1]
+                lowered = str(name or "").strip().lower()
+                if lowered.startswith("rating_"):
+                    lowered = lowered.split("rating_", 1)[1]
                 return lowered
 
             for index_key, tag_name in idx_to_tag.items():
@@ -437,7 +486,7 @@ class WD14Tagger:
                     tag_idx = int(index_key)
                 except (TypeError, ValueError):
                     continue
-                category = str(tag_to_category.get(tag_name, 'general')).strip().lower()
+                category = str(tag_to_category.get(tag_name, "general")).strip().lower()
                 self.tags.append(tag_name)
                 if category == "copyright":
                     self.copyright_tags.append((tag_idx, tag_name))
@@ -516,18 +565,28 @@ class WD14Tagger:
             # [B,H,W,3] into a [B,3,H,W] graph.
             if isinstance(input_shape[-1], int) and input_shape[-1] == 3:
                 self._input_layout = "nhwc"
-                height = int(input_shape[1]) if isinstance(input_shape[1], int) else height
-                width = int(input_shape[2]) if isinstance(input_shape[2], int) else width
+                height = (
+                    int(input_shape[1]) if isinstance(input_shape[1], int) else height
+                )
+                width = (
+                    int(input_shape[2]) if isinstance(input_shape[2], int) else width
+                )
             elif isinstance(input_shape[1], int) and input_shape[1] == 3:
                 self._input_layout = "nchw"
-                height = int(input_shape[2]) if isinstance(input_shape[2], int) else height
-                width = int(input_shape[3]) if isinstance(input_shape[3], int) else width
+                height = (
+                    int(input_shape[2]) if isinstance(input_shape[2], int) else height
+                )
+                width = (
+                    int(input_shape[3]) if isinstance(input_shape[3], int) else width
+                )
 
         batch_dim = input_shape[0] if input_shape else None
         self._input_hw = (width, height)
         self._supports_true_batch = not isinstance(batch_dim, int) or batch_dim > 1
 
-    def _run_inference(self, input_data: np.ndarray, *, allow_gpu_fallback: bool = True) -> np.ndarray:
+    def _run_inference(
+        self, input_data: np.ndarray, *, allow_gpu_fallback: bool = True
+    ) -> np.ndarray:
         """Run inference and optionally retry once on CPU if the GPU provider fails."""
         assert self.session is not None
         input_name = self._input_name or self.session.get_inputs()[0].name
@@ -540,7 +599,9 @@ class WD14Tagger:
             assert self.session is not None
             self._refresh_session_metadata()
             retry_input_name = self._input_name or self.session.get_inputs()[0].name
-            return self.session.run(None, {retry_input_name: input_data})[self._output_index]
+            return self.session.run(None, {retry_input_name: input_data})[
+                self._output_index
+            ]
 
     def _finalize_processed_images(self, image_count: int) -> None:
         """Advance refresh counters after successfully processing one or more images."""
@@ -564,7 +625,7 @@ class WD14Tagger:
             "character_tags": [],
             "rating": "unknown",
             "rating_confidences": {},
-            "all_tags": []
+            "all_tags": [],
         }
         if error:
             result["error"] = error
@@ -575,7 +636,10 @@ class WD14Tagger:
         values = np.asarray(probs, dtype=np.float32)
         invalid_values = ~np.isfinite(values)
         if np.any(invalid_values):
-            logger.warning("Tagger output for %s contained NaN/Inf values; ignoring those scores.", self.model_name)
+            logger.warning(
+                "Tagger output for %s contained NaN/Inf values; ignoring those scores.",
+                self.model_name,
+            )
             values = np.where(invalid_values, 0.0, values)
 
         if self._output_activation == "sigmoid":
@@ -612,8 +676,14 @@ class WD14Tagger:
     ) -> Dict[str, Any]:
         """Convert raw model scores into the public result payload."""
         general_thresh = threshold if threshold is not None else self.threshold
-        char_thresh = character_threshold if character_threshold is not None else self.character_threshold
-        copyright_thresh = copyright_threshold if copyright_threshold is not None else general_thresh
+        char_thresh = (
+            character_threshold
+            if character_threshold is not None
+            else self.character_threshold
+        )
+        copyright_thresh = (
+            copyright_threshold if copyright_threshold is not None else general_thresh
+        )
         probs = self._normalize_output_probs(probs)
         result = self._build_empty_result()
 
@@ -622,22 +692,34 @@ class WD14Tagger:
                 conf = float(probs[tag_id])
                 if conf >= general_thresh:
                     category = self._general_category_overrides.get(tag_name, "general")
-                    result["general_tags"].append({"tag": tag_name, "confidence": conf, "category": category})
-                    result["all_tags"].append({"tag": tag_name, "confidence": conf, "category": category})
+                    result["general_tags"].append(
+                        {"tag": tag_name, "confidence": conf, "category": category}
+                    )
+                    result["all_tags"].append(
+                        {"tag": tag_name, "confidence": conf, "category": category}
+                    )
 
         for tag_id, tag_name in self.copyright_tags:
             if tag_id < len(probs):
                 conf = float(probs[tag_id])
                 if conf >= copyright_thresh:
-                    result["copyright_tags"].append({"tag": tag_name, "confidence": conf, "category": "copyright"})
-                    result["all_tags"].append({"tag": tag_name, "confidence": conf, "category": "copyright"})
+                    result["copyright_tags"].append(
+                        {"tag": tag_name, "confidence": conf, "category": "copyright"}
+                    )
+                    result["all_tags"].append(
+                        {"tag": tag_name, "confidence": conf, "category": "copyright"}
+                    )
 
         for tag_id, tag_name in self.character_tags:
             if tag_id < len(probs):
                 conf = float(probs[tag_id])
                 if conf >= char_thresh:
-                    result["character_tags"].append({"tag": tag_name, "confidence": conf, "category": "character"})
-                    result["all_tags"].append({"tag": tag_name, "confidence": conf, "category": "character"})
+                    result["character_tags"].append(
+                        {"tag": tag_name, "confidence": conf, "category": "character"}
+                    )
+                    result["all_tags"].append(
+                        {"tag": tag_name, "confidence": conf, "category": "character"}
+                    )
 
         rating_probs = []
         for tag_id, tag_name in self.rating_tags:
@@ -649,12 +731,20 @@ class WD14Tagger:
         if rating_probs:
             best_rating = max(rating_probs, key=lambda x: x[1])
             result["rating"] = best_rating[0]
-            result["all_tags"].append({"tag": best_rating[0], "confidence": best_rating[1], "category": "rating"})
+            result["all_tags"].append(
+                {
+                    "tag": best_rating[0],
+                    "confidence": best_rating[1],
+                    "category": "rating",
+                }
+            )
         elif self._rating_fallback_mode == "derive_from_tags":
             result["rating"] = self._derive_fallback_rating(result)
             if result["rating"] != "unknown":
                 result["rating_confidences"][result["rating"]] = 1.0
-                result["all_tags"].append({"tag": result["rating"], "confidence": 1.0, "category": "rating"})
+                result["all_tags"].append(
+                    {"tag": result["rating"], "confidence": 1.0, "category": "rating"}
+                )
 
         result["general_tags"].sort(key=lambda x: x["confidence"], reverse=True)
         result["copyright_tags"].sort(key=lambda x: x["confidence"], reverse=True)
@@ -671,18 +761,50 @@ class WD14Tagger:
         }
 
         explicit_markers = {
-            "sex", "vaginal", "penis", "pussy", "anus", "nipples", "nude",
-            "completely_nude", "uncensored", "cum", "fellatio", "masturbation",
-            "breasts_out", "topless", "no_panties", "pantyshot", "pubic_hair",
+            "sex",
+            "vaginal",
+            "penis",
+            "pussy",
+            "anus",
+            "nipples",
+            "nude",
+            "completely_nude",
+            "uncensored",
+            "cum",
+            "fellatio",
+            "masturbation",
+            "breasts_out",
+            "topless",
+            "no_panties",
+            "pantyshot",
+            "pubic_hair",
         }
         questionable_markers = {
-            "lingerie", "underwear", "panties", "bra", "cameltoe", "cleavage",
-            "see-through", "wet", "swimsuit", "bikini", "navel", "thighhighs",
-            "garter_straps", "bondage", "bdsm",
+            "lingerie",
+            "underwear",
+            "panties",
+            "bra",
+            "cameltoe",
+            "cleavage",
+            "see-through",
+            "wet",
+            "swimsuit",
+            "bikini",
+            "navel",
+            "thighhighs",
+            "garter_straps",
+            "bondage",
+            "bdsm",
         }
         sensitive_markers = {
-            "midriff", "bare_shoulders", "stomach", "armpits", "short_shorts",
-            "miniskirt", "crop_top", "tube_top",
+            "midriff",
+            "bare_shoulders",
+            "stomach",
+            "armpits",
+            "short_shorts",
+            "miniskirt",
+            "crop_top",
+            "tube_top",
         }
 
         if general_tag_names & explicit_markers:
@@ -694,7 +816,7 @@ class WD14Tagger:
         if general_tag_names:
             return "general"
         return "unknown"
-    
+
     def load(self):
         """Load the model and tags. Idempotent and thread-safe.
 
@@ -717,12 +839,20 @@ class WD14Tagger:
 
         model_config = MODELS.get(self.model_name, {})
         self._input_layout = str(model_config.get("input_layout", "nhwc")).lower()
-        self._input_normalization = str(model_config.get("input_normalization", "wd14_bgr")).lower()
-        self._output_activation = str(model_config.get("output_activation", "identity")).lower()
+        self._input_normalization = str(
+            model_config.get("input_normalization", "wd14_bgr")
+        ).lower()
+        self._output_activation = str(
+            model_config.get("output_activation", "identity")
+        ).lower()
         self._output_index = int(model_config.get("output_index", 0))
-        self._metadata_format = str(model_config.get("metadata_format", "wd14_csv")).lower()
+        self._metadata_format = str(
+            model_config.get("metadata_format", "wd14_csv")
+        ).lower()
         self._resize_mode = str(model_config.get("resize_mode", "letterbox")).lower()
-        self._rating_fallback_mode = str(model_config.get("rating_fallback_mode", "none")).lower()
+        self._rating_fallback_mode = str(
+            model_config.get("rating_fallback_mode", "none")
+        ).lower()
         pad_color = model_config.get("pad_color", [255, 255, 255])
         if isinstance(pad_color, (list, tuple)) and len(pad_color) >= 3:
             self._pad_color = (int(pad_color[0]), int(pad_color[1]), int(pad_color[2]))
@@ -736,14 +866,18 @@ class WD14Tagger:
         # for NVIDIA-only setups: DmlExecutionProvider simply falls off the list
         # when onnxruntime-gpu is installed without DirectML support.
         if self.use_gpu:
-            providers = ['CUDAExecutionProvider', 'DmlExecutionProvider', 'CPUExecutionProvider']
+            providers = [
+                "CUDAExecutionProvider",
+                "DmlExecutionProvider",
+                "CPUExecutionProvider",
+            ]
         else:
-            providers = ['CPUExecutionProvider']
+            providers = ["CPUExecutionProvider"]
 
         available_providers = ort.get_available_providers()
         providers = [p for p in providers if p in available_providers]
         session_uses_gpu = self.use_gpu and (
-            'CUDAExecutionProvider' in providers or 'DmlExecutionProvider' in providers
+            "CUDAExecutionProvider" in providers or "DmlExecutionProvider" in providers
         )
         if self.use_gpu and not session_uses_gpu:
             logger.info(
@@ -756,7 +890,9 @@ class WD14Tagger:
         sess_options = self._build_session_options(gpu_enabled=session_uses_gpu)
 
         try:
-            self.session = self._create_session(model_path, tags_path, sess_options, providers)
+            self.session = self._create_session(
+                model_path, tags_path, sess_options, providers
+            )
         except RuntimeError as e:
             if session_uses_gpu:
                 logger.warning(
@@ -764,9 +900,11 @@ class WD14Tagger:
                     self.model_name,
                     e,
                 )
-                cpu_providers = ['CPUExecutionProvider']
+                cpu_providers = ["CPUExecutionProvider"]
                 cpu_options = self._build_session_options(gpu_enabled=False)
-                self.session = self._create_session(model_path, tags_path, cpu_options, cpu_providers)
+                self.session = self._create_session(
+                    model_path, tags_path, cpu_options, cpu_providers
+                )
                 self.use_gpu = False
             else:
                 raise
@@ -786,12 +924,14 @@ class WD14Tagger:
         if self.session is None:
             return False
         current = self.session.get_providers()
-        return 'CUDAExecutionProvider' in current or 'DmlExecutionProvider' in current
+        return "CUDAExecutionProvider" in current or "DmlExecutionProvider" in current
 
     def _fallback_to_cpu_session(self, error: Exception) -> None:
         """Rebuild the active ONNX session on CPU."""
         if not self._resolved_model_path or not self._resolved_tags_path:
-            raise RuntimeError("Cannot switch tagger to CPU before model paths are resolved.") from error
+            raise RuntimeError(
+                "Cannot switch tagger to CPU before model paths are resolved."
+            ) from error
 
         logger.warning(
             "GPU inference failed for %s, switching to CPU: %s",
@@ -803,7 +943,7 @@ class WD14Tagger:
             self._resolved_model_path,
             self._resolved_tags_path,
             cpu_options,
-            ['CPUExecutionProvider'],
+            ["CPUExecutionProvider"],
         )
         self.use_gpu = False
         self._learned_stable_gpu_batch_size = None
@@ -835,10 +975,16 @@ class WD14Tagger:
                 "attempted_gpu_backoff": False,
             }
 
-        preferred_chunk_size = max(1, min(initial_chunk_size or prepared_count, prepared_count))
-        learned_chunk_size = self._learned_stable_gpu_batch_size if self._session_uses_gpu() else None
+        preferred_chunk_size = max(
+            1, min(initial_chunk_size or prepared_count, prepared_count)
+        )
+        learned_chunk_size = (
+            self._learned_stable_gpu_batch_size if self._session_uses_gpu() else None
+        )
         if learned_chunk_size:
-            chunk_size = max(1, min(int(learned_chunk_size), preferred_chunk_size, prepared_count))
+            chunk_size = max(
+                1, min(int(learned_chunk_size), preferred_chunk_size, prepared_count)
+            )
         else:
             chunk_size = preferred_chunk_size
         min_chunk_size = max(1, min(min_chunk_size, chunk_size))
@@ -851,8 +997,8 @@ class WD14Tagger:
 
         while cursor < prepared_count:
             current_chunk_size = min(chunk_size, prepared_count - cursor)
-            current_inputs = prepared_inputs[cursor:cursor + current_chunk_size]
-            current_indices = prepared_indices[cursor:cursor + current_chunk_size]
+            current_inputs = prepared_inputs[cursor : cursor + current_chunk_size]
+            current_indices = prepared_indices[cursor : cursor + current_chunk_size]
 
             try:
                 batch_input = np.stack(current_inputs, axis=0)
@@ -876,7 +1022,10 @@ class WD14Tagger:
                         and current_chunk_size < preferred_chunk_size
                         and self._successful_gpu_batch_runs >= 2
                     ):
-                        next_candidate = min(preferred_chunk_size, max(current_chunk_size + 1, current_chunk_size * 2))
+                        next_candidate = min(
+                            preferred_chunk_size,
+                            max(current_chunk_size + 1, current_chunk_size * 2),
+                        )
                         if next_candidate > chunk_size:
                             chunk_size = next_candidate
                             raised_after_stable_runs = True
@@ -902,17 +1051,25 @@ class WD14Tagger:
                 if session_uses_gpu and current_chunk_size > min_chunk_size and is_oom:
                     attempted_gpu_backoff = True
                     next_chunk_size = max(min_chunk_size, current_chunk_size // 2)
-                    if next_chunk_size == current_chunk_size and current_chunk_size > min_chunk_size:
+                    if (
+                        next_chunk_size == current_chunk_size
+                        and current_chunk_size > min_chunk_size
+                    ):
                         next_chunk_size = current_chunk_size - 1
-                    backoff_steps.append({
-                        "from": current_chunk_size,
-                        "to": next_chunk_size,
-                        "mode": "gpu_backoff",
-                        "error": str(error),
-                    })
+                    backoff_steps.append(
+                        {
+                            "from": current_chunk_size,
+                            "to": next_chunk_size,
+                            "mode": "gpu_backoff",
+                            "error": str(error),
+                        }
+                    )
                     self._learned_stable_gpu_batch_size = max(
                         1,
-                        min(next_chunk_size, int(self._learned_stable_gpu_batch_size or next_chunk_size)),
+                        min(
+                            next_chunk_size,
+                            int(self._learned_stable_gpu_batch_size or next_chunk_size),
+                        ),
                     )
                     self._successful_gpu_batch_runs = 0
                     raised_after_stable_runs = False
@@ -924,12 +1081,14 @@ class WD14Tagger:
 
                 if session_uses_gpu:
                     attempted_gpu_backoff = True
-                    backoff_steps.append({
-                        "from": current_chunk_size,
-                        "to": 1,
-                        "mode": "cpu_fallback",
-                        "error": str(error),
-                    })
+                    backoff_steps.append(
+                        {
+                            "from": current_chunk_size,
+                            "to": 1,
+                            "mode": "cpu_fallback",
+                            "error": str(error),
+                        }
+                    )
                     self._fallback_to_cpu_session(error)
                     used_cpu_fallback = True
                     chunk_size = 1
@@ -942,15 +1101,18 @@ class WD14Tagger:
                 # CPU mode: also backoff chunk size if batch > 1
                 if current_chunk_size > 1:
                     next_chunk_size = max(1, current_chunk_size // 2)
-                    backoff_steps.append({
-                        "from": current_chunk_size,
-                        "to": next_chunk_size,
-                        "mode": "cpu_backoff",
-                        "error": str(error),
-                    })
+                    backoff_steps.append(
+                        {
+                            "from": current_chunk_size,
+                            "to": next_chunk_size,
+                            "mode": "cpu_backoff",
+                            "error": str(error),
+                        }
+                    )
                     logger.warning(
                         "CPU batch inference failed at chunk %d, backing off to %d",
-                        current_chunk_size, next_chunk_size,
+                        current_chunk_size,
+                        next_chunk_size,
                     )
                     chunk_size = next_chunk_size
                     gc.collect()
@@ -960,7 +1122,9 @@ class WD14Tagger:
 
                 for prepared_index, source_index in enumerate(current_indices):
                     try:
-                        single_input = np.expand_dims(current_inputs[prepared_index], axis=0)
+                        single_input = np.expand_dims(
+                            current_inputs[prepared_index], axis=0
+                        )
                         output = self._run_inference(single_input)
                         results[source_index] = self._process_probs(
                             output[0],
@@ -971,8 +1135,14 @@ class WD14Tagger:
                         del single_input
                         del output
                     except Exception as single_error:
-                        logger.error("Error tagging %s: %s", image_paths[source_index], single_error)
-                        results[source_index] = self._build_empty_result(str(single_error))
+                        logger.error(
+                            "Error tagging %s: %s",
+                            image_paths[source_index],
+                            single_error,
+                        )
+                        results[source_index] = self._build_empty_result(
+                            str(single_error)
+                        )
                 cursor += current_chunk_size
 
         return results, {
@@ -982,7 +1152,7 @@ class WD14Tagger:
             "used_cpu_fallback": used_cpu_fallback,
             "attempted_gpu_backoff": attempted_gpu_backoff,
         }
-    
+
     def release_session(self) -> None:
         """Fully release the ONNX session (and its device memory) until next use.
 
@@ -1025,15 +1195,20 @@ class WD14Tagger:
             gc.collect()
 
             if self.use_gpu:
-                providers = ['CUDAExecutionProvider', 'DmlExecutionProvider', 'CPUExecutionProvider']
+                providers = [
+                    "CUDAExecutionProvider",
+                    "DmlExecutionProvider",
+                    "CPUExecutionProvider",
+                ]
             else:
-                providers = ['CPUExecutionProvider']
+                providers = ["CPUExecutionProvider"]
 
             available_providers = ort.get_available_providers()
             providers = [p for p in providers if p in available_providers]
 
             session_uses_gpu = self.use_gpu and (
-                'CUDAExecutionProvider' in providers or 'DmlExecutionProvider' in providers
+                "CUDAExecutionProvider" in providers
+                or "DmlExecutionProvider" in providers
             )
             sess_options = self._build_session_options(gpu_enabled=session_uses_gpu)
 
@@ -1048,7 +1223,10 @@ class WD14Tagger:
             self._refresh_session_metadata()
             self._images_since_session_create = 0
             self._successful_gpu_batch_runs = 0
-            logger.info("ONNX session recreated successfully. Providers: %s", self.session.get_providers())
+            logger.info(
+                "ONNX session recreated successfully. Providers: %s",
+                self.session.get_providers(),
+            )
         except Exception as exc:
             logger.error("Failed to recreate ONNX session: %s", exc)
             # Attempt CPU fallback if GPU recreation failed
@@ -1057,7 +1235,10 @@ class WD14Tagger:
                     self._fallback_to_cpu_session(exc)
                     self._images_since_session_create = 0
                 except Exception as fallback_exc:
-                    logger.error("CPU fallback after session recreation failure also failed: %s", fallback_exc)
+                    logger.error(
+                        "CPU fallback after session recreation failure also failed: %s",
+                        fallback_exc,
+                    )
                     raise
 
     def set_session_refresh_interval(self, interval: int) -> None:
@@ -1069,7 +1250,9 @@ class WD14Tagger:
                       0 disables automatic recreation.
         """
         self._session_refresh_interval = max(0, interval)
-        logger.info("Session refresh interval set to %d", self._session_refresh_interval)
+        logger.info(
+            "Session refresh interval set to %d", self._session_refresh_interval
+        )
 
     def _preprocess_paths(self, paths: List[str]) -> List[Any]:
         """Decode + preprocess a chunk of images, returning a list aligned with
@@ -1077,6 +1260,7 @@ class WD14Tagger:
         that failed it (per-image isolation, order preserved). Uses a small
         thread pool so the GPU is not left waiting on single-threaded PIL
         decode/resize; falls back to serial for a single image."""
+
         def _one(path: str) -> np.ndarray:
             with Image.open(path) as image:
                 return self._preprocess(image)
@@ -1107,7 +1291,9 @@ class WD14Tagger:
         # bare convert("RGB") turns transparent pixels black, which reads as
         # a black background to the tagger. Matches SmilingWolf's official
         # wd14 preprocessing (white canvas alpha_composite).
-        if image.mode in ("RGBA", "LA", "PA") or (image.mode == "P" and "transparency" in image.info):
+        if image.mode in ("RGBA", "LA", "PA") or (
+            image.mode == "P" and "transparency" in image.info
+        ):
             rgba = image.convert("RGBA")
             canvas = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
             canvas.alpha_composite(rgba)
@@ -1119,7 +1305,9 @@ class WD14Tagger:
             processed_image = image.resize((width, height), Image.Resampling.BILINEAR)
         else:
             old_size = image.size
-            ratio = min(float(width) / max(1, old_size[0]), float(height) / max(1, old_size[1]))
+            ratio = min(
+                float(width) / max(1, old_size[0]), float(height) / max(1, old_size[1])
+            )
             new_size = (int(old_size[0] * ratio), int(old_size[1] * ratio))
             # P2-13a: BICUBIC matches the official wd14 letterbox resample
             # (LANCZOS produced slightly different tag confidences).
@@ -1150,7 +1338,7 @@ class WD14Tagger:
         if self._input_layout == "nchw":
             img_array = np.transpose(img_array, (2, 0, 1))
         return img_array
-    
+
     def tag(
         self,
         image_path: str,
@@ -1161,7 +1349,7 @@ class WD14Tagger:
     ) -> Dict[str, Any]:
         """
         Tag a single image.
-        
+
         Returns:
             {
                 "general_tags": [{"tag": str, "confidence": float}, ...],
@@ -1196,13 +1384,17 @@ class WD14Tagger:
 
             return result
 
-    def _runtime_chunk_size(self, image_count: int, preferred_batch_size: Optional[int]) -> int:
+    def _runtime_chunk_size(
+        self, image_count: int, preferred_batch_size: Optional[int]
+    ) -> int:
         """Return the maximum number of already-preprocessed inputs to hold at once."""
         if image_count <= 0:
             return 0
         if not self._supports_true_batch:
             return 1
-        learned_chunk_size = self._learned_stable_gpu_batch_size if self._session_uses_gpu() else None
+        learned_chunk_size = (
+            self._learned_stable_gpu_batch_size if self._session_uses_gpu() else None
+        )
         candidates = [image_count]
         if preferred_batch_size:
             candidates.append(max(1, int(preferred_batch_size)))
@@ -1221,17 +1413,30 @@ class WD14Tagger:
         }
 
     @staticmethod
-    def _merge_runtime_info(total_info: Dict[str, Any], chunk_info: Dict[str, Any]) -> None:
+    def _merge_runtime_info(
+        total_info: Dict[str, Any], chunk_info: Dict[str, Any]
+    ) -> None:
         chunk_initial = int(chunk_info.get("initial_chunk_size") or 0)
         chunk_final = int(chunk_info.get("final_chunk_size") or 0)
-        if total_info["initial_chunk_size"] == 0 or chunk_initial > total_info["initial_chunk_size"]:
+        if (
+            total_info["initial_chunk_size"] == 0
+            or chunk_initial > total_info["initial_chunk_size"]
+        ):
             total_info["initial_chunk_size"] = chunk_initial
-        if total_info["final_chunk_size"] == 0 or chunk_final < total_info["final_chunk_size"]:
+        if (
+            total_info["final_chunk_size"] == 0
+            or chunk_final < total_info["final_chunk_size"]
+        ):
             total_info["final_chunk_size"] = chunk_final
         total_info["backoff_steps"].extend(chunk_info.get("backoff_steps") or [])
-        total_info["used_cpu_fallback"] = bool(total_info["used_cpu_fallback"] or chunk_info.get("used_cpu_fallback"))
-        total_info["attempted_gpu_backoff"] = bool(total_info["attempted_gpu_backoff"] or chunk_info.get("attempted_gpu_backoff"))
-    
+        total_info["used_cpu_fallback"] = bool(
+            total_info["used_cpu_fallback"] or chunk_info.get("used_cpu_fallback")
+        )
+        total_info["attempted_gpu_backoff"] = bool(
+            total_info["attempted_gpu_backoff"]
+            or chunk_info.get("attempted_gpu_backoff")
+        )
+
     @overload
     def tag_batch(
         self,
@@ -1282,7 +1487,9 @@ class WD14Tagger:
 
             results: List[Optional[Dict[str, Any]]] = [None] * len(image_paths)
             runtime_info = self._empty_runtime_info()
-            runtime_chunk_size = self._runtime_chunk_size(len(image_paths), preferred_batch_size)
+            runtime_chunk_size = self._runtime_chunk_size(
+                len(image_paths), preferred_batch_size
+            )
 
             chunk_start = 0
             while chunk_start < len(image_paths):
@@ -1295,7 +1502,9 @@ class WD14Tagger:
                 for offset, prepared in enumerate(prepared_chunk):
                     source_index = chunk_start + offset
                     if isinstance(prepared, Exception):
-                        logger.error("Error preprocessing %s: %s", chunk_paths[offset], prepared)
+                        logger.error(
+                            "Error preprocessing %s: %s", chunk_paths[offset], prepared
+                        )
                         results[source_index] = self._build_empty_result(str(prepared))
                     else:
                         prepared_inputs.append(prepared)
@@ -1303,24 +1512,29 @@ class WD14Tagger:
 
                 if prepared_inputs:
                     if self._supports_true_batch and len(prepared_inputs) > 1:
-                        adaptive_results, chunk_info = self._run_true_batch_with_backoff(
-                            prepared_inputs,
-                            prepared_indices,
-                            image_paths,
-                            initial_chunk_size=len(prepared_inputs),
-                            min_chunk_size=min_batch_size,
-                            threshold=threshold,
-                            character_threshold=character_threshold,
-                            copyright_threshold=copyright_threshold,
+                        adaptive_results, chunk_info = (
+                            self._run_true_batch_with_backoff(
+                                prepared_inputs,
+                                prepared_indices,
+                                image_paths,
+                                initial_chunk_size=len(prepared_inputs),
+                                min_chunk_size=min_batch_size,
+                                threshold=threshold,
+                                character_threshold=character_threshold,
+                                copyright_threshold=copyright_threshold,
+                            )
                         )
                         self._merge_runtime_info(runtime_info, chunk_info)
                         for index, result in enumerate(adaptive_results):
                             if result is not None:
                                 results[index] = result
-                        runtime_chunk_size = self._runtime_chunk_size(
-                            len(image_paths) - chunk_end,
-                            preferred_batch_size,
-                        ) or runtime_chunk_size
+                        runtime_chunk_size = (
+                            self._runtime_chunk_size(
+                                len(image_paths) - chunk_end,
+                                preferred_batch_size,
+                            )
+                            or runtime_chunk_size
+                        )
                     else:
                         chunk_info = {
                             "initial_chunk_size": 1,
@@ -1331,7 +1545,9 @@ class WD14Tagger:
                         }
                         for prepared_index, source_index in enumerate(prepared_indices):
                             try:
-                                single_input = np.expand_dims(prepared_inputs[prepared_index], axis=0)
+                                single_input = np.expand_dims(
+                                    prepared_inputs[prepared_index], axis=0
+                                )
                                 output = self._run_inference(single_input)
                                 results[source_index] = self._process_probs(
                                     output[0],
@@ -1343,15 +1559,23 @@ class WD14Tagger:
                                 del single_input
                                 del output
                             except Exception as error:
-                                logger.error("Error tagging %s: %s", image_paths[source_index], error)
-                                results[source_index] = self._build_empty_result(str(error))
+                                logger.error(
+                                    "Error tagging %s: %s",
+                                    image_paths[source_index],
+                                    error,
+                                )
+                                results[source_index] = self._build_empty_result(
+                                    str(error)
+                                )
                         self._merge_runtime_info(runtime_info, chunk_info)
 
                 del prepared_inputs
                 gc.collect()
                 chunk_start = chunk_end
 
-            finalized_results = [result or self._build_empty_result() for result in results]
+            finalized_results = [
+                result or self._build_empty_result() for result in results
+            ]
             if return_runtime_info:
                 return finalized_results, runtime_info
             return finalized_results
@@ -1377,7 +1601,9 @@ class _ConfiguredTaggerProxy:
         self._tagger = tagger
         self._threshold = threshold
         self._character_threshold = character_threshold
-        self._copyright_threshold = copyright_threshold if copyright_threshold is not None else threshold
+        self._copyright_threshold = (
+            copyright_threshold if copyright_threshold is not None else threshold
+        )
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._tagger, name)
@@ -1393,8 +1619,12 @@ class _ConfiguredTaggerProxy:
         return self._tagger.tag(
             image_path,
             threshold=self._threshold if threshold is None else threshold,
-            character_threshold=self._character_threshold if character_threshold is None else character_threshold,
-            copyright_threshold=self._copyright_threshold if copyright_threshold is None else copyright_threshold,
+            character_threshold=self._character_threshold
+            if character_threshold is None
+            else character_threshold,
+            copyright_threshold=self._copyright_threshold
+            if copyright_threshold is None
+            else copyright_threshold,
         )
 
     def tag_batch(self, image_paths: List[str], **kwargs: Any) -> Any:
@@ -1402,6 +1632,7 @@ class _ConfiguredTaggerProxy:
         kwargs.setdefault("character_threshold", self._character_threshold)
         kwargs.setdefault("copyright_threshold", self._copyright_threshold)
         return self._tagger.tag_batch(image_paths, **kwargs)
+
 
 def get_tagger(
     model_name: str = DEFAULT_MODEL,
@@ -1411,7 +1642,7 @@ def get_tagger(
     character_threshold: float = 0.85,
     copyright_threshold: Optional[float] = None,
     use_gpu: bool = True,
-    force_reload: bool = False
+    force_reload: bool = False,
 ) -> WD14Tagger:
     """Get or create the tagger instance."""
     global _tagger, _current_settings
@@ -1419,10 +1650,12 @@ def get_tagger(
 
     with _tagger_lock:
         new_settings = {
-            "model_name": WD14Tagger._resolve_model_profile(resolved_model_name, model_path),
+            "model_name": WD14Tagger._resolve_model_profile(
+                resolved_model_name, model_path
+            ),
             "model_path": model_path,
             "tags_path": tags_path,
-            "use_gpu": use_gpu
+            "use_gpu": use_gpu,
         }
 
         # Reload if settings changed or forced
@@ -1433,7 +1666,7 @@ def get_tagger(
                 tags_path=tags_path,
                 threshold=threshold,
                 character_threshold=character_threshold,
-                use_gpu=use_gpu
+                use_gpu=use_gpu,
             )
             _current_settings = new_settings
         return _ConfiguredTaggerProxy(
