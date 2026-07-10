@@ -2500,6 +2500,8 @@ window.I18nLang_zhCN = {
     'models.wd14.missing': 'WD14 模型还没有下载，可以点击准备自动下载。',
     'models.toriigate.ready': 'ToriiGate 运行文件已就绪。',
     'models.toriigate.missing': 'ToriiGate 文件尚未下载，首次使用需要下载大型模型。',
+    'models.oppaiOracle.ready': 'OppaiOracle V1.1 ONNX 已就绪。',
+    'models.oppaiOracle.missing': 'OppaiOracle V1.1（约 947 MB ONNX）尚未下载。',
 
     // CLIP Similarity messages
     'models.clip.ready': '本地 CLIP 模型已就绪。',
@@ -3251,6 +3253,7 @@ window.I18nLang_zhCN = {
     'tagger.bgDetails': '详情',
     'tagger.bgDetailsTitle': '打开打标窗口',
     'censor.queueCleared': '队列已清空',
+    'censor.queueRestored': '已恢复上次的打码队列（{count} 张）。画布编辑与处理状态不跨重载保留。',
 
     // AI 任务队列（v3.4.1：打标 / 智能打标 / VLM 批量改为排队而非 409）
     'aiQueue.queuedToast': '已加入队列，当前任务完成后自动开始',

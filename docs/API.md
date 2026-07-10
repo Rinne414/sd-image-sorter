@@ -984,7 +984,7 @@ Find near-duplicate pairs.
 Get embedding statistics.
 
 #### GET /api/similarity/model-status
-Get local CLIP runtime readiness and the preferred local model path.
+Get local CLIP runtime readiness and the preferred local model path. Includes `message_key` (an i18n key such as `models.clip.missingModel`) alongside the English `message` so the frontend can localize the status detail.
 
 #### GET /api/similarity/compare
 Compute the CLIP cosine similarity (0.0-1.0) between two stored, embedded images (query params `id_a`, `id_b`).

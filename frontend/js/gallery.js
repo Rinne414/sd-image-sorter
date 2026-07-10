@@ -2838,7 +2838,9 @@ const Gallery = {
             const fallbackLabel = promptView.targetFormat === 'original'
                 ? 'Prompt (Original format)'
                 : `Prompt (${promptView.formatLabel} format)`;
-            promptHeader.textContent = this._t(promptView.headerKey || 'modal.prompt', null, fallbackLabel);
+            // Write into the label span so the collapse icon survives.
+            const headerLabel = promptHeader.querySelector('.section-toggle-label');
+            (headerLabel || promptHeader).textContent = this._t(promptView.headerKey || 'modal.prompt', null, fallbackLabel);
         }
         if (toggleBtn) {
             const hasPrompt = !!(promptView.promptText || promptView.negativeText || (promptView.characterPrompts && promptView.characterPrompts.length));
@@ -4193,6 +4195,15 @@ ${String(value)}`)
         document.body.appendChild(menu);
         this._positionContextMenu(menu, e.clientX, e.clientY, e.currentTarget || e.target?.closest?.('.gallery-item'));
 
+        // Scroll affordance: fade cue at the bottom while more items remain
+        // below the fold (short windows), cleared when scrolled to the end.
+        const updateScrollCue = () => {
+            const moreBelow = menu.scrollHeight - menu.scrollTop - menu.clientHeight > 4;
+            menu.classList.toggle('has-more-below', moreBelow);
+        };
+        menu.addEventListener('scroll', updateScrollCue, { passive: true });
+        updateScrollCue();
+
         // Close on click outside or Escape.
         const closeMenu = () => {
             menu.remove();
@@ -4225,6 +4236,9 @@ ${String(value)}`)
         const y = anchorRect && !pointerInsideAnchor
             ? clamp(rawY ?? anchorRect.top, anchorRect.top, anchorRect.bottom)
             : (rawY ?? 8);
+        // Let the menu use the full viewport height (19 items ≈ 660px) so all
+        // actions stay visible on desktop screens; PopupPosition still clamps
+        // to the available space when the window is short.
         if (anchorRect && window.PopupPosition?.place) {
             const placement = anchorRect.right + 8 > window.innerWidth - 260
                 ? 'left'
@@ -4233,7 +4247,7 @@ ${String(value)}`)
                 anchor: anchorElement,
                 placement,
                 gap: 8,
-                maxHeight: Math.min(420, Math.max(120, window.innerHeight - 16)),
+                maxHeight: Math.max(120, window.innerHeight - 16),
             });
             return;
         }
@@ -4242,7 +4256,7 @@ ${String(value)}`)
             x,
             y,
             placement: 'point',
-            maxHeight: Math.min(420, Math.max(120, window.innerHeight - 16)),
+            maxHeight: Math.max(120, window.innerHeight - 16),
         });
     },
 

@@ -2324,6 +2324,8 @@ window.I18nLang_en = {
     'models.wd14.missing': 'WD14 model files are missing and can be downloaded on demand.',
     'models.toriigate.ready': 'ToriiGate runtime files are ready.',
     'models.toriigate.missing': 'ToriiGate files are not downloaded yet. First use needs a large model download.',
+    'models.oppaiOracle.ready': 'OppaiOracle V1.1 ONNX bundle is ready.',
+    'models.oppaiOracle.missing': 'OppaiOracle V1.1 (~947 MB ONNX) is not downloaded yet.',
 
     // CLIP Similarity messages
     'models.clip.ready': 'Local CLIP model ready.',
@@ -3084,6 +3086,7 @@ window.I18nLang_en = {
     'tagger.bgDetails': 'Details',
     'tagger.bgDetailsTitle': 'Open tagger modal',
     'censor.queueCleared': 'Queue cleared',
+    'censor.queueRestored': 'Restored your last censor queue ({count} images). Canvas edits and processing state do not survive a reload.',
 
     // AI job queue (v3.4.1: tag / smart-tag / VLM batch queue instead of 409)
     'aiQueue.queuedToast': 'Queued — starts automatically after the current AI job finishes',

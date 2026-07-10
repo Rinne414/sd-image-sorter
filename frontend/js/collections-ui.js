@@ -72,6 +72,10 @@
                 // re-binding on every refresh.
                 list.addEventListener('click', (event) => this._onListClick(event));
             }
+            // Rows are JS-rendered HTML (no data-i18n), so re-render on a
+            // language switch or the built-in Favorites keeps showing the
+            // previous language's name (QA P3-7c).
+            document.addEventListener('languageChanged', () => this._renderList());
             await this.refresh();
         },
 

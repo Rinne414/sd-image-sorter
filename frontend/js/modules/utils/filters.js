@@ -21,7 +21,11 @@
  */
 function formatFilterSummary(filters) {
     const f = filters || {};
-    const allGens = ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
+    // Full generator vocabulary lives in FilterStore (14 entries incl. the
+    // "Others" bundle) — a stale short list here made the default all-selected
+    // state read "14 selected" instead of "All".
+    const allGens = window.FilterStore?.DEFAULT_FILTER_GENERATORS
+        || ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
     const allRatings = ['general', 'sensitive', 'questionable', 'explicit'];
     const t = window.I18n?.t?.bind(window.I18n);
     const allLabel = t ? t('common.all') : 'All';

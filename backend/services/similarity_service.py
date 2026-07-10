@@ -343,9 +343,20 @@ class SimilarityService:
         clip = get_model_health()["clip"]
         runtime_loaded = clip.get("runtime_loaded", False)
         effective_available = clip["available"] or runtime_loaded
+        # message_key mirrors model_service's CLIP card branches so the
+        # Similar view can localize instead of echoing backend English.
+        if runtime_loaded and not clip["available"]:
+            message_key = "models.clip.loaded"
+        elif clip["available"]:
+            message_key = "models.clip.ready"
+        elif clip["model_path"]:
+            message_key = "models.clip.missingRuntime"
+        else:
+            message_key = "models.clip.missingModel"
         return {
             "status": "ok",
             **clip,
             "available": effective_available,
             "message": clip["message"] if not runtime_loaded or clip["available"] else "CLIP model is loaded and ready.",
+            "message_key": message_key,
         }

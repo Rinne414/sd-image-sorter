@@ -4535,8 +4535,14 @@ textarea:focus,
    its clicks (exit-selection-mode becomes unclickable). */
 .filter-sidebar #btn-toggle-select {
     position: sticky;
-    bottom: 0;
+    /* Pin flush with the sidebar's bottom edge (-18px cancels the sidebar's
+       own padding) — with bottom:0 the folder-tree rows kept peeking through
+       the padding strip under the pinned button (QA P3-8, 1366×768). */
+    bottom: -18px;
     z-index: 18;
+    /* Separation shadow so rows sliding underneath read as "under a docked
+       action bar" instead of an overlap glitch. */
+    box-shadow: 0 -12px 16px -10px rgba(0, 0, 0, 0.55);
 }
 
 .filter-sidebar.selection-mode {

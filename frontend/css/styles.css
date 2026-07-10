@@ -7737,10 +7737,27 @@ input[type="radio"] {
     padding: 4px;
     min-width: 190px;
     max-width: min(260px, calc(100vw - 16px));
-    max-height: min(420px, calc(100vh - 16px));
+    max-height: calc(100vh - 16px);
     overflow-y: auto;
     overscroll-behavior: contain;
     box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+}
+/* Bottom fade while more items remain below the fold (.has-more-below is
+   toggled from the menu's scroll handler). */
+.gallery-context-menu::after {
+    content: '';
+    display: block;
+    position: sticky;
+    bottom: -4px;
+    height: 28px;
+    margin-top: -28px;
+    background: linear-gradient(to top, rgba(24, 27, 36, 0.96), rgba(24, 27, 36, 0));
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+.gallery-context-menu.has-more-below::after {
+    opacity: 1;
 }
 .context-menu-item {
     align-items: center;
@@ -8363,13 +8380,15 @@ input[type="radio"] {
     background: linear-gradient(to top, rgba(8, 10, 16, 0.85), rgba(8, 10, 16, 0));
     pointer-events: none;
 }
-.bracket-fighter .bracket-meta {
+.bracket-fighter .bracket-meta,
+.cull-caption .bracket-meta {
     display: flex;
     flex-wrap: wrap;
     gap: 5px;
     justify-content: center;
 }
-.bracket-fighter .bchip {
+.bracket-fighter .bchip,
+.cull-caption .bchip {
     font-size: 10.5px;
     line-height: 1.4;
     padding: 2px 7px;
@@ -8381,8 +8400,10 @@ input[type="radio"] {
     border: 1px solid rgba(255, 255, 255, 0.14);
     white-space: nowrap;
 }
-.bracket-fighter .bchip b { color: var(--text-muted); font-weight: 600; }
-.bracket-fighter .bracket-name {
+.bracket-fighter .bchip b,
+.cull-caption .bchip b { color: var(--text-muted); font-weight: 600; }
+.bracket-fighter .bracket-name,
+.cull-caption .bracket-name {
     font-size: 11px;
     color: #fff;
     text-align: center;
@@ -8564,6 +8585,15 @@ input[type="radio"] {
     border-radius: 10px;
     display: block;
 }
+/* In-flow caption under the image (the bracket's overlays the picture). */
+.cull-caption {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+}
+.cull-caption .bracket-name { max-width: 100%; }
 .cull-stamp {
     position: absolute;
     top: 22px;

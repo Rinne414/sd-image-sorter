@@ -1,6 +1,6 @@
 import os from 'os'
 import path from 'path'
-import { test, expect, type Page, type Route } from '@playwright/test'
+import { test, expect, type Page, type Route } from '../fixtures/click-ledger'
 
 // Destination path used by auto-separate mocked tests. Overridable via env so
 // runners on any platform can avoid writing to the author's absolute L:\ path.
@@ -2239,7 +2239,8 @@ test.describe('Smoke Tests', () => {
     expect(box!.y).toBeGreaterThanOrEqual(7)
     expect(box!.x + box!.width).toBeLessThanOrEqual(893)
     expect(box!.y + box!.height).toBeLessThanOrEqual(493)
-    expect(box!.height).toBeLessThanOrEqual(421)
+    // P3-6: the 420px cap is gone — the menu may use the viewport height.
+    expect(box!.height).toBeLessThanOrEqual(486)
     expect(box!.x + box!.width).toBeLessThanOrEqual(imageBox!.x - 4)
     expect(clickY).toBeGreaterThanOrEqual(box!.y)
     expect(clickY).toBeLessThanOrEqual(box!.y + box!.height)
@@ -2280,7 +2281,11 @@ test.describe('Smoke Tests', () => {
     expect(box!.x).toBeGreaterThanOrEqual(7)
     expect(box!.y).toBeGreaterThanOrEqual(7)
     expect(box!.x + box!.width).toBeLessThanOrEqual(2553)
-    expect(box!.height).toBeLessThanOrEqual(421)
+    // P3-6: no 420px cap — on a tall viewport every item is visible without
+    // internal scrolling.
+    expect(box!.height).toBeLessThanOrEqual(1424)
+    const menuOverflow = await menu.evaluate((el) => el.scrollHeight - el.clientHeight)
+    expect(menuOverflow).toBeLessThanOrEqual(2)
     expect(box!.x + box!.width).toBeLessThanOrEqual(imageBox!.x - 4)
     expect(clickY).toBeGreaterThanOrEqual(box!.y)
     expect(clickY).toBeLessThanOrEqual(box!.y + box!.height)

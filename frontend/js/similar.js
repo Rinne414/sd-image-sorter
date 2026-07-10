@@ -519,8 +519,12 @@ const SimilarImages = {
                 ? this._t('similar.setupReadyDetail', 'You can search or rebuild the index any time after scanning more images.')
                 : this._t('similar.setupNeedsDetail', 'Finish the CLIP setup first, then come back to build the index.');
             const detailItems = [];
-            if (result.message) {
-                detailItems.push(result.message);
+            if (result.message_key || result.message) {
+                // Prefer the backend's message_key so the tech detail is
+                // localized; raw message stays as the fallback (QA P3-7a).
+                detailItems.push(result.message_key
+                    ? this._t(result.message_key, result.message || '')
+                    : result.message);
             }
             if (result.model_path) {
                 detailItems.push(result.model_path);

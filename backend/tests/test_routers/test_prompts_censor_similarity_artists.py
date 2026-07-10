@@ -1560,6 +1560,13 @@ class TestSimilarityRouterValidation:
         assert data["status"] == "ok"
         assert "model_name" in data
         assert "available" in data
+        # The Similar view localizes the tech detail via message_key.
+        assert data["message_key"] in {
+            "models.clip.loaded",
+            "models.clip.ready",
+            "models.clip.missingRuntime",
+            "models.clip.missingModel",
+        }
 
     def test_embed_progress_reports_skipped_unreadable_and_failed(self, test_db, tmp_path, monkeypatch):
         import similarity as similarity_module

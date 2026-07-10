@@ -125,6 +125,14 @@
             var el = document.querySelector(selector);
             if (!el) return;
 
+            // Label-span structure (same pattern as the reader sections):
+            // only the label carries text, so the collapse icon survives.
+            var label = el.querySelector('.section-toggle-label');
+            if (label) {
+                label.textContent = this._t(key);
+                return;
+            }
+
             var icon = el.querySelector('.collapse-icon');
             if (!icon) {
                 el.textContent = this._t(key);
@@ -331,8 +339,8 @@
             this._setTextAll('.modal-meta strong', ['modal.generator', 'modal.size', 'modal.checkpoint']);
             this._setText('#modal-loading-state', 'modal.loadingDetails');
             this._setText('#modal-img2img-badge', 'modal.img2img');
-            this._setText('#modal-loras-section h4', 'modal.loras');
-            this._setText('.modal-prompt h4', 'modal.prompt');
+            this._setToggleHeader('#modal-loras-section h4', 'modal.loras');
+            this._setToggleHeader('.modal-prompt h4', 'modal.prompt');
             this._setToggleHeader('#modal-negative-section h4', 'modal.negativePrompt');
             this._setText('#modal-characters-section h4', 'modal.characterPrompts');
             this._setToggleHeader('#modal-params-section h4', 'modal.genParams');
