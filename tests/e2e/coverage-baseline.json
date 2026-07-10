@@ -1,0 +1,6 @@
+{
+  "comment": "Click-coverage ratchet (scripts/coverage_gate.py). min_click_coverage_pct may only go UP. Waivers are regexes matched against control keys; each entry needs a reason. Initial floor set from the 2026-07-11 full-suite run (observed 39.78%) minus flake headroom.",
+  "min_click_coverage_pct": 35.0,
+  "waivers": [
+  ]
+}

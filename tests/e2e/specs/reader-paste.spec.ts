@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from '../fixtures/click-ledger'
 
 // Tiny 1x1 PNG (base64), used to simulate a clipboard image payload.
 const TINY_PNG_BASE64 =

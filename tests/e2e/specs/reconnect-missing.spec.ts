@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
-import { expect, test } from '@playwright/test'
+import { expect, test } from '../fixtures/click-ledger'
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..')
 const runtimeDatabasePath = process.env.SD_IMAGE_SORTER_DB_PATH
@@ -139,6 +139,11 @@ test('find moved images reconnects a file through the real gallery UI', async ({
   await page.locator('#scan-folder-path').fill(oldDir)
   await disableScanAutoTag(page)
   await expect(page.locator('#scan-auto-tag')).not.toBeChecked()
+  // /api/scan/progress is a global singleton: without a reset, the poll below
+  // can false-match a PREVIOUS test's terminal "done" state — the fixture scan
+  // then lands AFTER fs.rename below and indexes nothing (proven full-suite
+  // flake: the late scan logged WinError 2 on the already-moved file).
+  await request.post('/api/scan/reset')
   await page.locator('#btn-start-scan').click()
 
   await expect.poll(async () => {
@@ -182,6 +187,10 @@ test('find moved images reconnects a file through the real gallery UI', async ({
   await page.locator('#reconnect-folder-browser-container #folder-browser-select').click()
   await expect(page.locator('#reconnect-folder-path')).toHaveValue(newDir)
 
+  // Reconnect progress is also a global singleton (aurora-phase3 runs a
+  // reconnect earlier in the suite) — capture the previous run's started_at
+  // so the poll below only accepts OUR run's terminal state.
+  const reconnectBaseline = await (await request.get('/api/images/reconnect-missing/progress')).json().catch(() => ({} as any))
   await page.locator('#btn-start-reconnect').click()
   await expect(page.locator('#reconnect-modal.visible')).toHaveCount(0)
 
@@ -189,6 +198,7 @@ test('find moved images reconnects a file through the real gallery UI', async ({
   await expect.poll(async () => {
     const response = await request.get('/api/images/reconnect-missing/progress')
     finalProgress = await response.json()
+    if ((finalProgress.started_at ?? null) === (reconnectBaseline.started_at ?? null)) return 'previous-run'
     return `${finalProgress.status}:${finalProgress.matched || 0}:${finalProgress.result?.still_missing ?? ''}:${finalProgress.conflicts || 0}:${finalProgress.ambiguous || 0}`
   }, { timeout: 90000 }).toBe('done:1:0:0:0')
 

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from '../fixtures/click-ledger'
 
 /**
  * v3.4.1 AI job queue (Debt-16 / TODO #19): starting an AI tagging job while

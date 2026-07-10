@@ -1,4 +1,4 @@
-import { expect, test, Page } from '@playwright/test'
+import { expect, test, Page } from '../fixtures/click-ledger'
 
 const LAZY_FIRST_IMAGE = process.env.SD_LAZY_QA_FIRST_IMAGE || ''
 const LAZY_COPY_DEST = process.env.SD_LAZY_QA_COPY_DEST || ''

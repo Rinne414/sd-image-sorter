@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { test, expect, type APIRequestContext, type Page } from '@playwright/test'
+import { test, expect, type APIRequestContext, type Page } from '../fixtures/click-ledger'
 
 const SAMPLE_IMAGE = path.resolve(__dirname, '../../../backend/favorites/ComfyUI_00208_.png')
 

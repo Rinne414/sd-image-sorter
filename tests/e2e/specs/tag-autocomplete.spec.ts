@@ -2,7 +2,7 @@ import fsSync from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from '../fixtures/click-ledger'
 
 /**
  * Tag autocomplete v2 (owner request 2026-07-05): the caption-editor style

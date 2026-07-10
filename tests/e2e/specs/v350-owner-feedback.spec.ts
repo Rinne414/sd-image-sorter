@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from '../fixtures/click-ledger'
 
 /**
  * Owner feedback batch 2026-07-05 (v3.5.0): regression tests for

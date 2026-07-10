@@ -1,7 +1,7 @@
 import fsSync from 'node:fs'
 import path from 'node:path'
 
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from '../fixtures/click-ledger'
 
 /**
  * TEMPORARY AUDIT SPEC (persona 5 — power user, port 19509).
@@ -121,6 +121,10 @@ test('01 tag all images with the (fake) tagger via UI', async ({ page, request }
     await expect(page.locator('#tag-modal.visible')).toBeVisible()
     await page.locator('#tag-model-select').selectOption('wd-swinv2-tagger-v3').catch(() => {})
     await page.screenshot({ path: shot('01b-tag-modal.png') })
+    // /api/tag/progress is a global singleton: reset it so the done-poll below
+    // can only match THIS run (a previous spec's terminal "done" made the
+    // library assertion run before the tag job even started — full-suite flake).
+    await request.post('/api/tag/reset')
     await page.locator('#btn-start-tag').click()
 
     let done = false

@@ -2,7 +2,7 @@ import fsSync from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
-import { expect, test } from '@playwright/test'
+import { expect, test } from '../fixtures/click-ledger'
 
 /**
  * Duplicate Cleanup workflow (v3.5.0 Tier 1): whole-library near-dup GROUP

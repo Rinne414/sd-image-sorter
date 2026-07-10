@@ -162,18 +162,14 @@ writeStubPackageMetadata('transformers', '5.9.0')
 writeStubPackageMetadata('timm', '1.0.0')
 writeStubPackageMetadata('safetensors', '0.7.0')
 
-const onboardingStorageState = {
+// The onboarding tour's auto-start was retired (QA P3-4) so its completion
+// flag no longer needs seeding here — only the entry overlay must be skipped.
+const suiteStorageState = {
   cookies: [],
   origins: [
     {
       origin: new URL(baseURL).origin,
       localStorage: [
-        {
-          name: 'sd-image-sorter-onboarding-completed',
-          // version must be >= onboarding.js TOUR_VERSION (2 since v3.3.3) so the
-          // tour stays suppressed in e2e; a stale version re-triggers the overlay.
-          value: JSON.stringify({ version: 2, completed: true, completedAt: '2026-04-08T00:00:00.000Z' }),
-        },
         {
           // v4.0 Aurora shell: suppress the mission entry page so the existing
           // suite lands directly in the gallery. entry-page.spec.ts opts back
@@ -193,6 +189,8 @@ const onboardingStorageState = {
  */
 export default defineConfig({
   testDir: './specs',
+  // Coverage ledger (Phase 2): reset artifacts/click-coverage once per run.
+  globalSetup: './fixtures/global-setup.ts',
   fullyParallel: false, // Sequential execution for state-dependent tests
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -204,7 +202,7 @@ export default defineConfig({
   ],
   use: {
     baseURL,
-    storageState: onboardingStorageState,
+    storageState: suiteStorageState,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

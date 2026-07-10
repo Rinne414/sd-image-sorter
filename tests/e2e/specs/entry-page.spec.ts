@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from '../fixtures/click-ledger'
 
 /**
  * v4.0 Aurora shell — mission entry page (canvas #11a, Phase 2).

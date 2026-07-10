@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { expect, test, type APIRequestContext, type Page } from '../fixtures/click-ledger'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -1668,6 +1668,11 @@ test('scan folder browser should pick a real folder and scan it through the UI',
 
   await disableScanAutoTag(page)
   await expect(page.locator('#scan-auto-tag')).not.toBeChecked()
+  // /api/scan/progress is a global singleton: without a reset, the poll below
+  // can false-match the PREVIOUS test's terminal "done" state before this
+  // test's scan even starts (proven full-suite flake — the filename assertion
+  // then ran ahead of the real scan).
+  await request.post('/api/scan/reset')
   await page.locator('#btn-start-scan').click()
 
   await expect.poll(async () => {

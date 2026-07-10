@@ -1,6 +1,6 @@
 import fs from 'fs/promises'
 import path from 'path'
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { expect, test, type APIRequestContext, type Page } from '../fixtures/click-ledger'
 
 import { createTestImage } from '../fixtures/test-helpers'
 

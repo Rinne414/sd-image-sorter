@@ -233,6 +233,17 @@ def main() -> int:
             ],
             ROOT / "tests" / "e2e",
         ),
+        (
+            # Click-coverage ratchet (QA coverage ledger): merges the
+            # click-ledger JSONL with the crawl's control inventory and fails
+            # when coverage drops below tests/e2e/coverage-baseline.json.
+            "click coverage gate",
+            [
+                str(BACKEND_PYTHON),
+                "scripts/coverage_gate.py",
+            ],
+            ROOT,
+        ),
     ]
 
     # Checks that are allowed to fail without blocking the CI pipeline.
