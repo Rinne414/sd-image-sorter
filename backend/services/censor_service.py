@@ -2050,6 +2050,11 @@ class CensorService:
                 "name": "NudeNet v3",
                 "description": "Recommended for NSFW region detection. No manual model path required.",
                 "available": nudenet["available"],
+                # The runtime can be installed while the ONNX weights are not yet
+                # on disk - the nudenet library downloads them on the first detect
+                # call (a ~2 min blocking fetch). Expose this so the UI can warn
+                # before a cold run instead of looking frozen.
+                "model_downloaded": bool(nudenet.get("model_downloaded")),
                 "requires_model_path": False,
                 "recommended": nudenet["available"],
                 "message": nudenet["message"],

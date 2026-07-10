@@ -113,6 +113,14 @@ function getManualSortStartLabel(mode) {
     return manualSortText('manual.startSorting', 'Start Sorting', '开始排序');
 }
 
+// Human name for a sort mode, used when a start action collides with a saved
+// session from a DIFFERENT mode (the cross-mode confirm below).
+function getManualSortModeLabel(mode) {
+    if (mode === 'bracket') return manualSortText('manual.modeBracket', 'A/B Showdown', 'A/B 擂台');
+    if (mode === 'cull') return manualSortText('manual.modeCull', 'Keep / Reject', '留 / 汰');
+    return manualSortText('manual.modeSlot', 'Slot Sorting (WASD)', '槽位整理（WASD）');
+}
+
 // Reflect the chosen mode in the setup UI: highlight the button, toggle the
 // slot-only vs bracket-only vs cull-only blocks, and relabel the start button.
 // Never touches an active session (mode is locked once sorting starts).
@@ -1521,6 +1529,60 @@ async function confirmResumeSavedSessionFromStart(savedSession) {
     });
 }
 
+// A saved session exists in a DIFFERENT mode than the one the user just asked
+// to start. Never silently resume the old one (that ignored the mode choice
+// and — because the direction keys alias WASD — could move files the user
+// thought they were only comparing). Ask explicitly: OK discards the old
+// session and starts the requested mode fresh; Cancel keeps the old session
+// and surfaces the resume banner so it can be continued from there.
+async function confirmCrossModeSavedSession(savedSession, requestedMode) {
+    const { API, showToast } = window.App;
+    const savedMode = MANUAL_SORT_MODES.has(savedSession.mode) ? savedSession.mode : 'slot';
+    const body = formatManualSortText(
+        'manual.crossModeBody',
+        'You chose {new}, but an unfinished {old} session is saved (image {index}/{total}, {remaining} left). Discard it and start a new {new} session? Choose Cancel to keep the {old} session and resume it from the banner instead.',
+        '你选择了「{new}」，但有一个未完成的「{old}」会话（第 {index}/{total} 张，还剩 {remaining}）。丢弃它并开始新的「{new}」吗？点「取消」可保留「{old}」会话，稍后从横幅恢复。',
+        {
+            new: getManualSortModeLabel(requestedMode),
+            old: getManualSortModeLabel(savedMode),
+            index: Number(savedSession.index ?? savedSession.challenger_index ?? 0) + 1,
+            total: Number(savedSession.total || 0),
+            remaining: Number(savedSession.remaining || 0),
+        }
+    );
+
+    return new Promise(resolve => {
+        window.App.showConfirm(
+            manualSortText('manual.crossModeTitle', 'Finish the saved session first', '先处理未完成的排序会话'),
+            body,
+            async () => {
+                try {
+                    await API.delete('/api/sort/session');
+                } catch (error) {
+                    if (window.Logger) Logger.warn('Failed to discard cross-mode session:', error);
+                    showToast(
+                        formatUserError(error, manualSortText('manual.discardSessionFailed', 'Failed to discard saved session', '丢弃已保存会话失败')),
+                        'error'
+                    );
+                    resolve(true); // handled (aborted); caller must not start
+                    return;
+                }
+                renderManualSortResumeBanner(null, { visible: false });
+                // Re-enter the requested start path. The saved session is gone,
+                // so this run proceeds straight to a fresh start.
+                if (requestedMode === 'bracket') await startBracketSorting();
+                else if (requestedMode === 'cull') await startCullSorting();
+                else await startSorting();
+                resolve(true);
+            },
+            () => {
+                renderManualSortResumeBanner(savedSession, { visible: true });
+                resolve(true); // handled (kept); caller must not start
+            }
+        );
+    });
+}
+
 async function startSorting() {
     // v3.3.2 WB-S3: A/B Showdown uses a separate, folder-free start path so the
     // slot (WASD) flow below stays exactly as it was.
@@ -1539,7 +1601,12 @@ async function startSorting() {
     try {
         const savedSession = await API.getCurrentSortImage();
         if (savedSession && !savedSession.done && (savedSession.image || savedSession.champion)) {
-            await confirmResumeSavedSessionFromStart(savedSession);
+            const savedMode = MANUAL_SORT_MODES.has(savedSession.mode) ? savedSession.mode : 'slot';
+            if (savedMode === 'slot') {
+                await confirmResumeSavedSessionFromStart(savedSession);
+            } else {
+                await confirmCrossModeSavedSession(savedSession, 'slot');
+            }
             return;
         }
     } catch (error) {
@@ -1993,7 +2060,7 @@ async function startBracketSorting() {
                 applyCurrentSortPayload(existing);
                 showToast(manualSortText('manual.bracketResumed', 'Resumed your A/B Showdown.', '已恢复 A/B 擂台。'), 'info');
             } else {
-                await resumeSavedSession(existing);
+                await confirmCrossModeSavedSession(existing, 'bracket');
             }
             return;
         }
@@ -2563,7 +2630,7 @@ async function startCullSorting() {
                 applyCurrentSortPayload(existing);
                 showToast(manualSortText('manual.cullResumed', 'Resumed your Keep/Reject session.', '已恢复留/汰整理。'), 'info');
             } else {
-                await resumeSavedSession(existing);
+                await confirmCrossModeSavedSession(existing, 'cull');
             }
             return;
         }

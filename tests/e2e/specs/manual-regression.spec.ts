@@ -1352,6 +1352,76 @@ test('manual sort should honor search and support move, skip, and undo', async (
   await expect.poll(async () => countFiles(manualSortInbox, '.png'), { timeout: 20000 }).toBe(1)
 })
 
+test('starting a different mode over a paused session asks before discarding, never silently resumes', async ({ page, request }) => {
+  // P2-2 (QA sweep 2026-07-10): a paused slot session must NOT be silently
+  // resumed when the user switches to A/B Showdown and clicks start — the old
+  // code ignored the mode choice and, because the arrows alias WASD, could move
+  // files the user thought they were only comparing. Starting a different mode
+  // now prompts: OK discards the old session and starts the chosen mode fresh.
+  await resetManualSortFixture()
+  // Deterministic start: clear any saved session a prior test (or a prior run
+  // of this one) may have left on the shared e2e DB.
+  await request.delete('/api/sort/session').catch(() => {})
+  await page.addInitScript((search) => {
+    localStorage.setItem('manual_sort_filter_state_v1', JSON.stringify({
+      generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
+      ratings: ['general', 'sensitive', 'questionable', 'explicit'],
+      tags: [], checkpoints: [], loras: [], prompts: [], artist: null,
+      search, sortBy: 'newest', limit: 0,
+      minWidth: null, maxWidth: null, minHeight: null, maxHeight: null,
+      aspectRatio: '', minAesthetic: null, maxAesthetic: null,
+    }))
+    localStorage.setItem('manual_sort_mode_v1', 'slot')
+  }, 'manual_test_sort_token_20260405')
+
+  await openMainPage(page)
+  await setGallerySearch(page, 'manual_test_sort_token_20260405')
+  await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(3)
+  await openSortingSubView(page, 'manual')
+
+  // Start a real slot session and make a move so the session persists.
+  await page.locator('input[name="manual-sort-operation"][value="copy"]').check({ force: true })
+  await page.locator('.folder-path-input[data-key="w"]').fill(manualSortTop)
+  await page.locator('.folder-path-input[data-key="d"]').fill(manualSortRight)
+  await page.locator('#btn-start-sorting').click()
+  await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+  await page.locator('#btn-confirm-ok').click()
+  await expect(page.locator('#sort-interface')).toBeVisible()
+  await page.keyboard.press('D')
+  await expect(page.locator('#sort-sorted-count')).toHaveText('1')
+
+  // Pause back to setup (the resume banner appears).
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#sort-setup')).toBeVisible()
+  await expect(page.locator('#sort-resume-banner')).toBeVisible()
+
+  // Switch to A/B Showdown and start — the cross-mode confirm must appear
+  // instead of the bracket interface or a silently-resumed slot session.
+  await page.locator('.sort-mode-btn[data-sort-mode="bracket"]').click()
+  await expect(page.locator('.sort-mode-btn[data-sort-mode="bracket"]')).toHaveClass(/is-active/)
+  await page.locator('#bracket-winner-collection').selectOption('fav')
+  await page.locator('#btn-start-sorting').click()
+
+  await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+  await expect(page.locator('#sort-bracket-interface')).toBeHidden()
+  await expect(page.locator('#sort-interface')).toBeHidden()
+
+  // OK = discard the slot session and start the requested bracket fresh. A
+  // resumed slot session would show #sort-interface and keep its 1-sorted
+  // progress; a clean 0/2 bracket proves the old session was discarded.
+  await page.locator('#btn-confirm-ok').click()
+  await expect(page.locator('#sort-bracket-interface')).toBeVisible()
+  await expect(page.locator('#bracket-progress-text')).toHaveText('0 / 2')
+
+  // Server-side confirmation: the active session is now a bracket, not the
+  // paused slot session.
+  const current = await (await request.get('/api/sort/current')).json()
+  expect(current.mode).toBe('bracket')
+
+  // Leave no saved session behind for the next spec.
+  await request.delete('/api/sort/session').catch(() => {})
+})
+
 test('A/B Showdown should switch modes, compare a pair, pick a winner, and save it', async ({ page, request }) => {
   // v3.3.2 WB-S7: Sort & Cull Workbench A/B Showdown (bracket) flow. Reuses the
   // manual-sort fixture (3 images) and drives the mode switch itself so the

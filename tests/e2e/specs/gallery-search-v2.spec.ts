@@ -243,9 +243,9 @@ test('typing a compound query applies filters; clearing restores box-owned field
   await expect(page.locator('#gallery-search-preview')).toBeVisible()
   expect(await page.locator('#gallery-search-preview .gsq-chip').count()).toBeGreaterThanOrEqual(7)
 
-  // Clearing the box resets everything the box wrote — scalars and the
-  // narrowed generator/rating sets — but ADDITIVE list entries stay until
-  // removed via the sidebar (documented semantics).
+  // Clearing the box resets everything the box wrote — scalars, the narrowed
+  // generator/rating sets, AND list values the box itself added (tags, color
+  // hues, …). An abandoned token must not keep filtering the gallery.
   await page.locator('#gallery-search-clear').click()
   await expect.poll(async () => (await filterState(page)).minAesthetic).toBe(null)
   const cleared = await filterState(page)
@@ -255,7 +255,9 @@ test('typing a compound query applies filters; clearing restores box-owned field
   expect(cleared.aspectRatio).toBe('')
   expect(cleared.colorTemperature).toBe('')
   expect(cleared.noCaption).toBe(null)
-  expect(cleared.excludeTags).toContain('blurry')
+  expect(cleared.excludeTags).not.toContain('blurry')
+  expect(cleared.colorHues).toEqual([])
+  expect(cleared.excludeColorHues).toEqual([])
 
   // Modal/chip-set values survive box edits: arm the aesthetic chip, then
   // type unrelated text — the chip's filter must NOT be cleared by the box.
@@ -265,6 +267,24 @@ test('typing a compound query applies filters; clearing restores box-owned field
   await input.press('Enter')
   await expect.poll(async () => (await filterState(page)).search).toBe('plain words')
   expect((await filterState(page)).minAesthetic).toBe(7)
+
+  // List values added OUTSIDE the box keep modal/sidebar ownership: pre-seed
+  // a tag through the filter store directly, add one via the box, then clear
+  // — only the box-added tag disappears.
+  await page.evaluate(() => {
+    const w = window as any
+    w.App.updateFilters((filters: any) => { filters.tags.push('modal_owned_tag') })
+  })
+  await input.fill('tag:box_owned_tag')
+  await input.press('Enter')
+  await expect.poll(async () => (await filterState(page)).tags).toContain('box_owned_tag')
+  await page.locator('#gallery-search-clear').click()
+  await expect.poll(async () => (await filterState(page)).tags.includes('box_owned_tag')).toBe(false)
+  expect((await filterState(page)).tags).toContain('modal_owned_tag')
+  await page.evaluate(() => {
+    const w = window as any
+    w.App.updateFilters((filters: any) => { filters.tags = filters.tags.filter((tag: string) => tag !== 'modal_owned_tag') })
+  })
 })
 
 test('color:red reaches the backend as color_hues', async ({ page }) => {

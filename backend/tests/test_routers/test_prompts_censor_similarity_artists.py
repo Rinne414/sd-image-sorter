@@ -1359,6 +1359,21 @@ class TestCensorRouterValidation:
         assert "models" in data
         assert "recommended_backend" in data
 
+    def test_censor_models_nudenet_exposes_model_downloaded(self, test_client):
+        # The frontend warns before a cold NudeNet run (first detect downloads
+        # the ONNX weights, ~2 min). That warning keys off model_downloaded, so
+        # the field must always be present and boolean on the nudenet entry.
+        response = test_client.get("/api/censor/models")
+
+        assert response.status_code == 200
+        nudenet = next(
+            (model for model in response.json()["models"] if model.get("id") == "nudenet"),
+            None,
+        )
+        assert nudenet is not None
+        assert "model_downloaded" in nudenet
+        assert isinstance(nudenet["model_downloaded"], bool)
+
 
 class TestSimilarityRouterValidation:
     def test_embed_images_uses_background_tasks_instead_of_daemon_thread(self, monkeypatch):

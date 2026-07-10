@@ -61,6 +61,10 @@
     let queueStats = { at: 0, text: '', unsupported: false };
     let boxOwnedScalars = new Set();
     let boxOwnedNarrows = new Set();
+    // List values (tag:/-tag:/lora:/…) THIS box added to FilterStore, per
+    // field. Clearing the box (or deleting the token) removes exactly these;
+    // values added via the filter modal / sidebar are never touched.
+    let boxOwnedListValues = Object.create(null);
     let suggestTimer = null;
     let suggestAbort = null;
     let suggestState = { items: [], active: -1, ctx: null };
@@ -119,32 +123,43 @@
         const narrowsTouched = [];
 
         a.updateFilters((filters) => {
-            // List tokens ADD to the existing filters (removal happens via the
-            // sidebar summary ✕ / Clear all, same as modal-added values).
-            const addUnique = (values, field, label) => {
+            // List tokens are box-owned declaratively: values THIS box added
+            // follow the query text — dropping the token (or clearing the box)
+            // removes them again. Values added via the filter modal / sidebar
+            // chips are left alone, same as the scalar ownership below.
+            const syncList = (values, field, label) => {
                 // Filters restored from an older localStorage snapshot may
                 // predate newer list fields (e.g. colorHues) — heal in place.
                 if (!Array.isArray(filters[field])) filters[field] = [];
-                (values || []).forEach((value) => {
+                const parsedValues = new Set(values || []);
+                const owned = boxOwnedListValues[field] || (boxOwnedListValues[field] = new Set());
+                owned.forEach((value) => {
+                    if (parsedValues.has(value)) return;
+                    owned.delete(value);
+                    const index = filters[field].indexOf(value);
+                    if (index !== -1) filters[field].splice(index, 1);
+                });
+                parsedValues.forEach((value) => {
                     if (!filters[field].includes(value)) {
                         filters[field].push(value);
+                        owned.add(value);
                         added.push(`${label}:${value}`);
                     }
                 });
             };
-            addUnique(parsed.tags, 'tags', 'tag');
-            addUnique(parsed.excludeTags, 'excludeTags', '-tag');
-            addUnique(parsed.checkpoints, 'checkpoints', 'checkpoint');
-            addUnique(parsed.excludeCheckpoints, 'excludeCheckpoints', '-checkpoint');
-            addUnique(parsed.loras, 'loras', 'lora');
-            addUnique(parsed.excludeLoras, 'excludeLoras', '-lora');
-            addUnique(parsed.prompts, 'prompts', 'prompt');
-            addUnique(parsed.excludePrompts, 'excludePrompts', '-prompt');
-            addUnique(parsed.excludeGenerators, 'excludeGenerators', '-generator');
-            addUnique(parsed.excludeRatings, 'excludeRatings', '-rating');
-            addUnique(parsed.excludeColors, 'excludeColors', '-color');
-            addUnique(parsed.colorHues, 'colorHues', 'color');
-            addUnique(parsed.excludeColorHues, 'excludeColorHues', '-color');
+            syncList(parsed.tags, 'tags', 'tag');
+            syncList(parsed.excludeTags, 'excludeTags', '-tag');
+            syncList(parsed.checkpoints, 'checkpoints', 'checkpoint');
+            syncList(parsed.excludeCheckpoints, 'excludeCheckpoints', '-checkpoint');
+            syncList(parsed.loras, 'loras', 'lora');
+            syncList(parsed.excludeLoras, 'excludeLoras', '-lora');
+            syncList(parsed.prompts, 'prompts', 'prompt');
+            syncList(parsed.excludePrompts, 'excludePrompts', '-prompt');
+            syncList(parsed.excludeGenerators, 'excludeGenerators', '-generator');
+            syncList(parsed.excludeRatings, 'excludeRatings', '-rating');
+            syncList(parsed.excludeColors, 'excludeColors', '-color');
+            syncList(parsed.colorHues, 'colorHues', 'color');
+            syncList(parsed.excludeColorHues, 'excludeColorHues', '-color');
 
             // generator:/rating: NARROW their default-everything lists while the
             // token is present; removing the token restores the default set.

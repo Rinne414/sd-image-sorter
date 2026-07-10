@@ -1330,6 +1330,7 @@ function _resetBatchStatus(items = CensorState.queue) {
     items.forEach((item) => {
         delete item.batchStatus;
         delete item.batchError;
+        delete item.batchRegionCount;
     });
 }
 
@@ -1339,6 +1340,23 @@ function _summarizeBatchFailures(items = CensorState.queue) {
         failedCount: failed.length,
         firstFailedName: failed[0]?.outputFilename || failed[0]?.originalFilename || '',
     };
+}
+
+// How many items ran a detection that actually matched ≥1 region. A detector
+// that ran cleanly but found nothing (e.g. NudeNet on anime at a high
+// threshold) is NOT a failure, but it also is not a "processed" success —
+// runAutoCensorBatch reports it separately so the toast never claims work it
+// did not do.
+function _summarizeBatchDetections(items = CensorState.queue) {
+    let appliedCount = 0;
+    let emptyCount = 0;
+    items.forEach((item) => {
+        if (item.batchStatus === 'done') {
+            if (Number(item.batchRegionCount) > 0) appliedCount += 1;
+            else emptyCount += 1;
+        }
+    });
+    return { appliedCount, emptyCount };
 }
 
 async function processCensorBatchItems(handler, { pageSize = CENSOR_TOKEN_QUEUE_WINDOW_SIZE } = {}) {
@@ -3644,6 +3662,29 @@ function getSelectedTargetClassesForDetection(modelType) {
     return shouldUseQuickTargetFilters(modelType) ? [...CensorState.targetClasses] : null;
 }
 
+// One-time-per-session heads-up: when the run will use NudeNet but its ONNX
+// weights are not on disk yet, the first detect blocks for ~2 min while the
+// library downloads them. Tell the user so the spinner does not read as frozen.
+let _nudenetColdStartWarned = false;
+function maybeWarnNudenetColdStart(modelType) {
+    if (_nudenetColdStartWarned) return;
+    if (modelType !== 'nudenet' && modelType !== 'both') return;
+    const nudenet = (CensorState.backendModelStatus?.models || []).find((model) => model.id === 'nudenet');
+    // Only warn when we positively know the model is missing. `model_downloaded`
+    // is a newer field; if an older backend omits it, stay quiet rather than
+    // nag on every run.
+    if (!nudenet || nudenet.model_downloaded !== false) return;
+    _nudenetColdStartWarned = true;
+    window.App.showToast(
+        censorT(
+            'censor.nudenetFirstUseDownload',
+            null,
+            'First NudeNet run downloads its model (~2 min). It may look stuck — please wait.'
+        ),
+        'info'
+    );
+}
+
 async function resolveQuickAutoCensorExecutionPlan(options = {}) {
     const { silent = false } = options;
     const { showToast } = window.App;
@@ -4194,6 +4235,11 @@ async function runAutoCensorBatch() {
         return;
     }
 
+    // Cold-start heads-up: NudeNet downloads its ONNX weights on the first
+    // detect call (a ~2 min blocking fetch inside the library). Without this
+    // the batch just sits on the spinner and looks frozen.
+    maybeWarnNudenetColdStart(executionPlan.modelType);
+
     const tracker = window.App.createProgressTracker();
 
     _resetBatchStatus();
@@ -4222,6 +4268,7 @@ async function runAutoCensorBatch() {
     // mode, so a run where every detection threw no longer shows a green
     // "complete" toast. renderQueue() already red-outlines failed thumbs.
     const { failedCount } = _summarizeBatchFailures();
+    const { appliedCount, emptyCount } = _summarizeBatchDetections();
     if (failedCount > 0) {
         const okCount = Math.max(0, count - failedCount);
         showToast(
@@ -4231,6 +4278,27 @@ async function runAutoCensorBatch() {
                 `Auto-censor finished — ${okCount} done, ${failedCount} failed (of ${result.total}).`
             ),
             failedCount >= count ? 'error' : 'warning'
+        );
+    } else if (appliedCount === 0 && emptyCount > 0) {
+        // Every image ran cleanly but nothing was detected — never claim the
+        // batch was "processed". Point the user at the two knobs that fix it.
+        showToast(
+            censorT(
+                'censor.batchProcessingNoneDetected',
+                { total: emptyCount },
+                `Auto-censor ran on ${emptyCount} image(s) but found no regions. Try lowering the confidence threshold or switching the detection model.`
+            ),
+            'warning'
+        );
+    } else if (emptyCount > 0) {
+        // Mixed: some images censored, some had nothing to censor.
+        showToast(
+            censorT(
+                'censor.batchProcessingSomeEmpty',
+                { applied: appliedCount, empty: emptyCount },
+                `Auto-censor applied to ${appliedCount} image(s); ${emptyCount} had no detectable regions.`
+            ),
+            'success'
         );
     } else {
         showToast(
@@ -4348,6 +4416,10 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
             return;
         }
 
+        // Single-image runs resolve their own plan; batch runs warn once up
+        // front. The latch inside makes a double call harmless.
+        if (!silent) maybeWarnNudenetColdStart(plan.modelType);
+
         const detectBody = {
             image_id: item.id,
             model_path: plan.modelPath,
@@ -4392,8 +4464,12 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
         const bakeResult = await applyDetectedRegionsToItem(item, regions, data);
         reloadedActiveItem = bakeResult.reloadedActiveItem;
         // Detection + bake succeeded (0 regions is a valid result, not a
-        // failure). Record it so a batch summary can report ok vs failed.
-        if (silent) item.batchStatus = 'done';
+        // failure). Record it — plus the region count — so a batch summary can
+        // report applied vs. found-nothing vs. failed.
+        if (silent) {
+            item.batchStatus = 'done';
+            item.batchRegionCount = regions.length;
+        }
 
         if (!silent && item.id === CensorState.activeId) {
             if (!reloadedActiveItem) {

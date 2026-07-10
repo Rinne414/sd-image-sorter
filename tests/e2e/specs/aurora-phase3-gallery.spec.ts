@@ -186,25 +186,21 @@ test.describe('Aurora Phase 3 — gallery toolbar', () => {
       })
     }).toEqual({ hasTag: true, hasCheckpoint: true, seed: 42, search: 'loose words' })
 
-    // Clearing the box clears only the box-owned (declarative) fields.
+    // Clearing the box removes every field the box wrote — scalars AND the
+    // list values it added (tag/checkpoint). An abandoned token must not keep
+    // filtering the gallery (QA sweep P2-1, 2026-07-10).
     await page.locator('#gallery-search-clear').click()
     await expect.poll(async () => {
       return await page.evaluate(() => {
         const filters = (window as any).App.AppState.filters
-        return { seed: filters.seed, search: filters.search, hasTag: filters.tags.includes('1girl') }
+        return {
+          seed: filters.seed,
+          search: filters.search,
+          hasTag: filters.tags.includes('1girl'),
+          hasCheckpoint: filters.checkpoints.includes('my model'),
+        }
       })
-    }).toEqual({ seed: null, search: '', hasTag: true })
-
-    // Cleanup for later tests: drop the structured tokens too.
-    await page.evaluate(async () => {
-      const app = (window as any).App
-      app.updateFilters((filters: any) => {
-        filters.tags = []
-        filters.checkpoints = []
-      })
-      app.updateFilterSummary()
-      await app.loadImages()
-    })
+    }).toEqual({ seed: null, search: '', hasTag: false, hasCheckpoint: false })
   })
 
   test('quick chips toggle their filter fields with pressed state', async ({ page }) => {
