@@ -464,8 +464,11 @@ def test_dataset_maker_guards_session_preview_and_heavy_audit_ux():
     assert "list.classList.contains('is-virtualized')" in part2
     assert "document.elementFromPoint" in onboarding
     assert "navTarget.click()" in onboarding
-    assert "window.AppState.currentView !== 'gallery'" in onboarding
-    assert "activeView.id !== 'view-gallery'" in onboarding
+    # QA P3-4: the tour's auto-start (and its view guards) is formally retired;
+    # the tour must only be reachable programmatically via the guide's 🎓 Tour.
+    assert "AUTO_START_ENABLED" not in onboarding
+    assert "markHasSeenImages" not in onboarding
+    assert "cleanupResidualTourUi();" in onboarding
 
 
 def test_dataset_new_i18n_keys_are_translated():

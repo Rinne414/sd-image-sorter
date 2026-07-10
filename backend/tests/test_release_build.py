@@ -1139,7 +1139,10 @@ def test_playwright_ci_inputs_are_tracked_or_generated():
     assert "REVIEW_DATASET_BUILDER" in run_ci
     assert "build_review_dataset.py" in run_ci
     assert "storage/onboarding-complete.json" not in config
-    assert "onboardingStorageState" in config
+    # QA P3-4 renamed the seeded state: only the entry-skip flag remains
+    # (the tour's auto-start is retired, so its completion flag is not seeded).
+    assert "suiteStorageState" in config
+    assert "sd-image-sorter-onboarding-completed" not in config
     assert "scripts/build_review_dataset.py" in reader_live
 
 

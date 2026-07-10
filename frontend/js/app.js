@@ -9513,9 +9513,6 @@ async function loadImages(appendMode = false, options = {}) {
                 _applyGalleryEmptyStateVariant(emptyState);
             }
         }
-        if (AppState.images.length > 0 && window.OnboardingTour) {
-            OnboardingTour.markHasSeenImages();
-        }
     } catch (error) {
         if (error.name === 'AbortError' || error.cancelled) {
             return;

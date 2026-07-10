@@ -286,6 +286,71 @@ function appendCensorQueueImages(images = [], { tokenSource = null } = {}) {
     return nextItems;
 }
 
+// ---------------------------------------------------------------------------
+// Queue persistence (QA P3-11): the sort session survives a reload, but the
+// censor queue used to vanish on F5. Persist the queue COMPOSITION (ids,
+// order, output names) in localStorage and restore it on init. Canvas edits
+// and processing state deliberately do NOT survive: an item must never LOOK
+// censored without its pixels (never-fallback-to-uncensored invariant), so
+// restored items always come back as unprocessed.
+// ---------------------------------------------------------------------------
+
+const CENSOR_QUEUE_STORE_KEY = 'censor-queue-v1';
+const CENSOR_QUEUE_STORE_LIMIT = 500;
+
+function persistCensorQueue() {
+    try {
+        const items = CensorState.queue
+            .filter((item) => Number.isFinite(Number(item?.id)) && Number(item.id) > 0 && item.originalFilename)
+            .slice(0, CENSOR_QUEUE_STORE_LIMIT)
+            .map((item) => ({
+                id: Number(item.id),
+                originalFilename: String(item.originalFilename),
+                outputFilename: String(item.outputFilename || item.originalFilename),
+                width: Number(item.width || 0),
+                height: Number(item.height || 0),
+            }));
+        if (!items.length) {
+            localStorage.removeItem(CENSOR_QUEUE_STORE_KEY);
+            return;
+        }
+        localStorage.setItem(CENSOR_QUEUE_STORE_KEY, JSON.stringify({ version: 1, items }));
+    } catch (_) {
+        // Persistence is best-effort; a full/blocked localStorage must never
+        // break the censor workspace itself.
+    }
+}
+
+function restoreCensorQueueFromStorage() {
+    // One attempt per page load: a queue the user emptied later in the session
+    // must not resurrect on the next view switch.
+    if (CensorState._queueRestoreDone) return 0;
+    CensorState._queueRestoreDone = true;
+    if (CensorState.queue.length > 0 || hasTokenQueueSource()) return 0;
+
+    let payload = null;
+    try {
+        payload = JSON.parse(localStorage.getItem(CENSOR_QUEUE_STORE_KEY) || 'null');
+    } catch (_) {
+        return 0;
+    }
+    const saved = Array.isArray(payload?.items) ? payload.items : [];
+    if (!saved.length) return 0;
+
+    const restored = appendCensorQueueImages(saved.map((item) => ({
+        id: item.id,
+        filename: item.originalFilename,
+        width: item.width,
+        height: item.height,
+    })));
+    const savedById = new Map(saved.map((item) => [Number(item.id), item]));
+    restored.forEach((item) => {
+        const stored = savedById.get(Number(item.id));
+        if (stored?.outputFilename) item.outputFilename = String(stored.outputFilename);
+    });
+    return restored.length;
+}
+
 async function fetchTokenQueueDataPage(offset = 0, limit = CENSOR_TOKEN_QUEUE_WINDOW_SIZE) {
     const source = CensorState.tokenQueueSource;
     const loader = window.App?.loadSelectionDataByToken;
@@ -722,6 +787,18 @@ function initCensorEdit() {
         initPanControls();
         censorEventsInitialized = true;
     }
+
+    // QA P3-11: bring back the previous session's queue (composition only —
+    // edits and processing state intentionally reset, see persistCensorQueue).
+    const restoredCount = restoreCensorQueueFromStorage();
+    if (restoredCount > 0) {
+        renderQueue();
+        window.App?.showToast?.(
+            censorT('censor.queueRestored', { count: restoredCount }, 'Restored your last censor queue ({count} images). Canvas edits and processing state do not survive a reload.'),
+            'info'
+        );
+    }
+
     updateUndoRedoButtons();
 }
 
@@ -1417,6 +1494,10 @@ async function processCensorBatchItems(handler, { pageSize = CENSOR_TOKEN_QUEUE_
 }
 
 function renderQueue() {
+    // Every queue mutation funnels through a re-render, so this is the single
+    // chokepoint that keeps the persisted copy in sync (QA P3-11).
+    persistCensorQueue();
+
     const list = document.getElementById('censor-queue-list');
     if (!list) return;
 

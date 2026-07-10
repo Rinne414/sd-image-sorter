@@ -8,8 +8,6 @@ const OnboardingTour = (function() {
 
     const STORAGE_KEY = 'sd-image-sorter-onboarding-completed';
     const DISMISSED_KEY = 'sd-image-sorter-onboarding-dismissed-version';
-    const AUTO_START_ENABLED = false;
-    const FIRST_RUN_CHECK_KEY = 'sd-image-sorter-has-seen-images';
 
     // Current tour version - increment when adding new features
     // v3 (v3.4.3): navigation step reflects direct advanced tabs with More fallback.
@@ -576,40 +574,17 @@ const OnboardingTour = (function() {
     }
 
     /**
-     * Initialize - auto-start tour for first-time users.
-     * Tour is also available via OnboardingTour.start() programmatically.
+     * Initialize — clean up any residual tour UI from a previous session.
+     *
+     * QA P3-4 (2026-07-11): the auto-start path is formally retired. It had
+     * been dead for a while (the auto-start flag shipped disabled, and the
+     * Aurora entry overlay covers the gallery on first run anyway); first-run
+     * guidance is carried by the empty-state cards and the ❓ context guide.
+     * The tour itself stays available via the guide modal's 🎓 Tour button
+     * (OnboardingTour.start()).
      */
     function init() {
         cleanupResidualTourUi();
-
-        // Auto-start only on true first-run: user has never loaded images
-        // and hasn't completed or dismissed the tour before. Re-check the
-        // active view after the startup delay so the tour does not cover a
-        // user who already jumped into a focused workflow such as Dataset
-        // Maker.
-        if (AUTO_START_ENABLED && !isCompleted() && !wasDismissed()) {
-            const hasSeen = localStorage.getItem(FIRST_RUN_CHECK_KEY);
-            if (!hasSeen) {
-                setTimeout(() => {
-                    if (window.AppState?.currentView && window.AppState.currentView !== 'gallery') return;
-                    const activeView = document.querySelector('.view.active');
-                    if (activeView && activeView.id && activeView.id !== 'view-gallery') return;
-                    start();
-                    // Safety: force-clean after 90s in case user is stuck
-                    setTimeout(() => {
-                        if (isActive) {
-                            skip();
-                            cleanupResidualTourUi();
-                        }
-                    }, 90000);
-                }, 800);
-            }
-        }
-    }
-
-    /** Mark that the user has loaded images at least once (called by app after gallery loads). */
-    function markHasSeenImages() {
-        localStorage.setItem(FIRST_RUN_CHECK_KEY, '1');
     }
 
     // Public API
@@ -620,8 +595,7 @@ const OnboardingTour = (function() {
         complete,
         resetState,
         isCompleted,
-        wasDismissed,
-        markHasSeenImages
+        wasDismissed
     };
 })();
 
