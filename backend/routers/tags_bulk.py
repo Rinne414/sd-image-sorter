@@ -15,6 +15,7 @@ All operations support dry-run preview before commit.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from typing import Any, Dict, Iterator, List, Optional
 
@@ -183,6 +184,10 @@ class FindReplaceRequest(BulkTagScopeRequest):
     find: str
     replace: str
     case_sensitive: bool = False
+    # QW-3: opt-in regex mode. ``find`` becomes a whole-tag fullmatch
+    # pattern; ``replace`` may use backrefs (\\1). Literal whole-tag
+    # equality stays the safe default.
+    regex: bool = False
     dry_run: bool = False
 
 
@@ -452,11 +457,21 @@ def _do_find_replace(request: FindReplaceRequest) -> Dict[str, Any]:
     if not find:
         raise HTTPException(400, "find string cannot be empty")
 
-    if request.case_sensitive:
+    if request.regex:
+        try:
+            flags = 0 if request.case_sensitive else re.IGNORECASE
+            pattern = re.compile(find, flags)
+        except re.error as exc:
+            raise HTTPException(400, f"Invalid regex: {exc}")
+        match_fn = lambda tag: pattern.fullmatch(tag) is not None
+        replacement_fn = (lambda tag: pattern.sub(replace, tag)) if replace else None
+    elif request.case_sensitive:
         match_fn = lambda tag: tag == find
+        replacement_fn = (lambda tag: replace) if replace else None
     else:
         find_lower = find.lower()
         match_fn = lambda tag: tag.lower() == find_lower
+        replacement_fn = (lambda tag: replace) if replace else None
 
     total_estimate = _estimate_scope_total(request)
     total_checked = 0
@@ -482,12 +497,13 @@ def _do_find_replace(request: FindReplaceRequest) -> Dict[str, Any]:
                         if match_fn(tag_str):
                             affected_tags += 1
                             modified = True
-                            if replace:  # replace with new tag
+                            new_value = replacement_fn(tag_str).strip() if replacement_fn else ""
+                            if new_value:  # replace with new tag
                                 # A user-initiated rename produces a
                                 # user-owned row; the old category no
                                 # longer applies to the new name.
                                 new_tags.append({
-                                    "tag": replace,
+                                    "tag": new_value,
                                     "confidence": float(t.get("confidence") or 1.0),
                                     "source": "manual",
                                     "category": None,
@@ -524,7 +540,10 @@ def _do_find_replace(request: FindReplaceRequest) -> Dict[str, Any]:
         _end_op()
 
     op_id, undo_available = _record_journal_if_applied(
-        request, "find_replace", {"find": find, "replace": replace}, journal
+        request,
+        "find_replace",
+        {"find": find, "replace": replace, "regex": bool(request.regex)},
+        journal,
     )
 
     return {

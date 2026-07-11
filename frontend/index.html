@@ -4140,6 +4140,44 @@
                                 </div>
                             </details>
 
+                            <!-- Section B1.5: Separation Console (SEP-1) — per-tag keep/prune
+                                 decisions across the whole set. Rows are rendered by
+                                 modules/separation-console.js -->
+                            <details class="dataset-card dataset-card-details" id="dataset-separation-console">
+                                <summary class="dataset-card-title">
+                                    <span aria-hidden="true">🧬</span>
+                                    <span data-i18n="dataset.separationConsoleTitle">Separation Console</span>
+                                </summary>
+                                <p class="helper-text" data-i18n="dataset.separationConsoleHelp">Every tag across the queue: keep it promptable, or prune it so the trigger word absorbs it. Frequency is the evidence.</p>
+                                <div class="sepcon-toolbar">
+                                    <span id="sepcon-stats" class="sepcon-stats"></span>
+                                    <button type="button" class="btn btn-ghost btn-small" id="sepcon-next-unseen" data-i18n="dataset.sepconNextUnseen">⏭ Next unreviewed</button>
+                                </div>
+                                <div class="sepcon-controls">
+                                    <input type="text" id="sepcon-search" class="form-input" placeholder="filter tags..." data-i18n-placeholder="dataset.sepconSearch" autocomplete="off">
+                                    <select id="sepcon-sort" class="input-field">
+                                        <option value="freq" data-i18n="dataset.sepconSortFreq">By frequency</option>
+                                        <option value="alpha" data-i18n="dataset.sepconSortAlpha">A→Z</option>
+                                        <option value="category" data-i18n="dataset.sepconSortCategory">By category</option>
+                                    </select>
+                                </div>
+                                <div id="sepcon-leaks" class="sepcon-leaks" hidden></div>
+                                <div id="sepcon-rows" class="sepcon-rows"></div>
+                                <p id="sepcon-overflow" class="helper-text" hidden></p>
+                                <div class="sepcon-health">
+                                    <div class="sepcon-health-bar">
+                                        <select id="sepcon-purpose" class="input-field">
+                                            <option value="character" data-i18n="dataset.sepconPurposeCharacter">Character LoRA</option>
+                                            <option value="style" data-i18n="dataset.sepconPurposeStyle">Style LoRA</option>
+                                            <option value="concept" data-i18n="dataset.sepconPurposeConcept">Concept LoRA</option>
+                                            <option value="general" data-i18n="dataset.sepconPurposeGeneral">General</option>
+                                        </select>
+                                        <button type="button" class="btn btn-secondary btn-small" id="sepcon-health-run" data-i18n="dataset.sepconHealthRun">🩺 Health check</button>
+                                    </div>
+                                    <div id="sepcon-health-results" class="sepcon-health-results" hidden></div>
+                                </div>
+                            </details>
+
                             <!-- Section B2: Batch Find/Replace -->
                             <details class="dataset-card dataset-card-details" id="dataset-step-findreplace">
                                 <summary class="dataset-card-title">
@@ -6874,6 +6912,7 @@
     <script src="/static/js/modules/nav-missions.js"></script>
     <script src="/static/js/modules/entry-catalog.js"></script>
     <script src="/static/js/modules/trait-pruner.js"></script>
+    <script src="/static/js/modules/separation-console.js"></script>
     <script>
     /* Sorting sub-tab toggle (Auto-Separate / Manual Sort) */
     window._switchSortingSub = function(sub) {
@@ -7394,6 +7433,7 @@
                 </div>
                 <div class="form-group">
                     <label><input type="checkbox" id="mass-tag-find-replace-case"> <span data-i18n="massTag.caseSensitive">Case sensitive</span></label>
+                    <label><input type="checkbox" id="mass-tag-find-replace-regex"> <span data-i18n="massTag.regexMode">Regex (whole-tag match, \1 backrefs)</span></label>
                 </div>
             </section>
 

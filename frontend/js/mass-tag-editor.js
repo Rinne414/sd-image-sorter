@@ -294,6 +294,7 @@
                 find: document.getElementById("mass-tag-find")?.value || "",
                 replace: document.getElementById("mass-tag-replace")?.value || "",
                 case_sensitive: !!document.getElementById("mass-tag-find-replace-case")?.checked,
+                regex: !!document.getElementById("mass-tag-find-replace-regex")?.checked,
                 dry_run: !!dryRun,
             };
         },

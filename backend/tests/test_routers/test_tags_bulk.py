@@ -479,3 +479,44 @@ def test_bulk_dry_run_is_not_journaled(test_client, tmp_path):
 
     after_ops = test_client.get("/api/tags/bulk/ops").json()["ops"]
     assert len(after_ops) == len(before_ops)
+
+
+def test_find_replace_regex_mode(test_client, tmp_path):
+    """QW-3: opt-in regex uses whole-tag fullmatch + backref replacement."""
+    import database as db
+
+    image_path = tmp_path / "regex-fr.png"
+    image_path.write_bytes(b"not a real image")
+    image_id = db.add_image(path=str(image_path), filename=image_path.name)
+    db.add_tags(image_id, [
+        {"tag": "hair_ribbon", "confidence": 0.9},
+        {"tag": "hair_bow", "confidence": 0.9},
+        {"tag": "crosshair_ribbon", "confidence": 0.9},  # fullmatch must NOT hit this
+        {"tag": "1girl", "confidence": 0.9},
+    ])
+
+    response = test_client.post("/api/tags/bulk/find-replace", json={
+        "image_ids": [image_id],
+        "find": r"hair_(ribbon|bow)",
+        "replace": r"hair_accessory_\1",
+        "regex": True,
+        "dry_run": False,
+    })
+    assert response.status_code == 200
+    assert response.json()["affected_tags"] == 2
+
+    tags = {row["tag"] for row in db.get_image_tags(image_id)}
+    assert "hair_accessory_ribbon" in tags
+    assert "hair_accessory_bow" in tags
+    assert "crosshair_ribbon" in tags  # untouched: fullmatch semantics
+    assert "hair_ribbon" not in tags
+
+    # Invalid pattern is a 400, not a 500.
+    bad = test_client.post("/api/tags/bulk/find-replace", json={
+        "image_ids": [image_id],
+        "find": "(unclosed",
+        "replace": "",
+        "regex": True,
+        "dry_run": True,
+    })
+    assert bad.status_code == 400

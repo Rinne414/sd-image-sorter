@@ -613,6 +613,10 @@ Export an ordered publish set with sequential platform-style names (v3.5.0). Bod
 #### GET /api/tags/suggest
 Type-ahead tag suggestions for autocomplete inputs (v3.5.0). Query params: `q=<partial token>`, `limit=<1..50, default 20>`. Merges the user's library tags (frequency-ranked, `source: "library"`) with the bundled danbooru vocabulary `backend/assets/danbooru_tags.csv` (popularity-ranked, alias-aware, `source: "danbooru"`). Each suggestion carries a 14-category `category` (same palette as Dataset Maker tag pills) and an optional `zh` display string. CJK queries fuzzy-match Chinese aliases when the optional `danbooru_zh.csv` drop-in is present (see `backend/assets/README.md`). Returns `{ "suggestions": [{ "tag", "count", "source", "category", "zh" }], "danbooru_loaded", "zh_loaded" }`. Empty `q` returns the library's most frequent tags.
 
+#### POST /api/tags/consistency/report
+
+Pre-training dataset health check (v3.5.x BE-5'). Body: `{image_ids|selection_token, trigger, training_purpose}`. Runs the checks an experienced LoRA trainer performs by eye and returns `{images, findings, tag_frequencies, shot_distribution}`. Each finding carries `severity`, bilingual `title/detail` (symptom → cause → fix guidance), optional `fix` (a ready-made payload for an existing bulk endpoint — never applied server-side) and `data`. Checks: trigger coverage + danbooru-collision (N5), full-body composition balance (N4), duplicate/missing rating rows, single-occurrence junk tags, multi-spelling variants, always-co-occurring tag pairs. Read-only; capped at 20k images.
+
 #### POST /api/tags/trait-candidates
 Compute character-trait pruning candidates (P1-17, v3.5.0). Body: `{ "image_ids": [..] }` or `{ "selection_token": "..." }` (exactly one), optional `min_ratio` (0.05–1.0, default 0.6) and `limit` (1–200, default 60). Returns `{ "total_images", "candidates": [{ "tag", "family", "count", "ratio" }] }` — innate-trait tags (hair / eyes / skin / body families, general-category rows only) present in at least `min_ratio` of the selected images, ranked by frequency. The export UI surfaces these as a reviewable checklist whose picks feed the ordinary export blacklist; nothing is removed silently.
 
@@ -1267,7 +1271,7 @@ Added in v3.2.1. Tag-Master-inspired bulk operations on the DB tags table. Every
 Report bulk-operation backend state (cancellable in-flight job, last completion summary, capability flags). Useful for the mass tag editor UI to gate destructive actions.
 
 #### POST /api/tags/bulk/find-replace
-Rename a tag across N images. Body: `{find, replace, scope, dry_run}`. Empty `replace` removes the tag. Returns `{affected_images, samples, committed}`.
+Rename a tag across N images. Body: `{find, replace, scope, case_sensitive, regex, dry_run}`. Empty `replace` removes the tag. `regex: true` (QW-3, opt-in) treats `find` as a whole-tag fullmatch pattern and lets `replace` use backrefs (`\1`); invalid patterns return 400. Applied runs are journaled for undo and return `op_id`/`undo_available`.
 
 #### POST /api/tags/bulk/add
 Append tags to a selection. Body: `{image_ids|filter, tags: [{tag, confidence}], dedupe, dry_run}`. Existing tags are kept; the new confidence wins only when explicitly requested.

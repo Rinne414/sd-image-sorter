@@ -6,7 +6,7 @@ Refactored to use Service Layer pattern with dependency injection.
 """
 from typing import Optional, Dict, Any, Callable
 
-from fastapi import APIRouter, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import FileResponse
 
 from services.service_provider import ServiceProvider
@@ -25,6 +25,7 @@ from services.tagging_pipeline_service import (
 )
 from services.tag_export_service import combined_export_path
 from services.trait_pruning_service import TraitCandidatesRequest
+from services.dataset_consistency_service import ConsistencyReportRequest
 
 
 router = APIRouter(prefix="/api", tags=["tags"])
@@ -206,6 +207,18 @@ def suggest_tags(
     from services import tag_suggest_service
 
     return tag_suggest_service.suggest(q=q, limit=limit)
+
+
+@router.post("/tags/consistency/report")
+async def consistency_report(request: ConsistencyReportRequest):
+    """Pre-training dataset health check (BE-5'): trigger hygiene, composition
+    balance, tag-set consistency. Read-only — findings carry ready-made bulk
+    payloads instead of mutating anything here."""
+    from services.dataset_consistency_service import build_consistency_report
+
+    if not request.image_ids and not request.selection_token:
+        raise HTTPException(400, "Provide image_ids or selection_token")
+    return build_consistency_report(request)
 
 
 @router.post(
