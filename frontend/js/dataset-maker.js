@@ -97,21 +97,39 @@
         },
 
         _saveSession() {
+            // DUR-1: localStorage, not sessionStorage. Caption edits are
+            // hours of work — they must survive tab close, browser crash,
+            // and the navbar 🔄 hard refresh (which clears sessionStorage).
+            // Key name and payload format are FROZEN (restore-compat).
+            const payload = JSON.stringify({
+                imageIds: this.imageIds,
+                captionEdits: Object.fromEntries(this.captionEdits),
+                nlEdits: Object.fromEntries(this.nlEdits),
+                captionType: Object.fromEntries(this.captionType),
+                activeId: this.activeId,
+                local: this._serializeLocalDatasetState?.() || null,
+            });
             try {
-                sessionStorage.setItem('sd-image-sorter-dataset-session', JSON.stringify({
-                    imageIds: this.imageIds,
-                    captionEdits: Object.fromEntries(this.captionEdits),
-                    nlEdits: Object.fromEntries(this.nlEdits),
-                    captionType: Object.fromEntries(this.captionType),
-                    activeId: this.activeId,
-                    local: this._serializeLocalDatasetState?.() || null,
-                }));
+                localStorage.setItem('sd-image-sorter-dataset-session', payload);
+                return;
+            } catch {
+                // Quota exceeded or storage unavailable — degrade to the
+                // old per-tab storage rather than silently losing edits.
+            }
+            try {
+                sessionStorage.setItem('sd-image-sorter-dataset-session', payload);
             } catch {}
         },
 
         _restoreSession() {
             try {
-                const saved = sessionStorage.getItem('sd-image-sorter-dataset-session');
+                // DUR-1: durable draft first; legacy per-tab draft second so
+                // a session written by a pre-DUR-1 build still restores once.
+                let saved = null;
+                try { saved = localStorage.getItem('sd-image-sorter-dataset-session'); } catch {}
+                if (!saved) {
+                    try { saved = sessionStorage.getItem('sd-image-sorter-dataset-session'); } catch {}
+                }
                 if (!saved) return false;
                 const s = JSON.parse(saved);
                 if (!s || !Array.isArray(s.imageIds) || s.imageIds.length === 0) return false;
@@ -211,7 +229,7 @@
             // Additionally, only prompt when there are UNSAVED edits
             // (``captionEdits.size > 0``). Just having images queued is
             // not a strong enough signal to nag every refresh; queue
-            // contents are persisted to sessionStorage and survive
+            // contents are persisted to localStorage (DUR-1) and survive
             // reload, but in-progress caption edits beyond what is
             // already saved would still be jarring to lose mid-typing.
             window.addEventListener('beforeunload', (e) => {
@@ -733,7 +751,8 @@
                 this._queueSelection.clear();
                 this.activeId = null;
                 this._clearLocalDatasetState?.();
-                sessionStorage.removeItem('sd-image-sorter-dataset-session');
+                try { localStorage.removeItem('sd-image-sorter-dataset-session'); } catch {}
+                try { sessionStorage.removeItem('sd-image-sorter-dataset-session'); } catch {}
                 this._saveSession();
                 this._renderQueue();
                 this._renderImportGallery?.();

@@ -377,6 +377,7 @@ PROMPT_PRESETS: Dict[str, str] = {
 # shares it — re-exported here because callers across the codebase import
 # these names from this module.
 from services.tag_training_filters import (  # noqa: E402
+    format_trait_suppression_block,  # noqa: F401 — SEP-2 prompt suppression
     TRAINING_PURPOSE_ALIASES,  # noqa: F401 — re-exported for existing importers
     normalize_training_purpose,  # noqa: F401 — re-exported for existing importers
 )
@@ -455,12 +456,18 @@ def build_vlm_prompt(
     wd14_tags: List[str],
     *,
     include_tags: bool = True,
+    suppressed_traits: Optional[List[str]] = None,
 ) -> str:
     """Render the per-image VLM prompt for the given training purpose.
 
     The WD14 tag list is filtered for noise BEFORE being substituted into
     the template so the VLM never sees ``masterpiece, score_9, anime`` and
     parrots them back into the natural-language sentences.
+
+    SEP-2: ``suppressed_traits`` (the dataset's pruned intrinsic features)
+    appends a "never mention these" block — the generic preset wording can
+    say "no hair color", but only the caller knows THIS character's tail /
+    heterochromia / signature accessory.
     """
     canonical = normalize_training_purpose(training_purpose)
     template = PROMPT_PRESETS.get(canonical) or PROMPT_PRESETS["general"]
@@ -468,7 +475,11 @@ def build_vlm_prompt(
         cleaned, _stripped = filter_noise_tags(wd14_tags)
     else:
         cleaned = []
-    return template.replace("{tags}", ", ".join(cleaned))
+    prompt = template.replace("{tags}", ", ".join(cleaned))
+    suppression = format_trait_suppression_block(suppressed_traits)
+    if suppression:
+        prompt = f"{prompt}\n\n{suppression}"
+    return prompt
 
 
 def filter_tags_by_training_purpose(
@@ -797,6 +808,11 @@ class SmartTagRequest:
     toriigate_max_new_tokens: int = 0
     vlm_grounding: bool = True
     toriigate_grounding: bool = True
+    # SEP-2: dataset-specific intrinsic-trait list (the user's pruned traits).
+    # Injected into the VLM prompt as a "never mention these" block so prose
+    # captions cannot re-introduce features the tag blacklist absorbed into
+    # the trigger word.
+    suppressed_traits: List[str] = field(default_factory=list)
 
 
 def _coerce_dataset_scan_token(payload: Dict[str, Any]) -> Optional[str]:
@@ -1099,6 +1115,11 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
         ),
         vlm_grounding=bool(payload.get("vlm_grounding", True)),
         toriigate_grounding=bool(payload.get("toriigate_grounding", True)),
+        suppressed_traits=[
+            str(trait).strip()
+            for trait in (payload.get("suppressed_traits") or [])
+            if str(trait or "").strip()
+        ][:500],
     )
 
 
@@ -1709,6 +1730,7 @@ def _process_one_image(
             req.training_purpose,
             vlm_context_tags,
             include_tags=include_tags_as_context,
+            suppressed_traits=req.suppressed_traits,
         )
         try:
             import asyncio
@@ -2112,6 +2134,12 @@ def _build_caption_phase(req: "SmartTagRequest", vlm_provider, nl_tagger) -> "_C
             PROMPT_PRESETS.get(normalize_training_purpose(req.training_purpose))
             or PROMPT_PRESETS["general"]
         )
+        # SEP-2: same suppression block as build_vlm_prompt — appended before
+        # the per-image {tags} substitution, so both pipelines emit identical
+        # prompts for identical inputs (parity pinned by the windowed test).
+        suppression = format_trait_suppression_block(req.suppressed_traits)
+        if suppression:
+            template = f"{template}\n\n{suppression}"
         config.user_prompt = template
         config.user_prompt_with_tags = template
         # Smart Tag's VLM role is prose only (booru tags come from the local

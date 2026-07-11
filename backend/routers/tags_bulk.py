@@ -22,7 +22,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
 import database as db
-from db_tags import _dedupe_tags
+from db_tags import _dedupe_tag_rows
 from services.tag_export_service import (
     PROMPT_MATCH_MODE_CONTAINS,
     PROMPT_MATCH_MODE_EXACT,
@@ -249,6 +249,34 @@ async def get_state():
         return dict(_op_state)
 
 
+class BulkUndoRequest(BaseModel):
+    force: bool = False
+
+
+@router.get("/ops")
+async def list_bulk_ops(limit: int = 20):
+    """List recent applied bulk ops with undo availability (FE-2s journal)."""
+    from services import tag_bulk_journal
+
+    return {"ops": tag_bulk_journal.list_ops(limit=max(1, min(int(limit), 100)))}
+
+
+@router.post("/undo/{op_id}")
+def undo_bulk_op(op_id: str, request: BulkUndoRequest):
+    """Undo one journaled bulk op. Conflicted images are skipped unless force."""
+    from services import tag_bulk_journal
+
+    def _do_undo(req: BulkUndoRequest):
+        try:
+            return tag_bulk_journal.undo_op(op_id, force=req.force)
+        except KeyError:
+            raise HTTPException(404, "Unknown bulk operation id")
+        except ValueError as exc:
+            raise HTTPException(409, str(exc))
+
+    return _run_exclusive("bulk_undo", _do_undo, request)
+
+
 # ====================================================================
 # Scope helpers
 # ====================================================================
@@ -351,6 +379,51 @@ def _scope_source(request: BulkTagScopeRequest) -> str:
     return "filters"
 
 
+def _preserve_row(t: Dict[str, Any]) -> Dict[str, Any]:
+    """Rebuild a tag row for re-commit, carrying provenance columns.
+
+    Bulk ops rewrite the FULL tag list of an image via
+    add_tags(replace_scope="all"); dropping source/category here would
+    wipe migration-024 provenance and let the next pipeline re-tag
+    delete formerly-manual rows.
+    """
+    return {
+        "tag": str(t.get("tag") or ""),
+        "confidence": float(t.get("confidence") or 1.0),
+        "source": t.get("source"),
+        "category": t.get("category"),
+    }
+
+
+def _row_from_tuple(row) -> Dict[str, Any]:
+    """(tag, confidence, source, category) from _dedupe_tag_rows -> row dict."""
+    tag, confidence, source, category = row
+    return {"tag": tag, "confidence": confidence, "source": source, "category": category}
+
+
+def _record_journal_if_applied(request, operation: str, params: Dict[str, Any], journal: List[Dict[str, Any]]):
+    """Journal an applied op for undo (FE-2s). Returns (op_id, undo_available).
+
+    Journal failure must not fail the (already committed) op — degrade to
+    "no undo for this run" and log why.
+    """
+    if request.dry_run or not journal:
+        return None, False
+    try:
+        from services import tag_bulk_journal
+
+        op_id, truncated = tag_bulk_journal.record_op(
+            operation=operation,
+            scope_source=_scope_source(request),
+            params=params,
+            entries=journal,
+        )
+        return op_id, not truncated
+    except Exception as exc:
+        logger.warning("bulk undo journal record failed: %s", exc)
+        return None, False
+
+
 def _commit_tag_updates(updates: List[Dict[str, Any]]) -> None:
     if not updates:
         return
@@ -390,6 +463,7 @@ def _do_find_replace(request: FindReplaceRequest) -> Dict[str, Any]:
     affected_images = 0
     affected_tags = 0
     sample_changes: List[Dict[str, Any]] = []
+    journal: List[Dict[str, Any]] = []
 
     _begin_op("find_replace", total_estimate)
     try:
@@ -409,10 +483,18 @@ def _do_find_replace(request: FindReplaceRequest) -> Dict[str, Any]:
                             affected_tags += 1
                             modified = True
                             if replace:  # replace with new tag
-                                new_tags.append({"tag": replace, "confidence": float(t.get("confidence") or 1.0)})
+                                # A user-initiated rename produces a
+                                # user-owned row; the old category no
+                                # longer applies to the new name.
+                                new_tags.append({
+                                    "tag": replace,
+                                    "confidence": float(t.get("confidence") or 1.0),
+                                    "source": "manual",
+                                    "category": None,
+                                })
                             # else: drop the tag (replace="" means remove)
                         else:
-                            new_tags.append({"tag": tag_str, "confidence": float(t.get("confidence") or 1.0)})
+                            new_tags.append(_preserve_row(t))
 
                     if modified:
                         affected_images += 1
@@ -424,9 +506,11 @@ def _do_find_replace(request: FindReplaceRequest) -> Dict[str, Any]:
                             })
                         if not request.dry_run:
                             # Dedupe by tag name (case-insensitive) using unified logic
-                            tag_tuples = [(t["tag"], t["confidence"]) for t in new_tags]
-                            deduped_tuples = _dedupe_tags(tag_tuples)
-                            deduped = [{"tag": tag, "confidence": conf} for tag, conf in deduped_tuples]
+                            deduped = [
+                                _row_from_tuple(row)
+                                for row in _dedupe_tag_rows(new_tags, None)
+                            ]
+                            journal.append({"image_id": image_id, "before": existing, "after": deduped})
                             updates.append({"image_id": image_id, "tags": deduped})
                 except Exception as exc:  # pragma: no cover — defensive
                     logger.warning("find_replace failed for image %s: %s", image_id, exc)
@@ -439,6 +523,10 @@ def _do_find_replace(request: FindReplaceRequest) -> Dict[str, Any]:
     finally:
         _end_op()
 
+    op_id, undo_available = _record_journal_if_applied(
+        request, "find_replace", {"find": find, "replace": replace}, journal
+    )
+
     return {
         "operation": "find_replace",
         "dry_run": request.dry_run,
@@ -450,6 +538,8 @@ def _do_find_replace(request: FindReplaceRequest) -> Dict[str, Any]:
         "sample_changes": sample_changes,
         "find": find,
         "replace": replace,
+        "op_id": op_id,
+        "undo_available": undo_available,
     }
 
 
@@ -465,6 +555,7 @@ def _do_bulk_add(request: BulkAddRequest) -> Dict[str, Any]:
     affected_images = 0
     total_tags_added = 0
     sample_changes: List[Dict[str, Any]] = []
+    journal: List[Dict[str, Any]] = []
 
     _begin_op("bulk_add", total_estimate)
     try:
@@ -493,11 +584,12 @@ def _do_bulk_add(request: BulkAddRequest) -> Dict[str, Any]:
 
                     if not request.dry_run:
                         merged = [
-                            {"tag": t.get("tag"), "confidence": float(t.get("confidence") or 1.0)}
-                            for t in existing if t.get("tag")
+                            _preserve_row(t) for t in existing if t.get("tag")
                         ] + [
-                            {"tag": t, "confidence": confidence} for t in new_to_add
+                            {"tag": t, "confidence": confidence, "source": "manual", "category": None}
+                            for t in new_to_add
                         ]
+                        journal.append({"image_id": image_id, "before": existing, "after": merged})
                         updates.append({"image_id": image_id, "tags": merged})
                 except Exception as exc:  # pragma: no cover — defensive
                     logger.warning("bulk_add failed for image %s: %s", image_id, exc)
@@ -510,6 +602,10 @@ def _do_bulk_add(request: BulkAddRequest) -> Dict[str, Any]:
     finally:
         _end_op()
 
+    op_id, undo_available = _record_journal_if_applied(
+        request, "bulk_add", {"tags": add_tags}, journal
+    )
+
     return {
         "operation": "bulk_add",
         "dry_run": request.dry_run,
@@ -520,6 +616,8 @@ def _do_bulk_add(request: BulkAddRequest) -> Dict[str, Any]:
         "total_tags_added": total_tags_added,
         "sample_changes": sample_changes,
         "tags_to_add": add_tags,
+        "op_id": op_id,
+        "undo_available": undo_available,
     }
 
 
@@ -540,6 +638,7 @@ def _do_bulk_remove(request: BulkRemoveRequest) -> Dict[str, Any]:
     affected_images = 0
     total_tags_removed = 0
     sample_changes: List[Dict[str, Any]] = []
+    journal: List[Dict[str, Any]] = []
 
     _begin_op("bulk_remove", total_estimate)
     try:
@@ -559,7 +658,7 @@ def _do_bulk_remove(request: BulkRemoveRequest) -> Dict[str, Any]:
                         if match_fn(tag_str):
                             removed_here.append(tag_str)
                         else:
-                            kept.append({"tag": tag_str, "confidence": float(t.get("confidence") or 1.0)})
+                            kept.append(_preserve_row(t))
 
                     if removed_here:
                         affected_images += 1
@@ -573,6 +672,7 @@ def _do_bulk_remove(request: BulkRemoveRequest) -> Dict[str, Any]:
                             })
 
                         if not request.dry_run:
+                            journal.append({"image_id": image_id, "before": existing, "after": kept})
                             updates.append({"image_id": image_id, "tags": kept})
                 except Exception as exc:  # pragma: no cover — defensive
                     logger.warning("bulk_remove failed for image %s: %s", image_id, exc)
@@ -585,6 +685,10 @@ def _do_bulk_remove(request: BulkRemoveRequest) -> Dict[str, Any]:
     finally:
         _end_op()
 
+    op_id, undo_available = _record_journal_if_applied(
+        request, "bulk_remove", {"tags": sorted(remove_set)}, journal
+    )
+
     return {
         "operation": "bulk_remove",
         "dry_run": request.dry_run,
@@ -595,6 +699,8 @@ def _do_bulk_remove(request: BulkRemoveRequest) -> Dict[str, Any]:
         "total_tags_removed": total_tags_removed,
         "sample_changes": sample_changes,
         "tags_to_remove": list(remove_set),
+        "op_id": op_id,
+        "undo_available": undo_available,
     }
 
 
@@ -607,6 +713,7 @@ def _do_cleanup(request: CleanupRequest) -> Dict[str, Any]:
     total_low_conf = 0
     total_dupes = 0
     sample_changes: List[Dict[str, Any]] = []
+    journal: List[Dict[str, Any]] = []
 
     _begin_op("cleanup", total_estimate)
     try:
@@ -629,10 +736,9 @@ def _do_cleanup(request: CleanupRequest) -> Dict[str, Any]:
                     # Dedupe (case-insensitive, keep highest confidence) using unified logic
                     dupe_count = 0
                     if request.dedupe:
-                        tag_tuples = [(t.get("tag") or "", float(t.get("confidence") or 1.0)) for t in filtered]
-                        deduped_tuples = _dedupe_tags(tag_tuples)
-                        dupe_count = len(filtered) - len(deduped_tuples)
-                        cleaned = [{"tag": tag, "confidence": conf} for tag, conf in deduped_tuples]
+                        deduped_rows = _dedupe_tag_rows(filtered, None)
+                        dupe_count = len(filtered) - len(deduped_rows)
+                        cleaned = [_row_from_tuple(row) for row in deduped_rows]
                     else:
                         cleaned = filtered
 
@@ -654,9 +760,9 @@ def _do_cleanup(request: CleanupRequest) -> Dict[str, Any]:
 
                     if not request.dry_run:
                         normalized = [
-                            {"tag": t.get("tag"), "confidence": float(t.get("confidence") or 1.0)}
-                            for t in cleaned if t.get("tag")
+                            _preserve_row(t) for t in cleaned if t.get("tag")
                         ]
+                        journal.append({"image_id": image_id, "before": existing, "after": normalized})
                         updates.append({"image_id": image_id, "tags": normalized})
                 except Exception as exc:  # pragma: no cover — defensive
                     logger.warning("cleanup failed for image %s: %s", image_id, exc)
@@ -668,6 +774,13 @@ def _do_cleanup(request: CleanupRequest) -> Dict[str, Any]:
                 _commit_tag_updates(updates)
     finally:
         _end_op()
+
+    op_id, undo_available = _record_journal_if_applied(
+        request,
+        "cleanup",
+        {"min_confidence": threshold, "dedupe": request.dedupe},
+        journal,
+    )
 
     return {
         "operation": "cleanup",
@@ -681,4 +794,6 @@ def _do_cleanup(request: CleanupRequest) -> Dict[str, Any]:
         "sample_changes": sample_changes,
         "min_confidence": threshold,
         "dedupe": request.dedupe,
+        "op_id": op_id,
+        "undo_available": undo_available,
     }

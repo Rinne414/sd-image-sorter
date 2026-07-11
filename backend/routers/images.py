@@ -1084,6 +1084,46 @@ async def get_image(
     return service.get_image_by_id(image_id)
 
 
+class ImageCaptionPatchRequest(BaseModel):
+    """PATCH body for manual caption edits (FE-3).
+
+    Explicit-clear semantics: a field is written IFF its key is present in
+    the request JSON (``model_fields_set``), so an empty-string nl_caption
+    clears NL while leaving ``ai_caption`` untouched.
+    """
+
+    ai_caption: Optional[str] = Field(default=None, max_length=20000)
+    nl_caption: Optional[str] = Field(default=None, max_length=20000)
+
+
+@router.patch(
+    "/images/{image_id}/caption",
+    summary="Manually edit ai_caption / nl_caption",
+    description="""
+Write the composed display caption (`ai_caption`) and/or the pure
+natural-language caption (`nl_caption`) for one image.
+
+A field is written only when its key is present in the request body, so a
+client can clear one caption (send an empty string) without touching the
+other. Returns the stored captions after the write.
+    """,
+)
+async def patch_image_caption(
+    request: ImageCaptionPatchRequest,
+    image_id: int = FastAPIPath(..., ge=1, le=2_147_483_647, description="Image ID (must fit in signed 32-bit int)"),
+    service: ImageService = Depends(get_image_service),
+):
+    """Manually edit captions with explicit-clear semantics."""
+    fields = request.model_fields_set & {"ai_caption", "nl_caption"}
+    return service.patch_image_captions(
+        image_id,
+        ai_caption=request.ai_caption,
+        nl_caption=request.nl_caption,
+        set_ai_caption="ai_caption" in fields,
+        set_nl_caption="nl_caption" in fields,
+    )
+
+
 @router.post(
     "/images/export-data",
     response_model=ExportSelectionResponse,

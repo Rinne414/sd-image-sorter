@@ -162,6 +162,7 @@ from db_images_write import (
     mark_pending_images_metadata_error,
     _copy_image_derived_state,
     copy_image_derived_state,
+    set_image_captions,
     update_image_caption,
     set_user_rating,
     update_image_colors,

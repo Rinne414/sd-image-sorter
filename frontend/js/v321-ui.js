@@ -40,6 +40,23 @@ const V321Integration = {
         this.interceptCombinedExportClick();
         this.interceptTagSubmit();
         this.bindHardRefreshButton();
+        this.bindCaptionEditorUnloadGuard();
+    },
+
+    /** DUR-1: the caption editor keeps edits in in-memory Maps only —
+     *  closing the tab while the modal is open with unsaved edits would
+     *  silently discard them. Prompt in that state (and only that state,
+     *  so the guard never nags outside the editor). */
+    bindCaptionEditorUnloadGuard() {
+        window.addEventListener('beforeunload', (e) => {
+            const editorOpen = document.getElementById('caption-editor-modal')?.classList.contains('visible');
+            const hasEdits = (this.editedCaptions?.size || 0) > 0
+                || (this.editedNl?.size || 0) > 0;
+            if (editorOpen && hasEdits) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
     },
 
     /** Wire the navbar 🔄 button. Performs a real hard refresh:

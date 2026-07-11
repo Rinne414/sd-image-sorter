@@ -291,3 +291,191 @@ def test_find_replace_empty_replace_deletes_matching_tag(test_client, tmp_path):
     assert payload["affected_tags"] == 1
     assert payload["sample_changes"][0]["after"] == ["keep_tag"]
     assert [row["tag"] for row in db.get_image_tags(image_id)] == ["keep_tag"]
+
+
+def test_bulk_ops_preserve_tag_provenance(test_client, tmp_path):
+    """Bulk rewrites must carry source/category through (migration 024).
+
+    Regression: the four bulk ops rebuilt rows as {tag, confidence} only,
+    so add_tags(replace_scope="all") re-inserted every row with NULL
+    provenance -- and the next pipeline re-tag (replace_scope="pipeline")
+    would then delete formerly-manual rows.
+    """
+    import database as db
+
+    image_path = tmp_path / "bulk-provenance.png"
+    image_path.write_bytes(b"not a real image")
+    image_id = db.add_image(path=str(image_path), filename=image_path.name)
+    db.add_tags(image_id, [
+        {"tag": "hand_made", "confidence": 1.0, "source": "manual", "category": "outfit"},
+        {"tag": "machine_made", "confidence": 0.9, "source": "tagger", "category": "general"},
+        {"tag": "old_name", "confidence": 0.8, "source": "tagger", "category": "general"},
+    ])
+
+    # --- find/replace: rename old_name -> new_name ---
+    response = test_client.post("/api/tags/bulk/find-replace", json={
+        "image_ids": [image_id],
+        "find": "old_name",
+        "replace": "new_name",
+        "dry_run": False,
+    })
+    assert response.status_code == 200
+    rows = {row["tag"]: row for row in db.get_image_tags(image_id)}
+    assert rows["hand_made"]["source"] == "manual"
+    assert rows["hand_made"]["category"] == "outfit"
+    assert rows["machine_made"]["source"] == "tagger"
+    assert rows["machine_made"]["category"] == "general"
+    # A user-initiated rename produces a user-owned row.
+    assert rows["new_name"]["source"] == "manual"
+
+    # --- bulk add: untouched rows keep provenance, new rows are manual ---
+    response = test_client.post("/api/tags/bulk/add", json={
+        "image_ids": [image_id],
+        "tags": ["user_added"],
+        "dry_run": False,
+    })
+    assert response.status_code == 200
+    rows = {row["tag"]: row for row in db.get_image_tags(image_id)}
+    assert rows["hand_made"]["source"] == "manual"
+    assert rows["hand_made"]["category"] == "outfit"
+    assert rows["machine_made"]["source"] == "tagger"
+    assert rows["user_added"]["source"] == "manual"
+
+    # --- bulk remove: surviving rows keep provenance ---
+    response = test_client.post("/api/tags/bulk/remove", json={
+        "image_ids": [image_id],
+        "tags": ["user_added"],
+        "dry_run": False,
+    })
+    assert response.status_code == 200
+    rows = {row["tag"]: row for row in db.get_image_tags(image_id)}
+    assert "user_added" not in rows
+    assert rows["hand_made"]["source"] == "manual"
+    assert rows["machine_made"]["source"] == "tagger"
+
+    # --- cleanup (dedupe path) : surviving rows keep provenance ---
+    response = test_client.post("/api/tags/bulk/cleanup", json={
+        "image_ids": [image_id],
+        "min_confidence": 0.85,
+        "dedupe": True,
+        "dry_run": False,
+    })
+    assert response.status_code == 200
+    rows = {row["tag"]: row for row in db.get_image_tags(image_id)}
+    assert "new_name" not in rows  # 0.8 < 0.85 cleaned up
+    assert rows["hand_made"]["source"] == "manual"
+    assert rows["hand_made"]["category"] == "outfit"
+    assert rows["machine_made"]["source"] == "tagger"
+    assert rows["machine_made"]["category"] == "general"
+
+
+def _seed_provenance_image(db, tmp_path, name):
+    image_path = tmp_path / name
+    image_path.write_bytes(b"not a real image")
+    image_id = db.add_image(path=str(image_path), filename=image_path.name)
+    db.add_tags(image_id, [
+        {"tag": "keep_manual", "confidence": 1.0, "source": "manual", "category": "outfit"},
+        {"tag": "keep_tagger", "confidence": 0.9, "source": "tagger", "category": "general"},
+    ])
+    return image_id
+
+
+def test_bulk_undo_restores_previous_tags(test_client, tmp_path):
+    """FE-2s: an applied bulk op is journaled and can be fully undone."""
+    import database as db
+
+    ids = [
+        _seed_provenance_image(db, tmp_path, f"undo-{i}.png")
+        for i in range(2)
+    ]
+
+    response = test_client.post("/api/tags/bulk/add", json={
+        "image_ids": ids,
+        "tags": ["bulk_added"],
+        "dry_run": False,
+    })
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["undo_available"] is True
+    op_id = payload["op_id"]
+    assert op_id
+
+    listing = test_client.get("/api/tags/bulk/ops")
+    assert listing.status_code == 200
+    ops = listing.json()["ops"]
+    assert ops[0]["id"] == op_id
+    assert ops[0]["undo_available"] is True
+
+    undo = test_client.post(f"/api/tags/bulk/undo/{op_id}", json={})
+    assert undo.status_code == 200
+    result = undo.json()
+    assert result["restored"] == 2
+    assert result["skipped_conflicts"] == []
+    assert result["redo_op_id"]
+
+    for image_id in ids:
+        rows = {row["tag"]: row for row in db.get_image_tags(image_id)}
+        assert "bulk_added" not in rows
+        assert rows["keep_manual"]["source"] == "manual"
+        assert rows["keep_manual"]["category"] == "outfit"
+        assert rows["keep_tagger"]["source"] == "tagger"
+
+    # One-shot: a second undo of the same op is a conflict error.
+    again = test_client.post(f"/api/tags/bulk/undo/{op_id}", json={})
+    assert again.status_code == 409
+
+
+def test_bulk_undo_conflict_skip_then_force(test_client, tmp_path):
+    """FE-2s: images edited after the op are skipped unless force=true."""
+    import database as db
+
+    ids = [
+        _seed_provenance_image(db, tmp_path, f"conflict-{i}.png")
+        for i in range(2)
+    ]
+
+    response = test_client.post("/api/tags/bulk/remove", json={
+        "image_ids": ids,
+        "tags": ["keep_tagger"],
+        "dry_run": False,
+    })
+    assert response.status_code == 200
+    op_id = response.json()["op_id"]
+
+    # Edit image 0 AFTER the op -> its tag set no longer matches the digest.
+    conflicted = ids[0]
+    rows = db.get_image_tags(conflicted)
+    db.add_tags(conflicted, rows + [{"tag": "late_edit", "confidence": 1.0, "source": "manual"}])
+
+    undo = test_client.post(f"/api/tags/bulk/undo/{op_id}", json={})
+    assert undo.status_code == 200
+    result = undo.json()
+    assert result["restored"] == 1
+    assert result["skipped_conflicts"] == [conflicted]
+
+    # The clean image got keep_tagger back; the conflicted one kept its edit.
+    clean_rows = {row["tag"] for row in db.get_image_tags(ids[1])}
+    assert "keep_tagger" in clean_rows
+    conflicted_rows = {row["tag"] for row in db.get_image_tags(conflicted)}
+    assert "late_edit" in conflicted_rows
+    assert "keep_tagger" not in conflicted_rows
+
+
+def test_bulk_dry_run_is_not_journaled(test_client, tmp_path):
+    """FE-2s: dry runs must not create journal entries."""
+    import database as db
+
+    image_id = _seed_provenance_image(db, tmp_path, "dry-journal.png")
+    before_ops = test_client.get("/api/tags/bulk/ops").json()["ops"]
+
+    response = test_client.post("/api/tags/bulk/add", json={
+        "image_ids": [image_id],
+        "tags": ["dry_tag"],
+        "dry_run": True,
+    })
+    assert response.status_code == 200
+    assert response.json()["op_id"] is None
+    assert response.json()["undo_available"] is False
+
+    after_ops = test_client.get("/api/tags/bulk/ops").json()["ops"]
+    assert len(after_ops) == len(before_ops)

@@ -227,6 +227,34 @@ Idle-triggered quick-import re-scan of the stalest enabled root (v3.3.2 Library 
 #### GET /api/images/{image_id}
 Get one image with its tags.
 
+
+#### PATCH /api/images/{image_id}/caption
+
+Manually edit the composed display caption (`ai_caption`) and/or the pure
+natural-language caption (`nl_caption`) for one image.
+
+Explicit-clear semantics: a field is written only when its key is present in
+the request body, so sending an empty-string `nl_caption` clears NL while
+leaving `ai_caption` untouched. Returns the stored captions after the write.
+
+Request body:
+
+```json
+{
+  "ai_caption": "1girl, smiling, park",
+  "nl_caption": "A girl smiling in a park."
+}
+```
+
+Response:
+
+```json
+{
+  "id": 42,
+  "ai_caption": "1girl, smiling, park",
+  "nl_caption": "A girl smiling in a park."
+}
+```
 #### GET /api/image-file/{image_id}
 Serve the original image file.
 
@@ -1250,11 +1278,19 @@ Delete specified tags from a selection. Body: `{image_ids|filter, tags, case_sen
 #### POST /api/tags/bulk/cleanup
 Drop tags below a confidence threshold and deduplicate by case-insensitive tag name keeping the highest-confidence copy. Body: `{image_ids|filter, min_confidence, dedupe, dry_run}`.
 
+
+#### GET /api/tags/bulk/ops
+
+List the most recent applied bulk tag operations from the undo journal (v3.5.x FE-2s). Query: `limit` (default 20, max 100). Returns `{ops: [{id, operation, created_at, scope_source, params, images_affected, undo_available, undone_at}]}`. Dry runs are never journaled.
+
+#### POST /api/tags/bulk/undo/{op_id}
+
+Undo one journaled bulk operation. Body: `{force}`. Restores each affected image's full pre-op tag rows (provenance included). Images whose tag set changed since the op are conflicts: skipped and reported in `skipped_conflicts` unless `force=true`. Undo is one-shot per op and is itself journaled (the returned `redo_op_id` can be undone to redo). Returns `{op_id, operation, restored, skipped_conflicts, redo_op_id}`; 404 for unknown ids, 409 when already undone or no journal was stored.
 #### GET /api/tags/export-presets
 List built-in tag/caption export presets used by the LoRA training template engine (Anima Tags+NL, Anima Tags-only, Illustrious / Pony, NoobAI, FLUX, Kohya SD1.5, Custom).
 
 #### POST /api/tags/export-preview
-Render sample caption files without writing to disk. Body: `{image_ids, preset_id|template_override, options}`. Returns rendered captions keyed by image id plus the resolved template variables. v3.5.0 (preview unification): pass `content_mode` (any real export mode, plus optional `prefix` and `normalize_tag_underscores`) to render through `build_sidecar_content` — the exact engine `/api/tags/export-batch` writes with — so the preview can never drift from the exported sidecar. Omit `content_mode` (or send `template`) for the template-designer path. Also accepts `training_purpose` and `dedupe_implications` (P2-19/P2-18) so the preview mirrors those export filters on both the native and template paths.
+Render sample caption files without writing to disk. Body: `{image_ids, preset_id|template_override, options}`. Returns rendered captions keyed by image id plus the resolved template variables. v3.5.0 (preview unification): pass `content_mode` (any real export mode, plus optional `prefix` and `normalize_tag_underscores`) to render through `build_sidecar_content` — the exact engine `/api/tags/export-batch` writes with — so the preview can never drift from the exported sidecar. Omit `content_mode` (or send `template`) for the template-designer path. Also accepts `training_purpose` and `dedupe_implications` (P2-19/P2-18) so the preview mirrors those export filters on both the native and template paths. Each result row also reports `blacklist_leaks` — blacklisted terms that still appear in the final rendered text (underscore/space folded, word-bounded), i.e. features that leaked back in through NL prose after the tag rows were pruned (SEP-2).
 
 #### POST /api/tags/export-combined
 Build a single combined export bundle for the current selection across multiple presets. Body: `{image_ids|selection_token, presets: [{preset_id|template, options}], filename_template}`. Returns `{token, total_files}` — pass the token to the download endpoint below.

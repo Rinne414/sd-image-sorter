@@ -891,3 +891,25 @@ def test_stale_worker_progress_cannot_override_newer_run_state():
     assert progress["run_id"] == 2
     assert progress["status"] == "running"
     assert progress["message"] == "New run still active"
+
+
+def test_tag_request_thresholds_resolve_to_model_defaults():
+    """Unset thresholds must resolve to the CHOSEN model's registry defaults.
+
+    Regression: TagRequest hardcoded 0.35/0.85 as Field defaults, so a raw
+    API call that omitted thresholds silently crushed camie's 0.62/0.78.
+    """
+    from services.tagging_service import TagRequest, resolve_request_thresholds
+
+    req = TagRequest()
+    assert req.threshold is None
+    assert req.character_threshold is None
+
+    resolved = resolve_request_thresholds("camie-tagger-v2", None, None)
+    assert resolved == (0.62, 0.78)
+
+    # Explicit values are never overridden.
+    assert resolve_request_thresholds("camie-tagger-v2", 0.5, 0.9) == (0.5, 0.9)
+
+    # Unknown model falls back to the historical WD14 defaults.
+    assert resolve_request_thresholds("not-a-model", None, None) == (0.35, 0.85)

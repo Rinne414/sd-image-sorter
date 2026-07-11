@@ -18,6 +18,8 @@ no-silent-limits principle.
 
 from __future__ import annotations
 
+import re
+
 import csv
 import logging
 import threading
@@ -246,3 +248,62 @@ def apply_training_filters(
     if dedupe_implications:
         result = collapse_implication_rows(result)
     return result if result is not rows else list(rows)
+
+
+# ---------------------------------------------------------------------------
+# SEP-2: NL leak control.
+#
+# The blacklist / trait pruner strips tag ROWS so intrinsic character
+# features get absorbed by the trigger word — but a VLM prose sentence can
+# re-introduce the same feature ("a girl with silver hair" right after
+# silver_hair was pruned), silently undoing the separation. Two shared
+# helpers close that hole from both ends:
+#   * format_trait_suppression_block -> injected into VLM prompts so the
+#     model is told THIS dataset's suppressed features up front.
+#   * scan_text_for_blacklisted_terms -> post-hoc scan of the final rendered
+#     caption so the export preview can flag any term that leaked through.
+# ---------------------------------------------------------------------------
+
+
+def format_trait_suppression_block(traits) -> str:
+    """Render the dataset-specific "never mention these" VLM prompt block."""
+    phrases = []
+    seen = set()
+    for trait in traits or []:
+        phrase = str(trait or "").strip().lower().replace("_", " ")
+        if phrase and phrase not in seen:
+            seen.add(phrase)
+            phrases.append(phrase)
+    if not phrases:
+        return ""
+    listed = ", ".join(phrases[:80])
+    return (
+        "Additionally, NEVER mention any of these features in your sentences "
+        "- they are fixed identity carried by the trained trigger word: "
+        f"{listed}."
+    )
+
+
+def scan_text_for_blacklisted_terms(text: str, blacklist) -> List[str]:
+    """Return blacklisted terms that still appear in rendered caption text.
+
+    Word-bounded, case-insensitive; underscore/space variants fold together
+    so the tag spelling ``silver_hair`` matches the prose "silver hair".
+    """
+    if not text or not blacklist:
+        return []
+    lowered = str(text).lower()
+    leaks: List[str] = []
+    seen = set()
+    for term in blacklist:
+        base = str(term or "").strip().lower()
+        if not base or base in seen:
+            continue
+        seen.add(base)
+        phrase = base.replace("_", " ").strip()
+        if not phrase:
+            continue
+        pattern = r"(?<!\w)" + re.escape(phrase).replace(r"\ ", r"[\s_]+") + r"(?!\w)"
+        if re.search(pattern, lowered):
+            leaks.append(base)
+    return leaks

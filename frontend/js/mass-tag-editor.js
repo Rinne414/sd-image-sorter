@@ -584,8 +584,57 @@
             } else if (samples) {
                 samples.hidden = true;
             }
+            this._renderUndoButton(box, applied ? data : null);
             box.hidden = false;
             box.classList.toggle("danger", (data.affected_images || 0) > MAX_NOCONFIRM);
+        },
+
+        // FE-2s: applied ops are journaled server-side — offer one-click undo.
+        _renderUndoButton(box, data) {
+            let btn = document.getElementById("mass-tag-undo-op");
+            if (!data || !data.op_id || !data.undo_available) {
+                if (btn) btn.remove();
+                return;
+            }
+            if (!btn) {
+                btn = document.createElement("button");
+                btn.id = "mass-tag-undo-op";
+                btn.type = "button";
+                btn.className = "btn btn-ghost btn-small";
+                box.appendChild(btn);
+            }
+            btn.disabled = false;
+            btn.textContent = this.t("↩ Undo this operation", "↩ 撤销这次操作");
+            btn.onclick = async () => {
+                btn.disabled = true;
+                try {
+                    const resp = await fetch(`/api/tags/bulk/undo/${encodeURIComponent(data.op_id)}`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({}),
+                    });
+                    const result = await resp.json().catch(() => ({}));
+                    if (!resp.ok) {
+                        this._setStatus(result.detail || resp.statusText, "error");
+                        btn.disabled = false;
+                        return;
+                    }
+                    const skipped = (result.skipped_conflicts || []).length;
+                    const msg = skipped > 0
+                        ? this.t(
+                            `Undone: ${result.restored} images restored, ${skipped} skipped (edited since).`,
+                            `已撤销：恢复 ${result.restored} 张，跳过 ${skipped} 张（此后被编辑过）。`)
+                        : this.t(
+                            `Undone: ${result.restored} images restored.`,
+                            `已撤销：恢复 ${result.restored} 张。`);
+                    this._setStatus(msg, "success");
+                    btn.textContent = this.t("Undone", "已撤销");
+                    try { window.dispatchEvent(new CustomEvent("massTagOperationApplied", { detail: result })); } catch (_) {}
+                } catch (e) {
+                    this._setStatus(String(e.message || e), "error");
+                    btn.disabled = false;
+                }
+            };
         },
 
         _resetResult() {

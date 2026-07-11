@@ -2339,3 +2339,32 @@ def test_run_pipeline_failure_while_resolving_total_lands_in_failed_state(monkey
     assert "selection token backend exploded" in job.message
     assert job.finished_at is not None
     assert smart_tag_service._active_job_id is None
+
+
+def test_build_vlm_prompt_appends_trait_suppression() -> None:
+    """SEP-2: suppressed_traits appends a dataset-specific never-mention block."""
+    prompt = build_vlm_prompt(
+        "character",
+        ["1girl"],
+        suppressed_traits=["silver_hair", "heterochromia"],
+    )
+    assert "NEVER mention" in prompt
+    assert "silver hair" in prompt
+    assert "heterochromia" in prompt
+    # The block sits after the preset text.
+    assert prompt.index("NEVER mention") > prompt.index("WD14 tags")
+
+    base = prompt_without = build_vlm_prompt("character", ["1girl"])
+    assert "NEVER mention" not in prompt_without
+    assert prompt.startswith(base)
+
+
+def test_smart_tag_request_parses_suppressed_traits() -> None:
+    """SEP-2: payload list is cleaned (blank entries dropped, strings coerced)."""
+    from services.smart_tag_service import _coerce_request
+
+    req = _coerce_request({
+        "image_ids": [1],
+        "suppressed_traits": ["silver_hair", "", "  red_eyes  ", None],
+    })
+    assert req.suppressed_traits == ["silver_hair", "red_eyes"]

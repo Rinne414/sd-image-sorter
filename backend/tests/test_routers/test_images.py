@@ -2707,3 +2707,40 @@ class TestPipelineQueueEndpoint:
         data = test_client.get("/api/tags/pipeline-queue").json()
         assert data["total_queued"] == 0
         assert data["queued"] == []
+
+
+def test_patch_image_caption_explicit_clear_semantics(test_client, tmp_path):
+    """FE-3: caption PATCH writes only the fields present in the body."""
+    import database as db
+
+    image_path = tmp_path / "caption-edit.png"
+    image_path.write_bytes(b"not a real image")
+    image_id = db.add_image(path=str(image_path), filename=image_path.name)
+
+    response = test_client.patch(f"/api/images/{image_id}/caption", json={
+        "ai_caption": "1girl, smiling, park",
+        "nl_caption": "A girl smiling in a park.",
+    })
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ai_caption"] == "1girl, smiling, park"
+    assert payload["nl_caption"] == "A girl smiling in a park."
+
+    # Clearing NL alone must not touch ai_caption.
+    response = test_client.patch(f"/api/images/{image_id}/caption", json={
+        "nl_caption": "",
+    })
+    assert response.status_code == 200
+    image = db.get_image_by_id(image_id)
+    assert image["ai_caption"] == "1girl, smiling, park"
+    assert image["nl_caption"] == ""
+
+    # Empty body is a client error, not a silent no-op.
+    response = test_client.patch(f"/api/images/{image_id}/caption", json={})
+    assert response.status_code == 400
+
+    # Unknown image id -> 404.
+    response = test_client.patch("/api/images/999999/caption", json={
+        "ai_caption": "x",
+    })
+    assert response.status_code == 404

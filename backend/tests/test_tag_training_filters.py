@@ -265,3 +265,28 @@ class TestTraitCandidatesEndpointLogic:
             {"tag", "family", "count", "ratio"} <= set(item)
             for item in payload["candidates"]
         )
+
+
+def test_scan_text_for_blacklisted_terms_folds_underscores():
+    from services.tag_training_filters import scan_text_for_blacklisted_terms
+
+    text = "A girl with silver hair and a red ribbon smiling in a park."
+    leaks = scan_text_for_blacklisted_terms(text, ["silver_hair", "blue_eyes", "red ribbon"])
+    assert leaks == ["silver_hair", "red ribbon"]
+
+    # Word-bounded: "hairband" must not match "hair".
+    assert scan_text_for_blacklisted_terms("a silver hairband", ["silver_hair"]) == []
+    # Empty inputs never crash.
+    assert scan_text_for_blacklisted_terms("", ["x"]) == []
+    assert scan_text_for_blacklisted_terms("text", []) == []
+
+
+def test_format_trait_suppression_block_dedupes_and_folds():
+    from services.tag_training_filters import format_trait_suppression_block
+
+    block = format_trait_suppression_block(["silver_hair", "Silver Hair", "red_eyes", ""])
+    assert "silver hair" in block
+    assert "red eyes" in block
+    assert block.count("silver hair") == 1
+    assert format_trait_suppression_block([]) == ""
+    assert format_trait_suppression_block(None) == ""

@@ -603,6 +603,40 @@ def update_image_caption(image_id: int, caption: str, nl_caption: Optional[str] 
             (caption, nl_caption, image_id),
         )
 
+def set_image_captions(
+    image_id: int,
+    *,
+    ai_caption: Optional[str] = None,
+    nl_caption: Optional[str] = None,
+    set_ai_caption: bool = False,
+    set_nl_caption: bool = False,
+) -> bool:
+    """Explicit-set caption writer for the manual caption editor (FE-3).
+
+    Unlike ``update_image_caption`` (COALESCE semantics for pipeline
+    callers), a field here is written IFF its ``set_*`` flag is True --
+    including an empty string, so the editor can deliberately clear one
+    caption without touching the other. Returns False when no row matched.
+    """
+    assignments = []
+    params: List[Any] = []
+    if set_ai_caption:
+        assignments.append("ai_caption = ?")
+        params.append(ai_caption)
+    if set_nl_caption:
+        assignments.append("nl_caption = ?")
+        params.append(nl_caption)
+    if not assignments:
+        return False
+    params.append(image_id)
+    with get_db() as conn:
+        cursor = conn.execute(
+            f"UPDATE images SET {', '.join(assignments)} WHERE id = ?",
+            params,
+        )
+        return int(cursor.rowcount or 0) > 0
+
+
 def set_user_rating(image_id: int, stars: int) -> bool:
     """Set the user-assigned star rating (0-5; 0 = unrated) for one image.
 

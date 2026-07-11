@@ -4918,9 +4918,30 @@
                     <div class="modal-caption" id="modal-caption-section" style="display: none;">
                         <div class="modal-tags-header">
                             <h4 data-i18n="modal.aiCaption">AI Caption</h4>
-                            <button class="btn btn-ghost btn-small" id="btn-copy-caption" title="Copy caption">Copy</button>
+                            <div class="modal-caption-actions">
+                                <button class="btn btn-ghost btn-small" id="btn-edit-caption" type="button" data-i18n="modal.editCaptionBtn">✎ Edit</button>
+                                <button class="btn btn-ghost btn-small" id="btn-copy-caption" title="Copy caption">Copy</button>
+                            </div>
                         </div>
-                        <p id="modal-caption-text" class="modal-caption-content" style="white-space: pre-wrap; font-style: italic; color: var(--text-secondary); line-height: 1.6;"></p>
+                        <div id="modal-caption-view">
+                            <p id="modal-caption-text" class="modal-caption-content" style="white-space: pre-wrap; font-style: italic; color: var(--text-secondary); line-height: 1.6;"></p>
+                            <div id="modal-nl-caption-view" style="display: none;">
+                                <h5 class="modal-caption-subhead" data-i18n="modal.nlCaption">Natural-language caption</h5>
+                                <p id="modal-nl-caption-text" class="modal-caption-content" style="white-space: pre-wrap; color: var(--text-secondary); line-height: 1.6;"></p>
+                            </div>
+                        </div>
+                        <!-- FE-3 manual caption editor (hidden until ✎ Edit). Saves via
+                             PATCH /api/images/{id}/caption with explicit-clear semantics. -->
+                        <div id="modal-caption-editor" hidden>
+                            <label class="modal-caption-edit-label" for="modal-caption-edit-ai" data-i18n="modal.aiCaptionEditLabel">Display caption (tags + prose)</label>
+                            <textarea id="modal-caption-edit-ai" rows="3" class="modal-caption-textarea"></textarea>
+                            <label class="modal-caption-edit-label" for="modal-caption-edit-nl" data-i18n="modal.nlCaptionEditLabel">Natural-language caption (pure prose)</label>
+                            <textarea id="modal-caption-edit-nl" rows="3" class="modal-caption-textarea"></textarea>
+                            <div class="modal-tags-edit-actions">
+                                <button class="btn btn-primary btn-small" id="btn-save-caption" type="button" data-i18n="common.save">Save</button>
+                                <button class="btn btn-ghost btn-small" id="btn-cancel-caption" type="button" data-i18n="common.cancel">Cancel</button>
+                            </div>
+                        </div>
                     </div>
                         </div>
                 </div>

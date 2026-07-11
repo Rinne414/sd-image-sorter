@@ -636,12 +636,15 @@ def _tagging_worker_main(
                 tagger_getter = get_oppai_oracle_tagger
             else:
                 tagger_getter = get_tagger
+        effective_threshold, effective_character_threshold = resolve_request_thresholds(
+            effective_model_name, request.threshold, request.character_threshold
+        )
         tagger = tagger_getter(
             model_name=effective_model_name,
             model_path=request.model_path,
             tags_path=request.tags_path,
-            threshold=request.threshold,
-            character_threshold=request.character_threshold,
+            threshold=effective_threshold,
+            character_threshold=effective_character_threshold,
             use_gpu=effective_use_gpu,
             force_reload=True,
         )
@@ -1009,8 +1012,11 @@ class TagRequest(BaseModel):
     """Request model for tagging operations."""
 
     image_ids: Optional[List[int]] = Field(default=None, max_length=BATCH_EXPORT_LIMIT)
-    threshold: float = Field(default=0.35, ge=THRESHOLD_MIN, le=THRESHOLD_MAX)
-    character_threshold: float = Field(default=0.85, ge=THRESHOLD_MIN, le=THRESHOLD_MAX)
+    # None = "use the chosen model's registry default" (resolved by
+    # resolve_request_thresholds). Hardcoding 0.35/0.85 here crushed
+    # per-model defaults (camie 0.62) for callers that omit the field.
+    threshold: Optional[float] = Field(default=None, ge=THRESHOLD_MIN, le=THRESHOLD_MAX)
+    character_threshold: Optional[float] = Field(default=None, ge=THRESHOLD_MIN, le=THRESHOLD_MAX)
     retag_all: bool = False
     model_name: Optional[str] = Field(default=None, max_length=256)
     model_path: Optional[str] = Field(default=None, max_length=PATH_MAX_LENGTH)
@@ -1031,6 +1037,20 @@ class TagRequest(BaseModel):
     # see backend/services/dataset_audit_service.py and the frontend
     # base-model preset for the live recommendation.
     max_tags_per_image: int = Field(default=0, ge=0, le=2000)
+
+
+def resolve_request_thresholds(
+    model_name: str,
+    threshold: Optional[float],
+    character_threshold: Optional[float],
+) -> tuple:
+    """Fill unset thresholds from the chosen model's registry defaults."""
+    model_config = TAGGER_MODELS.get(model_name, {})
+    if threshold is None:
+        threshold = float(model_config.get("default_threshold", 0.35))
+    if character_threshold is None:
+        character_threshold = float(model_config.get("default_character_threshold", 0.85))
+    return threshold, character_threshold
 
 
 class TagImportRequest(BaseModel):

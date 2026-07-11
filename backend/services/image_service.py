@@ -3014,6 +3014,42 @@ class ImageService:
         tags = db.get_image_tags(image_id)
         return {"image": image, "tags": tags}
 
+    def patch_image_captions(
+        self,
+        image_id: int,
+        *,
+        ai_caption: Optional[str],
+        nl_caption: Optional[str],
+        set_ai_caption: bool,
+        set_nl_caption: bool,
+    ) -> Dict[str, Any]:
+        """Manually edit ai_caption / nl_caption (FE-3, explicit-clear).
+
+        Raises 400 when neither field was supplied and 404 for unknown ids.
+        Returns the stored captions after the write so the client renders
+        the authoritative value.
+        """
+        if not (set_ai_caption or set_nl_caption):
+            raise HTTPException(
+                status_code=400,
+                detail="Provide ai_caption and/or nl_caption",
+            )
+        updated = db.set_image_captions(
+            image_id,
+            ai_caption=ai_caption,
+            nl_caption=nl_caption,
+            set_ai_caption=set_ai_caption,
+            set_nl_caption=set_nl_caption,
+        )
+        if not updated:
+            raise HTTPException(status_code=404, detail="Image not found")
+        image = db.get_image_by_id(image_id) or {}
+        return {
+            "id": image_id,
+            "ai_caption": image.get("ai_caption"),
+            "nl_caption": image.get("nl_caption"),
+        }
+
     def get_export_selection_data(
         self,
         image_ids: List[int],

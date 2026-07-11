@@ -1392,6 +1392,15 @@ def render_export_preview(request: Any) -> Dict[str, Any]:
 
         rendered = apply_caption_transforms(rendered, caption_transforms)
 
+        # SEP-2: any blacklisted term still present in the FINAL rendered
+        # text leaked back in through prose (NL caption / template append) —
+        # exactly the failure that undoes trait absorption. Surfaced per
+        # image so the preview UI can flag it before export.
+        from services.tag_training_filters import scan_text_for_blacklisted_terms
+        blacklist_leaks = scan_text_for_blacklisted_terms(
+            rendered, getattr(request, "blacklist", []) or []
+        )
+
         results.append({
             "image_id": image_id,
             "filename": image.get("filename") or "",
@@ -1407,6 +1416,7 @@ def render_export_preview(request: Any) -> Dict[str, Any]:
             # Pure natural-language caption (point 1/2): lets the editor's NL
             # box show / edit the sentence separately from the booru-tags box.
             "nl_caption": str(image.get("nl_caption") or ""),
+            "blacklist_leaks": blacklist_leaks,
             "error": None,
         })
 
