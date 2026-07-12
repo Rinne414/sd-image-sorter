@@ -2363,8 +2363,12 @@ def test_smart_tag_request_parses_suppressed_traits() -> None:
     """SEP-2: payload list is cleaned (blank entries dropped, strings coerced)."""
     from services.smart_tag_service import _coerce_request
 
+    # enable_vlm=False: without it _coerce_request consults the machine's
+    # VLM settings file — passes on configured machines, fails on clean
+    # clones/CI (latent env dependency found by the pin-test sweep).
     req = _coerce_request({
         "image_ids": [1],
+        "enable_vlm": False,
         "suppressed_traits": ["silver_hair", "", "  red_eyes  ", None],
     })
     assert req.suppressed_traits == ["silver_hair", "red_eyes"]
@@ -2393,7 +2397,7 @@ def test_score_sets_pass_through_partial_and_result(monkeypatch, test_db):
         path="/test/smart/seam.png", filename="seam.png",
         generator="comfyui", metadata_json="{}",
     )
-    req = _coerce_request({"image_ids": [image_id], "enable_wd14": True})
+    req = _coerce_request({"image_ids": [image_id], "enable_wd14": True, "enable_vlm": False})
     raw = {
         "general_tags": [{"tag": "1girl", "confidence": 0.95, "category": "general"}],
         "character_tags": [],
@@ -2433,7 +2437,7 @@ def test_multi_model_sets_ride_fused_result(test_db):
         compute_consensus_tags,
     )
 
-    req = _coerce_request({"image_ids": [1], "enable_wd14": True})
+    req = _coerce_request({"image_ids": [1], "enable_wd14": True, "enable_vlm": False})
     outputs = [
         {
             "model": "wd-a", "weight": 1.0,
