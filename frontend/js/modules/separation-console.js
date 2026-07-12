@@ -518,6 +518,29 @@
         },
 
         // ---- Tag info popover (roadmap #6: learn while tagging) ---------------
+        _computeCoOccurrence(row, topN = 8) {
+            // Concept-bleeding view (roadmap #5): among the queue images that
+            // carry this tag, which OTHER tags ride along, and how often.
+            // >=80% co-occurrence is the health check's "always together"
+            // smell — flagged so the trainer considers pruning or merging.
+            const carrierIds = new Set(row.ids);
+            if (carrierIds.size === 0) return [];
+            const counts = new Map();
+            for (const id of carrierIds) {
+                const seenHere = new Set();
+                for (const raw of this._effectiveCaption(id).split(',')) {
+                    const key = fold(raw.trim());
+                    if (!key || key === row.key || seenHere.has(key)) continue;
+                    seenHere.add(key);
+                    counts.set(key, (counts.get(key) || 0) + 1);
+                }
+            }
+            return [...counts.entries()]
+                .map(([tag, count]) => ({ tag, count, ratio: count / carrierIds.size }))
+                .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
+                .slice(0, topN);
+        },
+
         async showTagInfo(row) {
             const panel = this._gapsPanel();
             panel.hidden = false;
@@ -567,6 +590,31 @@
                 line.className = 'sepcon-gap-line';
                 line.textContent = textLine;
                 panel.appendChild(line);
+            }
+
+            const coTags = this._computeCoOccurrence(row);
+            if (coTags.length) {
+                const header = document.createElement('div');
+                header.className = 'sepcon-gap-line sepcon-cooccur-header';
+                header.textContent = t(
+                    `Co-occurs within the queue (${row.ids.length} images carry "${row.spelling}"):`,
+                    `队列内共现（${row.ids.length} 张图带有「${row.spelling}」）：`);
+                panel.appendChild(header);
+                for (const entry of coTags) {
+                    const line = document.createElement('div');
+                    line.className = 'sepcon-gap-line sepcon-cooccur-line';
+                    const percent = Math.round(entry.ratio * 100);
+                    const label = document.createElement('span');
+                    label.textContent = `${entry.tag} — ${entry.count}/${row.ids.length} (${percent}%)`;
+                    if (entry.ratio >= 0.8) {
+                        label.classList.add('sepcon-cooccur-high');
+                        label.title = t(
+                            'Nearly always together — the trainer cannot separate these two; consider pruning or merging.',
+                            '几乎永远同现 — 训练器无法分离这两个概念；考虑修剪或合并。');
+                    }
+                    line.appendChild(label);
+                    panel.appendChild(line);
+                }
             }
         },
 

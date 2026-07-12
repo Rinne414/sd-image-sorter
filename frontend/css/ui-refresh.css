@@ -10110,6 +10110,13 @@ html.lang-zh #view-censor .queue-action-btn span {
 .sepcon-tag-clickable:hover {
     text-decoration: underline dotted;
 }
+.sepcon-cooccur-header {
+    font-weight: 600;
+    margin-top: 4px;
+}
+.sepcon-cooccur-high {
+    color: var(--accent-danger, #ff6b81);
+}
 /* BE-1 — coverage-gap (find-missed) results panel */
 .sepcon-gaps {
     margin: 6px 0;

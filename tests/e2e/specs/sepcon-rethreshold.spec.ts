@@ -134,4 +134,8 @@ test('tag info: clicking a tag name renders category, aliases and implications',
   await expect(panel).toContainText('1girl · 女孩 — general')
   await expect(panel).toContainText('sole_female')
   await expect(panel).toContainText('6,100,000')
+  // Roadmap #5: queue-scope co-occurrence — both seeded captions carry
+  // 1girl; "smile" rides one of the two (1/2 = 50%).
+  await expect(panel).toContainText('Co-occurs within the queue')
+  await expect(panel).toContainText('smile — 1/2 (50%)')
 })
