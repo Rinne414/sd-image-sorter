@@ -4405,6 +4405,10 @@
                                             <option value="kohya" data-i18n="dataset.maskExportKohya">kohya (mask/ conditioning folder)</option>
                                         </select>
                                     </label>
+                                    <label class="form-label dataset-trainer-toml-row" style="display:flex;align-items:center;gap:8px;">
+                                        <input type="checkbox" id="dataset-trainer-toml">
+                                        <span data-i18n="dataset.trainerTomlLabel">Also write kohya dataset_config.toml (repeats/batch from the estimator above)</span>
+                                    </label>
                                     <!-- Hidden mirror element to keep the existing JS that reads
                                          #dataset-image-op working without changes. The radio
                                          above is the visible source of truth. -->

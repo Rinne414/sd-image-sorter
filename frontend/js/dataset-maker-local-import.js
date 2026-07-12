@@ -710,6 +710,12 @@
             image_nl_overrides,
             // Phase 4 masked training: mask sidecar format for the trainer.
             mask_export: document.getElementById('dataset-mask-export')?.value || 'none',
+            // Trainer handoff (roadmap #2): ready dataset_config.toml.
+            // repeats/batch ride the step-estimator inputs so the plan the
+            // user just previewed is the plan the trainer gets.
+            trainer_config: document.getElementById('dataset-trainer-toml')?.checked ? 'kohya_toml' : 'none',
+            trainer_repeats: Math.max(1, Number(document.getElementById('dataset-est-repeats')?.value) || 10),
+            trainer_batch: Math.max(1, Number(document.getElementById('dataset-est-batch')?.value) || 2),
         };
     };
 

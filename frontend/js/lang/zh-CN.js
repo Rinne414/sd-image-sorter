@@ -4140,6 +4140,7 @@ window.I18nLang_zhCN = {
     'dataset.maskToolAutoTip': 'rembg 主体提取（需自行安装，可选依赖）',
     'dataset.maskDelete': '🗑 移除遮罩',
     'dataset.maskSave': '保存遮罩',
+    'dataset.trainerTomlLabel': '同时生成 kohya dataset_config.toml（repeats/batch 取自上方估算器）',
     'dataset.maskExportLabel': '训练遮罩（masked loss）',
     'dataset.maskExportNone': '不导出',
     'dataset.maskExportOnetrainer': 'OneTrainer（图片旁 name-masklabel.png）',

@@ -55,6 +55,9 @@ EXPORT_RESPONSE_TOP_KEYS = {
     # Phase 4 masked training: mask sidecar counters (masks_missing is
     # informational — no mask means "train the whole image", never a failure).
     "masks_written", "masks_missing",
+    # Trainer handoff (roadmap #2): path of the generated kohya
+    # dataset_config.toml, null unless trainer_config="kohya_toml".
+    "trainer_config_path",
 }
 EXPORT_ITEM_KEYS = {
     "image_id", "src_image_path", "dst_image_path", "dst_caption_path",

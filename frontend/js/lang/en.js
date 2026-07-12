@@ -4141,6 +4141,7 @@ window.I18nLang_en = {
     'dataset.maskToolAutoTip': 'rembg subject extraction (opt-in install)',
     'dataset.maskDelete': '🗑 Remove mask',
     'dataset.maskSave': 'Save mask',
+    'dataset.trainerTomlLabel': 'Also write kohya dataset_config.toml (repeats/batch from the estimator above)',
     'dataset.maskExportLabel': 'Training masks (masked loss)',
     'dataset.maskExportNone': "Don't export",
     'dataset.maskExportOnetrainer': 'OneTrainer (name-masklabel.png beside image)',

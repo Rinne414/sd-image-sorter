@@ -41,6 +41,9 @@ const EXPORT_PAYLOAD_KEYS = [
   'overwrite_policy',
   'prefix',
   'template_options',
+  'trainer_batch',
+  'trainer_config',
+  'trainer_repeats',
   'trigger',
 ].sort()
 
