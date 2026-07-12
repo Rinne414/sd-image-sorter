@@ -14,6 +14,7 @@ the 108 characterization pins in tests/test_tagging_pins*.py:
     services/tagging/runtime_plan.py chunk constants + _build_runtime_plan
                                      + _format_runtime_adjustment_message
     services/tagging/worker.py       _tagging_worker_main (multiprocessing spawn target)
+    services/tagging/filters.py      pre-write tag filters + rescaling batch iterators
                                      + rescaling iterators + pre-tag filters + E2E stub
     services/tagging/progress.py     _build_tag_progress_state + progress get/set/reset
                                      /cancel + worker-progress merge/drain/cleanup
@@ -59,6 +60,7 @@ from types import ModuleType as _ModuleType
 
 from services.tagging import catalog as _catalog
 from services.tagging import exports as _exports
+from services.tagging import filters as _filters
 from services.tagging import jobs as _jobs
 from services.tagging import library_io as _library_io
 from services.tagging import progress as _progress
@@ -76,6 +78,10 @@ _SUBMODULE_ORDER = (
     _service,
     _validation,
     _worker,
+    # filters after worker: worker re-imports these helpers, so the
+    # setdefault owner map keeps resolving them to the worker module
+    # (existing consumer/patch semantics preserved).
+    _filters,
     _exports,
     _library_io,
     _runtime_plan,
