@@ -49,13 +49,42 @@ def _dataset_family_source(repo_root: Path) -> str:
     return source
 
 
+def _app_family_source(repo_root: Path) -> str:
+    # The app.js god-file is being decomposed VERBATIM into the
+    # frontend/js/app/ module family (staged split; same adaptation style as
+    # the censor / dataset-maker splits) while a slim, still-servable
+    # frontend/js/app.js stays behind (test_cache_bust GETs /static/js/app.js).
+    # Contract pins assert against the family concatenation so each literal is
+    # found in whichever file hosts it. Until the split lands the family is
+    # exactly app.js, so every assertion is byte-for-byte unchanged.
+    app_js = repo_root / "frontend" / "js" / "app.js"
+    assert app_js.is_file(), "frontend/js/app.js must remain a real file"
+    app_source = app_js.read_text(encoding="utf-8")
+    assert app_source, "frontend/js/app.js must not be empty"
+    family_dir = repo_root / "frontend" / "js" / "app"
+    family_parts = [
+        path.read_text(encoding="utf-8") for path in sorted(family_dir.glob("*.js"))
+    ]
+    return "\n".join([app_source] + family_parts)
+
+
+def _is_app_family_file(file_path: Path, frontend_root: Path) -> bool:
+    # frontend/js/app/*.js modules are split out of app.js verbatim, so they
+    # inherit app.js's shared-state writer allowances in the walker tests.
+    return file_path.relative_to(frontend_root).as_posix().startswith("app/")
+
+
 def test_frontend_feature_modules_do_not_directly_assign_appstate():
     repo_root = Path(__file__).resolve().parents[2]
     frontend_root = repo_root / "frontend" / "js"
     violations: list[str] = []
 
     for file_path in sorted(_iter_frontend_js_files(frontend_root)):
-        if file_path.name in ALLOWED_DIRECT_WRITER_FILES:
+        # App-family skip: app/*.js is split out of app.js and keeps its
+        # AppState direct-writer allowance (censor/dataset-split precedent).
+        if file_path.name in ALLOWED_DIRECT_WRITER_FILES or _is_app_family_file(
+            file_path, frontend_root
+        ):
             continue
         source = file_path.read_text(encoding="utf-8")
         for match in FORBIDDEN_APPSTATE_ASSIGN_RE.finditer(source):
@@ -76,7 +105,9 @@ def test_frontend_feature_modules_do_not_mutate_window_app_namespace():
     violations: list[str] = []
 
     for file_path in sorted(_iter_frontend_js_files(frontend_root)):
-        if file_path.name == "app.js":
+        # App-family skip: app/*.js is split out of app.js and keeps its
+        # window.App writer allowance (censor/dataset-split precedent).
+        if file_path.name == "app.js" or _is_app_family_file(file_path, frontend_root):
             continue
         source = file_path.read_text(encoding="utf-8")
         for match in FORBIDDEN_WINDOW_APP_ASSIGN_RE.finditer(source):
@@ -92,7 +123,8 @@ def test_frontend_feature_modules_do_not_mutate_window_app_namespace():
 
 def test_window_app_context_is_sealed_after_creation():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    source = _app_family_source(repo_root)
 
     assert "window.App = buildAppContext();" in source
     assert "Object.seal(window.App);" in source
@@ -100,7 +132,8 @@ def test_window_app_context_is_sealed_after_creation():
 
 def test_load_images_options_are_passed_as_second_argument():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    source = _app_family_source(repo_root)
 
     assert "loadImages({" not in source
     assert "loadImages(false, {" in source
@@ -108,7 +141,8 @@ def test_load_images_options_are_passed_as_second_argument():
 
 def test_cancelled_gallery_load_marks_refresh_intent():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    source = _app_family_source(repo_root)
 
     assert "function cancelGalleryImageLoad()" in source
     assert "hadPendingGalleryLoad" in source
@@ -192,7 +226,8 @@ def test_dataset_folder_import_has_paged_large_folder_controls():
     source = _dataset_family_source(repo_root)
     part2_source = source
     pipeline_source = source
-    app_source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    app_source = _app_family_source(repo_root)
     zh_source = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(
         encoding="utf-8"
     )
@@ -313,7 +348,9 @@ def test_full_selection_workflows_do_not_fallback_to_gallery_dom():
 
 def test_selection_filter_payload_preserves_full_gallery_scope():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    # NOTE(split): first-match regexes; each builder fn must stay unique family-wide.
+    source = _app_family_source(repo_root)
 
     selection_match = re.search(
         r"function buildSelectionFilterRequest\(.*?\) \{\n(?P<body>.*?)\n\}",
@@ -399,7 +436,8 @@ def test_native_checkbox_radio_are_not_forced_to_button_size():
 
 def test_app_filter_access_exposes_selection_token_resolver():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    source = _app_family_source(repo_root)
 
     assert "resolveSelectedImageIds" in source
     assert "getActiveSelectionToken" in source
@@ -408,7 +446,10 @@ def test_app_filter_access_exposes_selection_token_resolver():
 
 def test_censor_filtered_selection_uses_token_backed_queue_window():
     repo_root = Path(__file__).resolve().parents[2]
-    app_source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    # NOTE(split): first-match regex; keep the whole #btn-send-to-censor handler in
+    # ONE family file so the non-greedy match cannot bridge file boundaries.
+    app_source = _app_family_source(repo_root)
     # censor-edit.js was decomposed VERBATIM into the frontend/js/censor/
     # module family (god-file redesign). Concatenate the whole family so this
     # contract keeps pinning the token-backed queue seams no matter which part
@@ -818,7 +859,10 @@ def test_dataset_custom_dropdown_does_not_close_when_its_own_list_scrolls():
 
 def test_gallery_send_to_dataset_maker_button_tracks_selection_state():
     repo_root = Path(__file__).resolve().parents[2]
-    app_source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    # NOTE(split): first-match regex on `const buttonIds = [` (count==1 today); a
+    # second declaration earlier in the family concat would repoint the pin.
+    app_source = _app_family_source(repo_root)
 
     assert "'btn-send-selection-to-dataset-maker'" in app_source
     button_block = re.search(
@@ -940,8 +984,9 @@ def test_manual_sort_resume_failure_does_not_render_null_visible_banner():
 
 def test_tagger_ui_does_not_market_cpu_as_safe_mode():
     repo_root = Path(__file__).resolve().parents[2]
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    checked_sources = [("frontend/js/app.js family", _app_family_source(repo_root))]
     checked_files = [
-        repo_root / "frontend" / "js" / "app.js",
         repo_root / "frontend" / "js" / "lang" / "en.js",
         repo_root / "frontend" / "js" / "lang" / "zh-CN.js",
         repo_root / "backend" / "services" / "tagging_service.py",
@@ -959,11 +1004,17 @@ def test_tagger_ui_does_not_market_cpu_as_safe_mode():
     violations: list[str] = []
 
     for file_path in checked_files:
-        source = file_path.read_text(encoding="utf-8")
+        checked_sources.append(
+            (
+                file_path.relative_to(repo_root).as_posix(),
+                file_path.read_text(encoding="utf-8"),
+            )
+        )
+
+    for label, source in checked_sources:
         for phrase in forbidden_phrases:
             if phrase in source:
-                relative_path = file_path.relative_to(repo_root).as_posix()
-                violations.append(f"{relative_path}: contains {phrase!r}")
+                violations.append(f"{label}: contains {phrase!r}")
 
     assert not violations, (
         "Tagger UI/runtime wording must not market CPU as safer.\n"
@@ -973,7 +1024,8 @@ def test_tagger_ui_does_not_market_cpu_as_safe_mode():
 
 def test_manual_sort_start_uses_json_body_not_query_string_filters():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    source = _app_family_source(repo_root)
 
     assert "async startSortSession(" in source
     assert "return this.post('/api/sort/start', {" in source
@@ -983,7 +1035,8 @@ def test_manual_sort_start_uses_json_body_not_query_string_filters():
 
 def test_gallery_load_finally_clears_only_active_sequence():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    source = _app_family_source(repo_root)
 
     assert "let _activeImageLoadSequence = 0;" in source
     assert "const isActiveLoad = _activeImageLoadSequence === loadSequence;" in source
@@ -1005,7 +1058,8 @@ def test_autosep_critical_action_settings_are_visible_on_main_panel():
 def test_metadata_resolving_chip_is_driven_by_stats_contract():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    source = _app_family_source(repo_root)
 
     assert "metadata-status-chip" in html
     assert "stats.metadata_pending" in source
@@ -1025,7 +1079,8 @@ def test_metadata_resolving_chip_is_driven_by_stats_contract():
 
 def test_filter_facet_search_uses_backend_queries_not_prelimited_local_cache():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    source = _app_family_source(repo_root)
 
     assert "const FACET_SUGGESTION_LIMIT = 24;" in source
     assert "API.getTagsLibrary('frequency', {" in source
@@ -1045,7 +1100,10 @@ def test_filter_facet_search_uses_backend_queries_not_prelimited_local_cache():
 
 def test_gallery_delete_key_removes_from_gallery_not_disk():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    # NOTE(split): first-match regex on the Delete-key branch (count==1 today); the
+    # body terminator pins an 8-space indent - move the block verbatim.
+    source = _app_family_source(repo_root)
 
     match = re.search(
         r"else if \(e\.key === 'Delete'\) \{(?P<body>.*?)\n        \}",
@@ -1075,7 +1133,8 @@ def test_gallery_context_menu_has_workflow_actions_and_trash_is_explicit():
     gallery_source = (repo_root / "frontend" / "js" / "gallery.js").read_text(
         encoding="utf-8"
     )
-    app_source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    app_source = _app_family_source(repo_root)
     en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(
         encoding="utf-8"
     )
@@ -1181,7 +1240,8 @@ def test_gallery_selection_panel_is_desktop_user_facing_not_visible_dom_jargon()
     css = (repo_root / "frontend" / "css" / "ui-refresh.css").read_text(
         encoding="utf-8"
     )
-    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    source = _app_family_source(repo_root)
     ui_refresh = (repo_root / "frontend" / "js" / "ui-refresh.js").read_text(
         encoding="utf-8"
     )
@@ -1242,7 +1302,8 @@ def test_gallery_setup_button_lives_in_nav_not_floating():
 def test_export_ui_explains_output_formats_before_action():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    source = _app_family_source(repo_root)
     en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(
         encoding="utf-8"
     )
@@ -1290,7 +1351,8 @@ def test_scan_modal_advanced_summary_does_not_break_chinese_label():
 
 def test_scan_progress_eta_uses_real_counted_totals_and_separate_metadata_totals():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    source = _app_family_source(repo_root)
     en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(
         encoding="utf-8"
     )
@@ -1342,7 +1404,8 @@ def test_queue_solitaire_escapes_file_and_section_values_before_inner_html():
 def test_custom_tagger_profile_ui_and_payload_contract():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    source = _app_family_source(repo_root)
     en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(
         encoding="utf-8"
     )
@@ -1378,7 +1441,8 @@ def test_custom_tagger_profile_ui_and_payload_contract():
 def test_feature_setup_explains_lightweight_startup_and_cache_limit():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    source = _app_family_source(repo_root)
 
     assert "model-manager-summary" in html
     assert "renderFeatureAvailabilityNotice" in source
@@ -1395,7 +1459,8 @@ def test_feature_setup_explains_lightweight_startup_and_cache_limit():
 def test_scan_stalled_diagnostics_are_visible_and_copyable_from_frontend():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    source = _app_family_source(repo_root)
     css = (repo_root / "frontend" / "css" / "ui-refresh.css").read_text(
         encoding="utf-8"
     )
@@ -1466,7 +1531,8 @@ def test_tag_category_copy_and_promptlab_board_are_wired():
     copy_source = (repo_root / "frontend" / "js" / "tag-category-copy.js").read_text(
         encoding="utf-8"
     )
-    app_source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    app_source = _app_family_source(repo_root)
     css = (repo_root / "frontend" / "css" / "ui-refresh.css").read_text(
         encoding="utf-8"
     )
@@ -1549,7 +1615,10 @@ def test_sorting_payloads_carry_v33x_gallery_scope_filters():
     API payload builders silently dropped them, so "Copy from Gallery" moved
     or sorted a WIDER set than the gallery displayed."""
     repo_root = Path(__file__).resolve().parents[2]
-    app_source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
+    # NOTE(split): count >= 2 sums across the family; BOTH wire builders (batchMove
+    # + startSortSession) must keep every scope key - do not DRY them in the split.
+    app_source = _app_family_source(repo_root)
     autosep_source = (repo_root / "frontend" / "js" / "autosep.js").read_text(
         encoding="utf-8"
     )
