@@ -141,6 +141,8 @@ Retrieve images with filters and cursor pagination.
 | `min_saturation` | float | - | v3.5.0: minimum average saturation, `0..255`; requires color analysis data |
 | `max_saturation` | float | - | v3.5.0: maximum average saturation, `0..255`; requires color analysis data |
 | `seed` | int | - | v3.5.0: exact generation seed match (extracted from metadata). Powers the toolbar `seed:` search key. |
+| `date_from` | string | - | v3.5.x: inclusive `YYYY-MM-DD` lower bound on the file's first-seen time (`COALESCE(library_order_time, created_at)` — same key the newest/oldest sort uses). Powers the `date:` search key + filter-modal date range. NOT a generation timestamp. |
+| `date_to` | string | - | v3.5.x: inclusive `YYYY-MM-DD` upper bound on the same file-time expression (SQL half-open on the next day, so the whole end day matches). |
 
 Example response:
 

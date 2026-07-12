@@ -9,6 +9,7 @@ import binascii
 import io
 import json
 import os
+import re
 import subprocess
 import tempfile
 import threading
@@ -130,6 +131,19 @@ def _coerce_optional_float_filter(value: Any, field_name: str) -> Optional[float
         return float(value)
     except (TypeError, ValueError):
         raise _invalid_selection_token()
+
+
+_DATE_FILTER_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _coerce_optional_date_filter(value: Any, field_name: str) -> Optional[str]:
+    """ISO day string for the file-time date filter; anything else is an
+    invalid selection token, same failure mode as the other coercers."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or not _DATE_FILTER_RE.match(value.strip()):
+        raise _invalid_selection_token()
+    return value.strip()
 
 
 def _coerce_optional_string_filter(value: Any, field_name: str) -> Optional[str]:
@@ -2011,6 +2025,8 @@ class ImageService:
                     artist=contract["artist"],
                     min_aesthetic=contract["minAesthetic"],
                     max_aesthetic=contract["maxAesthetic"],
+                    date_from=contract.get("dateFrom"),
+                    date_to=contract.get("dateTo"),
                     min_user_rating=contract["minUserRating"],
                     brightness_min=contract["brightnessMin"],
                     brightness_max=contract["brightnessMax"],
@@ -2090,6 +2106,8 @@ class ImageService:
         aspect_ratio: Optional[str] = None,
         min_aesthetic: Optional[float] = None,
         max_aesthetic: Optional[float] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
         min_user_rating: Optional[int] = None,  # v3.3.2 FF-2: gallery "★≥N" filter
         excluded_image_ids: Optional[List[int]] = None,
         # v3.2.1 color filters
@@ -2236,6 +2254,8 @@ class ImageService:
                     aspect_ratio=aspect_ratio,
                     min_aesthetic=min_aesthetic,
                     max_aesthetic=max_aesthetic,
+                    date_from=date_from,
+                    date_to=date_to,
                     min_user_rating=min_user_rating,
                     brightness_min=brightness_min,
                     brightness_max=brightness_max,
@@ -2315,6 +2335,8 @@ class ImageService:
                 aspect_ratio=aspect_ratio,
                 min_aesthetic=min_aesthetic,
                 max_aesthetic=max_aesthetic,
+                date_from=date_from,
+                date_to=date_to,
                 min_user_rating=min_user_rating,
                 brightness_min=brightness_min,
                 brightness_max=brightness_max,
@@ -2371,6 +2393,8 @@ class ImageService:
             aspect_ratio=aspect_ratio,
             min_aesthetic=min_aesthetic,
             max_aesthetic=max_aesthetic,
+            date_from=date_from,
+            date_to=date_to,
             min_user_rating=min_user_rating,
             brightness_min=brightness_min,
             brightness_max=brightness_max,
@@ -2416,6 +2440,8 @@ class ImageService:
         aspect_ratio: Optional[str] = None,
         min_aesthetic: Optional[float] = None,
         max_aesthetic: Optional[float] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
         min_user_rating: Optional[int] = None,
         brightness_min: Optional[float] = None,
         brightness_max: Optional[float] = None,
@@ -2482,6 +2508,8 @@ class ImageService:
             aspect_ratio=aspect_ratio,
             min_aesthetic=min_aesthetic,
             max_aesthetic=max_aesthetic,
+            date_from=date_from,
+            date_to=date_to,
             min_user_rating=min_user_rating,
             brightness_min=brightness_min,
             brightness_max=brightness_max,
@@ -2550,6 +2578,8 @@ class ImageService:
         aspect_ratio: Optional[str] = None,
         min_aesthetic: Optional[float] = None,
         max_aesthetic: Optional[float] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
         min_user_rating: Optional[int] = None,
         excluded_image_ids: Optional[List[int]] = None,
         # v3.2.1 color filters
@@ -2588,6 +2618,8 @@ class ImageService:
         max_height = _coerce_optional_int_filter(max_height, "maxHeight")
         min_aesthetic = _coerce_optional_float_filter(min_aesthetic, "minAesthetic")
         max_aesthetic = _coerce_optional_float_filter(max_aesthetic, "maxAesthetic")
+        date_from = _coerce_optional_date_filter(date_from, "dateFrom")
+        date_to = _coerce_optional_date_filter(date_to, "dateTo")
         min_user_rating = _coerce_optional_int_filter(min_user_rating, "minUserRating")
         brightness_min = _coerce_optional_float_filter(brightness_min, "brightnessMin")
         brightness_max = _coerce_optional_float_filter(brightness_max, "brightnessMax")
@@ -2659,6 +2691,10 @@ class ImageService:
             "minSaturation": _coerce_optional_float_filter(min_saturation, "minSaturation"),
             "maxSaturation": _coerce_optional_float_filter(max_saturation, "maxSaturation"),
             "seed": _coerce_optional_int_filter(seed, "seed"),
+            # File-time day range (timeline-eval memo 2026-07-12): filters on
+            # first-seen mtime, deliberately NOT called "generation date".
+            "dateFrom": date_from,
+            "dateTo": date_to,
         }
 
     def _selection_ids_from_contract(
@@ -2687,6 +2723,8 @@ class ImageService:
             artist=contract["artist"],
             min_aesthetic=contract["minAesthetic"],
             max_aesthetic=contract["maxAesthetic"],
+            date_from=contract.get("dateFrom"),
+            date_to=contract.get("dateTo"),
             min_user_rating=contract["minUserRating"],
             brightness_min=contract["brightnessMin"],
             brightness_max=contract["brightnessMax"],
@@ -2734,6 +2772,8 @@ class ImageService:
             artist=contract["artist"],
             min_aesthetic=contract["minAesthetic"],
             max_aesthetic=contract["maxAesthetic"],
+            date_from=contract.get("dateFrom"),
+            date_to=contract.get("dateTo"),
             min_user_rating=contract["minUserRating"],
             brightness_min=contract["brightnessMin"],
             brightness_max=contract["brightnessMax"],
@@ -2927,6 +2967,8 @@ class ImageService:
         aspect_ratio: Optional[str] = None,
         min_aesthetic: Optional[float] = None,
         max_aesthetic: Optional[float] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
         min_user_rating: Optional[int] = None,
         brightness_min: Optional[float] = None,
         brightness_max: Optional[float] = None,
@@ -2971,6 +3013,8 @@ class ImageService:
             aspect_ratio=aspect_ratio,
             min_aesthetic=min_aesthetic,
             max_aesthetic=max_aesthetic,
+            date_from=date_from,
+            date_to=date_to,
             min_user_rating=min_user_rating,
             brightness_min=brightness_min,
             brightness_max=brightness_max,

@@ -152,6 +152,9 @@ class SelectionIdsRequest(BaseModel):
     minSaturation: Optional[float] = Field(default=None, ge=0, le=255)
     maxSaturation: Optional[float] = Field(default=None, ge=0, le=255)
     seed: Optional[int] = Field(default=None)
+    # File-time day range, YYYY-MM-DD inclusive (timeline-eval memo §4)
+    dateFrom: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    dateTo: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
     @model_validator(mode="after")
     def validate_prompt_match_mode(self):
@@ -493,6 +496,16 @@ async def get_images(
         description="Filter by aspect ratio: square, landscape, portrait",
         examples=["landscape"],
     ),
+    date_from: Optional[str] = Query(
+        default=None,
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
+        description="Only images whose file time is on/after this day (YYYY-MM-DD, inclusive).",
+    ),
+    date_to: Optional[str] = Query(
+        default=None,
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
+        description="Only images whose file time is on/before this day (YYYY-MM-DD, inclusive).",
+    ),
     min_aesthetic: Optional[float] = Query(
         default=None,
         ge=0,
@@ -655,6 +668,8 @@ async def get_images(
         aspect_ratio=aspect_ratio,
         min_aesthetic=min_aesthetic,
         max_aesthetic=max_aesthetic,
+        date_from=date_from,
+        date_to=date_to,
         min_user_rating=min_user_rating,
         brightness_min=brightness_min,
         brightness_max=brightness_max,
@@ -741,6 +756,8 @@ async def create_selection_token(
         aspect_ratio=request.aspectRatio,
         min_aesthetic=request.minAesthetic,
         max_aesthetic=request.maxAesthetic,
+        date_from=request.dateFrom,
+        date_to=request.dateTo,
         min_user_rating=request.minUserRating,
         brightness_min=request.brightnessMin,
         brightness_max=request.brightnessMax,
@@ -964,6 +981,8 @@ async def count_images(
     prompts: Optional[str] = Query(default=None, max_length=1000, description="Comma-separated prompt terms (AND)."),
     prompt_match_mode: str = Query(default=PROMPT_MATCH_MODE_EXACT, pattern="^(exact|contains)$"),
     aspect_ratio: Optional[str] = Query(default=None, description="square, landscape, or portrait."),
+    date_from: Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    date_to: Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     min_aesthetic: Optional[float] = Query(default=None, ge=0, le=10),
     max_aesthetic: Optional[float] = Query(default=None, ge=0, le=10),
     min_user_rating: Optional[int] = Query(default=None, ge=0, le=5),
@@ -1023,6 +1042,8 @@ async def count_images(
         aspect_ratio=aspect_ratio,
         min_aesthetic=min_aesthetic,
         max_aesthetic=max_aesthetic,
+        date_from=date_from,
+        date_to=date_to,
         min_user_rating=min_user_rating,
         brightness_min=brightness_min,
         brightness_max=brightness_max,
@@ -1193,6 +1214,8 @@ async def get_selection_ids(
         aspect_ratio=request.aspectRatio,
         min_aesthetic=request.minAesthetic,
         max_aesthetic=request.maxAesthetic,
+        date_from=request.dateFrom,
+        date_to=request.dateTo,
         min_user_rating=request.minUserRating,
         brightness_min=request.brightnessMin,
         brightness_max=request.brightnessMax,
@@ -1256,6 +1279,8 @@ async def count_filtered_images(
         aspect_ratio=request.aspectRatio,
         min_aesthetic=request.minAesthetic,
         max_aesthetic=request.maxAesthetic,
+        date_from=request.dateFrom,
+        date_to=request.dateTo,
         min_user_rating=request.minUserRating,
         brightness_min=request.brightnessMin,
         brightness_max=request.brightnessMax,

@@ -6508,6 +6508,30 @@
                             </div>
                         </section>
 
+                        <!-- File-time date range (timeline-eval memo 2026-07-12 §4).
+                             Filters on the first-seen file mtime — labeled "file
+                             time", never "generation date" (SD params carry no
+                             reliable timestamp). -->
+                        <section class="filter-panel">
+                            <div class="filter-panel-header">
+                                <div>
+                                    <p class="filter-panel-kicker">📅</p>
+                                    <h4 data-i18n="filter.dateTitle">Date Range (file time)</h4>
+                                </div>
+                                <p class="filter-panel-help" data-i18n="filter.dateHelp">Filter by the file's first-seen date. Search box: date:2026-05, date:7d, date:today.</p>
+                            </div>
+                            <div class="dimension-grid" role="group">
+                                <label class="dimension-field">
+                                    <span class="dimension-label" data-i18n="filter.dateFrom">From</span>
+                                    <input type="date" id="filter-date-from" class="input-field" aria-label="Earliest file date (inclusive)">
+                                </label>
+                                <label class="dimension-field">
+                                    <span class="dimension-label" data-i18n="filter.dateTo">To</span>
+                                    <input type="date" id="filter-date-to" class="input-field" aria-label="Latest file date (inclusive)">
+                                </label>
+                            </div>
+                        </section>
+
                         <!-- v3.3.3 WIRING-01: filter by the user's own star rating
                              (distinct from the AI content "Ratings" section above). -->
                         <section class="filter-panel">

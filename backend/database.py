@@ -327,6 +327,8 @@ def iter_filtered_image_id_chunks(
     excluded_image_ids: Optional[List[int]] = None,
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     min_user_rating: Optional[int] = None,
     include_unreadable: bool = False,
     # v3.2.1 color filters
@@ -385,6 +387,8 @@ def iter_filtered_image_id_chunks(
             excluded_image_ids=excluded_image_ids,
             min_aesthetic=min_aesthetic,
             max_aesthetic=max_aesthetic,
+            date_from=date_from,
+            date_to=date_to,
             min_user_rating=min_user_rating,
             include_unreadable=include_unreadable,
             brightness_min=brightness_min,

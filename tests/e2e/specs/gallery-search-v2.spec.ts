@@ -192,6 +192,15 @@ test('parser maps the full grammar onto FilterStore shapes', async ({ page }) =>
       starsOk: q.parse('stars>=4').scalars,
       hasNo: { has: q.parse('has:params').scalars, no: q.parse('no:caption').scalars },
       unknownKeyFree: q.parse('re:zero').freeText,
+      // date: file-time day range (timeline-eval memo §4)
+      dateDay: q.parse('date:2026-05-02').scalars,
+      dateMonth: q.parse('date:2026-05').scalars,
+      dateYear: q.parse('date:2026').scalars,
+      dateRange: q.parse('date:2026-05-01..2026-06-15').scalars,
+      dateFromOnly: q.parse('date>=2026-05-03').scalars,
+      dateToOnly: q.parse('date<=2026-05').scalars,
+      dateZh: q.parse('日期:2026-05-02').scalars,
+      warnDate: q.parse('date:yesterdayish').warnings.length,
     }
   })
 
@@ -218,6 +227,16 @@ test('parser maps the full grammar onto FilterStore shapes', async ({ page }) =>
   expect(parsed.hasNo.has.hasMetadata).toBe(true)
   expect(parsed.hasNo.no.noCaption).toBe(true)
   expect(parsed.unknownKeyFree).toEqual(['re:zero'])
+  expect(parsed.dateDay).toMatchObject({ dateFrom: '2026-05-02', dateTo: '2026-05-02' })
+  expect(parsed.dateMonth).toMatchObject({ dateFrom: '2026-05-01', dateTo: '2026-05-31' })
+  expect(parsed.dateYear).toMatchObject({ dateFrom: '2026-01-01', dateTo: '2026-12-31' })
+  expect(parsed.dateRange).toMatchObject({ dateFrom: '2026-05-01', dateTo: '2026-06-15' })
+  expect(parsed.dateFromOnly.dateFrom).toBe('2026-05-03')
+  expect(parsed.dateFromOnly.dateTo).toBeUndefined()
+  expect(parsed.dateToOnly.dateTo).toBe('2026-05-31')
+  expect(parsed.dateToOnly.dateFrom).toBeUndefined()
+  expect(parsed.dateZh).toMatchObject({ dateFrom: '2026-05-02', dateTo: '2026-05-02' })
+  expect(parsed.warnDate).toBe(1)
 })
 
 test('typing a compound query applies filters; clearing restores box-owned fields only', async ({ page }) => {

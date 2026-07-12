@@ -95,6 +95,7 @@
         brightness: 'brightness', bright: 'brightness', 亮度: 'brightness',
         saturation: 'saturation', sat: 'saturation', 饱和度: 'saturation',
         seed: 'seed', 种子: 'seed',
+        date: 'date', time: 'date', 日期: 'date', 时间: 'date',
         artist: 'artist', 画师: 'artist',
         folder: 'folder', 文件夹: 'folder',
         has: 'has', 有: 'has',
@@ -121,6 +122,7 @@
         has: ['params'],
         no: ['params', 'caption'],
         score: ['none'],
+        date: ['today', '7d', '30d'],
     };
 
     const NEGATABLE = new Set(['tag', 'checkpoint', 'lora', 'prompt', 'generator', 'rating', 'color']);
@@ -144,6 +146,7 @@
         { syntax: 'color:VALUE', example: 'color:warm', descKey: 'searchHelp.color' },
         { syntax: 'brightness / saturation OP N', example: 'brightness>=180 sat<=60', descKey: 'searchHelp.brightness' },
         { syntax: 'seed:N', example: 'seed:314159', descKey: 'searchHelp.seed' },
+        { syntax: 'date:VALUE', example: 'date:2026-05 date:7d', descKey: 'searchHelp.date' },
         { syntax: 'artist:VALUE', example: 'artist:wlop', descKey: 'searchHelp.artist' },
         { syntax: 'folder:VALUE', example: 'folder:keep', descKey: 'searchHelp.folder' },
         { syntax: 'has:params / no:params', example: 'has:params', descKey: 'searchHelp.hasParams' },
@@ -227,6 +230,36 @@
         const lo = toNumber(m[1]);
         const hi = toNumber(m[2]);
         return lo != null && hi != null ? [lo, hi] : null;
+    }
+
+    function isoDay(dateObj) {
+        const y = dateObj.getFullYear();
+        const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const d = String(dateObj.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    function addDays(iso, delta) {
+        const [y, m, d] = iso.split('-').map(Number);
+        return isoDay(new Date(y, m - 1, d + delta));
+    }
+
+    /** 'YYYY' | 'YYYY-MM' | 'YYYY-MM-DD' → whole-period {from, to} day bounds. */
+    function parseDatePeriod(value) {
+        let m = String(value).match(/^(\d{4})$/);
+        if (m) return { from: `${m[1]}-01-01`, to: `${m[1]}-12-31` };
+        m = String(value).match(/^(\d{4})-(\d{1,2})$/);
+        if (m) {
+            const month = String(m[2]).padStart(2, '0');
+            const lastDay = new Date(Number(m[1]), Number(m[2]), 0).getDate();
+            return { from: `${m[1]}-${month}-01`, to: `${m[1]}-${month}-${String(lastDay).padStart(2, '0')}` };
+        }
+        m = String(value).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+        if (m) {
+            const iso = `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}`;
+            return { from: iso, to: iso };
+        }
+        return null;
     }
 
     function handleNumericKey(result, key, op, value, minField, maxField, raw) {
@@ -436,6 +469,48 @@
                 }
                 result.scalars.seed = Math.trunc(num);
                 pushFilterPart(result, 'seed', '=', String(Math.trunc(num)));
+                return;
+            }
+            case 'date': {
+                // File-time day range (timeline-eval memo §4): filters on the
+                // first-seen file mtime — deliberately NOT "generation date"
+                // (SD params carry no reliable timestamp). Both bounds land in
+                // scalars as inclusive YYYY-MM-DD for date_from/date_to.
+                const v = value.toLowerCase();
+                let from = null;
+                let to = null;
+                const rel = v.match(/^(\d{1,4})d$/);
+                if (v === 'today') {
+                    from = isoDay(new Date());
+                    to = from;
+                } else if (rel) {
+                    to = isoDay(new Date());
+                    from = addDays(to, -(Number(rel[1]) - 1));
+                } else if (v.includes('..')) {
+                    const [loRaw, hiRaw] = v.split('..');
+                    const lo = parseDatePeriod(loRaw);
+                    const hi = parseDatePeriod(hiRaw);
+                    if (!lo || !hi) {
+                        pushWarning(result, token, 'searchWarn.date');
+                        return;
+                    }
+                    from = lo.from;
+                    to = hi.to;
+                } else {
+                    const period = parseDatePeriod(v);
+                    if (!period) {
+                        pushWarning(result, token, 'searchWarn.date');
+                        return;
+                    }
+                    if (op === '>=') from = period.from;
+                    else if (op === '<=') to = period.to;
+                    else if (op === '>') from = addDays(period.to, 1);
+                    else if (op === '<') to = addDays(period.from, -1);
+                    else { from = period.from; to = period.to; }
+                }
+                if (from) result.scalars.dateFrom = from;
+                if (to) result.scalars.dateTo = to;
+                pushFilterPart(result, 'date', '', `${from || '…'}..${to || '…'}`);
                 return;
             }
             case 'artist':

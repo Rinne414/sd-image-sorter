@@ -271,6 +271,8 @@ function createDefaultFilterState() {
         aspectRatio: '',
         minAesthetic: null,
         maxAesthetic: null,
+        dateFrom: null,
+        dateTo: null,
         minUserRating: null,
         brightnessMin: null,
         brightnessMax: null,
@@ -315,6 +317,8 @@ function cloneFilterState(filters) {
         aspectRatio: normalizeAspectRatioFilter(source.aspectRatio),
         minAesthetic: source.minAesthetic ?? null,
         maxAesthetic: source.maxAesthetic ?? null,
+        dateFrom: source.dateFrom ?? null,
+        dateTo: source.dateTo ?? null,
         minUserRating: source.minUserRating ?? null,
         brightnessMin: source.brightnessMin ?? null,
         brightnessMax: source.brightnessMax ?? null,
@@ -407,6 +411,8 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
         aspectRatio: normalizeAspectRatioFilter(source.aspectRatio) || null,
         minAesthetic: source.minAesthetic ?? null,
         maxAesthetic: source.maxAesthetic ?? null,
+        dateFrom: source.dateFrom ?? null,
+        dateTo: source.dateTo ?? null,
         minUserRating: source.minUserRating ?? null,
         brightnessMin: source.brightnessMin ?? null,
         brightnessMax: source.brightnessMax ?? null,
@@ -458,6 +464,8 @@ function buildAdvancedFilterContract(filters = AppState?.filters || createDefaul
         aspectRatio: request.aspectRatio || '',
         minAesthetic: request.minAesthetic ?? null,
         maxAesthetic: request.maxAesthetic ?? null,
+        dateFrom: request.dateFrom ?? null,
+        dateTo: request.dateTo ?? null,
         minUserRating: request.minUserRating ?? null,
         brightnessMin: request.brightnessMin ?? null,
         brightnessMax: request.brightnessMax ?? null,
@@ -632,6 +640,8 @@ window.AppFilterAccess = {
         if (filters.minHeight) params.set('min_height', filters.minHeight);
         if (filters.maxHeight) params.set('max_height', filters.maxHeight);
         if (filters.aspectRatio) params.set('aspect_ratio', filters.aspectRatio);
+        if (filters.dateFrom) params.set('date_from', filters.dateFrom);
+        if (filters.dateTo) params.set('date_to', filters.dateTo);
         if (filters.minAesthetic) params.set('min_aesthetic', filters.minAesthetic);
         if (filters.maxAesthetic) params.set('max_aesthetic', filters.maxAesthetic);
         if (filters.minUserRating) params.set('min_user_rating', filters.minUserRating);
@@ -833,6 +843,7 @@ function _galleryHasActiveFilter() {
     if (f.minHeight != null || f.maxHeight != null) return true;
     if (f.aspectRatio) return true;
     if (f.minAesthetic != null || f.maxAesthetic != null) return true;
+    if (f.dateFrom || f.dateTo) return true;
     if (f.minUserRating != null) return true;
     if (f.brightnessMin != null || f.brightnessMax != null) return true;
     if (f.colorTemperature) return true;
@@ -1261,6 +1272,8 @@ const API = {
         if (filters.maxHeight) params.set('max_height', filters.maxHeight);
         const aspectRatio = normalizeAspectRatioFilter(filters.aspectRatio);
         if (aspectRatio) params.set('aspect_ratio', aspectRatio);
+        if (filters.dateFrom) params.set('date_from', filters.dateFrom);
+        if (filters.dateTo) params.set('date_to', filters.dateTo);
         if (filters.minAesthetic) params.set('min_aesthetic', filters.minAesthetic);
         if (filters.maxAesthetic) params.set('max_aesthetic', filters.maxAesthetic);
         if (filters.minUserRating) params.set('min_user_rating', filters.minUserRating);
@@ -1320,6 +1333,8 @@ const API = {
         if (filters.maxHeight) params.set('max_height', filters.maxHeight);
         const aspectRatio = normalizeAspectRatioFilter(filters.aspectRatio);
         if (aspectRatio) params.set('aspect_ratio', aspectRatio);
+        if (filters.dateFrom) params.set('date_from', filters.dateFrom);
+        if (filters.dateTo) params.set('date_to', filters.dateTo);
         if (filters.minAesthetic) params.set('min_aesthetic', filters.minAesthetic);
         if (filters.maxAesthetic) params.set('max_aesthetic', filters.maxAesthetic);
         if (filters.minUserRating) params.set('min_user_rating', filters.minUserRating);
@@ -11169,6 +11184,11 @@ async function openFilterModal(options = {}) {
         const curValue = cur === true ? 'true' : (cur === false ? 'false' : '');
         radio.checked = radio.value === curValue;
     });
+    // File-time date range filter
+    const dateFromInput = $('#filter-date-from');
+    const dateToInput = $('#filter-date-to');
+    if (dateFromInput) dateFromInput.value = filterState.dateFrom ?? '';
+    if (dateToInput) dateToInput.value = filterState.dateTo ?? '';
     // Aesthetic score filter
     const minAestheticInput = $('#filter-aesthetic-min');
     const maxAestheticInput = $('#filter-aesthetic-max');
@@ -13158,6 +13178,10 @@ function readFilterModalDomInto(filterState) {
     const hasMetaRadio = $('input[name="has-metadata"]:checked');
     const hasMetaValue = hasMetaRadio ? hasMetaRadio.value : '';
     filterState.hasMetadata = hasMetaValue === 'true' ? true : (hasMetaValue === 'false' ? false : null);
+
+    // File-time date range (native date inputs emit YYYY-MM-DD or '')
+    filterState.dateFrom = $('#filter-date-from')?.value || null;
+    filterState.dateTo = $('#filter-date-to')?.value || null;
 
     // Get aesthetic score range
     filterState.minAesthetic = parseFloat($('#filter-aesthetic-min')?.value) || null;

@@ -27,6 +27,7 @@ from db_query import (
     _IMAGE_COLUMNS_BARE,
     _RECONNECT_CANDIDATE_COLUMNS,
     _LIBRARY_ORDER_SQL_UNQUALIFIED,
+    _apply_date_filter,
     _build_base_query,
     _group_by_clause,
     _apply_tag_filter,
@@ -172,6 +173,8 @@ def get_images(
     excluded_image_ids: Optional[List[int]] = None,
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
+    date_from: Optional[str] = None,  # inclusive YYYY-MM-DD (file time)
+    date_to: Optional[str] = None,  # inclusive YYYY-MM-DD (file time)
     min_user_rating: Optional[int] = None,  # v3.3.2 FF-2: gallery "★≥N" filter
     include_unreadable: bool = False,
     # v3.2.1 color filters
@@ -292,6 +295,9 @@ def get_images(
         conditions, params = _apply_aesthetic_filter(
             conditions, params, min_aesthetic, max_aesthetic, aesthetic_unscored
         )
+        conditions, params = _apply_date_filter(
+            conditions, params, date_from, date_to
+        )
         conditions, params = _apply_user_rating_filter(
             conditions, params, min_user_rating
         )
@@ -379,6 +385,8 @@ def get_filtered_image_count(
     excluded_image_ids: Optional[List[int]] = None,
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
+    date_from: Optional[str] = None,  # inclusive YYYY-MM-DD (file time)
+    date_to: Optional[str] = None,  # inclusive YYYY-MM-DD (file time)
     min_user_rating: Optional[int] = None,  # v3.3.2 FF-2: gallery "★≥N" filter
     include_unreadable: bool = False,
     # v3.2.1 color filters
@@ -482,6 +490,9 @@ def get_filtered_image_count(
         conditions, params = _apply_aesthetic_filter(
             conditions, params, min_aesthetic, max_aesthetic, aesthetic_unscored
         )
+        conditions, params = _apply_date_filter(
+            conditions, params, date_from, date_to
+        )
         conditions, params = _apply_user_rating_filter(
             conditions, params, min_user_rating
         )
@@ -546,6 +557,8 @@ def get_filtered_image_ids(
     excluded_image_ids: Optional[List[int]] = None,
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
+    date_from: Optional[str] = None,  # inclusive YYYY-MM-DD (file time)
+    date_to: Optional[str] = None,  # inclusive YYYY-MM-DD (file time)
     min_user_rating: Optional[int] = None,  # v3.3.2 FF-2: gallery "★≥N" filter
     include_unreadable: bool = False,
     fetch_chunk_size: int = 5000,
@@ -651,6 +664,9 @@ def get_filtered_image_ids(
 
         conditions, params = _apply_aesthetic_filter(
             conditions, params, min_aesthetic, max_aesthetic, aesthetic_unscored
+        )
+        conditions, params = _apply_date_filter(
+            conditions, params, date_from, date_to
         )
         conditions, params = _apply_user_rating_filter(
             conditions, params, min_user_rating
@@ -759,6 +775,8 @@ def get_images_paginated(
     skip_count: bool = False,  # Option to skip expensive COUNT query
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
+    date_from: Optional[str] = None,  # inclusive YYYY-MM-DD (file time)
+    date_to: Optional[str] = None,  # inclusive YYYY-MM-DD (file time)
     min_user_rating: Optional[int] = None,  # v3.3.2 FF-2: gallery "★≥N" filter
     include_unreadable: bool = False,
     # v3.2.1 color filters
@@ -871,6 +889,9 @@ def get_images_paginated(
         # Apply aesthetic score filters
         conditions, params = _apply_aesthetic_filter(
             conditions, params, min_aesthetic, max_aesthetic, aesthetic_unscored
+        )
+        conditions, params = _apply_date_filter(
+            conditions, params, date_from, date_to
         )
         conditions, params = _apply_user_rating_filter(
             conditions, params, min_user_rating
@@ -997,6 +1018,8 @@ def get_images_paginated(
                 has_metadata=has_metadata,
                 no_caption=no_caption,
                 aesthetic_unscored=aesthetic_unscored,
+                date_from=date_from,
+                date_to=date_to,
                 min_saturation=min_saturation,
                 max_saturation=max_saturation,
                 seed=seed,
@@ -1048,6 +1071,8 @@ def _get_filtered_count(
     include_unreadable: bool = False,
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
+    date_from: Optional[str] = None,  # inclusive YYYY-MM-DD (file time)
+    date_to: Optional[str] = None,  # inclusive YYYY-MM-DD (file time)
     min_user_rating: Optional[int] = None,  # v3.3.2 FF-2: gallery "★≥N" filter
     prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
     collection_id: Optional[int] = None,
@@ -1126,6 +1151,9 @@ def _get_filtered_count(
     # Apply aesthetic score filters
     conditions, params = _apply_aesthetic_filter(
         conditions, params, min_aesthetic, max_aesthetic, aesthetic_unscored
+    )
+    conditions, params = _apply_date_filter(
+        conditions, params, date_from, date_to
     )
     conditions, params = _apply_user_rating_filter(
         conditions, params, min_user_rating

@@ -38,6 +38,7 @@
         colorTemperature: '', brightnessDistribution: '',
         hasMetadata: null, noCaption: null,
         folder: null, artist: null,
+        dateFrom: null, dateTo: null,
     };
 
     const SUGGEST_DEBOUNCE_MS = 200;

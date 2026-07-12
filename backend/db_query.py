@@ -725,6 +725,29 @@ def _apply_aesthetic_filter(conditions: List[str], params: List[Any],
     return conditions, params
 
 
+def _apply_date_filter(conditions: List[str], params: List[Any],
+                       date_from: Optional[str],
+                       date_to: Optional[str]) -> tuple:
+    """File-time day-range filter (YYYY-MM-DD, both bounds inclusive).
+
+    Filters on COALESCE(library_order_time, created_at) — the same
+    expression the newest/oldest sort key uses, i.e. the file's first-seen
+    mtime (stable across rescans). Values are 'YYYY-MM-DD HH:MM:SS' strings,
+    so lexicographic comparison against the day prefix is exact; the upper
+    bound is half-open on the NEXT day via SQLite date(?, '+1 day') so the
+    whole end day is included.
+    """
+    if date_from:
+        conditions.append("COALESCE(i.library_order_time, i.created_at) >= ?")
+        params.append(date_from)
+    if date_to:
+        conditions.append(
+            "COALESCE(i.library_order_time, i.created_at) < date(?, '+1 day')"
+        )
+        params.append(date_to)
+    return conditions, params
+
+
 def _apply_saturation_filter(conditions: List[str], params: List[Any],
                              min_saturation: Optional[float],
                              max_saturation: Optional[float]) -> tuple:
