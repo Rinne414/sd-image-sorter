@@ -250,28 +250,3 @@ class LibraryIOMixin:
             "images_fixed": fixed_count,
             "message": f"Cleaned up rating tags for {fixed_count} images",
         }
-
-    @staticmethod
-    def _normalize_prompt_token(token: str) -> str:
-        """Normalize a prompt token for consistent matching."""
-        return token.lower().replace("_", " ").strip()
-
-    @staticmethod
-    def _normalize_lora_name(lora_name: str) -> str:
-        """Normalize a LORA name for consistent matching."""
-        if ":" in lora_name:
-            parts = lora_name.rsplit(":", 1)
-            try:
-                float(parts[1])
-                lora_name = parts[0]
-            except ValueError:
-                pass
-
-        extensions_to_strip = [".safetensors", ".ckpt", ".pt", ".pth", ".bin"]
-        lora_lower = lora_name.lower()
-        for ext in extensions_to_strip:
-            if lora_lower.endswith(ext):
-                lora_name = lora_name[: -len(ext)]
-                break
-
-        return lora_name.lower().strip()

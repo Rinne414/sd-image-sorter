@@ -587,22 +587,6 @@ def test_default_export_progress_state_shape() -> None:
     }
 
 
-def test_normalize_lora_name_and_prompt_token_statics() -> None:
-    """These two statics appear to have NO call sites left in the module
-    (metadata_parser and the migrations carry their own copies) — deletion
-    candidates for the split. Pinned so keeping them is also safe."""
-    norm_lora = TaggingService._normalize_lora_name
-    assert norm_lora("MyLora:0.8") == "mylora"
-    assert norm_lora("Style.safetensors") == "style"
-    assert norm_lora("weird:not-a-weight") == "weird:not-a-weight"
-    # QUIRK: the extension check runs BEFORE whitespace stripping, so a
-    # trailing space defeats it and the extension survives normalization.
-    assert norm_lora("  Padded.CKPT ") == "padded.ckpt"
-
-    norm_token = TaggingService._normalize_prompt_token
-    assert norm_token("  Best_Quality ") == "best quality"
-
-
 # ===========================================================================
 # Catalog derived fields + library delegation (no DB — db calls are stubbed).
 # ===========================================================================
