@@ -747,7 +747,13 @@ def test_smart_tag_supports_path_source_dataset_items():
     repo_root = Path(__file__).resolve().parents[2]
     frontend = (repo_root / "frontend" / "js" / "smart-tag.js").read_text(encoding="utf-8")
     router = (repo_root / "backend" / "routers" / "smart_tag.py").read_text(encoding="utf-8")
-    service = (repo_root / "backend" / "services" / "smart_tag_service.py").read_text(encoding="utf-8")
+    # smart_tag_service.py was decomposed into the services/smart_tag/ package
+    # (facade + submodules); the service-side contract strings live in the union.
+    service = "\n".join(
+        p.read_text(encoding="utf-8")
+        for p in [repo_root / "backend" / "services" / "smart_tag_service.py"]
+        + sorted((repo_root / "backend" / "services" / "smart_tag").glob("*.py"))
+    )
 
     assert "image_paths: sources.imagePaths" in frontend
     assert "selection_token: sources.selectionToken" in frontend
@@ -764,7 +770,13 @@ def test_smart_tag_uses_model_specific_tagger_defaults():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
     frontend = (repo_root / "frontend" / "js" / "smart-tag.js").read_text(encoding="utf-8")
-    service = (repo_root / "backend" / "services" / "smart_tag_service.py").read_text(encoding="utf-8")
+    # smart_tag_service.py was decomposed into the services/smart_tag/ package
+    # (facade + submodules); the service-side contract strings live in the union.
+    service = "\n".join(
+        p.read_text(encoding="utf-8")
+        for p in [repo_root / "backend" / "services" / "smart_tag_service.py"]
+        + sorted((repo_root / "backend" / "services" / "smart_tag").glob("*.py"))
+    )
     tagger_service = (repo_root / "backend" / "services" / "tagging_service.py").read_text(encoding="utf-8")
     en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
     zh_source = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
