@@ -411,9 +411,15 @@ def test_app_filter_access_exposes_selection_token_resolver():
 def test_censor_filtered_selection_uses_token_backed_queue_window():
     repo_root = Path(__file__).resolve().parents[2]
     app_source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
-    censor_source = (repo_root / "frontend" / "js" / "censor-edit.js").read_text(
-        encoding="utf-8"
+    # censor-edit.js was decomposed VERBATIM into the frontend/js/censor/
+    # module family (god-file redesign). Concatenate the whole family so this
+    # contract keeps pinning the token-backed queue seams no matter which part
+    # hosts them (same adaptation style as the smart_tag_service split).
+    censor_dir = repo_root / "frontend" / "js" / "censor"
+    censor_source = "\n".join(
+        path.read_text(encoding="utf-8") for path in sorted(censor_dir.glob("*.js"))
     )
+    assert censor_source, "frontend/js/censor/*.js family is missing"
 
     send_block = re.search(
         r"\$\('#btn-send-to-censor'\).*?addEventListener\('click', async \(e\) => \{(?P<body>.*?)\n    \}\);",

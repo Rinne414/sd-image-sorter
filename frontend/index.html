@@ -2578,7 +2578,7 @@
                         <div class="censor-tab-pane" data-censor-pane="adjust">
                         <!-- Photo Filters. The Adjust tab now gates visibility, so the card
                              opens by default within the tab. Slider ids are unchanged, so
-                             censor-edit.js getElementById lookups still work. -->
+                             censor/filters.js getElementById lookups still work. -->
                         <details class="censor-side-card censor-side-card-collapsible" open>
                             <summary class="censor-side-card-header censor-side-card-summary">
                                 <div>
@@ -7011,7 +7011,31 @@
     <script src="/static/js/autosep.js"></script>
     <script src="/static/js/manual-sort.js"></script>
     <script src="/static/js/audio.js"></script>
-    <script src="/static/js/censor-edit.js"></script>
+    <!-- Censor editor family (decomposed from the former censor-edit.js god file).
+         Order matters: censor/state.js declares the shared top-level singletons
+         (CensorState, boundHandlers, ...) consumed by every later part via
+         classic-script global lexical scoping; censor/review.js exports
+         window.initCensorEdit / window.cleanupCensorView (defined in earlier
+         parts); censor/filters.js registers its DOMContentLoaded wiring and the
+         window.__*CensorFilterPreview hooks last. Static tags (not dynamic
+         append) keep the DOMContentLoaded listener registered before the event
+         fires and keep every file covered by the GET / cache-bust injection. -->
+    <script src="/static/js/censor/state.js"></script>
+    <script src="/static/js/censor/queue.js"></script>
+    <script src="/static/js/censor/canvas-loader.js"></script>
+    <script src="/static/js/censor/detect-models.js"></script>
+    <script src="/static/js/censor/events.js"></script>
+    <script src="/static/js/censor/queue-render.js"></script>
+    <script src="/static/js/censor/ops-engine.js"></script>
+    <script src="/static/js/censor/detect.js"></script>
+    <script src="/static/js/censor/history.js"></script>
+    <script src="/static/js/censor/tools.js"></script>
+    <script src="/static/js/censor/rename.js"></script>
+    <script src="/static/js/censor/save.js"></script>
+    <script src="/static/js/censor/remove-bg.js"></script>
+    <script src="/static/js/censor/zoom-pan.js"></script>
+    <script src="/static/js/censor/review.js"></script>
+    <script src="/static/js/censor/filters.js"></script>
     <script src="/static/js/queue-solitaire.js"></script>
     <script src="/static/js/similar.js"></script>
     <script src="/static/js/clip-tools.js"></script>
