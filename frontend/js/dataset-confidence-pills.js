@@ -137,15 +137,12 @@
     };
 
     // Hook into _setActive: every time the active image changes, refresh
-    // the panel. We monkey-patch instead of forking to keep the existing
-    // navigation behaviour untouched.
-    const original_setActive = DM._setActive;
-    if (typeof original_setActive === 'function') {
-        DM._setActive = function (imageId) {
-            const ret = original_setActive.call(this, imageId);
+    // the panel. Registered on the shared active-changed registry (FE-1 2b)
+    // instead of re-wrapping DM._setActive.
+    if (Array.isArray(DM._activeChangedHooks)) {
+        DM._activeChangedHooks.push(function () {
             try { this._refreshConfidencePanel(this.activeId); } catch (_e) { /* */ }
-            return ret;
-        };
+        });
     }
 
     // Hook into _renderEmptyEditor so the panel disappears when no image

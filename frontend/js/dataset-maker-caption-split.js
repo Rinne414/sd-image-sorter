@@ -11,8 +11,8 @@
  *
  * The export side is handled in the backend (per-image NL compose) — this module
  * only feeds ``image_types`` + ``image_nl_overrides`` via _buildExportPayload
- * (see part3 / local-import). Loaded LAST so its wrappers compose over the
- * part2 + local-import + pipeline patches.
+ * (see local-import). Loaded LAST so its hooks/decorators register after the
+ * part2 + local-import + pipeline ones.
  */
 (function () {
     'use strict';
@@ -161,12 +161,15 @@
         return this._t('dataset.captionTypeBooru', 'Booru');
     };
 
-    // ---------- wrap _setActive: populate NL box + type after the base runs ----------
-    const _origSetActive = DM._setActive;
-    DM._setActive = function (id) {
-        if (typeof _origSetActive === 'function') _origSetActive.call(this, id);
-        this._refreshActiveCaptionBoxes();
-    };
+    // ---------- active-changed hook: populate NL box + type after the core runs ----------
+    // Registered on the shared registry (FE-1 2b) instead of re-wrapping
+    // DM._setActive; runs after part2's split/diff hooks and the confidence
+    // pills hook, matching the old load-order wrapper chain.
+    if (Array.isArray(DM._activeChangedHooks)) {
+        DM._activeChangedHooks.push(function () {
+            this._refreshActiveCaptionBoxes();
+        });
+    }
 
     // ---------- wrap _renderEmptyEditor: also clear/hide the NL box + type ----------
     const _origRenderEmpty = DM._renderEmptyEditor;
@@ -264,11 +267,12 @@
         });
     };
 
-    // ---------- wrap _buildQueueItem: add a small type chip ----------
-    const _origBuildQueueItem = DM._buildQueueItem;
-    if (typeof _origBuildQueueItem === 'function') {
-        DM._buildQueueItem = function (id, orderIndex = null) {
-            const item = _origBuildQueueItem.call(this, id, orderIndex);
+    // ---------- queue-item decorator: add a small type chip ----------
+    // Registered on part2's decorator registry (FE-1 2b) instead of
+    // re-wrapping _buildQueueItem; runs after local-import's decorator,
+    // matching the old load-order wrapper chain.
+    if (Array.isArray(DM._queueItemDecorators)) {
+        DM._queueItemDecorators.push(function (item, id) {
             try {
                 const type = this._captionTypeFor(id);
                 if (type === 'nl' || type === 'both') {
@@ -286,8 +290,7 @@
                     (metaWrap || item).appendChild(chip);
                 }
             } catch (_e) { /* chip is cosmetic */ }
-            return item;
-        };
+        });
     }
 
     // ---------- bind events once ----------

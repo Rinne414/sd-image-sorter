@@ -379,10 +379,10 @@
 
     // -------- Queue + editor patches: render local thumbs lazily --------
 
-    const original_buildQueueItem = DM._buildQueueItem;
-    DM._buildQueueItem = function (id, orderIndex = null) {
-        const node = original_buildQueueItem.call(this, id, orderIndex);
-        if (!this.isLocalId(id)) return node;
+    // Queue-item decoration for local ids (FE-1 2b: formerly a
+    // _buildQueueItem wrapper; now a decorator on part2's registry).
+    DM._queueItemDecorators.push(function (node, id) {
+        if (!this.isLocalId(id)) return;
         // Replace the ``/api/image-thumbnail/{id}`` request (which would 404
         // for negative ids) with either the inline scan thumb or the lazy
         // path-thumbnail endpoint.
@@ -405,15 +405,14 @@
         node.classList.add('source-local');
         const idLabel = node.querySelector('.dataset-queue-id');
         if (idLabel) idLabel.textContent = '📁 ' + (meta.filename || '').slice(-40);
-        return node;
-    };
+    });
 
-    const original_setActive = DM._setActive;
-    DM._setActive = function (imageId) {
-        const id = Number(imageId);
-        if (!this.isLocalId(id)) {
-            return original_setActive.call(this, id);
-        }
+    // Local-source _setActive branch (FE-1 2b: formerly a DM._setActive
+    // wrapper that intercepted negative ids). part2's single _setActive
+    // dispatches here for local ids, then runs DM._activeChangedHooks —
+    // so this branch, like the old wrapper, skips the gallery-only side
+    // effects (pending-edit flush, split-view refresh, caption diff).
+    DM._setActiveLocal = function (id) {
         // Local-source path: render the same lazy thumbnail path used by
         // queue/import/export previews. No DB row is required.
         if (!this.imageIds.includes(id)) return;
@@ -620,6 +619,14 @@
     };
 
     // -------- Export: split into image_ids + image_paths + path overrides --------
+    //
+    // FE-1 2b: this is the SINGLE _buildExportPayload implementation (the
+    // former part3 copy was dead code — this one redefined it at load time
+    // and is kept here beside the local-source state it reads:
+    // isLocalId / localItemPaths / _localIdUsesManifest /
+    // _getDatasetScanTokenSources). Gallery-only datasets simply produce
+    // empty image_paths / dataset_scan_tokens. The wire-format key set is
+    // pinned by tests/e2e/specs/dataset-payload-contract.spec.ts.
 
     DM._buildExportPayload = function () {
         const folder = document.getElementById('dataset-output-folder')?.value?.trim();

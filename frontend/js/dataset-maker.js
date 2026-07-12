@@ -792,9 +792,10 @@
     // ``async = false`` for dynamically-inserted scripts as a way to
     // request "execute these in DOM-insertion order, not parallel race"
     // (see HTML spec §"prepare a script", classic-script branch). This
-    // matters because dataset-maker-local-import.js patches functions
-    // defined in part2.js (e.g. _buildQueueItem) — without ordering, the
-    // patch can land BEFORE the function exists and get overwritten.
+    // matters because dataset-maker-local-import.js registers hooks and
+    // decorators on registries defined in part2.js (_activeChangedHooks,
+    // _queueItemDecorators) — without ordering, the registration can run
+    // BEFORE the registry exists.
     function _appendOrderedScript(src) {
         const s = document.createElement('script');
         s.src = src;
@@ -812,8 +813,8 @@
     // v3.2.2 T-power-PR2 (C): tag confidence pills inside the caption editor.
     _appendOrderedScript('/static/js/dataset-confidence-pills.js');
     // point 2/3: two-box caption editor (booru + natural-language) with a
-    // per-image type toggle + bulk/auto helpers. Loaded last so its _setActive /
-    // _renderEmptyEditor / _buildQueueItem wrappers compose over part2 + the
+    // per-image type toggle + bulk/auto helpers. Loaded last so its hooks /
+    // decorators / _renderEmptyEditor wrappers compose over part2 + the
     // local-import + pipeline patches.
     _appendOrderedScript('/static/js/dataset-maker-caption-split.js');
 

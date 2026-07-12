@@ -641,7 +641,10 @@ def test_dataset_export_tab_is_export_only_with_output_mode_payload():
     assert 'id="dataset-beside-image-warning"' in html
     assert 'data-export-folder-only' in html
     assert "DM._outputMode" in part3
-    assert "output_mode: outputMode" in part3
+    # FE-1 2b: _buildExportPayload has ONE implementation, hosted in
+    # local-import (it reads local-source state); the part3 copy was dead
+    # code (wholesale redefined at load time) and was removed.
+    assert "output_mode: outputMode" not in part3
     assert "output_mode: outputMode" in local_import
     assert "_sidecarCapabilityStats" in part3
     assert "_exportDisabledReason" in part3

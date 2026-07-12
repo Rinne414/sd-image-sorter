@@ -124,16 +124,16 @@
 
         _ensureHooks() {
             const dm = this.dm;
-            if (this._hooked || !dm || typeof dm._setActive !== 'function') return;
+            if (this._hooked || !dm || !Array.isArray(dm._activeChangedHooks)) return;
             this._hooked = true;
-            // QW-2: seen tracking — one more wrap on the established chain.
-            const original = dm._setActive.bind(dm);
-            dm._setActive = (id) => {
-                const result = original(id);
+            // QW-2: seen tracking — registered on the shared active-changed
+            // registry (FE-1 2b) instead of re-wrapping dm._setActive. Pushed
+            // at first console open, so it runs last (as the old outermost
+            // runtime wrap did).
+            dm._activeChangedHooks.push((id) => {
                 this._markSeen(id);
                 this._updateTokenCounter();
-                return result;
-            };
+            });
             // Recompute while the panel is open and captions are being edited.
             if (dm.captionEdits && !dm.captionEdits.__sepconWrapped) {
                 dm.captionEdits.__sepconWrapped = true;

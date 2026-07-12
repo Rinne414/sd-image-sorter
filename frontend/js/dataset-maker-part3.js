@@ -666,57 +666,12 @@
     };
 
     // ---------- Run export ----------
-    DM._buildExportPayload = function () {
-        const folder = document.getElementById('dataset-output-folder')?.value?.trim();
-        const pattern = this._effectivePattern();
-        const trigger = document.getElementById('dataset-trigger')?.value || '';
-        const imageOp = document.getElementById('dataset-image-op')?.value || 'copy';
-        const outputMode = this._outputMode();
-        const overwrite = document.getElementById('dataset-overwrite')?.value || 'unique';
-        const normalize = !!document.getElementById('dataset-underscore-to-space')?.checked;
-        const contentMode = this._exportContentMode();
-        const prefix = document.getElementById('dataset-export-prefix')?.value || '';
-        // Newline OR comma separated (TraitPruner appends blacklist tags with
-        // '\n'); splitting on comma alone silently dropped trait-pruned entries.
-        const blacklist = (document.getElementById('dataset-blacklist')?.value || '')
-            .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-        const commonTags = (document.getElementById('dataset-common-tags')?.value || '')
-            .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-        const image_overrides = {};
-        for (const [id, val] of this.captionEdits.entries()) {
-            image_overrides[String(id)] = val;
-        }
-        // point 3: per-image NL type + edited NL text. Only non-default entries
-        // are sent (booru-typed images send nothing → the backend renders them
-        // exactly as before), so even 80k-image exports stay tiny.
-        const image_types = {};
-        const image_nl_overrides = {};
-        for (const id of this.imageIds) {
-            const type = this._captionTypeFor ? this._captionTypeFor(id) : 'booru';
-            if (type === 'nl' || type === 'both') image_types[String(id)] = type;
-            if (this.nlEdits.has(id)) image_nl_overrides[String(id)] = this.nlEdits.get(id);
-        }
-
-        return {
-            image_ids: this.imageIds,
-            output_folder: outputMode === 'beside_image' ? '' : folder,
-            output_mode: outputMode,
-            naming_pattern: pattern,
-            trigger,
-            image_op: outputMode === 'beside_image' ? 'copy' : imageOp,
-            overwrite_policy: overwrite,
-            content_mode: contentMode,
-            prefix,
-            template_options: contentMode === 'template' ? this._datasetTemplateOptions() : null,
-            caption_transforms: this._captionTransforms(),
-            normalize_tag_underscores: normalize,
-            blacklist,
-            common_tags: commonTags,
-            image_overrides,
-            image_types,
-            image_nl_overrides,
-        };
-    };
+    // NOTE (FE-1 2b): _buildExportPayload lives in
+    // dataset-maker-local-import.js — the single implementation that
+    // handles both gallery ids and local-source items. A part3 copy used
+    // to exist here but was wholesale redefined by local-import at load
+    // time (dead code), so it was removed. The wire-format key set is
+    // pinned by tests/e2e/specs/dataset-payload-contract.spec.ts.
 
     DM._setExportBusy = function (busy, options = {}) {
         const btn = document.getElementById('btn-dataset-export');

@@ -103,9 +103,33 @@
         return { width, columns, cellWidth, rowStride: cellWidth + gap, gap };
     }
 
+    // FE-1 2b: active-image side-effect registry. The former _setActive
+    // monkey-patch chain (split-view refresh, caption diff, confidence
+    // pills, caption boxes, Separation Console seen-marking) registers
+    // hooks here instead of re-wrapping DM._setActive. Hooks run in
+    // registration order AFTER the core logic — the same order the old
+    // wrapper chain produced — and run even when the core early-returns
+    // (wrapper post-code always ran). Each hook receives the numeric id
+    // that was requested with `this` bound to DM.
+    DM._activeChangedHooks = [];
+
     DM._setActive = function (imageId) {
-        if (Number(this.activeId) !== Number(imageId)) this._flushPendingCaptionEdit?.();
         const id = Number(imageId);
+        if (this.isLocalId?.(id) && typeof this._setActiveLocal === 'function') {
+            // Local-source items (negative ids) render via the branch in
+            // dataset-maker-local-import.js. NOTE: the local branch never
+            // flushed pending caption edits, refreshed the split view, or
+            // updated the caption diff — gallery-only hooks below guard on
+            // isLocalId themselves to preserve that.
+            this._setActiveLocal(id);
+        } else {
+            this._setActiveGallery(id);
+        }
+        for (const hook of this._activeChangedHooks) hook.call(this, id);
+    };
+
+    DM._setActiveGallery = function (id) {
+        if (Number(this.activeId) !== id) this._flushPendingCaptionEdit?.();
         if (!this.imageIds.includes(id)) return;
         this.activeId = id;
         const meta = this.meta.get(id) || {};
@@ -424,6 +448,14 @@
         renderVisible();
     };
 
+    // FE-1 2b: queue-item decorator registry. Former _buildQueueItem
+    // monkey-patch wrappers (local-import thumb/label swap, caption-split
+    // type chip) register decorators here instead of re-wrapping. Each
+    // decorator mutates the built element in place and runs in
+    // registration order after the base item is fully assembled (event
+    // listeners included), exactly like the old wrapper chain.
+    DM._queueItemDecorators = [];
+
     DM._buildQueueItem = function (id, orderIndex = null) {
         const meta = this.meta.get(id) || {};
         const resolvedOrderIndex = Number.isFinite(orderIndex) ? Number(orderIndex) : this.imageIds.indexOf(id);
@@ -523,6 +555,7 @@
             if (e.shiftKey || e.ctrlKey || e.metaKey) this._handleMultiSelectClick(id, e);
             else this._setActive(id);
         });
+        for (const decorate of this._queueItemDecorators) decorate.call(this, item, id);
         return item;
     };
 
@@ -969,12 +1002,12 @@
         this._refreshExportPreview?.();
     };
 
-    // Patch _setActive to refresh split view
-    const _origSetActive = DM._setActive;
-    DM._setActive = function (imageId) {
-        _origSetActive.call(this, imageId);
+    // Refresh the split view on image change (former _setActive wrapper).
+    // Gallery-only: the local-import branch never re-rendered the split view.
+    DM._activeChangedHooks.push(function (id) {
+        if (this.isLocalId?.(id)) return;
         if (this._splitActive) this._applySplitView();
-    };
+    });
 
     // Init split view button binding
     if (document.readyState === 'loading') {
@@ -1528,12 +1561,12 @@
         el.hidden = false;
     };
 
-    // Patch _setActive to also update diff
-    const _origSetActiveDiff = DM._setActive;
-    DM._setActive = function (imageId) {
-        _origSetActiveDiff.call(this, imageId);
+    // Update the caption diff on image change (former _setActive wrapper).
+    // Gallery-only: the local-import branch never updated the diff.
+    DM._activeChangedHooks.push(function (id) {
+        if (this.isLocalId?.(id)) return;
         if (this.activeId != null) this._updateCaptionDiff(Number(this.activeId));
-    };
+    });
 
     // ---------- Keyboard shortcuts for workbench ----------
     document.addEventListener('keydown', function (e) {
