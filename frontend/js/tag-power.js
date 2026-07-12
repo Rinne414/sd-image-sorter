@@ -31,6 +31,13 @@
     const MAX_TAGS_BY_PRESET = {
         'sdxl': 50,
         'flux': 120,
+        // Krea 2 (June 2026): Qwen3-VL text encoder, trained predominantly on
+        // long natural-language captions — same budget class as Anima/Qwen3.
+        // Tags still help search/consensus, but for Krea-2 LoRA training the
+        // NL caption (Dataset Maker caption type "NL"/"Both") is the payload.
+        // Sources: krea.ai/blog/krea-2-technical-report,
+        // github.com/krea-ai/krea-2 docs/prompting.md.
+        'krea2': 200,
         'anima_style': 200,
         'anima_character': 200,
     };

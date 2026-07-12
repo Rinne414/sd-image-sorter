@@ -116,8 +116,8 @@
                 `${tagCount} 个标签 · ≈${tokens} tokens`);
             counter.classList.toggle('dataset-token-counter-over', tokens > 75);
             counter.title = tokens > 75
-                ? t('Over the 75-token CLIP budget — SD1.5/SDXL encoders truncate the rest. (Estimate; FLUX/T5 budgets are larger.)',
-                    '超过 CLIP 75-token 预算 — SD1.5/SDXL 编码器会截断多余部分。（估算值；FLUX/T5 预算更大。）')
+                ? t('Over the 75-token CLIP budget — SD1.5/SDXL encoders truncate the rest. (Estimate; FLUX/T5 and Krea-2/Qwen-VL budgets are far larger.)',
+                    '超过 CLIP 75-token 预算 — SD1.5/SDXL 编码器会截断多余部分。（估算值；FLUX/T5 与 Krea-2/Qwen-VL 预算远大于此。）')
                 : t('Estimated CLIP tokens (75-token budget for SD1.5/SDXL).',
                     '估算的 CLIP token 数（SD1.5/SDXL 预算为 75）。');
         },
