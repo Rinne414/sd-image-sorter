@@ -632,6 +632,21 @@ Storage report for the `tag_scores` table (v3.5.x BE-1): `{enabled, floor, total
 #### POST /api/tags/scores/purge
 Delete stored tag scores. Body: `{model?: string}` — omit to purge all models. Returns `{removed, model}`. Re-tagging repopulates scores; purging only removes the re-threshold/coverage-gap capability for images tagged before the next run.
 
+#### GET /api/masks/{image_id}
+Stored masked-training mask for one gallery image, as a grayscale PNG (white = train, black = ignore). 404 = no mask stored, which trainers treat as "train the whole image" (v3.5.x Phase 4 mask editor).
+
+#### PUT /api/masks/{image_id}
+Save a canvas-edited training mask. Body: `{data_url}` — a base64 `data:image/png;base64,...` URL (webp/jpeg accepted, converted to grayscale PNG). Atomic write to `DATA_DIR/masks/{image_id}.png`. 404 when the image id is not in the library; 400 on undecodable payloads or >32 MB. Returns `{saved, image_id, width, height, filename}`.
+
+#### DELETE /api/masks/{image_id}
+Remove the stored mask (the image reverts to fully trained). Returns `{removed, image_id}`.
+
+#### POST /api/masks/status
+Which of these images carry a stored mask. Body: `{image_ids: [..]}`. Returns `{masks: {"<id>": true|false}}` — queue badge data for the Dataset Maker.
+
+#### POST /api/masks/{image_id}/auto
+Generate a subject mask for canvas preview — NOT saved until the user saves the edited result. Body: `{method: "rembg"}` (the only method today; ClipSeg is a planned addition). rembg is an opt-in dependency: ONNX Runtime is already bundled, but rembg itself must be installed into the backend environment (`pip install rembg`; the u2net model, ~170 MB, downloads on first use into `DATA_DIR/models/rembg`). Missing install returns 400 with a bilingual hint. Returns `{image_id, method, width, height, data_url, saved: false}`.
+
 #### GET /api/prompts/library
 Get prompt token library. Optional query params: `q=<text>`, `limit=<n>`. Search runs across the full prompt-token index before applying `limit`.
 
@@ -1394,7 +1409,7 @@ Auto-start the local Ollama server when it is installed but not running. Useful 
 The Dataset tab (📦) drives a focused LoRA dataset preparation workflow.
 
 #### POST /api/dataset/export
-Combined image-and-caption export for LoRA training datasets. Renames every image according to the supplied pattern, copies (or moves) it to the output folder, and writes the matching `.txt` caption sidecar with the same stem.
+Combined image-and-caption export for LoRA training datasets. Renames every image according to the supplied pattern, copies (or moves) it to the output folder, and writes the matching `.txt` caption sidecar with the same stem. Optional `mask_export` (`"none"` default | `"onetrainer"` | `"kohya"`, v3.5.x Phase 4): also exports stored training masks — OneTrainer writes `<stem>-masklabel.png` beside each exported image, kohya writes `mask/<stem>.png` (a `conditioning_data_dir` layout). Images without a stored mask count in `masks_missing`, never fail (no mask = train the whole image); successful copies count in `masks_written`. Both counters ride the response.
 
 Pattern variables: `{filename}`, `{index}`, `{index:03d}` (0-padded counter), `{trigger}`, `{generator}`, `{ext}`, `{date}`.
 

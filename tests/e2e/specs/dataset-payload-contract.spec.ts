@@ -33,6 +33,7 @@ const EXPORT_PAYLOAD_KEYS = [
   'image_overrides',
   'image_paths',
   'image_types',
+  'mask_export',
   'naming_pattern',
   'normalize_tag_underscores',
   'output_folder',

@@ -708,6 +708,8 @@
             image_overrides,
             image_types,
             image_nl_overrides,
+            // Phase 4 masked training: mask sidecar format for the trainer.
+            mask_export: document.getElementById('dataset-mask-export')?.value || 'none',
         };
     };
 

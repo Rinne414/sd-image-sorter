@@ -141,6 +141,13 @@ class DatasetExportRequest(BaseModel):
     image_types: Dict[str, str] = Field(default_factory=dict)
     image_nl_overrides: Dict[str, str] = Field(default_factory=dict)
 
+    # Phase 4 masked training: also export stored masks, named for the
+    # chosen trainer. "onetrainer" writes ``<stem>-masklabel.png`` beside
+    # each exported image; "kohya" writes ``mask/<stem>.png`` (a
+    # conditioning_data_dir layout). Images without a stored mask are
+    # counted, never failed — no mask means "train the whole image".
+    mask_export: str = Field(default="none", max_length=16)
+
 
 class DatasetExportPreviewRequest(BaseModel):
     """Request schema for ``POST /api/dataset/export-preview``.
@@ -189,6 +196,8 @@ class DatasetExportResponse(BaseModel):
     exported: int
     skipped: int
     error_count: int
+    masks_written: int = 0
+    masks_missing: int = 0
     output_folder: str
     output_mode: str = "folder"
     items: List[DatasetExportItemResult]
@@ -406,10 +415,23 @@ def _output_mode(request: Any) -> str:
     return str(getattr(request, "output_mode", "folder") or "folder").strip().lower()
 
 
+VALID_MASK_EXPORT_MODES = ("none", "onetrainer", "kohya")
+
+
+def _mask_export_mode(request: Any) -> str:
+    return str(getattr(request, "mask_export", "none") or "none").strip().lower()
+
+
 def _validate_export_request(request: DatasetExportRequest) -> Optional[Path]:
     output_mode = _output_mode(request)
     if output_mode not in VALID_OUTPUT_MODES:
         raise HTTPException(status_code=400, detail=f"Invalid output_mode: {output_mode!r}")
+    if _mask_export_mode(request) not in VALID_MASK_EXPORT_MODES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid mask_export: {getattr(request, 'mask_export', None)!r} "
+                   f"(expected one of {', '.join(VALID_MASK_EXPORT_MODES)})",
+        )
     if request.image_op not in VALID_IMAGE_OPS:
         raise HTTPException(status_code=400, detail=f"Invalid image_op: {request.image_op!r}")
     if request.overwrite_policy not in VALID_OVERWRITE_POLICIES:
@@ -774,6 +796,7 @@ def export_dataset(
     image_types_int, image_types_path = _split_keyed_str_map(getattr(request, "image_types", None))
     nl_overrides_int, nl_overrides_path = _split_keyed_str_map(getattr(request, "image_nl_overrides", None))
     caption_extension = _dataset_sidecar_extension(request.content_mode)
+    mask_export_mode = _mask_export_mode(request)
 
     # ---- Execute the plan ----
     items: List[DatasetExportItemResult] = []
@@ -781,6 +804,8 @@ def export_dataset(
     exported = 0
     skipped = 0
     error_count = 0
+    masks_written = 0
+    masks_missing = 0
     processed = 0
     total_expected = requested_total
     total_items = 0
@@ -845,6 +870,7 @@ def export_dataset(
 
     def _export_record(record: Dict[str, Any], tags: Optional[List[Any]] = None) -> bool:
         nonlocal exported, skipped, error_count, processed, export_index, cancelled
+        nonlocal masks_written, masks_missing
         if cancel_event is not None and cancel_event.is_set():
             cancelled = True
             return False
@@ -999,6 +1025,25 @@ def export_dataset(
                 pass
             return True
 
+        # Masked-training sidecar (Phase 4): copy the stored mask, named for
+        # the chosen trainer. Local-source items (id <= 0) have no stored
+        # masks; a missing mask is normal (trainers treat it as full-image)
+        # and never fails the row.
+        if mask_export_mode != "none" and image_id > 0:
+            nonlocal_dst = dst_image_path if dst_image_path is not None else Path(src_image_path)
+            mask_error = _write_mask_sidecar(
+                image_id,
+                mask_export_mode,
+                exported_image_path=nonlocal_dst,
+                output_folder=output_path,
+            )
+            if mask_error is None:
+                masks_written += 1
+            elif mask_error == "missing":
+                masks_missing += 1
+            else:
+                _add_error(mask_error)
+
         exported += 1
         processed += 1
         _append_item(DatasetExportItemResult(
@@ -1009,6 +1054,33 @@ def export_dataset(
         ))
         _emit(f"Exported {filename} ({processed}/{total_expected})", filename)
         return True
+
+    def _write_mask_sidecar(
+        image_id: int,
+        mode: str,
+        *,
+        exported_image_path: Path,
+        output_folder: Optional[Path],
+    ) -> Optional[str]:
+        """Copy the stored mask next to the exported pair. Returns None on
+        success, "missing" when no mask is stored, or an error string."""
+        from services import mask_service
+
+        source_mask = mask_service.get_mask_file(image_id)
+        if source_mask is None:
+            return "missing"
+        stem = exported_image_path.stem
+        if mode == "onetrainer":
+            target = exported_image_path.parent / f"{stem}-masklabel.png"
+        else:  # kohya conditioning_data_dir layout
+            base = output_folder if output_folder is not None else exported_image_path.parent
+            target = base / "mask" / f"{stem}.png"
+        try:
+            os.makedirs(target.parent, exist_ok=True)
+            shutil.copy2(str(source_mask), str(target))
+            return None
+        except Exception as exc:  # noqa: BLE001
+            return f"failed to write mask for image {image_id}: {exc}"
 
     def _process_path_source(raw_path: Any) -> bool:
         nonlocal cancelled
@@ -1096,6 +1168,8 @@ def export_dataset(
         _write_export_manifest(output_path, manifest)
 
     return DatasetExportResponse(
+        masks_written=masks_written,
+        masks_missing=masks_missing,
         status=status,
         exported=exported,
         skipped=skipped,

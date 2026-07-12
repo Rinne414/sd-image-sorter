@@ -3670,6 +3670,17 @@
                                     </div>
                                 </div>
 
+                                <!-- Phase 4 masked training: per-image mask entry point.
+                                     Shown by modules/mask-editor.js for gallery images only
+                                     (local imports have no stored masks). -->
+                                <div class="dataset-mask-controls" id="dataset-mask-controls" hidden>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-mask-edit"
+                                            data-i18n="dataset.maskEditButton"
+                                            title="Masked training: paint which regions the trainer learns from"
+                                            data-i18n-title="dataset.maskEditButtonTip">🎭 Training mask</button>
+                                    <span class="dataset-mask-state" id="dataset-mask-state"></span>
+                                </div>
+
                                 <label class="dataset-box-label dataset-box-label-booru" id="dataset-booru-label"
                                        for="dataset-editor-textarea" data-i18n="dataset.booruBoxLabel" hidden>Booru tags</label>
                                 <textarea class="dataset-editor-textarea" id="dataset-editor-textarea"
@@ -4352,6 +4363,14 @@
                                             <option value="skip" data-i18n="dataset.overwriteSkip">Skip</option>
                                         </select>
                                     </label>
+                                    <label class="form-label">
+                                        <span data-i18n="dataset.maskExportLabel">Training masks (masked loss)</span>
+                                        <select id="dataset-mask-export" class="form-input">
+                                            <option value="none" selected data-i18n="dataset.maskExportNone">Don't export</option>
+                                            <option value="onetrainer" data-i18n="dataset.maskExportOnetrainer">OneTrainer (name-masklabel.png beside image)</option>
+                                            <option value="kohya" data-i18n="dataset.maskExportKohya">kohya (mask/ conditioning folder)</option>
+                                        </select>
+                                    </label>
                                     <!-- Hidden mirror element to keep the existing JS that reads
                                          #dataset-image-op working without changes. The radio
                                          above is the visible source of truth. -->
@@ -4366,6 +4385,44 @@
                             <h4 class="dataset-export-preview-title" data-i18n="dataset.exportPreviewTitle">Output folder preview</h4>
                             <div class="dataset-export-preview-list" id="dataset-export-preview-list">
                                 <span class="dataset-export-preview-empty" data-i18n="dataset.exportPreviewEmpty">Add images and set naming to see preview</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Phase 4: masked-training mask editor -->
+                    <div class="dataset-modal" id="mask-editor-modal" role="dialog" aria-modal="true"
+                         aria-labelledby="mask-editor-title" hidden>
+                        <div class="dataset-modal-backdrop"></div>
+                        <div class="dataset-modal-card mask-editor-card">
+                            <h3 id="mask-editor-title" class="dataset-modal-title">
+                                <span aria-hidden="true">🎭</span>
+                                <span data-i18n="dataset.maskEditorTitle">Training mask</span>
+                                <small class="mask-editor-help" data-i18n="dataset.maskEditorHelp">Red overlay = ignored by the trainer; clear = trained.</small>
+                            </h3>
+                            <div class="mask-editor-toolbar">
+                                <button type="button" class="btn btn-secondary btn-small mask-tool is-active" id="mask-tool-include"
+                                        data-i18n="dataset.maskToolInclude" title="Paint regions the trainer SHOULD learn from"
+                                        data-i18n-title="dataset.maskToolIncludeTip">🖌 Include</button>
+                                <button type="button" class="btn btn-secondary btn-small mask-tool" id="mask-tool-exclude"
+                                        data-i18n="dataset.maskToolExclude" title="Paint regions the trainer should IGNORE"
+                                        data-i18n-title="dataset.maskToolExcludeTip">⬛ Exclude</button>
+                                <label class="mask-brush-size">
+                                    <input type="range" id="mask-brush-size" min="4" max="160" step="2" value="40">
+                                    <span id="mask-brush-size-value">40</span>
+                                </label>
+                                <button type="button" class="btn btn-ghost btn-small" id="mask-tool-invert" data-i18n="dataset.maskToolInvert">⇄ Invert</button>
+                                <button type="button" class="btn btn-ghost btn-small" id="mask-tool-fill" data-i18n="dataset.maskToolFill">Reset (all trained)</button>
+                                <button type="button" class="btn btn-ghost btn-small" id="mask-tool-auto"
+                                        data-i18n="dataset.maskToolAuto" title="rembg subject extraction (opt-in install)"
+                                        data-i18n-title="dataset.maskToolAutoTip">🤖 Auto subject</button>
+                            </div>
+                            <div class="mask-editor-canvas-wrap" id="mask-editor-canvas-wrap">
+                                <canvas id="mask-editor-canvas"></canvas>
+                            </div>
+                            <div class="mask-editor-status helper-text" id="mask-editor-status"></div>
+                            <div class="dataset-modal-actions mask-editor-actions">
+                                <button type="button" class="btn btn-ghost" id="mask-editor-delete" data-i18n="dataset.maskDelete">🗑 Remove mask</button>
+                                <button type="button" class="btn btn-ghost" id="mask-editor-cancel" data-i18n="common.cancel">Cancel</button>
+                                <button type="button" class="btn btn-primary" id="mask-editor-save" data-i18n="dataset.maskSave">Save mask</button>
                             </div>
                         </div>
                     </div>
@@ -6923,6 +6980,7 @@
     <script src="/static/js/modules/entry-catalog.js"></script>
     <script src="/static/js/modules/trait-pruner.js"></script>
     <script src="/static/js/modules/separation-console.js"></script>
+    <script src="/static/js/modules/mask-editor.js"></script>
     <script>
     /* Sorting sub-tab toggle (Auto-Separate / Manual Sort) */
     window._switchSortingSub = function(sub) {

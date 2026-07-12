@@ -10202,6 +10202,77 @@ html.lang-zh #view-censor .queue-action-btn span {
     margin-bottom: 4px;
 }
 
+/* Phase 4 — masked-training mask editor */
+.dataset-mask-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0;
+}
+/* display:flex would override the [hidden] UA style (the classic trap). */
+.dataset-mask-controls[hidden] {
+    display: none;
+}
+.dataset-mask-state {
+    font-size: 11px;
+    color: var(--text-secondary, #aeb6cc);
+}
+.dataset-mask-state.has-mask {
+    color: var(--success, #4cc38a);
+}
+.mask-editor-card {
+    max-width: min(1100px, 92vw);
+    width: min(1100px, 92vw);
+}
+.mask-editor-help {
+    font-weight: 400;
+    font-size: 12px;
+    color: var(--text-secondary, #aeb6cc);
+    margin-left: 8px;
+}
+.mask-editor-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0;
+}
+.mask-editor-toolbar .mask-tool.is-active {
+    outline: 2px solid rgba(var(--accent-primary-rgb, 124, 139, 255), 0.7);
+}
+.mask-brush-size {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary, #aeb6cc);
+}
+.mask-brush-size input[type="range"] {
+    width: 110px;
+}
+.mask-editor-canvas-wrap {
+    overflow: auto;
+    max-height: min(64vh, 900px);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.35);
+    display: flex;
+    justify-content: center;
+}
+#mask-editor-canvas {
+    max-width: 100%;
+    height: auto;
+    cursor: crosshair;
+    touch-action: none;
+}
+.mask-editor-status {
+    min-height: 18px;
+    margin: 6px 0;
+}
+.mask-editor-actions #mask-editor-delete {
+    margin-right: auto;
+}
+
 /* QW-1 — caption token budget under the Dataset Maker booru box */
 .dataset-token-counter {
     font-size: 11px;
