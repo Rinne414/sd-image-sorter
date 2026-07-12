@@ -299,6 +299,11 @@ Resolve the full ordered ID set for the current filtered result set.
 
 This is the compatibility endpoint for callers that need one complete response. It uses the same filter payload as the gallery, including `tagMode` (`and`/`or`), `minUserRating`, color fields, `folder`, `hasMetadata`, `collectionId`, and all include/exclude filters (`excludeTags` / `excludeGenerators` / `excludeRatings` / `excludeCheckpoints` / `excludeLoras` / `excludePrompts` / `excludeColors`). Responses are capped at 100,000 IDs; larger selections return `413` and must use the token/chunk pair below unless `sortBy` is `random`.
 
+#### POST /api/images/count
+Count the images matching a gallery filter payload without returning rows or IDs.
+
+Request body is the same filter payload as `selection-ids` (all include/exclude filters, `tagMode`, `folder`, `collectionId`, `hasMetadata`, color fields, and the Aurora Phase 3 fields such as `noCaption`). Powers the gallery Smart Folders sidebar: pinned filter presets poll this for live counts. Response: `{ "count": 123, "exact": true }`. `exact=false` mirrors the selection-token `exact_total` semantics — prompt terms in `exact` match mode are post-filtered after SQL, so the count can over-report for those payloads.
+
 #### POST /api/images/selection-token
 Create a stateless token for chunked filtered-selection ID retrieval.
 

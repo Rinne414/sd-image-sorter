@@ -8928,6 +8928,97 @@ html.lang-zh #view-censor .queue-action-btn span {
     outline-offset: 1px;
 }
 
+/* ============== Smart Folders v1 (pinned filter presets) ==============
+   Sidebar entries mirror the Collections row language so the two facets
+   read as one system. */
+/* [hidden] guard: .filter-sidebar .sidebar-section is display:flex, which
+   would override the hidden attribute (the classic trap). */
+#smart-folders-section[hidden] {
+    display: none !important;
+}
+.smart-folders-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 260px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.smart-folder-row {
+    align-items: center;
+    background: var(--glass-bg, rgba(8, 14, 24, 0.55));
+    border: 1px solid var(--glass-border, rgba(191, 219, 254, 0.12));
+    border-radius: 10px;
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    font: inherit;
+    font-size: 0.84rem;
+    gap: 8px;
+    min-width: 0;
+    padding: 7px 8px;
+    text-align: left;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.smart-folder-row:hover {
+    background: var(--bg-hover, rgba(23, 38, 63, 0.86));
+    border-color: var(--glass-border, rgba(191, 219, 254, 0.22));
+}
+.smart-folder-row:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 1px;
+}
+.smart-folder-icon {
+    flex: 0 0 16px;
+    text-align: center;
+}
+.smart-folder-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.smart-folder-count {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    color: var(--text-muted);
+    flex: 0 0 auto;
+    font-size: 0.72rem;
+    min-width: 22px;
+    padding: 1px 7px;
+    text-align: center;
+}
+.smart-folder-more {
+    background: transparent;
+    border: 0;
+    color: var(--text-muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.76rem;
+    padding: 5px 8px;
+    text-align: left;
+    transition: color 0.15s ease;
+}
+.smart-folder-more:hover,
+.smart-folder-more:focus-visible {
+    color: var(--text-primary);
+    outline: none;
+}
+/* Pin toggle inside the filter modal presets bar */
+.preset-pin {
+    filter: grayscale(1);
+    opacity: 0.55;
+    transition: filter 0.15s ease, opacity 0.15s ease;
+}
+.preset-pin:hover {
+    opacity: 0.9;
+}
+.preset-pin.is-pinned {
+    filter: none;
+    opacity: 1;
+}
+
 /* v3.3.2 UI: collapsible gallery sidebar sections (accordion) */
 .filter-sidebar .sidebar-section {
     display: flex;

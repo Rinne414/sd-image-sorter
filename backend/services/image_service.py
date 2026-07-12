@@ -2867,6 +2867,23 @@ class ImageService:
             "chunk_size": normalized_chunk,
         }
 
+    def count_filtered_images(self, **filters: Any) -> Dict[str, Any]:
+        """Count images matching the gallery filter payload without fetching rows.
+
+        Smart Folders v1: pinned sidebar presets poll this for live counts, so
+        it reuses the exact selection filter contract (the same payload as
+        selection-ids / selection-token) and the COUNT path those endpoints
+        already use. ``exact`` mirrors ``create_selection_token``'s
+        ``exact_total``: prompt terms in ``exact`` match mode are post-filtered
+        after the SQL prefilter, so their COUNT can over-report.
+        """
+        contract = self._build_selection_filter_contract(**filters)
+        exact = not bool(contract["prompts"]) or contract["promptMatchMode"] == PROMPT_MATCH_MODE_CONTAINS
+        return {
+            "count": int(self._selection_total_estimate(contract)),
+            "exact": exact,
+        }
+
     def get_selection_chunk(self, selection_token: str, *, offset: int = 0, limit: int = SELECTION_TOKEN_DEFAULT_CHUNK) -> Dict[str, Any]:
         """Resolve one ordered chunk of image IDs from a selection token."""
         contract = self._decode_selection_token(selection_token)

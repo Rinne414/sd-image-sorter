@@ -1365,6 +1365,12 @@ const API = {
         return this.post('/api/images/selection-ids', buildSelectionFilterRequest(filters));
     },
 
+    // Smart Folders v1: count the images matching a filter state without
+    // fetching rows. Same payload as selection-ids; returns {count, exact}.
+    async countImages(filters = {}, options = {}) {
+        return this.post('/api/images/count', buildSelectionFilterRequest(filters), options);
+    },
+
     async createSelectionToken(filters = {}, chunkSize = FILTERED_SELECTION_CHUNK_SIZE, options = {}) {
         const payload = {
             ...buildSelectionFilterRequest(filters),
@@ -9499,6 +9505,13 @@ async function loadImages(appendMode = false, options = {}) {
             }
         }
 
+        // Smart Folders v1: additive hook so sidebar facets (pinned preset
+        // counts) can recount when the gallery reloads. append pages don't
+        // change library data, so listeners can skip them via the detail.
+        window.dispatchEvent(new CustomEvent('gallery-images-loaded', {
+            detail: { appendMode: Boolean(appendMode) },
+        }));
+
         const emptyState = $('#gallery-empty-state');
         if (emptyState) {
             const shouldShow = AppState.images.length === 0;
@@ -13350,6 +13363,9 @@ function saveFilterPreset(name) {
     try {
         localStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(presets));
         showToast(appT('filter.presetSaved', 'Preset "{name}" saved', { name }), 'success');
+        // Smart Folders v1: a re-saved pinned preset changed its filter state,
+        // so its sidebar entry needs a fresh count.
+        window.SmartFoldersUI?.refresh?.();
         return true;
     } catch (e) {
         showToast(appT('filter.presetSaveFailed', 'Failed to save preset'), 'error');
@@ -13395,6 +13411,9 @@ function deleteFilterPreset(name) {
         delete presets[name];
         localStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(presets));
         showToast(appT('filter.presetDeleted', 'Preset "{name}" deleted', { name }), 'success');
+        // Smart Folders v1: drop the orphaned pin so the sidebar never shows
+        // an entry whose preset no longer exists.
+        window.SmartFoldersUI?.handlePresetDeleted?.(name);
         return true;
     }
     return false;
@@ -13412,12 +13431,21 @@ function renderFilterPresets() {
         return;
     }
 
+    // Smart Folders v1: per-preset pin toggle (pinned = shows as a sidebar
+    // "smart folder" with a live count). Rendered only when the module is
+    // loaded so the presets bar is unchanged if it's ever absent.
+    const smartFolders = window.SmartFoldersUI;
     container.innerHTML = presetNames.map(name => {
         const safeName = escapeHtml(name);
+        const isPinned = Boolean(smartFolders?.isPinned?.(name));
+        const pinButton = smartFolders ? `
+                <button class="btn-small preset-pin${isPinned ? ' is-pinned' : ''}" data-preset-action="pin" data-preset-name="${safeName}"
+                    aria-pressed="${isPinned ? 'true' : 'false'}"
+                    title="${escapeHtml(isPinned ? appT('filter.unpinPreset', 'Unpin from sidebar') : appT('filter.pinPreset', 'Pin to sidebar as a smart folder'))}">📌</button>` : '';
         return `
         <div class="preset-item">
             <span class="preset-name">${safeName}</span>
-            <div class="preset-actions">
+            <div class="preset-actions">${pinButton}
                 <button class="btn-small" data-preset-action="load" data-preset-name="${safeName}">${escapeHtml(appT('filter.loadPreset', 'Load'))}</button>
                 <button class="btn-small btn-danger" data-preset-action="delete" data-preset-name="${safeName}">×</button>
             </div>
@@ -13429,6 +13457,9 @@ function renderFilterPresets() {
             const { presetAction, presetName } = button.dataset;
             if (presetAction === 'load') {
                 loadFilterPreset(presetName);
+            } else if (presetAction === 'pin') {
+                window.SmartFoldersUI?.togglePin?.(presetName);
+                renderFilterPresets();
             } else if (presetAction === 'delete' && deleteFilterPreset(presetName)) {
                 renderFilterPresets();
             }
@@ -13932,6 +13963,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.CollectionsUI?.init?.();
     // v3.3.2 Library Navigation: render the sidebar Folders tree.
     window.FolderTreeUI?.init?.();
+    // Smart Folders v1: render pinned filter presets with live counts.
+    window.SmartFoldersUI?.init?.();
     // v3.3.2 Library Navigation: wire the library-roots management modal (Phase D).
     window.LibraryRootsUI?.init?.();
     _initBgTagProgressButtons();

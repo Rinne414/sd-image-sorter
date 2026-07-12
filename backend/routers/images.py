@@ -188,6 +188,12 @@ class SelectionChunkResponse(BaseModel):
     has_more: bool = False
 
 
+class FilteredImageCountResponse(BaseModel):
+    """Response for POST /api/images/count (Smart Folders live counts)."""
+    count: int = 0
+    exact: bool = True
+
+
 class ExportSelectionImage(BaseModel):
     id: int
     filename: str = ""
@@ -1169,6 +1175,69 @@ async def get_selection_ids(
 ):
     """Return the full filtered-result ID set for selection flows."""
     return service.get_filtered_selection_ids(
+        generators=request.generators,
+        tags=request.tags,
+        tag_mode=request.tagMode,
+        ratings=request.ratings,
+        checkpoints=request.checkpoints,
+        loras=request.loras,
+        prompts=request.prompts,
+        prompt_match_mode=request.promptMatchMode,
+        artist=request.artist,
+        search=request.search,
+        sort_by=request.sortBy,
+        min_width=request.minWidth,
+        max_width=request.maxWidth,
+        min_height=request.minHeight,
+        max_height=request.maxHeight,
+        aspect_ratio=request.aspectRatio,
+        min_aesthetic=request.minAesthetic,
+        max_aesthetic=request.maxAesthetic,
+        min_user_rating=request.minUserRating,
+        brightness_min=request.brightnessMin,
+        brightness_max=request.brightnessMax,
+        color_temperature=request.colorTemperature,
+        brightness_distribution=request.brightnessDistribution,
+        exclude_tags=request.excludeTags,
+        exclude_generators=request.excludeGenerators,
+        exclude_ratings=request.excludeRatings,
+        exclude_checkpoints=request.excludeCheckpoints,
+        exclude_loras=request.excludeLoras,
+        exclude_prompts=request.excludePrompts,
+        exclude_colors=request.excludeColors,
+        color_hues=request.colorHues,
+        exclude_color_hues=request.excludeColorHues,
+        collection_id=request.collectionId,
+        folder=request.folder,
+        has_metadata=request.hasMetadata,
+        no_caption=request.noCaption,
+        aesthetic_unscored=request.aestheticUnscored,
+        min_saturation=request.minSaturation,
+        max_saturation=request.maxSaturation,
+        seed=request.seed,
+    )
+
+
+@router.post(
+    "/images/count",
+    response_model=FilteredImageCountResponse,
+    summary="Count images matching a gallery filter payload",
+    description="""
+Count the images matching a gallery filter payload without returning rows or IDs.
+
+Smart Folders v1: the gallery sidebar pins saved filter presets and shows a live
+image count per pin. The request body is the same filter payload as
+`/api/images/selection-ids`. `exact=false` mirrors the selection-token
+`exact_total` semantics: prompt terms in `exact` match mode are post-filtered
+after SQL, so the count can over-report for those payloads.
+    """,
+)
+async def count_filtered_images(
+    request: SelectionIdsRequest,
+    service: ImageService = Depends(get_image_service),
+):
+    """Return the number of images matching the gallery filter payload."""
+    return service.count_filtered_images(
         generators=request.generators,
         tags=request.tags,
         tag_mode=request.tagMode,

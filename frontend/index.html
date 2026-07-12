@@ -767,6 +767,26 @@
                         </div>
                     </div>
 
+                    <!-- Smart Folders v1: pinned filter presets with live counts.
+                         Hidden until at least one preset is pinned (modules/smart-folders.js).
+                         [hidden] display guard lives in ui-refresh.css. -->
+                    <div class="sidebar-section" data-sidebar-section="smart-folders" id="smart-folders-section" aria-label="Smart folders" hidden>
+                        <div class="sidebar-section-head">
+                            <button type="button" class="sidebar-section-toggle" aria-expanded="true" aria-controls="sidebar-body-smart-folders">
+                                <span class="sidebar-section-caret" aria-hidden="true">▾</span>
+                                <span class="sidebar-section-title" data-i18n="smartFolders.title">Smart Folders</span>
+                            </button>
+                            <div class="sidebar-section-actions">
+                                <button id="btn-smart-folders-manage" class="btn btn-ghost btn-small btn-icon-only" title="Manage presets" aria-label="Manage presets" data-i18n-title="smartFolders.manage" data-i18n-aria="smartFolders.manage">
+                                    <span aria-hidden="true">⚙</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="sidebar-section-body" id="sidebar-body-smart-folders">
+                            <div id="smart-folders-list" class="smart-folders-list"></div>
+                        </div>
+                    </div>
+
                     <div class="divider-h" aria-hidden="true"></div>
 
                     <button id="btn-toggle-select" class="btn btn-primary btn-large full-width" aria-pressed="false" aria-label="Toggle image selection mode">
@@ -6980,6 +7000,7 @@
     <script src="/static/js/tag-category-copy.js"></script>
     <script src="/static/js/gallery.js"></script>
     <script src="/static/js/collections-ui.js"></script>
+    <script src="/static/js/modules/smart-folders.js"></script>
     <script src="/static/js/folder-tree.js"></script>
     <script src="/static/js/sidebar-sections.js"></script>
     <script src="/static/js/library-roots-ui.js"></script>
