@@ -4116,6 +4116,8 @@ window.I18nLang_zhCN = {
     'dataset.exportPreviewNoCaption': '（空）',
     'dataset.exportPreviewLoading': '正在刷新预览...',
     'dataset.exportPreviewFailed': '预览失败',
+    'dataset.targetModelLabel': '目标底模',
+    'dataset.targetModelNone': '— 未选择 —',
     'dataset.maskEditButton': '🎭 训练遮罩',
     'dataset.maskEditButtonTip': '遮罩训练：涂抹训练器该学习的区域',
     'dataset.maskEditorTitle': '训练遮罩',

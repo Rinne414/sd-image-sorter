@@ -4117,6 +4117,8 @@ window.I18nLang_en = {
     'dataset.exportPreviewNoCaption': '(empty)',
     'dataset.exportPreviewLoading': 'Refreshing preview...',
     'dataset.exportPreviewFailed': 'Preview failed',
+    'dataset.targetModelLabel': 'Target base model',
+    'dataset.targetModelNone': '— Not set —',
     'dataset.maskEditButton': '🎭 Training mask',
     'dataset.maskEditButtonTip': 'Masked training: paint which regions the trainer learns from',
     'dataset.maskEditorTitle': 'Training mask',

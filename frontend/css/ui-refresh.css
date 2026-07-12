@@ -10202,6 +10202,22 @@ html.lang-zh #view-censor .queue-action-btn span {
     margin-bottom: 4px;
 }
 
+/* Target base-model profiles (LoRA setup card) */
+.dataset-setup-two-col {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 4px 12px;
+    align-items: start;
+}
+.dataset-target-model-field #btn-dataset-target-model-apply {
+    margin-top: 6px;
+    align-self: flex-start;
+}
+/* .btn's display would override the [hidden] UA style (the classic trap). */
+#btn-dataset-target-model-apply[hidden] {
+    display: none;
+}
+
 /* Phase 4 — masked-training mask editor */
 .dataset-mask-controls {
     display: flex;

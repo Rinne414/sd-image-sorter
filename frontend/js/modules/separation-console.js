@@ -111,15 +111,19 @@
             const text = box.value || '';
             const tagCount = text.split(',').map(s => s.trim()).filter(Boolean).length;
             const tokens = this.estimateTokens(text);
+            // Budget follows the LoRA-setup target model when one is chosen
+            // (CLIP 75 / T5+Qwen-VL 512); unset targets keep the historical
+            // CLIP default because it is the strictest common case.
+            const budget = window.TargetModel?.tokenBudget?.() || 75;
             counter.textContent = t(
                 `${tagCount} tags · ≈${tokens} tokens`,
                 `${tagCount} 个标签 · ≈${tokens} tokens`);
-            counter.classList.toggle('dataset-token-counter-over', tokens > 75);
-            counter.title = tokens > 75
-                ? t('Over the 75-token CLIP budget — SD1.5/SDXL encoders truncate the rest. (Estimate; FLUX/T5 and Krea-2/Qwen-VL budgets are far larger.)',
-                    '超过 CLIP 75-token 预算 — SD1.5/SDXL 编码器会截断多余部分。（估算值；FLUX/T5 与 Krea-2/Qwen-VL 预算远大于此。）')
-                : t('Estimated CLIP tokens (75-token budget for SD1.5/SDXL).',
-                    '估算的 CLIP token 数（SD1.5/SDXL 预算为 75）。');
+            counter.classList.toggle('dataset-token-counter-over', tokens > budget);
+            counter.title = tokens > budget
+                ? t(`Over the ~${budget}-token budget for the chosen target model — the encoder truncates the rest.`,
+                    `超过所选目标模型的 ~${budget}-token 预算 — 编码器会截断多余部分。`)
+                : t(`Estimated tokens (budget ~${budget} for the chosen target model; CLIP default when unset).`,
+                    `估算 token 数（当前目标模型预算约 ${budget}；未选择时按 CLIP 预算）。`);
         },
 
         _ensureHooks() {

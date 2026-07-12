@@ -3808,6 +3808,19 @@
                                     </small>
                                     <small class="dataset-preview-line" id="dataset-naming-preview" aria-live="polite"></small>
                                 </label>
+                                <div class="dataset-setup-two-col">
+                                <label class="form-label dataset-target-model-field">
+                                    <span data-i18n="dataset.targetModelLabel">Target base model</span>
+                                    <select id="dataset-target-model" class="form-input">
+                                        <option value="" data-i18n="dataset.targetModelNone">— Not set —</option>
+                                        <option value="sdxl">SD 1.5 / SDXL / Pony / Illustrious (CLIP)</option>
+                                        <option value="flux">FLUX / SD3 (T5)</option>
+                                        <option value="krea2">Krea 2 (Qwen3-VL)</option>
+                                        <option value="anima">Anima (Qwen3)</option>
+                                    </select>
+                                    <small class="dataset-field-hint" id="dataset-target-model-hint"></small>
+                                    <button type="button" class="btn btn-secondary btn-small" id="btn-dataset-target-model-apply" hidden></button>
+                                </label>
                                 <label class="form-label">
                                     <span data-i18n="dataset.loraPruneLabel">Prune tags for LoRA type:</span>
                                     <select id="dataset-lora-type" class="form-input">
@@ -3821,6 +3834,7 @@
                                     </select>
                                     <small class="dataset-lora-prune-hint" id="dataset-lora-type-hint"></small>
                                 </label>
+                                </div>
                                 <label class="form-label">
                                     <span data-i18n="dataset.commonTagsLabel">Common tags (added to every caption)</span>
                                     <textarea id="dataset-common-tags" class="form-input" rows="2"
@@ -6982,6 +6996,7 @@
     <script src="/static/js/modules/trait-pruner.js"></script>
     <script src="/static/js/modules/separation-console.js"></script>
     <script src="/static/js/modules/mask-editor.js"></script>
+    <script src="/static/js/modules/target-model.js"></script>
     <script>
     /* Sorting sub-tab toggle (Auto-Separate / Manual Sort) */
     window._switchSortingSub = function(sub) {
