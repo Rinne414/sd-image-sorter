@@ -18,6 +18,7 @@ from fastapi import HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field, model_validator
 
 import database as db
+import config
 from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
 from image_fingerprint import compute_image_content_fingerprint
 from metadata_parser import verify_image_readable
@@ -439,15 +440,25 @@ class _E2ETaggingStub:
                 {"tag": stem, "confidence": 0.88, "category": "general"},
                 {"tag": "general", "confidence": 0.99, "category": "rating"},
             ]
-            results.append(
-                {
-                    "all_tags": all_tags,
-                    "general_tags": all_tags[:2],
-                    "character_tags": [],
-                    "rating": {"tag": "general", "confidence": 0.99},
-                    "error": None,
-                }
-            )
+            result = {
+                "all_tags": all_tags,
+                "general_tags": all_tags[:2],
+                "character_tags": [],
+                "rating": {"tag": "general", "confidence": 0.99},
+                "error": None,
+            }
+            # BE-1: mirror the real _process_probs contract so e2e runs
+            # exercise the tag_scores write seam end-to-end, including one
+            # sub-threshold score the rethreshold/coverage-gap endpoints can
+            # surface.
+            if config.TAG_SCORES_ENABLED:
+                result["tag_scores"] = [
+                    {"tag": "e2e_fixture", "score": 0.99, "category": "general"},
+                    {"tag": stem, "score": 0.88, "category": "general"},
+                    {"tag": "e2e_low_conf", "score": 0.18, "category": "general"},
+                    {"tag": "general", "score": 0.99, "category": "rating"},
+                ]
+            results.append(result)
         runtime_info = {
             "requested_batch_size": preferred_batch_size,
             "effective_batch_size": max(
