@@ -641,11 +641,12 @@ RATING_CATEGORIES: list = ["general", "sensitive", "questionable", "explicit"]
 
 # Tag scores (BE-1 virtual re-threshold): persist every tagger score >= floor
 # into the tag_scores table at tagging time. Default-on per owner decision #1;
-# the floor bounds storage (100k images x 1 model ~= 400-600 MB at 0.10).
-# Disable or raise the floor via env if the library is huge and re-threshold
-# is not needed. Maintenance: GET /api/tags/scores/stats + POST purge.
+# the floor bounds storage. Owner decision 2026-07-12: floor raised 0.10 ->
+# 0.15 (roughly halves storage; the coverage-gaps default band 0.25-0.35 is
+# unaffected, only deep-low queries narrow). Disable or tune via env.
+# Maintenance: GET /api/tags/scores/stats + POST /api/tags/scores/purge.
 TAG_SCORES_ENABLED: bool = read_bool_env("SD_IMAGE_SORTER_TAG_SCORES", True)
-TAG_SCORES_FLOOR: float = read_float_env("SD_IMAGE_SORTER_TAG_SCORES_FLOOR", 0.10)
+TAG_SCORES_FLOOR: float = read_float_env("SD_IMAGE_SORTER_TAG_SCORES_FLOOR", 0.15)
 
 
 # =============================================================================

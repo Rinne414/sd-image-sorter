@@ -10179,6 +10179,23 @@ html.lang-zh #view-censor .queue-action-btn span {
     font-weight: 600;
     margin-bottom: 3px;
 }
+/* BE-1-UI — virtual re-threshold card */
+.sepcon-rethreshold {
+    margin-top: 8px;
+    border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.10));
+    padding-top: 8px;
+}
+.sepcon-rethreshold .sepcon-health-bar input[type="range"] {
+    flex: 1 1 120px;
+    min-width: 80px;
+}
+.sepcon-rt-value {
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    color: var(--text-secondary, #aeb6cc);
+    min-width: 34px;
+    text-align: right;
+}
 .sepcon-finding-detail {
     color: var(--text-secondary, #aeb6cc);
     line-height: 1.5;

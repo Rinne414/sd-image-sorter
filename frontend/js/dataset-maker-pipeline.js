@@ -1243,9 +1243,6 @@
         previewAbortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
         const list = document.getElementById('dataset-export-preview-list');
         if (!list) return;
-        const trigger = (document.getElementById('dataset-trigger')?.value || '').trim();
-        const preset = (document.querySelector('input[name="dataset-naming-preset"]:checked')?.value) || 'keep';
-        const pattern = (document.getElementById('dataset-naming-pattern')?.value || '{trigger}_{index:03d}');
         const outputMode = DM._outputMode?.() || 'folder';
         const items = DM.imageIds || [];
         const logicalCount = DM._getLogicalDatasetCount?.() || items.length;
@@ -1456,175 +1453,19 @@
             return;
         }
 
-        // OFFLINE FALLBACK ONLY — this mirrors backend
-        // services/dataset_naming.render_stem, which is the source of truth for
-        // output stems. It is reached only when DM._buildExportPayload() is
-        // unavailable or returns null; in the normal path the server
-        // /api/dataset/export-preview call above renders item.output_image_name /
-        // output_caption_name (from render_stem) and returns before here. Keep
-        // this token grammar in sync with render_stem if that ever changes.
-        const buildStem = (id, index) => {
-            const meta = DM.meta?.get?.(id) || {};
-            const sourceBase = meta.filename ? meta.filename.replace(/\.[^.]+$/, '') : `image_${index + 1}`;
-            const ext = extensionForDatasetId(id);
-            if (outputMode === 'beside_image' || preset === 'keep') return { stem: sourceBase, ext, sourceBase };
-            if (preset === 'renumber') {
-                return { stem: `${trigger || 'subject'}_${String(index + 1).padStart(3, '0')}`, ext, sourceBase };
-            }
-            return {
-                stem: pattern
-                    .replace(/\{trigger\}/g, trigger || 'subject')
-                    .replace(/\{index:0*(\d+)d\}/g, (_m, w) => String(index + 1).padStart(parseInt(w, 10) || 1, '0'))
-                    .replace(/\{index\}/g, String(index + 1))
-                    .replace(/\{filename\}/g, sourceBase)
-                    .replace(/\{generator\}/g, 'webui')
-                    .replace(/\{ext\}/g, ext)
-                    .replace(/\{date\}/g, new Date().toISOString().slice(0, 10)),
-                ext,
-                sourceBase,
-            };
-        };
-
-        const outputNameCounts = new Map();
-        items.forEach((id, index) => {
-            const { stem, ext } = buildStem(id, index);
-            const key = `${stem}.${ext}`.toLowerCase();
-            outputNameCounts.set(key, (outputNameCounts.get(key) || 0) + 1);
-        });
-        const duplicateOutputCount = Array.from(outputNameCounts.values()).reduce(
-            (sum, count) => sum + (count > 1 ? count : 0),
-            0
+        // FE-4 (decision #11, owner-approved 2026-07-12): the offline
+        // fallback that used to re-implement services/dataset_naming.render_stem
+        // in JS is gone -- two stem grammars WILL drift apart. The server
+        // preview above is the only rendering path; reaching this line means
+        // the export payload builder did not load, which is a bug, not a
+        // supported offline mode.
+        renderPreviewError(
+            list,
+            DM._t?.(
+                'dataset.exportPreviewBuilderMissing',
+                'Preview unavailable: the export payload builder did not load. Hard-refresh the page (Ctrl+F5); if it persists this is a bug.'
+            ) || 'Preview unavailable: the export payload builder did not load.'
         );
-
-        const sampleIndexes = [];
-        const firstCount = Math.min(items.length, 36);
-        for (let i = 0; i < firstCount; i += 1) sampleIndexes.push(i);
-        if (items.length > 60) {
-            const tailStart = Math.max(firstCount, items.length - 12);
-            for (let i = tailStart; i < items.length; i += 1) sampleIndexes.push(i);
-        } else {
-            for (let i = firstCount; i < Math.min(items.length, 60); i += 1) sampleIndexes.push(i);
-        }
-        const skippedMiddle = items.length - sampleIndexes.length;
-
-        list.innerHTML = '';
-
-        const summary = document.createElement('div');
-        summary.className = 'dataset-export-preview-summary';
-        const modeLabel = outputMode === 'beside_image'
-            ? (DM._t?.('dataset.outputModeBesideShort', 'Beside originals') || 'Beside originals')
-            : preset === 'keep'
-            ? (DM._t?.('dataset.namingKeepLabel', 'Keep original filenames') || 'Keep original filenames')
-            : preset === 'renumber'
-                ? (DM._t?.('dataset.namingRenumberShort', 'Renumber') || 'Renumber')
-                : (DM._t?.('dataset.namingCustomShort', 'Custom template') || 'Custom template');
-        summary.innerHTML = `
-            <strong>${logicalCount.toLocaleString()} ${DM._t?.('dataset.exportPreviewPairs', 'image + caption pairs') || 'image + caption pairs'}</strong>
-            <span>${modeLabel}</span>
-            <span>${DM._t?.('dataset.exportPreviewShowing', 'Showing') || 'Showing'} ${sampleIndexes.length.toLocaleString()} ${DM._t?.('dataset.exportPreviewSamples', 'samples') || 'samples'}</span>
-            ${logicalCount !== items.length
-                ? `<span>${DM._t?.('dataset.exportPreviewLoadedOfTotal', '{loaded}/{total} previews loaded', { loaded: items.length, total: logicalCount }) || `${items.length}/${logicalCount} previews loaded`}</span>`
-                : ''}
-        `;
-        list.appendChild(summary);
-
-        if (logicalCount !== items.length) {
-            const manifestNote = document.createElement('div');
-            manifestNote.className = 'dataset-export-preview-summary';
-            manifestNote.textContent = DM._t?.(
-                'dataset.exportPreviewManifestNote',
-                'Export will include every manifest image. File-name preview, duplicate checks, caption status, and thumbnail rows below cover loaded previews only.',
-                { loaded: items.length, total: logicalCount }
-            ) || 'Export will include every manifest image. Preview checks below cover loaded previews only.';
-            list.appendChild(manifestNote);
-        }
-
-        if (duplicateOutputCount > 0) {
-            const warning = document.createElement('div');
-            warning.className = 'dataset-export-preview-warning';
-            warning.textContent = DM._t?.(
-                'dataset.exportPreviewDuplicateWarning',
-                '{count} output image names would collide. Change naming before export.',
-                { count: duplicateOutputCount }
-            ) || `${duplicateOutputCount} output image names would collide. Change naming before export.`;
-            list.appendChild(warning);
-        }
-
-        sampleIndexes.forEach((i, samplePosition) => {
-            if (skippedMiddle > 0 && samplePosition === firstCount) {
-                const divider = document.createElement('div');
-                divider.className = 'dataset-export-preview-divider';
-                divider.textContent = DM._t?.(
-                    'dataset.exportPreviewSkippedMiddle',
-                    '{count} middle pairs hidden from preview; export still includes all.',
-                    { count: skippedMiddle }
-                ) || `${skippedMiddle} middle pairs hidden from preview; export still includes all.`;
-                list.appendChild(divider);
-            }
-
-            const id = items[i];
-            const meta = DM.meta?.get?.(id) || {};
-            const { stem, ext, sourceBase } = buildStem(id, i);
-            const outputKey = `${stem}.${ext}`.toLowerCase();
-            const hasCaptionEdit = DM.captionEdits?.has?.(id);
-            const caption = hasCaptionEdit ? DM.captionEdits.get(id) : (DM.captions?.get?.(id) || '');
-            const captionState = hasCaptionEdit
-                ? (DM._t?.('dataset.statusEdited', 'edited') || 'edited')
-                : String(caption || '').trim()
-                    ? (DM._t?.('dataset.statusTagged', 'tagged') || 'tagged')
-                    : (DM._t?.('dataset.statusUntagged', 'no caption') || 'no caption');
-
-            const row = document.createElement('div');
-            row.className = 'dataset-export-preview-pair';
-            if ((outputNameCounts.get(outputKey) || 0) > 1) row.classList.add('has-name-collision');
-
-            const thumb = document.createElement('img');
-            thumb.className = 'dataset-export-preview-thumb';
-            thumb.alt = '';
-            thumb.loading = 'lazy';
-            thumb.decoding = 'async';
-            if (typeof DM._thumbSrc === 'function') thumb.src = DM._thumbSrc(id, 128);
-            thumb.onerror = () => {
-                thumb.removeAttribute('src');
-                thumb.classList.add('is-missing');
-            };
-
-            const copy = document.createElement('div');
-            copy.className = 'dataset-export-preview-copy';
-            const index = document.createElement('span');
-            index.className = 'dataset-export-preview-index';
-            index.textContent = `#${String(i + 1).padStart(4, '0')}`;
-            const sourceName = document.createElement('span');
-            sourceName.className = 'file-source';
-            sourceName.textContent = meta.filename || `${sourceBase}.${ext}`;
-            const imgName = document.createElement('span');
-            imgName.className = 'file-img';
-            imgName.textContent = `${stem}.${ext}`;
-            const txtName = document.createElement('span');
-            txtName.className = 'file-txt';
-            txtName.textContent = `${stem}.txt`;
-            txtName.style.cursor = 'pointer';
-            txtName.title = DM._t?.('dataset.exportPreviewClickTxt', 'Click to preview caption') || 'Click to preview caption';
-            txtName.addEventListener('click', () => {
-                let preview = copy.querySelector('.export-caption-preview');
-                if (preview) {
-                    preview.remove();
-                    return;
-                }
-                preview = document.createElement('div');
-                preview.className = 'export-caption-preview';
-                const text = DM.captionEdits?.get?.(id) || DM.captions?.get?.(id) || '';
-                preview.textContent = text || DM._t?.('dataset.exportPreviewNoCaption', '(empty)') || '(empty)';
-                copy.appendChild(preview);
-            });
-            const status = document.createElement('span');
-            status.className = 'file-caption-status';
-            status.textContent = captionState;
-            copy.append(index, sourceName, imgName, txtName, status);
-
-            row.append(thumb, copy);
-            list.appendChild(row);
-        });
     }
 
     function bindExportPreview() {

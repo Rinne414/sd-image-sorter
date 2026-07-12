@@ -4176,6 +4176,16 @@
                                     </div>
                                     <div id="sepcon-health-results" class="sepcon-health-results" hidden></div>
                                 </div>
+                                <div class="sepcon-rethreshold">
+                                    <p class="helper-text" data-i18n="dataset.sepconRtHelp">🎚 Re-threshold from stored scores — zero inference. Tags rebuild at the new cutoff; manual tags survive.</p>
+                                    <div class="sepcon-health-bar">
+                                        <select id="sepcon-rt-model" class="input-field"></select>
+                                        <input type="range" id="sepcon-rt-threshold" min="0.15" max="0.95" step="0.01" value="0.35">
+                                        <span id="sepcon-rt-threshold-value" class="sepcon-rt-value">0.35</span>
+                                        <button type="button" class="btn btn-secondary btn-small" id="sepcon-rt-apply" data-i18n="dataset.sepconRtApply" disabled>Apply</button>
+                                    </div>
+                                    <div id="sepcon-rt-status" class="sepcon-health-note"></div>
+                                </div>
                             </details>
 
                             <!-- Section B2: Batch Find/Replace -->
