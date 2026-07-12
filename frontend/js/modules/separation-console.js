@@ -271,9 +271,11 @@
             div.appendChild(dot);
 
             const name = document.createElement('span');
-            name.className = 'sepcon-tag';
+            name.className = 'sepcon-tag sepcon-tag-clickable';
             name.textContent = row.spelling;
-            name.title = row.category;
+            name.title = t('Click for tag info: category, aliases, implications, counts',
+                '点击查看标签资料：分类、别名、蕴含关系、数量');
+            name.addEventListener('click', (e) => { e.stopPropagation(); this.showTagInfo(row); });
             div.appendChild(name);
 
             if (row.intrinsic) {
@@ -513,6 +515,59 @@
                 'success');
             this.findGaps(row);
             this.refresh();
+        },
+
+        // ---- Tag info popover (roadmap #6: learn while tagging) ---------------
+        async showTagInfo(row) {
+            const panel = this._gapsPanel();
+            panel.hidden = false;
+            panel.textContent = t('Loading tag info…', '加载标签资料…');
+            try {
+                const response = await fetch(
+                    `/api/tags/info?tag=${encodeURIComponent(row.key.replace(/ /g, '_'))}`
+                );
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                this._renderTagInfo(panel, row, await response.json());
+            } catch (e) {
+                panel.textContent = t('Tag info failed: ', '标签资料加载失败：') + String(e.message || e);
+            }
+        },
+
+        _renderTagInfo(panel, row, info) {
+            panel.textContent = '';
+            const head = document.createElement('div');
+            head.className = 'sepcon-gaps-head';
+            const title = document.createElement('span');
+            title.className = 'sepcon-gaps-title';
+            const zhPart = info.zh ? ` · ${info.zh}` : '';
+            title.textContent = `${info.canonical || row.spelling}${zhPart} — ${info.category || '?'}`;
+            head.appendChild(title);
+            head.appendChild(this._actionBtn('✕', t('Close', '关闭'),
+                () => { panel.hidden = true; panel.textContent = ''; }));
+            panel.appendChild(head);
+
+            const lines = [];
+            if (info.canonical && info.canonical !== row.key) {
+                lines.push(t(`Alias of "${info.canonical}"`, `是「${info.canonical}」的别名`));
+            }
+            lines.push(t(
+                `Library: ${info.library_count} images · danbooru popularity: ${info.found_in_vocab ? info.danbooru_count.toLocaleString() : t('not in vocab', '词表外')}`,
+                `库内 ${info.library_count} 张 · danbooru 热度：${info.found_in_vocab ? info.danbooru_count.toLocaleString() : '词表外'}`));
+            if ((info.aliases || []).length) {
+                lines.push(t('Aliases: ', '别名：') + info.aliases.slice(0, 8).join(', '));
+            }
+            if ((info.implies || []).length) {
+                lines.push(t('Implies (redundant parents): ', '蕴含（冗余上位标签）：') + info.implies.join(', '));
+            }
+            if ((info.implied_by || []).length) {
+                lines.push(t('Implied by: ', '被这些标签蕴含：') + info.implied_by.slice(0, 8).join(', '));
+            }
+            for (const textLine of lines) {
+                const line = document.createElement('div');
+                line.className = 'sepcon-gap-line';
+                line.textContent = textLine;
+                panel.appendChild(line);
+            }
         },
 
         // ---- BE-1-UI per-model tag audit --------------------------------------

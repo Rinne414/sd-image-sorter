@@ -10104,6 +10104,12 @@ html.lang-zh #view-censor .queue-action-btn span {
     color: var(--text-secondary, #aeb6cc);
     margin-top: 2px;
 }
+.sepcon-tag-clickable {
+    cursor: pointer;
+}
+.sepcon-tag-clickable:hover {
+    text-decoration: underline dotted;
+}
 /* BE-1 — coverage-gap (find-missed) results panel */
 .sepcon-gaps {
     margin: 6px 0;

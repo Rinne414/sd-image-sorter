@@ -292,6 +292,82 @@ def _scan_zh(q_lower: str, limit: int, seen: set) -> List[Dict[str, Any]]:
     return out
 
 
+def get_tag_info(tag: str) -> Dict[str, Any]:
+    """Everything the app knows about ONE tag — the learn-while-tagging
+    popover (competitive roadmap #6; Persona C): canonical category,
+    danbooru popularity + aliases + zh display from the bundled vocab
+    (alias hits resolve to their canonical tag), implication edges both
+    ways from the bundled/drop-in table, and the live library count.
+    Read-only; unknown tags still return the category heuristic + library
+    count so hand-rolled tags are not a dead end."""
+    _ensure_loaded()
+    q_norm = _normalize_tag(tag)
+    info: Dict[str, Any] = {
+        "tag": q_norm,
+        "canonical": q_norm,
+        "found_in_vocab": False,
+        "category": None,
+        "danbooru_count": 0,
+        "aliases": [],
+        "zh": None,
+        "implies": [],
+        "implied_by": [],
+        "library_count": 0,
+    }
+    if not q_norm:
+        return info
+
+    vocab = _VOCAB or []
+    index = _VOCAB_INDEX or {}
+    idx = index.get(q_norm)
+    if idx is None:
+        # Alias hit: comma-boundary scan over the blobs (tiny cost, one-off).
+        needle = f",{q_norm}"
+        for row_idx, (_tag, _count, _code, blob) in enumerate(vocab):
+            if blob.endswith(needle) or f"{needle}," in blob:
+                idx = row_idx
+                break
+    canonical = q_norm
+    code = 0
+    if idx is not None:
+        canonical, count, code, blob = vocab[idx]
+        info["canonical"] = canonical
+        info["found_in_vocab"] = True
+        info["danbooru_count"] = int(count)
+        parts = blob.split(",")
+        info["aliases"] = [alias for alias in parts[1:] if alias]
+        info["zh"] = (_ZH_DISPLAY or {}).get(canonical)
+    info["category"] = _category_for(canonical, code)
+
+    try:
+        from services.tag_training_filters import _implication_table
+
+        table = _implication_table()
+        # _implication_key folds underscores to spaces — match that form.
+        key = canonical.replace("_", " ")
+        # Table values are space-folded; the API speaks underscore form
+        # like every other tag surface in the app.
+        info["implies"] = sorted(p.replace(" ", "_") for p in table.get(key, set()))
+        info["implied_by"] = sorted(
+            child.replace(" ", "_")
+            for child, parents in table.items()
+            if key in parents
+        )
+    except Exception:  # pragma: no cover - popover data is best-effort
+        logger.debug("implication lookup failed for %s", canonical, exc_info=True)
+
+    try:
+        import database as db
+
+        counts = {row["tag"].lower().replace("_", " "): row["count"] for row in db.get_all_tags()}
+        info["library_count"] = int(
+            counts.get(canonical) or counts.get(q_norm) or 0
+        )
+    except Exception:  # pragma: no cover
+        logger.debug("library count lookup failed for %s", canonical, exc_info=True)
+    return info
+
+
 def suggest(q: str = "", limit: int = DEFAULT_LIMIT) -> Dict[str, Any]:
     """Return merged, ranked tag suggestions for a partial token."""
     limit = max(1, min(int(limit or DEFAULT_LIMIT), MAX_LIMIT))

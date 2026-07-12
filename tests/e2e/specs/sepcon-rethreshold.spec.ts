@@ -110,3 +110,28 @@ test('re-threshold card: empty score table disables the control with guidance', 
   await expect(page.locator('#sepcon-rt-status')).toContainText('No stored scores yet')
   await expect(page.locator('#sepcon-rt-apply')).toBeDisabled()
 })
+test('tag info: clicking a tag name renders category, aliases and implications', async ({ page }) => {
+  await seedDatasetQueue(page)
+  await page.route('**/api/tags/scores/stats', async (route) => {
+    await route.fulfill({
+      json: { enabled: true, floor: 0.15, total_rows: 0, images_with_scores: 0, models: [], estimated_bytes: 0 },
+    })
+  })
+  await page.route('**/api/tags/info**', async (route) => {
+    await route.fulfill({
+      json: {
+        tag: '1girl', canonical: '1girl', found_in_vocab: true,
+        category: 'general', danbooru_count: 6100000,
+        aliases: ['1girls', 'sole_female'], zh: '女孩',
+        implies: [], implied_by: [], library_count: 2,
+      },
+    })
+  })
+  await openConsole(page)
+  await page.locator('.sepcon-tag', { hasText: '1girl' }).first().click()
+  const panel = page.locator('#sepcon-gaps')
+  await expect(panel).toBeVisible()
+  await expect(panel).toContainText('1girl · 女孩 — general')
+  await expect(panel).toContainText('sole_female')
+  await expect(panel).toContainText('6,100,000')
+})

@@ -260,6 +260,18 @@ def trait_candidates(request: TraitCandidatesRequest):
     return compute_trait_candidates(request)
 
 
+@router.get("/tags/info")
+def tag_info(
+    tag: str = Query(..., min_length=1, max_length=256, description="Tag or alias to look up"),
+):
+    """Learn-while-tagging popover data: category, danbooru popularity,
+    aliases (alias input resolves to its canonical tag), zh display,
+    implication edges both ways, and the live library count."""
+    from services import tag_suggest_service
+
+    return tag_suggest_service.get_tag_info(tag)
+
+
 @router.post("/tags/rethreshold")
 def rethreshold_tags(request: RethresholdRequest):
     """BE-1 virtual re-threshold: rewrite tag rows from stored tag_scores at
