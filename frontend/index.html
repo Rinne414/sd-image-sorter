@@ -4246,6 +4246,20 @@
                                     <span data-i18n="dataset.cardExportTitle">Export to folder</span>
                                 </h3>
 
+                                <!-- Dataset size + training-step estimator (competitive gap
+                                     benchmark 2026-07: Danbooru-Dataset-Filter ships this; kohya
+                                     convention steps/epoch = ceil(images x repeats / batch)). -->
+                                <div class="dataset-steps-estimator" id="dataset-steps-estimator" hidden>
+                                    <span class="dataset-steps-line" id="dataset-steps-line"></span>
+                                    <span class="dataset-steps-inputs">
+                                        <label><span data-i18n="dataset.estRepeats">repeats</span>
+                                            <input id="dataset-est-repeats" type="number" min="1" max="1000" step="1" value="10"></label>
+                                        <label><span data-i18n="dataset.estEpochs">epochs</span>
+                                            <input id="dataset-est-epochs" type="number" min="1" max="1000" step="1" value="10"></label>
+                                        <label><span data-i18n="dataset.estBatch">batch</span>
+                                            <input id="dataset-est-batch" type="number" min="1" max="64" step="1" value="2"></label>
+                                    </span>
+                                </div>
                                 <div class="dataset-export-action-bar">
                                     <button type="button" class="btn btn-primary btn-large full-width dataset-export-cta"
                                             id="btn-dataset-export" disabled
@@ -6997,6 +7011,7 @@
     <script src="/static/js/modules/separation-console.js"></script>
     <script src="/static/js/modules/mask-editor.js"></script>
     <script src="/static/js/modules/target-model.js"></script>
+    <script src="/static/js/modules/dataset-estimator.js"></script>
     <script>
     /* Sorting sub-tab toggle (Auto-Separate / Manual Sort) */
     window._switchSortingSub = function(sub) {

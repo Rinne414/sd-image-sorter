@@ -10202,6 +10202,43 @@ html.lang-zh #view-censor .queue-action-btn span {
     margin-bottom: 4px;
 }
 
+/* Dataset size + training-step estimator (export card) */
+.dataset-steps-estimator {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    font-size: 12px;
+    color: var(--text-secondary, #aeb6cc);
+    margin-bottom: 6px;
+}
+.dataset-steps-estimator[hidden] {
+    display: none;
+}
+.dataset-steps-line {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary, #eef1f8);
+}
+.dataset-steps-inputs {
+    display: inline-flex;
+    gap: 8px;
+}
+.dataset-steps-inputs label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.dataset-steps-inputs input[type="number"] {
+    width: 56px;
+    padding: 2px 4px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    border-radius: 6px;
+    color: var(--text-primary, #eef1f8);
+    font-size: 12px;
+}
+
 /* Target base-model profiles (LoRA setup card) */
 .dataset-setup-two-col {
     display: grid;

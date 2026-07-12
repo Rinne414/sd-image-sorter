@@ -625,6 +625,7 @@
                         thumbnail_path: existing.thumbnail_path || rec.thumbnail_path || '',
                         width: Number(rec.width || 0),
                         height: Number(rec.height || 0),
+                        file_size: Number(rec.file_size || 0),
                     });
                 }
             } catch { /* gallery state shape might shift; non-fatal */ }

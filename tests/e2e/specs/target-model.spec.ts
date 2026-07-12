@@ -102,3 +102,31 @@ test('choice persists across reloads', async ({ page }) => {
   await page.waitForLoadState('networkidle')
   await expect(page.locator('#dataset-target-model')).toHaveValue('flux')
 })
+test('steps estimator: kohya math, live inputs, hidden when queue empty', async ({ page }) => {
+  await seedDatasetQueue(page)
+  // The estimator lives in the export card — visible on the Export tab.
+  await page.locator('#dataset-tab-export').click()
+  await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm.meta.set(801, { ...dm.meta.get(801), file_size: 3 * 1024 * 1024 })
+    dm.meta.set(802, { ...dm.meta.get(802), file_size: 2 * 1024 * 1024 })
+    ;(window as any).DatasetEstimator.refresh()
+  })
+  const line = page.locator('#dataset-steps-line')
+  await expect(page.locator('#dataset-steps-estimator')).toBeVisible()
+  // 2 images x 10 repeats / batch 2 = 10 steps/epoch x 10 epochs = 100.
+  await expect(line).toContainText('2 images')
+  await expect(line).toContainText('5 MB')
+  await expect(line).toContainText('100 steps')
+
+  await page.locator('#dataset-est-batch').fill('1')
+  // 2 x 10 / 1 = 20 x 10 = 200.
+  await expect(line).toContainText('200 steps')
+
+  await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm.imageIds = []
+    ;(window as any).DatasetEstimator.refresh()
+  })
+  await expect(page.locator('#dataset-steps-estimator')).toBeHidden()
+})
