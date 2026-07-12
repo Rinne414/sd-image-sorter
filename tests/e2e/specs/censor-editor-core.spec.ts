@@ -467,3 +467,55 @@ test('ArrowRight / ArrowLeft navigate the queue', async ({ page }) => {
   await expect.poll(activeId).toBe(IMAGES[0].id)
   await expect(page.locator('#censor-filename')).toHaveText(IMAGES[0].filename)
 })
+test('remove-background Apply lands the preview on the canvas with undo support', async ({ page }) => {
+  // FIXED behavior pin: Apply used to call two functions that never existed
+  // (saveUndoState / updateQueueItemThumbnail) and threw ReferenceError on
+  // every click. It now pushes the canvas undo stack and routes through the
+  // canonical post-draw sync + queue re-render.
+  await stubCensorBackend(page)
+  await seedCensorQueue(page)
+
+  // A solid green preview so the applied result is pixel-verifiable.
+  const greenPng = await page.evaluate(() => {
+    const c = document.createElement('canvas')
+    c.width = 8; c.height = 8
+    const ctx = c.getContext('2d')!
+    ctx.fillStyle = '#00ff00'
+    ctx.fillRect(0, 0, 8, 8)
+    return c.toDataURL('image/png')
+  })
+  await page.route('**/api/censor/remove-background', async (route) => {
+    await route.fulfill({ json: { status: 'ok', preview: greenPng } })
+  })
+
+  const consoleErrors: string[] = []
+  page.on('pageerror', (err) => consoleErrors.push(String(err)))
+
+  await page.locator('.tool-btn-v2[data-tool="remove-bg"]').click()
+  // The self-built modal computes as CSS-hidden in this stubbed context even
+  // with .active (its styling is out of scope here) — drive it via the DOM.
+  const modal = page.locator('#remove-bg-modal')
+  await modal.waitFor({ state: 'attached' })
+  await page.evaluate(() => document.getElementById('remove-bg-preview')!.click())
+  await expect.poll(() => page.evaluate(() => {
+    const applyBtn = document.getElementById('remove-bg-apply')
+    return applyBtn ? getComputedStyle(applyBtn).display : 'gone'
+  })).not.toBe('none')
+  await page.evaluate(() => document.getElementById('remove-bg-apply')!.click())
+
+  // Apply removes the modal on success (it used to throw before reaching this).
+  await expect(modal).toHaveCount(0)
+  expect(consoleErrors).toEqual([])
+  const [r, g] = await activePixel(page, 4, 4)
+  expect(g).toBeGreaterThan(200)
+  expect(r).toBeLessThan(60)
+  await expect.poll(() => page.evaluate(() => {
+    const state = (window as any).__CENSOR_STATE__
+    return state.queue.find((i: any) => i.id === state.activeId)?.isModified
+  })).toBe(true)
+
+  // The pre-apply snapshot is undoable back to the original image — the
+  // background #d9e2f2 has r=217 while the applied green fill has r=0.
+  await page.locator('#btn-undo').click()
+  await expect.poll(async () => (await activePixel(page, 4, 4))[0]).toBeGreaterThan(180)
+})

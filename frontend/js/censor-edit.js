@@ -5915,8 +5915,12 @@ async function showRemoveBackgroundPreview() {
     applyBtn.addEventListener('click', async () => {
         if (!currentPreviewData) return;
 
-        // Save current state to undo stack
-        saveUndoState();
+        // Snapshot the pre-apply canvas onto the undo stack — the same push
+        // the drawing tools use. (This handler used to call saveUndoState()
+        // and updateQueueItemThumbnail(), neither of which ever existed, so
+        // Apply threw ReferenceError since the day the modal shipped — found
+        // by the censor characterization sweep.)
+        pushUndo();
 
         // Load preview image onto canvas
         const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
@@ -5925,8 +5929,10 @@ async function showRemoveBackgroundPreview() {
         img.onload = () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            activeItem.isModified = true;
-            updateQueueItemThumbnail(activeItem.id);
+            // Canonical post-draw sync (item.currentDataUrl/isModified with
+            // base-state + proxy semantics) and queue thumbnail refresh.
+            saveCurrentCanvasToState();
+            renderQueue();
             window.App?.showToast?.(
                 censorT('censor.removeBgApplied', null, 'Background removed successfully'),
                 'success'
