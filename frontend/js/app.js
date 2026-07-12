@@ -1,6 +1,16 @@
 /**
- * SD Image Sorter - Main Application
- * Core app logic and API communication
+ * SD Image Sorter - application boot.
+ *
+ * The former 14k-line god file. Everything else was decomposed VERBATIM
+ * into the frontend/js/app/ module family (static script tags in
+ * index.html, dependency order, one shared classic-script global lexical
+ * environment — see the 2026-07 split stages 1-6). What remains here is
+ * the wiring that must run last: initEventListeners (a single 925-line
+ * binder), the two DOMContentLoaded boot blocks, and buildAppContext()
+ * + Object.seal(window.App) — the one place the sealed 93-key public
+ * surface is assembled. This file must stay a real servable asset
+ * (test_cache_bust GETs /static/js/app.js) and contract tests read the
+ * whole family via _app_family_source().
  */
 
 // ============== Event Listeners ==============
