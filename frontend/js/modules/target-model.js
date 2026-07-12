@@ -58,8 +58,8 @@
             captionType: 'nl',
             tokenBudget: 512,
             hint: () => t(
-                'Qwen3-VL encoder, trained on long natural-language captions — the NL sentence IS the training payload; run Smart Tag with a VLM caption. Tags still help search.',
-                'Qwen3-VL 编码器，以自然语言长 caption 训练 — NL 句子才是训练本体；请用带 VLM 描述的 Smart Tag。标签仍可用于搜索。'),
+                'Qwen3-VL encoder, trained on long natural-language captions — the NL sentence IS the training payload; run Smart Tag with a VLM caption (preset: Krea 2 Long NL). Official LoRA guidance: plain language, no trigger word needed, and NAME the details you do NOT want the LoRA to absorb. Tags still help search.',
+                'Qwen3-VL 编码器，以自然语言长 caption 训练 — NL 句子才是训练本体；请用带 VLM 描述的 Smart Tag（预设：Krea 2 长 NL）。官方 LoRA 建议：平白语言、无需触发词，并把「不想被 LoRA 学走」的细节在 caption 里点名。标签仍可用于搜索。'),
             applyLabel: () => t('Set every image to NL captions', '全部图片设为自然语言 caption'),
         },
         anima: {

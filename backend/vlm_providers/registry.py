@@ -75,6 +75,39 @@ PROMPT_PRESETS: Dict[str, Dict[str, str]] = {
             "Do not repeat tag information. Describe as if someone must recreate this image from your text alone."
         ),
     },
+    "krea2_long_nl": {
+        "name": "Krea 2 (Long NL, JoyCaption-ready)",
+        "output_format": "nl_caption",
+        # Krea 2 trains predominantly on LONG natural-language captions
+        # (krea.ai/blog/krea-2-technical-report); the phrasing follows
+        # JoyCaption's documented straightforward-caption idiom so pointing
+        # the OpenAI-compatible provider at a JoyCaption endpoint gets its
+        # best mode, while staying model-agnostic for any other VLM.
+        "system_prompt": (
+            "You are an image captioning model writing training captions for "
+            "natural-language text encoders. Write factual, comprehensive "
+            "descriptions of exactly what is visible. Never invent details. "
+            "Plain prose only: no markdown, no lists, no tag strings, and do "
+            "not open with 'The image shows' or 'This is'."
+        ),
+        "user_prompt": (
+            "Write a long, straightforward caption for this image in 5-8 "
+            "sentences of plain natural language. Describe the subject's "
+            "appearance, clothing and pose, then the setting and background, "
+            "then lighting, palette, composition and camera angle. Name "
+            "concrete visual details (colors, materials, textures) and "
+            "spatial positions (left, right, foreground, background)."
+        ),
+        "user_prompt_with_tags": (
+            "The following danbooru-style tags are ground truth for this "
+            "image:\n{tags}\n\n"
+            "Using them as grounding, write a long straightforward caption "
+            "(5-8 sentences) in plain natural language. Weave the tagged "
+            "facts into prose instead of listing them, and add what tags "
+            "cannot express: spatial layout, lighting direction and quality, "
+            "palette, atmosphere, and composition."
+        ),
+    },
     "short_caption": {
         "name": "Short Caption",
         "output_format": "nl_caption",
