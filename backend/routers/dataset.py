@@ -25,6 +25,15 @@ from fastapi.responses import StreamingResponse
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field
 
+from services.character_purity_service import (
+    CharacterPurityRequest,
+    CharacterPurityStartResponse,
+    cancel_character_purity,
+    get_character_purity_progress,
+    get_character_purity_status,
+    prepare_character_purity,
+    start_character_purity,
+)
 from services.dataset_audit_service import AUDIT_RESPONSE_ITEM_LIMIT, audit_dataset
 from services.dataset_export_service import (
     DatasetExportPreviewRequest,
@@ -569,4 +578,115 @@ async def post_dataset_upload_files(
         raise HTTPException(
             status_code=500,
             detail="Upload failed. / 上传失败。",
+        ) from exc
+
+# ------------------------- character purity (CCIP) -------------------------
+
+
+@router.get(
+    "/dataset/character-purity/status",
+    summary="CCIP character-purity model availability",
+)
+def get_dataset_character_purity_status() -> Dict[str, Any]:
+    try:
+        return get_character_purity_status()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Character-purity status failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Character-purity status failed. / 获取角色纯度模型状态失败。",
+        ) from exc
+
+
+@router.post(
+    "/dataset/character-purity/prepare",
+    summary="Download the CCIP character-purity model files",
+    responses={
+        200: {"description": "Download started (or model already ready)"},
+        409: {"description": "A CCIP model download is already running"},
+    },
+)
+def post_dataset_character_purity_prepare() -> Dict[str, Any]:
+    try:
+        return prepare_character_purity()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Character-purity prepare failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Character-purity model download failed. / 角色纯度模型下载失败。",
+        ) from exc
+
+
+@router.post(
+    "/dataset/character-purity",
+    response_model=CharacterPurityStartResponse,
+    summary="Start a background CCIP character-purity analysis",
+    description=(
+        "Embeds every selected gallery image with CCIP, compares all pairs "
+        "through the learned metrics graph, anchors the set on its medoid "
+        "and ranks images by distance-to-medoid. Advisory only: nothing is "
+        "moved, deleted, or edited — the result is a review list."
+    ),
+    responses={
+        200: {"description": "Analysis job started"},
+        400: {"description": "Invalid payload, fewer than 2 images, or model not prepared"},
+        409: {"description": "Another character-purity analysis is already running"},
+    },
+)
+def post_dataset_character_purity(payload: CharacterPurityRequest) -> CharacterPurityStartResponse:
+    try:
+        return start_character_purity(payload)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Character-purity start failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Character-purity analysis failed to start. / 角色纯度分析启动失败。",
+        ) from exc
+
+
+@router.get(
+    "/dataset/character-purity/progress",
+    summary="Get background character-purity analysis progress",
+)
+def get_dataset_character_purity_progress(job_id: Optional[str] = None) -> Dict[str, Any]:
+    try:
+        return get_character_purity_progress(job_id=job_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Character-purity progress failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Character-purity progress failed. / 获取角色纯度进度失败。",
+        ) from exc
+
+
+class CharacterPurityJobRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    job_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
+
+
+@router.post(
+    "/dataset/character-purity/cancel",
+    summary="Cancel the active character-purity analysis job",
+)
+def post_dataset_character_purity_cancel(
+    payload: Optional[CharacterPurityJobRequest] = None,
+) -> Dict[str, Any]:
+    try:
+        return cancel_character_purity(job_id=payload.job_id if payload else None)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Character-purity cancel failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Character-purity cancel failed. / 取消角色纯度分析失败。",
         ) from exc

@@ -4242,6 +4242,35 @@
                                 </div>
                             </details>
 
+                            <!-- Section B1.6: Character Purity (CCIP, roadmap #9 v1) —
+                                 medoid-anchored outlier review for character LoRA sets.
+                                 Advisory only; logic in modules/character-purity.js -->
+                            <details class="dataset-card dataset-card-details" id="dataset-character-purity">
+                                <summary class="dataset-card-title">
+                                    <span aria-hidden="true">🧿</span>
+                                    <span data-i18n="dataset.ccipTitle">Character Purity (CCIP)</span>
+                                </summary>
+                                <p class="helper-text" data-i18n="dataset.ccipHelp">Flags images that may show the wrong character: every image is compared against the set's most typical image (the medoid). Advisory only — nothing is moved or deleted. Multi-character images confuse the check, and chibi/style variance raises distances, so review flagged rows yourself and adjust the threshold as needed.</p>
+                                <div class="ccip-toolbar">
+                                    <button type="button" class="btn btn-secondary btn-small" id="ccip-run"
+                                            data-i18n="dataset.ccipRun">🧿 Analyze character purity</button>
+                                    <button type="button" class="btn btn-ghost btn-small" id="ccip-cancel"
+                                            data-i18n="common.cancel" hidden>Cancel</button>
+                                    <label class="ccip-threshold-label">
+                                        <span data-i18n="dataset.ccipThreshold">Outlier threshold</span>
+                                        <input type="number" id="ccip-threshold" class="input-field"
+                                               min="0" max="1" step="0.01" value="0.178">
+                                    </label>
+                                </div>
+                                <div id="ccip-prepare-wrap" hidden>
+                                    <p id="ccip-prepare-note" class="helper-text"></p>
+                                    <button type="button" class="btn btn-secondary btn-small" id="ccip-prepare"
+                                            data-i18n="dataset.ccipPrepare">⬇ Download CCIP model (~150 MB)</button>
+                                </div>
+                                <div id="ccip-status" class="sepcon-health-note" aria-live="polite"></div>
+                                <div id="ccip-results" class="ccip-results" hidden></div>
+                            </details>
+
                             <!-- Section B2: Batch Find/Replace -->
                             <details class="dataset-card dataset-card-details" id="dataset-step-findreplace">
                                 <summary class="dataset-card-title">
@@ -7071,6 +7100,7 @@
     <script src="/static/js/modules/entry-catalog.js"></script>
     <script src="/static/js/modules/trait-pruner.js"></script>
     <script src="/static/js/modules/separation-console.js"></script>
+    <script src="/static/js/modules/character-purity.js"></script>
     <script src="/static/js/modules/mask-editor.js"></script>
     <script src="/static/js/modules/target-model.js"></script>
     <script src="/static/js/modules/dataset-estimator.js"></script>

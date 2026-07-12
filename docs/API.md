@@ -1541,6 +1541,38 @@ Returns `{summary, items[], items_truncated, items_returned, duplicate_groups[]}
 
 ---
 
+#### POST /api/dataset/character-purity
+
+Start a background CCIP character-purity analysis over a Dataset Maker selection (roadmap #9, v1). CCIP (deepghs/ccip_onnx, `ccip-caformer-24-randaug-pruned`, pure onnxruntime — no dghs-imgutils dependency) embeds every gallery image, runs the LEARNED pairwise comparator (`model_metrics.onnx`, not raw cosine), anchors the set on its **medoid** (minimum total difference = the most typical image) and ranks every image by distance-to-medoid. Images above `threshold` (default 0.178, the variant's published operating point; LOWER = same character) are flagged as suspected outliers. **Advisory only**: nothing is moved, deleted, or edited — the result is a review list. Known caveats surfaced in the UI: multi-character images confuse the model, and chibi/style variance legitimately raises distances.
+
+Body: `{"image_ids": [1, 2, 3], "threshold": 0.178}` (`threshold` optional, 0–1). Requires at least 2 unique gallery ids (`400` otherwise), and the model files must already be prepared (`400` with a prepare hint if missing). Returns `{status: "started", job_id, total, message}`; `409` if another analysis is already running. Nonexistent ids and unreadable images count in the result's `failed`, never crash the job.
+
+---
+
+#### GET /api/dataset/character-purity/progress
+
+Live progress for the active character-purity job. Optional query: `job_id` (`404` on mismatch). Returns `{status, job_id, step, current, total, extracted, failed, result, message, started_at, updated_at}`. Terminal statuses: `done` / `failed` / `cancelled`. On `done`, `result` is `{medoid_image_id, items: [{image_id, distance, outlier}], threshold, extracted, failed}` with `items` ranked worst-first (largest distance-to-medoid first).
+
+---
+
+#### POST /api/dataset/character-purity/cancel
+
+Request cooperative cancellation of the active character-purity job. Optional body: `{job_id}` (`404` on mismatch). Returns `{status: "cancelling", job_id, message}` while a job is active, or the current terminal/idle status otherwise.
+
+---
+
+#### GET /api/dataset/character-purity/status
+
+CCIP model availability for the Dataset Maker character-purity card. Returns `{available, model_dir, missing_files[], default_threshold, preparing, prepare_error, download: {active, filename, downloaded, total}}`. v1 deliberately uses this dataset-scoped status endpoint instead of a Model Center registry entry (the registry couples each model to health aggregation, prepare branches, and bundle-sync tests).
+
+---
+
+#### POST /api/dataset/character-purity/prepare
+
+Download the two CCIP ONNX files (`model_feat.onnx` ~143 MB + `model_metrics.onnx`, HuggingFace repo `deepghs/ccip_onnx`) into `data/models/ccip/ccip-caformer-24-randaug-pruned/` in a background thread. Honours the shared Download Source setting via the hf-mirror endpoint order; downloads are size-verified against `Content-Length` plus a per-file sanity floor. Returns `{status: "started"|"ready", model_dir}`; `409` if a download is already running. Progress and failures surface through the status endpoint.
+
+---
+
 #### POST /api/dataset/vocab
 
 Returns the union of tags across the supplied Dataset Maker session, sorted by descending frequency. Combines DB-source tags (read from `image_ids`) and local-source caption text (`path_caption_overrides`, split by comma). Backs the Dataset Maker "Tag Vocabulary" side panel for adding current tags to common tags or blacklist.
