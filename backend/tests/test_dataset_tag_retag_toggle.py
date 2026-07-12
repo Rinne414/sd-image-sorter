@@ -13,6 +13,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _dataset_family_source() -> str:
+    # The dataset-maker JS family was decomposed VERBATIM into
+    # frontend/js/dataset/*.js; pins now grep the family concatenation
+    # (same adaptation as the censor / smart_tag splits).
+    return "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((ROOT / "frontend" / "js" / "dataset").glob("*.js"))
+    )
+
+
 def test_tag_retag_checkbox_present():
     html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
     assert 'id="dataset-tag-retag-all"' in html, (
@@ -22,7 +32,7 @@ def test_tag_retag_checkbox_present():
 
 
 def test_tag_all_reads_checkbox_not_hardcoded_retag():
-    js = (ROOT / "frontend" / "js" / "dataset-maker-part3.js").read_text(encoding="utf-8")
+    js = _dataset_family_source()
     # Old: { image_ids: this.imageIds, retag_all: true } — must be gone.
     assert "retag_all: true" not in js, (
         "_tagAll still hardcodes retag_all: true — checkbox is bypassed."
@@ -36,7 +46,7 @@ def test_tag_all_skips_local_source_items():
     """Path-source items (negative ids) cannot use the legacy
     /api/tag/start endpoint because they have no DB row. Tag all
     must filter them out before sending."""
-    js = (ROOT / "frontend" / "js" / "dataset-maker-part3.js").read_text(encoding="utf-8")
+    js = _dataset_family_source()
     assert "isLocalId" in js, (
         "_tagAll does not filter local-source items — backend will 404 on negative ids."
     )

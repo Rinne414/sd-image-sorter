@@ -3718,7 +3718,7 @@
                                 <div class="dataset-tag-pills-section dataset-tag-pills-section-inline" id="dataset-tag-pills-section" hidden>
                                     <h4 class="dataset-tag-pills-title" data-i18n="dataset.tagPillsTitle">Tags</h4>
                                     <!-- Color legend for the 14-class danbooru tag categories. Body rows
-                                         are injected by dataset-maker-cleanups.js (one source of truth for
+                                         are injected by dataset/lora-prune.js (one source of truth for
                                          the palette + labels, shared with the LoRA-prune checkboxes). -->
                                     <details class="dataset-tag-color-legend" id="dataset-tag-color-legend" open>
                                         <summary data-i18n="dataset.tagColorLegendTitle">🎨 Tag color legend</summary>
@@ -3981,13 +3981,13 @@
                                      pills, so the checkbox row also acts as a color legend. Matched tags
                                      from the live dataset vocabulary are appended to the blacklist above
                                      (non-destructive — original DB tags are untouched). Checkboxes are
-                                     injected by dataset-maker-cleanups.js. -->
+                                     injected by dataset/lora-prune.js. -->
                                 <div class="dataset-lora-prune" id="dataset-lora-prune">
                                     <div class="dataset-lora-prune-cats" id="dataset-lora-prune-cats" role="group"
                                          aria-label="Tag categories to remove from captions"></div>
                                     <div class="dataset-lora-prune-actions">
                                         <!-- No data-i18n here: the label is dynamic ("Add N tags to blacklist"),
-                                             set by dataset-maker-cleanups.js. applyToDOM() would clobber the
+                                             set by dataset/lora-prune.js. applyToDOM() would clobber the
                                              count, so localization is handled in JS (incl. the languageChanged event). -->
                                         <button type="button" class="btn btn-secondary btn-small" id="btn-dataset-lora-prune-apply">Add to blacklist</button>
                                         <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-lora-prune-clear"
@@ -7093,7 +7093,7 @@
     <script src="/static/js/similar.js"></script>
     <script src="/static/js/clip-tools.js"></script>
     <script src="/static/js/prompt-lab.js"></script>
-    <script src="/static/js/dataset-maker.js"></script>
+    <script src="/static/js/dataset/core.js"></script>
     <script src="/static/js/smart-tag.js"></script>
     <script src="/static/js/tag-power.js"></script>
     <script src="/static/js/tag-stats-modal.js"></script>

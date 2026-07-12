@@ -35,6 +35,20 @@ def _iter_frontend_js_files(frontend_root: Path):
                 yield root_path / filename
 
 
+def _dataset_family_source(repo_root: Path) -> str:
+    # The dataset-maker JS god-file family (dataset-maker.js + part2/part3/
+    # pipeline/local-import/cleanups) was decomposed VERBATIM into the
+    # frontend/js/dataset/ module family; contract pins now assert against the
+    # family concatenation so each literal is found in whichever new module
+    # hosts it (same adaptation style as the censor / smart_tag splits).
+    dataset_dir = repo_root / "frontend" / "js" / "dataset"
+    source = "\n".join(
+        path.read_text(encoding="utf-8") for path in sorted(dataset_dir.glob("*.js"))
+    )
+    assert source, "frontend/js/dataset/*.js family is missing"
+    return source
+
+
 def test_frontend_feature_modules_do_not_directly_assign_appstate():
     repo_root = Path(__file__).resolve().parents[2]
     frontend_root = repo_root / "frontend" / "js"
@@ -164,9 +178,7 @@ def test_v321_modules_read_runtime_selection_store_from_window_app():
 
 def test_dataset_maker_large_queues_use_virtualized_rendering():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "dataset-maker-part2.js").read_text(
-        encoding="utf-8"
-    )
+    source = _dataset_family_source(repo_root)
 
     assert "DATASET_VIRTUAL_THRESHOLD" in source
     assert "_renderVirtualQueue" in source
@@ -177,15 +189,9 @@ def test_dataset_maker_large_queues_use_virtualized_rendering():
 def test_dataset_folder_import_has_paged_large_folder_controls():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    source = (
-        repo_root / "frontend" / "js" / "dataset-maker-local-import.js"
-    ).read_text(encoding="utf-8")
-    part2_source = (repo_root / "frontend" / "js" / "dataset-maker-part2.js").read_text(
-        encoding="utf-8"
-    )
-    pipeline_source = (
-        repo_root / "frontend" / "js" / "dataset-maker-pipeline.js"
-    ).read_text(encoding="utf-8")
+    source = _dataset_family_source(repo_root)
+    part2_source = source
+    pipeline_source = source
     app_source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
     zh_source = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(
         encoding="utf-8"
@@ -212,9 +218,7 @@ def test_dataset_folder_import_has_paged_large_folder_controls():
 
 def test_dataset_folder_import_append_keeps_current_tab_and_shows_busy_state():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (
-        repo_root / "frontend" / "js" / "dataset-maker-local-import.js"
-    ).read_text(encoding="utf-8")
+    source = _dataset_family_source(repo_root)
     css = (repo_root / "frontend" / "css" / "dataset-pipeline.css").read_text(
         encoding="utf-8"
     )
@@ -229,9 +233,7 @@ def test_dataset_folder_import_append_keeps_current_tab_and_shows_busy_state():
 
 def test_dataset_audit_results_have_next_step_actions():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "dataset-maker-pipeline.js").read_text(
-        encoding="utf-8"
-    )
+    source = _dataset_family_source(repo_root)
     css = (repo_root / "frontend" / "css" / "dataset-pipeline.css").read_text(
         encoding="utf-8"
     )
@@ -252,9 +254,7 @@ def test_dataset_audit_results_have_next_step_actions():
 
 def test_dataset_browser_uploads_reuse_folder_import_busy_spinner():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (
-        repo_root / "frontend" / "js" / "dataset-maker-local-import.js"
-    ).read_text(encoding="utf-8")
+    source = _dataset_family_source(repo_root)
     en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(
         encoding="utf-8"
     )
@@ -279,9 +279,7 @@ def test_gallery_order_badge_moves_away_from_selection_circle():
 
 def test_dataset_local_ids_use_safe_52_bit_hash_slice():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (
-        repo_root / "frontend" / "js" / "dataset-maker-local-import.js"
-    ).read_text(encoding="utf-8")
+    source = _dataset_family_source(repo_root)
 
     assert ".slice(0, 13)" in source
     assert "Number.MAX_SAFE_INTEGER" in source
@@ -470,9 +468,7 @@ def test_mass_tag_editor_reuses_gallery_filter_contract_for_filter_scope():
 
 def test_dataset_caption_refresh_batches_without_silent_500_cap():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "dataset-maker-part3.js").read_text(
-        encoding="utf-8"
-    )
+    source = _dataset_family_source(repo_root)
 
     assert "const batchSize = 500;" in source
     assert "targetIds.slice(i, i + batchSize)" in source
@@ -482,12 +478,8 @@ def test_dataset_caption_refresh_batches_without_silent_500_cap():
 def test_dataset_export_uses_background_progress_job():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    part3 = (repo_root / "frontend" / "js" / "dataset-maker-part3.js").read_text(
-        encoding="utf-8"
-    )
-    local_import = (
-        repo_root / "frontend" / "js" / "dataset-maker-local-import.js"
-    ).read_text(encoding="utf-8")
+    part3 = _dataset_family_source(repo_root)
+    local_import = part3
 
     assert "/api/dataset/export/start" in part3
     assert "/api/dataset/export/progress" in part3
@@ -502,18 +494,10 @@ def test_dataset_export_uses_background_progress_job():
 def test_dataset_maker_guards_session_preview_and_heavy_audit_ux():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    dataset_js = (repo_root / "frontend" / "js" / "dataset-maker.js").read_text(
-        encoding="utf-8"
-    )
-    local_import = (
-        repo_root / "frontend" / "js" / "dataset-maker-local-import.js"
-    ).read_text(encoding="utf-8")
-    part2 = (repo_root / "frontend" / "js" / "dataset-maker-part2.js").read_text(
-        encoding="utf-8"
-    )
-    pipeline = (repo_root / "frontend" / "js" / "dataset-maker-pipeline.js").read_text(
-        encoding="utf-8"
-    )
+    dataset_js = _dataset_family_source(repo_root)
+    local_import = dataset_js
+    part2 = dataset_js
+    pipeline = dataset_js
     onboarding = (
         repo_root / "frontend" / "js" / "modules" / "components" / "onboarding.js"
     ).read_text(encoding="utf-8")
@@ -615,12 +599,8 @@ def test_dataset_export_tab_does_not_show_workbench_find_replace():
 def test_dataset_folder_and_output_browse_buttons_are_real_click_buttons():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    dataset_js = (repo_root / "frontend" / "js" / "dataset-maker.js").read_text(
-        encoding="utf-8"
-    )
-    local_import = (
-        repo_root / "frontend" / "js" / "dataset-maker-local-import.js"
-    ).read_text(encoding="utf-8")
+    dataset_js = _dataset_family_source(repo_root)
+    local_import = dataset_js
 
     assert (
         'type="button" class="btn btn-ghost btn-small" id="btn-dataset-folder-import-browse"'
@@ -642,9 +622,7 @@ def test_dataset_folder_and_output_browse_buttons_are_real_click_buttons():
 def test_dataset_maker_sidecar_export_limits_are_visible_before_caption_work():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    local_import = (
-        repo_root / "frontend" / "js" / "dataset-maker-local-import.js"
-    ).read_text(encoding="utf-8")
+    local_import = _dataset_family_source(repo_root)
     en = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
     zh = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(
         encoding="utf-8"
@@ -669,9 +647,7 @@ def test_dataset_maker_sidecar_export_limits_are_visible_before_caption_work():
 def test_dataset_maker_step2_owns_caption_formatting_and_translation_settings():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    dataset_js = (repo_root / "frontend" / "js" / "dataset-maker.js").read_text(
-        encoding="utf-8"
-    )
+    dataset_js = _dataset_family_source(repo_root)
 
     setup_start = html.index('id="dataset-step-setup"')
     caption_start = html.index('data-i18n="dataset.cardCaptionTitle"')
@@ -738,15 +714,11 @@ def test_smart_tag_has_visible_booru_to_captioner_grounding_control():
 def test_dataset_export_tab_is_export_only_with_output_mode_payload():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    part3 = (repo_root / "frontend" / "js" / "dataset-maker-part3.js").read_text(
-        encoding="utf-8"
-    )
+    part3 = _dataset_family_source(repo_root)
     local_import = (
-        repo_root / "frontend" / "js" / "dataset-maker-local-import.js"
+        repo_root / "frontend" / "js" / "dataset" / "local-import.js"
     ).read_text(encoding="utf-8")
-    pipeline = (repo_root / "frontend" / "js" / "dataset-maker-pipeline.js").read_text(
-        encoding="utf-8"
-    )
+    pipeline = part3
 
     assert 'name="dataset-output-mode"' in html
     assert 'value="folder"' in html
@@ -755,9 +727,10 @@ def test_dataset_export_tab_is_export_only_with_output_mode_payload():
     assert "data-export-folder-only" in html
     assert "DM._outputMode" in part3
     # FE-1 2b: _buildExportPayload has ONE implementation, hosted in
-    # local-import (it reads local-source state); the part3 copy was dead
-    # code (wholesale redefined at load time) and was removed.
-    assert "output_mode: outputMode" not in part3
+    # dataset/local-import.js (it reads local-source state); the former part3
+    # copy was dead code and stays removed — the family-wide occurrence count
+    # of the payload's output_mode line must remain exactly 1, in local-import.
+    assert part3.count("output_mode: outputMode") == 1
     assert "output_mode: outputMode" in local_import
     assert "_sidecarCapabilityStats" in part3
     assert "_exportDisabledReason" in part3
@@ -770,9 +743,7 @@ def test_dataset_export_tab_is_export_only_with_output_mode_payload():
 def test_dataset_audit_is_modal_not_inline_details():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    pipeline = (repo_root / "frontend" / "js" / "dataset-maker-pipeline.js").read_text(
-        encoding="utf-8"
-    )
+    pipeline = _dataset_family_source(repo_root)
     css = (repo_root / "frontend" / "css" / "dataset-pipeline.css").read_text(
         encoding="utf-8"
     )
@@ -790,12 +761,8 @@ def test_dataset_audit_is_modal_not_inline_details():
 def test_dataset_global_caption_scope_and_tag_categories_are_available():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    part2 = (repo_root / "frontend" / "js" / "dataset-maker-part2.js").read_text(
-        encoding="utf-8"
-    )
-    part3 = (repo_root / "frontend" / "js" / "dataset-maker-part3.js").read_text(
-        encoding="utf-8"
-    )
+    part2 = _dataset_family_source(repo_root)
+    part3 = part2
     css = (repo_root / "frontend" / "css" / "dataset-maker.css").read_text(
         encoding="utf-8"
     )
@@ -834,9 +801,7 @@ def test_dataset_global_caption_scope_and_tag_categories_are_available():
 
 def test_dataset_custom_dropdown_does_not_close_when_its_own_list_scrolls():
     repo_root = Path(__file__).resolve().parents[2]
-    pipeline = (repo_root / "frontend" / "js" / "dataset-maker-pipeline.js").read_text(
-        encoding="utf-8"
-    )
+    pipeline = _dataset_family_source(repo_root)
 
     # The custom dropdown registers its outside-interaction listeners ONCE
     # (shared across every wrapped select) instead of per-select, which
@@ -865,7 +830,9 @@ def test_gallery_send_to_dataset_maker_button_tracks_selection_state():
 
 def test_dataset_init_syncs_current_naming_preset_ui():
     repo_root = Path(__file__).resolve().parents[2]
-    dataset_js = (repo_root / "frontend" / "js" / "dataset-maker.js").read_text(
+    # init() lives in dataset/core.js after the split; the ordering assertion
+    # below is meaningful only within that single file.
+    dataset_js = (repo_root / "frontend" / "js" / "dataset" / "core.js").read_text(
         encoding="utf-8"
     )
 
@@ -877,9 +844,7 @@ def test_dataset_init_syncs_current_naming_preset_ui():
 
 def test_dataset_vocab_uses_explicit_actions_not_hidden_click_cycle():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "dataset-maker-pipeline.js").read_text(
-        encoding="utf-8"
-    )
+    source = _dataset_family_source(repo_root)
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
 
     assert "function cycleTag" not in source

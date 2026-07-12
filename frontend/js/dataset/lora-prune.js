@@ -1,4 +1,9 @@
 /**
+ * Dataset Maker — LoRA-type tag pruning (non-destructive blacklist append; wraps DM.init — the ONLY module allowed to wrap init).
+ * Moved VERBATIM from dataset-maker-cleanups.js L1-416 (whole file).
+ * Load order is pinned by the ordered async=false loader in dataset/core.js.
+ */
+/**
  * Dataset Maker — LoRA-type tag pruning (export blacklist, non-destructive).
  *
  * Replaces the old five fixed "quick remove a category" buttons. The user

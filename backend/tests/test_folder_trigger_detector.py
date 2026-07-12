@@ -11,6 +11,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _dataset_family_source() -> str:
+    # The dataset-maker JS family was decomposed VERBATIM into
+    # frontend/js/dataset/*.js; pins now grep the family concatenation
+    # (same adaptation as the censor / smart_tag splits).
+    return "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((ROOT / "frontend" / "js" / "dataset").glob("*.js"))
+    )
+
+
 def test_dataset_folder_import_uses_inline_path_bar_only():
     html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
     assert 'id="dataset-folder-import-modal"' not in html
@@ -21,9 +31,7 @@ def test_dataset_folder_import_uses_inline_path_bar_only():
 
 
 def test_folder_import_js_does_not_autofill_trigger_from_path():
-    js = (ROOT / "frontend" / "js" / "dataset-maker-local-import.js").read_text(
-        encoding="utf-8"
-    )
+    js = _dataset_family_source()
     assert "_deriveTriggerFromFolder" not in js
     assert "dataset-folder-trigger-mode" not in js
     assert "folderTriggerAutofilled" not in js

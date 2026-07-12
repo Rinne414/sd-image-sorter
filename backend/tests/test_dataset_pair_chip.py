@@ -10,6 +10,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _dataset_family_source() -> str:
+    # The dataset-maker JS family was decomposed VERBATIM into
+    # frontend/js/dataset/*.js; pins now grep the family concatenation
+    # (same adaptation as the censor / smart_tag splits).
+    return "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((ROOT / "frontend" / "js" / "dataset").glob("*.js"))
+    )
+
+
 def test_pair_chip_present_in_dataset_maker_html():
     html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
     assert 'id="dataset-pair-chip"' in html
@@ -31,7 +41,7 @@ def test_pair_chip_default_filenames_use_safe_underscored_form():
 
 
 def test_pair_chip_binds_to_trigger_and_preset():
-    js = (ROOT / "frontend" / "js" / "dataset-maker-pipeline.js").read_text(encoding="utf-8")
+    js = _dataset_family_source()
     assert "refreshPairChip" in js
     assert "dataset-trigger" in js
     assert "dataset-naming-pattern" in js
