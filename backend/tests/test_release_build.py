@@ -699,7 +699,15 @@ def test_core_requirements_exclude_heavy_ai_packages():
 
 
 def test_prepare_flow_frontend_warns_when_restart_is_needed():
-    app_js = (ROOT / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js was split into app/*.js (2026-07); the
+    # pinned literals live in whichever family file hosts them now.
+    app_js = "\n".join(
+        [(ROOT / "frontend" / "js" / "app.js").read_text(encoding="utf-8")]
+        + [
+            p.read_text(encoding="utf-8")
+            for p in sorted((ROOT / "frontend" / "js" / "app").glob("*.js"))
+        ]
+    )
     en_js = (ROOT / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
     zh_js = (ROOT / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
 
@@ -1191,7 +1199,14 @@ def test_autosep_and_manual_sort_default_to_copy_for_safety():
     index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
     autosep_js = (ROOT / "frontend" / "js" / "autosep.js").read_text(encoding="utf-8")
     manual_sort_js = (ROOT / "frontend" / "js" / "manual-sort.js").read_text(encoding="utf-8")
-    app_js = (ROOT / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    # App-family read: app.js was split into app/*.js (2026-07).
+    app_js = "\n".join(
+        [(ROOT / "frontend" / "js" / "app.js").read_text(encoding="utf-8")]
+        + [
+            p.read_text(encoding="utf-8")
+            for p in sorted((ROOT / "frontend" / "js" / "app").glob("*.js"))
+        ]
+    )
 
     # ---- HTML radios ----
     # For each radio group, find both the move and copy radio tags and

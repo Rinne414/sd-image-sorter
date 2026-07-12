@@ -32,8 +32,16 @@ FRONTEND = Path(__file__).resolve().parent.parent.parent / "frontend"
 
 
 def test_app_js_has_gallery_empty_state_variant_logic():
-    """The variant helper functions must exist in app.js."""
-    src = (FRONTEND / "js" / "app.js").read_text(encoding="utf-8")
+    """The variant helper functions must exist in the app family."""
+    # App-family read: app.js was split into app/*.js (2026-07); the
+    # helpers moved to app/gallery-filter-helpers.js.
+    src = "\n".join(
+        [(FRONTEND / "js" / "app.js").read_text(encoding="utf-8")]
+        + [
+            p.read_text(encoding="utf-8")
+            for p in sorted((FRONTEND / "js" / "app").glob("*.js"))
+        ]
+    )
     assert "_galleryHasActiveFilter" in src, (
         "app.js must define ``_galleryHasActiveFilter`` to detect "
         "whether a non-default filter is applied."
