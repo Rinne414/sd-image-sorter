@@ -207,6 +207,7 @@ class ProgressMixin:
                 or self._active_run_id
                 or 0
             )
+            previous_last_run_stats = self._progress.get("last_run_stats")
             self._progress = {
                 "status": payload.get("status", self._progress.get("status", "idle")),
                 "current": payload.get("current", self._progress.get("current", 0)),
@@ -236,6 +237,15 @@ class ProgressMixin:
                 ),
                 "run_id": effective_run_id,
             }
+            # Terminal payloads carry last_run_stats (the post-run stats
+            # modal's trigger — app.js pops it when GET /api/tag/progress
+            # exposes the key). The explicit-key rebuild above used to drop
+            # it, so the modal could never fire on the process-isolated
+            # pipeline. Carry-forward keeps it alive across same-run
+            # straggler payloads; reset_progress clears it for the next run.
+            last_run_stats = payload.get("last_run_stats") or previous_last_run_stats
+            if last_run_stats:
+                self._progress["last_run_stats"] = last_run_stats
 
     def _drain_worker_queue(self, progress_queue: Any, run_id: int) -> bool:
         """Drain queued worker progress messages. Returns True if a terminal state was seen."""

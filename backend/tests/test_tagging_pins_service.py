@@ -262,17 +262,15 @@ def test_apply_worker_progress_merges_partial_payload_over_previous_state() -> N
     assert progress["processed"] == 5
 
 
-def test_quirk_apply_worker_progress_drops_terminal_last_run_stats() -> None:
-    """QUIRK — PROBABLE DORMANT BUG, pinned as current behavior: the worker's
-    terminal IPC payload carries last_run_stats (tests in
-    test_tagging_pins_worker.py pin that side), and app.js pops the post-tag
-    stats modal when GET /api/tag/progress exposes that key — but
-    _apply_worker_progress, the ONLY bridge from worker payloads into service
-    state, rebuilds the progress dict from an explicit key list that omits
-    last_run_stats. Net effect: the stats modal can never fire on the
-    process-isolated pipeline. Fixing this is a conscious product decision
-    that must update this pin; a decomposition must not change it silently
-    in either direction."""
+def test_apply_worker_progress_carries_terminal_last_run_stats() -> None:
+    """FIXED (was the dormant stats-modal bug): the worker's terminal IPC
+    payload carries last_run_stats, and app.js pops the post-tag stats modal
+    when GET /api/tag/progress exposes that key. The bridge used to rebuild
+    the progress dict from an explicit key list that dropped it — the modal
+    could never fire on the process-isolated pipeline. It now carries the
+    key through, including across same-run straggler payloads (the drain
+    keeps applying after a terminal — quirk #9), and reset_progress clears
+    it for the next run."""
     service = TaggingService()
     service._active_run_id = 3
     service._progress = _build_tag_progress_state("running", run_id=3)
@@ -289,7 +287,19 @@ def test_quirk_apply_worker_progress_drops_terminal_last_run_stats() -> None:
 
     progress = service.get_progress()
     assert progress["status"] == "done"
-    assert "last_run_stats" not in progress
+    assert progress["last_run_stats"] == {"total_processed": 2, "top_tags": []}
+
+    # Same-run straggler payloads (drain applies them after the terminal —
+    # quirk #9) must not wipe the stats before the frontend polls them.
+    service._apply_worker_progress({"status": "done", "message": "straggler"}, run_id=3)
+    assert service.get_progress()["last_run_stats"] == {
+        "total_processed": 2,
+        "top_tags": [],
+    }
+
+    # The next run starts clean.
+    service.reset_progress()
+    assert "last_run_stats" not in service.get_progress()
 
 
 def test_apply_worker_progress_run_id_fallback_chain() -> None:
