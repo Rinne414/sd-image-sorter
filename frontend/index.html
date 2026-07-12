@@ -7050,7 +7050,23 @@
     <script src="/static/js/guide.js"></script>
     <script src="/static/js/stores/filter-store.js"></script>
     <script src="/static/js/stores/selection-store.js"></script>
-    <!-- Main application (contains API, AppState, modals, toast, etc.) -->
+    <!-- app.js decomposition, stage 2 (leaf sections extracted VERBATIM into
+         the app/ family; censor-family precedent). Classic static tags: every
+         file shares one global lexical environment, so the moved top-level
+         function/const/let declarations stay visible to app.js and to each
+         other; only load ORDER matters. Keep these tags in this order and all
+         BEFORE app.js, which still owns the stores/AppState wiring, the API
+         object, event listeners and the DOMContentLoaded boot (later stages). -->
+    <script src="/static/js/app/constants-prefs.js"></script>
+    <script src="/static/js/app/filter-state.js"></script>
+    <script src="/static/js/app/gallery-filter-helpers.js"></script>
+    <script src="/static/js/app/toasts-modals.js"></script>
+    <script src="/static/js/app/update-popup.js"></script>
+    <script src="/static/js/app/progress-trackers.js"></script>
+    <script src="/static/js/app/analytics-export.js"></script>
+    <script src="/static/js/app/handoffs.js"></script>
+    <!-- Main application (still contains API, AppState, store wiring, view
+         switching, scan/tag flows, event listeners and the boot sequence) -->
     <script src="/static/js/app.js"></script>
     <script src="/static/js/folder-browser.js"></script>
     <script src="/static/js/tag-category-copy.js"></script>
