@@ -77,6 +77,14 @@
             maxSaturation: null,
             // exact generation seed from the toolbar key:value search.
             seed: null,
+            // v3.5.x file-time day range (inclusive YYYY-MM-DD). These MUST
+            // be listed here AND in cloneState below: both functions are
+            // key-by-key allowlists, and a key missing from either is
+            // silently stripped on every store cycle — exactly the bug that
+            // made the date filter a UI no-op until the app.js pin sweep
+            // caught it (fix flipped in app-core-pins.spec.ts).
+            dateFrom: null,
+            dateTo: null,
         };
     }
 
@@ -139,6 +147,10 @@
             seed: Number.isFinite(Number(source.seed)) && source.seed !== null && source.seed !== ''
                 ? Number(source.seed)
                 : null,
+            // v3.5.x file-time day range — sanitized like the other scalar
+            // allowlist entries (anything not YYYY-MM-DD becomes null).
+            dateFrom: /^\d{4}-\d{2}-\d{2}$/.test(String(source.dateFrom || '')) ? String(source.dateFrom) : null,
+            dateTo: /^\d{4}-\d{2}-\d{2}$/.test(String(source.dateTo || '')) ? String(source.dateTo) : null,
         };
     }
 

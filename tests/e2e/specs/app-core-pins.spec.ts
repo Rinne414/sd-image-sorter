@@ -104,7 +104,7 @@ test('window.App is sealed and exposes the load-bearing public surface', async (
 // 2. createDefaultFilterState — the REAL runtime shape (FilterStore's).
 // ---------------------------------------------------------------------------
 
-test('createDefaultFilterState returns the FilterStore default shape (dateFrom/dateTo absent)', async ({ page }) => {
+test('createDefaultFilterState returns the FilterStore default shape (incl. dateFrom/dateTo)', async ({ page }) => {
   const probe = await page.evaluate(() => {
     const App = (window as AnyWin).App
     const state = App.createDefaultFilterState()
@@ -121,7 +121,8 @@ test('createDefaultFilterState returns the FilterStore default shape (dateFrom/d
       artistNull: state.artist === null,
       folderNull: state.folder === null,
       hasMetadataNull: state.hasMetadata === null,
-      // The QUIRK: FilterStore's default shape has no date keys at all.
+      // Flipped from the pinned quirk: the date keys are first-class store
+      // fields now (the missing-allowlist-entry bug is fixed).
       hasDateFromKey: 'dateFrom' in state,
       hasDateToKey: 'dateTo' in state,
       // Delegation check: app.js createDefaultFilterState forwards to FilterStore.
@@ -131,10 +132,12 @@ test('createDefaultFilterState returns the FilterStore default shape (dateFrom/d
     }
   })
 
-  // FilterStore.createDefaultFilterState (stores/filter-store.js) has exactly 41
+  // FilterStore.createDefaultFilterState (stores/filter-store.js) has exactly 43
   // keys. Bump this when a real filter field is added there — and make sure the
-  // snake_case query builders + cloneState allowlist get it too (see date bug).
-  expect(probe.keyCount).toBe(41)
+  // snake_case query builders + cloneState allowlist get it too (a key missing
+  // from EITHER store function is silently stripped every cycle — the date-
+  // filter bug this suite originally pinned).
+  expect(probe.keyCount).toBe(43)
   expect(probe.matchesFilterStore).toBe(true)
   expect(probe.generatorsLen).toBe(14) // PRIMARY_GENERATORS + OTHERS bundle
   expect(probe.ratings).toEqual(['general', 'sensitive', 'questionable', 'explicit'])
@@ -147,11 +150,10 @@ test('createDefaultFilterState returns the FilterStore default shape (dateFrom/d
   expect(probe.artistNull).toBe(true)
   expect(probe.folderNull).toBe(true)
   expect(probe.hasMetadataNull).toBe(true)
-  // Pinned quirk: dateFrom/dateTo are NOT default keys. The app.js inline
-  // fallback (app.js:274-275) lists them, but that branch is dead at runtime
-  // because FilterStore is always loaded first.
-  expect(probe.hasDateFromKey).toBe(false)
-  expect(probe.hasDateToKey).toBe(false)
+  // Flipped 2026-07-13: dateFrom/dateTo are default keys now (the store
+  // allowlists were the only gap; app.js's fallback branch already had them).
+  expect(probe.hasDateFromKey).toBe(true)
+  expect(probe.hasDateToKey).toBe(true)
 })
 
 // ---------------------------------------------------------------------------
@@ -387,22 +389,17 @@ test('updateFilters mutates AppState.filters and setFilters restores defaults', 
 })
 
 // ---------------------------------------------------------------------------
-// 8. BUG PINNED AS-IS: the date range filter is dropped by the store.
+// 8. FIXED (was the pinned date-filter bug): the range survives the store.
 // ---------------------------------------------------------------------------
 
-test('KNOWN BUG (pinned): date range filter is stripped by FilterStore.cloneState', async ({ page }) => {
-  // roadmap #12 / commit 8b5de3f added dateFrom/dateTo to the filter modal +
-  // to app.js createDefaultFilterState fallback + to the query builders, but
-  // NOT to stores/filter-store.js (createDefaultFilterState + cloneState). Every
-  // write to the filter state round-trips through FilterStore.cloneState, whose
-  // explicit allowlist has no date keys — so the value is silently discarded and
-  // /api/images never receives date_from/date_to. The gallery date filter is a
-  // no-op at runtime.
-  //
-  // This test pins the CURRENT (broken) behavior so the verbatim app.js split is
-  // provably neutral. WHEN THE BUG IS FIXED (add dateFrom/dateTo to
-  // filter-store.js createDefaultFilterState + cloneState), update the three
-  // expectations below to assert the value SURVIVES.
+test('date range filter survives the FilterStore round-trip onto the wire', async ({ page }) => {
+  // History: roadmap #12 / commit 8b5de3f added dateFrom/dateTo to the filter
+  // modal + the app.js createDefaultFilterState FALLBACK + the query builders,
+  // but not to stores/filter-store.js — and the store's cloneState allowlist
+  // runs on EVERY filter write, so the value was silently discarded and the
+  // gallery date filter was a runtime no-op. This suite pinned that bug as-is;
+  // the store fix flipped these expectations to assert the value survives all
+  // three hops: store -> selection contract -> /api/images query string.
   let capturedUrl = ''
   await page.route(/\/api\/images\?/, async (route) => {
     capturedUrl = route.request().url()
@@ -431,13 +428,14 @@ test('KNOWN BUG (pinned): date range filter is stripped by FilterStore.cloneStat
   })
 
   const q = new URL(capturedUrl).searchParams
-  // The value never made it into the store...
-  expect(probe.storedDateFrom).toBeNull()
-  expect(probe.storedHasKey).toBe(false)
-  // ...so the selection contract sends null...
-  expect(probe.selectionDateFrom).toBeNull()
-  // ...and the gallery query omits date_from entirely.
-  expect(q.get('date_from')).toBeNull()
+  // The value lands in the store...
+  expect(probe.storedDateFrom).toBe('2026-01-01')
+  expect(probe.storedHasKey).toBe(true)
+  // ...the selection contract carries it...
+  expect(probe.selectionDateFrom).toBe('2026-01-01')
+  // ...and the gallery query puts it on the wire.
+  expect(q.get('date_from')).toBe('2026-01-01')
+  expect(q.get('date_to')).toBe('2026-02-01')
 })
 
 // ---------------------------------------------------------------------------
