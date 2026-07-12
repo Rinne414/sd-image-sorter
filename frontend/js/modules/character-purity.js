@@ -350,7 +350,9 @@
                     display: inline-flex; align-items: center; gap: 6px;
                     font-size: 12px; opacity: 0.9;
                 }
-                .ccip-threshold-label input { width: 76px; }
+                /* 88px: 76px clipped "0.178" once the number-input spinner
+                   ate its ~20px (seen in the 1920x1080 zh-CN screenshot). */
+                .ccip-threshold-label input { width: 88px; }
                 .ccip-results { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
                 .ccip-summary { font-size: 13px; }
                 .ccip-note { font-size: 12px; opacity: 0.75; }
