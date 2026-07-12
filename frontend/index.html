@@ -7076,8 +7076,38 @@
          store subscriptions, state setters). ONE load-time EXEC chunk; keep the
          tag after api-features.js and before app.js. -->
     <script src="/static/js/app/state-core.js"></script>
-    <!-- Main application (still contains AppState, store wiring, view
-         switching, scan/tag flows, event listeners and the boot sequence) -->
+    <!-- app.js decomposition, stage 5: the feature flows, extracted VERBATIM
+         in original line order (tagger UI/defaults, selection, switchView,
+         gallery bulk ops, nav, reconnect, scan, tagging, stats, gallery load,
+         library, filter/settings/model-manager UI, drop zone + keyboard).
+         Keep all tags in this order, after state-core.js and before app.js
+         (initEventListeners, the DOMContentLoaded boot and the sealed
+         window.App facade assembly still live in app.js). -->
+    <script src="/static/js/app/tagger-model-ui.js"></script>
+    <script src="/static/js/app/tagger-defaults.js"></script>
+    <script src="/static/js/app/selection.js"></script>
+    <script src="/static/js/app/view-switch.js"></script>
+    <script src="/static/js/app/gallery-bulk-actions.js"></script>
+    <script src="/static/js/app/gallery-bulk-jobs.js"></script>
+    <script src="/static/js/app/nav-toolbar.js"></script>
+    <script src="/static/js/app/nav-mobile.js"></script>
+    <script src="/static/js/app/reconnect-flow.js"></script>
+    <script src="/static/js/app/scan-flow.js"></script>
+    <script src="/static/js/app/scan-diagnostics.js"></script>
+    <script src="/static/js/app/tagging-flow.js"></script>
+    <script src="/static/js/app/stats-aesthetic.js"></script>
+    <script src="/static/js/app/gallery-load.js"></script>
+    <script src="/static/js/app/library-modelselect.js"></script>
+    <script src="/static/js/app/selection-ui.js"></script>
+    <script src="/static/js/app/filters-apply.js"></script>
+    <script src="/static/js/app/settings.js"></script>
+    <script src="/static/js/app/model-manager.js"></script>
+    <script src="/static/js/app/disk-usage.js"></script>
+    <script src="/static/js/app/filter-modal-data.js"></script>
+    <script src="/static/js/app/filter-summary.js"></script>
+    <script src="/static/js/app/dropzone-keyboard.js"></script>
+    <!-- Main application remainder (initEventListeners, the DOMContentLoaded
+         boot sequence and the sealed window.App facade assembly) -->
     <script src="/static/js/app.js"></script>
     <script src="/static/js/folder-browser.js"></script>
     <script src="/static/js/tag-category-copy.js"></script>
