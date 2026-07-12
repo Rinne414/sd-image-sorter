@@ -7071,6 +7071,11 @@
          api.js first, both after the stage-2 leaves, before app.js. -->
     <script src="/static/js/app/api.js"></script>
     <script src="/static/js/app/api-features.js"></script>
+    <!-- app.js decomposition, stage 4: the state core (FilterModalController,
+         saved-filter hydration, store creation + window handles, AppState, both
+         store subscriptions, state setters). ONE load-time EXEC chunk; keep the
+         tag after api-features.js and before app.js. -->
+    <script src="/static/js/app/state-core.js"></script>
     <!-- Main application (still contains AppState, store wiring, view
          switching, scan/tag flows, event listeners and the boot sequence) -->
     <script src="/static/js/app.js"></script>
