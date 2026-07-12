@@ -716,6 +716,7 @@
             trainer_config: document.getElementById('dataset-trainer-toml')?.checked ? 'kohya_toml' : 'none',
             trainer_repeats: Math.max(1, Number(document.getElementById('dataset-est-repeats')?.value) || 10),
             trainer_batch: Math.max(1, Number(document.getElementById('dataset-est-batch')?.value) || 2),
+            trainer_keep_tokens: Math.max(0, Number(document.getElementById('dataset-trainer-keep-tokens')?.value) || 0),
         };
     };
 

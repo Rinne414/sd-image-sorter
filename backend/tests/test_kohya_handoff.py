@@ -95,6 +95,40 @@ def test_kohya_toml_points_conditioning_dir_at_exported_masks(
     assert content.count("/mask\"") == 1
 
 
+def test_keep_tokens_emits_shuffle_lines(test_client, test_db, tmp_path):
+    ids = _stage(tmp_path)
+    out = tmp_path / "out-keep"
+    out.mkdir()
+    response = test_client.post("/api/dataset/export", json={
+        "image_ids": ids,
+        "output_folder": str(out),
+        "naming_pattern": "{filename}",
+        "trainer_config": "kohya_toml",
+        "trainer_keep_tokens": 2,
+    })
+    content = Path(response.json()["trainer_config_path"]).read_text(encoding="utf-8")
+    assert "shuffle_caption = true" in content
+    assert "keep_tokens = 2" in content
+
+
+def test_keep_tokens_zero_emits_nothing(test_client, test_db, tmp_path):
+    ids = _stage(tmp_path)
+    out = tmp_path / "out-nokeep"
+    out.mkdir()
+    response = test_client.post("/api/dataset/export", json={
+        "image_ids": ids,
+        "output_folder": str(out),
+        "naming_pattern": "{filename}",
+        "trainer_config": "kohya_toml",
+        "trainer_keep_tokens": 0,
+    })
+    content = Path(response.json()["trainer_config_path"]).read_text(encoding="utf-8")
+    assert "shuffle_caption" not in content
+    # Note: the pytest tmp path embeds this TEST'S name (which contains
+    # "keep_tokens") into image_dir — assert on the config LINE instead.
+    assert "keep_tokens = " not in content
+
+
 def test_default_export_writes_no_toml(test_client, test_db, tmp_path):
     ids = _stage(tmp_path)
     out = tmp_path / "out-plain"

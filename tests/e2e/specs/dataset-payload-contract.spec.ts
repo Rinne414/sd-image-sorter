@@ -43,6 +43,7 @@ const EXPORT_PAYLOAD_KEYS = [
   'template_options',
   'trainer_batch',
   'trainer_config',
+  'trainer_keep_tokens',
   'trainer_repeats',
   'trigger',
 ].sort()

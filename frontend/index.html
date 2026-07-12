@@ -4409,6 +4409,10 @@
                                         <input type="checkbox" id="dataset-trainer-toml">
                                         <span data-i18n="dataset.trainerTomlLabel">Also write kohya dataset_config.toml (repeats/batch from the estimator above)</span>
                                     </label>
+                                    <label class="form-label dataset-trainer-keep-row" style="display:flex;align-items:center;gap:8px;">
+                                        <span data-i18n="dataset.trainerKeepTokensLabel">Shuffle captions, keep first N tags fixed (keep_tokens)</span>
+                                        <input type="number" id="dataset-trainer-keep-tokens" class="form-input" style="width:72px;" min="0" max="50" step="1" value="1">
+                                    </label>
                                     <!-- Hidden mirror element to keep the existing JS that reads
                                          #dataset-image-op working without changes. The radio
                                          above is the visible source of truth. -->

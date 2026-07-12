@@ -159,6 +159,11 @@ class DatasetExportRequest(BaseModel):
     trainer_repeats: int = Field(default=10, ge=1, le=1000)
     trainer_batch: int = Field(default=2, ge=1, le=64)
     trainer_resolution: int = Field(default=1024, ge=256, le=4096)
+    # keep_tokens: how many leading caption tokens stay FIXED while the
+    # rest shuffle (official config example: shuffle_caption = true +
+    # keep_tokens = N). This is how the trigger word survives shuffling.
+    # 0 = don't emit shuffle/keep lines at all.
+    trainer_keep_tokens: int = Field(default=0, ge=0, le=50)
 
 
 class DatasetExportPreviewRequest(BaseModel):
@@ -480,6 +485,12 @@ def _write_kohya_dataset_config(
         f'  caption_extension = "{caption_extension}"',
         f"  num_repeats = {int(request.trainer_repeats)}",
     ]
+    keep_tokens = int(getattr(request, "trainer_keep_tokens", 0) or 0)
+    if keep_tokens > 0:
+        # docs/config_README-en.md example: shuffle with the first N tokens
+        # pinned — the trigger (and any leading common tags) stay first.
+        lines.append("  shuffle_caption = true")
+        lines.append(f"  keep_tokens = {keep_tokens}")
     if _mask_export_mode(request) == "kohya" and masks_written > 0:
         lines.append(
             f'  conditioning_data_dir = "{_toml_path_literal(output_folder / "mask")}"'
