@@ -217,3 +217,39 @@ class TestMaintenanceEndpoints:
         purged = test_client.post("/api/tags/scores/purge", json={}).json()
         assert purged["removed"] == 1
         assert test_client.get("/api/tags/scores/stats").json()["total_rows"] == 0
+
+class TestTagAudit:
+    def test_per_model_spread_within_scope(self, test_client):
+        in_scope = _add_image("/test/api/audit1.png")
+        out_scope = _add_image("/test/api/audit2.png")
+        db.add_tags_batch(
+            [{
+                "image_id": in_scope, "tags": [],
+                "tag_scores": [
+                    {"model": "wd-a", "scores": [{"tag": "smile", "score": 0.9}]},
+                    {"model": "wd-b", "scores": [{"tag": "smile", "score": 0.5}]},
+                ],
+            }],
+            default_source="tagger", replace_scope="pipeline",
+        )
+        _seed_scores(out_scope, "wd-a", [{"tag": "smile", "score": 0.2}], [])
+
+        response = test_client.post("/api/tags/scores/tag-audit", json={
+            "tag": "smile", "image_ids": [in_scope],
+        })
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["scope_images"] == 1
+        by_model = {entry["model"]: entry for entry in body["models"]}
+        assert set(by_model) == {"wd-a", "wd-b"}, "out-of-scope image must not leak in"
+        assert by_model["wd-a"]["images"] == 1
+        assert by_model["wd-a"]["avg_score"] == pytest.approx(0.9)
+        assert by_model["wd-b"]["max_score"] == pytest.approx(0.5)
+
+    def test_unscored_tag_returns_empty_models(self, test_client):
+        image_id = _add_image("/test/api/audit3.png")
+        response = test_client.post("/api/tags/scores/tag-audit", json={
+            "tag": "never_scored", "image_ids": [image_id],
+        })
+        assert response.status_code == 200
+        assert response.json()["models"] == []

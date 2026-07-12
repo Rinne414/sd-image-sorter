@@ -626,6 +626,9 @@ Virtual re-threshold from stored scores (v3.5.x BE-1) — rewrites tag rows at n
 #### POST /api/tags/coverage-gaps
 Coverage completion (v3.5.x BE-1, N2): images whose stored score for `tag` sits just under the threshold but that carry **no such tag row** — "should probably have it, doesn't". Body: `{tag, image_ids|selection_token?, model?, band_low?, band_high?, limit?: 200}`. Scope omitted = whole library. `band_high` defaults to the model's registry threshold (0.35 without a model); `band_low` defaults to 0.10 under `band_high`, clamped to the storage floor. Without `model`, the best score across stored models wins per image. Returns `{tag, band_low, band_high, model, scope_images, gaps: [{image_id, model, score, filename, path}], total}` ranked by score descending. Feeds the Separation Console's find-missing flow; confirmed adds should go through `POST /api/tags/bulk/add` (writes `source: "manual"`).
 
+#### POST /api/tags/scores/tag-audit
+Per-model audit for ONE tag (v3.5.x BE-1-UI): which stored models scored `tag` inside the scope, at what confidence spread. Body: `{tag, image_ids|selection_token?}` (scope omitted = whole library). Returns `{tag, scope_images, models: [{model, images, avg_score, max_score, min_score}]}` sorted by model name. The Separation Console's per-tag 🧪 action renders this as the "which model said that?" view for dubious tags.
+
 #### GET /api/tags/scores/stats
 Storage report for the `tag_scores` table (v3.5.x BE-1): `{enabled, floor, total_rows, images_with_scores, models: [{model, rows, images}], estimated_bytes}`. Score persistence is on by default (`SD_IMAGE_SORTER_TAG_SCORES=0` disables; `SD_IMAGE_SORTER_TAG_SCORES_FLOOR` tunes the floor).
 

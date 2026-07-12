@@ -230,6 +230,64 @@ def find_coverage_gaps(
     return ranked[: max(0, int(limit))] if limit else ranked
 
 
+def get_tag_model_audit(
+    tag: str, image_ids: Optional[List[int]] = None
+) -> List[Dict[str, Any]]:
+    """Per-model score distribution for ONE tag (BE-1-UI audit panel:
+    "which model said this, at what confidence"). Scope by image ids when
+    given; batched to stay under the SQLite bind-variable limit. AVG is
+    merged across batches via SUM/COUNT."""
+    tag_value = str(tag or "").strip()
+    if not tag_value:
+        return []
+    ids = [int(i) for i in (image_ids or []) if int(i) > 0]
+    merged: Dict[str, Dict[str, Any]] = {}
+
+    def _consume(cursor, id_batch: Optional[List[int]]) -> None:
+        clause = ""
+        params: List[Any] = [tag_value]
+        if id_batch is not None:
+            placeholders = ",".join("?" * len(id_batch))
+            clause = f" AND image_id IN ({placeholders})"
+            params.extend(id_batch)
+        cursor.execute(
+            f"""
+            SELECT model, COUNT(*), SUM(score), MAX(score), MIN(score)
+            FROM tag_scores
+            WHERE tag = ?{clause}
+            GROUP BY model
+            """,
+            params,
+        )
+        for row in cursor.fetchall():
+            slot = merged.setdefault(
+                row[0], {"images": 0, "score_sum": 0.0, "max": 0.0, "min": 1.0}
+            )
+            slot["images"] += int(row[1] or 0)
+            slot["score_sum"] += float(row[2] or 0.0)
+            slot["max"] = max(slot["max"], float(row[3] or 0.0))
+            slot["min"] = min(slot["min"], float(row[4] or 1.0))
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        if ids:
+            for start in range(0, len(ids), _BATCH_SIZE):
+                _consume(cursor, ids[start:start + _BATCH_SIZE])
+        else:
+            _consume(cursor, None)
+
+    return [
+        {
+            "model": model,
+            "images": slot["images"],
+            "avg_score": round(slot["score_sum"] / slot["images"], 4) if slot["images"] else 0.0,
+            "max_score": round(slot["max"], 4),
+            "min_score": round(slot["min"], 4),
+        }
+        for model, slot in sorted(merged.items())
+    ]
+
+
 def get_tag_score_stats() -> Dict[str, Any]:
     """Storage report for the maintenance UI (owner decision #1: default-on
     needs visible cost + a purge escape hatch)."""

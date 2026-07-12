@@ -309,6 +309,10 @@
                 t('Find missed images: tagger scores just under the threshold without this tag',
                   '找漏打：分数卡在门槛下、该有却没有此标签的图'),
                 () => this.findGaps(row)));
+            actions.appendChild(this._actionBtn('🧪',
+                t('Model audit: which tagger scored this tag, at what confidence',
+                  '模型视角：这个标签是谁打的、信心多高'),
+                () => this.auditTag(row)));
             div.appendChild(actions);
             return div;
         },
@@ -509,6 +513,56 @@
                 'success');
             this.findGaps(row);
             this.refresh();
+        },
+
+        // ---- BE-1-UI per-model tag audit --------------------------------------
+        async auditTag(row) {
+            const panel = this._gapsPanel();
+            panel.hidden = false;
+            panel.textContent = t('Loading model audit…', '加载模型视角…');
+            const ids = this._queueIds().filter(id => id > 0);
+            try {
+                const response = await fetch('/api/tags/scores/tag-audit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tag: row.key.replace(/ /g, '_'),
+                        image_ids: ids.length ? ids : undefined,
+                    }),
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                this._renderAudit(panel, row, await response.json());
+            } catch (e) {
+                panel.textContent = t('Model audit failed: ', '模型视角加载失败：') + String(e.message || e);
+            }
+        },
+
+        _renderAudit(panel, row, report) {
+            panel.textContent = '';
+            const head = document.createElement('div');
+            head.className = 'sepcon-gaps-head';
+            const title = document.createElement('span');
+            title.className = 'sepcon-gaps-title';
+            const models = report.models || [];
+            title.textContent = models.length === 0
+                ? t(`No stored scores for "${row.spelling}" — images tagged before v3.5.x have no records.`,
+                    `「${row.spelling}」没有分数记录 — 旧版本打的标没有记录，重新打标后可用。`)
+                : t(`Who scored "${row.spelling}" (${report.scope_images} images in scope):`,
+                    `「${row.spelling}」的模型视角（范围 ${report.scope_images} 张）：`);
+            head.appendChild(title);
+            head.appendChild(this._actionBtn('✕', t('Close', '关闭'),
+                () => { panel.hidden = true; panel.textContent = ''; }));
+            panel.appendChild(head);
+            for (const entry of models) {
+                const line = document.createElement('div');
+                line.className = 'sepcon-gap-line';
+                const label = document.createElement('span');
+                label.textContent = t(
+                    `${entry.model} · ${entry.images} img · avg ${entry.avg_score} · max ${entry.max_score}`,
+                    `${entry.model} · ${entry.images} 张 · 均值 ${entry.avg_score} · 最高 ${entry.max_score}`);
+                line.appendChild(label);
+                panel.appendChild(line);
+            }
         },
 
         // ---- BE-1-UI virtual re-threshold (zero inference) -------------------

@@ -48,6 +48,14 @@ class CoverageGapsRequest(BaseModel):
     limit: int = Field(default=200, ge=1, le=2000)
 
 
+class TagAuditRequest(BaseModel):
+    """POST /api/tags/scores/tag-audit — per-model view of one tag."""
+
+    tag: str = Field(..., min_length=1, max_length=256)
+    image_ids: Optional[List[int]] = Field(default=None)
+    selection_token: Optional[str] = Field(default=None, min_length=1)
+
+
 class ScorePurgeRequest(BaseModel):
     """POST /api/tags/scores/purge — drop stored scores (all or one model)."""
 
@@ -342,6 +350,17 @@ def rethreshold_consensus_images(
             "character_threshold": character_threshold,
         },
     )
+
+
+def tag_model_audit(request: TagAuditRequest) -> Dict[str, Any]:
+    """Per-model score distribution for one tag within a scope."""
+    ids = resolve_scope_ids(request.image_ids, request.selection_token)
+    models = db.get_tag_model_audit(request.tag, image_ids=ids or None)
+    return {
+        "tag": request.tag,
+        "scope_images": len(ids),
+        "models": models,
+    }
 
 
 def get_stats() -> Dict[str, Any]:

@@ -232,6 +232,7 @@ from db_tags import (
 )
 from db_tag_scores import (
     replace_scores_in_cursor,
+    get_tag_model_audit,
     get_scores_for_images,
     list_score_models,
     find_coverage_gaps,

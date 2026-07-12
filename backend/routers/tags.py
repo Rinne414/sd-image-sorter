@@ -30,6 +30,7 @@ from services.tag_score_service import (
     CoverageGapsRequest,
     RethresholdRequest,
     ScorePurgeRequest,
+    TagAuditRequest,
 )
 
 
@@ -332,6 +333,15 @@ def coverage_gaps(request: CoverageGapsRequest):
     from services import tag_score_service
 
     return tag_score_service.find_gaps_for_request(request)
+
+
+@router.post("/tags/scores/tag-audit")
+def tag_model_audit(request: TagAuditRequest):
+    """BE-1-UI per-model audit: which models scored this tag in the scope,
+    at what confidence spread — the "who said that?" view for dubious tags."""
+    from services import tag_score_service
+
+    return tag_score_service.tag_model_audit(request)
 
 
 @router.get("/tags/scores/stats")
