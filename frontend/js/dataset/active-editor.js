@@ -184,6 +184,11 @@
         }
         this._undoStacks?.delete?.(id);
         this._queueSelection.delete(id);
+        // NL/type maps too — local ids are deterministic (sha1 of path), so a
+        // leaked entry resurfaces on re-import (2026-07 pin-sweep finding #2).
+        this.nlCaptions?.delete?.(id);
+        this.nlEdits?.delete?.(id);
+        this.captionType?.delete?.(id);
         if (this.localItemPaths && this.isLocalId && this.isLocalId(id)) {
             this.localItemPaths.delete(id);
             this.localItemDsIds?.delete?.(id);

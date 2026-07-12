@@ -79,6 +79,11 @@
                 this.captionEdits.delete(id);
             }
             this._undoStacks?.delete?.(id);
+            // NL/type maps too — deterministic local ids resurface leaked
+            // entries on re-import (2026-07 pin-sweep finding #2).
+            this.nlCaptions?.delete?.(id);
+            this.nlEdits?.delete?.(id);
+            this.captionType?.delete?.(id);
             if (this.localItemPaths && this.isLocalId && this.isLocalId(id)) {
                 this.localItemPaths.delete(id);
                 this.localItemDsIds?.delete?.(id);

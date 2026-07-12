@@ -209,6 +209,13 @@
                 this.captionEdits.clear();
                 this._undoStacks.clear();
                 this._queueSelection.clear();
+                // meta + NL/type maps too — clearing used to leak them, and
+                // deterministic local ids resurface leaked entries on
+                // re-import (2026-07 pin-sweep finding #2).
+                this.meta?.clear?.();
+                this.nlCaptions?.clear?.();
+                this.nlEdits?.clear?.();
+                this.captionType?.clear?.();
                 this.activeId = null;
                 this._clearLocalDatasetState?.();
                 try { localStorage.removeItem('sd-image-sorter-dataset-session'); } catch {}

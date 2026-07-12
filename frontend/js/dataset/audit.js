@@ -300,6 +300,11 @@
             }
             DM._undoStacks?.delete?.(id);
             DM._queueSelection?.delete?.(id);
+            // NL/type maps too — deterministic local ids resurface leaked
+            // entries on re-import (2026-07 pin-sweep finding #2).
+            DM.nlCaptions?.delete?.(id);
+            DM.nlEdits?.delete?.(id);
+            DM.captionType?.delete?.(id);
             if (DM.localItemPaths && DM.isLocalId?.(id)) {
                 DM.localItemPaths.delete(id);
                 DM.localItemDsIds?.delete?.(id);

@@ -94,15 +94,26 @@ test('_removeImageById drops the id from every state map and re-homes activeId',
   const result = await page.evaluate(() => {
     const dm = (window as any).DatasetMaker
     dm._setActive(702)
+    // NL/type maps must be dropped too (leak fixed after the 2026-07 pin
+    // sweep: deterministic local ids resurfaced stale entries on re-import).
+    dm.nlCaptions.set(701, 'a girl on a hill')
+    dm.nlEdits.set(701, 'a girl on a hill, edited')
+    dm.captionType.set(701, 'nl')
     // Remove a non-active middle image (no confirm prompt requested).
     dm._removeImageById(701)
-    const afterMiddle = { ids: [...dm.imageIds], hasCap: dm.captions.has(701), active: dm.activeId }
+    const afterMiddle = {
+      ids: [...dm.imageIds],
+      hasCap: dm.captions.has(701),
+      leaked: dm.nlCaptions.has(701) || dm.nlEdits.has(701) || dm.captionType.has(701),
+      active: dm.activeId,
+    }
     // Remove the ACTIVE image → activeId moves to the neighbour at the same index.
     dm._removeImageById(702)
     return { afterMiddle, afterActive: { ids: [...dm.imageIds], active: dm.activeId } }
   })
   expect(result.afterMiddle.ids).toEqual([702, 703, 704])
   expect(result.afterMiddle.hasCap).toBe(false)
+  expect(result.afterMiddle.leaked).toBe(false)
   expect(result.afterMiddle.active).toBe(702)
   expect(result.afterActive.ids).toEqual([703, 704])
   // 702 was at index 0; the neighbour promoted to active is 703.
@@ -197,7 +208,12 @@ test('find/replace defaults to whole-tag rename; substring mode edits inside tag
     .toBe('curly HAIR, HAIR')
 })
 
-test('dedupe tags is space/case-insensitive but NOT underscore-insensitive (pinned quirk)', async ({ page }) => {
+test('dedupe tags folds space, case AND underscores (pin flipped from the quirk)', async ({ page }) => {
+  // Pin FLIPPED 2026-07-12: the original behavior kept "long_hair" as a
+  // distinct tag because the dedupe key folded whitespace but not
+  // underscores, while find/replace and the export underscore_to_space
+  // option treat "long_hair" == "long hair". The key now folds underscores
+  // too, so dedupe agrees with the rest of the pipeline.
   await seedQueue(page)
   await page.locator('#dataset-tab-workbench').click()
   await page.evaluate(() => {
@@ -205,9 +221,8 @@ test('dedupe tags is space/case-insensitive but NOT underscore-insensitive (pinn
     dm.imageIds = [811]
     dm.captions.clear()
     dm.captionEdits.clear()
-    // "Long Hair" (key "long hair") collapses with "long hair"; "1girl"
-    // collapses with "1girl". "long_hair" keeps its underscore in the key,
-    // so it is a DISTINCT tag and survives.
+    // "Long Hair" (key "long hair") collapses with "long hair" AND with
+    // "long_hair"; "1girl" collapses with "1girl". First spelling wins.
     dm.captionEdits.set(811, '1girl, 1girl, Long Hair, long hair, long_hair')
     dm._setActive(811)
     const scope = document.getElementById('dataset-caption-scope') as HTMLSelectElement
@@ -219,7 +234,7 @@ test('dedupe tags is space/case-insensitive but NOT underscore-insensitive (pinn
   await page.locator('#btn-dataset-dedupe-tags').click()
   await expect
     .poll(() => page.evaluate(() => (window as any).DatasetMaker.captionEdits.get(811)))
-    .toBe('1girl, Long Hair, long_hair')
+    .toBe('1girl, Long Hair')
 })
 
 test('removing a tag pill drops that tag from the active caption textarea', async ({ page }) => {

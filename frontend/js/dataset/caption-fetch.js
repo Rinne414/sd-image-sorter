@@ -100,7 +100,12 @@
             const seen = new Set();
             const kept = [];
             for (const part of parts) {
-                const key = part.replace(/\s+/g, ' ').toLowerCase();
+                // Fold underscores like find/replace and the export
+                // underscore_to_space option do — "long_hair" and "long hair"
+                // are the same tag everywhere else in the pipeline (latent
+                // inconsistency found by the 2026-07 pin sweep; pin flipped in
+                // the same commit).
+                const key = part.replace(/[_\s]+/g, ' ').trim().toLowerCase();
                 if (seen.has(key)) {
                     removedTags += 1;
                     continue;
