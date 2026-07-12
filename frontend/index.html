@@ -7055,8 +7055,8 @@
          file shares one global lexical environment, so the moved top-level
          function/const/let declarations stay visible to app.js and to each
          other; only load ORDER matters. Keep these tags in this order and all
-         BEFORE app.js, which still owns the stores/AppState wiring, the API
-         object, event listeners and the DOMContentLoaded boot (later stages). -->
+         BEFORE app.js, which still owns the stores/AppState wiring, event
+         listeners and the DOMContentLoaded boot (later stages). -->
     <script src="/static/js/app/constants-prefs.js"></script>
     <script src="/static/js/app/filter-state.js"></script>
     <script src="/static/js/app/gallery-filter-helpers.js"></script>
@@ -7065,7 +7065,13 @@
     <script src="/static/js/app/progress-trackers.js"></script>
     <script src="/static/js/app/analytics-export.js"></script>
     <script src="/static/js/app/handoffs.js"></script>
-    <!-- Main application (still contains API, AppState, store wiring, view
+    <!-- app.js decomposition, stage 3: the API object (REST client).
+         api.js opens the object literal; api-features.js merges the
+         remaining members onto the same object at load time. Keep
+         api.js first, both after the stage-2 leaves, before app.js. -->
+    <script src="/static/js/app/api.js"></script>
+    <script src="/static/js/app/api-features.js"></script>
+    <!-- Main application (still contains AppState, store wiring, view
          switching, scan/tag flows, event listeners and the boot sequence) -->
     <script src="/static/js/app.js"></script>
     <script src="/static/js/folder-browser.js"></script>
