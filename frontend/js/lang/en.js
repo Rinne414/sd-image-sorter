@@ -4098,6 +4098,7 @@ window.I18nLang_en = {
     'dataset.sepconPurposeConcept': 'Concept LoRA',
     'dataset.sepconPurposeGeneral': 'General',
     'dataset.sepconHealthRun': '🩺 Health check',
+    'dataset.sepconTipoSuggest': '🧩 Suggest missing tags',
     'dataset.findReplaceTitle': 'Find / Replace',
     'dataset.findLabel': 'Find',
     'dataset.replaceLabel': 'Replace with',

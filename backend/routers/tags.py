@@ -26,6 +26,7 @@ from services.tagging_pipeline_service import (
 from services.tag_export_service import combined_export_path
 from services.trait_pruning_service import TraitCandidatesRequest
 from services.dataset_consistency_service import ConsistencyReportRequest
+from services.tipo_service import TipoSuggestRequest
 from services.tag_score_service import (
     CoverageGapsRequest,
     RethresholdRequest,
@@ -345,6 +346,23 @@ def coverage_gaps(request: CoverageGapsRequest):
     from services import tag_score_service
 
     return tag_score_service.find_gaps_for_request(request)
+
+
+@router.post("/tags/suggest-upsample")
+def suggest_upsample_tags(request: TipoSuggestRequest):
+    """TIPO tag-upsampling assist (roadmap #8, v1): propose danbooru tags
+    the WD14-family taggers have no label for. Opt-in dependency pair
+    (tipo-kgen + llama-cpp-python, CPU GGUF); missing install returns 400
+    with the exact pip hint. Read-only — proposals are vocab-gated and the
+    frontend applies confirmed picks itself (never auto-applied)."""
+    from services import tipo_service
+
+    try:
+        return tipo_service.suggest_upsample(request)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+    except tipo_service.TipoError as exc:
+        raise HTTPException(400, str(exc))
 
 
 @router.post("/tags/scores/tag-audit")

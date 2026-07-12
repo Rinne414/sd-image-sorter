@@ -4097,6 +4097,7 @@ window.I18nLang_zhCN = {
     'dataset.sepconPurposeConcept': '概念 LoRA',
     'dataset.sepconPurposeGeneral': '通用',
     'dataset.sepconHealthRun': '🩺 训练前健检',
+    'dataset.sepconTipoSuggest': '🧩 建议缺漏标签',
     'dataset.findReplaceTitle': '查找 / 替换',
     'dataset.findLabel': '查找',
     'dataset.replaceLabel': '替换为',
