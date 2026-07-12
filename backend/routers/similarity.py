@@ -25,6 +25,18 @@ get_similarity_service = _similarity_service_provider.get
 set_similarity_service = _similarity_service_provider.set
 
 
+class TextSearchRequest(BaseModel):
+    """Body schema for POST /api/similarity/search-text (semantic search)."""
+
+    query: str = Field(..., min_length=1, max_length=512)
+    limit: int = Field(default=100, ge=1, le=1000)
+    # Cross-modal CLIP cosine runs ~0.2-0.35 for matches — default to pure
+    # top-k ranking instead of the image-search 0.5 cutoff.
+    threshold: float = Field(default=0.0, ge=0.0, le=1.0)
+    offset: int = Field(default=0, ge=0)
+    collection_id: Optional[int] = Field(default=None, ge=1)
+
+
 class EmbedRequest(BaseModel):
     """Body schema for POST /api/similarity/embed.
 
@@ -79,6 +91,33 @@ async def embed_images(
     """
     image_ids = request.image_ids if request else None
     return await run_in_threadpool(service.embed_images, background_tasks, image_ids)
+
+
+@router.post(
+    "/search-text",
+    summary="Semantic search by natural-language text",
+    description="""
+Rank library images against a natural-language description using the CLIP
+text tower paired with the image-embedding model (same ViT-B/32 checkpoint,
+same 512-dim space). Requires images to be embedded first (POST /embed).
+
+Cross-modal similarity scores run far lower than image-image scores —
+matching pairs typically land around 0.2-0.35 — so results are ranked
+top-k by default (threshold 0.0).
+    """,
+)
+async def search_text(
+    request: TextSearchRequest,
+    service: SimilarityService = Depends(get_similarity_service),
+):
+    """Semantic text-to-image search over stored CLIP embeddings."""
+    return await service.search_by_text(
+        request.query,
+        request.limit,
+        request.threshold,
+        request.offset,
+        request.collection_id,
+    )
 
 
 @router.post("/cancel")

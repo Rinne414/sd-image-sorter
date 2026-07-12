@@ -1036,6 +1036,9 @@ The response also includes richer counters and recent issue details:
 #### GET /api/similarity/search/{image_id}
 Find similar images by image ID.
 
+#### POST /api/similarity/search-text
+Semantic text-to-image search (v3.5.x, competitive roadmap #1). Body: `{query (1-512 chars), limit?: 100, threshold?: 0.0, offset?: 0, collection_id?}`. Embeds the natural-language query with the CLIP TEXT tower paired with the image-embedding model (`Qdrant/clip-ViT-B-32-text`, the same ViT-B/32 checkpoint and 512-dim space as the stored embeddings; downloads on first use, ~65 MB) and ranks embedded images by cosine. Cross-modal scores run far lower than image-image scores (matches ≈ 0.2-0.35), so the default threshold is 0.0 = pure top-k ranking. Requires images to be embedded (`POST /api/similarity/embed`). 503 while the text model is unavailable. Returns the upload-search shape plus `query`: `{query, results, count, total, has_more, offset, limit}`.
+
 #### POST /api/similarity/search-upload
 Find similar images by uploaded file.
 

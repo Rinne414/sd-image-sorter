@@ -21,6 +21,7 @@ from PIL import Image, UnidentifiedImageError
 
 from config import (
     CLIP_MODEL_NAME,
+    CLIP_TEXT_MODEL_NAME,
     get_clip_model_dir,
     get_state_dir,
     SIMILARITY_DEFAULT_LIMIT,
@@ -203,6 +204,57 @@ def ensure_clip_model_ready() -> Optional[str]:
         logger.debug("Could not introspect FastEmbed model directory", exc_info=True)
     # Model is loaded in memory — return a sentinel so callers know it works
     return "fastembed:in-memory"
+
+
+_text_embed_model = None
+
+
+def _get_text_embed_model():
+    """FastEmbed CLIP TEXT tower (singleton) — the same OpenAI CLIP ViT-B/32
+    checkpoint as the vision model, split by fastembed, so text queries are
+    cosine-comparable with the stored image embeddings. Downloads on first
+    use (~65 MB) into the CLIP model dir."""
+    global _text_embed_model
+    if _text_embed_model is None:
+        with _embed_lock:
+            if _text_embed_model is None:
+                try:
+                    from fastembed import TextEmbedding  # type: ignore
+
+                    endpoint = get_hf_endpoint_order(model_name="CLIP Similarity")[0]
+                    apply_hf_endpoint_monkeypatch(endpoint, purpose="CLIP text tower / FastEmbed")
+                    with exclusive_ai_runtime("clip-text-load"):
+                        _text_embed_model = TextEmbedding(
+                            model_name=CLIP_TEXT_MODEL_NAME,
+                            cache_dir=get_clip_model_dir(),
+                        )
+                except ImportError:
+                    raise RuntimeError(
+                        "fastembed not installed. Run: pip install fastembed"
+                    )
+                except Exception as exc:
+                    raise RuntimeError(
+                        "CLIP text model is not ready yet — it downloads on first "
+                        "use (~65 MB). Check the network / model mirror settings. "
+                        f"Error: {exc}"
+                    ) from exc
+    return _text_embed_model
+
+
+def embed_text(query: str) -> Optional[np.ndarray]:
+    """Embed a natural-language query into the CLIP image-embedding space."""
+    value = str(query or "").strip()
+    if not value:
+        return None
+    model = _get_text_embed_model()
+    try:
+        with exclusive_ai_runtime("clip-text-inference"):
+            embeddings = list(model.embed([value]))
+        if embeddings:
+            return np.array(embeddings[0], dtype=np.float32)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[Similarity] Error embedding text query: %s", exc)
+    return None
 
 
 def embedding_to_bytes(embedding: np.ndarray) -> bytes:
@@ -608,6 +660,49 @@ class SimilarityIndex:
 
         page_limit = max(1, int(limit))
         page_offset = max(0, int(offset))
+        page, total, has_more = self._search_ranked_candidates(
+            query_emb,
+            threshold,
+            page_limit,
+            page_offset,
+            allowed_ids=allowed_ids,
+        )
+        return {
+            "results": page,
+            "total": total,
+            "has_more": has_more,
+            "offset": page_offset,
+            "limit": page_limit,
+        }
+
+    def search_by_text(
+        self,
+        query: str,
+        limit: int = SIMILARITY_DEFAULT_LIMIT,
+        threshold: float = 0.0,
+        offset: int = 0,
+        allowed_ids: Optional[Set[int]] = None,
+    ) -> Dict[str, Any]:
+        """Semantic search: rank library images against a natural-language
+        query via CLIP text-image cosine.
+
+        Cross-modal scores run FAR lower than image-image ones (matching
+        pairs typically land around 0.2-0.35 for ViT-B/32), which is why the
+        default threshold is 0.0 — pure top-k ranking — instead of the 0.5
+        image-search cutoff. Reuses the exact paginated ranking path the
+        upload search uses.
+        """
+        query_emb = embed_text(query)
+        page_limit = max(1, int(limit))
+        page_offset = max(0, int(offset))
+        if query_emb is None:
+            return {
+                "results": [],
+                "total": 0,
+                "has_more": False,
+                "offset": page_offset,
+                "limit": page_limit,
+            }
         page, total, has_more = self._search_ranked_candidates(
             query_emb,
             threshold,

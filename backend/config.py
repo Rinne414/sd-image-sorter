@@ -686,6 +686,16 @@ CLIP_MODEL_NAME: str = os.environ.get(
     "Qdrant/clip-ViT-B-32-vision"
 )
 
+# Text tower paired with the vision model above — the SAME OpenAI CLIP
+# ViT-B/32 checkpoint split by fastembed (512-dim), so natural-language
+# queries land in the stored image-embedding space (fastembed
+# supported-models registry). Downloads on first use (~65 MB) into the
+# CLIP model dir.
+CLIP_TEXT_MODEL_NAME: str = os.environ.get(
+    "SD_IMAGE_SORTER_CLIP_TEXT_MODEL",
+    "Qdrant/clip-ViT-B-32-text"
+)
+
 # Embedding dimensions (for CLIP ViT-B-32)
 EMBEDDING_DIMENSIONS: int = 512
 

@@ -2877,6 +2877,12 @@
                         <!-- Search Panel -->
                         <div class="similar-panel" id="panel-similar-search">
                             <div class="similar-search-controls">
+                                <div class="similar-text-row" style="display:flex;gap:8px;width:100%;">
+                                    <input type="text" id="similar-search-text" class="input" style="flex:1;"
+                                           placeholder="Describe it: red dress, smiling, garden…"
+                                           data-i18n-placeholder="similar.searchTextPlaceholder" autocomplete="off">
+                                    <button class="btn btn-primary" id="btn-similar-search-text" data-i18n="similar.searchTextButton">🔮 Semantic search</button>
+                                </div>
                                 <input type="number" id="similar-search-id" class="input" placeholder="Image ID" data-i18n-placeholder="similar.searchById">
                                 <button class="btn btn-primary" id="btn-similar-search" data-i18n="similar.searchById">Search by ID</button>
                                 <div class="similar-threshold-row" style="display:flex;align-items:center;gap:8px;width:100%;margin-top:4px;">

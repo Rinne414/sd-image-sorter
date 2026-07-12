@@ -267,6 +267,43 @@ class SimilarityService:
             "limit": result["limit"],
         }
 
+    async def search_by_text(
+        self,
+        query: str,
+        limit: int = 100,
+        threshold: float = 0.0,
+        offset: int = 0,
+        collection_id: Optional[int] = None,
+    ) -> dict:
+        """Semantic text search over the stored CLIP embeddings (same scope
+        + pagination semantics as the upload search; RuntimeError from a
+        not-yet-downloaded text tower maps to 503 so the UI can explain)."""
+        allowed_ids = self._resolve_scope_ids(collection_id)
+        if allowed_ids is not None and not allowed_ids:
+            return self._empty_search_result(None, limit, offset)
+
+        index = get_similarity_index(db)
+        try:
+            result = await run_in_threadpool(
+                index.search_by_text,
+                query,
+                limit,
+                threshold,
+                offset,
+                allowed_ids,
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return {
+            "query": query,
+            "results": result["results"],
+            "count": len(result["results"]),
+            "total": result["total"],
+            "has_more": result["has_more"],
+            "offset": result["offset"],
+            "limit": result["limit"],
+        }
+
     def find_duplicates(
         self,
         threshold: float = 0.95,
