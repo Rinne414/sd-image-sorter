@@ -1492,7 +1492,27 @@ def _tag_batch_with_thresholds(
     return out
 
 
-def _booru_partial_from_tag_result(raw: Dict[str, Any], req: "SmartTagRequest") -> Dict[str, Any]:
+def _score_sets_from_raw(
+    raw: Dict[str, Any], score_model: Optional[str]
+) -> List[Dict[str, Any]]:
+    """BE-1: normalize a raw tagger/consensus result into tag_scores write
+    sets. Multi-tagger fusion attaches ready-made ``tag_score_sets`` (one per
+    model); a single-tagger result carries flat ``tag_scores`` and needs the
+    model name from the caller."""
+    sets = raw.get("tag_score_sets")
+    if sets:
+        return [s for s in sets if isinstance(s, dict)]
+    scores = raw.get("tag_scores")
+    if scores and score_model:
+        return [{"model": str(score_model), "scores": scores}]
+    return []
+
+
+def _booru_partial_from_tag_result(
+    raw: Dict[str, Any],
+    req: "SmartTagRequest",
+    score_model: Optional[str] = None,
+) -> Dict[str, Any]:
     """Stage-1 of the pipeline: turn a raw tagger/consensus result into the
     normalized + noise-stripped + capped tag partial the caption builder needs.
 
@@ -1518,6 +1538,7 @@ def _booru_partial_from_tag_result(raw: Dict[str, Any], req: "SmartTagRequest") 
         "character_names": _flatten_tag_names(character_rows),
         "rating": raw.get("rating") or None,
         "noise_stripped": noise_stripped,
+        "tag_score_sets": _score_sets_from_raw(raw, score_model),
     }
 
 
@@ -1577,6 +1598,7 @@ def _assemble_result_dict(
         "rating": partial["rating"],
         "nl_text": nl_text,
         "noise_stripped_count": partial["noise_stripped"],
+        "tag_score_sets": partial.get("tag_score_sets") or [],
         # Persisted by _persist_result as a top-confidence tag row so
         # tags-mode exports keep a subject token even after character-mode
         # filtering removed the character name (P1-16).
@@ -1684,6 +1706,11 @@ def _process_one_image(
             consensus_min=req.consensus_min,
             skip_categories=req.consensus_skip_categories,
         )
+        raw["tag_score_sets"] = [
+            {"model": o.get("model"), "scores": o.get("tag_scores")}
+            for o in precomputed_tagger_outputs
+            if o.get("model") and o.get("tag_scores")
+        ]
     elif req.enable_wd14 and tagger is not None:
         raw = _tag_image_with_thresholds(
             tagger,
@@ -1695,7 +1722,9 @@ def _process_one_image(
     else:
         raw = {}
 
-    partial = _booru_partial_from_tag_result(raw, req)
+    partial = _booru_partial_from_tag_result(
+        raw, req, score_model=getattr(tagger, "model_name", None)
+    )
     general_names = partial["general_names"]
     copyright_names = partial["copyright_names"]
     character_names = partial["character_names"]
@@ -1854,6 +1883,7 @@ def _persist_result(image_id: int, result: Dict[str, Any], merge_strategy: str) 
                     "tags": tag_rows,
                     "ai_caption": final_caption or None,
                     "nl_caption": final_nl or None,
+                    "tag_scores": result.get("tag_score_sets") or None,
                 }
             ],
             default_source="tagger",
@@ -2345,7 +2375,12 @@ def _run_windowed_pipeline(
         else:
             raw_results = [{} for _ in valid]
 
-        partials = [_booru_partial_from_tag_result(raw or {}, req) for raw in raw_results]
+        partials = [
+            _booru_partial_from_tag_result(
+                raw or {}, req, score_model=getattr(tagger, "model_name", None)
+            )
+            for raw in raw_results
+        ]
         items = [
             (valid[i][0], valid[i][1], valid[i][2], partials[i])
             for i in range(len(valid))
@@ -2496,7 +2531,12 @@ def _run_two_phase_toriigate_pipeline(
         else:
             raw_results = [{} for _ in valid]
 
-        partials = [_booru_partial_from_tag_result(raw or {}, req) for raw in raw_results]
+        partials = [
+            _booru_partial_from_tag_result(
+                raw or {}, req, score_model=getattr(tagger, "model_name", None)
+            )
+            for raw in raw_results
+        ]
         pending_items.extend(
             (valid[i][0], valid[i][1], valid[i][2], partials[i])
             for i in range(len(valid))
@@ -2694,6 +2734,10 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                                 "copyright_tags": out.get("copyright_tags") or [],
                                 "character_tags": out.get("character_tags") or [],
                                 "rating": out.get("rating"),
+                                # BE-1: raw floored scores ride along so every
+                                # model's distribution is persisted, not just
+                                # the fused verdicts.
+                                "tag_scores": out.get("tag_scores") or [],
                             })
                     # Fix M1: image-count semantics for processed/total; smooth
                     # sub-phase progress through phase_completion (0.0-1.0).
@@ -2722,6 +2766,11 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                         consensus_min=req.consensus_min,
                         skip_categories=req.consensus_skip_categories,
                     )
+                    fused["tag_score_sets"] = [
+                        {"model": o.get("model"), "scores": o.get("tag_scores")}
+                        for o in (per_image_outputs[img_idx] or [])
+                        if o.get("model") and o.get("tag_scores")
+                    ]
                     partial = _booru_partial_from_tag_result(fused, req)
                     pending_items.append((source_key, image_id, path, partial))
 

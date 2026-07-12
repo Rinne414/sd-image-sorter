@@ -50,12 +50,15 @@ def _clear_image_derived_state(cursor: sqlite3.Cursor, image_id: int) -> None:
             tagged_at = NULL,
             ai_caption = NULL,
             nl_caption = NULL,
-            aesthetic_score = NULL
+            aesthetic_score = NULL,
+            ai_rating = NULL,
+            ai_rating_confidence = NULL
         WHERE id = ?
         """,
         (image_id,),
     )
     cursor.execute("DELETE FROM tags WHERE image_id = ?", (image_id,))
+    cursor.execute("DELETE FROM tag_scores WHERE image_id = ?", (image_id,))
     cursor.execute("DELETE FROM artist_predictions WHERE image_id = ?", (image_id,))
 
 def _sync_image_loras(

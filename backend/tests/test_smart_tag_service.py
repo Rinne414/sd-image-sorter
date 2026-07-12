@@ -2368,3 +2368,91 @@ def test_smart_tag_request_parses_suppressed_traits() -> None:
         "suppressed_traits": ["silver_hair", "", "  red_eyes  ", None],
     })
     assert req.suppressed_traits == ["silver_hair", "red_eyes"]
+
+# ---------------------------------------------------------------------------
+# BE-1: tag_scores threading through the Smart Tag pipeline reshapers.
+# The three historical "reshaper drops keys" sites are pinned here at the
+# unit level; the DB write itself is covered by test_tag_scores.py.
+# ---------------------------------------------------------------------------
+
+def test_score_sets_pass_through_partial_and_result(monkeypatch, test_db):
+    """A raw single-tagger result's tag_scores must survive
+    _booru_partial_from_tag_result -> _assemble_result_dict -> _persist_result
+    and land in the tag_scores table."""
+    import sqlite3
+
+    import database as db
+    from services.smart_tag_service import (
+        _assemble_result_dict,
+        _booru_partial_from_tag_result,
+        _coerce_request,
+        _persist_result,
+    )
+
+    image_id = db.add_image(
+        path="/test/smart/seam.png", filename="seam.png",
+        generator="comfyui", metadata_json="{}",
+    )
+    req = _coerce_request({"image_ids": [image_id], "enable_wd14": True})
+    raw = {
+        "general_tags": [{"tag": "1girl", "confidence": 0.95, "category": "general"}],
+        "character_tags": [],
+        "copyright_tags": [],
+        "rating": "general",
+        "tag_scores": [
+            {"tag": "1girl", "score": 0.95, "category": "general"},
+            {"tag": "smile", "score": 0.28, "category": "general"},
+        ],
+    }
+    partial = _booru_partial_from_tag_result(raw, req, score_model="wd-test")
+    assert partial["tag_score_sets"] == [
+        {"model": "wd-test", "scores": raw["tag_scores"]}
+    ]
+
+    result = _assemble_result_dict(partial, "", image_id, req)
+    assert result["tag_score_sets"], "reshaper #3 must not drop the sets"
+
+    _persist_result(image_id, result, "replace")
+    conn = sqlite3.connect(db.DATABASE_PATH)
+    try:
+        rows = conn.execute(
+            "SELECT model, tag, score FROM tag_scores WHERE image_id = ? ORDER BY tag",
+            (image_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    assert rows == [("wd-test", "1girl", 0.95), ("wd-test", "smile", 0.28)]
+
+
+def test_multi_model_sets_ride_fused_result(test_db):
+    """Multi-tagger mode: per-model score sets attached to the fused dict
+    survive into the partial (one set per model, not fused)."""
+    from services.smart_tag_service import (
+        _booru_partial_from_tag_result,
+        _coerce_request,
+        compute_consensus_tags,
+    )
+
+    req = _coerce_request({"image_ids": [1], "enable_wd14": True})
+    outputs = [
+        {
+            "model": "wd-a", "weight": 1.0,
+            "general_tags": [{"tag": "1girl", "confidence": 0.9, "category": "general"}],
+            "copyright_tags": [], "character_tags": [], "rating": "general",
+            "tag_scores": [{"tag": "1girl", "score": 0.9, "category": "general"}],
+        },
+        {
+            "model": "wd-b", "weight": 1.0,
+            "general_tags": [{"tag": "1girl", "confidence": 0.8, "category": "general"}],
+            "copyright_tags": [], "character_tags": [], "rating": "general",
+            "tag_scores": [{"tag": "1girl", "score": 0.8, "category": "general"}],
+        },
+    ]
+    fused = compute_consensus_tags(outputs, consensus_min=2)
+    fused["tag_score_sets"] = [
+        {"model": o["model"], "scores": o["tag_scores"]}
+        for o in outputs if o.get("model") and o.get("tag_scores")
+    ]
+    partial = _booru_partial_from_tag_result(fused, req)
+    models = [s["model"] for s in partial["tag_score_sets"]]
+    assert models == ["wd-a", "wd-b"]

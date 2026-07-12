@@ -213,13 +213,17 @@ def _build_base_query(sort_by: str, select_cols: str) -> str:
                    FROM images i
                    LEFT JOIN tags _agg_char ON _agg_char.image_id = i.id"""
     elif sort_by in ("rating", "rating_desc"):
-        # Priority: explicit > questionable > sensitive > general > unrated
+        # Priority: explicit > questionable > sensitive > general > unrated.
+        # BE-3: reads the denormalized images.ai_rating column (migration 026,
+        # kept in sync by db_tags._sync_ai_rating) instead of 4 correlated
+        # EXISTS probes per row. DISTINCT retained: tag-filter INNER JOINs can
+        # still multiply rows in this sort mode.
         return f"""SELECT DISTINCT {select_cols},
-                   CASE
-                       WHEN EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id AND t.tag = 'explicit') THEN 1
-                       WHEN EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id AND t.tag = 'questionable') THEN 2
-                       WHEN EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id AND t.tag = 'sensitive') THEN 3
-                       WHEN EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id AND t.tag = 'general') THEN 4
+                   CASE i.ai_rating
+                       WHEN 'explicit' THEN 1
+                       WHEN 'questionable' THEN 2
+                       WHEN 'sensitive' THEN 3
+                       WHEN 'general' THEN 4
                        ELSE 5
                    END as rating_order
                    FROM images i"""
@@ -234,7 +238,7 @@ def _group_by_clause(sort_by: str) -> str:
     GROUP BY because they were rewritten from per-row correlated subqueries to a
     ``LEFT JOIN tags ... COUNT(DISTINCT ...)``. It must be appended *after* the
     WHERE clause and *before* ORDER BY/LIMIT. Every other sort (including the
-    ``rating`` modes, which still use ``SELECT DISTINCT`` + ``EXISTS``) returns
+    ``rating`` modes, which still use ``SELECT DISTINCT`` over ai_rating) return
     an empty string so the emitted SQL is unchanged from before this rewrite.
     """
     if sort_by in ("tag_count", "tag_count_asc", "character_count", "character_count_asc"):
@@ -319,9 +323,11 @@ def _apply_rating_filter(conditions: List[str], params: List[Any],
         return conditions, params
 
     rating_placeholders = ",".join("?" * len(ratings))
-    # Image has one of the selected ratings OR image has no tags at all (untagged)
+    # Image's rating verdict is one of the selected ratings OR the image was
+    # never tagged (untagged fallback, unchanged). BE-3: ai_rating is the
+    # denormalized winner column (migration 026) — no tags-table probe.
     conditions.append(f"""(
-        EXISTS (SELECT 1 FROM tags rt WHERE rt.image_id = i.id AND rt.tag IN ({rating_placeholders}))
+        i.ai_rating IN ({rating_placeholders})
         OR i.tagged_at IS NULL
     )""")
     params.extend(ratings)
@@ -429,12 +435,11 @@ def _apply_exclude_ratings_filter(conditions: List[str], params: List[Any],
     if not exclude_ratings:
         return conditions, params
     placeholders = ",".join("?" * len(exclude_ratings))
-    # NOT EXISTS (instead of NOT IN) so the engine can use an index on
-    # LOWER(tag) (idx_tags_lower_tag) instead of full-scanning tags. tags.image_id
-    # is NOT NULL, so NOT EXISTS and the old NOT IN exclude exactly the same rows.
+    # BE-3: excludes by the denormalized images.ai_rating verdict (migration
+    # 026). The IS NULL arm keeps unrated images visible — NOT IN alone would
+    # drop them because NULL NOT IN (...) evaluates to NULL.
     conditions.append(
-        f"NOT EXISTS (SELECT 1 FROM tags _ex_rating WHERE _ex_rating.image_id = i.id "
-        f"AND LOWER(_ex_rating.tag) IN ({placeholders}))"
+        f"(i.ai_rating IS NULL OR LOWER(i.ai_rating) NOT IN ({placeholders}))"
     )
     params.extend([r.lower() for r in exclude_ratings])
     return conditions, params

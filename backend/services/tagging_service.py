@@ -290,8 +290,11 @@ def _apply_pre_tag_filters(
        on the tag side because Pony / NoobAI recipes need them, but
        blacklist entries are also normalised so the user can write
        either ``score_9_up`` or ``score 9 up`` in their list.
-    2. **max_tags** — keep the top N tags by confidence, descending.
-       0 = unlimited (legacy behaviour).
+    2. **max_tags** — keep the top N content tags by confidence,
+       descending. 0 = unlimited (legacy behaviour). The rating verdict
+       row (category == "rating") is exempt from the trim (BE-3): it is
+       metadata, not a content tag, and dropping it would make the image
+       read as unrated downstream.
 
     Returns a new list; the caller's tag list is not mutated.
     """
@@ -313,13 +316,22 @@ def _apply_pre_tag_filters(
             tag if isinstance(tag, dict) else {"tag": str(tag), "confidence": 1.0}
         )
 
-    if max_tags and max_tags > 0 and len(out) > max_tags:
-        out = sorted(
-            out,
-            key=lambda t: (
-                -float(t.get("confidence") or 0.0) if isinstance(t, dict) else 0.0
-            ),
-        )[: int(max_tags)]
+    if max_tags and max_tags > 0:
+        rating_rows: List[Dict[str, Any]] = []
+        content_rows: List[Dict[str, Any]] = []
+        for entry in out:
+            if isinstance(entry, dict) and entry.get("category") == "rating":
+                rating_rows.append(entry)
+            else:
+                content_rows.append(entry)
+        if len(content_rows) > max_tags:
+            content_rows = sorted(
+                content_rows,
+                key=lambda t: (
+                    -float(t.get("confidence") or 0.0) if isinstance(t, dict) else 0.0
+                ),
+            )[: int(max_tags)]
+        out = content_rows + rating_rows
     return out
 
 
@@ -928,6 +940,17 @@ def _tagging_worker_main(
                                 "tags": filtered_tags,
                                 "content_fingerprint": content_fingerprint,
                             }
+                            raw_scores = result.get("tag_scores")
+                            if raw_scores:
+                                # BE-1: the raw (pre-filter) score distribution
+                                # rides the same transaction as the tag rows.
+                                # Blacklist / max_tags shape only the ROWS —
+                                # scores stay the audit truth of what the model
+                                # actually saw.
+                                entry["tag_scores"] = {
+                                    "model": effective_model_name,
+                                    "scores": raw_scores,
+                                }
                             tags_batch.append(entry)
                             total_tagged += 1
 

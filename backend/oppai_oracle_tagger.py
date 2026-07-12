@@ -36,6 +36,7 @@ from PIL import Image
 if TYPE_CHECKING:  # pragma: no cover - type-only
     import onnxruntime as ort  # type: ignore
 
+import config
 from config import (
     TAGGER_MODELS,
     get_oppai_oracle_model_dir,
@@ -537,9 +538,20 @@ class OppaiOracleTagger:
             "all_tags": [],
         }
 
+        # BE-1: collect every score >= the configured floor for the
+        # tag_scores table (virtual re-threshold) — same seam as
+        # WD14Tagger._process_probs, kept in sync.
+        collect_scores = bool(config.TAG_SCORES_ENABLED)
+        score_floor = float(config.TAG_SCORES_FLOOR)
+        raw_scores: List[Dict[str, Any]] = []
+
         for tag_id, tag_name in self.general_tags:
             if tag_id < values.shape[0]:
                 conf = float(values[tag_id])
+                if collect_scores and conf >= score_floor:
+                    raw_scores.append(
+                        {"tag": tag_name, "score": conf, "category": "general"}
+                    )
                 if conf >= thresh:
                     entry = {"tag": tag_name, "confidence": conf}
                     result["general_tags"].append(entry)
@@ -551,11 +563,18 @@ class OppaiOracleTagger:
                 conf = float(values[tag_id])
                 rating_probs.append((rating_name, conf))
                 result["rating_confidences"][rating_name] = conf
+                if collect_scores and conf >= score_floor:
+                    raw_scores.append(
+                        {"tag": rating_name, "score": conf, "category": "rating"}
+                    )
 
         if rating_probs:
             best = max(rating_probs, key=lambda x: x[1])
             result["rating"] = best[0]
             result["all_tags"].append({"tag": best[0], "confidence": best[1]})
+
+        if collect_scores:
+            result["tag_scores"] = raw_scores
 
         result["general_tags"].sort(key=lambda x: x["confidence"], reverse=True)
         result["all_tags"].sort(key=lambda x: x["confidence"], reverse=True)

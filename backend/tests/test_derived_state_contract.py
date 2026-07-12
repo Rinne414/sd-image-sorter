@@ -40,9 +40,13 @@ SKIPPED_SOURCE_DIRS = {"tests", "venv", "__pycache__"}
 # direction is to shrink this list toward a single derived-state owner.
 EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
     (
+        # BE-3 (v3.5.x): ai_rating / ai_rating_confidence are derived from tag
+        # rows (db_tags._sync_ai_rating), so the derived-state clear NULLs them
+        # with the other tag-derived columns — same statement, same owner.
         "db_images_write.py",
         "UPDATE images SET content_fingerprint = NULL, embedding = NULL, "
-        "tagged_at = NULL, ai_caption = NULL, nl_caption = NULL, aesthetic_score = NULL WHERE id = ?",
+        "tagged_at = NULL, ai_caption = NULL, nl_caption = NULL, aesthetic_score = NULL, "
+        "ai_rating = NULL, ai_rating_confidence = NULL WHERE id = ?",
     ): 1,
     (
         # Metadata L3 (v3.5.0): the scan upsert also maintains the

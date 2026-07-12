@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     import onnxruntime as ort  # type: ignore
 from PIL import Image
 
+import config
 from config import (
     TAGGER_MODELS as MODELS,
     DEFAULT_TAGGER_MODEL as DEFAULT_MODEL,
@@ -687,9 +688,28 @@ class WD14Tagger:
         probs = self._normalize_output_probs(probs)
         result = self._build_empty_result()
 
+        # BE-1: alongside the thresholded verdicts, collect EVERY score >= the
+        # configured floor so the tag_scores table can serve virtual
+        # re-threshold and coverage-gap queries with zero re-inference.
+        # Read at call time (not import time) so tests and settings changes
+        # take effect without a process restart.
+        collect_scores = bool(config.TAG_SCORES_ENABLED)
+        score_floor = float(config.TAG_SCORES_FLOOR)
+        raw_scores: List[Dict[str, Any]] = []
+
         for tag_id, tag_name in self.general_tags:
             if tag_id < len(probs):
                 conf = float(probs[tag_id])
+                if collect_scores and conf >= score_floor:
+                    raw_scores.append(
+                        {
+                            "tag": tag_name,
+                            "score": conf,
+                            "category": self._general_category_overrides.get(
+                                tag_name, "general"
+                            ),
+                        }
+                    )
                 if conf >= general_thresh:
                     category = self._general_category_overrides.get(tag_name, "general")
                     result["general_tags"].append(
@@ -702,6 +722,10 @@ class WD14Tagger:
         for tag_id, tag_name in self.copyright_tags:
             if tag_id < len(probs):
                 conf = float(probs[tag_id])
+                if collect_scores and conf >= score_floor:
+                    raw_scores.append(
+                        {"tag": tag_name, "score": conf, "category": "copyright"}
+                    )
                 if conf >= copyright_thresh:
                     result["copyright_tags"].append(
                         {"tag": tag_name, "confidence": conf, "category": "copyright"}
@@ -713,6 +737,10 @@ class WD14Tagger:
         for tag_id, tag_name in self.character_tags:
             if tag_id < len(probs):
                 conf = float(probs[tag_id])
+                if collect_scores and conf >= score_floor:
+                    raw_scores.append(
+                        {"tag": tag_name, "score": conf, "category": "character"}
+                    )
                 if conf >= char_thresh:
                     result["character_tags"].append(
                         {"tag": tag_name, "confidence": conf, "category": "character"}
@@ -727,6 +755,10 @@ class WD14Tagger:
                 conf = float(probs[tag_id])
                 rating_probs.append((tag_name, conf))
                 result["rating_confidences"][tag_name] = conf
+                if collect_scores and conf >= score_floor:
+                    raw_scores.append(
+                        {"tag": tag_name, "score": conf, "category": "rating"}
+                    )
 
         if rating_probs:
             best_rating = max(rating_probs, key=lambda x: x[1])
@@ -745,6 +777,13 @@ class WD14Tagger:
                 result["all_tags"].append(
                     {"tag": result["rating"], "confidence": 1.0, "category": "rating"}
                 )
+                if collect_scores:
+                    raw_scores.append(
+                        {"tag": result["rating"], "score": 1.0, "category": "rating"}
+                    )
+
+        if collect_scores:
+            result["tag_scores"] = raw_scores
 
         result["general_tags"].sort(key=lambda x: x["confidence"], reverse=True)
         result["copyright_tags"].sort(key=lambda x: x["confidence"], reverse=True)

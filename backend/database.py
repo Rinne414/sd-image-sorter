@@ -230,6 +230,14 @@ from db_tags import (
     get_all_loras,
     get_all_generators,
 )
+from db_tag_scores import (
+    replace_scores_in_cursor,
+    get_scores_for_images,
+    list_score_models,
+    find_coverage_gaps,
+    get_tag_score_stats,
+    purge_tag_scores,
+)
 from db_facets import (
     get_metadata_status_counts,
     _library_health_percent,

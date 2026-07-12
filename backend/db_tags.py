@@ -25,6 +25,7 @@ from db_helpers import (
     _rows_to_dicts,
 )
 from db_images_write import _mark_image_tagged
+from db_tag_scores import replace_scores_in_cursor
 
 
 def _dedupe_tags(tags: List[Tuple[str, float]]) -> List[Tuple[str, float]]:
@@ -55,6 +56,46 @@ def _dedupe_tags(tags: List[Tuple[str, float]]) -> List[Tuple[str, float]]:
 # a user ('manual') survive tagger/Smart-Tag re-runs; NULL covers every
 # pre-migration-024 row (all of which came from tagger pipelines).
 PIPELINE_TAG_SOURCES: Tuple[str, ...] = ("tagger", "vlm", "trigger")
+
+# The four WD14 rating verdicts. images.ai_rating (migration 026) denormalizes
+# the winning row so rating filter/sort never probes the tags table (BE-3).
+RATING_TAG_NAMES: Tuple[str, ...] = ("general", "sensitive", "questionable", "explicit")
+
+_RATING_PRIORITY_SQL = (
+    "CASE tag WHEN 'explicit' THEN 0 WHEN 'questionable' THEN 1 "
+    "WHEN 'sensitive' THEN 2 ELSE 3 END"
+)
+
+
+def _sync_ai_rating(cursor, image_id: int) -> None:
+    """Re-derive images.ai_rating(+confidence) from the image's tag rows.
+
+    Called after EVERY tag replace (add_tags / add_tags_batch — which is also
+    every bulk op and bulk-undo, since those route through add_tags), so the
+    denormalized column can never drift from the rows. Highest confidence
+    wins; severity (explicit > questionable > sensitive > general) breaks
+    ties — the same rule migration 026 used for the backfill.
+    """
+    placeholders = ",".join("?" * len(RATING_TAG_NAMES))
+    row = cursor.execute(
+        f"""
+        SELECT tag, confidence FROM tags
+        WHERE image_id = ? AND tag IN ({placeholders})
+        ORDER BY confidence DESC, {_RATING_PRIORITY_SQL}
+        LIMIT 1
+        """,
+        (image_id, *RATING_TAG_NAMES),
+    ).fetchone()
+    if row is not None:
+        cursor.execute(
+            "UPDATE images SET ai_rating = ?, ai_rating_confidence = ? WHERE id = ?",
+            (row[0], row[1], image_id),
+        )
+    else:
+        cursor.execute(
+            "UPDATE images SET ai_rating = NULL, ai_rating_confidence = NULL WHERE id = ?",
+            (image_id,),
+        )
 
 
 def _dedupe_tag_rows(tags: List[Dict[str, Any]], default_source: Optional[str]) -> List[Tuple[str, float, Optional[str], Optional[str]]]:
@@ -160,6 +201,7 @@ def add_tags(
             cursor, image_id, tags,
             default_source=default_source, replace_scope=replace_scope,
         )
+        _sync_ai_rating(cursor, image_id)
         _mark_image_tagged(cursor, image_id, content_fingerprint)
     _invalidate_tags_cache()
 
@@ -182,6 +224,10 @@ def add_tags_batch(
             - ai_caption: Optional[str] - composed display caption (may include tags)
             - nl_caption: Optional[str] - pure natural-language caption from a VLM
             - content_fingerprint: Optional[str] - metadata-independent image hash
+            - tag_scores: Optional - {"model", "scores"} dict (or list of them)
+              of raw tagger scores >= config.TAG_SCORES_FLOOR, persisted to the
+              tag_scores table in the same transaction (BE-1). Absent = no
+              score write (leaves any previously stored scores untouched).
         default_source: provenance for rows that carry no 'source' key
             ('tagger' | 'vlm' | 'manual' | 'trigger'); None keeps legacy NULL.
         replace_scope: "all" (historical full replace) or "pipeline"
@@ -204,6 +250,11 @@ def add_tags_batch(
                 cursor, image_id, tags,
                 default_source=default_source, replace_scope=replace_scope,
             )
+            _sync_ai_rating(cursor, image_id)
+
+            score_sets = item.get("tag_scores")
+            if score_sets:
+                replace_scores_in_cursor(cursor, image_id, score_sets)
 
             # Update tagged timestamp and captions. COALESCE preserves an
             # existing value when the caller passes None (a tag-only run, or a

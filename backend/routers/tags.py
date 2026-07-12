@@ -26,6 +26,11 @@ from services.tagging_pipeline_service import (
 from services.tag_export_service import combined_export_path
 from services.trait_pruning_service import TraitCandidatesRequest
 from services.dataset_consistency_service import ConsistencyReportRequest
+from services.tag_score_service import (
+    CoverageGapsRequest,
+    RethresholdRequest,
+    ScorePurgeRequest,
+)
 
 
 router = APIRouter(prefix="/api", tags=["tags"])
@@ -252,6 +257,100 @@ def trait_candidates(request: TraitCandidatesRequest):
     from services.trait_pruning_service import compute_trait_candidates
 
     return compute_trait_candidates(request)
+
+
+@router.post("/tags/rethreshold")
+def rethreshold_tags(request: RethresholdRequest):
+    """BE-1 virtual re-threshold: rewrite tag rows from stored tag_scores at
+    new thresholds with ZERO inference. ``model`` names a tagger with stored
+    scores, or "consensus" to fuse every stored model. ``dry_run`` (default)
+    only reports the diff. Property-tested: equals re-running inference at
+    the same thresholds (for thresholds >= the storage floor)."""
+    import config as app_config
+    from services import tag_score_service
+    from services.tagging_service import resolve_request_thresholds
+
+    ids = tag_score_service.resolve_scope_ids(
+        request.image_ids, request.selection_token
+    )
+    if not ids:
+        raise HTTPException(400, "Provide image_ids or selection_token")
+
+    is_consensus = request.model.strip().lower() == "consensus"
+    if is_consensus:
+        if request.threshold is None:
+            raise HTTPException(
+                400, "Consensus mode needs an explicit threshold (no single model default applies)."
+            )
+        threshold = float(request.threshold)
+        character_threshold = float(
+            request.character_threshold
+            if request.character_threshold is not None
+            else request.threshold
+        )
+    else:
+        threshold, character_threshold = resolve_request_thresholds(
+            request.model, request.threshold, request.character_threshold
+        )
+
+    floor = float(app_config.TAG_SCORES_FLOOR)
+    if threshold < floor or character_threshold < floor:
+        raise HTTPException(
+            400,
+            f"Stored scores are floored at {floor:.2f}; thresholds below that "
+            "cannot be reproduced from the score table. Re-tag with a lower "
+            "SD_IMAGE_SORTER_TAG_SCORES_FLOOR instead.",
+        )
+
+    if is_consensus:
+        return tag_score_service.rethreshold_consensus_images(
+            ids,
+            threshold,
+            character_threshold,
+            consensus_min=request.consensus_min,
+            dry_run=request.dry_run,
+            pre_tag_blacklist=request.pre_tag_blacklist,
+            max_tags_per_image=request.max_tags_per_image,
+        )
+    return tag_score_service.rethreshold_images(
+        ids,
+        request.model,
+        threshold,
+        character_threshold,
+        dry_run=request.dry_run,
+        pre_tag_blacklist=request.pre_tag_blacklist,
+        max_tags_per_image=request.max_tags_per_image,
+    )
+
+
+@router.post("/tags/coverage-gaps")
+def coverage_gaps(request: CoverageGapsRequest):
+    """BE-1 coverage completion (N2): images whose stored score for ``tag``
+    sits just under the threshold but carry no such tag row — "should
+    probably have it, doesn't". Feeds the Separation Console's find-missing
+    button; confirmed adds go through the normal bulk-add path as manual."""
+    from services import tag_score_service
+
+    return tag_score_service.find_gaps_for_request(request)
+
+
+@router.get("/tags/scores/stats")
+def tag_score_stats():
+    """Storage report for the tag_scores table (rows, models, size hint) —
+    the visible-cost side of the default-on score persistence."""
+    from services import tag_score_service
+
+    return tag_score_service.get_stats()
+
+
+@router.post("/tags/scores/purge")
+def purge_tag_scores(request: ScorePurgeRequest):
+    """Drop stored scores — all of them, or one model's slice. The escape
+    hatch for reclaiming disk on huge libraries."""
+    from services import tag_score_service
+
+    removed = tag_score_service.purge(request.model)
+    return {"removed": removed, "model": request.model}
 
 
 @router.get("/prompts/library")

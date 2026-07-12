@@ -125,3 +125,18 @@ def test_skips_tags_with_no_name():
         max_tags=0,
     )
     assert [t["tag"] for t in out] == ["1girl"]
+def test_max_tags_never_drops_the_rating_row():
+    """BE-3: the rating verdict (category == 'rating') is metadata, not a
+    content tag — a low-confidence rating must survive a top-N trim that
+    would otherwise evict it, or the image reads as unrated downstream."""
+    tags = [
+        _tag("high_a", 0.95),
+        _tag("high_b", 0.94),
+        _tag("high_c", 0.93),
+        {"tag": "general", "confidence": 0.41, "category": "rating"},
+    ]
+    out = _apply_pre_tag_filters(tags, blacklist=[], max_tags=2)
+    names = {t["tag"] for t in out}
+    assert names == {"high_a", "high_b", "general"}, (
+        "top-2 content tags + the exempt rating row"
+    )
