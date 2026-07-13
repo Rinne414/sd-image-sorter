@@ -63,6 +63,17 @@ select = ["F", "E9"]
 # them there (tests/test_images_router_pins.py, tests/test_routers/
 # test_images.py:1838+2022, tests/test_reconnect_missing_files.py).
 "backend/routers/images.py" = ["F401"]
+# artist_identifier.py is the compatibility FILE facade for the artist/
+# package split (2026-07). Same rationale as censor_service.py above: the
+# verbatim header import block (incl. the ``urllib.request`` module singleton
+# the runtime suite patches through this namespace as
+# ``artist_identifier.urllib.request``) plus the artist.* re-imports exist so
+# every historical module attribute keeps resolving at
+# artist_identifier.<name> for tests that patch and read them there
+# (tests/test_artist_identifier_pins.py, tests/test_artist_identifier_runtime.py,
+# tests/test_artist_gpu_toggle.py, tests/test_artist_diagnostics_legacy_path.py,
+# tests/test_model_service.py, tests/fixtures/ml_fixtures.py).
+"backend/artist_identifier.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.
