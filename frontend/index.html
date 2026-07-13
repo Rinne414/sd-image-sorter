@@ -7363,6 +7363,26 @@
     <script src="/static/js/modules/nav-missions.js"></script>
     <script src="/static/js/modules/entry-catalog.js"></script>
     <script src="/static/js/modules/trait-pruner.js"></script>
+    <!-- separation-console family: verbatim decomposition of the 1,155-line
+         modules/separation-console.js IIFE (the SEP-1 per-tag curation
+         panel). core.js declares the shared script-globals (sepconT /
+         sepconFold / SEPCON_* — the renamed IIFE privates) plus the base
+         SeparationConsole object and MUST load first; the middle files are
+         order-independent Object.assign mixins; boot.js publishes
+         window.SeparationConsole and runs the DOMContentLoaded init tail
+         and MUST load last (mirrors the original file tail). The slim
+         separation-console.js shim stays last so
+         /static/js/modules/separation-console.js remains servable. Slot
+         contract: AFTER trait-pruner.js, BEFORE character-purity.js —
+         exactly where the single separation-console.js tag sat. -->
+    <script src="/static/js/modules/separation-console/core.js"></script>
+    <script src="/static/js/modules/separation-console/render.js"></script>
+    <script src="/static/js/modules/separation-console/actions.js"></script>
+    <script src="/static/js/modules/separation-console/insights.js"></script>
+    <script src="/static/js/modules/separation-console/tipo.js"></script>
+    <script src="/static/js/modules/separation-console/rethreshold.js"></script>
+    <script src="/static/js/modules/separation-console/health.js"></script>
+    <script src="/static/js/modules/separation-console/boot.js"></script>
     <script src="/static/js/modules/separation-console.js"></script>
     <script src="/static/js/modules/character-purity.js"></script>
     <script src="/static/js/modules/mask-editor.js"></script>
