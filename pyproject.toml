@@ -216,6 +216,21 @@ select = ["F", "E9"]
 # patch and read them there (tests/test_dataset_session_pins.py,
 # tests/test_dataset_session_service.py).
 "backend/services/dataset_session_service.py" = ["F401"]
+# db_images_write.py is the HOME module + import surface of the
+# db_images_write_upsert / db_images_write_lifecycle / db_images_write_attributes
+# sibling-module split (2026-07). Unlike the pure FILE facades above it keeps
+# ten defs in place — tests/test_derived_state_contract.py pins their derived
+# writer statements to THIS filename — and re-imports the 17 moved names at
+# the BOTTOM of the module (managed import cycle: the siblings from-import
+# the shared cursor helpers defined here). Those 17 re-imports plus the
+# verbatim pre-split header block (os / datetime / Union / _row_to_dict now
+# used only by the moved bodies) exist so the 27-name identity contract
+# ``database.X is db_images_write.X`` (database.py:148,
+# tests/test_db_images_write_pins.py TestReExportIdentityUnion) and the
+# by-reference pulls db_collections._compact_persisted_metadata_json /
+# db_tags._mark_image_tagged / the pins' _normalize_indexed_image_path import
+# keep resolving on this module; the retained bodies call none of them.
+"backend/db_images_write.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.

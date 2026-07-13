@@ -1,11 +1,28 @@
 """
-Write-side database operations for images.
+Write-side database operations for images: the derived-state writer core.
 
-Insert/upsert, batch ingest, source-path reconnect, derived-state
-clear/sync/copy, deletions, and the various ``update_*``/``mark_*`` mutators.
-Cursor-taking helpers that issue SQL (``_clear_image_derived_state``,
-``_sync_image_loras``/``_sync_image_prompt_tokens``, ``_copy_image_derived_state``)
-live here rather than in :mod:`db_helpers`.
+Split (2026-07): this module KEEPS the ten defs whose writer statements
+tests/test_derived_state_contract.py pins to this exact filename (the
+derived-state clear / copy / mark-tagged cursor helpers, the scan upsert
+engine, and both metadata rewrite paths) plus the loras / prompt-token
+index sync helpers they call. The remaining 17 write entry points moved
+verbatim to three sibling modules and are re-imported BY REFERENCE at the
+BOTTOM of this file (below the local defs deliberately: each sibling
+from-imports shared helpers defined here, so those names must already be
+bound on this partially initialized module while the sibling bodies run):
+
+* ``db_images_write_upsert``     — ``add_image`` / ``add_images_batch`` /
+  ``get_image_scan_state_by_paths`` / ``_get_existing_images_by_paths``
+* ``db_images_write_lifecycle``  — source-path reconnect, path move,
+  readable / unreadable transitions, pending-error marking, deletions
+* ``db_images_write_attributes`` — caption / user-rating / color writers
+
+``database.py`` re-exports all 27 names from here BY REFERENCE (10 local +
+17 re-imported) and ``db_collections`` / ``db_tags`` pull
+``_compact_persisted_metadata_json`` / ``_mark_image_tagged`` by name; the
+identity contract ``database.X is db_images_write.X`` is locked by
+tests/test_db_images_write_pins.py (TestReExportIdentityUnion). The header
+import block below stays verbatim from the pre-split module.
 
 Depends on :mod:`db_core`, :mod:`db_helpers`, and ``metadata_storage``; it must
 not import from ``database``.
@@ -90,128 +107,6 @@ def _sync_image_prompt_tokens(
             "INSERT OR IGNORE INTO image_prompt_tokens (image_id, token) VALUES (?, ?)",
             (image_id, token),
         )
-
-def add_image(
-    path: str,
-    filename: str,
-    generator: str = "unknown",
-    prompt: Optional[str] = None,
-    negative_prompt: Optional[str] = None,
-    metadata_json: Optional[str] = None,
-    width: Optional[int] = None,
-    height: Optional[int] = None,
-    file_size: Optional[int] = None,
-    checkpoint: Optional[str] = None,
-    loras: Optional[List[str]] = None,
-    created_at: Optional[datetime] = None,
-    library_order_time: Optional[datetime] = None,
-    source_file_mtime: Optional[datetime] = None,
-    model_hash: Optional[str] = None,
-    is_readable: bool = True,
-    read_error: Optional[str] = None,
-    source_mtime_ns: Optional[int] = None,
-    source_size: Optional[int] = None,
-    metadata_status: str = "complete",
-    content_fingerprint: Optional[str] = None,
-    raw_metadata_gz: Optional[bytes] = None,
-    return_status: bool = False,
-) -> Union[int, Tuple[int, str]]:
-    """Add an image to the database.
-
-    Returns the image ID by default. When ``return_status`` is True, returns
-    ``(image_id, "new" | "updated")`` so callers can report truthful scan
-    summaries without duplicating the upsert logic.
-    """
-    resolved_library_order_time = library_order_time or created_at
-    resolved_source_file_mtime = source_file_mtime or created_at
-    record = {
-        "path": path,
-        "filename": filename,
-        "generator": generator,
-        "prompt": prompt,
-        "negative_prompt": negative_prompt,
-        "metadata_json": metadata_json,
-        "width": width,
-        "height": height,
-        "file_size": file_size,
-        "checkpoint": checkpoint,
-        "checkpoint_normalized": normalize_checkpoint_name(checkpoint),
-        "loras": loras,
-        "library_order_time": resolved_library_order_time,
-        "source_file_mtime": resolved_source_file_mtime,
-        "created_at": resolved_library_order_time,
-        "model_hash": model_hash,
-        "is_readable": is_readable,
-        "read_error": read_error,
-        "source_mtime_ns": source_mtime_ns,
-        "source_size": source_size,
-        "metadata_status": metadata_status,
-        "content_fingerprint": content_fingerprint,
-        "raw_metadata_gz": raw_metadata_gz,
-    }
-
-    with get_db() as conn:
-        cursor = conn.cursor()
-        image_id, write_status = _upsert_image_record(cursor, record)
-        _invalidate_tags_cache()
-        _invalidate_facet_caches()
-
-        if return_status:
-            return image_id, write_status
-        return image_id
-
-def _get_existing_images_by_paths(
-    cursor: sqlite3.Cursor,
-    paths: List[str],
-) -> Dict[str, sqlite3.Row]:
-    """Fetch existing image rows keyed by normalized indexed path."""
-    normalized_paths = [_normalize_indexed_image_path(path) for path in paths if path]
-    if not normalized_paths:
-        return {}
-
-    requested_candidates = {
-        path: build_indexed_image_lookup_candidates(path)
-        for path in normalized_paths
-    }
-    existing_rows: Dict[str, sqlite3.Row] = {}
-    chunk_size = 100
-    for start in range(0, len(normalized_paths), chunk_size):
-        chunk_paths = normalized_paths[start:start + chunk_size]
-        query_clause, query_params = _path_query_match_clause(chunk_paths)
-        if not query_clause:
-            continue
-        cursor.execute(
-            f"""
-                    SELECT id, path, filename, generator, prompt, negative_prompt, metadata_json,
-                   width, height, file_size, checkpoint, checkpoint_normalized, loras, model_hash,
-                   library_order_time, source_file_mtime, created_at,
-                   is_readable, read_error, source_mtime_ns, source_size, metadata_status,
-                   content_fingerprint, tagged_at, ai_caption, aesthetic_score,
-                   CASE WHEN embedding IS NOT NULL THEN 1 ELSE 0 END AS has_embedding,
-                   EXISTS(SELECT 1 FROM artist_predictions ap WHERE ap.image_id = images.id) AS has_artist_predictions
-            FROM images
-            WHERE {query_clause}
-            """,
-            query_params,
-        )
-        for row in cursor.fetchall():
-            existing_rows[row["path"]] = row
-
-    existing: Dict[str, sqlite3.Row] = {}
-    rows_by_match_key = {
-        indexed_image_path_match_key(path): row
-        for path, row in existing_rows.items()
-    }
-    for requested_path, candidates in requested_candidates.items():
-        for candidate in candidates:
-            row = existing_rows.get(candidate)
-            if not row:
-                row = rows_by_match_key.get(indexed_image_path_match_key(candidate))
-            if row:
-                existing[requested_path] = row
-                break
-
-    return existing
 
 def _compact_persisted_metadata_json(metadata_json: Any) -> str:
     compacted = compact_existing_metadata_json(metadata_json)
@@ -397,116 +292,6 @@ def _upsert_image_record(
     _sync_image_prompt_tokens(cursor, image_id, record.get("prompt"))
     return image_id, write_status
 
-def add_images_batch(image_records: List[Dict[str, Any]], return_statuses: bool = False) -> Dict[str, Any]:
-    """Insert or update many images in a single transaction."""
-    if not image_records:
-        empty_result: Dict[str, Any] = {"new": 0, "updated": 0}
-        if return_statuses:
-            empty_result["statuses"] = {}
-        return empty_result
-
-    normalized_records = []
-    for record in image_records:
-        normalized = dict(record)
-        normalized["path"] = _normalize_indexed_image_path(record["path"])
-        normalized_records.append(normalized)
-
-    with get_db() as conn:
-        cursor = conn.cursor()
-        existing_by_path = _get_existing_images_by_paths(
-            cursor,
-            [record["path"] for record in normalized_records],
-        )
-        counts = {"new": 0, "updated": 0}
-        statuses: Dict[str, str] = {}
-
-        for record in normalized_records:
-            _image_id, status = _upsert_image_record(
-                cursor,
-                record,
-                existing_row=existing_by_path.get(record["path"]),
-            )
-            counts[status] += 1
-            statuses[record["path"]] = status
-
-        _invalidate_tags_cache()
-        _invalidate_facet_caches()
-        if return_statuses:
-            return {
-                **counts,
-                "statuses": statuses,
-            }
-        return counts
-
-def get_image_scan_state_by_paths(paths: List[str]) -> Dict[str, Dict[str, Any]]:
-    """Fetch lightweight row state used by folder scan optimizations."""
-    if not paths:
-        return {}
-
-    with get_db() as conn:
-        cursor = conn.cursor()
-        rows = _get_existing_images_by_paths(cursor, paths)
-        return {
-            path: _row_to_dict(row)
-            for path, row in rows.items()
-        }
-
-def reconnect_image_source_path(
-    image_id: int,
-    new_path: str,
-    *,
-    source_mtime_ns: Optional[int] = None,
-    source_size: Optional[int] = None,
-    source_file_mtime: Optional[datetime] = None,
-) -> None:
-    """Reconnect a missing library row to a found file path without clearing derived data."""
-    normalized_path = _normalize_indexed_image_path(new_path)
-    filename = os.path.basename(normalized_path)
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            UPDATE images
-            SET path = ?,
-                filename = ?,
-                is_readable = CASE
-                    WHEN TRIM(COALESCE(read_error, '')) = ''
-                         OR LOWER(COALESCE(read_error, '')) LIKE '%not found%'
-                         OR LOWER(COALESCE(read_error, '')) LIKE '%missing%'
-                    THEN 1
-                    ELSE is_readable
-                END,
-                read_error = CASE
-                    WHEN TRIM(COALESCE(read_error, '')) = ''
-                         OR LOWER(COALESCE(read_error, '')) LIKE '%not found%'
-                         OR LOWER(COALESCE(read_error, '')) LIKE '%missing%'
-                    THEN NULL
-                    ELSE read_error
-                END,
-                metadata_status = CASE
-                    WHEN TRIM(COALESCE(read_error, '')) = ''
-                         OR LOWER(COALESCE(read_error, '')) LIKE '%not found%'
-                         OR LOWER(COALESCE(read_error, '')) LIKE '%missing%'
-                    THEN 'complete'
-                    ELSE COALESCE(metadata_status, 'complete')
-                END,
-                source_mtime_ns = COALESCE(?, source_mtime_ns),
-                source_size = COALESCE(?, source_size),
-                source_file_mtime = COALESCE(?, source_file_mtime),
-                indexed_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (
-                normalized_path,
-                filename,
-                source_mtime_ns,
-                source_size,
-                source_file_mtime,
-                image_id,
-            ),
-        )
-    _invalidate_tags_cache()
-
 def _mark_image_tagged(
     cursor: sqlite3.Cursor,
     image_id: int,
@@ -516,185 +301,6 @@ def _mark_image_tagged(
         "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
         (content_fingerprint, image_id),
     )
-
-def delete_images_by_ids(image_ids: List[int]) -> int:
-    """Delete many image rows in chunks and return the removed count."""
-    if not image_ids:
-        return 0
-
-    removed = 0
-    batch_size = 500
-
-    with get_db() as conn:
-        cursor = conn.cursor()
-        for start in range(0, len(image_ids), batch_size):
-            batch = image_ids[start:start + batch_size]
-            placeholders = ",".join("?" * len(batch))
-            cursor.execute(
-                f"DELETE FROM images WHERE id IN ({placeholders})",
-                batch,
-            )
-            removed += cursor.rowcount or 0
-
-    if removed:
-        _invalidate_tags_cache()
-        _invalidate_facet_caches()
-
-    return removed
-
-def delete_images_by_paths(paths: List[str]) -> int:
-    """Delete image rows by absolute file path."""
-    if not paths:
-        return 0
-
-    removed = 0
-    # Conservative path batch size: each path can expand to several lookup
-    # candidates inside _path_query_match_clause, so keep batches small to
-    # stay well under SQLite's 999 bound-variable limit per statement.
-    batch_size = 100
-
-    with get_db() as conn:
-        cursor = conn.cursor()
-        for start in range(0, len(paths), batch_size):
-            path_batch = paths[start:start + batch_size]
-            clause, params = _path_query_match_clause(path_batch)
-            if not clause:
-                continue
-            cursor.execute(f"DELETE FROM images WHERE {clause}", params)
-            removed += cursor.rowcount or 0
-
-    if removed:
-        _invalidate_tags_cache()
-        _invalidate_facet_caches()
-
-    return removed
-
-def mark_pending_images_metadata_error(image_ids: List[int], read_error: str) -> int:
-    """Mark pending metadata rows as errored without changing derived state."""
-    normalized_ids = [int(image_id) for image_id in image_ids if image_id]
-    if not normalized_ids:
-        return 0
-
-    placeholders = ",".join("?" for _ in normalized_ids)
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            f"""
-            UPDATE images
-            SET is_readable = 0,
-                metadata_status = 'error',
-                read_error = ?,
-                indexed_at = CURRENT_TIMESTAMP
-            WHERE id IN ({placeholders})
-              AND LOWER(COALESCE(metadata_status, '')) = 'pending'
-            """,
-            [read_error, *normalized_ids],
-        )
-        return int(cursor.rowcount or 0)
-
-def update_image_caption(image_id: int, caption: str, nl_caption: Optional[str] = None) -> None:
-    """Update the composed ``ai_caption`` (and optionally pure ``nl_caption``).
-
-    ``caption`` is the composed/display caption (may contain booru tags).
-    ``nl_caption`` is the pure natural-language sentence from a VLM. When
-    ``nl_caption`` is None the existing value is preserved (COALESCE) so callers
-    that only know the composed caption never clobber the pure NL field.
-    """
-    with get_db() as conn:
-        conn.execute(
-            "UPDATE images SET ai_caption = ?, nl_caption = COALESCE(?, nl_caption) WHERE id = ?",
-            (caption, nl_caption, image_id),
-        )
-
-def set_image_captions(
-    image_id: int,
-    *,
-    ai_caption: Optional[str] = None,
-    nl_caption: Optional[str] = None,
-    set_ai_caption: bool = False,
-    set_nl_caption: bool = False,
-) -> bool:
-    """Explicit-set caption writer for the manual caption editor (FE-3).
-
-    Unlike ``update_image_caption`` (COALESCE semantics for pipeline
-    callers), a field here is written IFF its ``set_*`` flag is True --
-    including an empty string, so the editor can deliberately clear one
-    caption without touching the other. Returns False when no row matched.
-    """
-    assignments = []
-    params: List[Any] = []
-    if set_ai_caption:
-        assignments.append("ai_caption = ?")
-        params.append(ai_caption)
-    if set_nl_caption:
-        assignments.append("nl_caption = ?")
-        params.append(nl_caption)
-    if not assignments:
-        return False
-    params.append(image_id)
-    with get_db() as conn:
-        cursor = conn.execute(
-            f"UPDATE images SET {', '.join(assignments)} WHERE id = ?",
-            params,
-        )
-        return int(cursor.rowcount or 0) > 0
-
-
-def set_user_rating(image_id: int, stars: int) -> bool:
-    """Set the user-assigned star rating (0-5; 0 = unrated) for one image.
-
-    Returns True when a row was updated, False when no image has ``image_id``.
-    Raises ``ValueError`` when ``stars`` is outside 0-5 so a bad client value
-    fails loudly at the boundary instead of writing garbage.
-    """
-    try:
-        stars_int = int(stars)
-    except (TypeError, ValueError):
-        raise ValueError(f"user_rating must be an integer 0-5, got {stars!r}")
-    if not 0 <= stars_int <= 5:
-        raise ValueError(f"user_rating must be between 0 and 5, got {stars_int}")
-    with get_db() as conn:
-        cursor = conn.execute(
-            "UPDATE images SET user_rating = ? WHERE id = ?",
-            (stars_int, image_id),
-        )
-        return int(cursor.rowcount or 0) > 0
-
-def update_image_colors(image_id: int, color_data: Dict[str, Any]) -> None:
-    """Update color analysis columns for an image (v3.2.1).
-
-    color_data should match the keys returned by color_analyzer.analyze_image_colors():
-      dominant_colors, avg_brightness, color_temperature, color_saturation,
-      brightness_histogram, brightness_skew, brightness_distribution.
-    """
-    if not color_data:
-        return
-    with get_db() as conn:
-        conn.execute(
-            """
-            UPDATE images
-            SET dominant_colors = ?,
-                dominant_color_tags = ?,
-                avg_brightness = ?,
-                color_temperature = ?,
-                color_saturation = ?,
-                brightness_histogram = ?,
-                brightness_skew = ?,
-                brightness_distribution = ?
-            WHERE id = ?
-            """,
-            (
-                color_data.get("dominant_colors"),
-                color_data.get("dominant_color_tags"),
-                color_data.get("avg_brightness"),
-                color_data.get("color_temperature"),
-                color_data.get("color_saturation"),
-                color_data.get("brightness_histogram"),
-                color_data.get("brightness_skew"),
-                color_data.get("brightness_distribution"),
-                image_id,
-            ),
-        )
 
 def _copy_image_derived_state(cursor: sqlite3.Cursor, source_image_id: int, target_image_id: int) -> None:
     """Copy cached derived fields that remain valid for file duplicates using an existing transaction."""
@@ -766,111 +372,6 @@ def copy_image_derived_state(source_image_id: int, target_image_id: int) -> None
     """Copy cached derived fields that remain valid for file duplicates."""
     with get_db() as conn:
         _copy_image_derived_state(conn.cursor(), source_image_id, target_image_id)
-
-def update_image_path(image_id: int, new_path: str):
-    """Update the path of an image after a successful move.
-
-    Gallery requests can race with a move between the filesystem rename and
-    this database update. If that stale read marked the old path as missing,
-    the successful move must restore the row so the image does not disappear.
-    """
-    with get_db() as conn:
-        cursor = conn.cursor()
-        normalized_path = _normalize_indexed_image_path(new_path)
-        new_filename = os.path.basename(normalized_path)
-        cursor.execute(
-            """
-            UPDATE images
-            SET path = ?,
-                filename = ?,
-                is_readable = CASE
-                    WHEN TRIM(COALESCE(read_error, '')) = ''
-                         OR LOWER(COALESCE(read_error, '')) LIKE '%not found%'
-                         OR LOWER(COALESCE(read_error, '')) LIKE '%missing%'
-                    THEN 1
-                    ELSE is_readable
-                END,
-                read_error = CASE
-                    WHEN TRIM(COALESCE(read_error, '')) = ''
-                         OR LOWER(COALESCE(read_error, '')) LIKE '%not found%'
-                         OR LOWER(COALESCE(read_error, '')) LIKE '%missing%'
-                    THEN NULL
-                    ELSE read_error
-                END,
-                metadata_status = CASE
-                    WHEN TRIM(COALESCE(read_error, '')) = ''
-                         OR LOWER(COALESCE(read_error, '')) LIKE '%not found%'
-                         OR LOWER(COALESCE(read_error, '')) LIKE '%missing%'
-                    THEN 'complete'
-                    ELSE COALESCE(metadata_status, 'complete')
-                END,
-                indexed_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (normalized_path, new_filename, image_id)
-        )
-
-def mark_image_unreadable(image_id: int, read_error: Optional[str]) -> None:
-    """Mark an indexed image as unreadable so normal workflows exclude it."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        _clear_image_derived_state(cursor, image_id)
-        cursor.execute(
-            """
-            UPDATE images
-            SET is_readable = 0,
-                read_error = ?,
-                metadata_status = 'error',
-                indexed_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (read_error, image_id),
-        )
-    _invalidate_tags_cache()
-
-def mark_image_unreadable_by_path(path: str, read_error: Optional[str]) -> None:
-    """Mark an existing image row as unreadable based on its file path."""
-    candidates = build_indexed_image_lookup_candidates(path)
-    if not candidates:
-        return
-
-    with get_db() as conn:
-        cursor = conn.cursor()
-        clause, params = _path_query_match_clause(candidates)
-        row = cursor.execute(
-            f"SELECT id FROM images WHERE {clause} LIMIT 1",
-            params,
-        ).fetchone()
-        if row:
-            _clear_image_derived_state(cursor, row["id"])
-        cursor.execute(
-            f"""
-            UPDATE images
-            SET is_readable = 0,
-                read_error = ?,
-                metadata_status = 'error',
-                indexed_at = CURRENT_TIMESTAMP
-            WHERE {clause}
-            """,
-            [read_error, *params],
-        )
-    _invalidate_tags_cache()
-
-def mark_image_readable(image_id: int) -> None:
-    """Restore an image row to readable state after a successful re-parse."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            UPDATE images
-            SET is_readable = 1,
-                read_error = NULL,
-                metadata_status = 'complete',
-                indexed_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (image_id,),
-        )
 
 def update_image_metadata(
     image_id: int,
@@ -1061,10 +562,32 @@ def update_reparsed_prompt_fields(
     _invalidate_tags_cache()
     _invalidate_facet_caches()
 
-def delete_image(image_id: int):
-    """Delete an image from the database."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM images WHERE id = ?", (image_id,))
-    _invalidate_tags_cache()
-    _invalidate_facet_caches()
+# --- Split re-exports (2026-07) --------------------------------------------
+# Deliberately at the BOTTOM: the sibling modules from-import the shared
+# cursor helpers defined above, so this module must bind them before the
+# sibling bodies run (managed import cycle). Consumers never import the
+# siblings directly -- they import ``database`` (or this module), so this
+# module always loads first.
+from db_images_write_upsert import (
+    add_image,
+    _get_existing_images_by_paths,
+    add_images_batch,
+    get_image_scan_state_by_paths,
+)
+from db_images_write_lifecycle import (
+    reconnect_image_source_path,
+    delete_images_by_ids,
+    delete_images_by_paths,
+    mark_pending_images_metadata_error,
+    update_image_path,
+    mark_image_unreadable,
+    mark_image_unreadable_by_path,
+    mark_image_readable,
+    delete_image,
+)
+from db_images_write_attributes import (
+    update_image_caption,
+    set_image_captions,
+    set_user_rating,
+    update_image_colors,
+)
