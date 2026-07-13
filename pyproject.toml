@@ -109,6 +109,23 @@ select = ["F", "E9"]
 # resolving at image_manager.<name> for the pin suite and for
 # services/sorting/scan.py's image_manager_module.* reads.
 "backend/image_manager.py" = ["F401"]
+# similarity.py is the compatibility FILE facade for the similarity_* mixin
+# split (2026-07). Same rationale as tagger.py above: the verbatim header
+# import block stays — ``get_state_dir`` is autouse-patched on this module by
+# tests/conftest.py:66 and read back through _svc() by
+# similarity_vector_cache._get_index_dir (the split-killer seam);
+# SIMILARITY_DEFAULT_LIMIT / SIMILARITY_DEFAULT_THRESHOLD /
+# DUPLICATE_THRESHOLD / DUPLICATE_SYNC_MAX_EMBEDDINGS / DUPLICATE_CHUNK_SIZE
+# and the ``similarity_ann`` module singleton are patch/pin surfaces the
+# moved mixins resolve through this namespace — plus the similarity_errors /
+# similarity_math re-imports exist so every historical module attribute (the
+# 7 exception classes, bytes_to_embedding, cosine_similarity) keeps resolving
+# at similarity.<name> for services.similarity_service,
+# services.duplicate_group_service, model_health._clip_model_loaded, and the
+# suites that patch and read them there (tests/test_similarity_pins.py,
+# tests/test_resource_safety.py, tests/test_similarity_ann.py,
+# tests/test_similarity_vector_cache.py).
+"backend/similarity.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.
