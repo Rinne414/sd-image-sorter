@@ -235,6 +235,27 @@ def _reader_family_source(repo_root: Path) -> str:
     return "\n".join([reader_source] + family_parts)
 
 
+def _vlm_caption_family_source(repo_root: Path) -> str:
+    # The vlm-caption.js god-object (`const VLMCaption = {...}`) is decomposed
+    # VERBATIM into the frontend/js/vlm-caption/ module family (Object.assign
+    # mixins over the shared base object declared in vlm-caption/core.js; same
+    # adaptation style as the censor / dataset-maker / app.js / gallery.js /
+    # manual-sort / v321 / prompt-lab / image-reader splits) while a slim,
+    # still-servable frontend/js/vlm-caption.js stays behind (index.html's
+    # script tag and the release packages reference it). Contract pins assert
+    # against the family concatenation so each literal is found in whichever
+    # file hosts it.
+    vlm_js = repo_root / "frontend" / "js" / "vlm-caption.js"
+    assert vlm_js.is_file(), "frontend/js/vlm-caption.js must remain a real file"
+    vlm_source = vlm_js.read_text(encoding="utf-8")
+    assert vlm_source, "frontend/js/vlm-caption.js must not be empty"
+    family_dir = repo_root / "frontend" / "js" / "vlm-caption"
+    family_parts = [
+        path.read_text(encoding="utf-8") for path in sorted(family_dir.glob("*.js"))
+    ]
+    return "\n".join([vlm_source] + family_parts)
+
+
 def test_frontend_feature_modules_do_not_directly_assign_appstate():
     repo_root = Path(__file__).resolve().parents[2]
     frontend_root = repo_root / "frontend" / "js"
@@ -361,9 +382,9 @@ def test_v321_modules_read_runtime_selection_store_from_window_app():
     repo_root = Path(__file__).resolve().parents[2]
     # v321-family read: v321-ui.js is split into v321/*.js (gallery precedent).
     v321_source = _v321_family_source(repo_root)
-    vlm_source = (repo_root / "frontend" / "js" / "vlm-caption.js").read_text(
-        encoding="utf-8"
-    )
+    # vlm-family read: vlm-caption.js is split into vlm-caption/*.js
+    # (gallery precedent).
+    vlm_source = _vlm_caption_family_source(repo_root)
 
     combined_source = v321_source + "\n" + vlm_source
     assert "window.SelectionStore?.getSelectedIds" not in combined_source
@@ -489,9 +510,9 @@ def test_full_selection_workflows_do_not_fallback_to_gallery_dom():
         # v321-family read: v321-ui.js is split into v321/*.js (gallery
         # precedent); no v321 family file may scrape gallery DOM either.
         "frontend/js/v321-ui.js family": _v321_family_source(repo_root),
-        "frontend/js/vlm-caption.js": (
-            repo_root / "frontend" / "js" / "vlm-caption.js"
-        ).read_text(encoding="utf-8"),
+        # vlm-family read: vlm-caption.js is split into vlm-caption/*.js
+        # (gallery precedent); no vlm family file may scrape gallery DOM either.
+        "frontend/js/vlm-caption.js family": _vlm_caption_family_source(repo_root),
         "frontend/js/mass-tag-editor.js": (
             repo_root / "frontend" / "js" / "mass-tag-editor.js"
         ).read_text(encoding="utf-8"),
@@ -650,9 +671,9 @@ def test_censor_filtered_selection_uses_token_backed_queue_window():
 
 def test_vlm_caption_uses_selection_token_without_resolving_full_id_list():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "vlm-caption.js").read_text(
-        encoding="utf-8"
-    )
+    # vlm-family read: vlm-caption.js is split into vlm-caption/*.js
+    # (gallery precedent).
+    source = _vlm_caption_family_source(repo_root)
 
     assert "getActiveSelectionToken" in source
     assert "selection_token" in source

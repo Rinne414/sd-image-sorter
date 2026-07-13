@@ -7332,6 +7332,24 @@
     <script src="/static/js/virtual-gallery.js"></script>
     <script src="/static/js/library-health.js"></script>
     <script src="/static/js/unreadable-banner.js"></script>
+    <!-- vlm-caption family: verbatim Object.assign decomposition of
+         vlm-caption.js (VLM natural-language captioning: settings modal with
+         provider/proxy/vertex form, connection test + model fetch + Ollama
+         local-model cards, batch caption start/poll/summary + retry-failed,
+         NL workflow card visibility, API debug chat). core.js declares the
+         ONE VLMCaption object + the window.VLMCaption publish and MUST load
+         first; boot.js registers the DOMContentLoaded init LAST. The slim
+         vlm-caption.js shim stays last so /static/js/vlm-caption.js remains
+         servable at its old URL. Slot contract: AFTER the app/gallery
+         families (escapeHtml, window.App, window.Gallery), BEFORE the v321
+         family — exactly where the single vlm-caption.js tag sat. -->
+    <script src="/static/js/vlm-caption/core.js"></script>
+    <script src="/static/js/vlm-caption/settings-form.js"></script>
+    <script src="/static/js/vlm-caption/connection-models.js"></script>
+    <script src="/static/js/vlm-caption/batch.js"></script>
+    <script src="/static/js/vlm-caption/workflow-ui.js"></script>
+    <script src="/static/js/vlm-caption/debug-chat.js"></script>
+    <script src="/static/js/vlm-caption/boot.js"></script>
     <script src="/static/js/vlm-caption.js"></script>
     <!-- v321 family: verbatim Object.assign decomposition of v321-ui.js
          (Tag modal tabs + batch-export presets + live preview / caption
