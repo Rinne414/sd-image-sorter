@@ -126,6 +126,19 @@ select = ["F", "E9"]
 # tests/test_resource_safety.py, tests/test_similarity_ann.py,
 # tests/test_similarity_vector_cache.py).
 "backend/similarity.py" = ["F401"]
+# services/tag_export_service.py is the compatibility FILE facade for the
+# services/tag_export/ package split (2026-07). Same rationale as
+# dataset_export_service.py above: the verbatim header import block (incl. the
+# ``database`` module singleton tests patch through this namespace as
+# ``tag_export_service.db.<fn>`` in tests/test_resource_safety.py) plus the
+# tag_export.* re-imports exist so every historical module attribute — the
+# identity-shared objects (NL_COMPOSE_MODES / VALID_CONTENT_MODES /
+# VALID_OUTPUT_MODES and the shared callables) that
+# services.dataset_export_service and services/dataset_export/* origin-import
+# from here, and the settable ``count_selection_token_ids`` seam patched by
+# tests/test_routers/test_vlm.py — keeps resolving at
+# services.tag_export_service.<name> (tests/test_tag_export_pins.py).
+"backend/services/tag_export_service.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.
