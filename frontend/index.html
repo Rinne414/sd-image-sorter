@@ -7286,6 +7286,25 @@
     <script src="/static/js/caption-autocomplete.js"></script>
     <script src="/static/js/modules/dup-cleaner.js"></script>
     <script src="/static/js/modules/publish-set.js"></script>
+    <!-- artist family: verbatim Object.assign decomposition of artist-ident.js
+         (experimental Style Finder: Kaloscope/LSNet artist identification —
+         stats grid + artist cards, per-artist detail, batch identify with
+         progress bar, runtime diagnostics banner, saved preferences).
+         core.js declares the ONE ArtistIdent object + the window.ArtistIdent
+         publish and MUST load first; boot.js runs the DOMContentLoaded
+         applySavedPreferences tail LAST. The slim artist-ident.js shim stays
+         last so /static/js/artist-ident.js remains servable. Slot contract:
+         AFTER the utils/app families (window.App, escapeHtml,
+         formatUserError, Logger), exactly where the single artist-ident.js
+         tag sat. -->
+    <script src="/static/js/artist/core.js"></script>
+    <script src="/static/js/artist/preferences.js"></script>
+    <script src="/static/js/artist/diagnostics.js"></script>
+    <script src="/static/js/artist/stats-grid.js"></script>
+    <script src="/static/js/artist/detail.js"></script>
+    <script src="/static/js/artist/identify.js"></script>
+    <script src="/static/js/artist/events.js"></script>
+    <script src="/static/js/artist/boot.js"></script>
     <script src="/static/js/artist-ident.js"></script>
     <!-- image-reader family: verbatim Object.assign decomposition of
          image-reader.js (metadata reader workspace: drag/paste/library
