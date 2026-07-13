@@ -21,7 +21,6 @@
 
 const ArtistIdent = {
     isIdentifying: false,
-    progress: { current: 0, total: 0 },
     selectedArtist: null,
     selectedArtistPageSize: 120,
     selectedArtistOffset: 0,

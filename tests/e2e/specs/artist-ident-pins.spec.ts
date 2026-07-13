@@ -118,7 +118,7 @@ test('window.ArtistIdent is an unsealed object literal exposing the load-bearing
       'showFirstUseGuide', '_syncControls', 'tText', 'tKey',
     ]
     const requiredProps = [
-      'isIdentifying', 'progress', 'selectedArtist', 'selectedArtistPageSize',
+      'isIdentifying', 'selectedArtist', 'selectedArtistPageSize',
       'selectedArtistOffset', 'selectedArtistHasMore', 'selectedArtistImages',
       'artistRequestToken', 'viewMode', 'stats', 'diagnostics', 'eventsBound',
       'progressTracker', 'thresholdDefaults',
