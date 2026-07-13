@@ -273,12 +273,13 @@ test('the workbench mode switch is exclusive, persists, and relabels start', asy
 test('a slot type toggle swaps the folder input for the collection select', async ({ page }) => {
   await gotoManualSetup(page)
 
-  // refreshManualSortSlotUi drives `element.hidden` for both nodes. We pin that
-  // JS contract via the `.hidden` PROPERTY, which is what the split preserves —
-  // NOT Playwright visibility, because `.slot-folder-target { display:flex }`
-  // overrides its `[hidden]` attribute (a pre-existing CSS glitch; see REPORT).
-  // The collection <select> has no `display` rule, so its visibility IS reliable.
+  // refreshManualSortSlotUi drives `element.hidden` for both nodes. Originally
+  // only the JS `.hidden` PROPERTY could be pinned because
+  // `.slot-folder-target { display:flex }` overrode its `[hidden]` attribute
+  // (the pin sweep's BUG-1); the CSS guard fix landed with this strengthened
+  // pin, so REAL visibility is asserted for both nodes now.
   const collectionSelectW = page.locator('.slot-collection-select[data-key="w"]')
+  const folderTargetW = page.locator('.slot-target[data-key="w"] .slot-folder-target')
   const readHidden = () =>
     page.evaluate(() => {
       const target = document.querySelector('.slot-target[data-key="w"]')
@@ -295,6 +296,9 @@ test('a slot type toggle swaps the folder input for the collection select', asyn
   await page.locator('input[name="slot-type-w"][value="collection"]').check({ force: true })
   expect(await readHidden()).toEqual({ folder: true, collection: false })
   await expect(collectionSelectW).toBeVisible()
+  // BUG-1 regression pin: the folder input must REALLY disappear (the
+  // display:flex rule used to beat [hidden] and kept it on screen).
+  await expect(folderTargetW).toBeHidden()
 
   await page.locator('input[name="slot-type-w"][value="folder"]').check({ force: true })
   expect(await readHidden()).toEqual({ folder: false, collection: true })

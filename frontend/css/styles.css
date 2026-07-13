@@ -2034,6 +2034,13 @@ body::before {
         min-width: 0;
     }
 
+    /* display:flex above beats the [hidden] UA rule — without this guard a
+       collection-typed slot kept showing the folder input next to the
+       collection select (found by the manual-sort pin sweep). */
+    .slot-folder-target[hidden] {
+        display: none;
+    }
+
     .slot-folder-target .browse-folder {
         flex-shrink: 0;
     }
