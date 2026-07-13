@@ -149,6 +149,16 @@ select = ["F", "E9"]
 # tests/test_db_images_read_pins.py (TestReExportContract); the facade body
 # itself calls none of them.
 "backend/db_images_read.py" = ["F401"]
+# db_query.py is the compatibility FILE facade for the db_query_columns /
+# db_query_base / db_query_filters / db_query_filters_exclude / db_query_post
+# sibling-module split (2026-07). Same rationale as database.py above: its
+# import block exists so the four consumer namespaces keep resolving BY
+# REFERENCE — db_images_query (38 names), db_images_paginate (36),
+# db_images_lookup (2), and database.py (43), a 55-name identity union locked
+# by tests/test_db_query_pins.py (TestReExportIdentityUnion), plus the
+# _HAS_METADATA_CLAUSE constant historical code resolves here; the facade body
+# itself calls none of them.
+"backend/db_query.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.
