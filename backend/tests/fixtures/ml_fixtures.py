@@ -11,6 +11,7 @@ Usage:
         mock_artist_identifier,
     )
 """
+
 import sys
 import numpy as np
 from pathlib import Path
@@ -26,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 # ============================================================================
 # WD14 Tagger Mocks
 # ============================================================================
+
 
 class MockWD14Tagger:
     """Mock WD14 tagger for testing without loading the actual model."""
@@ -86,6 +88,7 @@ def mock_tagger_module():
 # ============================================================================
 # Censor Detector Mocks
 # ============================================================================
+
 
 class MockCensorDetector:
     """Mock NSFW detector for testing without loading actual models."""
@@ -185,6 +188,7 @@ def mock_sam3_refiner():
 # CLIP Similarity Mocks
 # ============================================================================
 
+
 class MockCLIPEmbedder:
     """Mock CLIP embedder for similarity testing."""
 
@@ -223,6 +227,7 @@ def mock_clip_embedder():
 # ============================================================================
 # Artist Identifier Mocks
 # ============================================================================
+
 
 class MockArtistIdentifier:
     """Mock artist identifier for testing."""
@@ -296,6 +301,7 @@ def mock_artist_identifier():
 # Combined Mock Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def mock_all_ml_models():
     """
@@ -319,12 +325,16 @@ def mock_all_ml_models():
     # Patch CLIP embedder
     clip_mock = MagicMock()
     clip_mock.get_embedder.return_value = MockCLIPEmbedder()
-    patches.append(patch("similarity.get_embedder", clip_mock.get_embedder))
+    patches.append(patch("similarity._get_embed_model", clip_mock.get_embedder))
 
     # Patch artist identifier
     artist_mock = MagicMock()
     artist_mock.get_artist_identifier.return_value = MockArtistIdentifier()
-    patches.append(patch("artist_identifier.get_artist_identifier", artist_mock.get_artist_identifier))
+    patches.append(
+        patch(
+            "artist_identifier.get_artist_identifier", artist_mock.get_artist_identifier
+        )
+    )
 
     # Start all patches
     for p in patches:
@@ -345,6 +355,7 @@ def mock_all_ml_models():
 # ============================================================================
 # Test Data Generators
 # ============================================================================
+
 
 def generate_test_image_with_embedding(
     tmp_path: Path,
