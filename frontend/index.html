@@ -7113,6 +7113,27 @@
     <script src="/static/js/app.js"></script>
     <script src="/static/js/folder-browser.js"></script>
     <script src="/static/js/tag-category-copy.js"></script>
+    <!-- Gallery family: verbatim Object.assign decomposition of gallery.js;
+         base.js declares the shared consts + the window.Gallery object and
+         MUST load first. The slim gallery.js shim stays last (ordering
+         contract: tag-category-copy.js precedes /static/js/gallery.js). -->
+    <script src="/static/js/gallery/base.js"></script>
+    <script src="/static/js/gallery/favorites-rating.js"></script>
+    <script src="/static/js/gallery/modal-analysis.js"></script>
+    <script src="/static/js/gallery/generator-note.js"></script>
+    <script src="/static/js/gallery/virtual-layout.js"></script>
+    <script src="/static/js/gallery/card-markup.js"></script>
+    <script src="/static/js/gallery/list-render.js"></script>
+    <script src="/static/js/gallery/selection.js"></script>
+    <script src="/static/js/gallery/metadata-parse.js"></script>
+    <script src="/static/js/gallery/prompt-convert.js"></script>
+    <script src="/static/js/gallery/modal-sections.js"></script>
+    <script src="/static/js/gallery/modal-edit.js"></script>
+    <script src="/static/js/gallery/modal-preview.js"></script>
+    <script src="/static/js/gallery/color-histogram.js"></script>
+    <script src="/static/js/gallery/context-menu.js"></script>
+    <script src="/static/js/gallery/lifecycle-a11y.js"></script>
+    <script src="/static/js/gallery/metadata-editor.js"></script>
     <script src="/static/js/gallery.js"></script>
     <script src="/static/js/collections-ui.js"></script>
     <script src="/static/js/modules/smart-folders.js"></script>

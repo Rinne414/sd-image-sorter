@@ -74,16 +74,48 @@ def _is_app_family_file(file_path: Path, frontend_root: Path) -> bool:
     return file_path.relative_to(frontend_root).as_posix().startswith("app/")
 
 
+def _gallery_family_source(repo_root: Path) -> str:
+    # The gallery.js god-object (`const Gallery = {...}`) is decomposed VERBATIM
+    # into the frontend/js/gallery/ module family (Object.assign mixins over the
+    # shared base object; same adaptation style as the censor / dataset-maker /
+    # app.js splits) while a slim, still-servable frontend/js/gallery.js stays
+    # behind (the index.html ordering assertion below and the release QA gate
+    # both reference /static/js/gallery.js). Contract pins assert against the
+    # family concatenation so each literal is found in whichever file hosts it.
+    # Until the split lands the family is exactly gallery.js, so every
+    # assertion is byte-for-byte unchanged.
+    gallery_js = repo_root / "frontend" / "js" / "gallery.js"
+    assert gallery_js.is_file(), "frontend/js/gallery.js must remain a real file"
+    gallery_source = gallery_js.read_text(encoding="utf-8")
+    assert gallery_source, "frontend/js/gallery.js must not be empty"
+    family_dir = repo_root / "frontend" / "js" / "gallery"
+    family_parts = [
+        path.read_text(encoding="utf-8") for path in sorted(family_dir.glob("*.js"))
+    ]
+    return "\n".join([gallery_source] + family_parts)
+
+
+def _is_gallery_family_file(file_path: Path, frontend_root: Path) -> bool:
+    # frontend/js/gallery/*.js modules are split out of gallery.js verbatim, so
+    # they inherit gallery.js's AppState walker allowance. gallery.js has no
+    # real AppState writes -- its `AppState.viewMode ===` comparisons merely
+    # false-positive FORBIDDEN_APPSTATE_ASSIGN_RE on the first `=` of `===`.
+    return file_path.relative_to(frontend_root).as_posix().startswith("gallery/")
+
+
 def test_frontend_feature_modules_do_not_directly_assign_appstate():
     repo_root = Path(__file__).resolve().parents[2]
     frontend_root = repo_root / "frontend" / "js"
     violations: list[str] = []
 
     for file_path in sorted(_iter_frontend_js_files(frontend_root)):
-        # App-family skip: app/*.js is split out of app.js and keeps its
-        # AppState direct-writer allowance (censor/dataset-split precedent).
-        if file_path.name in ALLOWED_DIRECT_WRITER_FILES or _is_app_family_file(
-            file_path, frontend_root
+        # App/gallery-family skip: app/*.js and gallery/*.js are split out of
+        # app.js / gallery.js and keep those files' AppState direct-writer
+        # allowances (censor/dataset-split precedent).
+        if (
+            file_path.name in ALLOWED_DIRECT_WRITER_FILES
+            or _is_app_family_file(file_path, frontend_root)
+            or _is_gallery_family_file(file_path, frontend_root)
         ):
             continue
         source = file_path.read_text(encoding="utf-8")
@@ -1130,9 +1162,9 @@ def test_manual_sort_start_routes_unfinished_sessions_to_resume():
 
 def test_gallery_context_menu_has_workflow_actions_and_trash_is_explicit():
     repo_root = Path(__file__).resolve().parents[2]
-    gallery_source = (repo_root / "frontend" / "js" / "gallery.js").read_text(
-        encoding="utf-8"
-    )
+    # Gallery-family read: the pinned literals live in gallery/context-menu.js
+    # after the split (family == gallery.js until then).
+    gallery_source = _gallery_family_source(repo_root)
     # App-family read: app.js is being split into app/*.js (censor/dataset precedent).
     app_source = _app_family_source(repo_root)
     en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(
@@ -1142,8 +1174,16 @@ def test_gallery_context_menu_has_workflow_actions_and_trash_is_explicit():
         encoding="utf-8"
     )
 
+    # Terminator bounds the body on the `_positionContextMenu(` sibling that
+    # directly follows `_showContextMenu` (both live in gallery/context-menu.js
+    # after the split). The previous terminator (`},\n\n    // Cleanup`) also
+    # required the destroy() block to be adjacent in the SAME object literal --
+    # an adjacency the Object.assign family split breaks (destroy moved to
+    # gallery/lifecycle-a11y.js). Call sites use `this._positionContextMenu(`
+    # at deeper indentation, so this cannot terminate early inside the body.
     match = re.search(
-        r"_showContextMenu\(e, image\) \{(?P<body>.*?)\n    \},\n\n    // Cleanup",
+        r"_showContextMenu\(e, image\) \{(?P<body>.*?)"
+        r"\n    \},\n\n    _positionContextMenu\(",
         gallery_source,
         re.DOTALL,
     )
@@ -1199,9 +1239,9 @@ def test_gallery_context_menu_has_workflow_actions_and_trash_is_explicit():
 
 def test_gallery_single_color_action_patches_frontend_color_fields():
     repo_root = Path(__file__).resolve().parents[2]
-    gallery_source = (repo_root / "frontend" / "js" / "gallery.js").read_text(
-        encoding="utf-8"
-    )
+    # Gallery-family read: the color-patch pin lives in gallery/modal-analysis.js
+    # after the split (family == gallery.js until then).
+    gallery_source = _gallery_family_source(repo_root)
 
     assert "_buildColorAnalysisPatch" in gallery_source
     for field in [
@@ -1519,9 +1559,10 @@ def test_scan_stalled_diagnostics_are_visible_and_copyable_from_frontend():
 def test_tag_category_copy_and_promptlab_board_are_wired():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    gallery_source = (repo_root / "frontend" / "js" / "gallery.js").read_text(
-        encoding="utf-8"
-    )
+    # Gallery-family read: contextCopyTagCategory/TagCategoryCopy.showMenu live
+    # in gallery/context-menu.js after the split; index.html must still list
+    # the retained /static/js/gallery.js AFTER tag-category-copy.js.
+    gallery_source = _gallery_family_source(repo_root)
     reader_source = (repo_root / "frontend" / "js" / "image-reader.js").read_text(
         encoding="utf-8"
     )
