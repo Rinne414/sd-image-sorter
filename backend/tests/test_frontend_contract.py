@@ -192,6 +192,26 @@ def _prompt_lab_family_source(repo_root: Path) -> str:
     return "\n".join([prompt_lab_source] + family_parts)
 
 
+def _reader_family_source(repo_root: Path) -> str:
+    # The image-reader.js god-object (`const ImageReader = {...}`) is decomposed
+    # VERBATIM into the frontend/js/image-reader/ module family (Object.assign
+    # mixins over the shared base object declared in image-reader/core.js; same
+    # adaptation style as the censor / dataset-maker / app.js / gallery.js /
+    # manual-sort / v321 / prompt-lab splits) while a slim, still-servable
+    # frontend/js/image-reader.js stays behind (index.html's script tag and the
+    # release packages reference it). Contract pins assert against the family
+    # concatenation so each literal is found in whichever file hosts it.
+    reader_js = repo_root / "frontend" / "js" / "image-reader.js"
+    assert reader_js.is_file(), "frontend/js/image-reader.js must remain a real file"
+    reader_source = reader_js.read_text(encoding="utf-8")
+    assert reader_source, "frontend/js/image-reader.js must not be empty"
+    family_dir = repo_root / "frontend" / "js" / "image-reader"
+    family_parts = [
+        path.read_text(encoding="utf-8") for path in sorted(family_dir.glob("*.js"))
+    ]
+    return "\n".join([reader_source] + family_parts)
+
+
 def test_frontend_feature_modules_do_not_directly_assign_appstate():
     repo_root = Path(__file__).resolve().parents[2]
     frontend_root = repo_root / "frontend" / "js"
@@ -1659,9 +1679,10 @@ def test_tag_category_copy_and_promptlab_board_are_wired():
     # in gallery/context-menu.js after the split; index.html must still list
     # the retained /static/js/gallery.js AFTER tag-category-copy.js.
     gallery_source = _gallery_family_source(repo_root)
-    reader_source = (repo_root / "frontend" / "js" / "image-reader.js").read_text(
-        encoding="utf-8"
-    )
+    # Reader-family read: image-reader.js is decomposed into image-reader/*.js
+    # (gallery precedent); _copyPromptCategory/_renderReaderCategoryTags live
+    # in image-reader/category-tags.js after the split.
+    reader_source = _reader_family_source(repo_root)
     # Prompt-lab-family read: prompt-lab.js is decomposed into prompt-lab/*.js
     # (v321/gallery precedent); each pinned literal lives in whichever family
     # file hosts it.

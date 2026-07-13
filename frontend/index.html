@@ -7248,6 +7248,25 @@
     <script src="/static/js/modules/dup-cleaner.js"></script>
     <script src="/static/js/modules/publish-set.js"></script>
     <script src="/static/js/artist-ident.js"></script>
+    <!-- image-reader family: verbatim Object.assign decomposition of
+         image-reader.js (metadata reader workspace: drag/paste/library
+         ingest, parse render, model assets, color histogram, category
+         tags, metadata editor). core.js declares the ONE ImageReader
+         object + the window publish and MUST load first; boot.js invokes
+         the DOMContentLoaded init LAST. The slim image-reader.js shim
+         stays last so /static/js/image-reader.js remains servable. Slot
+         contract: AFTER i18n/handoffs/app/tag-category-copy/gallery,
+         BEFORE obfuscate-engine.js/image-obfuscate.js. -->
+    <script src="/static/js/image-reader/core.js"></script>
+    <script src="/static/js/image-reader/render.js"></script>
+    <script src="/static/js/image-reader/sections-scroll.js"></script>
+    <script src="/static/js/image-reader/metadata-editor.js"></script>
+    <script src="/static/js/image-reader/category-tags.js"></script>
+    <script src="/static/js/image-reader/color.js"></script>
+    <script src="/static/js/image-reader/ingest.js"></script>
+    <script src="/static/js/image-reader/extract.js"></script>
+    <script src="/static/js/image-reader/model-assets.js"></script>
+    <script src="/static/js/image-reader/boot.js"></script>
     <script src="/static/js/image-reader.js"></script>
     <script src="/static/js/obfuscate-engine.js"></script>
     <script src="/static/js/image-obfuscate.js"></script>
