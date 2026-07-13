@@ -7196,6 +7196,26 @@
     <script src="/static/js/queue-solitaire.js"></script>
     <script src="/static/js/similar.js"></script>
     <script src="/static/js/clip-tools.js"></script>
+    <!-- prompt-lab family: verbatim Object.assign decomposition of
+         prompt-lab.js (Prompt Helper: Stats / Compare / Build / Random,
+         category board, image picker, gallery round-trip). base.js declares
+         the ONE PromptLab object + the window publish and MUST load first;
+         boot.js declares the initPromptLab boot LAST. The slim prompt-lab.js
+         shim stays last so /static/js/prompt-lab.js remains servable. -->
+    <script src="/static/js/prompt-lab/base.js"></script>
+    <script src="/static/js/prompt-lab/lifecycle.js"></script>
+    <script src="/static/js/prompt-lab/image-picker.js"></script>
+    <script src="/static/js/prompt-lab/builder-state.js"></script>
+    <script src="/static/js/prompt-lab/render.js"></script>
+    <script src="/static/js/prompt-lab/slots-conflicts.js"></script>
+    <script src="/static/js/prompt-lab/generate.js"></script>
+    <script src="/static/js/prompt-lab/category-board.js"></script>
+    <script src="/static/js/prompt-lab/gallery-copy.js"></script>
+    <script src="/static/js/prompt-lab/events.js"></script>
+    <script src="/static/js/prompt-lab/stats.js"></script>
+    <script src="/static/js/prompt-lab/compare.js"></script>
+    <script src="/static/js/prompt-lab/build.js"></script>
+    <script src="/static/js/prompt-lab/boot.js"></script>
     <script src="/static/js/prompt-lab.js"></script>
     <script src="/static/js/dataset/core.js"></script>
     <script src="/static/js/smart-tag.js"></script>

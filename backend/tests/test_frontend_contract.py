@@ -147,6 +147,30 @@ def _v321_family_source(repo_root: Path) -> str:
     return "\n".join([v321_source] + family_parts)
 
 
+def _prompt_lab_family_source(repo_root: Path) -> str:
+    # The prompt-lab.js god-object (`const PromptLab = {...}`) is decomposed
+    # VERBATIM into the frontend/js/prompt-lab/ module family (Object.assign
+    # mixins over the shared base object declared in prompt-lab/base.js; same
+    # adaptation style as the censor / dataset-maker / app.js / gallery.js /
+    # manual-sort / v321 splits) while a slim, still-servable
+    # frontend/js/prompt-lab.js stays behind (index.html's script tag and the
+    # release packages reference it). Contract pins assert against the family
+    # concatenation so each literal is found in whichever file hosts it. Until
+    # the split lands the family is exactly prompt-lab.js, so every assertion
+    # is byte-for-byte unchanged.
+    prompt_lab_js = repo_root / "frontend" / "js" / "prompt-lab.js"
+    assert prompt_lab_js.is_file(), (
+        "frontend/js/prompt-lab.js must remain a real file"
+    )
+    prompt_lab_source = prompt_lab_js.read_text(encoding="utf-8")
+    assert prompt_lab_source, "frontend/js/prompt-lab.js must not be empty"
+    family_dir = repo_root / "frontend" / "js" / "prompt-lab"
+    family_parts = [
+        path.read_text(encoding="utf-8") for path in sorted(family_dir.glob("*.js"))
+    ]
+    return "\n".join([prompt_lab_source] + family_parts)
+
+
 def test_frontend_feature_modules_do_not_directly_assign_appstate():
     repo_root = Path(__file__).resolve().parents[2]
     frontend_root = repo_root / "frontend" / "js"
@@ -1614,9 +1638,10 @@ def test_tag_category_copy_and_promptlab_board_are_wired():
     reader_source = (repo_root / "frontend" / "js" / "image-reader.js").read_text(
         encoding="utf-8"
     )
-    promptlab_source = (repo_root / "frontend" / "js" / "prompt-lab.js").read_text(
-        encoding="utf-8"
-    )
+    # Prompt-lab-family read: prompt-lab.js is decomposed into prompt-lab/*.js
+    # (v321/gallery precedent); each pinned literal lives in whichever family
+    # file hosts it.
+    promptlab_source = _prompt_lab_family_source(repo_root)
     copy_source = (repo_root / "frontend" / "js" / "tag-category-copy.js").read_text(
         encoding="utf-8"
     )
