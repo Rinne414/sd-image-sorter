@@ -4,8 +4,9 @@
 # Source line ranges (original file): 2949-3167, 3187-3462, 3463-3471, 3551-3818.
 # Mixin: ComfyUI model-asset + global-LoRA candidate scan/classify/score.
 # self.* calls and class-constant lookups resolve via MRO exactly as before.
-# Patched seams (Image / open / _MAX_* / _sidecar_directory_cache) live ONLY
-# in metadata_parser/__init__.py; see tests/test_metadata_parser_pins.py.
+# Patched seams (Image / open / _MAX_* / _sidecar_directory_cache): the readers
+# live in metadata_parser/_runtime.py behind the package get/set proxy in
+# __init__.py (stage 3); see tests/test_metadata_parser_pins.py.
 import json
 import re
 from typing import Optional, Dict, Any, Tuple, List, Set

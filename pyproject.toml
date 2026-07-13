@@ -174,6 +174,15 @@ select = ["F", "E9"]
 # historical module attribute keeps resolving at services.model_service.<name>
 # (aesthetic.py's lazy _direct_download_file import, routers/models.py).
 "backend/services/model_service.py" = ["F401"]
+# metadata_parser/__init__.py is the package top module of the metadata_parser
+# split (stages 1+2+3, 2026-07). Stage 3 moved the verify_image_readable body
+# to metadata_parser/_runtime.py; the __init__ re-import is a pure by-reference
+# re-export the package body itself never calls -- production consumers
+# (similarity.py, services/image_service.py, services/sorting_service.py,
+# services/tagging/worker.py) do `from metadata_parser import
+# verify_image_readable` and tests/test_metadata_parser_pins.py locks the name
+# on this module. Same rationale as database.py above.
+"backend/metadata_parser/__init__.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.
