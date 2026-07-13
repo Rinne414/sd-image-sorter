@@ -214,14 +214,6 @@
         await Promise.all(missingIds.map((id) => fetchImageDetailFallback(id)));
     }
 
-    function getRatingLabel(item) {
-        // From queue item or app state
-        const meta = getImageMeta(item?.id || item);
-        if (!meta) return '';
-        // Check tags for rating
-        return '';  // Ratings come from tags, not readily available here
-    }
-
     // ── Undo ──────────────────────────────────────────────────────────
     function pushUndo(description) {
         const snapshot = JSON.stringify(state.sections.map(s => ({
