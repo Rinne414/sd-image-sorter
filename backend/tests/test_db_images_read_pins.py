@@ -248,15 +248,13 @@ class TestPaginationContracts:
         assert result["total"] == -1
         assert isinstance(result["images"], list)
 
-    def test_paginated_total_ignores_color_hues_filter_DORMANT_BUG(self, test_db):
-        """DORMANT BUG pinned AS-IS: the cursor-pagination first-page COUNT
-        (_get_filtered_count) accepts color_hues/exclude_color_hues and
-        get_images_paginated passes them in, but the count body never calls
-        _apply_color_hues_filter (every other query function does). So under a
-        newest/oldest sort with a dominant-hue filter active and no cursor, the
-        returned ``total`` is inflated to the unfiltered count even though the
-        page itself is correctly hue-filtered. Standalone get_filtered_image_count
-        applies the hue filter correctly. When the count is fixed, update this pin.
+    def test_paginated_total_respects_color_hues_filter(self, test_db):
+        """The cursor-pagination first-page COUNT (_get_filtered_count) applies
+        the v3.5.0 dominant-hue filters, so ``total`` matches the hue-filtered
+        page. Regression pin for the dormant bug found by the step-0 sweep:
+        the count body omitted _apply_color_hues_filter while every other query
+        function applied it, inflating ``total`` to the unfiltered count under
+        newest/oldest sort.
         """
         red = _add("/hue/total_red.png")
         _add("/hue/total_g.png")
@@ -270,9 +268,9 @@ class TestPaginationContracts:
 
         # Page is correctly filtered to the one red image ...
         assert [img["id"] for img in result["images"]] == [red]
-        # ... but total is (buggily) the unfiltered count, not 1.
-        assert result["total"] == 3
-        # The standalone count helper gets it right (proves the divergence).
+        # ... and total now agrees with the hue-filtered page.
+        assert result["total"] == 1
+        # The standalone count helper agrees (no divergence).
         assert db.get_filtered_image_count(color_hues=["red"]) == 1
 
 

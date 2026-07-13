@@ -1181,6 +1181,11 @@ def _get_filtered_count(
     conditions, params = _apply_exclude_prompts_filter(conditions, params, exclude_prompts, prompt_match_mode)
     conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
 
+    # Apply v3.5.0 dominant-hue filters (mirror get_filtered_image_count so the
+    # cursor-path total matches the page query; previously omitted, so an active
+    # hue filter under newest/oldest sort returned an inflated total).
+    conditions, params = _apply_color_hues_filter(conditions, params, color_hues, exclude_color_hues)
+
     # Apply artist filter (JOIN)
     query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
 
