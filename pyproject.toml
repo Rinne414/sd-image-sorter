@@ -200,6 +200,22 @@ select = ["F", "E9"]
 # (tests/test_model_health_pins.py, tests/test_model_health.py,
 # tests/test_artist_diagnostics_legacy_path.py).
 "backend/model_health.py" = ["F401"]
+# services/dataset_session_service.py is the compatibility FILE facade for the
+# services/dataset_session/ package split (2026-07). Same rationale as
+# dataset_export_service.py above: the verbatim header import block (kept so
+# every historical attribute keeps resolving here) plus the dataset_session.*
+# re-imports exist so every historical module attribute — the REBIND dir pairs
+# _SCAN_DIR/_get_scan_dir and _UPLOAD_DIR/_get_upload_dir stay DEFINED here and
+# are patched on this module object, MAX_SCAN_RESULTS / _SESSION_PATH_CACHE_MAX
+# / _try_import_rarfile are patched here and read back through _svc() by the
+# moved bodies, and _session_path_cache is re-exported as the SAME dict object
+# readers clear in place — keeps resolving at
+# services.dataset_session_service.<name> for the downstream identity seams
+# (services/dataset_export/planning.py, services/dataset_export_service.py,
+# services/dataset_export/engine.py, routers/dataset.py) and the suites that
+# patch and read them there (tests/test_dataset_session_pins.py,
+# tests/test_dataset_session_service.py).
+"backend/services/dataset_session_service.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.
