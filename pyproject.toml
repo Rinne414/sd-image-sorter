@@ -97,6 +97,18 @@ select = ["F", "E9"]
 # tests/test_tagger.py, tests/test_resource_safety.py,
 # tests/fixtures/ml_fixtures.py).
 "backend/tagger.py" = ["F401"]
+# image_manager.py is the compatibility FILE facade for the
+# image_manager_gates / image_manager_records / image_manager_executor
+# sibling-module split (2026-07). Same rationale as censor_service.py above:
+# the verbatim header import block stays — ThreadPoolExecutor /
+# ProcessPoolExecutor are monkeypatch seams tests patch on this module object
+# (tests/test_image_manager.py:783+) AND the names image_manager_executor
+# resolves through this facade at call time; PARSED_METADATA_VERSION is
+# re-exported for tests/test_image_manager_pins.py — plus the gates/records/
+# executor re-imports exist so every historical module attribute keeps
+# resolving at image_manager.<name> for the pin suite and for
+# services/sorting/scan.py's image_manager_module.* reads.
+"backend/image_manager.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.
