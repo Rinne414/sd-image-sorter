@@ -7213,6 +7213,23 @@
     <script src="/static/js/library-health.js"></script>
     <script src="/static/js/unreadable-banner.js"></script>
     <script src="/static/js/vlm-caption.js"></script>
+    <!-- v321 family: verbatim Object.assign decomposition of v321-ui.js
+         (Tag modal tabs + batch-export presets + live preview / caption
+         editor). base.js declares the ONE V321Integration object + the
+         window publish and MUST load first; boot.js registers the
+         DOMContentLoaded init LAST. The slim v321-ui.js shim stays last
+         so /static/js/v321-ui.js remains servable at its old URL. -->
+    <script src="/static/js/v321/base.js"></script>
+    <script src="/static/js/v321/shell.js"></script>
+    <script src="/static/js/v321/tagger-tabs.js"></script>
+    <script src="/static/js/v321/tagger-picker.js"></script>
+    <script src="/static/js/v321/export-presets.js"></script>
+    <script src="/static/js/v321/preview-core.js"></script>
+    <script src="/static/js/v321/caption-model.js"></script>
+    <script src="/static/js/v321/preview-queue.js"></script>
+    <script src="/static/js/v321/preview-panels.js"></script>
+    <script src="/static/js/v321/combined-export.js"></script>
+    <script src="/static/js/v321/boot.js"></script>
     <script src="/static/js/v321-ui.js"></script>
     <script src="/static/js/color-backfill.js"></script>
     <script src="/static/js/mass-tag-editor.js"></script>

@@ -126,6 +126,27 @@ def _manual_sort_family_source(repo_root: Path) -> str:
     return "\n".join([manual_sort_source] + family_parts)
 
 
+def _v321_family_source(repo_root: Path) -> str:
+    # The v321-ui.js god-object (`const V321Integration = {...}`) is decomposed
+    # VERBATIM into the frontend/js/v321/ module family (Object.assign mixins
+    # over the shared base object declared in v321/base.js; same adaptation
+    # style as the censor / dataset-maker / app.js / gallery.js / manual-sort
+    # splits) while a slim, still-servable frontend/js/v321-ui.js stays behind
+    # (index.html's script tag and the release packages reference it).
+    # Contract pins assert against the family concatenation so each literal is
+    # found in whichever file hosts it. Until the split lands the family is
+    # exactly v321-ui.js, so every assertion is byte-for-byte unchanged.
+    v321_js = repo_root / "frontend" / "js" / "v321-ui.js"
+    assert v321_js.is_file(), "frontend/js/v321-ui.js must remain a real file"
+    v321_source = v321_js.read_text(encoding="utf-8")
+    assert v321_source, "frontend/js/v321-ui.js must not be empty"
+    family_dir = repo_root / "frontend" / "js" / "v321"
+    family_parts = [
+        path.read_text(encoding="utf-8") for path in sorted(family_dir.glob("*.js"))
+    ]
+    return "\n".join([v321_source] + family_parts)
+
+
 def test_frontend_feature_modules_do_not_directly_assign_appstate():
     repo_root = Path(__file__).resolve().parents[2]
     frontend_root = repo_root / "frontend" / "js"
@@ -250,9 +271,8 @@ if (filteredState.filterKey !== 'active-filter' || filteredState.selectionToken 
 
 def test_v321_modules_read_runtime_selection_store_from_window_app():
     repo_root = Path(__file__).resolve().parents[2]
-    v321_source = (repo_root / "frontend" / "js" / "v321-ui.js").read_text(
-        encoding="utf-8"
-    )
+    # v321-family read: v321-ui.js is split into v321/*.js (gallery precedent).
+    v321_source = _v321_family_source(repo_root)
     vlm_source = (repo_root / "frontend" / "js" / "vlm-caption.js").read_text(
         encoding="utf-8"
     )
@@ -378,9 +398,9 @@ def test_dataset_local_ids_use_safe_52_bit_hash_slice():
 def test_full_selection_workflows_do_not_fallback_to_gallery_dom():
     repo_root = Path(__file__).resolve().parents[2]
     checked = {
-        "frontend/js/v321-ui.js": (
-            repo_root / "frontend" / "js" / "v321-ui.js"
-        ).read_text(encoding="utf-8"),
+        # v321-family read: v321-ui.js is split into v321/*.js (gallery
+        # precedent); no v321 family file may scrape gallery DOM either.
+        "frontend/js/v321-ui.js family": _v321_family_source(repo_root),
         "frontend/js/vlm-caption.js": (
             repo_root / "frontend" / "js" / "vlm-caption.js"
         ).read_text(encoding="utf-8"),
@@ -437,7 +457,12 @@ def test_selection_filter_payload_preserves_full_gallery_scope():
 
 def test_batch_caption_export_requires_selection_not_loaded_gallery_fallback():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "v321-ui.js").read_text(encoding="utf-8")
+    # v321-family read: v321-ui.js is split into v321/*.js (gallery precedent).
+    # _resolveSelectionImageIds is runtime-dead but its body IS this pinned
+    # no-loaded-gallery-fallback invariant (lead sign-off: KEEP verbatim); the
+    # assertions below follow it into whichever family file hosts it
+    # (v321/preview-core.js after the split).
+    source = _v321_family_source(repo_root)
 
     assert "allowLoadedFallback = false" in source
     assert "const source = await this._loadQueueSource();" in source
