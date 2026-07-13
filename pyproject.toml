@@ -159,6 +159,21 @@ select = ["F", "E9"]
 # _HAS_METADATA_CLAUSE constant historical code resolves here; the facade body
 # itself calls none of them.
 "backend/db_query.py" = ["F401"]
+# services/model_service.py is the compatibility FILE facade for the
+# model_service_helpers / model_service_inventory / model_service_prepare
+# sibling-module split (2026-07). Same rationale as image_manager.py above:
+# the verbatim header import block stays — ensure_group /
+# ensure_group_with_soft_deps / DependencyInstallResult / get_sam3_checkpoint_path
+# / get_toriigate_model_dir / get_wd14_model_dir / TAGGER_MODELS / shutil are
+# monkeypatch/pin seams tests patch and read on this module object
+# (tests/test_model_service_pins.py, tests/test_model_service.py,
+# tests/test_routers/test_prompts_censor_similarity_artists.py) AND the names
+# the moved bodies resolve back through _svc() at call time — plus the
+# helpers/inventory/prepare re-imports (_artist_resolve_url,
+# _artist_checkpoint_url, _materialize_existing_file, ...) exist so every
+# historical module attribute keeps resolving at services.model_service.<name>
+# (aesthetic.py's lazy _direct_download_file import, routers/models.py).
+"backend/services/model_service.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.

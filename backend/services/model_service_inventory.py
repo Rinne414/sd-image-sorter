@@ -1,0 +1,361 @@
+"""Model-inventory branch table (split from services/model_service.py, 2026-07).
+
+_build_inventory is ModelService.build_model_inventory's body moved here
+(claude-modelsvc-pins-REPORT.md §5.1): the facade method fetches
+``health = get_model_health()`` (facade-bound seam) and delegates; every
+remaining facade-family read (PROJECT_ROOT, TAGGER_MODELS, the config dir
+getters, PRIVACY_YOLO_PAGE_URL, SAM3_MODELSCOPE_URL, RECOMMENDED_MODEL_IDS)
+resolves through _svc() at call time so monkeypatches on the facade module
+keep affecting behavior. The SAM3 card's setup_steps copy stays in the
+facade (_sam3_inventory_setup_steps) because tests/test_release_build.py
+asserts those literal strings in backend/services/model_service.py's raw
+source text.
+"""
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+from typing import Any, Dict, List
+
+
+def _svc():
+    """Resolve facade-patched seams through services.model_service at call time.
+
+    Tests monkeypatch seam names on the facade module object
+    (claude-modelsvc-pins-REPORT.md §3); a ``from`` import here would freeze
+    an independent binding those patches silently miss. The lazy import
+    avoids a facade<->submodule load cycle.
+    """
+    import services.model_service as model_service
+
+    return model_service
+
+
+def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
+    censor = health["censor"]
+    artist = health["artist"]
+    installed_wd14 = [item["name"] for item in health["wd14"]["installed_models"] if item["available"]]
+    wd14_primary_path = None
+    if installed_wd14:
+        first_variant = installed_wd14[0]
+        wd14_primary_path = str(
+            (Path(_svc().get_wd14_model_dir()) / first_variant / _svc().TAGGER_MODELS[first_variant]["model_file"]).resolve()
+        )
+
+    aesthetic_available = False
+    aesthetic_message = "Aesthetic predictor dependencies are not installed"
+    aesthetic_head_path = str(_svc().PROJECT_ROOT / "models" / "aesthetic" / "sa_0_4_vit_l_14_linear.pth")
+    aesthetic_head_exists = Path(aesthetic_head_path).exists()
+    aesthetic_runtime_ready = (
+        importlib.util.find_spec("torch") is not None
+        and importlib.util.find_spec("open_clip") is not None
+    )
+    aesthetic_available = bool(aesthetic_head_exists and aesthetic_runtime_ready)
+    if aesthetic_available:
+        aesthetic_message = "Aesthetic predictor is ready (CLIP + linear head)."
+    elif aesthetic_head_exists:
+        aesthetic_message = "Linear head downloaded but CLIP dependencies missing (torch/open_clip)."
+
+    def with_status(*, is_ready: bool, is_downloaded: bool) -> Dict[str, str]:
+        if is_ready:
+            return {"status": "ready", "status_label": "Ready"}
+        return {"status": "missing", "status_label": "Missing"}
+
+    # -- WD14 --
+    if installed_wd14:
+        wd14_message_key = "models.wd14.readyCount"
+        wd14_message = f"{len(installed_wd14)} WD14 variant(s) are ready."
+        wd14_message_params = {"count": len(installed_wd14)}
+    else:
+        wd14_message_key = "models.wd14.missing"
+        wd14_message = "WD14 model files are missing and can be downloaded on demand."
+        wd14_message_params = {}
+
+    # -- ToriiGate --
+    toriigate = health.get("toriigate", {})
+    toriigate_available = bool(toriigate.get("available"))
+    toriigate_dir = toriigate.get("model_dir") or str(Path(_svc().get_toriigate_model_dir()) / "toriigate-0.5")
+
+    # -- OppaiOracle --
+    oppai_oracle = health.get("oppai_oracle", {})
+    oppai_oracle_available = bool(oppai_oracle.get("available"))
+    oppai_oracle_dir = oppai_oracle.get("model_dir") or ""
+
+    # -- CLIP --
+    clip_health = health["clip"]
+    clip_runtime_loaded = clip_health.get("runtime_loaded", False)
+    clip_available = clip_health["available"] or clip_runtime_loaded
+    if clip_runtime_loaded and not clip_health["available"]:
+        clip_message_key = "models.clip.loaded"
+        clip_message = "CLIP model is loaded and ready."
+    elif clip_health["available"]:
+        clip_message_key = "models.clip.ready"
+        clip_message = clip_health["message"]
+    elif clip_health["model_path"]:
+        clip_message_key = "models.clip.missingRuntime"
+        clip_message = clip_health["message"]
+    else:
+        clip_message_key = "models.clip.missingModel"
+        clip_message = clip_health["message"]
+
+    # -- Aesthetic --
+    if aesthetic_available:
+        aesthetic_msg_key = "models.aesthetic.ready"
+    elif aesthetic_head_exists:
+        aesthetic_msg_key = "models.aesthetic.headOnly"
+    else:
+        aesthetic_msg_key = "models.aesthetic.missing"
+
+    # -- Artist --
+    if artist["available"]:
+        artist_message_key = "models.artist.ready"
+    elif not artist.get("checkpoint_path") and not artist.get("has_download_source"):
+        artist_message_key = "models.artist.noSource"
+    else:
+        artist_message_key = "models.artist.missing"
+
+    # -- Censor Legacy --
+    legacy = censor["legacy"]
+    privacy_yolo_files = [f for f in legacy.get("files", []) if f.get("recommended_for_censor")]
+    general_yolo_files = [f for f in legacy.get("files", []) if not f.get("recommended_for_censor")]
+    if legacy["available"] and privacy_yolo_files:
+        if general_yolo_files:
+            censor_legacy_key = "models.censorLegacy.readyPrivacyWithGeneral"
+        else:
+            censor_legacy_key = "models.censorLegacy.readyPrivacy"
+    elif legacy["available"]:
+        censor_legacy_key = "models.censorLegacy.readyNonPrivacy"
+    else:
+        censor_legacy_key = "models.censorLegacy.missing"
+
+    # -- NudeNet --
+    nudenet = censor["nudenet"]
+    if nudenet["available"] and nudenet.get("model_downloaded"):
+        nudenet_key = "models.censorNudenet.ready"
+    elif nudenet["available"]:
+        nudenet_key = "models.censorNudenet.installed"
+    else:
+        nudenet_key = "models.censorNudenet.missing"
+
+    # -- SAM3 --
+    sam3 = censor["sam3"]
+    sam3_missing_packages = sam3.get("missing_dependency_packages") or sam3.get("missing_dependencies") or []
+    sam3_message_params = {"deps": ", ".join(sam3_missing_packages)}
+    if sam3["available"]:
+        sam3_key = "models.sam3.ready"
+    elif sam3["checkpoint_path"] and sam3_missing_packages and sam3.get("torch_version") and sam3.get("torch_cuda_build") is None:
+        sam3_key = "models.sam3.missingDepsCpuTorch"
+    elif sam3["checkpoint_path"] and sam3_missing_packages:
+        sam3_key = "models.sam3.missingDeps"
+    elif sam3["checkpoint_path"]:
+        if sam3.get("torch_cuda_build") is None:
+            sam3_key = "models.sam3.cpuTorch"
+        elif not sam3.get("cuda_available"):
+            sam3_key = "models.sam3.noCuda"
+        else:
+            sam3_key = "models.sam3.missing"
+    else:
+        sam3_key = "models.sam3.missing"
+
+    inventory = [
+        {
+            "id": "wd14",
+            "name": "WD14 Tagger",
+            "group": "Tagging",
+            "group_key": "models.group.tagging",
+            "available": bool(installed_wd14),
+            **with_status(is_ready=bool(installed_wd14), is_downloaded=bool(installed_wd14)),
+            "message": wd14_message,
+            "message_key": wd14_message_key,
+            "message_params": wd14_message_params,
+            "path": health["wd14"]["model_path"] or wd14_primary_path,
+            "download_supported": True,
+            "variants": [item["name"] for item in health["wd14"]["installed_models"]],
+            # The variant list follows TAGGER_MODELS insertion order (eva02
+            # is first), but the recommended default is swinv2. Surface the
+            # default so the card's <select> pre-selects it and one-click
+            # Prepare downloads the recommended model, not the heavy eva02.
+            # .get(): production health always sets default_model, but a
+            # partial/mocked health dict must not crash the whole inventory.
+            "default_variant": health["wd14"].get("default_model"),
+            "installed_variants": installed_wd14,
+            "setup_steps": [
+                "Click Prepare / Download to download the selected WD14 model files if missing.",
+                "On Windows, the same action also repairs ONNX GPU packages so CUDA/DirectML can appear.",
+                "Restart SD Image Sorter if the Prepare result says ONNX Runtime was repaired.",
+            ],
+        },
+        {
+            "id": "toriigate",
+            "name": "ToriiGate 0.5",
+            "group": "Tagging",
+            "group_key": "models.group.tagging",
+            "available": toriigate_available,
+            **with_status(
+                is_ready=toriigate_available,
+                is_downloaded=bool(Path(toriigate_dir).joinpath("config.json").exists()),
+            ),
+            "message": toriigate.get("message") or "ToriiGate files are not downloaded yet. The first run will need a large model download.",
+            "message_key": "models.toriigate.ready" if toriigate_available else "models.toriigate.missing",
+            "path": toriigate_dir,
+            "download_supported": True,
+            "setup_steps": [
+                "Click Prepare / Download to install the PyTorch/Transformers runtime if missing.",
+                "Restart SD Image Sorter if the Prepare result says Python packages were installed.",
+                "Click Prepare / Download again to download the ToriiGate model files (~5 GB) if they are not present.",
+            ],
+        },
+        {
+            "id": "oppai-oracle",
+            "name": "OppaiOracle V1.1",
+            "group": "Tagging",
+            "group_key": "models.group.tagging",
+            "available": oppai_oracle_available,
+            **with_status(
+                is_ready=oppai_oracle_available,
+                is_downloaded=oppai_oracle_available,
+            ),
+            "message": oppai_oracle.get("message") or "OppaiOracle V1.1 (~947 MB ONNX) is not downloaded yet.",
+            "message_key": "models.oppaiOracle.ready" if oppai_oracle_available else "models.oppaiOracle.missing",
+            "path": oppai_oracle_dir,
+            "download_supported": True,
+            "setup_steps": [
+                "Click Prepare / Download to fetch the OppaiOracle V1.1 ONNX bundle (~947 MB) from HuggingFace.",
+                "No additional Python packages are required; ONNX Runtime is already installed.",
+                "Once ready, OppaiOracle V1.1 will appear in the tagger model dropdown.",
+            ],
+        },
+        {
+            "id": "clip",
+            "name": "CLIP Similarity",
+            "group": "Search",
+            "group_key": "models.group.search",
+            "available": clip_available,
+            **with_status(
+                is_ready=bool(clip_available),
+                is_downloaded=bool(clip_health["model_path"] or clip_runtime_loaded),
+            ),
+            "message": clip_message,
+            "message_key": clip_message_key,
+            "path": clip_health["model_path"] or clip_health.get("expected_path", ""),
+            "download_supported": True,
+            "setup_steps": [
+                "Click Prepare to install fastembed Python package (restart required after install).",
+                "Click Prepare again after restart to download the CLIP ViT-B/32 ONNX model (~335 MB).",
+                "Manual: place model.onnx + config.json in " + clip_health.get("expected_path", "data/models/clip/Qdrant-clip-ViT-B-32-vision"),
+            ],
+        },
+        {
+            "id": "aesthetic",
+            "name": "Aesthetic Predictor",
+            "group": "Scoring",
+            "group_key": "models.group.scoring",
+            "available": aesthetic_available,
+            **with_status(is_ready=aesthetic_available, is_downloaded=aesthetic_head_exists),
+            "message": aesthetic_message,
+            "message_key": aesthetic_msg_key,
+            "path": aesthetic_head_path if aesthetic_head_exists else None,
+            "download_supported": True,
+            "note": "Uses CLIP ViT-L/14 + LAION linear head (~3KB). CLIP model (~400MB) downloads on first use via open_clip.",
+        },
+        {
+            "id": "artist",
+            "name": "Artist ID / Kaloscope",
+            "group": "Artist ID",
+            "group_key": "models.group.artistId",
+            "available": artist["available"],
+            **with_status(
+                is_ready=bool(artist["available"]),
+                is_downloaded=bool(artist["checkpoint_path"] or artist["runtime_path"]),
+            ),
+            "message": artist["message"],
+            "message_key": artist_message_key,
+            "path": artist["checkpoint_path"] or artist.get("expected_path", ""),
+            "download_supported": bool(artist.get("has_download_source", True)),
+            "sources": [
+                s for s in ["auto", "huggingface", "modelscope"]
+                if s == "auto"
+                or (s == "huggingface" and artist.get("huggingface_available"))
+                or (s == "modelscope" and artist.get("modelscope_available"))
+            ],
+            "runtime_path": artist["runtime_path"],
+            "setup_steps": [
+                "Click Prepare to install torch/transformers/timm Python packages (restart required).",
+                "Click Prepare again after restart to download Kaloscope 2.0 model (~2.8 GB).",
+                "Source: HuggingFace (heathcliff01/Kaloscope2.0) or ModelScope (Heathcliff02/Kaloscope-2.0) — pick via the Download Source selector above.",
+                "Manual: put best_checkpoint.pth in " + str(Path(_svc().get_artist_model_dir()) / "kaloscope2.0" / "448-90.13"),
+                "Manual: put class_mapping.csv in " + str(Path(_svc().get_artist_model_dir()) / "kaloscope2.0"),
+                "Manual: the LSNet runtime (lsnet_model/) goes in " + str(Path(_svc().get_artist_model_dir()) / "comfyui-lsnet-runtime"),
+            ],
+        },
+        {
+            "id": "censor-legacy",
+            "name": "Privacy YOLO",
+            "group": "Censor",
+            "group_key": "models.group.censor",
+            "available": legacy["available"],
+            **with_status(
+                is_ready=bool(legacy["available"]),
+                is_downloaded=bool(legacy["default_model_path"]),
+            ),
+            "message": legacy["message"],
+            "message_key": censor_legacy_key,
+            "path": legacy["default_model_path"] or legacy.get("expected_path", ""),
+            "download_supported": True,
+            "external_links": [
+                {
+                    "label": "Civitai",
+                    "url": _svc().PRIVACY_YOLO_PAGE_URL,
+                }
+            ],
+            "setup_steps": [
+                "Click Prepare to auto-download the recommended privacy YOLO model.",
+                "If auto-download fails (Civitai login wall), download manually from the Civitai link above.",
+                "Place the .pt file in " + str(Path(_svc().get_yolo_model_dir())),
+            ],
+        },
+        {
+            "id": "censor-nudenet",
+            "name": "NudeNet v3",
+            "group": "Censor",
+            "group_key": "models.group.censor",
+            "available": nudenet["available"],
+            **with_status(
+                is_ready=bool(nudenet["available"]),
+                is_downloaded=bool(nudenet["model_downloaded"] or nudenet["available"]),
+            ),
+            "message": nudenet["message"],
+            "message_key": nudenet_key,
+            "path": nudenet["model_path"],
+            "download_supported": True,
+        },
+        {
+            "id": "sam3",
+            "name": "SAM 3",
+            "group": "Censor",
+            "group_key": "models.group.censor",
+            "available": sam3["available"],
+            **with_status(
+                is_ready=bool(sam3["available"]),
+                is_downloaded=bool(sam3["checkpoint_path"]),
+            ),
+            "message": sam3["message"],
+            "message_key": sam3_key,
+            "message_params": sam3_message_params,
+            "path": sam3["checkpoint_path"] or sam3.get("expected_path", ""),
+            "download_supported": True,
+            "setup_steps": _svc()._sam3_inventory_setup_steps(),
+            "external_links": [
+                {
+                    "label": "ModelScope",
+                    "url": _svc().SAM3_MODELSCOPE_URL,
+                }
+            ],
+        },
+    ]
+    # MODELS-07: flag the essentials so the Model Manager can render them
+    # first with a Recommended badge. Optional/advanced models (ToriiGate,
+    # OppaiOracle, Wenaka Privacy YOLO) fall into the "additional" section.
+    for entry in inventory:
+        entry["recommended"] = entry["id"] in _svc().RECOMMENDED_MODEL_IDS
+    return inventory
