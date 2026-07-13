@@ -1,0 +1,774 @@
+import { expect, test, type Page } from '../fixtures/click-ledger'
+
+/**
+ * Characterization pins for the artist-ident.js god-file (1,171 lines) — "step 0" of a
+ * later VERBATIM decomposition (mirrors the shipped gallery.js -> gallery/*.js,
+ * app.js -> app/*.js, image-reader, similar, smart-tag, censor, dataset, autosep,
+ * manual-sort, prompt-lab, v321-ui splits).
+ *
+ * ASSEMBLY-SHAPE VERDICT (evidence in claude-artistident-pins-REPORT.md §2):
+ *   artist-ident.js is a single object LITERAL —
+ *       `const ArtistIdent = { ...~1160 lines... };`  (line 6)
+ *       `window.ArtistIdent = ArtistIdent;`           (line 1168)
+ *   — that is NOT wrapped in an IIFE and holds NO closure-private state (every method
+ *   uses `this.*` + `window.*` globals). That is the exact shape gallery.js /
+ *   image-reader.js / similar.js have, so — unlike queue-solitaire.js's true-IIFE
+ *   exemption — it is fully splittable by reassembling the object incrementally
+ *   (`Object.assign(window.ArtistIdent, {...})`). The object is NOT sealed. The file has
+ *   NO 'use strict' directive (classic script, sloppy mode). This is why the smart-tag
+ *   walker reported "0 internal top-level decls": there are none — it is a bare literal.
+ *
+ * Cross-module consumers the split MUST keep working (grep is exhaustive):
+ *   - app/view-switch.js  -> `window.ArtistIdent.init()` when the Artist view activates.
+ *   - app/settings.js     -> `window.ArtistIdent.savePreferences()` +
+ *                            `window.ArtistIdent.resetSavedPreferences({apply,silent})`.
+ *   - gallery/modal-analysis.js -> `window.ArtistIdent.getThresholdValue()`,
+ *                            `window.ArtistIdent._getIdentifyModelConfig()` (the single-
+ *                            image "Identify Artist" modal button reuses BOTH), and
+ *                            `window.ArtistIdent.loadStats()` after a single identify.
+ * backend/tests/test_frontend_contract.py does NOT pin any artist-ident.js literal (its
+ * only "artist" hit is a dataset tag-pill category), but its generic per-file rules
+ * (no `AppState.*` writes, no `window.App.*` writes) DO cover every future
+ * frontend/js/artist/*.js file — artist-ident.js already complies (its only filter
+ * mutation goes through the sanctioned `window.App.updateFilters(fn)` API).
+ *
+ * No DB seeding and no Kaloscope/LSNet models: every case drives ArtistIdent in-page via
+ * direct method calls + route-mocked /api/artists/* (and /api/images) responses. This
+ * avoids the `.tmp/e2e-data-<port>` cross-run pollution pitfall and the missing-model
+ * dependency (the feature is experimental — routers/artists.py needs models absent on a
+ * clean machine). It MUST pass before AND after the refactor.
+ */
+
+test.describe.configure({ mode: 'serial' })
+
+/**
+ * Land on the app, wait for window.ArtistIdent + App.API to exist, and reveal
+ * #view-artist so its controls are visible (the view is otherwise display:none).
+ * Deliberately does NOT call ArtistIdent.init(): the pins call ArtistIdent methods
+ * directly, so the real diagnostics/stats/batch-progress boot never fires unless a test
+ * opts in via initArtistView(). Also resets the object's mutable state so serial tests
+ * do not leak into each other within a shared page (each test still gets a fresh goto).
+ */
+async function gotoArtist(page: Page): Promise<void> {
+  await page.goto('/')
+  await page.waitForLoadState('domcontentloaded')
+  await page.waitForFunction(() => {
+    const w = window as any
+    return !!w.ArtistIdent
+      && typeof w.ArtistIdent.selectArtist === 'function'
+      && typeof w.ArtistIdent.init === 'function'
+      && typeof w.App?.API?.get === 'function'
+  })
+  await page.evaluate(() => {
+    const view = document.getElementById('view-artist')
+    if (!view) return
+    document.querySelectorAll('.view').forEach((node) => {
+      if (node !== view) (node as HTMLElement).style.display = 'none'
+    })
+    ;(view as HTMLElement).style.display = 'block'
+    view.classList.add('active')
+  })
+}
+
+/**
+ * Run the real init() once with the boot endpoints mocked to a "ready" state, so
+ * bindEvents() wires the delegated document handlers. Used only by the bindEvents pin.
+ */
+async function initArtistView(page: Page): Promise<void> {
+  await page.route('**/api/artists/diagnostics', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ available: true }) }))
+  await page.route('**/api/artists/stats', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ total_images: 0, identified_images: 0, undefined_count: 0, artist_counts: {}, artist_stats: {} }),
+    }))
+  await page.route('**/api/artists/batch-progress', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ running: false }) }))
+  await page.evaluate(() => (window as any).ArtistIdent.init())
+  await page.waitForFunction(() => (window as any).ArtistIdent.eventsBound === true)
+}
+
+test.beforeEach(async ({ page }) => {
+  await gotoArtist(page)
+})
+
+// ---------------------------------------------------------------------------
+// 1. Public surface — the (unsealed) window.ArtistIdent other modules depend on.
+// ---------------------------------------------------------------------------
+
+test('window.ArtistIdent is an unsealed object literal exposing the load-bearing surface + documented defaults', async ({ page }) => {
+  const probe = await page.evaluate(() => {
+    const A = (window as any).ArtistIdent
+    // Public entries + the internal methods a bad cut could drop off the reassembled
+    // object. The FOUR cross-module seams are called out inline.
+    const requiredFns = [
+      'init', 'bindEvents',                                    // view-switch.js seam
+      'savePreferences', 'resetSavedPreferences',              // settings.js seams
+      'getThresholdValue', '_getIdentifyModelConfig',          // modal-analysis.js seams
+      'loadStats',                                             // modal-analysis.js + boot
+      'applySavedPreferences', 'capturePreferences', 'resetPreferenceControls',
+      'syncThresholdDisplay', '_getIdentifyPayload', 'loadDiagnostics', 'renderArtistGrid',
+      'getInitials', 'formatArtistName', 'formatConfidencePercent', 'getArtistStat',
+      'selectArtist', 'filterGalleryByArtist', 'clearArtistFilter', 'updateProgressUi',
+      'resumeBatchProgress', 'identifyAll', 'pollProgress', 'identifySelected',
+      'clearAllData', 'refreshAvailabilityState', 'syncSelectionActionState',
+      '_buildCompletionToast', '_escapeHtml', '_decodeArtistValue',
+      'localizeDiagnosticsMessage', 'dismissFirstUseCard', 'refreshFirstUseCard',
+      'showFirstUseGuide', '_syncControls', 'tText', 'tKey',
+    ]
+    const requiredProps = [
+      'isIdentifying', 'progress', 'selectedArtist', 'selectedArtistPageSize',
+      'selectedArtistOffset', 'selectedArtistHasMore', 'selectedArtistImages',
+      'artistRequestToken', 'viewMode', 'stats', 'diagnostics', 'eventsBound',
+      'progressTracker', 'thresholdDefaults',
+    ]
+    return {
+      isObject: A !== null && typeof A === 'object',
+      sealed: Object.isSealed(A),
+      identity: (window as any).ArtistIdent === A,
+      missingFns: requiredFns.filter((k) => typeof A[k] !== 'function'),
+      missingProps: requiredProps.filter((k) => !(k in A)),
+      isIdentifying: A.isIdentifying,
+      viewMode: A.viewMode,
+      pageSize: A.selectedArtistPageSize,
+      offset: A.selectedArtistOffset,
+      hasMore: A.selectedArtistHasMore,
+      token: A.artistRequestToken,
+      selectedArtist: A.selectedArtist,
+      diagnostics: A.diagnostics,
+      thresholdDefaults: A.thresholdDefaults,
+    }
+  })
+
+  expect(probe.isObject).toBe(true)
+  // Deliberately NOT sealed: the split reassembles it with Object.assign.
+  expect(probe.sealed).toBe(false)
+  expect(probe.identity).toBe(true)
+  expect(probe.missingFns).toEqual([])
+  expect(probe.missingProps).toEqual([])
+  // Documented default state (the object-literal initializers).
+  expect(probe.isIdentifying).toBe(false)
+  expect(probe.viewMode).toBe('grid')
+  expect(probe.pageSize).toBe(120)
+  expect(probe.offset).toBe(0)
+  expect(probe.hasMore).toBe(false)
+  expect(probe.token).toBe(0)
+  expect(probe.selectedArtist).toBeNull()
+  expect(probe.diagnostics).toBeNull()
+  expect(probe.thresholdDefaults).toEqual({ value: 0.03, suggestedLow: 0.02, suggestedHigh: 0.08 })
+})
+
+// ---------------------------------------------------------------------------
+// 2. getThresholdValue / syncThresholdDisplay — slider read, default fallback, 2dp label.
+// ---------------------------------------------------------------------------
+
+test('getThresholdValue reads the slider (default 0.03 when absent) and syncThresholdDisplay renders it to two decimals', async ({ page }) => {
+  const probe = await page.evaluate(() => {
+    const A = (window as any).ArtistIdent
+    const el = document.getElementById('artist-threshold') as HTMLInputElement
+    const label = document.getElementById('artist-threshold-value') as HTMLElement
+    const original = el.value
+
+    el.value = '0.07'
+    const setValue = A.getThresholdValue()
+    A.syncThresholdDisplay()
+    const setLabel = label.textContent
+
+    // Hide the slider from getElementById -> the `?.value || default` fallback fires.
+    el.id = 'artist-threshold-temp'
+    const fallbackValue = A.getThresholdValue()
+    el.id = 'artist-threshold'
+    el.value = original
+    return { setValue, setLabel, fallbackValue }
+  })
+
+  expect(probe.setValue).toBeCloseTo(0.07, 5)
+  expect(probe.setLabel).toBe('0.07')
+  // thresholdDefaults.value is the fallback when the slider element is missing.
+  expect(probe.fallbackValue).toBeCloseTo(0.03, 5)
+})
+
+// ---------------------------------------------------------------------------
+// 3. _getIdentifyModelConfig / _getIdentifyPayload — the identify request contract.
+// ---------------------------------------------------------------------------
+
+test('_getIdentifyModelConfig maps source/path/gpu, requires a local path, and _getIdentifyPayload adds threshold + top_k:5', async ({ page }) => {
+  const probe = await page.evaluate(() => {
+    const A = (window as any).ArtistIdent
+    const source = document.getElementById('artist-model-source') as HTMLSelectElement
+    const path = document.getElementById('artist-model-path') as HTMLInputElement
+    const gpu = document.getElementById('artist-use-gpu') as HTMLInputElement
+    const threshold = document.getElementById('artist-threshold') as HTMLInputElement
+
+    // huggingface + gpu checked -> model_path null, use_gpu true.
+    source.value = 'huggingface'
+    path.value = ''
+    gpu.checked = true
+    const hf = A._getIdentifyModelConfig()
+
+    // local WITHOUT a path throws (the required-path guard).
+    source.value = 'local'
+    path.value = ''
+    let threwForLocal = false
+    try { A._getIdentifyModelConfig() } catch (e) { threwForLocal = true }
+
+    // local WITH a (padded) path + gpu unchecked -> trimmed path, use_gpu false.
+    source.value = 'local'
+    path.value = '  C:/models/best.pth  '
+    gpu.checked = false
+    const local = A._getIdentifyModelConfig()
+
+    // Payload wraps the config with the slider threshold, top_k:5 and image_ids.
+    source.value = 'huggingface'
+    path.value = ''
+    gpu.checked = true
+    threshold.value = '0.05'
+    const payload = A._getIdentifyPayload([11, 22, 33])
+    return { hf, threwForLocal, local, payload }
+  })
+
+  expect(probe.hf).toEqual({ model_source: 'huggingface', model_path: null, use_gpu: true })
+  expect(probe.threwForLocal).toBe(true)
+  expect(probe.local).toEqual({ model_source: 'local', model_path: 'C:/models/best.pth', use_gpu: false })
+  expect(probe.payload.image_ids).toEqual([11, 22, 33])
+  expect(probe.payload.top_k).toBe(5)
+  expect(probe.payload.threshold).toBeCloseTo(0.05, 5)
+  expect(probe.payload.model_source).toBe('huggingface')
+  expect(probe.payload.model_path).toBeNull()
+  expect(probe.payload.use_gpu).toBe(true)
+})
+
+// ---------------------------------------------------------------------------
+// 4. capturePreferences / applySavedPreferences — DOM <-> App.Prefs round-trip.
+// ---------------------------------------------------------------------------
+
+test('capturePreferences reads the control DOM and applySavedPreferences writes saved values back (guarded threshold + local group reveal)', async ({ page }) => {
+  const probe = await page.evaluate(() => {
+    const A = (window as any).ArtistIdent
+    const source = document.getElementById('artist-model-source') as HTMLSelectElement
+    const path = document.getElementById('artist-model-path') as HTMLInputElement
+    const gpu = document.getElementById('artist-use-gpu') as HTMLInputElement
+    const threshold = document.getElementById('artist-threshold') as HTMLInputElement
+    const localGroup = document.getElementById('artist-local-model-group') as HTMLElement
+
+    source.value = 'local'
+    path.value = '  /trim/me.pth  '
+    gpu.checked = false
+    threshold.value = '0.04'
+    const captured = A.capturePreferences()
+
+    // Stub App.Prefs.getArtistDefaults so applySavedPreferences has something to apply.
+    const w = window as any
+    w.App = w.App || {}
+    w.App.Prefs = { ...(w.App.Prefs || {}), getArtistDefaults: () => ({
+      modelSource: 'local', modelPath: '/saved/model.pth', threshold: 0.09, useGpu: true,
+    }) }
+    const applied = A.applySavedPreferences()
+
+    return {
+      captured,
+      applied,
+      appliedSource: source.value,
+      appliedPath: path.value,
+      appliedThreshold: threshold.value,
+      appliedGpu: gpu.checked,
+      localGroupDisplay: localGroup.style.display,
+    }
+  })
+
+  // capture: source/path trimmed, threshold from the slider, gpu from the checkbox.
+  expect(probe.captured.modelSource).toBe('local')
+  expect(probe.captured.modelPath).toBe('/trim/me.pth')
+  expect(probe.captured.threshold).toBeCloseTo(0.04, 5)
+  expect(probe.captured.useGpu).toBe(false)
+  // apply: writes the saved values back and returns true; _syncControls reveals local group.
+  expect(probe.applied).toBe(true)
+  expect(probe.appliedSource).toBe('local')
+  expect(probe.appliedPath).toBe('/saved/model.pth')
+  expect(probe.appliedThreshold).toBe('0.09') // 0.09 is within the [0, 0.25] guard
+  expect(probe.appliedGpu).toBe(true)
+  expect(probe.localGroupDisplay).toBe('block')
+})
+
+// ---------------------------------------------------------------------------
+// 5. getInitials / formatArtistName / formatConfidencePercent — pure display transforms.
+// ---------------------------------------------------------------------------
+
+test('name + confidence formatters handle multi-word, single-word, empty and "undefined" sentinels', async ({ page }) => {
+  const probe = await page.evaluate(() => {
+    const A = (window as any).ArtistIdent
+    return {
+      initialsMulti: A.getInitials('greg_rutkowski'),
+      initialsSingle: A.getInitials('picasso'),
+      initialsOneChar: A.getInitials('a'),
+      initialsEmpty: A.getInitials(''),
+      initialsUndef: A.getInitials('undefined'),
+      nameMulti: A.formatArtistName('greg_rutkowski'),
+      nameEmpty: A.formatArtistName(''),
+      nameUndef: A.formatArtistName('undefined'),
+      pct: A.formatConfidencePercent(0.856),
+      pctZero: A.formatConfidencePercent(0),
+      pctNull: A.formatConfidencePercent(null),
+    }
+  })
+
+  expect(probe.initialsMulti).toBe('GR')
+  expect(probe.initialsSingle).toBe('PI')
+  expect(probe.initialsOneChar).toBe('A')
+  expect(probe.initialsEmpty).toBe('?')
+  expect(probe.initialsUndef).toBe('?')
+  expect(probe.nameMulti).toBe('Greg Rutkowski')
+  expect(probe.nameEmpty).toBe('Undefined')
+  expect(probe.nameUndef).toBe('Undefined')
+  expect(probe.pct).toBe('85.6%')
+  expect(probe.pctZero).toBe('0.0%')
+  expect(probe.pctNull).toBe('0.0%')
+})
+
+// ---------------------------------------------------------------------------
+// 6. _buildCompletionToast — the batch-result -> toast decision table + crash ordering.
+// ---------------------------------------------------------------------------
+
+test('_buildCompletionToast picks error/warning/success by branch and the whole-batch crash (step:error) wins over the count paths', async ({ page }) => {
+  const probe = await page.evaluate(() => {
+    const A = (window as any).ArtistIdent
+    return {
+      // step:'error' returns the raw backend message even though results exist and
+      // errors===0 (the documented crash-before-count ordering).
+      crash: A._buildCompletionToast({ step: 'error', message: 'kaboom', results: [{ artist: 'greg' }], errors: 0 }, 5),
+      // per-image errors -> warning.
+      withErrors: A._buildCompletionToast({ results: [{ artist: 'greg' }], errors: 2, total: 3 }, 3),
+      // every result "undefined" -> warning (threshold too high).
+      allUndefined: A._buildCompletionToast({ results: [{ artist: 'undefined' }, { artist: 'Undefined' }], errors: 0 }, 0),
+      // a real target count -> success.
+      counted: A._buildCompletionToast({ results: [{ artist: 'greg' }], errors: 0, total: 1 }, 3),
+      // nothing to report -> generic success.
+      generic: A._buildCompletionToast({ results: [], errors: 0, total: 0 }, 0),
+    }
+  })
+
+  expect(probe.crash.level).toBe('error')
+  expect(probe.crash.message).toBe('kaboom')
+  expect(probe.withErrors.level).toBe('warning')
+  expect(probe.allUndefined.level).toBe('warning')
+  expect(probe.counted.level).toBe('success')
+  expect(probe.generic.level).toBe('success')
+})
+
+// ---------------------------------------------------------------------------
+// 7. renderArtistGrid — count-sorted cards, grid/list mode, two distinct empty states.
+// ---------------------------------------------------------------------------
+
+test('renderArtistGrid sorts by count desc, toggles list-mode, and shows distinct empty copy for "none yet" vs "all below threshold"', async ({ page }) => {
+  const gridProbe = await page.evaluate(() => {
+    const A = (window as any).ArtistIdent
+    A.stats = { identified_images: 0, undefined_count: 0, artist_stats: {} }
+    A.renderArtistGrid({ alice: 5, bob: 10, carol: 3 }, 'grid')
+    const grid = document.getElementById('artist-results-grid') as HTMLElement
+    const cards = Array.from(grid.querySelectorAll('.artist-card'))
+    return {
+      count: cards.length,
+      firstArtistAttr: cards[0]?.getAttribute('data-artist'),
+      firstName: cards[0]?.querySelector('.artist-name')?.textContent,
+      firstCount: cards[0]?.querySelector('.artist-count')?.textContent,
+      listModeInGrid: grid.classList.contains('list-mode'),
+    }
+  })
+
+  // bob(10) sorts ahead of alice(5) and carol(3).
+  expect(gridProbe.count).toBe(3)
+  expect(gridProbe.firstArtistAttr).toBe('bob')
+  expect(gridProbe.firstName).toBe('Bob')
+  expect(gridProbe.firstCount).toBe('10 images')
+  expect(gridProbe.listModeInGrid).toBe(false)
+
+  const listProbe = await page.evaluate(() => {
+    const A = (window as any).ArtistIdent
+    A.renderArtistGrid({ alice: 5 }, 'list')
+    const grid = document.getElementById('artist-results-grid') as HTMLElement
+    return {
+      listModeInList: grid.classList.contains('list-mode'),
+      listCard: grid.querySelectorAll('.artist-card-list').length,
+    }
+  })
+  expect(listProbe.listModeInList).toBe(true)
+  expect(listProbe.listCard).toBe(1)
+
+  const emptyProbe = await page.evaluate(() => {
+    const A = (window as any).ArtistIdent
+    const grid = document.getElementById('artist-results-grid') as HTMLElement
+    // Nothing identified yet.
+    A.stats = { identified_images: 0, undefined_count: 0 }
+    A.renderArtistGrid({}, 'grid')
+    const noneTitle = grid.querySelector('.empty-state p')?.textContent?.trim() ?? ''
+    // Everything identified but all below threshold.
+    A.stats = { identified_images: 5, undefined_count: 5 }
+    A.renderArtistGrid({}, 'grid')
+    const allUndefTitle = grid.querySelector('.empty-state p')?.textContent?.trim() ?? ''
+    return { noneTitle, allUndefTitle, hasHint: !!grid.querySelector('.empty-hint') }
+  })
+  // Both are non-empty empty-states, but the copy differs by stats context.
+  expect(emptyProbe.noneTitle).not.toBe('')
+  expect(emptyProbe.allUndefTitle).not.toBe('')
+  expect(emptyProbe.noneTitle).not.toBe(emptyProbe.allUndefTitle)
+  expect(emptyProbe.hasHint).toBe(true)
+})
+
+// ---------------------------------------------------------------------------
+// 8. selectArtist — paged images URL, detail render, preview cards + 4 actions, load-more.
+// ---------------------------------------------------------------------------
+
+test('selectArtist requests the paged images URL, renders the detail header + preview cards with 4 per-image actions, and toggles Load More', async ({ page }) => {
+  const imagesUrls: string[] = []
+  let imagesResponse: unknown = {}
+  await page.route('**/api/artists/images/**', (route) => {
+    imagesUrls.push(route.request().url())
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(imagesResponse) })
+  })
+
+  imagesResponse = {
+    images: [
+      { image_id: 501, filename: 'a.png', confidence_percent: 88 },
+      { image_id: 502, filename: 'b.png', confidence_percent: 75 },
+    ],
+    has_more: true,
+  }
+  await page.evaluate(() => {
+    const A = (window as any).ArtistIdent
+    A.stats = {
+      artist_counts: { greg_rutkowski: 4 },
+      artist_stats: { greg_rutkowski: { count: 4, avg_confidence: 0.7, max_confidence: 0.9 } },
+    }
+    return A.selectArtist('greg_rutkowski')
+  })
+
+  // URL carries the default page size (120) + offset 0, artist path-encoded.
+  expect(imagesUrls[0]).toMatch(/\/api\/artists\/images\/greg_rutkowski\?limit=120&offset=0(?:&|$)/)
+
+  await expect(page.locator('#artist-detail-content h4')).toHaveText('Greg Rutkowski')
+
+  const preview = page.locator('#artist-images-preview')
+  await expect(preview.locator('.artist-image-card')).toHaveCount(2)
+  await expect(preview.locator('.artist-image-card[data-image-id="501"] .artist-image-confidence')).toHaveText('88%')
+  const actions = await preview
+    .locator('.artist-image-card[data-image-id="501"] .artist-image-action')
+    .evaluateAll((els) => els.map((el) => el.getAttribute('data-action')))
+  expect(actions).toEqual(['preview', 'reader', 'edit', 'build'])
+
+  // has_more:true -> Load More is shown; the Gallery filter CTA is present.
+  await expect(page.locator('#btn-artist-load-more')).toBeVisible()
+  await expect(page.locator('#btn-filter-by-artist')).toBeVisible()
+
+  // Re-select with has_more:false -> Load More hides.
+  imagesResponse = { images: [{ image_id: 501, filename: 'a.png', confidence_percent: 88 }], has_more: false }
+  await page.evaluate(() => (window as any).ArtistIdent.selectArtist('greg_rutkowski'))
+  await expect(page.locator('#btn-artist-load-more')).toBeHidden()
+})
+
+// ---------------------------------------------------------------------------
+// 9. selectArtist token guard — a newer selection supersedes an in-flight older one.
+// ---------------------------------------------------------------------------
+
+test('a newer artist selection wins the race and the slower older response is dropped (artistRequestToken guard)', async ({ page }) => {
+  await page.route('**/api/artists/images/**', async (route) => {
+    const url = route.request().url()
+    if (url.includes('/images/slow_one')) {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ images: [{ image_id: 111, filename: 'old.png', confidence_percent: 10 }], has_more: false }),
+      })
+    } else {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ images: [{ image_id: 222, filename: 'new.png', confidence_percent: 20 }], has_more: false }),
+      })
+    }
+  })
+
+  await page.evaluate(() => {
+    const A = (window as any).ArtistIdent
+    A.stats = { artist_counts: {}, artist_stats: {} }
+    A.selectArtist('slow_one') // token N (slow)
+    A.selectArtist('fast_two') // token N+1 (fast) -> becomes the live token
+  })
+
+  // The fast, newer response renders.
+  await expect(page.locator('#artist-detail-content h4')).toHaveText('Fast Two')
+  await expect(page.locator('#artist-images-preview .artist-image-card[data-image-id="222"]')).toHaveCount(1)
+  // After the slow one lands it must NOT overwrite the newer detail/preview.
+  await page.waitForTimeout(600)
+  await expect(page.locator('#artist-detail-content h4')).toHaveText('Fast Two')
+  await expect(page.locator('#artist-images-preview .artist-image-card[data-image-id="111"]')).toHaveCount(0)
+})
+
+// ---------------------------------------------------------------------------
+// 10. loadDiagnostics — ready banner vs needs-setup (with the model-guidance button).
+// ---------------------------------------------------------------------------
+
+test('loadDiagnostics renders a plain ready banner when available and a warning banner + open-model-guidance button when not', async ({ page }) => {
+  let diagResponse: unknown = {}
+  await page.route('**/api/artists/diagnostics', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(diagResponse) }))
+
+  diagResponse = { available: true }
+  const ready = await page.evaluate(async () => {
+    const A = (window as any).ArtistIdent
+    await A.loadDiagnostics()
+    const banner = document.getElementById('artist-model-health') as HTMLElement
+    return {
+      warning: banner.classList.contains('model-health-banner-warning'),
+      visible: banner.classList.contains('is-visible'),
+      setupBtn: !!banner.querySelector('[data-action="open-model-guidance"]'),
+      diagStored: A.diagnostics?.available,
+    }
+  })
+  expect(ready.visible).toBe(true)
+  expect(ready.warning).toBe(false)
+  expect(ready.setupBtn).toBe(false)
+  expect(ready.diagStored).toBe(true)
+
+  diagResponse = {
+    available: false,
+    message: 'Artist identification still needs the LSNet runtime, Kaloscope files, or Python dependencies.',
+    missing_dependencies: ['timm', 'einops'],
+  }
+  const needsSetup = await page.evaluate(async () => {
+    const A = (window as any).ArtistIdent
+    await A.loadDiagnostics()
+    const banner = document.getElementById('artist-model-health') as HTMLElement
+    return {
+      warning: banner.classList.contains('model-health-banner-warning'),
+      setupBtn: !!banner.querySelector('[data-action="open-model-guidance"]'),
+      hasDetails: !!banner.querySelector('.model-health-details'),
+      identifyAllDisabled: (document.getElementById('btn-identify-all') as HTMLButtonElement).disabled,
+    }
+  })
+  expect(needsSetup.warning).toBe(true)
+  expect(needsSetup.setupBtn).toBe(true)
+  expect(needsSetup.hasDetails).toBe(true)
+  // refreshAvailabilityState (called at the end of loadDiagnostics) gates the run button.
+  expect(needsSetup.identifyAllDisabled).toBe(true)
+})
+
+// ---------------------------------------------------------------------------
+// 11. refreshAvailabilityState / syncSelectionActionState — button gating machine.
+// ---------------------------------------------------------------------------
+
+test('the run buttons are gated on availability, in-flight state, and (for Identify Selected) the gallery selection', async ({ page }) => {
+  const probe = await page.evaluate(() => {
+    const A = (window as any).ArtistIdent
+    const w = window as any
+    w.App = w.App || {}
+    w.App.AppState = w.App.AppState || {}
+    const identifyAll = () => (document.getElementById('btn-identify-all') as HTMLButtonElement).disabled
+    const identifySel = () => (document.getElementById('btn-identify-selected') as HTMLButtonElement).disabled
+
+    // Unavailable runtime -> Identify All disabled regardless of selection.
+    A.isIdentifying = false
+    A.diagnostics = { available: false }
+    w.App.AppState.selectedIds = new Set([1, 2])
+    A.refreshAvailabilityState()
+    const unavailableAll = identifyAll()
+
+    // Available + a selection -> both enabled.
+    A.diagnostics = { available: true }
+    A.refreshAvailabilityState()
+    const availableAll = identifyAll()
+    const availableSelWithPick = identifySel()
+
+    // Available but NO selection -> Identify Selected disabled, Identify All still enabled.
+    w.App.AppState.selectedIds = new Set()
+    A.syncSelectionActionState()
+    const availableSelNoPick = identifySel()
+    const availableAllNoPick = identifyAll()
+
+    // A run in progress disables Identify All even when available.
+    A.isIdentifying = true
+    A.refreshAvailabilityState()
+    const runningAll = identifyAll()
+    A.isIdentifying = false
+    return { unavailableAll, availableAll, availableSelWithPick, availableSelNoPick, availableAllNoPick, runningAll }
+  })
+
+  expect(probe.unavailableAll).toBe(true)
+  expect(probe.availableAll).toBe(false)
+  expect(probe.availableSelWithPick).toBe(false)
+  expect(probe.availableSelNoPick).toBe(true)
+  expect(probe.availableAllNoPick).toBe(false)
+  expect(probe.runningAll).toBe(true)
+})
+
+// ---------------------------------------------------------------------------
+// 12. identifyAll — image collection, identify-batch POST shape, poll, stats refetch,
+//     plus the empty-library and unavailable-runtime early returns.
+// ---------------------------------------------------------------------------
+
+test('identifyAll collects image ids, posts the identify-batch payload, polls to completion + refetches stats, and short-circuits on empty library / unavailable runtime', async ({ page }) => {
+  let imagesResponse: Record<string, unknown> = { images: [{ id: 1, filename: 'x1.png' }, { id: 2, filename: 'x2.png' }], has_more: false }
+  let imagesCalls = 0
+  let batchBody: Record<string, unknown> | null = null
+  let batchCalls = 0
+
+  await page.route(/\/api\/images\?/, (route) => {
+    imagesCalls += 1
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(imagesResponse) })
+  })
+  await page.route(/\/api\/artists\/identify-batch/, (route) => {
+    batchCalls += 1
+    batchBody = JSON.parse(route.request().postData() || '{}')
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ started: true }) })
+  })
+  await page.route(/\/api\/artists\/batch-progress/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ running: false, total: 2, processed: 2, errors: 0, results: [{ artist: 'greg' }, { artist: 'greg' }] }),
+    }))
+  await page.route(/\/api\/artists\/stats/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ total_images: 2, identified_images: 2, undefined_count: 0, artist_counts: { greg: 2 }, artist_stats: {} }),
+    }))
+
+  // Spy on App.showToast so the completion level is deterministic.
+  await page.evaluate(() => {
+    const w = window as any
+    w.__artistToasts = []
+    const orig = w.App.showToast?.bind(w.App)
+    w.App.showToast = (message: string, level: string) => {
+      w.__artistToasts.push({ message, level })
+      return orig ? orig(message, level) : undefined
+    }
+  })
+
+  // --- Happy path: available runtime, 2 images collected + identified. ---
+  const happy = await page.evaluate(async () => {
+    const A = (window as any).ArtistIdent
+    A.diagnostics = { available: true }
+    A.isIdentifying = false
+    ;(document.getElementById('artist-threshold') as HTMLInputElement).value = '0.05'
+    ;(document.getElementById('artist-model-source') as HTMLSelectElement).value = 'huggingface'
+    ;(document.getElementById('artist-use-gpu') as HTMLInputElement).checked = true
+    ;(window as any).__artistToasts = []
+    await A.identifyAll()
+    return (window as any).__artistToasts.slice(-1)[0]
+  })
+
+  expect(batchCalls).toBe(1)
+  expect(batchBody).not.toBeNull()
+  expect((batchBody as any).image_ids).toEqual([1, 2])
+  expect((batchBody as any).threshold).toBeCloseTo(0.05, 5)
+  expect((batchBody as any).top_k).toBe(5)
+  expect((batchBody as any).model_source).toBe('huggingface')
+  expect((batchBody as any).model_path).toBeNull()
+  expect((batchBody as any).use_gpu).toBe(true)
+  expect(happy.level).toBe('success')
+
+  // --- Empty library: warns, never posts identify-batch again. ---
+  imagesResponse = { images: [], has_more: false }
+  const emptyToast = await page.evaluate(async () => {
+    const A = (window as any).ArtistIdent
+    A.isIdentifying = false
+    ;(window as any).__artistToasts = []
+    await A.identifyAll()
+    return (window as any).__artistToasts.slice(-1)[0]
+  })
+  expect(batchCalls).toBe(1) // no new POST
+  expect(emptyToast.level).toBe('warning')
+
+  // --- Unavailable runtime: short-circuits before touching /api/images. ---
+  const imagesBefore = imagesCalls
+  const unavailableToast = await page.evaluate(async () => {
+    const A = (window as any).ArtistIdent
+    A.isIdentifying = false
+    A.diagnostics = { available: false }
+    ;(window as any).__artistToasts = []
+    await A.identifyAll()
+    return (window as any).__artistToasts.slice(-1)[0]
+  })
+  expect(imagesCalls).toBe(imagesBefore) // never collected images
+  expect(batchCalls).toBe(1)             // never posted
+  expect(unavailableToast.level).toBe('warning')
+})
+
+// ---------------------------------------------------------------------------
+// 13. filterGalleryByArtist / clearArtistFilter — the Artist -> Gallery handoff.
+// ---------------------------------------------------------------------------
+
+test('filterGalleryByArtist and clearArtistFilter route through App.updateFilters + switchView(gallery) + loadImages with the right artist value', async ({ page }) => {
+  const probe = await page.evaluate(() => {
+    const A = (window as any).ArtistIdent
+    const w = window as any
+    w.App = w.App || {}
+    w.App.AppState = w.App.AppState || {}
+    w.App.AppState.filters = w.App.AppState.filters || {}
+
+    const artistValues: (string | null | undefined)[] = []
+    const switched: string[] = []
+    let loadImagesCalls = 0
+    w.App.updateFilters = (fn: (f: Record<string, unknown>) => void) => {
+      const probeFilters: Record<string, unknown> = {}
+      fn(probeFilters)
+      artistValues.push(probeFilters.artist as string | null)
+    }
+    w.App.updateFilterSummary = () => {}
+    w.App.switchView = (name: string) => { switched.push(name) }
+    w.App.loadImages = () => { loadImagesCalls += 1 }
+    w.App.showToast = () => {}
+
+    A.filterGalleryByArtist('greg_rutkowski')
+    A.clearArtistFilter()
+    return { artistValues, switched, loadImagesCalls }
+  })
+
+  expect(probe.artistValues[0]).toBe('greg_rutkowski')
+  expect(probe.artistValues[1]).toBeNull()
+  expect(probe.switched).toEqual(['gallery', 'gallery'])
+  expect(probe.loadImagesCalls).toBe(2)
+})
+
+// ---------------------------------------------------------------------------
+// 14. bindEvents (via init) — idempotent guard, delegated button routing, view toggle.
+// ---------------------------------------------------------------------------
+
+test('after init the delegated click handlers route the action buttons exactly once and the Grid/List toggle re-renders', async ({ page }) => {
+  await initArtistView(page)
+
+  const probe = await page.evaluate(async () => {
+    const A = (window as any).ArtistIdent
+    // A second bindEvents() must be a no-op (eventsBound guard) — no double handlers.
+    A.bindEvents()
+
+    let identifyAllCalls = 0
+    let loadStatsCalls = 0
+    A.identifyAll = () => { identifyAllCalls += 1 }
+    A.loadStats = () => { loadStatsCalls += 1 }
+    // Ensure the run button is enabled so the click event actually dispatches.
+    A.diagnostics = { available: true }
+    A.isIdentifying = false
+    A.refreshAvailabilityState()
+    A.stats = { artist_counts: { alice: 1 } }
+
+    document.getElementById('btn-identify-all')?.click()
+    document.getElementById('btn-refresh-artist-stats')?.click()
+    ;(document.querySelector('.view-toggle .toggle-btn[data-view="list"]') as HTMLElement)?.click()
+
+    const grid = document.getElementById('artist-results-grid') as HTMLElement
+    return {
+      eventsBound: A.eventsBound,
+      identifyAllCalls,
+      loadStatsCalls,
+      listMode: grid.classList.contains('list-mode'),
+    }
+  })
+
+  expect(probe.eventsBound).toBe(true)
+  expect(probe.identifyAllCalls).toBe(1)
+  expect(probe.loadStatsCalls).toBe(1)
+  expect(probe.listMode).toBe(true)
+})
