@@ -147,6 +147,29 @@ def _autosep_family_source(repo_root: Path) -> str:
     return "\n".join([autosep_source] + family_parts)
 
 
+def _smart_tag_family_source(repo_root: Path) -> str:
+    # The smart-tag.js god-file (single strict IIFE, one window.SmartTag
+    # publish) is decomposed VERBATIM into the frontend/js/smart-tag/ module
+    # family (static script tags in index.html, one shared classic-script
+    # global lexical environment; state.js first, boot.js last — same
+    # adaptation style as the censor / autosep / manual-sort splits) while a
+    # slim, still-servable frontend/js/smart-tag.js stays behind (index.html's
+    # script tag and the release packages reference it). Contract pins assert
+    # against the family concatenation so each literal is found in whichever
+    # file hosts it (form.js: vlm_grounding/toriigate_grounding and the
+    # image_paths/selection_token/dataset_scan_token payload lines; run.js:
+    # /api/smart-tag/results; taggers.js: model?.default_threshold).
+    smart_tag_js = repo_root / "frontend" / "js" / "smart-tag.js"
+    assert smart_tag_js.is_file(), "frontend/js/smart-tag.js must remain a real file"
+    smart_tag_source = smart_tag_js.read_text(encoding="utf-8")
+    assert smart_tag_source, "frontend/js/smart-tag.js must not be empty"
+    family_dir = repo_root / "frontend" / "js" / "smart-tag"
+    family_parts = [
+        path.read_text(encoding="utf-8") for path in sorted(family_dir.glob("*.js"))
+    ]
+    return "\n".join([smart_tag_source] + family_parts)
+
+
 def _v321_family_source(repo_root: Path) -> str:
     # The v321-ui.js god-object (`const V321Integration = {...}`) is decomposed
     # VERBATIM into the frontend/js/v321/ module family (Object.assign mixins
@@ -887,9 +910,7 @@ def test_dataset_maker_step2_owns_caption_formatting_and_translation_settings():
 def test_smart_tag_has_visible_booru_to_captioner_grounding_control():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    smart_tag_js = (repo_root / "frontend" / "js" / "smart-tag.js").read_text(
-        encoding="utf-8"
-    )
+    smart_tag_js = _smart_tag_family_source(repo_root)
 
     assert 'id="smart-tag-vlm-grounding"' in html
     assert 'data-i18n="smartTag.vlmGrounding"' in html
@@ -1044,9 +1065,7 @@ def test_dataset_vocab_uses_explicit_actions_not_hidden_click_cycle():
 
 def test_smart_tag_supports_path_source_dataset_items():
     repo_root = Path(__file__).resolve().parents[2]
-    frontend = (repo_root / "frontend" / "js" / "smart-tag.js").read_text(
-        encoding="utf-8"
-    )
+    frontend = _smart_tag_family_source(repo_root)
     router = (repo_root / "backend" / "routers" / "smart_tag.py").read_text(
         encoding="utf-8"
     )
@@ -1072,9 +1091,7 @@ def test_smart_tag_supports_path_source_dataset_items():
 def test_smart_tag_uses_model_specific_tagger_defaults():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    frontend = (repo_root / "frontend" / "js" / "smart-tag.js").read_text(
-        encoding="utf-8"
-    )
+    frontend = _smart_tag_family_source(repo_root)
     # smart_tag_service.py was decomposed into the services/smart_tag/ package
     # (facade + submodules); the service-side contract strings live in the union.
     service = "\n".join(

@@ -7258,6 +7258,27 @@
     <script src="/static/js/prompt-lab/boot.js"></script>
     <script src="/static/js/prompt-lab.js"></script>
     <script src="/static/js/dataset/core.js"></script>
+    <!-- smart-tag family: verbatim shared-scope decomposition of the former
+         1,246-line smart-tag.js IIFE (the Dataset Maker "Smart Tag (WD14 +
+         VLM)" modal). Classic scripts in one shared global lexical
+         environment (autosep/censor precedent, per-file 'use strict' per
+         the image-reader precedent): state.js declares the shared closure
+         state and MUST load first; boot.js (bindHandlers + DOM-ready gate +
+         the single window.SmartTag publish) is the only file with top-level
+         execution and MUST load last. The slim smart-tag.js shim stays last
+         so /static/js/smart-tag.js remains servable. Slot contract: AFTER
+         dataset/core.js (the family reads window.DatasetMaker), exactly
+         where the single smart-tag.js tag sat. -->
+    <script src="/static/js/smart-tag/state.js"></script>
+    <script src="/static/js/smart-tag/sources.js"></script>
+    <script src="/static/js/smart-tag/progress-ui.js"></script>
+    <script src="/static/js/smart-tag/ollama-banner.js"></script>
+    <script src="/static/js/smart-tag/modal.js"></script>
+    <script src="/static/js/smart-tag/taggers.js"></script>
+    <script src="/static/js/smart-tag/vote-ui.js"></script>
+    <script src="/static/js/smart-tag/form.js"></script>
+    <script src="/static/js/smart-tag/run.js"></script>
+    <script src="/static/js/smart-tag/boot.js"></script>
     <script src="/static/js/smart-tag.js"></script>
     <script src="/static/js/tag-power.js"></script>
     <script src="/static/js/tag-stats-modal.js"></script>
