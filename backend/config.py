@@ -166,118 +166,27 @@ THUMBNAIL_DIR: Path = Path(
 UPDATE_CHANNEL_CONFIG_PATH: Path = CONFIG_DIR / "update-channel.json"
 DOWNLOAD_MIRROR_CONFIG_PATH: Path = CONFIG_DIR / "download-mirror.json"
 APP_SETTINGS_CONFIG_PATH: Path = CONFIG_DIR / "app-settings.json"
-DEFAULT_THUMBNAIL_CACHE_MAX_MB: int = 500
-MAX_THUMBNAIL_CACHE_MAX_MB: int = 102400
-
-
-VALID_MIRRORS = ("auto", "hf-mirror", "modelscope")
-
-
-def get_download_mirror() -> str:
-    """Return the persisted download mirror, defaulting to "auto".
-
-    Reads CONFIG_DIR/download-mirror.json. Logs (rather than swallows) any
-    read error so config corruption is surfaced and not silently masked.
-    """
-    if not DOWNLOAD_MIRROR_CONFIG_PATH.exists():
-        return "auto"
-    import json as _json
-    try:
-        raw = DOWNLOAD_MIRROR_CONFIG_PATH.read_text(encoding="utf-8")
-    except OSError as exc:
-        logger.warning(
-            "Could not read download mirror config %s: %s; defaulting to 'auto'",
-            DOWNLOAD_MIRROR_CONFIG_PATH,
-            exc,
-        )
-        return "auto"
-    try:
-        data = _json.loads(raw)
-    except _json.JSONDecodeError as exc:
-        logger.warning(
-            "Download mirror config %s is corrupt (%s); defaulting to 'auto'",
-            DOWNLOAD_MIRROR_CONFIG_PATH,
-            exc,
-        )
-        return "auto"
-    mirror = str(data.get("mirror", "auto")).strip().lower()
-    if mirror not in VALID_MIRRORS:
-        logger.warning(
-            "Download mirror config has unknown value %r; defaulting to 'auto'",
-            mirror,
-        )
-        return "auto"
-    return mirror
-
-
-def save_download_mirror(mirror: str) -> None:
-    mirror = str(mirror).strip().lower()
-    if mirror not in VALID_MIRRORS:
-        mirror = "auto"
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    DOWNLOAD_MIRROR_CONFIG_PATH.write_text(
-        json.dumps({"mirror": mirror}, indent=2),
-        encoding="utf-8",
-    )
-
-
-def _read_app_settings() -> dict:
-    if not APP_SETTINGS_CONFIG_PATH.exists():
-        return {}
-    try:
-        raw = APP_SETTINGS_CONFIG_PATH.read_text(encoding="utf-8")
-    except OSError as exc:
-        logger.warning("Could not read app settings %s: %s", APP_SETTINGS_CONFIG_PATH, exc)
-        return {}
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        logger.warning("App settings file %s is corrupt (%s); using defaults", APP_SETTINGS_CONFIG_PATH, exc)
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def _write_app_settings(settings: dict) -> None:
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    APP_SETTINGS_CONFIG_PATH.write_text(
-        json.dumps(settings, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-
-
-def _normalize_thumbnail_cache_max_mb(value: object, *, default: int = DEFAULT_THUMBNAIL_CACHE_MAX_MB) -> int:
-    try:
-        max_mb = int(value)
-    except (TypeError, ValueError):
-        return default
-    if max_mb < 0:
-        return default
-    return min(max_mb, MAX_THUMBNAIL_CACHE_MAX_MB)
-
-
-def get_thumbnail_cache_max_mb() -> int:
-    raw_env = os.environ.get("SD_IMAGE_SORTER_THUMBNAIL_CACHE_MAX_MB")
-    if raw_env is not None:
-        try:
-            env_value = int(raw_env)
-        except ValueError as exc:
-            raise ValueError(
-                f"Invalid SD_IMAGE_SORTER_THUMBNAIL_CACHE_MAX_MB: expected integer, got {raw_env!r}"
-            ) from exc
-        if env_value < 0:
-            raise ValueError("Invalid SD_IMAGE_SORTER_THUMBNAIL_CACHE_MAX_MB: expected integer >= 0")
-        return min(env_value, MAX_THUMBNAIL_CACHE_MAX_MB)
-
-    settings = _read_app_settings()
-    return _normalize_thumbnail_cache_max_mb(settings.get("thumbnail_cache_max_mb"))
-
-
-def save_thumbnail_cache_max_mb(max_mb: int) -> int:
-    normalized = _normalize_thumbnail_cache_max_mb(max_mb)
-    settings = _read_app_settings()
-    settings["thumbnail_cache_max_mb"] = normalized
-    _write_app_settings(settings)
-    return normalized
+# Settings-file IO cluster (download mirror + app-settings + thumbnail-cache
+# limit) lives in config_settings.py (decomposition 2026-07). Re-exported BY
+# REFERENCE so every historical `config.<name>` attribute and `from config
+# import <name>` consumer keeps resolving here and monkeypatch seams on this
+# module object keep landing; the moved bodies read CONFIG_DIR /
+# DOWNLOAD_MIRROR_CONFIG_PATH / APP_SETTINGS_CONFIG_PATH back through this
+# facade at CALL time, so tests that patch those paths on config still steer
+# the moved getters (tests/test_config_env.py, tests/test_disk_service.py,
+# tests/test_config_pins.py).
+from config_settings import (
+    DEFAULT_THUMBNAIL_CACHE_MAX_MB,
+    MAX_THUMBNAIL_CACHE_MAX_MB,
+    VALID_MIRRORS,
+    get_download_mirror,
+    save_download_mirror,
+    _read_app_settings,
+    _write_app_settings,
+    _normalize_thumbnail_cache_max_mb,
+    get_thumbnail_cache_max_mb,
+    save_thumbnail_cache_max_mb,
+)
 MANUAL_SORT_SESSION_FILE: str = os.environ.get(
     "SD_IMAGE_SORTER_SORT_SESSION_FILE",
     str(STATE_DIR / "sort-session.json"),
@@ -451,190 +360,11 @@ ARTIST_USE_GPU: bool = os.environ.get(
     "true"
 ).lower() in ("true", "1", "yes")
 
-# Available tagger models
-TAGGER_MODELS: dict = {
-    "wd-eva02-large-tagger-v3": {
-        "repo_id": "SmilingWolf/wd-eva02-large-tagger-v3",
-        "model_file": "model.onnx",
-        "tags_file": "selected_tags.csv",
-        "runtime_safety_tier": "heavy",
-        "default_threshold": 0.35,
-        "default_character_threshold": 0.85,
-        "default_copyright_threshold": 0.35,
-        "default_max_tags_per_image": 60,
-    },
-    "wd-swinv2-tagger-v3": {
-        "repo_id": "SmilingWolf/wd-swinv2-tagger-v3",
-        "model_file": "model.onnx",
-        "tags_file": "selected_tags.csv",
-        "runtime_safety_tier": "balanced",
-        "default_threshold": 0.35,
-        "default_character_threshold": 0.85,
-        "default_copyright_threshold": 0.35,
-        "default_max_tags_per_image": 50,
-    },
-    "wd-convnext-tagger-v3": {
-        "repo_id": "SmilingWolf/wd-convnext-tagger-v3",
-        "model_file": "model.onnx",
-        "tags_file": "selected_tags.csv",
-        "runtime_safety_tier": "balanced",
-        "default_threshold": 0.35,
-        "default_character_threshold": 0.85,
-        "default_copyright_threshold": 0.35,
-        "default_max_tags_per_image": 50,
-    },
-    "wd-vit-tagger-v3": {
-        "repo_id": "SmilingWolf/wd-vit-tagger-v3",
-        "model_file": "model.onnx",
-        "tags_file": "selected_tags.csv",
-        "runtime_safety_tier": "light",
-        "default_threshold": 0.35,
-        "default_character_threshold": 0.85,
-        "default_copyright_threshold": 0.35,
-        "default_max_tags_per_image": 40,
-    },
-    "wd-vit-large-tagger-v3": {
-        "repo_id": "SmilingWolf/wd-vit-large-tagger-v3",
-        "model_file": "model.onnx",
-        "tags_file": "selected_tags.csv",
-        "runtime_safety_tier": "balanced",
-        "default_threshold": 0.35,
-        "default_character_threshold": 0.85,
-        "default_copyright_threshold": 0.35,
-        "default_max_tags_per_image": 55,
-    },
-    "camie-tagger-v2": {
-        "repo_id": "Camais03/camie-tagger-v2",
-        "model_file": "camie-tagger-v2.onnx",
-        "tags_file": "camie-tagger-v2-metadata.json",
-        "runtime_safety_tier": "heavy",
-        "metadata_format": "camie_v2",
-        "input_layout": "nchw",
-        "input_normalization": "imagenet",
-        "output_activation": "sigmoid",
-        # Camie v2 ONNX has 3 outputs: initial_predictions(70527),
-        # refined_predictions(70527), selected_candidates(256). The refined
-        # head is the model's real output; index 0 (initial) is a coarse
-        # intermediate that misses characters/halo/guitar-level content and
-        # emits contradictions (open_mouth + closed_mouth). A/B on a real
-        # image: initial had no character and guitar at 0.79; refined gave
-        # kayoko_(blue_archive) 0.99, 1girl 1.00, halo 0.88.
-        "output_index": 1,
-        "pad_color": [124, 116, 104],
-        "default_threshold": 0.62,
-        "default_character_threshold": 0.78,
-        "default_copyright_threshold": 0.62,
-        "default_max_tags_per_image": 65,
-        "supports_rating": True
-    },
-    "pixai-tagger-v0.9": {
-        "repo_id": "deepghs/pixai-tagger-v0.9-onnx",
-        "model_file": "model.onnx",
-        "tags_file": "selected_tags.csv",
-        "runtime_safety_tier": "heavy",
-        "input_layout": "nchw",
-        "input_normalization": "minus_one_to_one",
-        "resize_mode": "stretch",
-        # PixAI v0.9 ONNX has 3 outputs: embedding(1024), logits(13461),
-        # prediction(13461). prediction = sigmoid(logits) and is the correct
-        # probability vector for thresholding. We must use output index 2
-        # (prediction), NOT index 0 (embedding). output_activation stays
-        # identity because prediction is already in [0, 1].
-        "output_index": 2,
-        "output_activation": "identity",
-        "default_threshold": 0.45,
-        "default_character_threshold": 0.85,
-        "default_copyright_threshold": 0.45,
-        "default_max_tags_per_image": 65,
-        "supports_rating": False,
-        "rating_fallback_mode": "derive_from_tags"
-    },
-    "toriigate-0.5": {
-        "repo_id": "Minthy/ToriiGate-0.5",
-        "model_file": "config.json",
-        "tags_file": "",
-        "runtime_backend": "toriigate",
-        "runtime_safety_tier": "vlm",
-        # Owner decision (2026-07-06): ToriiGate is a captioner, not a
-        # tagger. As a gallery tagger it produced 5-7 tags/image with
-        # non-danbooru words ("buttocks") and invented anatomy — measured
-        # unusable. It stays registered here for model download/prepare and
-        # for Smart Tag's natural-language stage, but /api/tag rejects it
-        # and the gallery tagger dropdown hides it.
-        "captioner_only": True,
-        # Hardware floors are calibrated to the actual ToriiGate-0.5
-        # checkpoint (Qwen3.5-VL, ~9.6 GB BF16 weights, image capped to
-        # 1 MP via TORIIGATE_MAX_IMAGE_PIXELS).
-        #
-        # Empirical measurement on RTX 3090 (24 GB): peak GPU memory
-        # consumption hit 22.7 GB during a real inference (model weights
-        # 9.6 GB + PyTorch caching allocator + KV cache + activations).
-        # That puts the realistic floor at ~16 GB total VRAM and ~14 GB
-        # free VRAM - 12 GB cards (3060, 4070) WILL OOM and must be
-        # rejected, but 16 GB cards (4060 Ti 16 GB, A4000) and above
-        # work after closing other GPU apps.
-        #
-        # Host RAM peak during load: ~3-5 GB (transformers uses
-        # low_cpu_mem_usage=True which streams safetensors directly to
-        # the GPU). The previous 48 GB / 12 GB-free numbers blocked any
-        # 32 GB workstation - including the user's 32 GB / RTX 3090
-        # setup that successfully tagged a real image at this revision.
-        # Those numbers were never re-tuned for ToriiGate's BF16 + GPU
-        # streaming loader.
-        #
-        # CPU mode peak: ~19.3 GB FP32 weights + ~3-5 GB working set =
-        # ~24 GB. Keep a safety margin to 32 GB total / 20 GB free so
-        # the OS and other apps don't get evicted to swap.
-        "minimum_total_ram_gb": 16,
-        "minimum_available_ram_gb": 4,
-        "minimum_gpu_vram_mb": 16384,
-        "minimum_gpu_available_vram_mb": 14000,
-        "minimum_cpu_total_ram_gb": 32,
-        "minimum_cpu_available_ram_gb": 20,
-        "default_threshold": 1.0,
-        "default_character_threshold": 1.0,
-        "default_copyright_threshold": 1.0,
-        "default_max_tags_per_image": 120,
-        "supports_rating": True,
-    },
-    "oppai-oracle-v1.1": {
-        # OppaiOracle is a from-scratch ViT (~247M params) anime tagger by
-        # Grio43 with a 19,294-tag general-only vocabulary. The V1.1 ONNX
-        # bundle lives in the V1.1_onnx/ subfolder of the HF repo and ships
-        # two ONNX inputs (pixel_values + padding_mask) instead of the
-        # WD14-style single input, so we route it through a dedicated
-        # OppaiOracleTagger class via runtime_backend = "oppai-oracle".
-        "repo_id": "Grio43/OppaiOracle",
-        "repo_subfolder": "V1.1_onnx",
-        "model_file": "model.onnx",
-        "tags_file": "selected_tags.csv",
-        "extra_files": ["preprocessing.json", "pr_thresholds.json", "config.json"],
-        "runtime_backend": "oppai-oracle",
-        "runtime_safety_tier": "heavy",
-        "input_layout": "nchw",
-        "input_normalization": "minus_one_to_one",
-        "resize_mode": "letterbox",
-        "pad_color": [114, 114, 114],
-        "image_size": 448,
-        # Output is already sigmoid'd inside the graph, so we read it as a
-        # probability vector. Indices 0/1 are <PAD>/<UNK> and the last 4
-        # entries are the rating:* tags. The tagger handles both quirks.
-        "output_activation": "identity",
-        "supports_rating": True,
-        # 0.7927 is the model's published P=R global threshold (precision ==
-        # recall == 0.699 on the held-out 296k val split). At this operating
-        # point the model emits ~35-50 tags per image which matches our
-        # smoke-test density on real anime images.
-        "default_threshold": 0.7927,
-        "default_copyright_threshold": 0.7927,
-        "default_max_tags_per_image": 60,
-        # OppaiOracle's vocabulary is general-only — there is no dedicated
-        # character category. Setting the character threshold to 1.0 keeps
-        # the existing tagging service shape working without forcing
-        # character-tag splits that the model cannot supply.
-        "default_character_threshold": 1.0,
-    },
-}
+# Available tagger models -- the catalog literal lives in tagger_models.py
+# (decomposition 2026-07), re-exported BY REFERENCE so the ~20 historical
+# `from config import TAGGER_MODELS` consumers and the monkeypatch.setitem
+# seam (tests/test_tagging_pins_service.py) keep sharing the SAME dict object.
+from tagger_models import TAGGER_MODELS
 
 # Rating categories
 RATING_CATEGORIES: list = ["general", "sensitive", "questionable", "explicit"]
