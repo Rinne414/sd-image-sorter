@@ -1197,7 +1197,16 @@ def test_autosep_and_manual_sort_default_to_copy_for_safety():
     import re
 
     index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
-    autosep_js = (ROOT / "frontend" / "js" / "autosep.js").read_text(encoding="utf-8")
+    # Autosep-family read: autosep.js is being split into autosep/*.js (the
+    # pinned literals live in state-constants / operation-mode after the
+    # split; family == autosep.js until then).
+    autosep_js = "\n".join(
+        [(ROOT / "frontend" / "js" / "autosep.js").read_text(encoding="utf-8")]
+        + [
+            p.read_text(encoding="utf-8")
+            for p in sorted((ROOT / "frontend" / "js" / "autosep").glob("*.js"))
+        ]
+    )
     # Manual-sort-family read: manual-sort.js is being split into
     # manual-sort/*.js (the pinned literals live in state-constants /
     # mode-operation / init after the split; family == manual-sort.js until

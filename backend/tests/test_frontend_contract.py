@@ -126,6 +126,27 @@ def _manual_sort_family_source(repo_root: Path) -> str:
     return "\n".join([manual_sort_source] + family_parts)
 
 
+def _autosep_family_source(repo_root: Path) -> str:
+    # The autosep.js god-file is being decomposed VERBATIM into the
+    # frontend/js/autosep/ module family (static script tags in index.html,
+    # state-constants base first; same adaptation style as the censor /
+    # dataset-maker / app.js / gallery.js / manual-sort splits) while a slim,
+    # still-servable frontend/js/autosep.js stays behind (index.html's script
+    # tag and the release packages reference it). Contract pins assert against
+    # the family concatenation so each literal is found in whichever file
+    # hosts it. Until the split lands the family is exactly autosep.js, so
+    # every assertion is byte-for-byte unchanged.
+    autosep_js = repo_root / "frontend" / "js" / "autosep.js"
+    assert autosep_js.is_file(), "frontend/js/autosep.js must remain a real file"
+    autosep_source = autosep_js.read_text(encoding="utf-8")
+    assert autosep_source, "frontend/js/autosep.js must not be empty"
+    family_dir = repo_root / "frontend" / "js" / "autosep"
+    family_parts = [
+        path.read_text(encoding="utf-8") for path in sorted(family_dir.glob("*.js"))
+    ]
+    return "\n".join([autosep_source] + family_parts)
+
+
 def _v321_family_source(repo_root: Path) -> str:
     # The v321-ui.js god-object (`const V321Integration = {...}`) is decomposed
     # VERBATIM into the frontend/js/v321/ module family (Object.assign mixins
@@ -1150,7 +1171,10 @@ def test_gallery_load_finally_clears_only_active_sequence():
 def test_autosep_critical_action_settings_are_visible_on_main_panel():
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    source = (repo_root / "frontend" / "js" / "autosep.js").read_text(encoding="utf-8")
+    # Autosep-family read: autosep.js is being split into autosep/*.js.
+    # NOTE(split): the operation-radio handler literal below lives inside
+    # initAutoSeparate (autosep/init.js after the split).
+    source = _autosep_family_source(repo_root)
 
     assert "autosep-action-settings" in html
     assert 'name="autosep-operation-mode-main"' in html
@@ -1733,9 +1757,11 @@ def test_sorting_payloads_carry_v33x_gallery_scope_filters():
     # NOTE(split): count >= 2 sums across the family; BOTH wire builders (batchMove
     # + startSortSession) must keep every scope key - do not DRY them in the split.
     app_source = _app_family_source(repo_root)
-    autosep_source = (repo_root / "frontend" / "js" / "autosep.js").read_text(
-        encoding="utf-8"
-    )
+    # Autosep-family read: autosep.js is being split into autosep/*.js.
+    # NOTE(split): each scope key below recurs across serialize.js
+    # (serializeAutoSepFilters), preview.js (signature + query builder), and
+    # move-progress.js (the batchMove scope bundle) - do not DRY them.
+    autosep_source = _autosep_family_source(repo_root)
     # Manual-sort-family read: manual-sort.js is being split into
     # manual-sort/*.js. NOTE(split): count >= 4 sums across the family
     # (slot-start x2 incl. the minimap preview, bracket, cull) - do not DRY

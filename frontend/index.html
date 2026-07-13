@@ -7142,6 +7142,28 @@
     <script src="/static/js/library-roots-ui.js"></script>
     <script src="/static/js/auto-refresh.js"></script>
     <script src="/static/js/autosep.js"></script>
+    <!-- Auto-Separate family (decomposed VERBATIM from the former 1,981-line
+         autosep.js; the tag above is the retained servable shim).
+         Order matters: autosep/state-constants.js declares the shared
+         top-level lexical state (AutoSepState, DEFAULT_AUTOSEP_SETTINGS, the
+         AUTOSEP_* storage keys, _previewRequestId) consumed by every later
+         part via classic-script global lexical scoping. The feature files
+         keep the original line order; each window.* export is published in
+         the file that declares its function (hoisted within that script),
+         and the DOMContentLoaded -> initAutoSeparate boot rides with
+         init.js. Static tags (not dynamic append) keep the boot listener
+         registered before the event fires and keep every file covered by
+         the GET / cache-bust injection. -->
+    <script src="/static/js/autosep/state-constants.js"></script>
+    <script src="/static/js/autosep/operation-mode.js"></script>
+    <script src="/static/js/autosep/filters-scope.js"></script>
+    <script src="/static/js/autosep/init.js"></script>
+    <script src="/static/js/autosep/serialize.js"></script>
+    <script src="/static/js/autosep/configs.js"></script>
+    <script src="/static/js/autosep/settings.js"></script>
+    <script src="/static/js/autosep/summary-chips.js"></script>
+    <script src="/static/js/autosep/preview.js"></script>
+    <script src="/static/js/autosep/move-progress.js"></script>
     <script src="/static/js/manual-sort.js"></script>
     <!-- Manual Sort family (decomposed VERBATIM from the former 3,731-line
          manual-sort.js; the tag above is the retained servable shim).
