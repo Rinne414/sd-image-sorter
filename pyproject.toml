@@ -34,6 +34,14 @@ select = ["F", "E9"]
 # services.image_service.<name> for tests that patch and read them there
 # (tests/test_image_service_pins.py, tests/test_routers/test_images.py).
 "backend/services/image_service.py" = ["F401"]
+# tag_rules.py is the compatibility facade for the tag_vocab/ data-table split
+# (2026-07). It re-imports every extracted table so the 8 production importers
+# (`from tag_rules import <NAME>`) and the pin/monkeypatch seams
+# (tests/test_tag_rules_pins.py, tests/test_tag_training_filters.py) keep
+# resolving names on this module; BUILTIN_TAG_SETS / BUILTIN_EXCLUSION_RULES /
+# WEIGHTED_GROUPS are pure re-exports the facade body itself never calls.
+# Same rationale as database.py above.
+"backend/tag_rules.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.
