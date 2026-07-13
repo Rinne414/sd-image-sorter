@@ -74,6 +74,19 @@ select = ["F", "E9"]
 # tests/test_artist_gpu_toggle.py, tests/test_artist_diagnostics_legacy_path.py,
 # tests/test_model_service.py, tests/fixtures/ml_fixtures.py).
 "backend/artist_identifier.py" = ["F401"]
+# services/dataset_export_service.py is the compatibility FILE facade for the
+# services/dataset_export/ package split (2026-07). Same rationale as
+# censor_service.py above: the verbatim header import block (incl. the
+# ``shutil`` / ``database`` module singletons tests patch through this
+# namespace as ``export_service.shutil.copy2`` / ``des.db.update_image_path``,
+# and the dataset_naming / tag_export_service / dataset_session_service /
+# path_validation re-binds — ``render_stem`` is patched ON this module object
+# and read back through _svc() by planning._plan_single_rename) plus the
+# dataset_export.* re-imports exist so every historical module attribute keeps
+# resolving at services.dataset_export_service.<name> for tests that patch and
+# read them there (tests/test_dataset_export_pins.py,
+# tests/test_dataset_export.py:149-164).
+"backend/services/dataset_export_service.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.
