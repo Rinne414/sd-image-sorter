@@ -7143,6 +7143,30 @@
     <script src="/static/js/auto-refresh.js"></script>
     <script src="/static/js/autosep.js"></script>
     <script src="/static/js/manual-sort.js"></script>
+    <!-- Manual Sort family (decomposed VERBATIM from the former 3,731-line
+         manual-sort.js; the tag above is the retained servable shim).
+         Order matters: manual-sort/state-constants.js declares the shared
+         top-level lexical consts (ManualSortState, the MANUAL_SORT_* storage
+         keys, KEY_MAP, DIRECTION_MAP) consumed by every later part via
+         classic-script global lexical scoping; manual-sort/boot-touch.js
+         registers the DOMContentLoaded -> initManualSort boot and the
+         window.* exports last, when every referent is defined. The middle
+         files keep the original line order. Static tags (not dynamic append)
+         keep the boot listener registered before the event fires and keep
+         every file covered by the GET / cache-bust injection. -->
+    <script src="/static/js/manual-sort/state-constants.js"></script>
+    <script src="/static/js/manual-sort/mode-operation.js"></script>
+    <script src="/static/js/manual-sort/i18n-helpers.js"></script>
+    <script src="/static/js/manual-sort/collection-slots.js"></script>
+    <script src="/static/js/manual-sort/filters-scope.js"></script>
+    <script src="/static/js/manual-sort/presets-zen-enh.js"></script>
+    <script src="/static/js/manual-sort/init.js"></script>
+    <script src="/static/js/manual-sort/slot-start.js"></script>
+    <script src="/static/js/manual-sort/bracket.js"></script>
+    <script src="/static/js/manual-sort/cull.js"></script>
+    <script src="/static/js/manual-sort/slot-actions.js"></script>
+    <script src="/static/js/manual-sort/keys.js"></script>
+    <script src="/static/js/manual-sort/boot-touch.js"></script>
     <script src="/static/js/audio.js"></script>
     <!-- Censor editor family (decomposed from the former censor-edit.js god file).
          Order matters: censor/state.js declares the shared top-level singletons

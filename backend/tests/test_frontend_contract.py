@@ -103,6 +103,29 @@ def _is_gallery_family_file(file_path: Path, frontend_root: Path) -> bool:
     return file_path.relative_to(frontend_root).as_posix().startswith("gallery/")
 
 
+def _manual_sort_family_source(repo_root: Path) -> str:
+    # The manual-sort.js god-file is being decomposed VERBATIM into the
+    # frontend/js/manual-sort/ module family (static script tags in index.html,
+    # base first; same adaptation style as the censor / dataset-maker / app.js /
+    # gallery.js splits) while a slim, still-servable frontend/js/manual-sort.js
+    # stays behind (index.html's script tag and the release packages reference
+    # it). Contract pins assert against the family concatenation so each
+    # literal is found in whichever file hosts it. Until the split lands the
+    # family is exactly manual-sort.js, so every assertion is byte-for-byte
+    # unchanged.
+    manual_sort_js = repo_root / "frontend" / "js" / "manual-sort.js"
+    assert manual_sort_js.is_file(), (
+        "frontend/js/manual-sort.js must remain a real file"
+    )
+    manual_sort_source = manual_sort_js.read_text(encoding="utf-8")
+    assert manual_sort_source, "frontend/js/manual-sort.js must not be empty"
+    family_dir = repo_root / "frontend" / "js" / "manual-sort"
+    family_parts = [
+        path.read_text(encoding="utf-8") for path in sorted(family_dir.glob("*.js"))
+    ]
+    return "\n".join([manual_sort_source] + family_parts)
+
+
 def test_frontend_feature_modules_do_not_directly_assign_appstate():
     repo_root = Path(__file__).resolve().parents[2]
     frontend_root = repo_root / "frontend" / "js"
@@ -1006,9 +1029,9 @@ def test_smart_tag_uses_model_specific_tagger_defaults():
 
 def test_manual_sort_resume_failure_does_not_render_null_visible_banner():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "manual-sort.js").read_text(
-        encoding="utf-8"
-    )
+    # Manual-sort-family read: manual-sort.js is being split into
+    # manual-sort/*.js (censor/dataset/app/gallery precedent).
+    source = _manual_sort_family_source(repo_root)
 
     assert "renderManualSortResumeBanner(null, { visible: true })" not in source
     assert "previousResumeSnapshot" in source
@@ -1150,9 +1173,9 @@ def test_gallery_delete_key_removes_from_gallery_not_disk():
 
 def test_manual_sort_start_routes_unfinished_sessions_to_resume():
     repo_root = Path(__file__).resolve().parents[2]
-    source = (repo_root / "frontend" / "js" / "manual-sort.js").read_text(
-        encoding="utf-8"
-    )
+    # Manual-sort-family read: manual-sort.js is being split into
+    # manual-sort/*.js (censor/dataset/app/gallery precedent).
+    source = _manual_sort_family_source(repo_root)
 
     assert "confirmResumeSavedSessionFromStart(savedSession)" in source
     assert "resumeSavedSession(savedSession)" in source
@@ -1663,9 +1686,11 @@ def test_sorting_payloads_carry_v33x_gallery_scope_filters():
     autosep_source = (repo_root / "frontend" / "js" / "autosep.js").read_text(
         encoding="utf-8"
     )
-    manual_sort_source = (repo_root / "frontend" / "js" / "manual-sort.js").read_text(
-        encoding="utf-8"
-    )
+    # Manual-sort-family read: manual-sort.js is being split into
+    # manual-sort/*.js. NOTE(split): count >= 4 sums across the family
+    # (slot-start x2 incl. the minimap preview, bracket, cull) - do not DRY
+    # the scope bundle across the split.
+    manual_sort_source = _manual_sort_family_source(repo_root)
 
     # API.batchMove AND API.startSortSession must put every scope field on the
     # wire (snake_case payload keys, hence count >= 2 across the two builders).

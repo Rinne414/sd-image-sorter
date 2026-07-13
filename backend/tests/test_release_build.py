@@ -1198,7 +1198,17 @@ def test_autosep_and_manual_sort_default_to_copy_for_safety():
 
     index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
     autosep_js = (ROOT / "frontend" / "js" / "autosep.js").read_text(encoding="utf-8")
-    manual_sort_js = (ROOT / "frontend" / "js" / "manual-sort.js").read_text(encoding="utf-8")
+    # Manual-sort-family read: manual-sort.js is being split into
+    # manual-sort/*.js (the pinned literals live in state-constants /
+    # mode-operation / init after the split; family == manual-sort.js until
+    # then).
+    manual_sort_js = "\n".join(
+        [(ROOT / "frontend" / "js" / "manual-sort.js").read_text(encoding="utf-8")]
+        + [
+            p.read_text(encoding="utf-8")
+            for p in sorted((ROOT / "frontend" / "js" / "manual-sort").glob("*.js"))
+        ]
+    )
     # App-family read: app.js was split into app/*.js (2026-07).
     app_js = "\n".join(
         [(ROOT / "frontend" / "js" / "app.js").read_text(encoding="utf-8")]
