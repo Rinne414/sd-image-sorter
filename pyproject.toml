@@ -87,6 +87,16 @@ select = ["F", "E9"]
 # read them there (tests/test_dataset_export_pins.py,
 # tests/test_dataset_export.py:149-164).
 "backend/services/dataset_export_service.py" = ["F401"]
+# tagger.py is the compatibility FILE facade for the tagger_* mixin split
+# (2026-07). Same rationale as artist_identifier.py above: the verbatim header
+# import block (incl. csv/json/PIL.Image/endpoint_label/get_hf_endpoint_order,
+# now called only from the tagger_* mixins) is kept so every historical module
+# attribute keeps resolving at tagger.<name> for tests that patch and read
+# them there — tagger.ort / tagger.hf_hub / tagger._ensure_imports /
+# tagger.DEFAULT_MODEL / tagger.MODELS (tests/test_tagger_pins.py,
+# tests/test_tagger.py, tests/test_resource_safety.py,
+# tests/fixtures/ml_fixtures.py).
+"backend/tagger.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.
