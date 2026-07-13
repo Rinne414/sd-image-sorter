@@ -25,6 +25,15 @@ select = ["F", "E9"]
 # this path (tests/test_sorting_service_pins.py). Same rationale as
 # database.py above.
 "backend/services/sorting_service.py" = ["F401"]
+# services/image_service.py is the compatibility facade for the
+# services/image/ package split (2026-07). Same rationale as
+# sorting_service.py above: the verbatim import block plus the
+# _constants/_filters re-imports exist so every historical module attribute
+# (db, move_file_to_trash, resolve_existing_indexed_image_path, the selection
+# constants, the coercers/sanitizers) keeps resolving at
+# services.image_service.<name> for tests that patch and read them there
+# (tests/test_image_service_pins.py, tests/test_routers/test_images.py).
+"backend/services/image_service.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.
