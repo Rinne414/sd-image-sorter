@@ -1686,17 +1686,8 @@ const PromptLab = {
         document.getElementById('pl-best-checkpoints-more')?.addEventListener('click', () => self._expandStatsSection('bestCheckpoints', 8));
         document.getElementById('pl-top-scored-images-more')?.addEventListener('click', () => self._expandStatsSection('scoredImages', 8));
         document.getElementById('pl-recipe-suggestions-more')?.addEventListener('click', () => self._expandStatsSection('recipes', 8));
-        document.getElementById('pl-pick-a')?.addEventListener('click', () => self.openImagePicker('compare-a'));
-        document.getElementById('pl-pick-b')?.addEventListener('click', () => self.openImagePicker('compare-b'));
-        document.getElementById('pl-pick-build')?.addEventListener('click', () => self.openImagePicker('build'));
-        document.getElementById('pl-image-picker-close')?.addEventListener('click', () => self.closeImagePicker());
-        document.querySelector('#promptlab-image-picker-modal .modal-backdrop')?.addEventListener('click', () => self.closeImagePicker());
-        document.getElementById('pl-image-picker-search')?.addEventListener('input', () => self.renderImagePicker());
-        document.getElementById('pl-image-picker-grid')?.addEventListener('click', (event) => {
-            const card = event.target.closest('.promptlab-image-picker-card');
-            if (!card) return;
-            self.selectImageFromPicker(card.dataset.imageId || '');
-        });
+        // A byte-identical copy of the picker/pick-button bindings above sat
+        // here (pin-sweep BUG-1): every click fired its handler twice.
 
         document.getElementById('pl-best-checkpoints')?.addEventListener('click', (event) => {
             const actionButton = event.target.closest('[data-action]');
