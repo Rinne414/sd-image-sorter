@@ -82,7 +82,16 @@ class TestPurposeFilterRows:
             assert filters.normalize_training_purpose(alias) == expected
             assert smart_normalize(alias) == expected
 
-    def test_legacy_rows_without_category_fall_back_to_classifier(self):
+    def test_legacy_rows_without_category_fall_back_to_classifier(self, monkeypatch):
+        # categorize_tag learns character tags from the selected_tags.csv of
+        # whichever WD14 taggers THIS MACHINE has downloaded — pin the module
+        # caches so the verdict is deterministic (this test was green on the
+        # owner's box and red on any fresh checkout/worktree without models).
+        import tag_rules
+        monkeypatch.setattr(tag_rules, "_wd14_character_tags", {"hatsune_miku"})
+        monkeypatch.setattr(
+            tag_rules, "_booru_tag_categories", {"hatsune_miku": "character"}
+        )
         rows = [_row("hatsune_miku", category=""), _row("silver_hair", category="")]
         result = filters.filter_tag_rows_by_training_purpose(rows, "character", "trig")
         assert [r["tag"] for r in result] == ["silver_hair"]
