@@ -7216,6 +7216,24 @@
     <script src="/static/js/censor/review.js"></script>
     <script src="/static/js/censor/filters.js"></script>
     <script src="/static/js/queue-solitaire.js"></script>
+    <!-- similar family: verbatim Object.assign decomposition of similar.js
+         (similarity-search UI: CLIP search by ID / text / upload, duplicate
+         finder, embedding-index build bar). core.js declares the ONE
+         SimilarImages object + the window.SimilarImages publish and MUST
+         load first; boot.js declares the initSimilar boot + languageChanged
+         listener LAST. The slim similar.js shim stays last so
+         /static/js/similar.js remains servable. Slot contract: AFTER
+         app.js/logger (window.App, escapeHtml, formatUserError, Logger),
+         exactly where the single similar.js tag sat. -->
+    <script src="/static/js/similar/core.js"></script>
+    <script src="/static/js/similar/scope.js"></script>
+    <script src="/static/js/similar/status.js"></script>
+    <script src="/static/js/similar/embedding.js"></script>
+    <script src="/static/js/similar/search.js"></script>
+    <script src="/static/js/similar/duplicates.js"></script>
+    <script src="/static/js/similar/render.js"></script>
+    <script src="/static/js/similar/events.js"></script>
+    <script src="/static/js/similar/boot.js"></script>
     <script src="/static/js/similar.js"></script>
     <script src="/static/js/clip-tools.js"></script>
     <!-- prompt-lab family: verbatim Object.assign decomposition of
