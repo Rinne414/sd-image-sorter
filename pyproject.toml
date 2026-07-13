@@ -183,6 +183,23 @@ select = ["F", "E9"]
 # verify_image_readable` and tests/test_metadata_parser_pins.py locks the name
 # on this module. Same rationale as database.py above.
 "backend/metadata_parser/__init__.py" = ["F401"]
+# model_health.py is the compatibility FILE facade for the model_health_probes
+# / model_health_paths sibling-module split (2026-07). Same rationale as
+# services/model_service.py above: the verbatim header import block stays —
+# the config dir getters + constants (ARTIST_KALOSCOPE_CHECKPOINT,
+# ARTIST_KALOSCOPE_CLASS_MAPPING, ARTIST_LSNET_CODE_PATH), importlib / os /
+# subprocess / warnings, exclusive_ai_runtime and _canonicalize_yolo_class_name
+# are monkeypatch/seam surfaces tests patch and the moved bodies resolve back
+# through _svc() at call time — plus the probes/paths re-imports
+# (_module_available, _probe_torch_runtime, _load_yolo_class_names,
+# get_clip_local_model_path, get_sam3_checkpoint_path, ...) exist so every
+# historical module attribute keeps resolving at model_health.<name> for the
+# 5 downstream from-import identity seams (services/model_service.py,
+# services/censor_service.py, similarity.py, services/similarity_service.py,
+# routers/artists.py) and the suites that patch and read them there
+# (tests/test_model_health_pins.py, tests/test_model_health.py,
+# tests/test_artist_diagnostics_legacy_path.py).
+"backend/model_health.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.

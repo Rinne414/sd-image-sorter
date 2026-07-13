@@ -3,6 +3,13 @@ Unified model discovery and readiness helpers for SD Image Sorter.
 
 This module keeps model path detection in one place so the backend, startup
 scripts, and frontend diagnostics can all report the same truth.
+
+Split into a FILE facade + 2 sibling modules (2026-07): torch/runtime
+probing lives in model_health_probes.py, path/YOLO/Kaloscope resolution in
+model_health_paths.py. This module stays the only import surface -- every
+historical attribute keeps resolving at model_health.<name> (the 5
+downstream from-import identity seams and all monkeypatch surfaces), and
+moved bodies resolve those seams back through this module at call time.
 """
 from __future__ import annotations
 
@@ -43,6 +50,40 @@ from ai_runtime_guard import exclusive_ai_runtime
 
 from censor import canonicalize_class_name as _canonicalize_yolo_class_name
 
+# Split siblings (2026-07): torch/runtime probing lives in model_health_probes,
+# path/YOLO/Kaloscope resolution in model_health_paths. Moved bodies resolve
+# facade-family seams back through THIS module at call time (_svc()), so the
+# re-imports below keep every historical module attribute -- including the
+# monkeypatch surfaces (_probe_torch_runtime, _module_installed,
+# _module_available, _load_yolo_class_names, _resolve_artist_runtime_path,
+# get_clip_local_model_path, get_sam3_checkpoint_path, get_artist_*_path) and
+# the 5 downstream from-import identity seams (services/model_service.py,
+# services/censor_service.py, similarity.py, services/similarity_service.py,
+# routers/artists.py) -- resolving at model_health.<name>. Unused-looking
+# imports are intentional re-exports (see pyproject.toml F401 note).
+from model_health_probes import (
+    _module_available,
+    _module_installed,
+    _probe_loaded_torch_runtime,
+    _probe_torch_runtime,
+)
+from model_health_paths import (
+    _build_yolo_capabilities,
+    _describe_yolo_model,
+    _find_kaloscope_dir,
+    _infer_yolo_model_profile,
+    _list_model_files,
+    _list_yolo_model_files,
+    _load_yolo_class_names,
+    _parse_class_mapping,
+    _resolve_artist_runtime_path,
+    get_artist_checkpoint_path,
+    get_artist_class_mapping_path,
+    get_clip_local_model_path,
+    get_default_legacy_model_path,
+    get_sam3_checkpoint_path,
+)
+
 
 def _clip_model_loaded() -> bool:
     """Check whether the FastEmbed CLIP model singleton is already loaded in memory."""
@@ -51,118 +92,6 @@ def _clip_model_loaded() -> bool:
         return _embed_model is not None
     except Exception:
         return False
-
-
-def _module_available(module_name: str) -> bool:
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            importlib.import_module(module_name)
-        return True
-    except Exception:
-        return False
-
-
-def _module_installed(module_name: str) -> bool:
-    try:
-        return importlib.util.find_spec(module_name) is not None
-    except Exception:
-        return False
-
-
-def _probe_loaded_torch_runtime() -> Dict[str, Any]:
-    result: Dict[str, Any] = {
-        "torch_version": None,
-        "torch_cuda_build": None,
-        "torch_cuda_available": False,
-        "torch_probe_error": None,
-        "torch_probe_source": "current-process",
-    }
-    try:
-        torch = sys.modules.get("torch")
-        if torch is None:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                torch = importlib.import_module("torch")
-        result["torch_version"] = getattr(torch, "__version__", None)
-        result["torch_cuda_build"] = getattr(getattr(torch, "version", None), "cuda", None)
-        result["torch_cuda_available"] = bool(torch.cuda.is_available())
-    except Exception as exc:
-        result["torch_probe_error"] = str(exc)
-    return result
-
-
-def _probe_torch_runtime() -> Dict[str, Any]:
-    if "torch" in sys.modules:
-        return _probe_loaded_torch_runtime()
-
-    code = r'''
-import json
-from importlib import metadata
-result = {
-    "torch_version": None,
-    "torch_cuda_build": None,
-    "torch_cuda_available": False,
-    "torch_probe_error": None,
-    "torch_probe_source": "subprocess",
-}
-try:
-    result["torch_version"] = metadata.version("torch")
-except Exception:
-    pass
-try:
-    import torch
-    result["torch_version"] = getattr(torch, "__version__", result["torch_version"])
-    result["torch_cuda_build"] = getattr(getattr(torch, "version", None), "cuda", None)
-    result["torch_cuda_available"] = bool(torch.cuda.is_available())
-except Exception as exc:
-    result["torch_probe_error"] = str(exc)
-print(json.dumps(result))
-'''.strip()
-    try:
-        completed = subprocess.run(
-            [sys.executable, "-c", code],
-            capture_output=True,
-            text=True,
-            timeout=45,
-            check=False,
-        )
-    except Exception as exc:
-        return {
-            "torch_version": None,
-            "torch_cuda_build": None,
-            "torch_cuda_available": False,
-            "torch_probe_error": str(exc),
-            "torch_probe_source": "subprocess",
-        }
-
-    if completed.returncode != 0:
-        return {
-            "torch_version": None,
-            "torch_cuda_build": None,
-            "torch_cuda_available": False,
-            "torch_probe_error": (completed.stderr or completed.stdout or f"exit {completed.returncode}").strip(),
-            "torch_probe_source": "subprocess",
-        }
-
-    try:
-        parsed = json.loads((completed.stdout or "{}").strip().splitlines()[-1])
-    except Exception as exc:
-        return {
-            "torch_version": None,
-            "torch_cuda_build": None,
-            "torch_cuda_available": False,
-            "torch_probe_error": f"Could not parse torch probe output: {exc}",
-            "torch_probe_source": "subprocess",
-        }
-
-    return {
-        "torch_version": parsed.get("torch_version"),
-        "torch_cuda_build": parsed.get("torch_cuda_build"),
-        "torch_cuda_available": bool(parsed.get("torch_cuda_available")),
-        "torch_probe_error": parsed.get("torch_probe_error"),
-        "torch_probe_source": parsed.get("torch_probe_source") or "subprocess",
-    }
 
 
 SAM3_REQUIRED_MODULES = (
@@ -218,438 +147,6 @@ def _format_sam3_readiness_message(
     if problems:
         return "SAM3 checkpoint is installed, but SAM3 is not ready: " + "; ".join(problems) + "."
     return "SAM3 checkpoint and runtime dependencies are ready."
-
-
-def _list_model_files(directory: Path, extensions: Iterable[str]) -> List[Dict[str, Any]]:
-    if not directory.exists():
-        return []
-
-    allowed = {ext.lower() for ext in extensions}
-    files = []
-    for path in sorted(directory.rglob("*")):
-        if not path.is_file():
-            continue
-        if path.suffix.lower() not in allowed:
-            continue
-        files.append(
-            {
-                "name": path.name,
-                "path": str(path.resolve()),
-                "size_mb": round(path.stat().st_size / (1024 * 1024), 1),
-            }
-        )
-    return files
-
-
-def _parse_class_mapping(raw_names: Any) -> List[str]:
-    if isinstance(raw_names, str):
-        try:
-            raw_names = json.loads(raw_names)
-        except (json.JSONDecodeError, TypeError):
-            return []
-    if isinstance(raw_names, dict):
-        ordered = []
-        for key in sorted(raw_names.keys(), key=lambda item: int(item) if str(item).isdigit() else str(item)):
-            ordered.append(str(raw_names[key]))
-        return ordered
-    if isinstance(raw_names, list):
-        return [str(item) for item in raw_names]
-    return []
-
-
-def _load_yolo_class_names(model_path: Path) -> List[str]:
-    candidates = []
-    if model_path.suffix.lower() == ".onnx":
-        candidates.append(model_path)
-    else:
-        onnx_candidate = model_path.with_suffix(".onnx")
-        if onnx_candidate.exists():
-            candidates.append(onnx_candidate)
-
-    for candidate in candidates:
-        try:
-            from runtime_env import prepare_onnxruntime_environment
-
-            prepare_onnxruntime_environment()
-            import onnxruntime as ort
-
-            with exclusive_ai_runtime("model-health-onnx-metadata"):
-                session = ort.InferenceSession(str(candidate), providers=["CPUExecutionProvider"])
-                metadata = session.get_modelmeta().custom_metadata_map or {}
-            raw_names = metadata.get("names")
-            if not raw_names:
-                continue
-            return _parse_class_mapping(raw_names)
-        except Exception:
-            continue
-
-    if model_path.suffix.lower() in {".pt", ".pth"} and _module_installed("ultralytics"):
-        try:
-            from ultralytics import YOLO
-
-            with exclusive_ai_runtime("model-health-ultralytics-metadata"):
-                return _parse_class_mapping(getattr(YOLO(str(model_path)), "names", {}))
-        except Exception:
-            return []
-
-    return []
-
-
-def _infer_yolo_model_profile(class_names: List[str], filename: str) -> Dict[str, Any]:
-    canonical = [_canonicalize_yolo_class_name(name) for name in class_names]
-    canonical_set = {name.replace(" ", "") for name in canonical}
-    privacy_keywords = {"anus", "cum", "dick", "breasts", "pussy"}
-    filename_lower = filename.lower()
-
-    if privacy_keywords.intersection(canonical_set):
-        return {
-            "id": "privacy-censor",
-            "label": "Privacy-part detector",
-            "recommended_for_censor": True,
-            "message": "Specialized for privacy-part detection and censor workflows.",
-        }
-
-    if "wenaka" in filename_lower:
-        return {
-            "id": "privacy-censor",
-            "label": "Privacy-part detector",
-            "recommended_for_censor": True,
-            "message": "Wenaka is treated as a privacy-part detector even when ONNX metadata is incomplete.",
-        }
-
-    if "yolo26" in filename_lower or "yolov8" in filename_lower:
-        return {
-            "id": "general-object",
-            "label": "General object segmentation",
-            "recommended_for_censor": False,
-            "message": "This is a general COCO-style object model. It is useful for compatibility tests, not for privacy-part censoring.",
-        }
-
-    return {
-        "id": "unknown",
-        "label": "Unknown model type",
-        "recommended_for_censor": False,
-        "message": "Model classes could not be identified automatically.",
-    }
-
-
-def _build_yolo_capabilities(profile_id: str, filename: str, class_names: List[str]) -> Dict[str, Any]:
-    filename_lower = filename.lower()
-    class_count = len(class_names)
-    supports_mask_output = "seg" in filename_lower
-
-    if profile_id == "privacy-censor":
-        return {
-            "class_scope": "fixed-privacy",
-            "class_scope_label": f"{class_count or 5} built-in privacy classes",
-            "input_mode_label": "Fixed privacy-part labels",
-            "output_mode_label": "Privacy-part segmentation masks" if supports_mask_output else "Fast box-first censoring",
-            "supports_text_prompt": False,
-            "supports_mask_output": supports_mask_output,
-            "recommended_user_level": "normal",
-            "best_for": "Quick privacy-part censoring",
-            "plain_english": (
-                "Best for normal users who want quick privacy-part auto-detection. "
-                + (
-                    "When the runtime preserves segmentation outputs, auto-censor can use the model masks directly. "
-                    if supports_mask_output
-                    else ""
-                )
-                + "This route does not understand arbitrary text prompts."
-            ),
-        }
-
-    if profile_id == "general-object":
-        model_family = "YOLO26" if "yolo26" in filename_lower else "YOLOv8"
-        return {
-            "class_scope": "fixed-coco",
-            "class_scope_label": f"{class_count or 80} built-in object classes",
-            "input_mode_label": "Fixed built-in object classes",
-            "output_mode_label": "General object segmentation tests",
-            "supports_text_prompt": False,
-            "supports_mask_output": True,
-            "recommended_user_level": "pro",
-            "best_for": "Advanced compatibility checks and non-privacy object tests",
-            "plain_english": (
-                f"The current local {model_family} file is a fixed-class COCO model. "
-                "It is useful for general segmentation tests, but it is not an open-text prompt detector."
-            ),
-        }
-
-    return {
-        "class_scope": "unknown",
-        "class_scope_label": "Unknown class scope",
-        "input_mode_label": "Unknown",
-        "output_mode_label": "Unknown",
-        "supports_text_prompt": False,
-        "supports_mask_output": False,
-        "recommended_user_level": "pro",
-        "best_for": "Manual inspection required",
-        "plain_english": "The app could not determine what this model is good at automatically.",
-    }
-
-
-def _describe_yolo_model(model_path: Path) -> Dict[str, Any]:
-    class_names = _load_yolo_class_names(model_path)
-    profile = _infer_yolo_model_profile(class_names, model_path.name)
-    canonical_names = [_canonicalize_yolo_class_name(name) for name in class_names]
-    preview = canonical_names[:8]
-    capabilities = _build_yolo_capabilities(profile["id"], model_path.name, canonical_names)
-
-    return {
-        "name": model_path.name,
-        "path": str(model_path.resolve()),
-        "size_mb": round(model_path.stat().st_size / (1024 * 1024), 1),
-        "format": model_path.suffix.lower().lstrip("."),
-        "class_count": len(class_names),
-        "classes_preview": preview,
-        "profile": profile["id"],
-        "profile_label": profile["label"],
-        "recommended_for_censor": profile["recommended_for_censor"],
-        "message": profile["message"],
-        "capabilities": capabilities,
-    }
-
-
-def _list_yolo_model_files(directory: Path) -> List[Dict[str, Any]]:
-    if not directory.exists():
-        return []
-
-    files = []
-    for path in sorted(directory.glob("*")):
-        if not path.is_file():
-            continue
-        if path.suffix.lower() not in {".onnx", ".pt", ".pth", ".safetensors"}:
-            continue
-        files.append(_describe_yolo_model(path))
-    return files
-
-
-def get_clip_local_model_path() -> Optional[str]:
-    """Return the local FastEmbed-compatible CLIP model directory if present.
-
-    Checks the canonical slug path first, then the huggingface_hub cache
-    layout, then falls back to a deeper recursive scan. FastEmbed delegates
-    downloads to huggingface_hub, which stores models as
-    ``models--{org}--{repo}/snapshots/{hash}/model.onnx`` (double dash, three
-    levels deep) — a layout the old two-level glob never reached, so a user
-    who let the first-run download complete still saw "CLIP missing".
-    """
-    clip_root = Path(get_clip_model_dir())
-
-    # 1) Canonical slug path (most common when we stage the model ourselves).
-    repo_slug = CLIP_MODEL_NAME.replace("/", "-").replace("\\", "-")
-    candidate = clip_root / repo_slug
-    if (candidate / "model.onnx").exists():
-        return str(candidate.resolve())
-
-    # 2) huggingface_hub cache layout: models--{org}--{repo}/snapshots/{hash}/.
-    #    Prefer the snapshot dir that actually contains model.onnx.
-    hub_dir_name = "models--" + CLIP_MODEL_NAME.replace("/", "--").replace("\\", "--")
-    hub_snapshots = clip_root / hub_dir_name / "snapshots"
-    if hub_snapshots.is_dir():
-        for snapshot in sorted(hub_snapshots.iterdir(), reverse=True):
-            if (snapshot / "model.onnx").exists():
-                return str(snapshot.resolve())
-
-    # 3) Recursive fallback for any other FastEmbed/HF cache nesting. Bounded to
-    #    a few levels so a huge clip_root can't trigger an unbounded walk.
-    for depth_pattern in ("*/model.onnx", "*/*/model.onnx", "*/*/*/model.onnx", "*/*/*/*/model.onnx"):
-        matches = sorted(clip_root.glob(depth_pattern))
-        for match in matches:
-            model_dir = match.parent
-            # Skip obvious temp/cache directories
-            if model_dir.name.startswith(".") or model_dir.name == "tmp":
-                continue
-            return str(model_dir.resolve())
-
-    return None
-
-
-def get_default_legacy_model_path() -> Optional[str]:
-    """Return the best local legacy YOLO model path for censor detection."""
-    yolo_root = Path(get_yolo_model_dir())
-    preferred_names = [
-        "wenaka_yolov8s-seg.onnx",
-        "wenaka_yolov8s-seg.pt",
-        "yolo26s-seg.onnx",
-        "yolo26s-seg.pt",
-        "yolov8s-seg.onnx",
-        "yolov8s-seg.pt",
-    ]
-
-    for name in preferred_names:
-        candidate = yolo_root / name
-        if candidate.exists():
-            return str(candidate.resolve())
-
-    for suffix in (".onnx", ".pt", ".pth"):
-        matches = sorted(path for path in yolo_root.glob(f"*{suffix}") if path.is_file())
-        if matches:
-            return str(matches[0].resolve())
-    return None
-
-
-def get_sam3_checkpoint_path() -> Optional[str]:
-    """Return the directory containing a complete transformers SAM3 checkpoint.
-
-    The transformers ``Sam3Model.from_pretrained`` loader needs a directory
-    holding ``config.json`` + ``model.safetensors`` + tokenizer files, so
-    this returns the directory path (not a single weight file path).
-
-    Covers the canonical download dirs, then the huggingface_hub cache layout
-    (``models--facebook--sam3/snapshots/{hash}/``) and any nested placement, so
-    a user who downloaded SAM3 via transformers/HF tooling — not just our
-    direct ModelScope fetch — is still detected.
-    """
-    sam3_root = Path(get_sam3_model_dir())
-    candidate_dirs = [
-        sam3_root / "facebook-sam3-modelscope",
-        sam3_root / "facebook-sam3",
-        sam3_root,
-    ]
-    for candidate in candidate_dirs:
-        if (candidate / "config.json").exists() and (candidate / "model.safetensors").exists():
-            return str(candidate.resolve())
-
-    # huggingface_hub cache layout: models--facebook--sam3/snapshots/{hash}/.
-    for hub_dir in sorted(sam3_root.glob("models--*--*")):
-        snapshots = hub_dir / "snapshots"
-        if not snapshots.is_dir():
-            continue
-        for snapshot in sorted(snapshots.iterdir(), reverse=True):
-            if (snapshot / "config.json").exists() and (snapshot / "model.safetensors").exists():
-                return str(snapshot.resolve())
-
-    # Recursive fallback: any dir under sam3_root holding both required files.
-    if sam3_root.is_dir():
-        for config_file in sorted(sam3_root.rglob("config.json")):
-            checkpoint_dir = config_file.parent
-            if (checkpoint_dir / "model.safetensors").exists():
-                return str(checkpoint_dir.resolve())
-    return None
-
-
-def _find_kaloscope_dir(artist_root: Path) -> Optional[Path]:
-    """Find the directory holding the Kaloscope checkpoint, case-insensitively.
-
-    A ``git clone`` of the model repo creates a mixed-case ``Kaloscope2.0/``
-    directory; the hardcoded lowercase ``kaloscope2.0`` path misses it on
-    case-sensitive Linux filesystems. Prefer the canonical lowercase dir
-    (fast path on Windows/macOS), then any case-insensitive kaloscope* match,
-    then any directory anywhere under the artist root that actually contains
-    the checkpoint basename. Returns the directory that directly contains the
-    checkpoint (i.e. the ``.../448-90.13`` level) or ``None``.
-    """
-    if not artist_root.exists():
-        return None
-
-    checkpoint_basename = Path(ARTIST_KALOSCOPE_CHECKPOINT.replace("\\", "/")).name
-
-    # 1) Canonical lowercase layout.
-    canonical = artist_root / "kaloscope2.0" / ARTIST_KALOSCOPE_CHECKPOINT
-    if canonical.is_file():
-        return canonical.parent
-
-    # 2) Case-insensitive kaloscope* directory, checkpoint at the HF subpath.
-    for child in sorted(artist_root.iterdir()):
-        if not child.is_dir():
-            continue
-        normalized = child.name.lower().replace("-", "").replace("_", "").replace(".", "")
-        if normalized.startswith("kaloscope"):
-            checkpoint = child / ARTIST_KALOSCOPE_CHECKPOINT
-            if checkpoint.is_file():
-                return checkpoint.parent
-
-    # 3) Recursive search by basename (any manual placement depth).
-    for checkpoint in sorted(artist_root.rglob(checkpoint_basename)):
-        if checkpoint.is_file():
-            return checkpoint.parent
-    return None
-
-
-def _resolve_artist_runtime_path() -> Optional[str]:
-    """Locate an LSNet runtime checkout on disk.
-
-    Mirrors ``artist_identifier._resolve_lsnet_runtime_path`` so the
-    ``/api/artists/diagnostics`` endpoint and the actual identifier agree
-    on whether the runtime is available. Older installs commonly have the
-    runtime under ``<repo>/models/artist/comfyui-lsnet-runtime/`` (legacy
-    path); that location must be probed here too, otherwise the
-    diagnostics permanently reports ``available: false`` even though the
-    identifier loads and runs successfully.
-    """
-    candidates: List[Path] = []
-    if ARTIST_LSNET_CODE_PATH:
-        candidates.append(Path(ARTIST_LSNET_CODE_PATH).expanduser())
-
-    artist_root = Path(get_artist_model_dir())
-    candidates.extend(
-        [
-            artist_root / "comfyui-lsnet-runtime",
-            artist_root / "comfyui-lsnet",
-            artist_root / "lsnet-test",
-        ]
-    )
-    # Legacy paths (pre-data/models/ migration). Keep parity with
-    # artist_identifier._resolve_lsnet_runtime_path so diagnostics don't drift
-    # from runtime behaviour. Skipped when the env opts out of legacy model
-    # locations (the hermetic E2E harness sets
-    # SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY=1) so a developer's real
-    # models/artist/ checkout can't shadow the data-dir runtime. Production
-    # never sets the flag, so legacy installs keep resolving exactly as before.
-    if os.environ.get("SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY") != "1":
-        project_root = Path(__file__).resolve().parent.parent
-        candidates.extend(
-            [
-                project_root / "models" / "artist" / "comfyui-lsnet",
-                project_root / "models" / "artist" / "lsnet-test",
-                project_root / "models" / "artist" / "comfyui-lsnet-runtime",
-                project_root / "third_party" / "comfyui-lsnet",
-                project_root / "third_party" / "lsnet-test",
-            ]
-        )
-
-    for candidate in candidates:
-        resolved = candidate.resolve()
-        if not resolved.exists():
-            continue
-        if (resolved / "lsnet_model").exists() or (resolved / "model").exists():
-            return str(resolved)
-    return None
-
-
-def get_artist_checkpoint_path() -> Optional[str]:
-    artist_root = Path(get_artist_model_dir())
-    checkpoint_basename = Path(ARTIST_KALOSCOPE_CHECKPOINT.replace("\\", "/")).name
-    checkpoint_dir = _find_kaloscope_dir(artist_root)
-    if checkpoint_dir is None:
-        return None
-    candidate = checkpoint_dir / checkpoint_basename
-    if candidate.exists():
-        return str(candidate.resolve())
-    return None
-
-
-def get_artist_class_mapping_path() -> Optional[str]:
-    artist_root = Path(get_artist_model_dir())
-    mapping_basename = Path(ARTIST_KALOSCOPE_CLASS_MAPPING.replace("\\", "/")).name
-    checkpoint_dir = _find_kaloscope_dir(artist_root)
-    if checkpoint_dir is not None:
-        # The mapping sits next to the checkpoint, or one level up (HF ships it
-        # at the kaloscope dir root, with the checkpoint under 448-90.13/).
-        for mapping_candidate in (
-            checkpoint_dir / mapping_basename,
-            checkpoint_dir.parent / mapping_basename,
-        ):
-            if mapping_candidate.is_file():
-                return str(mapping_candidate.resolve())
-    # Last resort: any class_mapping.csv under the artist root.
-    if artist_root.is_dir():
-        for match in sorted(artist_root.rglob(mapping_basename)):
-            if match.is_file():
-                return str(match.resolve())
-    return None
 
 
 def get_model_health() -> Dict[str, Any]:
