@@ -41,7 +41,6 @@ target the export surface and the write-path edge contracts a split must keep.
 
 import ast
 import sys
-from datetime import datetime
 from pathlib import Path
 
 import pytest
