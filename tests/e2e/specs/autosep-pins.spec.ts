@@ -66,6 +66,7 @@ type AutoSepWin = typeof window & {
   // (app.js model). The verbatim split must keep them reachable as globals.
   serializeAutoSepFilters: (filters: unknown) => Record<string, unknown>
   getAutoSepOperationMode: () => string
+  updateAutoSepPreview: () => Promise<void>
   normalizeAutoSepOperationMode: (mode: unknown) => string
   initAutoSeparate: () => void
   // AutoSepState is a lexical `const` — deliberately NOT leaked to window
@@ -367,6 +368,46 @@ test('invalidateAutoSepPreview zeroes the match count and clears the preview lis
   await expect(page.locator('#autosep-preview .stat-number')).toHaveText('0')
   await expect(page.locator('#autosep-preview-list .autosep-preview-item')).toHaveCount(0)
   await expect(page.locator('#autosep-preview-list .autosep-preview-empty')).toHaveCount(1)
+
+  // DEAD-1 regression pin (fix landed with this assertion), two parts —
+  // earlier serial tests persist autosep filters, so this is asserted
+  // environment-independently instead of via a real no-filters preview:
+  // (1) the guidance branch itself renders;
+  await page.evaluate(() => {
+    ;(window as AutoSepWin & { renderAutoSepPreviewList: (i: unknown[], t: number, r?: string | null) => void })
+      .renderAutoSepPreviewList([], 0, 'no-filters')
+  })
+  await expect(
+    page.locator('#autosep-preview-list .autosep-preview-empty--no-filters'),
+  ).toHaveCount(1)
+  // (2) updateAutoSepPreview actually FORWARDS the reason (the bug was that
+  // no caller ever passed it): clear the persisted filter state so this page
+  // is genuinely filter-less (AutoSepState is a lexical const — invisible to
+  // evaluate — so the no-filters condition is forced via storage + reload),
+  // wrap the renderer, run a real preview, and assert 'no-filters' arrives.
+  await page.evaluate(() => localStorage.removeItem('autosep_filter_state_v1'))
+  await gotoAutosep(page)
+  const captured = await page.evaluate(async () => {
+    const w = window as AutoSepWin & {
+      renderAutoSepPreviewList: (i: unknown[], t: number, r?: string | null) => void
+    }
+    const original = w.renderAutoSepPreviewList
+    let seen: string | null | undefined = 'never-called'
+    w.renderAutoSepPreviewList = (images, total, reason) => {
+      seen = reason ?? null
+      original(images, total, reason)
+    }
+    try {
+      await w.updateAutoSepPreview()
+    } finally {
+      w.renderAutoSepPreviewList = original
+    }
+    return seen
+  })
+  // The forwarding is the pin; whether the guidance NODE renders depends on
+  // the library being empty (with images present the grid correctly shows) —
+  // part (1) above already pins the branch's rendering.
+  expect(captured).toBe('no-filters')
 })
 
 // ---------------------------------------------------------------------------

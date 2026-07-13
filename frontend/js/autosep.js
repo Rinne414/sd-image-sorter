@@ -1421,7 +1421,11 @@ async function updateAutoSepPreview() {
         // Clamp defensively: the count must never render as the backend's -1
         // "count skipped" sentinel (the user-reported "-1 张图").
         $('#autosep-preview .stat-number').textContent = Math.max(0, AutoSepState.matchCount);
-        renderAutoSepPreviewList(AutoSepState.previewImages, AutoSepState.matchCount);
+        // Pass the no-filters reason so the guidance empty-state (pin-sweep
+        // DEAD-1: it could never render — no caller ever sent the reason)
+        // replaces the silent generic text when nothing is filtered yet.
+        renderAutoSepPreviewList(AutoSepState.previewImages, AutoSepState.matchCount,
+            AutoSepState.allImagesMode ? 'no-filters' : null);
 
     } catch (error) {
         Logger.error('Failed to preview:', error);
