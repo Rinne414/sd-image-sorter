@@ -35,13 +35,27 @@ test.describe.configure({ mode: 'serial' })
 async function gotoGallery(page: Page): Promise<void> {
   await page.goto('/')
   await page.waitForLoadState('domcontentloaded')
-  // gallery.js loads right after app.js at the end of <body>; wait for both the
-  // Gallery global and a settled App before driving anything.
+  // gallery.js loads right after app.js at the end of <body>; wait for both
+  // the Gallery global and a FULLY settled boot (appReady flag, not just
+  // isLoading) before driving anything — the DOMContentLoaded boot fires its
+  // own loadImages whose empty-DB resolution calls Gallery.setImages([]) and
+  // would wipe cards seeded too early (raced 3/3 on a clean isolated DB).
   await page.waitForFunction(() =>
     typeof window.Gallery?.setImages === 'function'
     && typeof window.App?.switchView === 'function'
+    && document.documentElement.dataset.appReady === '1'
     && window.App?.AppState?.isLoading === false)
+  // Our own switchView MAY trigger another loadImages (it does not when the
+  // boot already landed on gallery) — wait for that request if one fires, but
+  // don't burn the full timeout when none does: no request = no pending
+  // setImages([]) wipe.
+  const loadSettled = page
+    .waitForResponse((r) => r.url().includes('/api/images'), { timeout: 15000 })
+    .catch(() => null)
   await page.evaluate(() => window.App.switchView('gallery'))
+  await Promise.race([loadSettled, page.waitForTimeout(1500)])
+  await page.waitForFunction(() => window.App?.AppState?.isLoading === false)
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve(null))))
 }
 
 /**
