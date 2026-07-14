@@ -217,6 +217,7 @@ from db_reconnect_reviews import (
 from db_tags import (
     add_tags,
     add_tags_batch,
+    tag_update_transaction,
     get_image_tags,
     get_image_tags_map,
     get_image_ids_already_tagged,

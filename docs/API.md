@@ -1313,22 +1313,37 @@ Wipe the contents of whitelisted cache directories. Body: `{keys: ["tmp" | "pip_
 
 ### Tags Library Bulk Operations
 
-Added in v3.2.1. Tag-Master-inspired bulk operations on the DB tags table. Every mutation accepts `dry_run=true` to preview affected counts and up to 5 sample before/after pairs before committing.
+Added in v3.2.1. Tag-Master-inspired bulk operations on the DB tags table. Every mutation accepts exactly one scope source (`image_ids`, `selection_token`, or `filters`) and `dry_run=true` to preview affected counts and up to 5 sample before/after pairs before committing.
+
+Every non-dry-run operation is atomic across its full resolved scope, including
+all internal ID chunks. If preparing or writing any image fails, the API returns
+a non-2xx response whose `error` explains that all changes were rolled back;
+no undo-journal entry is created and clients must not render an applied result.
+
+Repeated IDs in an explicit `image_ids` scope are normalized to one logical
+image so progress, affected counts, and undo journals remain exact.
+
+Successful applied responses include `op_id`, `undo_available`, and
+`warnings: [{code, message}]`. The undo journal is bounded by both image
+count and serialized bytes. If that limit is exceeded, or persisting the
+journal fails after the tag transaction commits, the endpoint still returns
+HTTP 200 because the tag changes were applied; `undo_available` is false and
+`warnings` explicitly explains why undo is unavailable.
 
 #### GET /api/tags/bulk/state
-Report bulk-operation backend state (cancellable in-flight job, last completion summary, capability flags). Useful for the mass tag editor UI to gate destructive actions.
+Report the current bulk-operation counters as `{running, operation, total, completed, errors}`. This endpoint does not provide cancellation, capability flags, or a separate completion summary.
 
 #### POST /api/tags/bulk/find-replace
-Rename a tag across N images. Body: `{find, replace, scope, case_sensitive, regex, dry_run}`. Empty `replace` removes the tag. `regex: true` (QW-3, opt-in) treats `find` as a whole-tag fullmatch pattern and lets `replace` use backrefs (`\1`); invalid patterns return 400. Applied runs are journaled for undo and return `op_id`/`undo_available`.
+Rename a tag across N images. Body: `{image_ids|selection_token|filters, find, replace, case_sensitive, regex, dry_run}`. Empty `replace` removes the tag. `regex: true` (QW-3, opt-in) treats `find` as a whole-tag fullmatch pattern and lets `replace` use backrefs (`\1`); invalid patterns or replacement backreferences return 400.
 
 #### POST /api/tags/bulk/add
-Append tags to a selection. Body: `{image_ids|filter, tags: [{tag, confidence}], dedupe, dry_run}`. Existing tags are kept; the new confidence wins only when explicitly requested.
+Append tags to a selection. Body: `{image_ids|selection_token|filters, tags: string[], confidence, dry_run}`. Existing tags are kept. Request tags are trimmed and deduplicated case-insensitively before preview counts and persistence, and `confidence` applies to every newly added tag.
 
 #### POST /api/tags/bulk/remove
-Delete specified tags from a selection. Body: `{image_ids|filter, tags, case_sensitive, dry_run}`.
+Delete specified tags from a selection. Body: `{image_ids|selection_token|filters, tags: string[], case_sensitive, dry_run}`.
 
 #### POST /api/tags/bulk/cleanup
-Drop tags below a confidence threshold and deduplicate by case-insensitive tag name keeping the highest-confidence copy. Body: `{image_ids|filter, min_confidence, dedupe, dry_run}`.
+Drop tags below a confidence threshold and deduplicate by case-insensitive tag name keeping the highest-confidence copy. Body: `{image_ids|selection_token|filters, min_confidence, dedupe, dry_run}`.
 
 
 #### GET /api/tags/bulk/ops
@@ -1337,7 +1352,7 @@ List the most recent applied bulk tag operations from the undo journal (v3.5.x F
 
 #### POST /api/tags/bulk/undo/{op_id}
 
-Undo one journaled bulk operation. Body: `{force}`. Restores each affected image's full pre-op tag rows (provenance included). Images whose tag set changed since the op are conflicts: skipped and reported in `skipped_conflicts` unless `force=true`. Undo is one-shot per op and is itself journaled (the returned `redo_op_id` can be undone to redo). Returns `{op_id, operation, restored, skipped_conflicts, redo_op_id}`; 404 for unknown ids, 409 when already undone or no journal was stored.
+Undo one journaled bulk operation. Body: `{force}`. Restores each affected image's full pre-op tag rows (provenance included). Images whose tag set changed since the op are conflicts: skipped and reported in `skipped_conflicts` unless `force=true`. Undo is one-shot per op and is itself journaled when the bounded redo journal can be saved. Returns `{op_id, operation, restored, skipped_conflicts, redo_op_id, redo_available, warnings}`; `redo_op_id` is non-null only when `redo_available=true`. If Undo succeeds but its redo journal exceeds a limit or cannot be persisted, the endpoint still returns HTTP 200, marks the original operation undone, and reports the lost redo capability in `warnings`. Returns 404 for unknown ids and 409 when already undone, the original operation has no journal, or persisted journal data is invalid.
 #### GET /api/tags/export-presets
 List built-in tag/caption export presets used by the LoRA training template engine (Anima Tags+NL, Anima Tags-only, Illustrious / Pony, NoobAI, FLUX, Kohya SD1.5, Custom).
 

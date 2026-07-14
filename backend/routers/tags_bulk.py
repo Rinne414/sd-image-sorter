@@ -17,13 +17,15 @@ from __future__ import annotations
 import logging
 import re
 import threading
-from typing import Any, Dict, Iterator, List, Optional
+from contextlib import contextmanager
+from typing import Any, Callable, Dict, Iterator, List, Literal, NoReturn, Optional, TypedDict
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 import database as db
 from db_tags import _dedupe_tag_rows
+from services import tag_bulk_journal
 from services.tag_export_service import (
     PROMPT_MATCH_MODE_CONTAINS,
     PROMPT_MATCH_MODE_EXACT,
@@ -36,6 +38,22 @@ router = APIRouter(prefix="/api/tags/bulk", tags=["tags-bulk"])
 BULK_TAG_MAX_IMAGE_IDS = 1_000_000
 BULK_TAG_ID_CHUNK_SIZE = 500
 VALID_PROMPT_MATCH_MODES = {PROMPT_MATCH_MODE_EXACT, PROMPT_MATCH_MODE_CONTAINS}
+
+BulkWarningCode = Literal[
+    "undo_journal_truncated",
+    "undo_journal_persistence_failed",
+]
+
+
+class BulkOperationWarning(TypedDict):
+    code: BulkWarningCode
+    message: str
+
+
+class JournalApiResult(TypedDict):
+    op_id: Optional[str]
+    undo_available: bool
+    warnings: List[BulkOperationWarning]
 
 
 _op_lock = threading.Lock()
@@ -81,6 +99,18 @@ def _record_op_error(image_id: int, message: str) -> None:
 def _end_op() -> None:
     with _op_lock:
         _op_state["running"] = False
+
+
+def _record_scope_estimate_failure(operation: str, detail: str) -> None:
+    """Replace stale progress with the latest pre-mutation scope failure."""
+    with _op_lock:
+        _op_state.update({
+            "running": False,
+            "operation": operation,
+            "total": 0,
+            "completed": 0,
+            "errors": [{"image_id": 0, "error": detail}],
+        })
 
 
 def _run_exclusive(operation: str, handler, request) -> Dict[str, Any]:
@@ -166,6 +196,13 @@ class BulkTagScopeRequest(BaseModel):
     selection_token: Optional[str] = Field(default=None, min_length=1)
     filters: Optional[BulkTagFilterContract] = None
 
+    @field_validator("image_ids")
+    @classmethod
+    def dedupe_explicit_image_ids(cls, image_ids: Optional[List[int]]) -> Optional[List[int]]:
+        if image_ids is None:
+            return None
+        return list(dict.fromkeys(image_ids))
+
     @model_validator(mode="after")
     def require_one_scope(self) -> "BulkTagScopeRequest":
         scope_count = sum([
@@ -195,6 +232,22 @@ class BulkAddRequest(BulkTagScopeRequest):
     tags: List[str] = Field(min_length=1, max_length=200)
     confidence: float = 0.85
     dry_run: bool = False
+
+    @field_validator("tags")
+    @classmethod
+    def normalize_tags(cls, tags: List[str]) -> List[str]:
+        normalized: List[str] = []
+        seen: set[str] = set()
+        for raw_tag in tags:
+            tag = raw_tag.strip()
+            tag_key = tag.lower()
+            if not tag or tag_key in seen:
+                continue
+            seen.add(tag_key)
+            normalized.append(tag)
+        if not normalized:
+            raise ValueError("tags list cannot be empty")
+        return normalized
 
 
 class BulkRemoveRequest(BulkTagScopeRequest):
@@ -376,12 +429,58 @@ def _estimate_scope_total(request: BulkTagScopeRequest) -> int:
     return 0
 
 
+def _estimate_scope_total_or_raise(
+    operation: str,
+    request: BulkTagScopeRequest,
+) -> int:
+    """Expose scope read failures before any mutation begins."""
+    try:
+        return _estimate_scope_total(request)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        detail = (
+            f"Bulk tag {operation} scope estimate failed; no changes were applied. "
+            f"Cause: {type(exc).__name__}: {exc}"
+        )
+        _record_scope_estimate_failure(operation, detail)
+        logger.exception(
+            "bulk tag scope estimate failed",
+            extra={
+                "operation": operation,
+                "error_type": type(exc).__name__,
+            },
+        )
+        raise HTTPException(status_code=500, detail=detail) from exc
+
+
 def _scope_source(request: BulkTagScopeRequest) -> str:
     if request.image_ids is not None:
         return "image_ids"
     if request.selection_token:
         return "selection_token"
     return "filters"
+
+
+def _confidence_from_row(row: Dict[str, Any]) -> float:
+    """Return numeric confidence without treating a valid zero as missing."""
+    raw_confidence: object = row.get("confidence")
+    if raw_confidence is None:
+        return 1.0
+    if isinstance(raw_confidence, bool) or not isinstance(
+        raw_confidence,
+        (int, float, str),
+    ):
+        raise TypeError(
+            "Tag confidence must be numeric; received "
+            f"{type(raw_confidence).__name__}."
+        )
+    try:
+        return float(raw_confidence)
+    except ValueError as exc:
+        raise ValueError(
+            f"Tag confidence must be numeric; received {raw_confidence!r}."
+        ) from exc
 
 
 def _preserve_row(t: Dict[str, Any]) -> Dict[str, Any]:
@@ -394,7 +493,7 @@ def _preserve_row(t: Dict[str, Any]) -> Dict[str, Any]:
     """
     return {
         "tag": str(t.get("tag") or ""),
-        "confidence": float(t.get("confidence") or 1.0),
+        "confidence": _confidence_from_row(t),
         "source": t.get("source"),
         "category": t.get("category"),
     }
@@ -406,45 +505,180 @@ def _row_from_tuple(row) -> Dict[str, Any]:
     return {"tag": tag, "confidence": confidence, "source": source, "category": category}
 
 
-def _record_journal_if_applied(request, operation: str, params: Dict[str, Any], journal: List[Dict[str, Any]]):
-    """Journal an applied op for undo (FE-2s). Returns (op_id, undo_available).
+def _create_journal_buffer() -> tag_bulk_journal.JournalBuffer:
+    return tag_bulk_journal.create_journal_buffer(
+        tag_bulk_journal.MAX_JOURNAL_IMAGES,
+        tag_bulk_journal.MAX_JOURNAL_SERIALIZED_BYTES,
+    )
 
-    Journal failure must not fail the (already committed) op — degrade to
-    "no undo for this run" and log why.
-    """
-    if request.dry_run or not journal:
-        return None, False
+
+def _append_journal_entry(
+    journal: tag_bulk_journal.JournalBuffer,
+    image_id: int,
+    before_rows: List[Dict[str, Any]],
+    after_rows: List[Dict[str, Any]],
+) -> None:
+    tag_bulk_journal.append_journal_entry(
+        journal,
+        image_id,
+        before_rows,
+        after_rows,
+    )
+
+
+def _record_journal_if_applied(
+    request: BulkTagScopeRequest,
+    operation: str,
+    params: Dict[str, Any],
+    journal: tag_bulk_journal.JournalBuffer,
+    images_affected: int,
+) -> JournalApiResult:
+    """Journal a committed operation and expose lost undo as a warning."""
+    if request.dry_run or images_affected <= 0:
+        return {"op_id": None, "undo_available": False, "warnings": []}
     try:
-        from services import tag_bulk_journal
-
-        op_id, truncated = tag_bulk_journal.record_op(
+        record_result = tag_bulk_journal.record_op(
             operation=operation,
             scope_source=_scope_source(request),
             params=params,
-            entries=journal,
+            journal=journal,
+            images_affected=images_affected,
         )
-        return op_id, not truncated
+        if record_result.truncated:
+            if record_result.truncation_reason == "serialized_byte_limit":
+                limit_description = (
+                    f"the {journal.max_serialized_bytes}-byte serialized-data limit"
+                )
+            else:
+                limit_description = f"the {journal.max_images}-image limit"
+            warning: BulkOperationWarning = {
+                "code": "undo_journal_truncated",
+                "message": (
+                    "Tags were applied, but undo is unavailable because the journal "
+                    f"exceeded {limit_description}."
+                ),
+            }
+            return {
+                "op_id": record_result.op_id,
+                "undo_available": False,
+                "warnings": [warning],
+            }
+        return {
+            "op_id": record_result.op_id,
+            "undo_available": True,
+            "warnings": [],
+        }
     except Exception as exc:
-        logger.warning("bulk undo journal record failed: %s", exc)
-        return None, False
+        logger.warning(
+            "bulk undo journal record failed",
+            extra={
+                "operation": operation,
+                "images_affected": images_affected,
+                "error_type": type(exc).__name__,
+            },
+            exc_info=exc,
+        )
+        warning = {
+            "code": "undo_journal_persistence_failed",
+            "message": (
+                "Tags were applied, but undo is unavailable because the journal "
+                f"could not be saved. Cause: {type(exc).__name__}: {exc}"
+            ),
+        }
+        return {"op_id": None, "undo_available": False, "warnings": [warning]}
 
 
-def _commit_tag_updates(updates: List[Dict[str, Any]]) -> None:
+def _commit_tag_updates(
+    write_updates: Callable[[List[Dict[str, Any]]], None],
+    updates: List[Dict[str, Any]],
+) -> None:
     if not updates:
         return
+    image_ids = [int(item["image_id"]) for item in updates]
+    first_image_id = image_ids[0]
     try:
-        db.add_tags_batch(updates)
-        return
-    except Exception as exc:  # pragma: no cover - defensive fallback
-        logger.warning("bulk tag batch commit failed; retrying per image: %s", exc)
+        write_updates(updates)
+    except Exception as exc:
+        detail = (
+            f"Bulk tag update failed for {len(image_ids)} image(s) beginning with "
+            f"image_id={first_image_id}; all changes were rolled back. Cause: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        _record_op_error(first_image_id, detail)
+        logger.exception(
+            "bulk tag transaction write failed",
+            extra={
+                "image_count": len(image_ids),
+                "first_image_id": first_image_id,
+                "error_type": type(exc).__name__,
+            },
+        )
+        raise HTTPException(status_code=500, detail=detail) from exc
 
-    for item in updates:
-        image_id = int(item.get("image_id") or 0)
-        try:
-            db.add_tags(image_id, item.get("tags") or [])
-        except Exception as exc:  # pragma: no cover - defensive fallback
-            logger.warning("bulk tag commit failed for image %s: %s", image_id, exc)
-            _record_op_error(image_id, str(exc))
+
+def _raise_bulk_preparation_error(
+    operation: str,
+    image_id: int,
+    dry_run: bool,
+    exc: Exception,
+) -> NoReturn:
+    """Abort a logical bulk operation when one image cannot be prepared."""
+    outcome = (
+        "no changes were applied"
+        if dry_run
+        else "all changes were rolled back"
+    )
+    detail = (
+        f"Bulk tag {operation} failed while preparing image_id={image_id}; "
+        f"{outcome}. Cause: {type(exc).__name__}: {exc}"
+    )
+    _record_op_error(image_id, detail)
+    logger.exception(
+        "bulk tag operation preparation failed",
+        extra={
+            "operation": operation,
+            "image_id": image_id,
+            "dry_run": dry_run,
+            "error_type": type(exc).__name__,
+        },
+    )
+    raise HTTPException(status_code=500, detail=detail) from exc
+
+
+@contextmanager
+def _bulk_tag_transaction(
+    operation: str,
+    dry_run: bool,
+) -> Iterator[Callable[[List[Dict[str, Any]]], None]]:
+    """Expose transaction lifecycle failures as actionable API errors."""
+    try:
+        with db.tag_update_transaction(
+            default_source=None,
+            replace_scope="all",
+        ) as write_updates:
+            yield write_updates
+    except HTTPException:
+        raise
+    except Exception as exc:
+        outcome = (
+            "no changes were applied"
+            if dry_run
+            else "all changes were rolled back"
+        )
+        detail = (
+            f"Bulk tag {operation} transaction failed; {outcome}. "
+            f"Cause: {type(exc).__name__}: {exc}"
+        )
+        _record_op_error(0, detail)
+        logger.exception(
+            "bulk tag transaction failed",
+            extra={
+                "operation": operation,
+                "dry_run": dry_run,
+                "error_type": type(exc).__name__,
+            },
+        )
+        raise HTTPException(status_code=500, detail=detail) from exc
 
 
 # ====================================================================
@@ -463,6 +697,11 @@ def _do_find_replace(request: FindReplaceRequest) -> Dict[str, Any]:
             pattern = re.compile(find, flags)
         except re.error as exc:
             raise HTTPException(400, f"Invalid regex: {exc}")
+        if replace:
+            try:
+                pattern.sub(replace, "")
+            except (re.error, IndexError) as exc:
+                raise HTTPException(400, f"Invalid regex replacement: {exc}")
         match_fn = lambda tag: pattern.fullmatch(tag) is not None
         replacement_fn = (lambda tag: pattern.sub(replace, tag)) if replace else None
     elif request.case_sensitive:
@@ -473,77 +712,91 @@ def _do_find_replace(request: FindReplaceRequest) -> Dict[str, Any]:
         match_fn = lambda tag: tag.lower() == find_lower
         replacement_fn = (lambda tag: replace) if replace else None
 
-    total_estimate = _estimate_scope_total(request)
+    total_estimate = _estimate_scope_total_or_raise("find_replace", request)
     total_checked = 0
     affected_images = 0
     affected_tags = 0
     sample_changes: List[Dict[str, Any]] = []
-    journal: List[Dict[str, Any]] = []
+    journal = _create_journal_buffer()
 
     _begin_op("find_replace", total_estimate)
     try:
-        for image_ids in _iter_scope_id_chunks(request):
-            tags_by_image = db.get_image_tags_map(image_ids)
-            updates: List[Dict[str, Any]] = []
-            for image_id in image_ids:
-                try:
-                    existing = tags_by_image.get(image_id) or []
-                    if not existing:
-                        continue
-                    new_tags = []
-                    modified = False
-                    for t in existing:
-                        tag_str = str(t.get("tag") or "")
-                        if match_fn(tag_str):
-                            affected_tags += 1
-                            modified = True
-                            new_value = replacement_fn(tag_str).strip() if replacement_fn else ""
-                            if new_value:  # replace with new tag
-                                # A user-initiated rename produces a
-                                # user-owned row; the old category no
-                                # longer applies to the new name.
-                                new_tags.append({
-                                    "tag": new_value,
-                                    "confidence": float(t.get("confidence") or 1.0),
-                                    "source": "manual",
-                                    "category": None,
-                                })
-                            # else: drop the tag (replace="" means remove)
-                        else:
-                            new_tags.append(_preserve_row(t))
+        with _bulk_tag_transaction(
+            "find_replace",
+            request.dry_run,
+        ) as write_updates:
+            for image_ids in _iter_scope_id_chunks(request):
+                tags_by_image = db.get_image_tags_map(image_ids)
+                updates: List[Dict[str, Any]] = []
+                for image_id in image_ids:
+                    try:
+                        existing = tags_by_image.get(image_id) or []
+                        if not existing:
+                            continue
+                        new_tags = []
+                        modified = False
+                        for t in existing:
+                            tag_str = str(t.get("tag") or "")
+                            if match_fn(tag_str):
+                                affected_tags += 1
+                                modified = True
+                                new_value = replacement_fn(tag_str).strip() if replacement_fn else ""
+                                if new_value:  # replace with new tag
+                                    # A user-initiated rename produces a
+                                    # user-owned row; the old category no
+                                    # longer applies to the new name.
+                                    new_tags.append({
+                                        "tag": new_value,
+                                        "confidence": _confidence_from_row(t),
+                                        "source": "manual",
+                                        "category": None,
+                                    })
+                                # else: drop the tag (replace="" means remove)
+                            else:
+                                new_tags.append(_preserve_row(t))
 
-                    if modified:
-                        affected_images += 1
-                        if len(sample_changes) < 5:
-                            sample_changes.append({
-                                "image_id": image_id,
-                                "before": [t.get("tag") for t in existing],
-                                "after": [t.get("tag") for t in new_tags],
-                            })
-                        if not request.dry_run:
-                            # Dedupe by tag name (case-insensitive) using unified logic
-                            deduped = [
-                                _row_from_tuple(row)
-                                for row in _dedupe_tag_rows(new_tags, None)
-                            ]
-                            journal.append({"image_id": image_id, "before": existing, "after": deduped})
-                            updates.append({"image_id": image_id, "tags": deduped})
-                except Exception as exc:  # pragma: no cover — defensive
-                    logger.warning("find_replace failed for image %s: %s", image_id, exc)
-                    _record_op_error(image_id, str(exc))
-                finally:
-                    total_checked += 1
-                    _bump_op_progress()
-            if not request.dry_run:
-                _commit_tag_updates(updates)
+                        if modified:
+                            affected_images += 1
+                            if len(sample_changes) < 5:
+                                sample_changes.append({
+                                    "image_id": image_id,
+                                    "before": [t.get("tag") for t in existing],
+                                    "after": [t.get("tag") for t in new_tags],
+                                })
+                            if not request.dry_run:
+                                # Dedupe by tag name (case-insensitive) using unified logic
+                                deduped = [
+                                    _row_from_tuple(row)
+                                    for row in _dedupe_tag_rows(new_tags, None)
+                                ]
+                                _append_journal_entry(
+                                    journal,
+                                    image_id,
+                                    existing,
+                                    deduped,
+                                )
+                                updates.append({"image_id": image_id, "tags": deduped})
+                    except Exception as exc:
+                        _raise_bulk_preparation_error(
+                            "find_replace",
+                            image_id,
+                            request.dry_run,
+                            exc,
+                        )
+                    finally:
+                        total_checked += 1
+                        _bump_op_progress()
+                if not request.dry_run:
+                    _commit_tag_updates(write_updates, updates)
     finally:
         _end_op()
 
-    op_id, undo_available = _record_journal_if_applied(
+    journal_result = _record_journal_if_applied(
         request,
         "find_replace",
         {"find": find, "replace": replace, "regex": bool(request.regex)},
         journal,
+        affected_images,
     )
 
     return {
@@ -557,72 +810,82 @@ def _do_find_replace(request: FindReplaceRequest) -> Dict[str, Any]:
         "sample_changes": sample_changes,
         "find": find,
         "replace": replace,
-        "op_id": op_id,
-        "undo_available": undo_available,
+        **journal_result,
     }
 
 
 def _do_bulk_add(request: BulkAddRequest) -> Dict[str, Any]:
-    add_tags = [t.strip() for t in request.tags if t and t.strip()]
-    if not add_tags:
-        raise HTTPException(400, "tags list cannot be empty")
+    add_tags = list(request.tags)
 
     confidence = float(max(0.0, min(1.0, request.confidence)))
 
-    total_estimate = _estimate_scope_total(request)
+    total_estimate = _estimate_scope_total_or_raise("bulk_add", request)
     total_checked = 0
     affected_images = 0
     total_tags_added = 0
     sample_changes: List[Dict[str, Any]] = []
-    journal: List[Dict[str, Any]] = []
+    journal = _create_journal_buffer()
 
     _begin_op("bulk_add", total_estimate)
     try:
-        for image_ids in _iter_scope_id_chunks(request):
-            tags_by_image = db.get_image_tags_map(image_ids)
-            updates: List[Dict[str, Any]] = []
-            for image_id in image_ids:
-                try:
-                    existing = tags_by_image.get(image_id) or []
-                    existing_lower = {(t.get("tag") or "").lower() for t in existing}
+        with _bulk_tag_transaction(
+            "bulk_add",
+            request.dry_run,
+        ) as write_updates:
+            for image_ids in _iter_scope_id_chunks(request):
+                tags_by_image = db.get_image_tags_map(image_ids)
+                updates: List[Dict[str, Any]] = []
+                for image_id in image_ids:
+                    try:
+                        existing = tags_by_image.get(image_id) or []
+                        existing_lower = {(t.get("tag") or "").lower() for t in existing}
 
-                    new_to_add = [t for t in add_tags if t.lower() not in existing_lower]
-                    if not new_to_add:
-                        continue
+                        new_to_add = [t for t in add_tags if t.lower() not in existing_lower]
+                        if not new_to_add:
+                            continue
 
-                    affected_images += 1
-                    total_tags_added += len(new_to_add)
+                        affected_images += 1
+                        total_tags_added += len(new_to_add)
 
-                    if len(sample_changes) < 5:
-                        sample_changes.append({
-                            "image_id": image_id,
-                            "added": new_to_add,
-                            "before_count": len(existing),
-                            "after_count": len(existing) + len(new_to_add),
-                        })
+                        if len(sample_changes) < 5:
+                            sample_changes.append({
+                                "image_id": image_id,
+                                "added": new_to_add,
+                                "before_count": len(existing),
+                                "after_count": len(existing) + len(new_to_add),
+                            })
 
-                    if not request.dry_run:
-                        merged = [
-                            _preserve_row(t) for t in existing if t.get("tag")
-                        ] + [
-                            {"tag": t, "confidence": confidence, "source": "manual", "category": None}
-                            for t in new_to_add
-                        ]
-                        journal.append({"image_id": image_id, "before": existing, "after": merged})
-                        updates.append({"image_id": image_id, "tags": merged})
-                except Exception as exc:  # pragma: no cover — defensive
-                    logger.warning("bulk_add failed for image %s: %s", image_id, exc)
-                    _record_op_error(image_id, str(exc))
-                finally:
-                    total_checked += 1
-                    _bump_op_progress()
-            if not request.dry_run:
-                _commit_tag_updates(updates)
+                        if not request.dry_run:
+                            merged = [
+                                _preserve_row(t) for t in existing if t.get("tag")
+                            ] + [
+                                {"tag": t, "confidence": confidence, "source": "manual", "category": None}
+                                for t in new_to_add
+                            ]
+                            _append_journal_entry(
+                                journal,
+                                image_id,
+                                existing,
+                                merged,
+                            )
+                            updates.append({"image_id": image_id, "tags": merged})
+                    except Exception as exc:
+                        _raise_bulk_preparation_error(
+                            "bulk_add",
+                            image_id,
+                            request.dry_run,
+                            exc,
+                        )
+                    finally:
+                        total_checked += 1
+                        _bump_op_progress()
+                if not request.dry_run:
+                    _commit_tag_updates(write_updates, updates)
     finally:
         _end_op()
 
-    op_id, undo_available = _record_journal_if_applied(
-        request, "bulk_add", {"tags": add_tags}, journal
+    journal_result = _record_journal_if_applied(
+        request, "bulk_add", {"tags": add_tags}, journal, affected_images
     )
 
     return {
@@ -635,8 +898,7 @@ def _do_bulk_add(request: BulkAddRequest) -> Dict[str, Any]:
         "total_tags_added": total_tags_added,
         "sample_changes": sample_changes,
         "tags_to_add": add_tags,
-        "op_id": op_id,
-        "undo_available": undo_available,
+        **journal_result,
     }
 
 
@@ -652,60 +914,77 @@ def _do_bulk_remove(request: BulkRemoveRequest) -> Dict[str, Any]:
     if not remove_set:
         raise HTTPException(400, "tags list cannot be empty")
 
-    total_estimate = _estimate_scope_total(request)
+    total_estimate = _estimate_scope_total_or_raise("bulk_remove", request)
     total_checked = 0
     affected_images = 0
     total_tags_removed = 0
     sample_changes: List[Dict[str, Any]] = []
-    journal: List[Dict[str, Any]] = []
+    journal = _create_journal_buffer()
 
     _begin_op("bulk_remove", total_estimate)
     try:
-        for image_ids in _iter_scope_id_chunks(request):
-            tags_by_image = db.get_image_tags_map(image_ids)
-            updates: List[Dict[str, Any]] = []
-            for image_id in image_ids:
-                try:
-                    existing = tags_by_image.get(image_id) or []
-                    if not existing:
-                        continue
+        with _bulk_tag_transaction(
+            "bulk_remove",
+            request.dry_run,
+        ) as write_updates:
+            for image_ids in _iter_scope_id_chunks(request):
+                tags_by_image = db.get_image_tags_map(image_ids)
+                updates: List[Dict[str, Any]] = []
+                for image_id in image_ids:
+                    try:
+                        existing = tags_by_image.get(image_id) or []
+                        if not existing:
+                            continue
 
-                    kept = []
-                    removed_here = []
-                    for t in existing:
-                        tag_str = str(t.get("tag") or "")
-                        if match_fn(tag_str):
-                            removed_here.append(tag_str)
-                        else:
-                            kept.append(_preserve_row(t))
+                        kept = []
+                        removed_here = []
+                        for t in existing:
+                            tag_str = str(t.get("tag") or "")
+                            if match_fn(tag_str):
+                                removed_here.append(tag_str)
+                            else:
+                                kept.append(_preserve_row(t))
 
-                    if removed_here:
-                        affected_images += 1
-                        total_tags_removed += len(removed_here)
+                        if removed_here:
+                            affected_images += 1
+                            total_tags_removed += len(removed_here)
 
-                        if len(sample_changes) < 5:
-                            sample_changes.append({
-                                "image_id": image_id,
-                                "removed": removed_here,
-                                "remaining_count": len(kept),
-                            })
+                            if len(sample_changes) < 5:
+                                sample_changes.append({
+                                    "image_id": image_id,
+                                    "removed": removed_here,
+                                    "remaining_count": len(kept),
+                                })
 
-                        if not request.dry_run:
-                            journal.append({"image_id": image_id, "before": existing, "after": kept})
-                            updates.append({"image_id": image_id, "tags": kept})
-                except Exception as exc:  # pragma: no cover — defensive
-                    logger.warning("bulk_remove failed for image %s: %s", image_id, exc)
-                    _record_op_error(image_id, str(exc))
-                finally:
-                    total_checked += 1
-                    _bump_op_progress()
-            if not request.dry_run:
-                _commit_tag_updates(updates)
+                            if not request.dry_run:
+                                _append_journal_entry(
+                                    journal,
+                                    image_id,
+                                    existing,
+                                    kept,
+                                )
+                                updates.append({"image_id": image_id, "tags": kept})
+                    except Exception as exc:
+                        _raise_bulk_preparation_error(
+                            "bulk_remove",
+                            image_id,
+                            request.dry_run,
+                            exc,
+                        )
+                    finally:
+                        total_checked += 1
+                        _bump_op_progress()
+                if not request.dry_run:
+                    _commit_tag_updates(write_updates, updates)
     finally:
         _end_op()
 
-    op_id, undo_available = _record_journal_if_applied(
-        request, "bulk_remove", {"tags": sorted(remove_set)}, journal
+    journal_result = _record_journal_if_applied(
+        request,
+        "bulk_remove",
+        {"tags": sorted(remove_set)},
+        journal,
+        affected_images,
     )
 
     return {
@@ -718,87 +997,100 @@ def _do_bulk_remove(request: BulkRemoveRequest) -> Dict[str, Any]:
         "total_tags_removed": total_tags_removed,
         "sample_changes": sample_changes,
         "tags_to_remove": list(remove_set),
-        "op_id": op_id,
-        "undo_available": undo_available,
+        **journal_result,
     }
 
 
 def _do_cleanup(request: CleanupRequest) -> Dict[str, Any]:
     threshold = float(max(0.0, min(1.0, request.min_confidence)))
 
-    total_estimate = _estimate_scope_total(request)
+    total_estimate = _estimate_scope_total_or_raise("cleanup", request)
     total_checked = 0
     affected_images = 0
     total_low_conf = 0
     total_dupes = 0
     sample_changes: List[Dict[str, Any]] = []
-    journal: List[Dict[str, Any]] = []
+    journal = _create_journal_buffer()
 
     _begin_op("cleanup", total_estimate)
     try:
-        for image_ids in _iter_scope_id_chunks(request):
-            tags_by_image = db.get_image_tags_map(image_ids)
-            updates: List[Dict[str, Any]] = []
-            for image_id in image_ids:
-                try:
-                    existing = tags_by_image.get(image_id) or []
-                    if not existing:
-                        continue
+        with _bulk_tag_transaction(
+            "cleanup",
+            request.dry_run,
+        ) as write_updates:
+            for image_ids in _iter_scope_id_chunks(request):
+                tags_by_image = db.get_image_tags_map(image_ids)
+                updates: List[Dict[str, Any]] = []
+                for image_id in image_ids:
+                    try:
+                        existing = tags_by_image.get(image_id) or []
+                        if not existing:
+                            continue
 
-                    # Drop low-confidence
-                    filtered = [
-                        t for t in existing
-                        if float(t.get("confidence") or 1.0) >= threshold
-                    ]
-                    low_conf_count = len(existing) - len(filtered)
-
-                    # Dedupe (case-insensitive, keep highest confidence) using unified logic
-                    dupe_count = 0
-                    if request.dedupe:
-                        deduped_rows = _dedupe_tag_rows(filtered, None)
-                        dupe_count = len(filtered) - len(deduped_rows)
-                        cleaned = [_row_from_tuple(row) for row in deduped_rows]
-                    else:
-                        cleaned = filtered
-
-                    if low_conf_count == 0 and dupe_count == 0:
-                        continue
-
-                    affected_images += 1
-                    total_low_conf += low_conf_count
-                    total_dupes += dupe_count
-
-                    if len(sample_changes) < 5:
-                        sample_changes.append({
-                            "image_id": image_id,
-                            "before_count": len(existing),
-                            "after_count": len(cleaned),
-                            "removed_low_conf": low_conf_count,
-                            "removed_dupes": dupe_count,
-                        })
-
-                    if not request.dry_run:
-                        normalized = [
-                            _preserve_row(t) for t in cleaned if t.get("tag")
+                        # Drop low-confidence
+                        filtered = [
+                            t for t in existing
+                            if _confidence_from_row(t) >= threshold
                         ]
-                        journal.append({"image_id": image_id, "before": existing, "after": normalized})
-                        updates.append({"image_id": image_id, "tags": normalized})
-                except Exception as exc:  # pragma: no cover — defensive
-                    logger.warning("cleanup failed for image %s: %s", image_id, exc)
-                    _record_op_error(image_id, str(exc))
-                finally:
-                    total_checked += 1
-                    _bump_op_progress()
-            if not request.dry_run:
-                _commit_tag_updates(updates)
+                        low_conf_count = len(existing) - len(filtered)
+
+                        # Dedupe (case-insensitive, keep highest confidence) using unified logic
+                        dupe_count = 0
+                        if request.dedupe:
+                            deduped_rows = _dedupe_tag_rows(filtered, None)
+                            dupe_count = len(filtered) - len(deduped_rows)
+                            cleaned = [_row_from_tuple(row) for row in deduped_rows]
+                        else:
+                            cleaned = filtered
+
+                        if low_conf_count == 0 and dupe_count == 0:
+                            continue
+
+                        affected_images += 1
+                        total_low_conf += low_conf_count
+                        total_dupes += dupe_count
+
+                        if len(sample_changes) < 5:
+                            sample_changes.append({
+                                "image_id": image_id,
+                                "before_count": len(existing),
+                                "after_count": len(cleaned),
+                                "removed_low_conf": low_conf_count,
+                                "removed_dupes": dupe_count,
+                            })
+
+                        if not request.dry_run:
+                            normalized = [
+                                _preserve_row(t) for t in cleaned if t.get("tag")
+                            ]
+                            _append_journal_entry(
+                                journal,
+                                image_id,
+                                existing,
+                                normalized,
+                            )
+                            updates.append({"image_id": image_id, "tags": normalized})
+                    except Exception as exc:
+                        _raise_bulk_preparation_error(
+                            "cleanup",
+                            image_id,
+                            request.dry_run,
+                            exc,
+                        )
+                    finally:
+                        total_checked += 1
+                        _bump_op_progress()
+                if not request.dry_run:
+                    _commit_tag_updates(write_updates, updates)
     finally:
         _end_op()
 
-    op_id, undo_available = _record_journal_if_applied(
+    journal_result = _record_journal_if_applied(
         request,
         "cleanup",
         {"min_confidence": threshold, "dedupe": request.dedupe},
         journal,
+        affected_images,
     )
 
     return {
@@ -813,6 +1105,5 @@ def _do_cleanup(request: CleanupRequest) -> Dict[str, Any]:
         "sample_changes": sample_changes,
         "min_confidence": threshold,
         "dedupe": request.dedupe,
-        "op_id": op_id,
-        "undo_available": undo_available,
+        **journal_result,
     }

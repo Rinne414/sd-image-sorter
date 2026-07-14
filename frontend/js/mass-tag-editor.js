@@ -40,6 +40,52 @@
     const BACKEND_MAX_IDS = 1000000;     // matches Pydantic Field max_length
     const CONFIRM_DELAY_MS = 2000;       // 2-second countdown on Apply button
 
+    function responseErrorMessage(payload, response) {
+        const structuredMessages = [
+            payload?.error,
+            payload?.detail,
+            payload?.message,
+        ];
+        for (const value of structuredMessages) {
+            if (typeof value === "string" && value.trim()) {
+                return value.trim();
+            }
+        }
+        const status = Number(response.status);
+        const statusText = typeof response.statusText === "string"
+            ? response.statusText.trim()
+            : "";
+        return statusText
+            ? `Request failed with HTTP ${status}: ${statusText}.`
+            : `Request failed with HTTP ${status}.`;
+    }
+
+    function responseWarningMessage(payload) {
+        const warnings = payload?.warnings;
+        if (warnings === undefined) {
+            return "";
+        }
+        if (!Array.isArray(warnings)) {
+            return "Tags were applied, but the server returned invalid warning data.";
+        }
+
+        const messages = [];
+        for (const warning of warnings) {
+            if (
+                !warning
+                || typeof warning !== "object"
+                || typeof warning.code !== "string"
+                || !warning.code.trim()
+                || typeof warning.message !== "string"
+                || !warning.message.trim()
+            ) {
+                return "Tags were applied, but the server returned invalid warning data.";
+            }
+            messages.push(warning.message.trim());
+        }
+        return messages.join(" ");
+    }
+
     const MassTagEditor = {
         activeTab: "find_replace",
         scopeLabel: "",
@@ -374,6 +420,7 @@
         // ---- Dry-run ------------------------------------------------------
 
         async runDryRun() {
+            this._resetResult();
             this._setStatus(this.t("Resolving scope…", "正在计算范围..."), "info");
             const scope = await this.resolveScopePayload();
             if (!scope || scope.scopeSize === 0) {
@@ -403,7 +450,7 @@
                 });
                 const data = await resp.json().catch(() => ({}));
                 if (!resp.ok) {
-                    this._setStatus(data.detail || resp.statusText, "error");
+                    this._setStatus(responseErrorMessage(data, resp), "error");
                     return;
                 }
                 this.lastDryRunResult = { ...data, _scope: scope };
@@ -541,13 +588,20 @@
                 });
                 const data = await resp.json().catch(() => ({}));
                 if (!resp.ok) {
-                    this._setStatus(data.detail || resp.statusText, "error");
+                    this._resetResult();
+                    this._setStatus(responseErrorMessage(data, resp), "error");
                     return;
                 }
                 this._renderResult(data, /*applied=*/ true);
-                this._setStatus(this.t("Applied. Gallery will reflect changes on next load.", "已应用，下次加载图库时生效。"), "success");
+                const warning = responseWarningMessage(data);
+                if (warning) {
+                    this._setStatus(warning, "warning");
+                } else {
+                    this._setStatus(this.t("Applied. Gallery will reflect changes on next load.", "已应用，下次加载图库时生效。"), "success");
+                }
                 try { window.dispatchEvent(new CustomEvent("massTagOperationApplied", { detail: data })); } catch (_) {}
             } catch (e) {
+                this._resetResult();
                 this._setStatus(String(e.message || e), "error");
             }
         },
@@ -616,7 +670,7 @@
                     });
                     const result = await resp.json().catch(() => ({}));
                     if (!resp.ok) {
-                        this._setStatus(result.detail || resp.statusText, "error");
+                        this._setStatus(responseErrorMessage(result, resp), "error");
                         btn.disabled = false;
                         return;
                     }
@@ -628,7 +682,11 @@
                         : this.t(
                             `Undone: ${result.restored} images restored.`,
                             `已撤销：恢复 ${result.restored} 张。`);
-                    this._setStatus(msg, "success");
+                    const warning = responseWarningMessage(result);
+                    this._setStatus(
+                        warning ? `${msg} ${warning}` : msg,
+                        warning ? "warning" : "success",
+                    );
                     btn.textContent = this.t("Undone", "已撤销");
                     try { window.dispatchEvent(new CustomEvent("massTagOperationApplied", { detail: result })); } catch (_) {}
                 } catch (e) {

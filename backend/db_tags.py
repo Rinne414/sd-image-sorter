@@ -7,8 +7,10 @@ shared facet-search ranking helpers.
 Imports only from db_core / db_helpers / db_images_write / utils / stdlib to
 avoid an import cycle with the ``database`` facade.
 """
+import sqlite3
 import time
-from typing import Optional, List, Dict, Any, Tuple
+from contextlib import contextmanager
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import db_core
 from db_core import (
@@ -206,6 +208,66 @@ def add_tags(
     _invalidate_tags_cache()
 
 
+def _apply_tag_updates(
+    cursor: sqlite3.Cursor,
+    image_tags_list: List[Dict[str, Any]],
+    *,
+    default_source: Optional[str],
+    replace_scope: str,
+) -> None:
+    """Apply prepared tag updates through the caller-owned transaction."""
+    for item in image_tags_list:
+        image_id = item["image_id"]
+        tags = item["tags"]
+        ai_caption = item.get("ai_caption") or None
+        nl_caption = item.get("nl_caption") or None
+        content_fingerprint = _ensure_content_fingerprint_value(
+            cursor,
+            image_id,
+            item.get("content_fingerprint"),
+        )
+
+        _replace_tag_rows(
+            cursor,
+            image_id,
+            tags,
+            default_source=default_source,
+            replace_scope=replace_scope,
+        )
+        _sync_ai_rating(cursor, image_id)
+
+        score_sets = item.get("tag_scores")
+        if score_sets:
+            replace_scores_in_cursor(cursor, image_id, score_sets)
+
+        cursor.execute(
+            "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, ai_caption = COALESCE(?, ai_caption), nl_caption = COALESCE(?, nl_caption), content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
+            (ai_caption, nl_caption, content_fingerprint, image_id),
+        )
+
+
+@contextmanager
+def tag_update_transaction(
+    *,
+    default_source: Optional[str],
+    replace_scope: str,
+) -> Iterator[Callable[[List[Dict[str, Any]]], None]]:
+    """Yield a chunk writer whose successful writes commit as one transaction."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        def write_updates(image_tags_list: List[Dict[str, Any]]) -> None:
+            _apply_tag_updates(
+                cursor,
+                image_tags_list,
+                default_source=default_source,
+                replace_scope=replace_scope,
+            )
+
+        yield write_updates
+    _invalidate_tags_cache()
+
+
 def add_tags_batch(
     image_tags_list: List[Dict[str, Any]],
     *,
@@ -236,37 +298,11 @@ def add_tags_batch(
     if not image_tags_list:
         return
 
-    with get_db() as conn:
-        cursor = conn.cursor()
-
-        for item in image_tags_list:
-            image_id = item["image_id"]
-            tags = item["tags"]
-            ai_caption = item.get("ai_caption") or None
-            nl_caption = item.get("nl_caption") or None
-            content_fingerprint = _ensure_content_fingerprint_value(cursor, image_id, item.get("content_fingerprint"))
-
-            _replace_tag_rows(
-                cursor, image_id, tags,
-                default_source=default_source, replace_scope=replace_scope,
-            )
-            _sync_ai_rating(cursor, image_id)
-
-            score_sets = item.get("tag_scores")
-            if score_sets:
-                replace_scores_in_cursor(cursor, image_id, score_sets)
-
-            # Update tagged timestamp and captions. COALESCE preserves an
-            # existing value when the caller passes None (a tag-only run, or a
-            # VLM-only run), so ai_caption (composed display caption) and
-            # nl_caption (pure natural-language) are written independently.
-            cursor.execute(
-                "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, ai_caption = COALESCE(?, ai_caption), nl_caption = COALESCE(?, nl_caption), content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
-                (ai_caption, nl_caption, content_fingerprint, image_id)
-            )
-
-        # Single commit at the end (automatic with context manager)
-    _invalidate_tags_cache()
+    with tag_update_transaction(
+        default_source=default_source,
+        replace_scope=replace_scope,
+    ) as write_updates:
+        write_updates(image_tags_list)
 
 
 def get_image_tags(image_id: int) -> List[Dict[str, Any]]:
