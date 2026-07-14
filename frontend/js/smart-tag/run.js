@@ -126,7 +126,7 @@
         const total = snap.total || 0;
         showProgress(false);
         let captionApplyFailed = false;
-        if (status === 'completed' && (snap.caption_result_count || 0) > 0) {
+        if (['completed', 'warning', 'cancelled'].includes(status) && (snap.caption_result_count || 0) > 0) {
             try {
                 await applyPathCaptions(snap.job_id, snap.settings?.merge_strategy || 'replace');
             } catch (err) {
@@ -143,14 +143,40 @@
         // Reuse the existing toast helper if available; fall back to alert.
         const noiseStripped = snap.noise_stripped_count || 0;
         const noiseSuffix = noiseStripped > 0 ? ` · ${noiseStripped} noise tags removed` : '';
+        const firstError = Array.isArray(snap.errors)
+            ? snap.errors.find((entry) => entry && entry.error)
+            : null;
+        const errorSource = String(firstError?.image_id || '').trim();
+        const errorLabel = errorSource
+            ? (/^-?\d+$/.test(errorSource) ? `Image #${errorSource}` : `Image ${errorSource}`)
+            : 'Image';
+        const errorSuffix = firstError
+            ? ` · ${errorLabel}: ${String(firstError.error)}`
+            : '';
+        const errorText = firstError ? String(firstError.error) : '';
+        const failedErrorSuffix = firstError
+            ? String(snap.message || '').includes(errorText)
+                ? ` · ${errorLabel}`
+                : errorSuffix
+            : '';
+        const isWarning = status === 'warning' || (status === 'completed' && fail > 0);
         const message = status === 'cancelled'
             ? `Smart Tag cancelled at ${ok + fail}/${total}${noiseSuffix}`
             : status === 'failed'
-                ? `Smart Tag failed: ${snap.message || 'unknown error'}`
-                : `Smart Tag finished: ${ok} ok, ${fail} failed${noiseSuffix}.`;
+                ? `Smart Tag failed: ${snap.message || 'unknown error'}${failedErrorSuffix}`
+                : isWarning
+                    ? `Smart Tag finished with warnings: ${ok} ok, ${fail} failed${noiseSuffix}${errorSuffix}.`
+                    : `Smart Tag finished: ${ok} ok, ${fail} failed${noiseSuffix}.`;
+        const toastType = status === 'failed'
+            ? 'error'
+            : status === 'cancelled'
+                ? 'info'
+                : isWarning
+                    ? 'warning'
+                    : 'success';
 
         if (!captionApplyFailed && typeof window.showToast === 'function') {
-            window.showToast(message, status === 'failed' ? 'error' : 'success');
+            window.showToast(message, toastType);
         } else if (!captionApplyFailed) {
             (window.Logger?.info || console.log)('[smart-tag]', message);
         }

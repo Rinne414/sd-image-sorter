@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional, Protocol, TypedDict
 from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import APIRouter, HTTPException
@@ -29,6 +29,44 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/vlm", tags=["vlm"])
 
 VLM_SETTINGS_PATH = CONFIG_DIR / "vlm-settings.json"
+
+
+class _StoredVLMTagRow(TypedDict):
+    tag: str
+    confidence: Optional[float]
+    source: Optional[str]
+    category: Optional[str]
+
+
+class _PersistedVLMTagRow(TypedDict):
+    tag: str
+    confidence: float
+    source: Optional[str]
+    category: Optional[str]
+
+
+class _VLMImageUpdate(TypedDict):
+    image_id: int
+    tags: List[_PersistedVLMTagRow]
+    ai_caption: Optional[str]
+    nl_caption: Optional[str]
+
+
+class _VLMPersistenceStore(Protocol):
+    def get_image_tags(self, image_id: int) -> List[_StoredVLMTagRow]: ...
+
+    def add_tags_batch(
+        self,
+        image_tags_list: List[_VLMImageUpdate],
+        *,
+        default_source: Optional[str],
+        replace_scope: str,
+    ) -> None: ...
+
+
+class VLMResultPersistenceError(RuntimeError):
+    """Raised when a generated VLM result cannot be saved atomically."""
+
 
 _batch_state_lock = threading.Lock()
 _batch_state: Dict[str, Any] = {
@@ -480,11 +518,17 @@ async def caption_single(request: CaptionSingleRequest):
 
     # Persist results based on output format
     dropped_tags = 0
-    if not result.error:
-        if result.caption:
-            db.update_image_caption(request.image_id, result.caption, nl_caption=result.caption)
-        if result.tags:
-            dropped_tags = _persist_tags(db, request.image_id, result.tags)
+    if not result.error and (result.caption or result.tags):
+        try:
+            dropped_tags = _persist_vlm_result(
+                db, request.image_id, result.caption, result.tags
+            )
+        except VLMResultPersistenceError as exc:
+            logger.exception(
+                "VLM single-image result persistence failed",
+                extra={"image_id": request.image_id, "error_type": "persistence"},
+            )
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return {
         "caption": result.caption,
@@ -499,8 +543,13 @@ async def caption_single(request: CaptionSingleRequest):
     }
 
 
-def _persist_tags(db, image_id: int, vlm_tags: List[str]) -> int:
-    """Merge gated VLM-generated tags with existing local-tagger tags.
+def _persist_vlm_result(
+    db: _VLMPersistenceStore,
+    image_id: int,
+    caption: str,
+    vlm_tags: List[str],
+) -> int:
+    """Atomically persist a VLM caption and gated tags for one image.
 
     VLM tags pass through the vocabulary gate (services.vlm_tag_gate) first:
     hallucinated non-vocabulary tags and rating words are dropped so they never
@@ -509,43 +558,79 @@ def _persist_tags(db, image_id: int, vlm_tags: List[str]) -> int:
     confidence=0.85 (a manual-tier marker). Returns the number of tags the gate
     dropped so callers can surface "N invalid tags dropped".
     """
-    if not vlm_tags:
-        return 0
     from services.vlm_tag_gate import filter_vlm_tags
 
-    accepted, dropped = filter_vlm_tags(vlm_tags)
-    if dropped:
-        logger.info(
-            "VLM tag gate dropped %d invalid tag(s) for image %s", dropped, image_id
-        )
-    if not accepted:
-        return dropped
     try:
+        accepted, dropped = filter_vlm_tags(vlm_tags) if vlm_tags else ([], 0)
+        if dropped:
+            logger.info(
+                "VLM tag gate dropped invalid tags",
+                extra={"dropped_count": dropped, "image_id": image_id},
+            )
+        if not caption and not accepted:
+            return dropped
         existing = db.get_image_tags(image_id) or []
-        existing_lower = {(t.get("tag") or "").lower() for t in existing}
+        existing_lower = {
+            tag_row["tag"].lower()
+            for tag_row in existing
+            if tag_row["tag"]
+        }
         # ``accepted`` is already lowercase_with_underscores, so a direct
         # membership test against the lowercased existing set is correct.
-        new_tags = [t for t in accepted if t not in existing_lower]
-        if not new_tags:
+        new_tags = [tag for tag in accepted if tag not in existing_lower]
+        if not caption and not new_tags:
             return dropped
         # Full-list merge (replace_scope stays "all"): existing rows keep
         # their provenance columns; VLM additions are marked source='vlm' so
         # a later pipeline re-tag may replace them but never the user's rows.
-        merged = [
+        merged: List[_PersistedVLMTagRow] = [
             {
-                "tag": t.get("tag"),
-                "confidence": float(t.get("confidence") or 1.0),
-                "source": t.get("source"),
-                "category": t.get("category"),
+                "tag": tag_row["tag"],
+                "confidence": (
+                    float(tag_row["confidence"])
+                    if tag_row["confidence"] is not None
+                    else 1.0
+                ),
+                "source": tag_row["source"],
+                "category": tag_row["category"],
             }
-            for t in existing if t.get("tag")
+            for tag_row in existing
+            if tag_row["tag"]
         ] + [
-            {"tag": t, "confidence": 0.85, "source": "vlm"} for t in new_tags
+            {
+                "tag": tag,
+                "confidence": 0.85,
+                "source": "vlm",
+                "category": None,
+            }
+            for tag in new_tags
         ]
-        db.add_tags(image_id, merged)
-    except Exception as e:
-        logger.warning(f"Failed to persist VLM tags for image {image_id}: {e}")
+        db.add_tags_batch(
+            [{
+                "image_id": image_id,
+                "tags": merged,
+                "ai_caption": caption or None,
+                "nl_caption": caption or None,
+            }],
+            default_source=None,
+            replace_scope="all",
+        )
+    except Exception as exc:
+        raise VLMResultPersistenceError(
+            f"VLM result persistence failed for image_id={image_id}: {exc}"
+        ) from exc
     return dropped
+
+
+def _persist_tags(
+    db: _VLMPersistenceStore,
+    image_id: int,
+    vlm_tags: List[str],
+) -> int:
+    """Persist gated VLM tags without suppressing database failures."""
+    if not vlm_tags:
+        return 0
+    return _persist_vlm_result(db, image_id, "", vlm_tags)
 
 
 _BATCH_ID_CHUNK_SIZE = 500
@@ -932,10 +1017,27 @@ async def _run_batch(image_source: _BatchImageSource) -> None:
             )
 
             if not result.error and (result.caption or result.tags):
-                if result.caption:
-                    db.update_image_caption(image_id, result.caption, nl_caption=result.caption)
-                if result.tags:
-                    _persist_tags(db, image_id, result.tags)
+                try:
+                    _persist_vlm_result(
+                        db, image_id, result.caption, result.tags
+                    )
+                except VLMResultPersistenceError as exc:
+                    _append_debug_chat_event({
+                        "phase": "error",
+                        "image_id": image_id,
+                        "image_name": image_name,
+                        "error": _redact_debug_text(str(exc)),
+                        "error_type": "persistence",
+                    })
+                    with _batch_state_lock:
+                        _batch_state["api_error"] += 1
+                        _batch_state["tokens_used"] += result.tokens_used
+                        _batch_state["last_api_latency_ms"] = latency_ms
+                        _batch_state["api_status"] = "error"
+                        _batch_state["api_message"] = "VLM result could not be saved"
+                        _batch_state["last_api_error"] = str(exc)
+                    _record_error(image_id, str(exc), "persistence")
+                    return
                 with _batch_state_lock:
                     _batch_state["completed"] += 1
                     _batch_state["tokens_used"] += result.tokens_used

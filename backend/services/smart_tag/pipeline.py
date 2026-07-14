@@ -63,7 +63,7 @@ from services.smart_tag.tagging import (
 logger = logging.getLogger("services.smart_tag_service")
 
 
-# Job hygiene: finished (completed/failed/cancelled) jobs and their on-disk
+# Job hygiene: finished (completed/warning/failed/cancelled) jobs and their on-disk
 # caption-results files used to accumulate for the life of the process. Keep
 # only this many finished jobs; older ones are pruned when a new job starts.
 SMART_TAG_FINISHED_JOBS_KEPT = 5
@@ -117,7 +117,7 @@ def cancel_active_job() -> Optional[SmartTagJobState]:
         return job
 
 
-_TERMINAL_JOB_STATUSES = {"completed", "failed", "cancelled"}
+_TERMINAL_JOB_STATUSES = {"completed", "warning", "failed", "cancelled"}
 
 
 def _terminal_job_outcome(
@@ -129,23 +129,30 @@ def _terminal_job_outcome(
         return "cancelled", "Cancelled by user."
     if job.status != "running":
         return job.status, job.message
-    if (
-        req.caption_profile is not None
-        and job.succeeded == 0
-        and job.failed > 0
-    ):
+    if job.succeeded == 0 and job.failed > 0:
+        last_error = ""
         for error in reversed(job.errors):
-            provider_error = error.get("error", "").strip()
-            if provider_error:
-                return (
-                    "failed",
-                    f"Caption profile {req.caption_profile.value!r} failed for all "
-                    f"{job.failed} image(s). Provider error: {provider_error}",
+            last_error = error.get("error", "").strip()
+            if last_error:
+                break
+        if req.caption_profile is not None:
+            if not last_error:
+                raise RuntimeError(
+                    "Caption profile job recorded failures without error details: "
+                    f"job_id={job.job_id!r}, failed={job.failed}."
                 )
-        raise RuntimeError(
-            "Caption profile job recorded failures without error details: "
-            f"job_id={job.job_id!r}, failed={job.failed}."
+            return (
+                "failed",
+                f"Caption profile {req.caption_profile.value!r} failed for all "
+                f"{job.failed} image(s). Provider error: {last_error}",
+            )
+        detail = f" Last error: {last_error}" if last_error else ""
+        return (
+            "failed",
+            f"Smart Tag failed for all {job.failed} image(s).{detail}",
         )
+    if job.failed > 0:
+        return "warning", f"Completed with warning. {_completion_message(job)}"
     return "completed", _completion_message(job)
 
 
@@ -724,7 +731,8 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
         else:
             # Single-tagger / no-tagger path: GPU-batched booru tagging +
             # concurrent VLM captioning (see _run_windowed_pipeline). It sets
-            # the terminal job status (completed / cancelled) itself.
+            # the terminal job status itself: completed, warning, failed, or
+            # cancelled.
             _run_windowed_pipeline(
                 job,
                 req,

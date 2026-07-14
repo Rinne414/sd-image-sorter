@@ -1378,6 +1378,66 @@ def test_path_caption_results_keep_legacy_rows_readable(tmp_path) -> None:
     }
 
 
+def test_path_caption_results_raise_when_result_file_is_missing(tmp_path: Path) -> None:
+    target = tmp_path / "missing-path-results.jsonl"
+    job = SmartTagJobState(job_id="missing-results", caption_result_count=1)
+    job.caption_results_path = str(target)
+
+    with pytest.raises(smart_tag_service.SmartTagResultReadError) as exc_info:
+        get_caption_results_page(job, offset=0, limit=10)
+
+    message = str(exc_info.value)
+    assert "job_id='missing-results'" in message
+    assert str(target) in message
+
+
+def test_path_caption_results_raise_on_malformed_json(tmp_path: Path) -> None:
+    target = tmp_path / "malformed-path-results.jsonl"
+    target.write_text('{"path": "/tmp/broken.png"', encoding="utf-8")
+    job = SmartTagJobState(job_id="malformed-results", caption_result_count=1)
+    job.caption_results_path = str(target)
+
+    with pytest.raises(smart_tag_service.SmartTagResultReadError) as exc_info:
+        get_caption_results_page(job, offset=0, limit=10)
+
+    message = str(exc_info.value)
+    assert "job_id='malformed-results'" in message
+    assert "line=1" in message
+
+
+def test_path_caption_results_ignore_uncommitted_trailing_row(tmp_path: Path) -> None:
+    target = tmp_path / "in-progress-path-results.jsonl"
+    target.write_text(
+        '{"path": "/tmp/committed.png", "caption": "committed"}\n'
+        '{"path": "/tmp/in-progress.png"',
+        encoding="utf-8",
+    )
+    job = SmartTagJobState(job_id="in-progress-results", caption_result_count=1)
+    job.caption_results_path = str(target)
+
+    page = get_caption_results_page(job, offset=0, limit=10)
+
+    assert [row["path"] for row in page["results"]] == ["/tmp/committed.png"]
+
+
+def test_path_caption_results_raise_when_file_is_truncated(tmp_path: Path) -> None:
+    target = tmp_path / "truncated-path-results.jsonl"
+    target.write_text(
+        '{"path": "/tmp/only.png", "caption": "only row"}\n',
+        encoding="utf-8",
+    )
+    job = SmartTagJobState(job_id="truncated-results", caption_result_count=2)
+    job.caption_results_path = str(target)
+
+    with pytest.raises(smart_tag_service.SmartTagResultReadError) as exc_info:
+        get_caption_results_page(job, offset=0, limit=10)
+
+    message = str(exc_info.value)
+    assert "job_id='truncated-results'" in message
+    assert "expected_rows=2" in message
+    assert "actual_rows=1" in message
+
+
 def test_run_pipeline_keeps_only_bounded_recent_errors(monkeypatch) -> None:
     # The single-tagger path no longer routes through _process_one_image; it
     # assembles + persists each image via _append_caption_result (path sources).
@@ -2508,7 +2568,7 @@ def test_krea_profile_does_not_persist_booru_only_when_vlm_returns_an_error(monk
     assert job.errors[0]["error"] in job.message
 
 
-def test_krea_profile_partial_caption_success_remains_completed(monkeypatch) -> None:
+def test_krea_profile_partial_caption_success_ends_with_warning(monkeypatch) -> None:
     persisted = []
     provider_error = "Caption provider rejected one image."
     monkeypatch.setattr(
@@ -2554,7 +2614,7 @@ def test_krea_profile_partial_caption_success_remains_completed(monkeypatch) -> 
     )
 
     assert persisted == ["/tmp/succeeded.png"]
-    assert job.status == "completed"
+    assert job.status == "warning"
     assert job.succeeded == 1
     assert job.failed == 1
     assert job.processed == 2
@@ -2971,3 +3031,60 @@ def test_multi_model_sets_ride_fused_result(test_db):
     partial = _booru_partial_from_tag_result(fused, req)
     models = [s["model"] for s in partial["tag_score_sets"]]
     assert models == ["wd-a", "wd-b"]
+
+
+def test_terminal_outcome_marks_all_failures_as_failed() -> None:
+    from services.smart_tag.pipeline import _terminal_job_outcome
+
+    job = SmartTagJobState(
+        job_id="all-persistence-failed",
+        status="running",
+        total=2,
+        processed=2,
+        failed=2,
+        errors=[
+            {
+                "image_id": "42",
+                "error": "injected database persistence failure",
+            }
+        ],
+    )
+
+    status, message = _terminal_job_outcome(
+        job,
+        SmartTagRequest(
+            image_ids=[41, 42],
+            enable_wd14=False,
+            enable_vlm=False,
+        ),
+    )
+
+    assert status == "failed"
+    assert "2 image" in message
+    assert "injected database persistence failure" in message
+
+
+def test_terminal_outcome_labels_partial_failure_as_warning() -> None:
+    from services.smart_tag.pipeline import _terminal_job_outcome
+
+    job = SmartTagJobState(
+        job_id="partial-persistence-failure",
+        status="running",
+        total=2,
+        processed=2,
+        succeeded=1,
+        failed=1,
+    )
+
+    status, message = _terminal_job_outcome(
+        job,
+        SmartTagRequest(
+            image_ids=[41, 42],
+            enable_wd14=False,
+            enable_vlm=False,
+        ),
+    )
+
+    assert status == "warning"
+    assert "warning" in message.lower()
+    assert "1 ok, 1 failed" in message

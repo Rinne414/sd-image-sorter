@@ -78,6 +78,13 @@
         return form;
     }
 
+    function smartTagResponseErrorMessage(data, status) {
+        const candidate = data && (data.error || data.detail);
+        return typeof candidate === 'string' && candidate.trim()
+            ? candidate
+            : `HTTP ${status}`;
+    }
+
     async function postJson(url, body) {
         const resp = await fetch(url, {
             method: 'POST',
@@ -86,7 +93,7 @@
         });
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) {
-            const detail = data && data.detail ? data.detail : `HTTP ${resp.status}`;
+            const detail = smartTagResponseErrorMessage(data, resp.status);
             const err = new Error(detail);
             err.status = resp.status;
             err.payload = data;
@@ -99,8 +106,9 @@
         const resp = await fetch(url);
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) {
-            const err = new Error(data?.detail || `HTTP ${resp.status}`);
+            const err = new Error(smartTagResponseErrorMessage(data, resp.status));
             err.status = resp.status;
+            err.payload = data;
             throw err;
         }
         return data;

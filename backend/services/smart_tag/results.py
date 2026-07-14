@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, TypedDict
 
 from services.export_template_engine import is_kaomoji_tag
 from services.smart_tag.consensus import _SCORE_RE, filter_noise_tags, is_noise_tag
@@ -25,6 +25,17 @@ from services.smart_tag.request import SmartTagRequest
 # Shared logger: keep the historical channel name so log capture, filtering,
 # and support-log diagnostics behave exactly as before the decomposition.
 logger = logging.getLogger("services.smart_tag_service")
+
+
+class SmartTagResultReadError(RuntimeError):
+    """Raised when persisted path-source results cannot be read safely."""
+
+
+class _CaptionResultRow(TypedDict):
+    path: str
+    caption: str
+    booru_text: str
+    nl_text: str
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +178,26 @@ def _rating_row_from(rating: Any) -> Tuple[str, float]:
     if not canon:
         return "", 0.0
     return canon, max(0.0, min(1.0, score))
+
+
+def _result_tag_rows(
+    result: Dict[str, Any],
+    preferred_field: str,
+    fallback_field: str,
+) -> List[Any]:
+    selected_field = preferred_field
+    raw_rows: object = result.get(preferred_field)
+    if raw_rows is None:
+        selected_field = fallback_field
+        raw_rows = result.get(fallback_field)
+    if raw_rows is None:
+        return []
+    if not isinstance(raw_rows, list):
+        raise TypeError(
+            f"Smart Tag result field {selected_field!r} must be a list, "
+            f"received {type(raw_rows).__name__}."
+        )
+    return raw_rows
 
 
 def _normalize_tag_rows(items: List[Any], category: str) -> List[Dict[str, Any]]:
@@ -378,26 +409,19 @@ def _persist_result(image_id: int, result: Dict[str, Any], merge_strategy: str) 
     final composed caption (trigger + tags + NL sentences); the per-tag
     rows carry the individual tag/confidence pairs.
     """
-    try:
-        import database as db
-    except Exception as exc:
-        logger.error("smart-tag DB import failed: %s", exc)
-        return
+    import database as db
 
     caption = (result.get("caption") or "").strip()
-    general = result.get("general_tags") or []
-    copyright = result.get("copyright_tags") or []
-    character = result.get("character_tags") or []
     general_rows = _normalize_tag_rows(
-        result.get("general_tag_rows") if result.get("general_tag_rows") is not None else general,
+        _result_tag_rows(result, "general_tag_rows", "general_tags"),
         "general",
     )
     copyright_rows = _normalize_tag_rows(
-        result.get("copyright_tag_rows") if result.get("copyright_tag_rows") is not None else copyright,
+        _result_tag_rows(result, "copyright_tag_rows", "copyright_tags"),
         "copyright",
     )
     character_rows = _normalize_tag_rows(
-        result.get("character_tag_rows") if result.get("character_tag_rows") is not None else character,
+        _result_tag_rows(result, "character_tag_rows", "character_tags"),
         "character",
     )
 
@@ -409,20 +433,18 @@ def _persist_result(image_id: int, result: Dict[str, Any], merge_strategy: str) 
     nl_text = (result.get("nl_text") or "").strip()
     final_nl = nl_text
     if merge_strategy == "append":
-        try:
-            existing_rows = db.get_image_tags(image_id) or []
-            # ai_caption / nl_caption aren't returned by get_image_tags; pull
-            # from the row directly to honour append semantics.
-            row = db.get_images_by_ids([image_id]).get(image_id) or {}
-            prior = (row.get("ai_caption") or "").strip()
-            if prior and prior != caption:
-                final_caption = f"{prior}, {caption}".strip(", ")
-            prior_nl = (row.get("nl_caption") or "").strip()
-            if prior_nl and prior_nl != nl_text:
-                final_nl = f"{prior_nl} {nl_text}".strip()
-            del existing_rows  # not used; kept for documentation of intent
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("smart-tag append-merge fallback to replace for %s: %s", image_id, exc)
+        rows_by_id = db.get_images_by_ids([image_id])
+        if image_id not in rows_by_id:
+            raise LookupError(
+                f"Cannot append Smart Tag result: image_id={image_id} does not exist"
+            )
+        row = rows_by_id[image_id]
+        prior = (row.get("ai_caption") or "").strip()
+        if prior and prior != caption:
+            final_caption = f"{prior}, {caption}".strip(", ")
+        prior_nl = (row.get("nl_caption") or "").strip()
+        if prior_nl and prior_nl != nl_text:
+            final_nl = f"{prior_nl} {nl_text}".strip()
 
     # Build the per-tag rows the way add_tags_batch expects.
     tag_rows: List[Dict[str, Any]] = []
@@ -455,22 +477,19 @@ def _persist_result(image_id: int, result: Dict[str, Any], merge_strategy: str) 
             {"tag": rating_label, "confidence": rating_score, "category": "rating"}
         )
 
-    try:
-        db.add_tags_batch(
-            [
-                {
-                    "image_id": image_id,
-                    "tags": tag_rows,
-                    "ai_caption": final_caption or None,
-                    "nl_caption": final_nl or None,
-                    "tag_scores": result.get("tag_score_sets") or None,
-                }
-            ],
-            default_source="tagger",
-            replace_scope="pipeline",
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.error("smart-tag DB write failed for %s: %s", image_id, exc)
+    db.add_tags_batch(
+        [
+            {
+                "image_id": image_id,
+                "tags": tag_rows,
+                "ai_caption": final_caption or None,
+                "nl_caption": final_nl or None,
+                "tag_scores": result.get("tag_score_sets") or None,
+            }
+        ],
+        default_source="tagger",
+        replace_scope="pipeline",
+    )
 
 
 def _get_caption_results_dir() -> Path:
@@ -523,6 +542,55 @@ def _close_caption_results(job: SmartTagJobState) -> None:
             job._caption_results_handle = None
 
 
+def _parse_caption_result_row(
+    raw_line: str,
+    *,
+    job_id: str,
+    result_path: Path,
+    line_number: int,
+) -> _CaptionResultRow:
+    context = (
+        f"job_id={job_id!r}, path=<{result_path}>, line={line_number}"
+    )
+    try:
+        raw_row: object = json.loads(raw_line)
+    except json.JSONDecodeError as exc:
+        raise SmartTagResultReadError(
+            f"Cannot decode Smart Tag caption result ({context}): {exc.msg}"
+        ) from exc
+    if not isinstance(raw_row, dict):
+        raise SmartTagResultReadError(
+            f"Invalid Smart Tag caption result ({context}): expected an object, "
+            f"received {type(raw_row).__name__}."
+        )
+
+    path_value = raw_row.get("path")
+    caption_value = raw_row.get("caption")
+    booru_value = raw_row.get("booru_text", "")
+    nl_value = raw_row.get("nl_text", "")
+    validated_values: Dict[str, str] = {}
+    for field_name, field_value in (
+        ("path", path_value),
+        ("caption", caption_value),
+        ("booru_text", booru_value),
+        ("nl_text", nl_value),
+    ):
+        if not isinstance(field_value, str):
+            raise SmartTagResultReadError(
+                f"Invalid Smart Tag caption result ({context}): field "
+                f"{field_name!r} must be a string, received "
+                f"{type(field_value).__name__}."
+            )
+        validated_values[field_name] = field_value
+
+    return {
+        "path": validated_values["path"],
+        "caption": validated_values["caption"],
+        "booru_text": validated_values["booru_text"],
+        "nl_text": validated_values["nl_text"],
+    }
+
+
 def get_caption_results_page(
     job: SmartTagJobState,
     *,
@@ -532,34 +600,55 @@ def get_caption_results_page(
     start = max(0, int(offset or 0))
     page_limit = max(1, min(5000, int(limit or 1000)))
     end = start + page_limit
-    results: List[Dict[str, str]] = []
+    total = max(0, int(job.caption_result_count or 0))
+    read_end = min(end, total)
+    results: List[_CaptionResultRow] = []
     path = job.caption_results_path
-    if path:
+    if path is None:
+        if total > 0:
+            raise SmartTagResultReadError(
+                "Cannot read Smart Tag caption results: "
+                f"job_id={job.job_id!r} reports total={total} but has no result path."
+            )
+    else:
+        result_path = Path(path)
         try:
-            with open(path, "r", encoding="utf-8") as handle:
+            with result_path.open("r", encoding="utf-8") as handle:
                 for index, line in enumerate(handle):
                     if index < start:
                         continue
-                    if index >= end:
+                    if index >= read_end:
                         break
-                    try:
-                        row = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if isinstance(row, dict):
-                        results.append({
-                            "path": str(row.get("path") or ""),
-                            "caption": str(row.get("caption") or ""),
-                            "booru_text": str(row.get("booru_text") or ""),
-                            "nl_text": str(row.get("nl_text") or ""),
-                        })
-        except OSError:
-            results = []
+                    results.append(
+                        _parse_caption_result_row(
+                            line,
+                            job_id=job.job_id,
+                            result_path=result_path,
+                            line_number=index + 1,
+                        )
+                    )
+        except SmartTagResultReadError:
+            raise
+        except (OSError, UnicodeError) as exc:
+            raise SmartTagResultReadError(
+                "Cannot read Smart Tag caption results: "
+                f"job_id={job.job_id!r}, path=<{result_path}>: {exc}"
+            ) from exc
+
+        expected_rows = max(0, read_end - start)
+        if len(results) != expected_rows:
+            raise SmartTagResultReadError(
+                "Incomplete Smart Tag caption results: "
+                f"job_id={job.job_id!r}, path=<{result_path}>, "
+                f"offset={start}, expected_rows={expected_rows}, "
+                f"actual_rows={len(results)}."
+            )
+
     return {
         "job_id": job.job_id,
         "offset": start,
         "limit": page_limit,
-        "total": job.caption_result_count,
+        "total": total,
         "results": results,
-        "has_more": end < job.caption_result_count,
+        "has_more": end < total,
     }

@@ -18,6 +18,7 @@ All tests use the `test_db` fixture from conftest — never the real data DB.
 
 from __future__ import annotations
 
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -262,3 +263,125 @@ def test_manual_rows_survive_pipeline_persist(test_db):
     assert manual_rows[0]["confidence"] == 1.0  # the user's row, not the 0.4 duplicate
     tagger_row = next(r for r in rows if r["tag"] == "1girl")
     assert tagger_row["source"] == "tagger"
+
+
+# ===========================================================================
+# Persistence failures are explicit and atomic
+# ===========================================================================
+
+
+def test_persist_result_raises_and_rolls_back_when_tag_insert_fails(test_db):
+    db = test_db
+    image_id = _add_image(db, "/pins/persist/atomic-failure.png")
+    _persist_result(
+        image_id,
+        _result(
+            caption="prior caption",
+            nl_text="prior natural language",
+            general_rows=[{"tag": "prior_tag", "confidence": 0.8, "category": "general"}],
+        ),
+        "replace",
+    )
+
+    with db.get_db() as conn:
+        conn.execute(
+            f"""
+            CREATE TRIGGER fail_smart_tag_insert
+            BEFORE INSERT ON tags
+            WHEN NEW.image_id = {int(image_id)} AND NEW.tag = 'new_tag'
+            BEGIN
+                SELECT RAISE(ABORT, 'injected smart-tag persistence failure');
+            END
+            """
+        )
+
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="injected smart-tag persistence failure",
+    ):
+        _persist_result(
+            image_id,
+            _result(
+                caption="new caption",
+                nl_text="new natural language",
+                general_rows=[{"tag": "new_tag", "confidence": 0.9, "category": "general"}],
+            ),
+            "replace",
+        )
+
+    row = db.get_images_by_ids([image_id])[image_id]
+    assert row["ai_caption"] == "prior caption"
+    assert row["nl_caption"] == "prior natural language"
+    assert [tag["tag"] for tag in db.get_image_tags(image_id)] == ["prior_tag"]
+
+
+def test_append_read_failure_is_not_downgraded_to_replace(test_db):
+    db = test_db
+    image_id = _add_image(db, "/pins/persist/append-read-failure.png")
+
+    with db.get_db() as conn:
+        conn.execute("ALTER TABLE images RENAME TO images_temporarily_unavailable")
+    try:
+        with pytest.raises(sqlite3.OperationalError, match="no such table: images"):
+            _persist_result(
+                image_id,
+                _result(caption="must not be written", nl_text="must not be written"),
+                "append",
+            )
+    finally:
+        with db.get_db() as conn:
+            conn.execute("ALTER TABLE images_temporarily_unavailable RENAME TO images")
+
+
+def test_persist_result_rolls_back_caption_tags_and_scores_on_score_failure(test_db):
+    db = test_db
+    image_id = _add_image(db, "/pins/persist/atomic-score-failure.png")
+    prior = _result(
+        caption="prior caption",
+        nl_text="prior natural language",
+        general_rows=[{"tag": "prior_tag", "confidence": 0.8, "category": "general"}],
+    )
+    prior["tag_score_sets"] = [{
+        "model": "prior-model",
+        "scores": [{"tag": "prior_tag", "score": 0.8, "category": "general"}],
+    }]
+    _persist_result(image_id, prior, "replace")
+
+    with db.get_db() as conn:
+        conn.execute(
+            f"""
+            CREATE TRIGGER fail_smart_tag_score_insert
+            BEFORE INSERT ON tag_scores
+            WHEN NEW.image_id = {int(image_id)} AND NEW.model = 'new-model'
+            BEGIN
+                SELECT RAISE(ABORT, 'injected smart-tag score persistence failure');
+            END
+            """
+        )
+
+    replacement = _result(
+        caption="new caption",
+        nl_text="new natural language",
+        general_rows=[{"tag": "new_tag", "confidence": 0.9, "category": "general"}],
+    )
+    replacement["tag_score_sets"] = [{
+        "model": "new-model",
+        "scores": [{"tag": "new_tag", "score": 0.9, "category": "general"}],
+    }]
+
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="injected smart-tag score persistence failure",
+    ):
+        _persist_result(image_id, replacement, "replace")
+
+    row = db.get_images_by_ids([image_id])[image_id]
+    assert row["ai_caption"] == "prior caption"
+    assert row["nl_caption"] == "prior natural language"
+    assert [tag["tag"] for tag in db.get_image_tags(image_id)] == ["prior_tag"]
+    with db.get_db() as conn:
+        scores = conn.execute(
+            "SELECT model, tag, score FROM tag_scores WHERE image_id = ?",
+            (image_id,),
+        ).fetchall()
+    assert [tuple(score) for score in scores] == [("prior-model", "prior_tag", 0.8)]

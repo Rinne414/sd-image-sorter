@@ -1393,14 +1393,23 @@ List available models for the configured provider (calls provider's `models` API
 List built-in system-prompt presets (general LoRA NL, Anima/FLUX detailed, single-sentence, character LoRA, NSFW-tolerant, danbooru, hybrid).
 
 #### POST /api/vlm/caption
-Caption a single image. Body: `{image_id, override_settings?}`. Returns `{caption, tokens_used, latency_ms}`.
+Caption a single indexed image. Body: `{image_id, tags?}`. Returns
+`{caption, tags, tokens_used, retries_used, error, error_type, model, output_format, dropped_tags}`.
+Caption fields and accepted VLM tags are committed atomically. If the tag gate,
+existing-tag read, or SQLite write fails, HTTP 500 includes the affected `image_id`
+and root cause; the prior caption and tags remain unchanged.
 
 #### POST /api/vlm/caption-batch
 Start a concurrency-controlled batch caption job. Body: `{image_ids|filter, concurrency, retries, retry_delay, output_format, prompt_preset?}`.
 While another AI job is running the batch is queued instead of rejected — see the AI job queue notes under `POST /api/tag/start` (v3.4.2). The cancel endpoint also removes queued VLM entries.
+An image increments `completed` only after its caption and accepted tags commit
+in one SQLite transaction. Persistence failures increment `failed`, retain the
+image ID and concrete database error, and never count as completed.
+Provider token usage remains counted even when local persistence fails.
 
 #### GET /api/vlm/caption-batch/progress
-Live progress for the running batch: `{state, total, completed, failed, tokens_used, current_image, started_at, errors: [{image_id, error, type}]}` (errors list capped at 50).
+Live progress includes `{running, total, completed, failed, tokens_used, current_image, active_requests,
+api_ok, api_error, api_status, errors: [{image_id, error, error_type}]}` (errors capped at 50). Persistence failures use `error_type: "persistence"`.
 
 #### GET /api/vlm/caption-batch/debug-chat
 Return recent sanitized VLM request/response debug events for the user-facing API Chat view. API keys, service-account JSON, image bytes, endpoint userinfo, query strings, and fragments are redacted.
@@ -1670,15 +1679,31 @@ Since v3.4.2 a busy AI runtime (another Smart Tag, gallery tagging, or VLM batch
 
 #### GET /api/smart-tag/progress
 
-Poll the active or named Smart Tag job. With no `job_id` query param, returns the active job (or `{"status": "idle", "active": false}` if none is running). Snapshot contains `total`, `processed`, `succeeded`, `failed`, `message`, `last_caption_preview`, and a tail-capped `errors[]` list.
+Poll the active or named Smart Tag job. With no `job_id` query param, returns the active job
+(or `{"status": "idle", "active": false}` if none is running). Job statuses are
+`queued`, `running`, `completed`, `warning`, `failed`, and `cancelled`: zero successes with
+one or more failures ends as `failed`; mixed successes and failures ends as `warning`; only
+a failure-free run ends as `completed`. Snapshots include `total`, `processed`, `succeeded`,
+`failed`, `message`, `last_caption_preview`, `caption_result_count`, and tail-capped
+`errors: [{image_id, error}]`; `image_id` is a numeric DB ID string or a local source path.
+
+For DB-backed images, caption fields, tag rows, and raw tag-score rows commit in
+one SQLite transaction. A failed append read or write is reported as an image
+failure and leaves all prior rows unchanged.
 
 #### GET /api/smart-tag/results
 
-Returns paginated path-source caption results for a completed Smart Tag job, used by Dataset Maker local-folder imports. Query params: `job_id`, `offset`, `limit`. Each row contains `path`, the legacy composed `caption`, and independent `booru_text` / `nl_text` editor channels. Historical rows without the new fields remain readable and return empty strings for both instead of guessing how to split old text. Gallery-source captions are written directly to the DB and do not need this endpoint.
+Returns paginated persisted path-source captions, including completed work from `completed`,
+`warning`, and `cancelled` terminal jobs. Query params: `job_id`, `offset`, `limit`. Each row
+contains `path`, legacy `caption`, and independent `booru_text` / `nl_text` channels. Historical rows return empty channel strings rather than guessing. Gallery captions write directly to SQLite.
+Missing, unreadable, malformed, schema-invalid, or truncated result stores return HTTP 500
+with the `job_id`, result path, and concrete cause. Clients preserve existing edits and
+must not render a success state when the page cannot be read.
 
 #### POST /api/smart-tag/cancel
 
-Request cancellation of the active Smart Tag job. The worker stops at the next image boundary. Returns 404 when no job is active.
+Request cancellation of the active Smart Tag job. The worker stops at the next image boundary;
+already committed gallery captions and path results remain available. Returns 404 when no job is active.
 
 ---
 

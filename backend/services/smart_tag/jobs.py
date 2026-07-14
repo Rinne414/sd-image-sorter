@@ -33,7 +33,7 @@ class SmartTagJobState:
     reuse the same progress-rendering helpers.
     """
     job_id: str
-    status: str = "queued"  # queued | running | completed | failed | cancelled
+    status: str = "queued"  # queued | running | completed | warning | failed | cancelled
     stage: str = ""  # "" | "tagging" | "vlm" (legacy single-pass leaves this blank)
     total: int = 0
     processed: int = 0

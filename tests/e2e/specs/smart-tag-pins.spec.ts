@@ -51,6 +51,17 @@ type PathCaptionResult = {
   nl_text: string
 }
 
+type SmartTagDatasetMaker = {
+  captionEdits: Map<number, string>
+  nlEdits: Map<number, string>
+}
+
+declare global {
+  interface Window {
+    DatasetMaker: SmartTagDatasetMaker
+  }
+}
+
 /**
  * The route-mock baseline every pin starts from. Registered in beforeEach; individual
  * pins re-register (page.route wins by most-recent registration) to override.
@@ -470,6 +481,7 @@ test('Krea 2 total caption failure surfaces the provider recovery action in an e
         failed: 1,
         caption_result_count: 0,
         message: jobMessage,
+        errors: [{ image_id: item.path, error: providerError }],
         settings: {
           enable_vlm: true,
           natural_language_mode: 'vlm',
@@ -491,6 +503,9 @@ test('Krea 2 total caption failure surfaces the provider recovery action in an e
   await expect(errorToast).toHaveCount(1)
   await expect(errorToast).toContainText('Smart Tag failed')
   await expect(errorToast).toContainText('qwen3-vl:8b-instruct')
+  await expect(errorToast).toContainText(item.path)
+  const errorText = await errorToast.textContent()
+  expect(errorText?.split(providerError)).toHaveLength(2)
   await expect(page.locator('#toast-container .toast.success')).toHaveCount(0)
 })
 
@@ -550,6 +565,139 @@ test('malformed path results leave caption edits unchanged and never report succ
   expect(state.toasts[0].type).toBe('error')
   expect(state.toasts[0].message).toContain('Smart Tag result 1')
   expect(state.toasts[0].message).toContain('booru_text, and nl_text strings')
+})
+
+test('path result read failures surface the backend cause and never report success', async ({ page }) => {
+  const item = {
+    id: -926,
+    path: 'C:/dataset/result-file-missing.png',
+    booru: 'original_tag',
+    nl: 'Original natural-language caption.',
+  }
+  const serverError = "Cannot read Smart Tag caption results: job_id='pin-path-read-failure'"
+  await seedLocalCaptionItems(page, [item])
+  await installCompletedPathJob(page, 'pin-path-read-failure', 'replace', [
+    {
+      path: item.path,
+      caption: 'replacement combined caption',
+      booru_text: 'replacement_tag',
+      nl_text: 'Replacement natural-language caption.',
+    },
+  ])
+  await page.route('**/api/smart-tag/results**', (route) =>
+    route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: serverError, type: 'HTTPException' }),
+    }))
+
+  await openDatasetAndReady(page)
+  await page.locator('#btn-smart-tag-run').click()
+
+  const errorToast = page.locator('#toast-container [role="alert"].error')
+  await expect(errorToast).toHaveCount(1)
+  await expect(errorToast).toContainText('captions were generated but could not be applied')
+  await expect(errorToast).toContainText(serverError)
+  await expect(page.locator('#toast-container [role="alert"].success')).toHaveCount(0)
+  const edits = await page.evaluate(() => ({
+    booru: [...window.DatasetMaker.captionEdits.entries()],
+    nl: [...window.DatasetMaker.nlEdits.entries()],
+  }))
+  expect(edits).toEqual({ booru: [], nl: [] })
+})
+
+test('warning terminal applies successful path captions and reports the first image failure', async ({ page }) => {
+  const item = {
+    id: -931,
+    path: 'C:/dataset/partial-warning.png',
+    booru: 'prior_tag',
+    nl: 'Prior natural-language caption.',
+  }
+  await seedLocalCaptionItems(page, [item])
+  await installCompletedPathJob(page, 'pin-path-warning', 'replace', [
+    {
+      path: item.path,
+      caption: 'replacement combined caption',
+      booru_text: 'new_tag',
+      nl_text: 'The successful caption remains usable.',
+    },
+  ])
+  await page.route('**/api/smart-tag/progress**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        job_id: 'pin-path-warning',
+        status: 'warning',
+        active: false,
+        total: 2,
+        processed: 2,
+        succeeded: 1,
+        failed: 1,
+        caption_result_count: 1,
+        errors: [{ image_id: '42', error: 'database is locked' }],
+        settings: { merge_strategy: 'replace', enable_vlm: true, natural_language_mode: 'vlm' },
+      }),
+    }))
+
+  await openDatasetAndReady(page)
+  await page.locator('#btn-smart-tag-run').click()
+
+  await expect.poll(() => page.evaluate(() => {
+    const dm = window.DatasetMaker
+    return [dm.captionEdits.get(-931), dm.nlEdits.get(-931)]
+  })).toEqual(['new_tag', 'The successful caption remains usable.'])
+  const warningToast = page.locator('#toast-container [role="alert"].warning')
+  await expect(warningToast).toHaveCount(1)
+  await expect(warningToast).toContainText('1 ok, 1 failed')
+  await expect(warningToast).toContainText('Image #42: database is locked')
+  await expect(page.locator('#toast-container [role="alert"].success')).toHaveCount(0)
+})
+
+test('cancelled terminal applies completed path captions and uses an informational toast', async ({ page }) => {
+  const item = {
+    id: -941,
+    path: 'C:/dataset/cancelled-with-result.png',
+    booru: 'prior_tag',
+    nl: 'Prior natural-language caption.',
+  }
+  await seedLocalCaptionItems(page, [item])
+  await installCompletedPathJob(page, 'pin-cancelled-toast', 'replace', [
+    {
+      path: item.path,
+      caption: 'replacement combined caption',
+      booru_text: 'completed_tag',
+      nl_text: 'This caption finished before cancellation.',
+    },
+  ])
+  await page.route('**/api/smart-tag/progress**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        job_id: 'pin-cancelled-toast',
+        status: 'cancelled',
+        active: false,
+        total: 2,
+        processed: 1,
+        succeeded: 1,
+        failed: 0,
+        caption_result_count: 1,
+        settings: { merge_strategy: 'replace', enable_vlm: true, natural_language_mode: 'vlm' },
+      }),
+    }))
+
+  await openDatasetAndReady(page)
+  await page.locator('#btn-smart-tag-run').click()
+
+  await expect.poll(() => page.evaluate(() => {
+    const dm = window.DatasetMaker
+    return [dm.captionEdits.get(-941), dm.nlEdits.get(-941)]
+  })).toEqual(['completed_tag', 'This caption finished before cancellation.'])
+  const infoToast = page.locator('#toast-container [role="alert"].info')
+  await expect(infoToast).toHaveCount(1)
+  await expect(infoToast).toContainText('Smart Tag cancelled')
+  await expect(page.locator('#toast-container [role="alert"].success')).toHaveCount(0)
 })
 
 test('Dataset Krea profile is omitted when ToriiGate captioning is selected', async ({ page }) => {

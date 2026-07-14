@@ -486,6 +486,179 @@ def test_vlm_caption_single_resolves_indexed_path(monkeypatch, test_client, tmp_
     assert seen_paths == [str(runtime_path)]
 
 
+def test_vlm_caption_single_persistence_failure_rolls_back_and_returns_500(
+    monkeypatch,
+    test_client,
+    tmp_path: Path,
+):
+    import database as db
+    import routers.vlm as vlm_router
+    from services import vlm_tag_gate
+    from vlm_providers.base import VLMResult
+
+    runtime_path = tmp_path / "single-persistence-failure.png"
+    Image.new("RGB", (32, 32), color="white").save(runtime_path)
+    image_id = db.add_image(path=str(runtime_path), filename=runtime_path.name)
+    db.add_tags(
+        image_id,
+        [{"tag": "prior_manual", "confidence": 1.0, "source": "manual"}],
+    )
+    db.update_image_caption(
+        image_id,
+        "prior caption",
+        nl_caption="prior natural language",
+    )
+    monkeypatch.setattr(
+        vlm_tag_gate,
+        "_danbooru_accept_set",
+        lambda: frozenset({"1girl"}),
+    )
+    monkeypatch.setattr(vlm_tag_gate, "_library_tag_set", lambda: set())
+
+    with db.get_db() as conn:
+        conn.execute(
+            f"""
+            CREATE TRIGGER fail_single_vlm_insert
+            BEFORE INSERT ON tags
+            WHEN NEW.image_id = {int(image_id)} AND NEW.tag = '1girl'
+            BEGIN
+                SELECT RAISE(ABORT, 'injected VLM persistence failure');
+            END
+            """
+        )
+
+    class FakeProvider:
+        async def caption_image(self, image_path, *, tags=None):
+            return VLMResult(
+                caption="new caption",
+                tags=["1girl"],
+                model="m",
+            )
+
+    monkeypatch.setattr(vlm_router, "get_provider", lambda config: FakeProvider())
+    monkeypatch.setattr(
+        vlm_router,
+        "_build_config",
+        lambda overrides=None: vlm_router.VLMConfig(
+            endpoint="https://example.test/v1",
+            model="m",
+        ),
+    )
+
+    response = test_client.post("/api/vlm/caption", json={"image_id": image_id})
+
+    assert response.status_code == 500
+    assert "injected VLM persistence failure" in response.json()["error"]
+    row = db.get_image_by_id(image_id)
+    assert row["ai_caption"] == "prior caption"
+    assert row["nl_caption"] == "prior natural language"
+    assert [tag["tag"] for tag in db.get_image_tags(image_id)] == ["prior_manual"]
+
+
+def test_vlm_batch_persistence_failure_is_failed_not_completed(
+    monkeypatch,
+    test_client,
+    tmp_path: Path,
+):
+    import database as db
+    import routers.vlm as vlm_router
+    from services import vlm_tag_gate
+    from vlm_providers.base import VLMResult
+
+    runtime_path = tmp_path / "batch-persistence-failure.png"
+    Image.new("RGB", (32, 32), color="white").save(runtime_path)
+    image_id = db.add_image(path=str(runtime_path), filename=runtime_path.name)
+    db.add_tags(
+        image_id,
+        [{"tag": "prior_manual", "confidence": 1.0, "source": "manual"}],
+    )
+    db.update_image_caption(
+        image_id,
+        "prior caption",
+        nl_caption="prior natural language",
+    )
+    monkeypatch.setattr(
+        vlm_tag_gate,
+        "_danbooru_accept_set",
+        lambda: frozenset({"1girl"}),
+    )
+    monkeypatch.setattr(vlm_tag_gate, "_library_tag_set", lambda: set())
+
+    with db.get_db() as conn:
+        conn.execute(
+            f"""
+            CREATE TRIGGER fail_batch_vlm_insert
+            BEFORE INSERT ON tags
+            WHEN NEW.image_id = {int(image_id)} AND NEW.tag = '1girl'
+            BEGIN
+                SELECT RAISE(ABORT, 'injected VLM batch persistence failure');
+            END
+            """
+        )
+
+    class FakeProvider:
+        name = "fake_vlm"
+
+        def build_user_message(self, tags=None):
+            return "Describe this image."
+
+        async def caption_image(self, image_path, *, tags=None):
+            return VLMResult(
+                caption="new caption",
+                tags=["1girl"],
+                tokens_used=23,
+                model="m",
+            )
+
+    monkeypatch.setattr(vlm_router, "get_provider", lambda config: FakeProvider())
+    monkeypatch.setattr(
+        vlm_router,
+        "_build_config",
+        lambda overrides=None: vlm_router.VLMConfig(
+            endpoint="https://example.test/v1",
+            model="m",
+            concurrent_requests=1,
+        ),
+    )
+
+    scheduled = []
+    real_create_task = asyncio.create_task
+    monkeypatch.setattr(
+        vlm_router.asyncio,
+        "create_task",
+        lambda coroutine: scheduled.append(coroutine),
+    )
+    response = test_client.post(
+        "/api/vlm/caption-batch",
+        json={"image_ids": [image_id]},
+    )
+    assert response.status_code == 200
+    monkeypatch.setattr(vlm_router.asyncio, "create_task", real_create_task)
+    asyncio.run(scheduled.pop())
+
+    progress = test_client.get("/api/vlm/caption-batch/progress").json()
+    assert progress["completed"] == 0
+    assert progress["failed"] == 1
+    assert progress["api_ok"] == 0
+    assert progress["api_error"] == 1
+    assert progress["tokens_used"] == 23
+    assert progress["api_status"] == "done_with_errors"
+    assert progress["errors"] == [
+        {
+            "image_id": image_id,
+            "error": (
+                f"VLM result persistence failed for image_id={image_id}: "
+                "injected VLM batch persistence failure"
+            ),
+            "error_type": "persistence",
+        }
+    ]
+    row = db.get_image_by_id(image_id)
+    assert row["ai_caption"] == "prior caption"
+    assert row["nl_caption"] == "prior natural language"
+    assert [tag["tag"] for tag in db.get_image_tags(image_id)] == ["prior_manual"]
+
+
 def test_vlm_caption_batch_queued_while_smart_tag_active(monkeypatch, test_client):
     from types import SimpleNamespace
 

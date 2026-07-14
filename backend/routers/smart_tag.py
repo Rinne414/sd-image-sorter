@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, ConfigDict
 
 from services.smart_tag_service import (
+    SmartTagResultReadError,
     get_caption_results_page,
     get_job,
 )
@@ -130,11 +131,18 @@ def results(
     offset: int = 0,
     limit: int = 1000,
 ) -> Dict[str, Any]:
-    """Return path-source caption results for a completed Smart Tag job."""
+    """Return persisted path-source caption results for a Smart Tag job."""
     job = get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Smart Tag job not found.")
-    return get_caption_results_page(job, offset=offset, limit=limit)
+    try:
+        return get_caption_results_page(job, offset=offset, limit=limit)
+    except SmartTagResultReadError as exc:
+        logger.exception(
+            "Smart Tag caption results read failed",
+            extra={"job_id": job_id},
+        )
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.post("/cancel")
