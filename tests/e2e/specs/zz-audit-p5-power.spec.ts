@@ -84,6 +84,9 @@ test('00 scan reference library', async ({ page, request }) => {
       await quickImport.check({ force: true }).catch(() => {})
     }
     await page.screenshot({ path: shot('00a-scan-modal.png') })
+    // /api/scan/progress is a global singleton; reset the previous terminal
+    // state so this poll cannot complete before the new scan starts.
+    await request.post('/api/scan/reset')
     await page.locator('#btn-start-scan').click()
 
     let done = false
