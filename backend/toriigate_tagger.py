@@ -33,6 +33,11 @@ hf_hub = None
 AutoProcessor = None
 Qwen3_5ForConditionalGeneration = None
 
+
+class ToriiGateImageGeometryError(ValueError):
+    """Raised when an image exceeds ToriiGate's supported geometry."""
+
+
 RATING_TAGS = {"general", "sensitive", "questionable", "explicit"}
 EXPLICIT_HINT_TAGS = {
     "pussy",
@@ -75,6 +80,9 @@ TORIIGATE_BRIEF_MAX_NEW_TOKENS = 160
 TORIIGATE_DETAILED_MAX_NEW_TOKENS = 512
 TORIIGATE_CAPTION_LENGTHS = ("brief", "detailed")
 TORIIGATE_MAX_IMAGE_PIXELS = 1024 * 1024
+# The model selects Qwen2VLImageProcessorFast, whose smart_resize rejects
+# source images with an aspect ratio above 200:1.
+TORIIGATE_MAX_ASPECT_RATIO: float = 200.0
 TORIIGATE_CUDA_MEMORY_FRACTION = max(
     0.30,
     min(0.95, read_float_env("SD_TORIIGATE_CUDA_MEMORY_FRACTION", 0.80)),
@@ -794,13 +802,45 @@ class ToriiGateTagger:
     @staticmethod
     def _resize_for_inference(image: Image.Image) -> Image.Image:
         width, height = image.size
+        long_edge = max(width, height)
+        short_edge = min(width, height)
+        aspect_ratio = long_edge / float(short_edge)
+        if aspect_ratio > TORIIGATE_MAX_ASPECT_RATIO:
+            raise ToriiGateImageGeometryError(
+                f"ToriiGate image {width}x{height} has aspect ratio "
+                f"{aspect_ratio:.2f}:1, which exceeds the supported "
+                f"{TORIIGATE_MAX_ASPECT_RATIO:.0f}:1 limit. Crop the long edge "
+                "or pad the short edge before tagging."
+            )
+
         pixels = width * height
         if pixels <= TORIIGATE_MAX_IMAGE_PIXELS:
             return image
 
         scale = (TORIIGATE_MAX_IMAGE_PIXELS / float(pixels)) ** 0.5
-        resized_width = max(512, int(width * scale))
-        resized_height = max(512, int(height * scale))
+        resized_width = max(1, int(width * scale))
+        resized_height = max(1, int(height * scale))
+        if resized_width >= resized_height:
+            resized_width = min(
+                resized_width,
+                int(TORIIGATE_MAX_ASPECT_RATIO * resized_height),
+            )
+        else:
+            resized_height = min(
+                resized_height,
+                int(TORIIGATE_MAX_ASPECT_RATIO * resized_width),
+            )
+        if resized_width * resized_height > TORIIGATE_MAX_IMAGE_PIXELS:
+            if resized_width >= resized_height:
+                resized_width = max(
+                    1,
+                    TORIIGATE_MAX_IMAGE_PIXELS // resized_height,
+                )
+            else:
+                resized_height = max(
+                    1,
+                    TORIIGATE_MAX_IMAGE_PIXELS // resized_width,
+                )
         resampling = getattr(Image, "Resampling", Image).LANCZOS
         return image.resize((resized_width, resized_height), resampling)
 
@@ -864,7 +904,11 @@ class ToriiGateTagger:
             return self._build_result(self._generate_text(image_path, tags))
         except Exception as exc:
             logger.error("ToriiGate failed on %s: %s", image_path, exc)
-            if self.use_gpu and self.allow_cpu_fallback:
+            if (
+                not isinstance(exc, ToriiGateImageGeometryError)
+                and self.use_gpu
+                and self.allow_cpu_fallback
+            ):
                 logger.warning("ToriiGate switching to CPU after GPU failure.")
                 self.use_gpu = False
                 self.device = "cpu"
@@ -873,14 +917,7 @@ class ToriiGateTagger:
                     return self._build_result(self._generate_text(image_path, tags))
                 except Exception as retry_exc:
                     logger.error("ToriiGate CPU retry failed on %s: %s", image_path, retry_exc)
-                    return {
-                        "general_tags": [],
-                        "character_tags": [],
-                        "rating": "unknown",
-                        "rating_confidences": {},
-                        "all_tags": [],
-                        "error": str(retry_exc),
-                    }
+                    exc = retry_exc
             return {
                 "general_tags": [],
                 "character_tags": [],

@@ -608,6 +608,35 @@ def test_tag_error_without_fallback_returns_unknown_error_dict(monkeypatch):
     }
 
 
+def test_tag_geometry_error_does_not_switch_gpu_session_to_cpu(monkeypatch):
+    tagger = _bare(use_gpu=True, allow_cpu_fallback=True, device="cuda")
+    monkeypatch.setattr(
+        tagger,
+        "_generate_text",
+        lambda _p, _t=None: (_ for _ in ()).throw(
+            tg.ToriiGateImageGeometryError("unsupported geometry")
+        ),
+    )
+    monkeypatch.setattr(
+        tagger,
+        "_recreate_session",
+        lambda: (_ for _ in ()).throw(AssertionError("must not recreate session")),
+    )
+
+    result = tagger.tag("/img.png")
+
+    assert result == {
+        "general_tags": [],
+        "character_tags": [],
+        "rating": "unknown",
+        "rating_confidences": {},
+        "all_tags": [],
+        "error": "unsupported geometry",
+    }
+    assert tagger.use_gpu is True
+    assert tagger.device == "cuda"
+
+
 def test_tag_gpu_failure_recreates_cpu_session_and_retries_when_allowed(monkeypatch):
     tagger = _bare(use_gpu=True, allow_cpu_fallback=True, device="cuda")
     calls = {"n": 0}
@@ -780,22 +809,51 @@ def test_generate_text_forwards_grounding_tags_into_prompt(monkeypatch, tmp_path
 
 
 # ===========================================================================
-# 11. _resize_for_inference — passthrough + min floor (reader pins only the cap)
+# 11. _resize_for_inference — passthrough + extreme-aspect cap
 # ===========================================================================
 def test_resize_for_inference_returns_small_image_unchanged():
     image = Image.new("RGB", (256, 256), "white")
     assert ToriiGateTagger._resize_for_inference(image) is image
 
 
-def test_resize_for_inference_min_512_floor_can_exceed_cap_on_extreme_aspect():
-    """DORMANT QUIRK pinned AS-IS (see report): the max(512, ...) short-side
-    floor OVERRIDES the 1 MP area cap for pathological aspect ratios, so the
-    result can exceed TORIIGATE_MAX_IMAGE_PIXELS. An 8000x400 (20:1) image floors
-    the height at 512 and returns 4579x512 = ~2.34 MP > 1 MP."""
-    image = Image.new("RGB", (8000, 400), "white")  # 3.2 MP, very wide
+@pytest.mark.parametrize("size", [(8000, 400), (400, 8000)])
+def test_resize_for_inference_caps_extreme_aspect_without_distorting_ratio(size):
+    """A 20:1 image stays under the area cap without short-side inflation."""
+    image = Image.new("RGB", size, "white")
     resized = ToriiGateTagger._resize_for_inference(image)
-    assert resized.size[1] == 512  # short side floored to the 512 minimum
-    assert resized.size[0] * resized.size[1] > tg.TORIIGATE_MAX_IMAGE_PIXELS
+    assert resized.size[0] * resized.size[1] <= tg.TORIIGATE_MAX_IMAGE_PIXELS
+    assert max(resized.size) / min(resized.size) == pytest.approx(
+        max(image.size) / min(image.size),
+        rel=0.01,
+    )
+
+
+@pytest.mark.parametrize("size", [(201, 1), (1, 201)])
+def test_resize_for_inference_rejects_unsupported_aspect_ratio_before_identity(size):
+    image = Image.new("RGB", size, "white")
+
+    with pytest.raises(tg.ToriiGateImageGeometryError) as exc_info:
+        ToriiGateTagger._resize_for_inference(image)
+
+    message = str(exc_info.value)
+    assert f"{size[0]}x{size[1]}" in message
+    assert "201.00:1" in message
+    assert "200:1 limit" in message
+    assert "crop" in message.lower()
+    assert "pad" in message.lower()
+
+
+@pytest.mark.parametrize("size", [(20000, 100), (100, 20000)])
+def test_resize_for_inference_rounding_stays_within_supported_aspect_ratio(size):
+    image = Image.new("RGB", size, "white")
+
+    resized = ToriiGateTagger._resize_for_inference(image)
+
+    long_edge = max(resized.size)
+    short_edge = min(resized.size)
+    assert resized.size != image.size
+    assert long_edge / short_edge <= tg.TORIIGATE_MAX_ASPECT_RATIO
+    assert long_edge * short_edge <= tg.TORIIGATE_MAX_IMAGE_PIXELS
 
 
 # ===========================================================================
