@@ -1,7 +1,8 @@
 """Output-path safety, preview/save endpoints, base64 decode, metadata copy.
 
-Methods moved verbatim from services/censor_service.py (decomposition 2026-07,
-claude-censorsvc-pins-REPORT.md section 6) except the manifest lines: save_data
+Methods moved from services/censor_service.py (decomposition 2026-07,
+claude-censorsvc-pins-REPORT.md section 6). Legacy preview/save preserve alpha
+and encode truthful formats. The manifest lines in save_data
 and _decode_base64_image resolve MAX_SAVE_DATA_PIXELS / MAX_SAVE_DATA_BYTES
 through _svc() at call time (patched on the facade module object); the three
 backend_file= call-sites here (_resolve_source_image_path, save, save_data)
@@ -23,7 +24,7 @@ import logging
 import os
 from io import BytesIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 from fastapi import HTTPException
 from PIL import Image, PngImagePlugin
@@ -36,6 +37,30 @@ if TYPE_CHECKING:  # annotation-only; never imported at runtime (no facade cycle
     from services.censor_service import CensorApplyRequest, CensorSaveDataRequest, CensorSaveRequest
 
 logger = logging.getLogger("services.censor_service")
+
+
+CensorOutputFormat = Literal['png', 'jpg', 'webp']
+
+
+def _image_has_alpha(image: Image.Image) -> bool:
+    '''Return whether decoding the image as RGB would discard transparency.'''
+    return 'A' in image.getbands() or 'transparency' in image.info
+
+
+def _normalize_censor_source(image: Image.Image) -> Image.Image:
+    '''Return a detached RGB/RGBA raster suitable for censor operations.'''
+    target_mode = 'RGBA' if _image_has_alpha(image) else 'RGB'
+    return image.convert(target_mode)
+
+
+def _resolve_censor_output_format(source_format: Optional[str]) -> tuple[CensorOutputFormat, str]:
+    '''Map the decoded source format to a truthful supported output format.'''
+    normalized = str(source_format or '').upper()
+    if normalized == 'JPEG':
+        return 'jpg', '.jpg'
+    if normalized == 'WEBP':
+        return 'webp', '.webp'
+    return 'png', '.png'
 
 
 def _svc():
@@ -187,7 +212,7 @@ class _OutputMixin:
 
         try:
             with Image.open(image_path) as src:
-                image = src.convert('RGB')
+                image = _normalize_censor_source(src)
             regions = [(int(r[0]), int(r[1]), int(r[2]), int(r[3])) for r in request.regions]
 
             censored = Censor.apply_censoring(
@@ -200,13 +225,18 @@ class _OutputMixin:
             )
 
             buffer = BytesIO()
-            censored.save(buffer, format='JPEG', quality=90)
+            if _image_has_alpha(censored):
+                censored.save(buffer, format="PNG")
+                preview_mime = "image/png"
+            else:
+                censored.save(buffer, format="JPEG", quality=90)
+                preview_mime = "image/jpeg"
             buffer.seek(0)
             b64_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
 
             return {
                 "status": "ok",
-                "preview": f"data:image/jpeg;base64,{b64_image}"
+                "preview": f"data:{preview_mime};base64,{b64_image}"
             }
         except Exception:
             raise HTTPException(status_code=500, detail="Preview failed")
@@ -242,7 +272,8 @@ class _OutputMixin:
             os.makedirs(output_folder, exist_ok=True)
 
             with Image.open(image_path) as src:
-                image = src.convert('RGB')
+                source_format = src.format
+                image = _normalize_censor_source(src)
             regions = [(int(r[0]), int(r[1]), int(r[2]), int(r[3])) for r in request.regions]
 
             censored = Censor.apply_censoring(
@@ -256,15 +287,12 @@ class _OutputMixin:
 
             base_name = os.path.splitext(image_data["filename"])[0]
             safe_suffix = self._sanitize_suffix(request.filename_suffix)
-            ext = os.path.splitext(image_data["filename"])[1] or ".png"
+            output_format, ext = _resolve_censor_output_format(source_format)
             output_filename = f"{base_name}{safe_suffix}{ext}"
             output_path = self._ensure_output_path(output_folder, output_filename)
 
             def _write_censored_image(final_output_path: str, _overwrite_requested: bool) -> None:
-                if ext.lower() in ['.jpg', '.jpeg']:
-                    censored.save(final_output_path, format='JPEG', quality=95)
-                else:
-                    censored.save(final_output_path, format='PNG')
+                self._save_image_with_format(censored, final_output_path, output_format, {})
 
             write_result = save_and_reconcile_checked(
                 output_path,
@@ -317,6 +345,7 @@ class _OutputMixin:
             output_filename = f"{base_name}{ext}"
             output_path = self._ensure_output_path(output_folder, output_filename)
 
+            save_kwargs: Dict[str, object]
             if request.metadata_option == "strip":
                 image = self._strip_all_metadata(image)
                 save_kwargs = {}
@@ -471,9 +500,9 @@ class _OutputMixin:
         original_image_id: Optional[int],
         metadata_option: str,
         output_format: str
-    ) -> dict:
+    ) -> Dict[str, object]:
         """Prepare save kwargs with metadata based on options."""
-        save_kwargs = {}
+        save_kwargs: Dict[str, object] = {}
 
         if metadata_option == "strip":
             return save_kwargs
@@ -530,7 +559,7 @@ class _OutputMixin:
         image: Image.Image,
         output_path: str,
         output_format: str,
-        save_kwargs: dict
+        save_kwargs: Dict[str, object]
     ) -> None:
         """Save image in the specified format."""
         if output_format == 'webp':

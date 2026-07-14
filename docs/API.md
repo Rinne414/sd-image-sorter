@@ -993,9 +993,11 @@ Run censor detection.
 
 #### POST /api/censor/preview
 Preview censoring.
+Opaque previews return JPEG data URLs. Sources with transparency return PNG data URLs so alpha survives; the MIME prefix always matches the encoded bytes.
 
 #### POST /api/censor/save
 Save censored output to disk.
+The decoded source format determines the output bytes and extension: JPEG stays `.jpg`, WebP stays `.webp`, and unsupported source formats are saved as PNG. PNG/WebP alpha is preserved.
 
 #### POST /api/censor/save-data
 Save edited base64 canvas output.

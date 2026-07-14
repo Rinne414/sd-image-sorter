@@ -96,6 +96,8 @@ async def censor_detect(
     summary="Preview censored image",
     description="""
 Apply censoring to specified regions and return a base64-encoded preview image.
+Opaque previews are JPEG data URLs. Sources with transparency are PNG data URLs so alpha is preserved;
+the declared MIME type always matches the encoded bytes.
 
 **Censoring styles:**
 - `mosaic`: Pixelate the region with adjustable block size
@@ -112,7 +114,7 @@ Use this endpoint to preview before saving with `/api/censor/save`.
                 "application/json": {
                     "example": {
                         "status": "ok",
-                        "preview": "data:image/jpeg;base64,/9j/4AAQSkZJRg..."
+                        "preview": "data:image/png;base64,iVBORw0KGgo..."
                     }
                 }
             }
