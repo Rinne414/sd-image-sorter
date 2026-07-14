@@ -10381,9 +10381,12 @@ html.lang-zh #view-censor .queue-action-btn span {
 /* Target base-model profiles (LoRA setup card) */
 .dataset-setup-two-col {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 4px 12px;
     align-items: start;
+}
+.dataset-setup-two-col:has(#btn-dataset-target-model-apply:not([hidden])) {
+    grid-template-columns: minmax(0, 1fr);
 }
 .dataset-target-model-field #btn-dataset-target-model-apply {
     margin-top: 6px;
