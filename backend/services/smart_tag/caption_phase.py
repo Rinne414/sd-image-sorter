@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from services.smart_tag.jobs import SmartTagJobState, _record_job_error
 from services.smart_tag.prompts import PROMPT_PRESETS, _vlm_context_tags_for
-from services.smart_tag.request import SmartTagRequest
+from services.smart_tag.request import SmartTagCaptionProfile, SmartTagRequest
 from services.smart_tag.results import (
     _append_caption_result,
     _assemble_result_dict,
@@ -26,6 +26,7 @@ from services.tag_training_filters import (
     format_trait_suppression_block,
     normalize_training_purpose,
 )
+from vlm_providers.registry import PROMPT_PRESETS as VLM_PROMPT_PRESETS
 
 # Shared logger: keep the historical channel name so log capture, filtering,
 # and support-log diagnostics behave exactly as before the decomposition.
@@ -46,6 +47,31 @@ class _CaptionPhase:
     @property
     def nl_active(self) -> bool:
         return self.use_vlm or self.use_toriigate
+
+
+def _resolve_vlm_prompts(
+    req: SmartTagRequest,
+) -> Tuple[Optional[str], str, str]:
+    """Resolve job-local VLM prompts without mutating provider settings."""
+    system_prompt: Optional[str] = None
+    if req.caption_profile is SmartTagCaptionProfile.KREA2_LONG_NL:
+        profile = VLM_PROMPT_PRESETS[req.caption_profile.value]
+        system_prompt = profile["system_prompt"]
+        user_prompt = profile["user_prompt"]
+        user_prompt_with_tags = profile["user_prompt_with_tags"]
+    else:
+        template = (
+            PROMPT_PRESETS.get(normalize_training_purpose(req.training_purpose))
+            or PROMPT_PRESETS["general"]
+        )
+        user_prompt = template
+        user_prompt_with_tags = template
+
+    suppression = format_trait_suppression_block(req.suppressed_traits)
+    if suppression:
+        user_prompt = f"{user_prompt}\n\n{suppression}"
+        user_prompt_with_tags = f"{user_prompt_with_tags}\n\n{suppression}"
+    return system_prompt, user_prompt, user_prompt_with_tags
 
 
 def _build_caption_phase(req: "SmartTagRequest", vlm_provider, nl_tagger) -> "_CaptionPhase":
@@ -78,18 +104,11 @@ def _build_caption_phase(req: "SmartTagRequest", vlm_provider, nl_tagger) -> "_C
         config = vlm_provider.config
         ctx.worker_count = max(1, int(getattr(config, "concurrent_requests", 1) or 1))
         ctx.include_tags_as_context = bool(getattr(config, "include_tags_as_context", True)) and req.vlm_grounding
-        template = (
-            PROMPT_PRESETS.get(normalize_training_purpose(req.training_purpose))
-            or PROMPT_PRESETS["general"]
-        )
-        # SEP-2: same suppression block as build_vlm_prompt — appended before
-        # the per-image {tags} substitution, so both pipelines emit identical
-        # prompts for identical inputs (parity pinned by the windowed test).
-        suppression = format_trait_suppression_block(req.suppressed_traits)
-        if suppression:
-            template = f"{template}\n\n{suppression}"
-        config.user_prompt = template
-        config.user_prompt_with_tags = template
+        system_prompt, user_prompt, user_prompt_with_tags = _resolve_vlm_prompts(req)
+        if system_prompt is not None:
+            config.system_prompt = system_prompt
+        config.user_prompt = user_prompt
+        config.user_prompt_with_tags = user_prompt_with_tags
         # Smart Tag's VLM role is prose only (booru tags come from the local
         # tagger), so force nl_caption regardless of the VLM Settings preset.
         # Without this, a preset like anima_flux that stored output_format=
@@ -121,7 +140,13 @@ def _handle_caption_result(
         if image_id > 0:
             _persist_result(image_id, result, req.merge_strategy)
         else:
-            _append_caption_result(job, path, (result.get("caption") or "").strip())
+            _append_caption_result(
+                job,
+                path,
+                (result.get("caption") or "").strip(),
+                (result.get("booru_text") or "").strip(),
+                (result.get("nl_text") or "").strip(),
+            )
         job.succeeded += 1
         job.noise_stripped_count += int(partial.get("noise_stripped") or 0)
         preview = (result.get("caption") or "").strip()
@@ -137,6 +162,20 @@ def _handle_caption_result(
             job.phase_completion = min(1.0, job.processed / job.total)
         label = "VLM captioning" if nl_active else "Processing"
         job.message = f"{label} {job.processed}/{job.total}"
+
+
+def _record_required_caption_failure(
+    job: SmartTagJobState,
+    source_key: str,
+    error: Exception,
+) -> None:
+    """Record a required profile caption failure without persisting tag-only output."""
+    job.failed += 1
+    _record_job_error(job, str(source_key), str(error))
+    job.processed += 1
+    if job.total > 0:
+        job.phase_completion = min(1.0, job.processed / job.total)
+    job.message = f"VLM captioning {job.processed}/{job.total}"
 
 
 def _run_caption_phase(
@@ -178,13 +217,25 @@ def _run_caption_phase(
                             req.trigger_word,
                         )
                         res = await ctx.vlm_provider.caption_image(path, tags=tags)
+                        provider_error = (getattr(res, "error", "") or "").strip()
+                        if provider_error:
+                            raise RuntimeError(provider_error)
                         nl_text = (getattr(res, "caption", "") or "").strip()
+                        if req.caption_profile is not None and not nl_text:
+                            raise RuntimeError(
+                                f"Caption profile {req.caption_profile.value!r} requires a non-empty "
+                                "natural-language caption, but the VLM returned no answer content."
+                            )
                 except Exception as exc:  # noqa: BLE001
-                    # A VLM failure on one image must not fail the image — it
-                    # still gets a booru-tag caption (old serial behaviour).
+                    # Legacy generic jobs retain their booru output. Explicit
+                    # caption profiles fail closed because tag-only output does
+                    # not satisfy their training-caption contract.
                     logger.warning(
                         "VLM caption failed for image %s: %s", image_id or source_key, exc
                     )
+                    if req.caption_profile is not None:
+                        _record_required_caption_failure(job, source_key, exc)
+                        return
                     nl_text = ""
                 _handle_caption_result(
                     job, req, source_key, image_id, path, partial, nl_text,

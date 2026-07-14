@@ -99,9 +99,10 @@ PROMPT_PRESETS: Dict[str, Dict[str, str]] = {
             "spatial positions (left, right, foreground, background)."
         ),
         "user_prompt_with_tags": (
-            "The following danbooru-style tags are ground truth for this "
-            "image:\n{tags}\n\n"
-            "Using them as grounding, write a long straightforward caption "
+            "The following machine-generated danbooru-style tags are optional "
+            "grounding cues and may be incomplete or incorrect. Verify every "
+            "detail against the image:\n{tags}\n\n"
+            "Using these cues, write a long straightforward caption "
             "(5-8 sentences) in plain natural language. Weave the tagged "
             "facts into prose instead of listing them, and add what tags "
             "cannot express: spatial layout, lighting direction and quality, "

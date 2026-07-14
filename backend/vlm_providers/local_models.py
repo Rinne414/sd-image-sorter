@@ -45,11 +45,11 @@ RECOMMENDED_MODELS: List[Dict[str, Any]] = [
         "nsfw_ok": True,
     },
     {
-        "id": "qwen3-vl:8b",
-        "name": "Qwen3 VL 8B",
-        "size_gb": 5.0,
+        "id": "qwen3-vl:8b-instruct",
+        "name": "Qwen3 VL 8B Instruct",
+        "size_gb": 6.1,
         "vram_min_gb": 6,
-        "description": "Alibaba Qwen3-VL 8B - latest Qwen vision model, strong reasoning + perception",
+        "description": "Alibaba Qwen3-VL 8B Instruct - strong vision captioning without a reasoning-token tax",
         "nsfw_ok": True,
     },
     {
@@ -85,11 +85,11 @@ RECOMMENDED_MODELS: List[Dict[str, Any]] = [
         "nsfw_ok": True,
     },
     {
-        "id": "qwen3-vl:32b",
-        "name": "Qwen3 VL 32B",
-        "size_gb": 20.0,
+        "id": "qwen3-vl:32b-instruct",
+        "name": "Qwen3 VL 32B Instruct",
+        "size_gb": 21.0,
         "vram_min_gb": 24,
-        "description": "Qwen3-VL 32B - best Qwen vision quality, needs high-end GPU",
+        "description": "Qwen3-VL 32B Instruct - highest Qwen caption quality, needs a high-end GPU",
         "nsfw_ok": True,
     },
 ]

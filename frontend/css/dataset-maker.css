@@ -972,6 +972,9 @@
 #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-card .dataset-field-hint {
     display: none;
 }
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-card .dataset-target-model-field .dataset-field-hint {
+    display: block;
+}
 #view-dataset .dataset-card textarea.form-input {
     font-family: var(--font-mono, ui-monospace, monospace);
     resize: vertical;

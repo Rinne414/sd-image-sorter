@@ -21,6 +21,7 @@ from services.smart_tag_service import (
     get_caption_results_page,
     get_job,
 )
+from services.smart_tag.request import SmartTagCaptionProfile
 from services.tagging_pipeline_service import (
     TaggingPipelineService,
     get_tagging_pipeline_service,
@@ -68,6 +69,7 @@ class SmartTagStartRequest(BaseModel):
     copyright_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     max_tags_per_image: Optional[int] = Field(default=None, ge=0, le=2000)
     natural_language_mode: str = "vlm"
+    caption_profile: Optional[SmartTagCaptionProfile] = None
     # v3.2.2 T-power-PR2 (D): multi-tagger consensus.
     taggers: List[Dict[str, Any]] = Field(default_factory=list)
     consensus_min: int = Field(default=2, ge=1, le=10)
@@ -87,7 +89,7 @@ def start(
     pipeline: TaggingPipelineService = Depends(get_tagging_pipeline_service),
     legacy_service: Any = Depends(get_legacy_tagging_service_for_smart_tag),
 ) -> Dict[str, Any]:
-    payload = request.model_dump()
+    payload = request.model_dump(mode="json")
     try:
         snapshot = pipeline.start_smart_tagging(
             payload,

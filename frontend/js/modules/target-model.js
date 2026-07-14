@@ -14,13 +14,11 @@
  *   flux  — FLUX.1 conditions on T5-XXL with max_sequence_length 512
  *           (black-forest-labs/flux reference inference + diffusers
  *           FluxPipeline default); booru tags work but NL adds detail.
- *   krea2 — Krea 2 uses Qwen 3 VL as its text encoder and was trained
- *           predominantly on LONG natural-language captions
- *           (krea.ai/blog/krea-2-technical-report); the official
- *           prompting guide says "natural language prompts" and "long
- *           detailed prompts yield best results"
- *           (github.com/krea-ai/krea-2 docs/prompting.md). LoRA captions
- *           are required per image (krea.ai/blog/krea-2-lora-training).
+ *   krea2 — Krea 2 uses Qwen3-VL-4B-Instruct with a 512-token maximum
+ *           and was trained predominantly on long natural-language captions
+ *           (krea.ai/blog/krea-2-technical-report; krea-ai/krea-2 encoder.py
+ *           and inference.py). The official repository directs LoRA users
+ *           to train on krea/Krea-2-Raw and run on Turbo for inference.
  *   anima — Qwen3-class encoder with booru-tag-native vocabulary; the
  *           app's Anima export presets (@-prefixed triggers, category
  *           sections) already encode its conventions.
@@ -29,6 +27,31 @@
     'use strict';
 
     const STORE_KEY = 'sd-image-sorter-dataset-target-model';
+    const DEFAULT_CAPTION_HELP_KEYS = Object.freeze([
+        ['dataset-caption-help-intro', 'dataset.helpIntro'],
+        ['dataset-caption-help-rule-1', 'dataset.helpRule1'],
+        ['dataset-caption-help-rule-2', 'dataset.helpRule2'],
+        ['dataset-caption-help-rule-3', 'dataset.helpRule3'],
+        ['dataset-caption-help-rule-4', 'dataset.helpRule4'],
+        ['dataset-caption-help-shortcut', 'dataset.helpShortcut'],
+    ]);
+    const KREA2_CAPTION_HELP_KEYS = Object.freeze([
+        ['dataset-caption-help-intro', 'dataset.krea2HelpIntro'],
+        ['dataset-caption-help-rule-1', 'dataset.krea2HelpRule1'],
+        ['dataset-caption-help-rule-2', 'dataset.krea2HelpRule2'],
+        ['dataset-caption-help-rule-3', 'dataset.krea2HelpRule3'],
+        ['dataset-caption-help-rule-4', 'dataset.krea2HelpRule4'],
+        ['dataset-caption-help-shortcut', 'dataset.krea2HelpShortcut'],
+    ]);
+
+    function refreshCaptionHelp(keys) {
+        for (const [elementId, translationKey] of keys) {
+            const element = document.getElementById(elementId);
+            if (!element) continue;
+            element.setAttribute('data-i18n', translationKey);
+            element.textContent = window.I18n?.t?.(translationKey) || translationKey;
+        }
+    }
 
     function t(en, zh) {
         try {
@@ -56,10 +79,12 @@
         },
         krea2: {
             captionType: 'nl',
+            captionProfile: 'krea2_long_nl',
             tokenBudget: 512,
+            captionHelpKeys: KREA2_CAPTION_HELP_KEYS,
             hint: () => t(
-                'Qwen3-VL encoder, trained on long natural-language captions — the NL sentence IS the training payload; run Smart Tag with a VLM caption (preset: Krea 2 Long NL). Official LoRA guidance: plain language, no trigger word needed, and NAME the details you do NOT want the LoRA to absorb. Tags still help search.',
-                'Qwen3-VL 编码器，以自然语言长 caption 训练 — NL 句子才是训练本体；请用带 VLM 描述的 Smart Tag（预设：Krea 2 长 NL）。官方 LoRA 建议：平白语言、无需触发词，并把「不想被 LoRA 学走」的细节在 caption 里点名。标签仍可用于搜索。'),
+                'Train LoRAs on krea/Krea-2-Raw, then run them on Krea 2 Turbo for inference. Its Qwen3-VL encoder supports 512 tokens, and training used predominantly long natural-language captions. Use Smart Tag\'s Krea 2 Long NL profile; tags remain useful for library search and review, not as a Krea 2 training tag-count target.',
+                'LoRA 请在 krea/Krea-2-Raw 上训练，再用于 Krea 2 Turbo 推理。其 Qwen3-VL 编码器支持 512 tokens，训练数据主要采用自然语言长 caption。请使用 Smart Tag 的 Krea 2 长 NL 配置；标签仍适合图库检索与审核，但不是 Krea 2 训练的标签数量目标。'),
             applyLabel: () => t('Set every image to NL captions', '全部图片设为自然语言 caption'),
         },
         anima: {
@@ -89,6 +114,12 @@
             return profile ? profile.tokenBudget : null;
         },
 
+        /** Smart Tag caption profile; null means use its normal purpose preset. */
+        captionProfile() {
+            const profile = this.profile();
+            return profile?.captionProfile || null;
+        },
+
         init() {
             const select = document.getElementById('dataset-target-model');
             if (!select) return;
@@ -110,6 +141,7 @@
             const apply = document.getElementById('btn-dataset-target-model-apply');
             const profile = this.profile();
             if (hint) hint.textContent = profile ? profile.hint() : '';
+            refreshCaptionHelp(profile?.captionHelpKeys || DEFAULT_CAPTION_HELP_KEYS);
             if (apply) {
                 apply.hidden = !profile;
                 if (profile) apply.textContent = profile.applyLabel();
@@ -125,14 +157,11 @@
                 return;
             }
             dm._applyCaptionTypeToScope(profile.captionType, 'all');
-            window.App?.showToast?.(
-                t(`Caption type set to "${profile.captionType}" for every image`,
-                  `已把全部图片的 caption 类型设为「${profile.captionType}」`),
-                'success');
         },
     };
 
     window.TargetModel = TargetModel;
+    document.addEventListener('languageChanged', () => TargetModel.refresh());
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => TargetModel.init());
     } else {

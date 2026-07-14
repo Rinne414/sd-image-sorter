@@ -4091,6 +4091,12 @@ window.I18nLang_en = {
     'dataset.helpRule3': "DON'T describe things that are constant across all images — that's what your trigger word is for.",
     'dataset.helpRule4': "DON'T leave .txt files empty — empty captions teach the model nothing.",
     'dataset.helpShortcut': "Shortcut: click \"Tag all images\" in Step A and you're done — the WD14 tagger writes a perfectly serviceable starter caption per image.",
+    'dataset.krea2HelpIntro': 'For Krea 2 LoRA training, each .txt should be a reviewed, factual long natural-language caption. Train on Krea-2-Raw, then use the LoRA on Turbo for inference.',
+    'dataset.krea2HelpRule1': 'DO describe visible subjects, poses, settings, lighting, composition, colors, materials, and spatial relationships.',
+    'dataset.krea2HelpRule2': 'DO review auto-captions and remove invented details; machine tags are cues, not ground truth.',
+    'dataset.krea2HelpRule3': "DO name one-off details you do not want the LoRA to absorb. Krea's official guide does not prescribe a trigger convention.",
+    'dataset.krea2HelpRule4': "DON'T leave .txt files empty — Krea 2 training requires a caption for each image.",
+    'dataset.krea2HelpShortcut': "Start with Smart Tag's Krea 2 Long NL profile, then review every caption before export.",
 
     'dataset.separationConsoleTitle': 'Separation Console',
     'dataset.separationConsoleHelp': 'Every tag across the queue: keep it promptable, or prune it so the trigger word absorbs it. Frequency is the evidence.',

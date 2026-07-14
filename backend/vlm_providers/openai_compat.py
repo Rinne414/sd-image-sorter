@@ -97,6 +97,21 @@ class OpenAICompatProvider(VLMProvider):
                 truncated = bool(result.get("truncated", False))
 
                 if not raw_text:
+                    if truncated:
+                        model = self.config.model or "<unspecified>"
+                        return VLMResult(
+                            error=(
+                                f"Model {model!r} exhausted the {self.config.caption_max_tokens}-token "
+                                "caption budget before producing answer content "
+                                "(finish_reason=length). Select a non-thinking/Instruct caption "
+                                "model (for Ollama Qwen3-VL use qwen3-vl:8b-instruct), or "
+                                "increase Caption max tokens in VLM Settings."
+                            ),
+                            error_type="truncated_empty_response",
+                            retries_used=retries,
+                            model=self.config.model,
+                            truncated=True,
+                        )
                     retries += 1
                     if attempt < self.config.max_retries:
                         await asyncio.sleep(self.config.retry_delay_seconds)

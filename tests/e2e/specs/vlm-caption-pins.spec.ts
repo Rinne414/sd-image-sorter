@@ -599,7 +599,7 @@ test('loadRecommendedModels fills the model datalist + Ollama cards and "Use Thi
         ollama_installed: true,
         ollama_running: true,
         models: [
-          { id: 'qwen2.5-vl:7b', name: 'Qwen2.5-VL 7B', description: 'desc', installed: true, nsfw_ok: true, size_gb: 6, vram_min_gb: 8 },
+          { id: 'qwen3-vl:8b-instruct', name: 'Qwen3-VL 8B Instruct', description: 'desc', installed: true, nsfw_ok: true, size_gb: 6.1, vram_min_gb: 6 },
           { id: 'minicpm-v', name: 'MiniCPM-V', description: 'desc2', installed: false, nsfw_ok: false, size_gb: 5, vram_min_gb: 6 },
         ],
       }),
@@ -610,7 +610,7 @@ test('loadRecommendedModels fills the model datalist + Ollama cards and "Use Thi
     await V.loadRecommendedModels()
     const container = document.getElementById('vlm-local-models') as HTMLElement
     const datalist = document.getElementById('vlm-model-suggestions') as HTMLElement
-    ;(container.querySelector('[data-vlm-use="qwen2.5-vl:7b"]') as HTMLElement)?.click()
+    ;(container.querySelector('[data-vlm-use="qwen3-vl:8b-instruct"]') as HTMLElement)?.click()
     return {
       cards: container.querySelectorAll('.vlm-model-card').length,
       datalistCount: datalist.querySelectorAll('option').length,
@@ -626,7 +626,7 @@ test('loadRecommendedModels fills the model datalist + Ollama cards and "Use Thi
   expect(probe.datalistCount).toBe(2)
   expect(probe.pullButtons).toBe(1) // the not-installed model offers Download
   expect(probe.useButtons).toBe(1) // the installed model offers Use This
-  expect(probe.model).toBe('qwen2.5-vl:7b')
+  expect(probe.model).toBe('qwen3-vl:8b-instruct')
   expect(probe.endpoint).toBe('http://localhost:11434/v1')
   expect(probe.provider).toBe('openai_compat')
 })

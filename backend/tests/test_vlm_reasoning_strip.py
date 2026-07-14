@@ -120,6 +120,43 @@ def test_finish_reason_length_flags_truncation_without_error(monkeypatch, tmp_pa
     assert result.error is None
 
 
+def test_empty_truncated_answer_fails_without_repeating_same_budget(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    provider = OpenAICompatProvider(
+        VLMConfig(
+            endpoint="https://example.test/v1",
+            model="qwen3-vl:8b",
+            output_format="nl_caption",
+            caption_max_tokens=1024,
+            max_retries=3,
+        )
+    )
+    calls = 0
+
+    async def request(messages, *, max_tokens, temperature):
+        nonlocal calls
+        calls += 1
+        assert messages
+        assert max_tokens == 1024
+        assert temperature == provider.config.caption_temperature
+        return {"caption": "", "tokens": 1024, "truncated": True}
+
+    monkeypatch.setattr(provider, "_request", request)
+    image_path = tmp_path / "thinking.png"
+    Image.new("RGB", (16, 16), color="white").save(image_path)
+
+    result = asyncio.run(provider.caption_image(str(image_path)))
+
+    assert calls == 1
+    assert result.error_type == "truncated_empty_response"
+    assert result.retries_used == 0
+    assert result.truncated is True
+    assert "qwen3-vl:8b-instruct" in result.error
+    assert "1024-token" in result.error
+
+
 def test_request_flags_truncation_and_ignores_reasoning_content(monkeypatch):
     # Arrange: a vendor that returns chain-of-thought in a sibling field.
     payload = {

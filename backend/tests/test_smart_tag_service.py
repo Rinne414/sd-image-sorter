@@ -51,6 +51,7 @@ from services.smart_tag_service import (  # noqa: E402
     is_noise_tag,
     normalize_training_purpose,
 )
+from services.smart_tag.request import SmartTagCaptionProfile  # noqa: E402
 import services.smart_tag_service as smart_tag_service  # noqa: E402
 
 
@@ -1312,6 +1313,71 @@ def test_path_caption_results_are_paged_from_file_not_kept_in_memory(monkeypatch
     assert [row["path"] for row in second_page["results"]] == ["/tmp/local-2.png"]
 
 
+def test_path_caption_results_keep_booru_and_nl_channels_separate(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(smart_tag_service, "_get_caption_results_dir", lambda: tmp_path)
+    nl_text = "A woman stands beneath warm window light."
+
+    class _FixedVlm:
+        def __init__(self) -> None:
+            self.config = SimpleNamespace(
+                concurrent_requests=1,
+                include_tags_as_context=True,
+                system_prompt="",
+                user_prompt="",
+                user_prompt_with_tags="",
+                output_format="both",
+            )
+
+        async def caption_image(self, image_path, *, tags=None):
+            return SimpleNamespace(caption=nl_text)
+
+    job = SmartTagJobState(job_id="path-separated-job")
+    job.total = 1
+    req = SmartTagRequest(
+        image_paths=["/tmp/local-separated.png"],
+        enable_wd14=True,
+        enable_vlm=True,
+        natural_language_mode="vlm",
+    )
+
+    smart_tag_service._run_windowed_pipeline(
+        job,
+        req,
+        tagger=_FakeBatchTagger(),
+        vlm_provider=_FixedVlm(),
+        nl_tagger=None,
+    )
+
+    row = get_caption_results_page(job, offset=0, limit=10)["results"][0]
+    assert row == {
+        "path": "/tmp/local-separated.png",
+        "caption": f"1girl, {nl_text}",
+        "booru_text": "1girl",
+        "nl_text": nl_text,
+    }
+    assert job.recent_caption_results[0]["booru_text"] == "1girl"
+    assert job.recent_caption_results[0]["nl_text"] == nl_text
+
+
+def test_path_caption_results_keep_legacy_rows_readable(tmp_path) -> None:
+    target = tmp_path / "legacy-path-results.jsonl"
+    target.write_text(
+        '{"path": "/tmp/legacy.png", "caption": "legacy combined text"}\n',
+        encoding="utf-8",
+    )
+    job = SmartTagJobState(job_id="legacy-path-job", caption_result_count=1)
+    job.caption_results_path = str(target)
+
+    row = get_caption_results_page(job, offset=0, limit=10)["results"][0]
+
+    assert row == {
+        "path": "/tmp/legacy.png",
+        "caption": "legacy combined text",
+        "booru_text": "",
+        "nl_text": "",
+    }
+
+
 def test_run_pipeline_keeps_only_bounded_recent_errors(monkeypatch) -> None:
     # The single-tagger path no longer routes through _process_one_image; it
     # assembles + persists each image via _append_caption_result (path sources).
@@ -1624,6 +1690,114 @@ class _FakeBatchTagger:
         }
 
 
+def _run_pipeline_with_provider_construction_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    caption_profile: SmartTagCaptionProfile | None,
+) -> tuple[
+    SmartTagJobState,
+    _FakeBatchTagger,
+    list[int],
+    list[tuple[str, str, str, str]],
+]:
+    import vlm_providers
+
+    tagger = _FakeBatchTagger()
+    persisted_db: list[int] = []
+    persisted_paths: list[tuple[str, str, str, str]] = []
+
+    def _raise_provider_error(_config: object) -> None:
+        raise RuntimeError("provider construction exploded")
+
+    monkeypatch.setattr(smart_tag_service, "_resolve_tagger", lambda req: tagger)
+    monkeypatch.setattr(
+        smart_tag_service,
+        "_resolve_image_paths",
+        lambda image_ids: {
+            int(image_id): f"/tmp/db-{int(image_id)}.png"
+            for image_id in image_ids
+        },
+    )
+    monkeypatch.setattr(
+        smart_tag_service,
+        "_recommended_tag_batch_size",
+        lambda model_name, use_gpu: 2,
+    )
+    monkeypatch.setattr(
+        smart_tag_service,
+        "_apply_memory_pressure",
+        lambda job, active_tagger, batch_size: batch_size,
+    )
+    monkeypatch.setattr(
+        smart_tag_service,
+        "_persist_result",
+        lambda image_id, result, merge_strategy: persisted_db.append(image_id),
+    )
+    monkeypatch.setattr(
+        smart_tag_service,
+        "_append_caption_result",
+        lambda job, path, caption, booru_text, nl_text: persisted_paths.append(
+            (path, caption, booru_text, nl_text)
+        ),
+    )
+    monkeypatch.setattr(
+        "routers.vlm._build_config",
+        lambda overrides=None: SimpleNamespace(
+            endpoint="http://127.0.0.1:11434/v1",
+            api_key="",
+        ),
+    )
+    monkeypatch.setattr(vlm_providers, "get_provider", _raise_provider_error)
+
+    job = SmartTagJobState(job_id="provider-construction-failure")
+    req = SmartTagRequest(
+        image_ids=[1],
+        image_paths=["/tmp/local.png"],
+        enable_wd14=True,
+        enable_vlm=True,
+        natural_language_mode="vlm",
+        caption_profile=caption_profile,
+        skip_existing=False,
+    )
+
+    smart_tag_service._run_pipeline(job, req)
+
+    return job, tagger, persisted_db, persisted_paths
+
+
+def test_krea_profile_provider_construction_failure_is_fail_closed(monkeypatch) -> None:
+    job, tagger, persisted_db, persisted_paths = (
+        _run_pipeline_with_provider_construction_failure(
+            monkeypatch,
+            SmartTagCaptionProfile.KREA2_LONG_NL,
+        )
+    )
+
+    assert job.status == "failed"
+    assert job.succeeded == 0
+    assert job.processed == 0
+    assert job.last_caption_preview == ""
+    assert "provider construction exploded" in job.message
+    assert tagger.batch_calls == []
+    assert persisted_db == []
+    assert persisted_paths == []
+
+
+def test_unprofiled_provider_failure_keeps_legacy_booru_fallback(monkeypatch) -> None:
+    job, tagger, persisted_db, persisted_paths = (
+        _run_pipeline_with_provider_construction_failure(monkeypatch, None)
+    )
+
+    assert job.status == "completed"
+    assert job.succeeded == 2
+    assert [
+        path
+        for batch in tagger.batch_calls
+        for path in batch
+    ] == ["/tmp/db-1.png", "/tmp/local.png"]
+    assert persisted_db == [1]
+    assert [row[0] for row in persisted_paths] == ["/tmp/local.png"]
+
+
 class _RecordingToriiTagger:
     """Fake ToriiGate that records the grounding tags passed to tag()."""
 
@@ -1646,7 +1820,7 @@ def test_caption_phase_passes_booru_tags_to_toriigate_as_grounding(monkeypatch) 
     """ToriiGate must receive the window's WD tags as grounding input (the
     same noise-filtered context the cloud VLM path gets)."""
     monkeypatch.setattr(
-        smart_tag_service, "_append_caption_result", lambda job, path, caption: None,
+        smart_tag_service, "_append_caption_result", lambda job, path, caption, booru_text, nl_text: None,
     )
 
     torii = _RecordingToriiTagger()
@@ -1671,7 +1845,7 @@ def test_caption_phase_passes_booru_tags_to_toriigate_as_grounding(monkeypatch) 
 
 def test_caption_phase_omits_grounding_when_disabled(monkeypatch) -> None:
     monkeypatch.setattr(
-        smart_tag_service, "_append_caption_result", lambda job, path, caption: None,
+        smart_tag_service, "_append_caption_result", lambda job, path, caption, booru_text, nl_text: None,
     )
 
     torii = _RecordingToriiTagger()
@@ -1715,7 +1889,7 @@ def test_two_phase_toriigate_releases_booru_before_loading(monkeypatch) -> None:
     persisted = []
     monkeypatch.setattr(
         smart_tag_service, "_append_caption_result",
-        lambda job, path, caption: persisted.append((path, caption)),
+        lambda job, path, caption, booru_text, nl_text: persisted.append((path, caption)),
     )
     torii = _RecordingToriiTagger()
 
@@ -1752,7 +1926,7 @@ def test_two_phase_toriigate_persists_booru_tags_when_load_fails(monkeypatch) ->
     persisted = []
     monkeypatch.setattr(
         smart_tag_service, "_append_caption_result",
-        lambda job, path, caption: persisted.append((path, caption)),
+        lambda job, path, caption, booru_text, nl_text: persisted.append((path, caption)),
     )
 
     def _boom(job, req):
@@ -1848,6 +2022,137 @@ def test_run_pipeline_routes_toriigate_to_two_phase(monkeypatch) -> None:
     assert job.status == "completed"
 
 
+@pytest.mark.parametrize("caption_profile", ["", "unsupported_profile"])
+def test_coerce_request_rejects_unknown_caption_profile(caption_profile: str) -> None:
+    with pytest.raises(ValueError, match=r"caption_profile.*krea2_long_nl"):
+        _coerce_request({
+            "image_ids": [1],
+            "enable_vlm": False,
+            "caption_profile": caption_profile,
+        })
+
+
+def test_coerce_request_rejects_caption_profile_when_vlm_disabled() -> None:
+    with pytest.raises(ValueError, match=r"caption_profile requires enable_vlm=true"):
+        _coerce_request({
+            "image_ids": [1],
+            "enable_vlm": False,
+            "natural_language_mode": "vlm",
+            "caption_profile": "krea2_long_nl",
+        })
+
+
+def test_coerce_request_rejects_caption_profile_with_toriigate() -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"caption_profile requires natural_language_mode='vlm'.*toriigate",
+    ):
+        _coerce_request({
+            "image_ids": [1],
+            "enable_vlm": True,
+            "natural_language_mode": "toriigate",
+            "caption_profile": "krea2_long_nl",
+        })
+
+
+@pytest.mark.parametrize("natural_language_mode", ["", "off", "banana"])
+def test_coerce_request_rejects_caption_profile_with_non_vlm_mode(
+    natural_language_mode: str,
+) -> None:
+    with pytest.raises(
+        ValueError,
+        match=r"caption_profile requires natural_language_mode='vlm'",
+    ):
+        _coerce_request({
+            "image_ids": [1],
+            "enable_vlm": True,
+            "natural_language_mode": natural_language_mode,
+            "caption_profile": "krea2_long_nl",
+        })
+
+
+def test_build_caption_phase_applies_explicit_krea2_profile(monkeypatch) -> None:
+    from vlm_providers.registry import PROMPT_PRESETS as VLM_PROMPT_PRESETS
+
+    monkeypatch.setattr(
+        "routers.vlm._build_config",
+        lambda overrides=None: SimpleNamespace(
+            provider="openai_compat",
+            endpoint="http://127.0.0.1:11434/v1",
+            api_key="",
+            use_vertex=False,
+            vertex_project="",
+        ),
+    )
+    req = _coerce_request({
+        "image_ids": [1],
+        "enable_vlm": True,
+        "natural_language_mode": "vlm",
+        "training_purpose": "character",
+        "caption_profile": "krea2_long_nl",
+        "suppressed_traits": ["blue_hair"],
+    })
+    config = SimpleNamespace(
+        concurrent_requests=2,
+        include_tags_as_context=True,
+        system_prompt="settings system prompt",
+        user_prompt="settings user prompt",
+        user_prompt_with_tags="settings grounded prompt",
+        output_format="both",
+    )
+    vlm = SimpleNamespace(config=config)
+
+    ctx = smart_tag_service._build_caption_phase(req, vlm, None)
+
+    preset = VLM_PROMPT_PRESETS["krea2_long_nl"]
+    assert ctx.use_vlm is True
+    assert ctx.include_tags_as_context is True
+    assert config.system_prompt == preset["system_prompt"]
+    assert config.user_prompt.startswith(preset["user_prompt"])
+    assert config.user_prompt_with_tags.startswith(preset["user_prompt_with_tags"])
+    assert "5-8" in config.user_prompt
+    assert "5-8" in config.user_prompt_with_tags
+    assert "2-3 plain English sentences" not in config.user_prompt
+    assert "blue hair" in config.user_prompt
+    assert "blue hair" in config.user_prompt_with_tags
+    assert config.output_format == "nl_caption"
+
+
+def test_build_caption_phase_without_profile_keeps_purpose_prompt() -> None:
+    config = SimpleNamespace(
+        concurrent_requests=2,
+        include_tags_as_context=True,
+        system_prompt="settings system prompt",
+        user_prompt="settings user prompt",
+        user_prompt_with_tags="settings grounded prompt",
+        output_format="both",
+    )
+    vlm = SimpleNamespace(config=config)
+    req = SmartTagRequest(
+        image_ids=[1],
+        enable_vlm=True,
+        natural_language_mode="vlm",
+        training_purpose="style",
+    )
+
+    smart_tag_service._build_caption_phase(req, vlm, None)
+
+    assert config.system_prompt == "settings system prompt"
+    assert config.user_prompt == PROMPT_PRESETS["style"]
+    assert config.user_prompt_with_tags == PROMPT_PRESETS["style"]
+    assert config.output_format == "nl_caption"
+
+
+def test_krea2_grounding_prompt_treats_machine_tags_as_cues() -> None:
+    from vlm_providers.registry import PROMPT_PRESETS as VLM_PROMPT_PRESETS
+
+    prompt = VLM_PROMPT_PRESETS["krea2_long_nl"]["user_prompt_with_tags"].lower()
+
+    assert "ground truth" not in prompt
+    assert "machine-generated" in prompt
+    assert "grounding cues" in prompt
+
+
 def test_build_caption_phase_forces_nl_output_format() -> None:
     """Smart Tag's VLM role is prose only — a stored preset with
     output_format="both"/"danbooru_tags" must be overridden per job (the
@@ -1921,7 +2226,7 @@ def test_windowed_pipeline_batches_booru_on_gpu(monkeypatch) -> None:
     persisted = []
     monkeypatch.setattr(
         smart_tag_service, "_append_caption_result",
-        lambda job, path, caption: persisted.append((path, caption)),
+        lambda job, path, caption, booru_text, nl_text: persisted.append((path, caption)),
     )
 
     tagger = _FakeBatchTagger()
@@ -1991,7 +2296,7 @@ def test_windowed_pipeline_uses_hardware_aware_batch_size(monkeypatch) -> None:
     size to tag_batch (not the fixed SMART_TAG_TAG_BATCH_SIZE ceiling)."""
     monkeypatch.setattr(
         smart_tag_service, "_append_caption_result",
-        lambda job, path, caption: None,
+        lambda job, path, caption, booru_text, nl_text: None,
     )
     monkeypatch.setattr(smart_tag_service, "_recommended_tag_batch_size", lambda model, gpu: 7)
     # Isolate hardware-aware *sizing* from live memory-pressure shrinking (which
@@ -2092,7 +2397,7 @@ def test_windowed_pipeline_runs_vlm_concurrently(monkeypatch) -> None:
     serially (the bug: asyncio.run per image never used concurrent_requests)."""
     monkeypatch.setattr(
         smart_tag_service, "_append_caption_result",
-        lambda job, path, caption: None,
+        lambda job, path, caption, booru_text, nl_text: None,
     )
 
     tagger = _FakeBatchTagger()
@@ -2120,7 +2425,7 @@ def test_windowed_pipeline_vlm_failure_keeps_booru_caption(monkeypatch) -> None:
     persisted = []
     monkeypatch.setattr(
         smart_tag_service, "_append_caption_result",
-        lambda job, path, caption: persisted.append(caption),
+        lambda job, path, caption, booru_text, nl_text: persisted.append(caption),
     )
 
     class _FailingVlm:
@@ -2147,6 +2452,113 @@ def test_windowed_pipeline_vlm_failure_keeps_booru_caption(monkeypatch) -> None:
     assert job.succeeded == 2  # VLM failure is not an image failure
     assert job.failed == 0
     assert all("1girl" in c for c in persisted)  # booru tag survived
+
+
+def test_krea_profile_does_not_persist_booru_only_when_vlm_returns_an_error(monkeypatch) -> None:
+    persisted = []
+    monkeypatch.setattr(
+        smart_tag_service,
+        "_append_caption_result",
+        lambda job, path, caption, booru_text, nl_text: persisted.append(caption),
+    )
+
+    class _TruncatedVlm:
+        def __init__(self) -> None:
+            self.config = SimpleNamespace(
+                concurrent_requests=1,
+                include_tags_as_context=True,
+                system_prompt="",
+                user_prompt="",
+                user_prompt_with_tags="",
+                output_format="nl_caption",
+            )
+
+        async def caption_image(self, image_path, *, tags):
+            return SimpleNamespace(
+                caption="",
+                error=(
+                    "Model 'qwen3-vl:8b' exhausted the 1024-token caption budget "
+                    "before producing answer content. Use qwen3-vl:8b-instruct."
+                ),
+            )
+
+    job = SmartTagJobState(job_id="krea-vlm-fail-job", status="running", total=1)
+    req = SmartTagRequest(
+        image_paths=["/tmp/krea.png"],
+        enable_wd14=True,
+        enable_vlm=True,
+        natural_language_mode="vlm",
+        caption_profile=SmartTagCaptionProfile.KREA2_LONG_NL,
+    )
+
+    smart_tag_service._run_windowed_pipeline(
+        job,
+        req,
+        tagger=_FakeBatchTagger(),
+        vlm_provider=_TruncatedVlm(),
+        nl_tagger=None,
+    )
+
+    assert persisted == []
+    assert job.status == "failed"
+    assert job.succeeded == 0
+    assert job.failed == 1
+    assert job.processed == 1
+    assert "qwen3-vl:8b-instruct" in job.errors[0]["error"]
+    assert job.errors[0]["error"] in job.message
+
+
+def test_krea_profile_partial_caption_success_remains_completed(monkeypatch) -> None:
+    persisted = []
+    provider_error = "Caption provider rejected one image."
+    monkeypatch.setattr(
+        smart_tag_service,
+        "_append_caption_result",
+        lambda job, path, caption, booru_text, nl_text: persisted.append(path),
+    )
+
+    class _PartiallyFailingVlm:
+        def __init__(self) -> None:
+            self.config = SimpleNamespace(
+                concurrent_requests=1,
+                include_tags_as_context=True,
+                system_prompt="",
+                user_prompt="",
+                user_prompt_with_tags="",
+                output_format="nl_caption",
+            )
+
+        async def caption_image(self, image_path, *, tags):
+            if image_path.endswith("failed.png"):
+                return SimpleNamespace(caption="", error=provider_error)
+            return SimpleNamespace(
+                caption="A successful natural-language caption.",
+                error=None,
+            )
+
+    job = SmartTagJobState(job_id="krea-vlm-partial-job", status="running", total=2)
+    req = SmartTagRequest(
+        image_paths=["/tmp/succeeded.png", "/tmp/failed.png"],
+        enable_wd14=True,
+        enable_vlm=True,
+        natural_language_mode="vlm",
+        caption_profile=SmartTagCaptionProfile.KREA2_LONG_NL,
+    )
+
+    smart_tag_service._run_windowed_pipeline(
+        job,
+        req,
+        tagger=_FakeBatchTagger(),
+        vlm_provider=_PartiallyFailingVlm(),
+        nl_tagger=None,
+    )
+
+    assert persisted == ["/tmp/succeeded.png"]
+    assert job.status == "completed"
+    assert job.succeeded == 1
+    assert job.failed == 1
+    assert job.processed == 2
+    assert job.errors[0]["error"] == provider_error
 
 
 def test_windowed_pipeline_vlm_prompt_matches_legacy_build_vlm_prompt() -> None:
@@ -2193,7 +2605,7 @@ def test_windowed_pipeline_cancel_preserves_completed(monkeypatch) -> None:
     persisted = []
     monkeypatch.setattr(
         smart_tag_service, "_append_caption_result",
-        lambda job, path, caption: persisted.append(path),
+        lambda job, path, caption, booru_text, nl_text: persisted.append(path),
     )
 
     job = SmartTagJobState(job_id="cancel-job")
@@ -2233,7 +2645,7 @@ def test_multi_tagger_pipeline_batches_and_runs_vlm_concurrently(monkeypatch) ->
     the VLM concurrently (owner-chosen scope), still fusing consensus tags."""
     monkeypatch.setattr(
         smart_tag_service, "_append_caption_result",
-        lambda job, path, caption: None,
+        lambda job, path, caption, booru_text, nl_text: None,
     )
 
     batch_taggers = []
@@ -2279,9 +2691,108 @@ def test_multi_tagger_pipeline_batches_and_runs_vlm_concurrently(monkeypatch) ->
     assert vlm.max_in_flight >= 2
 
 
+def test_multi_tagger_krea_profile_all_caption_failures_end_failed(monkeypatch) -> None:
+    persisted = []
+    provider_error = (
+        "Model 'qwen3-vl:8b' exhausted the caption budget before producing answer "
+        "content. Use qwen3-vl:8b-instruct."
+    )
+    monkeypatch.setattr(
+        smart_tag_service,
+        "_append_caption_result",
+        lambda job, path, caption, booru_text, nl_text: persisted.append(path),
+    )
+
+    def fake_resolve(model_name, **_kwargs):
+        return _FakeBatchTagger()
+
+    class _FailingProfileVlm:
+        def __init__(self) -> None:
+            self.config = SimpleNamespace(
+                concurrent_requests=2,
+                include_tags_as_context=True,
+                system_prompt="",
+                user_prompt="",
+                user_prompt_with_tags="",
+                output_format="nl_caption",
+            )
+
+        async def caption_image(self, image_path, *, tags):
+            return SimpleNamespace(caption="", error=provider_error)
+
+    monkeypatch.setattr(smart_tag_service, "_resolve_tagger_by_model", fake_resolve)
+    monkeypatch.setattr(
+        "routers.vlm._build_config",
+        lambda: SimpleNamespace(endpoint="http://localhost:11434", api_key=""),
+    )
+    monkeypatch.setattr(
+        "vlm_providers.get_provider",
+        lambda config: _FailingProfileVlm(),
+    )
+
+    job = SmartTagJobState(job_id="multi-krea-vlm-fail-job")
+    req = SmartTagRequest(
+        image_paths=["/tmp/multi-krea-0.png", "/tmp/multi-krea-1.png"],
+        enable_wd14=True,
+        enable_vlm=True,
+        natural_language_mode="vlm",
+        caption_profile=SmartTagCaptionProfile.KREA2_LONG_NL,
+        taggers=[
+            {
+                "model": "tagger-a",
+                "general_threshold": 0.35,
+                "character_threshold": 0.85,
+            },
+            {
+                "model": "tagger-b",
+                "general_threshold": 0.35,
+                "character_threshold": 0.85,
+            },
+        ],
+        consensus_min=1,
+    )
+
+    smart_tag_service._run_pipeline(job, req)
+
+    assert persisted == []
+    assert job.status == "failed"
+    assert job.succeeded == 0
+    assert job.failed == 2
+    assert job.processed == 2
+    assert len(job.errors) == 2
+    assert all(error["error"] == provider_error for error in job.errors)
+    assert provider_error in job.message
+
+
 # ---------------------------------------------------------------------------
 # Job hygiene: registry pruning + results-file cleanup + total-failure handling
 # ---------------------------------------------------------------------------
+
+
+def test_start_smart_tag_job_exposes_caption_profile_in_settings(monkeypatch) -> None:
+    monkeypatch.setattr(smart_tag_service, "_run_pipeline", lambda job, req: None)
+    monkeypatch.setattr(smart_tag_service, "_jobs", {})
+    monkeypatch.setattr(smart_tag_service, "_active_job_id", None)
+    monkeypatch.setattr(
+        "routers.vlm._build_config",
+        lambda overrides=None: SimpleNamespace(
+            provider="openai_compat",
+            endpoint="http://127.0.0.1:11434/v1",
+            api_key="",
+            use_vertex=False,
+            vertex_project="",
+        ),
+    )
+
+    snapshot = smart_tag_service.start_smart_tag_job({
+        "image_ids": [1],
+        "enable_wd14": False,
+        "enable_vlm": True,
+        "natural_language_mode": "vlm",
+        "caption_profile": "krea2_long_nl",
+    })
+
+    assert snapshot["settings"]["caption_profile"] == "krea2_long_nl"
 
 
 def test_start_smart_tag_job_prunes_finished_jobs_and_results_files(monkeypatch, tmp_path) -> None:

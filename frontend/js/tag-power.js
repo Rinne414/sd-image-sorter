@@ -3,7 +3,7 @@
  *
  * Owns the small <details id="tag-power-card"> block:
  *   - quickfill buttons populate the blacklist textarea with curated lists
- *   - base-model dropdown auto-suggests max-tags via placeholder
+ *   - base-model dropdown keeps untouched max-tags aligned with its suggestion
  *
  * The textarea + max-tags input are read by app.js startTagging() at submit
  * time (no separate state, no separate request). This keeps the surface
@@ -27,17 +27,10 @@
     ];
 
     // Base-model -> recommended max_tags (matches the README research notes;
-    // not a hard cap, just a placeholder hint).
+    // not a hard cap; users can override it explicitly).
     const MAX_TAGS_BY_PRESET = {
         'sdxl': 50,
         'flux': 120,
-        // Krea 2 (June 2026): Qwen3-VL text encoder, trained predominantly on
-        // long natural-language captions — same budget class as Anima/Qwen3.
-        // Tags still help search/consensus, but for Krea-2 LoRA training the
-        // NL caption (Dataset Maker caption type "NL"/"Both") is the payload.
-        // Sources: krea.ai/blog/krea-2-technical-report,
-        // github.com/krea-ai/krea-2 docs/prompting.md.
-        'krea2': 200,
         'anima_style': 200,
         'anima_character': 200,
     };
@@ -78,22 +71,21 @@
         if (ta) ta.value = '';
     }
 
-    function syncMaxTagsPlaceholderFromBaseModel() {
+    function syncMaxTagsFromBaseModel() {
         const sel = $('tag-base-model');
         const max = $('tag-max-tags-per-image');
         if (!sel || !max) return;
         const preset = sel.value || '';
         const suggested = MAX_TAGS_BY_PRESET[preset];
+        const userTouched = max.dataset.userTouched === '1' || max.dataset.userTouched === 'true';
         if (suggested) {
             max.placeholder = `0 = unlimited (suggested for ${sel.options[sel.selectedIndex]?.text?.split('(')[0]?.trim() || preset}: ${suggested})`;
-            // Only auto-fill if the user hasn't typed anything yet
-            if (!max.value && !max.dataset.userTouched) {
-                max.value = String(suggested);
-                // Mark NOT user-touched so a later preset change can update it
-                delete max.dataset.userTouched;
-            }
         } else {
             max.placeholder = '0 = unlimited';
+        }
+        // Automatic values follow every preset change until the user edits the input.
+        if (!userTouched) {
+            max.value = suggested ? String(suggested) : '0';
         }
     }
 
@@ -102,7 +94,7 @@
         $('btn-tag-prebl-meta')?.addEventListener('click', () => appendTags(META_TAGS));
         $('btn-tag-prebl-clear')?.addEventListener('click', clearBlacklist);
 
-        $('tag-base-model')?.addEventListener('change', syncMaxTagsPlaceholderFromBaseModel);
+        $('tag-base-model')?.addEventListener('change', syncMaxTagsFromBaseModel);
 
         // Mark the max-tags input as user-touched once they type, so a base-model
         // preset change after that DOESN'T overwrite their value.
@@ -114,7 +106,7 @@
         }
 
         // Initial pass so the placeholder reflects the default option.
-        syncMaxTagsPlaceholderFromBaseModel();
+        syncMaxTagsFromBaseModel();
     }
 
     if (document.readyState === 'loading') {

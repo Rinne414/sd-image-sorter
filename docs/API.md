@@ -1640,6 +1640,7 @@ Body:
   "image_ids": [1, 2, 3],
   "image_paths": ["C:/dataset/local_001.png"],
   "training_purpose": "style",
+  "caption_profile": "krea2_long_nl",
   "trigger_word": "myloratrigger",
   "merge_strategy": "replace",
   "auto_strip_noise": true,
@@ -1655,6 +1656,16 @@ Body:
 
 `training_purpose` accepts `style` / `character` / `general` / `concept` (plus aliases `style_lora` / `character_lora` / `concept_lora` / `nsfw` / `nsfw_lora`). Each picks a different VLM prompt: STYLE describes medium / lighting / composition only, CHARACTER describes pose / framing / mood and explicitly avoids hair / eye / signature outfit, GENERAL covers full subject / pose / clothing / scene.
 
+`caption_profile` is optional and currently accepts only `krea2_long_nl`. The
+Krea profile keeps the long natural-language system, plain, and tag-grounded
+prompts instead of replacing them with the shorter training-purpose prompt;
+omitting it or sending `null` preserves the existing behavior. It is valid only
+when `enable_vlm=true` and `natural_language_mode="vlm"`; every other
+combination returns HTTP 400. Unknown values return the application's normalized
+HTTP 400 validation payload with
+`body.caption_profile` in `details[].field`. Job snapshots expose the resolved
+value as `settings.caption_profile`.
+
 Since v3.4.2 a busy AI runtime (another Smart Tag, gallery tagging, or VLM batch run) queues the job instead of returning 409 — see the AI job queue notes under `POST /api/tag/start`. 409 remains only for validation errors and the fail-closed case where a sibling job's status could not be determined. The progress snapshot includes `pipeline_queue` while entries are waiting.
 
 #### GET /api/smart-tag/progress
@@ -1663,7 +1674,7 @@ Poll the active or named Smart Tag job. With no `job_id` query param, returns th
 
 #### GET /api/smart-tag/results
 
-Returns paginated path-source caption results for a completed Smart Tag job, used by Dataset Maker local-folder imports. Query params: `job_id`, `offset`, `limit`. Gallery-source captions are written directly to the DB and do not need this endpoint.
+Returns paginated path-source caption results for a completed Smart Tag job, used by Dataset Maker local-folder imports. Query params: `job_id`, `offset`, `limit`. Each row contains `path`, the legacy composed `caption`, and independent `booru_text` / `nl_text` editor channels. Historical rows without the new fields remain readable and return empty strings for both instead of guessing how to split old text. Gallery-source captions are written directly to the DB and do not need this endpoint.
 
 #### POST /api/smart-tag/cancel
 

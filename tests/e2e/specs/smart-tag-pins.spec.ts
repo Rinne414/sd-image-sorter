@@ -42,6 +42,14 @@ import { expect, test, type Page } from '../fixtures/click-ledger'
  */
 
 test.describe.configure({ mode: 'serial' })
+test.use({ viewport: { width: 1366, height: 768 } })
+
+type PathCaptionResult = {
+  path: string
+  caption: string
+  booru_text: string
+  nl_text: string
+}
 
 /**
  * The route-mock baseline every pin starts from. Registered in beforeEach; individual
@@ -126,6 +134,77 @@ async function openScopedAndReady(page: Page, imageIds: number[]): Promise<void>
   await expect(page.locator('#smart-tag-modal')).toHaveClass(/visible/)
   // Two booru models -> two options in tagger-1 (the NL model is filtered out).
   await expect(page.locator('#smart-tag-tagger-1 option')).toHaveCount(2)
+}
+
+async function openDatasetAndReady(page: Page): Promise<void> {
+  await page.evaluate(() => (window as any).SmartTag.open())
+  await expect(page.locator('#smart-tag-modal')).toHaveClass(/visible/)
+  await expect(page.locator('#smart-tag-tagger-1 option')).toHaveCount(2)
+}
+
+async function seedLocalCaptionItems(
+  page: Page,
+  items: Array<{ id: number; path: string; booru: string; nl: string }>,
+): Promise<void> {
+  await page.evaluate((seedItems) => {
+    const dm = (window as any).DatasetMaker
+    dm.imageIds = seedItems.map((item) => item.id)
+    dm.activeId = seedItems[0]?.id ?? null
+    dm.localItemPaths.clear()
+    dm.captions.clear()
+    dm.captionEdits.clear()
+    dm.nlCaptions.clear()
+    dm.nlEdits.clear()
+    for (const item of seedItems) {
+      dm.localItemPaths.set(item.id, item.path)
+      dm.captions.set(item.id, item.booru)
+      dm.nlCaptions.set(item.id, item.nl)
+      dm.captionType.set(item.id, 'both')
+    }
+  }, items)
+}
+
+async function installCompletedPathJob(
+  page: Page,
+  jobId: string,
+  mergeStrategy: 'replace' | 'append',
+  results: Array<Partial<PathCaptionResult>>,
+): Promise<void> {
+  await page.route('**/api/smart-tag/start', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: jobId, status: 'running', active: true, total: results.length }),
+    }))
+  await page.route('**/api/smart-tag/progress**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        job_id: jobId,
+        status: 'completed',
+        active: false,
+        total: results.length,
+        processed: results.length,
+        succeeded: results.length,
+        failed: 0,
+        caption_result_count: results.length,
+        settings: { merge_strategy: mergeStrategy, enable_vlm: true, natural_language_mode: 'vlm' },
+      }),
+    }))
+  await page.route('**/api/smart-tag/results**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        job_id: jobId,
+        offset: 0,
+        limit: 1000,
+        total: results.length,
+        results,
+        has_more: false,
+      }),
+    }))
 }
 
 test.beforeEach(async ({ page }) => {
@@ -337,6 +416,382 @@ test('run() posts the single-tagger payload with tagger_model set, consensus_min
   })
   // Single tagger -> no consensus taggers array.
   expect(startPayload.taggers).toBeUndefined()
+  expect(startPayload.caption_profile).toBeUndefined()
+})
+
+test('Krea 2 target model posts the explicit long-NL caption profile', async ({ page }) => {
+  let startPayload: any = null
+  const item = { id: -900, path: 'C:/dataset/krea2-profile.png', booru: 'portrait', nl: 'A portrait.' }
+  await page.route('**/api/smart-tag/start', (route) => {
+    startPayload = route.request().postDataJSON()
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: 'pin-krea2-profile', status: 'running', active: true, total: 1 }),
+    })
+  })
+
+  await seedLocalCaptionItems(page, [item])
+  await page.evaluate(() => {
+    const select = document.getElementById('dataset-target-model') as HTMLSelectElement
+    select.value = 'krea2'
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await openDatasetAndReady(page)
+  await page.locator('#btn-smart-tag-run').click()
+
+  await expect.poll(() => startPayload).not.toBeNull()
+  expect(startPayload.image_paths).toEqual([item.path])
+  expect(startPayload.caption_profile).toBe('krea2_long_nl')
+})
+
+test('Krea 2 total caption failure surfaces the provider recovery action in an error toast', async ({ page }) => {
+  const providerError = "Model 'qwen3-vl:8b' exhausted the caption budget. Use qwen3-vl:8b-instruct."
+  const jobMessage = `Caption profile 'krea2_long_nl' failed for all 1 image(s). Provider error: ${providerError}`
+  const item = { id: -906, path: 'C:/dataset/krea2-failed.png', booru: 'portrait', nl: 'A portrait.' }
+
+  await page.route('**/api/smart-tag/start', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: 'pin-krea2-failed', status: 'running', active: true, total: 1 }),
+    }))
+  await page.route('**/api/smart-tag/progress**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        job_id: 'pin-krea2-failed',
+        status: 'failed',
+        active: false,
+        total: 1,
+        processed: 1,
+        succeeded: 0,
+        failed: 1,
+        caption_result_count: 0,
+        message: jobMessage,
+        settings: {
+          enable_vlm: true,
+          natural_language_mode: 'vlm',
+          caption_profile: 'krea2_long_nl',
+        },
+      }),
+    }))
+
+  await seedLocalCaptionItems(page, [item])
+  await page.evaluate(() => {
+    const select = document.getElementById('dataset-target-model') as HTMLSelectElement
+    select.value = 'krea2'
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await openDatasetAndReady(page)
+  await page.locator('#btn-smart-tag-run').click()
+
+  const errorToast = page.locator('#toast-container .toast.error')
+  await expect(errorToast).toHaveCount(1)
+  await expect(errorToast).toContainText('Smart Tag failed')
+  await expect(errorToast).toContainText('qwen3-vl:8b-instruct')
+  await expect(page.locator('#toast-container .toast.success')).toHaveCount(0)
+})
+
+test('malformed path results leave caption edits unchanged and never report success', async ({ page }) => {
+  const items = [
+    {
+      id: -921,
+      path: 'C:/dataset/atomic-valid-first.png',
+      booru: 'original_tag',
+      nl: 'Original first sentence.',
+    },
+    {
+      id: -922,
+      path: 'C:/dataset/atomic-malformed-second.png',
+      booru: 'second_original_tag',
+      nl: 'Original second sentence.',
+    },
+  ]
+  await seedLocalCaptionItems(page, items)
+  await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm.captionEdits.set(-921, 'user_booru_draft')
+    dm.nlEdits.set(-921, 'User natural-language draft.')
+    ;(window as any).__smartTagToasts = []
+    ;(window as any).showToast = (message: string, type: string) => {
+      ;(window as any).__smartTagToasts.push({ message, type })
+    }
+  })
+  await installCompletedPathJob(page, 'pin-path-atomic-failure', 'replace', [
+    {
+      path: items[0].path,
+      caption: 'new combined caption',
+      booru_text: 'new_tag',
+      nl_text: 'A replacement sentence that must not be committed.',
+    },
+    {
+      path: items[1].path,
+      caption: 'malformed combined caption',
+      booru_text: 'malformed_tag',
+    },
+  ])
+  await openDatasetAndReady(page)
+  await page.locator('#btn-smart-tag-run').click()
+
+  await expect.poll(() => page.evaluate(() => (window as any).__smartTagToasts.length)).toBe(1)
+  const state = await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    return {
+      booruEdits: [...dm.captionEdits.entries()],
+      nlEdits: [...dm.nlEdits.entries()],
+      toasts: (window as any).__smartTagToasts,
+    }
+  })
+  expect(state.booruEdits).toEqual([[-921, 'user_booru_draft']])
+  expect(state.nlEdits).toEqual([[-921, 'User natural-language draft.']])
+  expect(state.toasts).toHaveLength(1)
+  expect(state.toasts[0].type).toBe('error')
+  expect(state.toasts[0].message).toContain('Smart Tag result 1')
+  expect(state.toasts[0].message).toContain('booru_text, and nl_text strings')
+})
+
+test('Dataset Krea profile is omitted when ToriiGate captioning is selected', async ({ page }) => {
+  let startPayload: any = null
+  const item = { id: -901, path: 'C:/dataset/krea2-toriigate.png', booru: 'portrait', nl: 'A portrait.' }
+  await page.route('**/api/smart-tag/start', (route) => {
+    startPayload = route.request().postDataJSON()
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: 'pin-krea2-toriigate', status: 'running', active: true, total: 1 }),
+    })
+  })
+
+  await seedLocalCaptionItems(page, [item])
+  await page.evaluate(() => {
+    const select = document.getElementById('dataset-target-model') as HTMLSelectElement
+    select.value = 'krea2'
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await openDatasetAndReady(page)
+  await page.locator('#smart-tag-nl-mode').selectOption('toriigate')
+  await page.locator('#btn-smart-tag-run').click()
+
+  await expect.poll(() => startPayload).not.toBeNull()
+  expect(startPayload).toMatchObject({
+    image_paths: [item.path],
+    enable_vlm: true,
+    natural_language_mode: 'toriigate',
+  })
+  expect(startPayload.caption_profile).toBeUndefined()
+})
+
+test('Dataset Krea profile is omitted when natural-language captioning is disabled', async ({ page }) => {
+  let startPayload: any = null
+  const item = { id: -902, path: 'C:/dataset/krea2-vlm-disabled.png', booru: 'portrait', nl: 'A portrait.' }
+  await page.route('**/api/smart-tag/start', (route) => {
+    startPayload = route.request().postDataJSON()
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: 'pin-krea2-vlm-disabled', status: 'running', active: true, total: 1 }),
+    })
+  })
+
+  await seedLocalCaptionItems(page, [item])
+  await page.evaluate(() => {
+    const select = document.getElementById('dataset-target-model') as HTMLSelectElement
+    select.value = 'krea2'
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await openDatasetAndReady(page)
+  await page.locator('#smart-tag-enable-vlm').uncheck()
+  await page.locator('#btn-smart-tag-run').click()
+
+  await expect.poll(() => startPayload).not.toBeNull()
+  expect(startPayload).toMatchObject({
+    image_paths: [item.path],
+    enable_vlm: false,
+    natural_language_mode: 'vlm',
+  })
+  expect(startPayload.caption_profile).toBeUndefined()
+})
+
+test('Gallery-scoped Smart Tag does not inherit the selected Krea 2 Dataset caption profile', async ({ page }) => {
+  let startPayload: any = null
+  await page.route('**/api/smart-tag/start', (route) => {
+    startPayload = route.request().postDataJSON()
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: 'pin-krea2-gallery', status: 'running', active: true, total: 1 }),
+    })
+  })
+
+  await seedLocalCaptionItems(page, [
+    { id: -904, path: 'C:/dataset/krea2-gallery-guard.png', booru: 'portrait', nl: 'A portrait.' },
+  ])
+  await page.evaluate(() => {
+    const select = document.getElementById('dataset-target-model') as HTMLSelectElement
+    select.value = 'krea2'
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await openScopedAndReady(page, [10])
+  await page.locator('#btn-smart-tag-run').click()
+
+  await expect.poll(() => startPayload).not.toBeNull()
+  expect(startPayload.image_ids).toEqual([10])
+  expect(startPayload.caption_profile).toBeUndefined()
+})
+
+test('path-source NL-only writeback persists the session, refreshes export, and preserves Booru', async ({ page }) => {
+  const item = {
+    id: -905,
+    path: 'C:/dataset/nl-only-writeback.png',
+    booru: '1girl, red_hair',
+    nl: 'Old natural-language caption.',
+  }
+  await seedLocalCaptionItems(page, [item])
+  await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm.captionType.set(-905, 'nl')
+    const calls = { scheduleSaveSession: 0, refreshExportPreview: 0 }
+    const scheduleSaveSession = dm._scheduleSaveSession.bind(dm)
+    const refreshExportPreview = dm._refreshExportPreview.bind(dm)
+    ;(window as any).__smartTagWritebackCalls = calls
+    dm._scheduleSaveSession = () => {
+      calls.scheduleSaveSession += 1
+      return scheduleSaveSession()
+    }
+    dm._refreshExportPreview = () => {
+      calls.refreshExportPreview += 1
+      return refreshExportPreview()
+    }
+  })
+  await installCompletedPathJob(page, 'pin-path-nl-only', 'replace', [
+    {
+      path: item.path,
+      caption: 'legacy combined caption must not enter the Booru editor',
+      booru_text: '',
+      nl_text: 'A red-haired person looks toward the camera in soft daylight.',
+    },
+  ])
+  await openDatasetAndReady(page)
+  await page.locator('#smart-tag-enable-wd14').uncheck()
+  await page.locator('#btn-smart-tag-run').click()
+
+  await expect.poll(() => page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    const calls = (window as any).__smartTagWritebackCalls
+    const exportPayload = dm._buildExportPayload()
+    const path = 'C:/dataset/nl-only-writeback.png'
+    return {
+      booruOriginal: dm.captions.get(-905),
+      booruEditPresent: dm.captionEdits.has(-905),
+      nlEdit: dm.nlEdits.get(-905),
+      sessionSaveScheduled: calls.scheduleSaveSession > 0,
+      exportPreviewRefreshed: calls.refreshExportPreview > 0,
+      exportType: exportPayload.image_types[path],
+      exportNl: exportPayload.image_nl_overrides[path],
+      exportHasBooruOverride: Object.prototype.hasOwnProperty.call(exportPayload.image_overrides, path),
+    }
+  })).toEqual({
+    booruOriginal: '1girl, red_hair',
+    booruEditPresent: false,
+    nlEdit: 'A red-haired person looks toward the camera in soft daylight.',
+    sessionSaveScheduled: true,
+    exportPreviewRefreshed: true,
+    exportType: 'nl',
+    exportNl: 'A red-haired person looks toward the camera in soft daylight.',
+    exportHasBooruOverride: false,
+  })
+})
+
+test('path-source replace writes Booru and natural language into separate Dataset Maker channels', async ({ page }) => {
+  const items = [
+    { id: -901, path: 'C:/dataset/replace-both.png', booru: 'old_tag', nl: 'Old sentence.' },
+    { id: -902, path: 'C:/dataset/replace-booru.png', booru: 'old_booru', nl: 'Keep this NL sentence.' },
+    { id: -903, path: 'C:/dataset/replace-nl.png', booru: 'keep_this_tag', nl: 'Old NL sentence.' },
+  ]
+  await seedLocalCaptionItems(page, items)
+  await installCompletedPathJob(page, 'pin-path-replace', 'replace', [
+    {
+      path: items[0].path,
+      caption: 'legacy combined caption must not enter either editor',
+      booru_text: '1girl, red_hair',
+      nl_text: 'A red-haired person stands outside.',
+    },
+    {
+      path: items[1].path,
+      caption: 'legacy combined caption must not enter either editor',
+      booru_text: 'blue_eyes',
+      nl_text: '',
+    },
+    {
+      path: items[2].path,
+      caption: 'legacy combined caption must not enter either editor',
+      booru_text: '',
+      nl_text: 'A person looks toward the camera.',
+    },
+  ])
+  await openDatasetAndReady(page)
+  await page.locator('#smart-tag-merge').selectOption('replace')
+  await page.locator('#btn-smart-tag-run').click()
+
+  await expect.poll(() => page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    return {
+      both: [dm.captionEdits.get(-901), dm.nlEdits.get(-901)],
+      booruOnly: [dm.captionEdits.get(-902), dm.nlEdits.get(-902) ?? dm.nlCaptions.get(-902)],
+      nlOnly: [dm.captionEdits.get(-903) ?? dm.captions.get(-903), dm.nlEdits.get(-903)],
+    }
+  })).toEqual({
+    both: ['1girl, red_hair', 'A red-haired person stands outside.'],
+    booruOnly: ['blue_eyes', 'Keep this NL sentence.'],
+    nlOnly: ['keep_this_tag', 'A person looks toward the camera.'],
+  })
+})
+
+test('path-source append preserves channel separators, skips exact duplicates, and leaves absent channels untouched', async ({ page }) => {
+  const items = [
+    { id: -911, path: 'C:/dataset/append-both.png', booru: '1girl, red_hair', nl: 'A person stands outside.' },
+    { id: -912, path: 'C:/dataset/append-same.png', booru: 'blue_eyes', nl: 'The subject is smiling.' },
+    { id: -913, path: 'C:/dataset/append-booru.png', booru: 'solo', nl: 'Preserve this sentence.' },
+  ]
+  await seedLocalCaptionItems(page, items)
+  await installCompletedPathJob(page, 'pin-path-append', 'append', [
+    {
+      path: items[0].path,
+      caption: 'legacy combined caption must not enter either editor',
+      booru_text: 'blue_eyes',
+      nl_text: 'The subject looks toward the camera.',
+    },
+    {
+      path: items[1].path,
+      caption: 'legacy combined caption must not enter either editor',
+      booru_text: 'blue_eyes',
+      nl_text: 'The subject is smiling.',
+    },
+    {
+      path: items[2].path,
+      caption: 'legacy combined caption must not enter either editor',
+      booru_text: 'outdoors',
+      nl_text: '',
+    },
+  ])
+  await openDatasetAndReady(page)
+  await page.locator('#smart-tag-merge').selectOption('append')
+  await page.locator('#btn-smart-tag-run').click()
+
+  await expect.poll(() => page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    return {
+      both: [dm.captionEdits.get(-911), dm.nlEdits.get(-911)],
+      same: [dm.captionEdits.get(-912) ?? dm.captions.get(-912), dm.nlEdits.get(-912) ?? dm.nlCaptions.get(-912)],
+      booruOnly: [dm.captionEdits.get(-913), dm.nlEdits.get(-913) ?? dm.nlCaptions.get(-913)],
+    }
+  })).toEqual({
+    both: ['1girl, red_hair, blue_eyes', 'A person stands outside. The subject looks toward the camera.'],
+    same: ['blue_eyes', 'The subject is smiling.'],
+    booruOnly: ['solo, outdoors', 'Preserve this sentence.'],
+  })
 })
 
 // ---------------------------------------------------------------------------

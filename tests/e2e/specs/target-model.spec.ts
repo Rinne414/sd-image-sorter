@@ -9,6 +9,7 @@ import { expect, test, type Page } from '../fixtures/click-ledger'
  */
 
 test.describe.configure({ mode: 'serial' })
+test.use({ viewport: { width: 1366, height: 768 } })
 
 async function seedDatasetQueue(page: Page) {
   await page.route('**/api/image-thumbnail/**', async (route) => {
@@ -51,6 +52,14 @@ async function chooseTargetModel(page: Page, value: string) {
   }, value)
 }
 
+async function chooseTagBaseModel(page: Page, value: string) {
+  await page.evaluate((preset) => {
+    const select = document.getElementById('tag-base-model') as HTMLSelectElement
+    select.value = preset
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  }, value)
+}
+
 test('choosing Krea 2 shows NL-first guidance and applies NL caption type to all', async ({ page }) => {
   await seedDatasetQueue(page)
 
@@ -62,9 +71,22 @@ test('choosing Krea 2 shows NL-first guidance and applies NL caption type to all
   await expect(applyButton).toBeHidden()
 
   await chooseTargetModel(page, 'krea2')
-  await expect(page.locator('#dataset-target-model-hint')).toContainText('Qwen3-VL')
+  const hint = page.locator('#dataset-target-model-hint')
+  await expect(hint).toBeVisible()
+  await expect(hint).toContainText('Qwen3-VL')
+  await expect(hint).toContainText('krea/Krea-2-Raw')
+  await expect(hint).toContainText('Turbo')
+  await expect(hint).toContainText('inference')
+  await expect(hint).not.toContainText('no trigger word needed')
   await expect(applyButton).toBeVisible()
   await expect(applyButton).toContainText('NL captions')
+
+  const captionHelp = page.locator('.dataset-editor-help-body')
+  await expect(captionHelp).toContainText('reviewed, factual long natural-language caption')
+  await expect(captionHelp).toContainText('machine tags are cues, not ground truth')
+  await expect(captionHelp).toContainText('does not prescribe a trigger convention')
+  await expect(captionHelp).not.toContainText('a few short tags')
+  await expect(captionHelp).not.toContainText('DO include your trigger word once')
 
   await applyButton.click()
   const types = await page.evaluate(() => {
@@ -72,6 +94,93 @@ test('choosing Krea 2 shows NL-first guidance and applies NL caption type to all
     return [dm._captionTypeFor(801), dm._captionTypeFor(802)]
   })
   expect(types).toEqual(['nl', 'nl'])
+
+  const kreaTagPreset = await page.locator('#tag-base-model').evaluate((select) => {
+    const option = Array.from((select as HTMLSelectElement).options).find((item) => item.value === 'krea2')
+    return {
+      label: option?.textContent ?? '',
+      maxTags: (window as any).TagPower?.MAX_TAGS_BY_PRESET?.krea2,
+    }
+  })
+  expect(kreaTagPreset.label).toContain('tags for search/review')
+  expect(kreaTagPreset.label).not.toContain('200')
+  expect(kreaTagPreset.maxTags).toBeUndefined()
+
+  await chooseTargetModel(page, 'sdxl')
+  await expect(captionHelp).toContainText('a few short tags')
+  await expect(captionHelp).toContainText('DO include your trigger word once')
+  await expect(captionHelp).not.toContainText('Krea-2-Raw')
+})
+
+test('Krea apply on an empty queue shows one warning and no success', async ({ page }) => {
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+  await page.waitForFunction(() => typeof (window as any).DatasetMaker?._setActive === 'function')
+  await page.evaluate(() => (window as any).App.switchView('dataset'))
+  await page.locator('#dataset-tab-workbench').click()
+  await chooseTargetModel(page, 'krea2')
+
+  await page.locator('#btn-dataset-target-model-apply').click()
+
+  const toastContainer = page.locator('#toast-container')
+  await expect(toastContainer.locator('.toast')).toHaveCount(1)
+  await expect(toastContainer.locator('.toast.warning')).toHaveCount(1)
+  await expect(toastContainer.locator('.toast.success')).toHaveCount(0)
+})
+
+test('Krea guidance relocalizes and fits the 1366 desktop setup column', async ({ page }) => {
+  await seedDatasetQueue(page)
+  await chooseTargetModel(page, 'krea2')
+
+  const field = page.locator('.dataset-target-model-field')
+  const hint = page.locator('#dataset-target-model-hint')
+  const applyButton = page.locator('#btn-dataset-target-model-apply')
+  await expect(hint).toContainText('Train LoRAs on krea/Krea-2-Raw')
+
+  await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
+
+  await expect(hint).toContainText('LoRA 请在 krea/Krea-2-Raw 上训练')
+  await expect(applyButton).toContainText('全部图片设为自然语言 caption')
+  const layout = await field.evaluate((element) => {
+    const hintElement = document.getElementById('dataset-target-model-hint')
+    return {
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      hintWidth: hintElement?.getBoundingClientRect().width ?? 0,
+    }
+  })
+  expect(layout.hintWidth).toBeGreaterThanOrEqual(200)
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth)
+})
+
+test('max-tags follows base-model suggestions until the user edits it', async ({ page }) => {
+  await seedDatasetQueue(page)
+  const maxTags = page.locator('#tag-max-tags-per-image')
+
+  await chooseTagBaseModel(page, 'sdxl')
+  await expect(maxTags).toHaveValue('50')
+
+  await chooseTagBaseModel(page, 'flux')
+  await expect(maxTags).toHaveValue('120')
+
+  await chooseTagBaseModel(page, 'krea2')
+  await expect(maxTags).toHaveValue('0')
+  await expect(maxTags).toHaveAttribute('placeholder', '0 = unlimited')
+
+  await page.evaluate(() => {
+    const input = document.getElementById('tag-max-tags-per-image') as HTMLInputElement
+    input.value = '37'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await chooseTagBaseModel(page, 'sdxl')
+  await expect(maxTags).toHaveValue('37')
+
+  await page.evaluate(() => {
+    const input = document.getElementById('tag-max-tags-per-image') as HTMLInputElement
+    input.dataset.userTouched = 'false'
+  })
+  await chooseTagBaseModel(page, 'flux')
+  await expect(maxTags).toHaveValue('120')
 })
 
 test('token budget follows the target model (75 CLIP vs 512 Qwen-VL)', async ({ page }) => {

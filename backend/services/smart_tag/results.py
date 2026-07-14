@@ -335,17 +335,23 @@ def _assemble_result_dict(
     general_names = _selected_names(partial["general_names"])
     copyright_names = _selected_names(partial["copyright_names"])
     character_names = _selected_names(partial["character_names"])
-    caption = assemble_caption(
-        rating=partial["rating"],
-        general_tags=general_names + copyright_names,
-        character_tags=character_names,
-        nl_text=nl_text,
-        trigger_word=req.trigger_word,
-        auto_strip_noise=req.auto_strip_noise,
-    )
+
+    def _compose_caption(natural_language_text: str) -> str:
+        return assemble_caption(
+            rating=partial["rating"],
+            general_tags=general_names + copyright_names,
+            character_tags=character_names,
+            nl_text=natural_language_text,
+            trigger_word=req.trigger_word,
+            auto_strip_noise=req.auto_strip_noise,
+        )
+
+    booru_text = _compose_caption("")
+    caption = _compose_caption(nl_text)
     return {
         "image_id": image_id,
         "caption": caption,
+        "booru_text": booru_text,
         "general_tags": general_names,
         "copyright_tags": copyright_names,
         "character_tags": character_names,
@@ -476,8 +482,19 @@ def _get_caption_results_dir() -> Path:
     return data_dir
 
 
-def _append_caption_result(job: SmartTagJobState, path: str, caption: str) -> None:
-    row = {"path": str(path), "caption": str(caption or "")}
+def _append_caption_result(
+    job: SmartTagJobState,
+    path: str,
+    caption: str,
+    booru_text: str,
+    nl_text: str,
+) -> None:
+    row = {
+        "path": str(path),
+        "caption": str(caption or ""),
+        "booru_text": str(booru_text or ""),
+        "nl_text": str(nl_text or ""),
+    }
     if job.caption_results_path is None:
         target = _get_caption_results_dir() / f"{job.job_id}.jsonl"
         job.caption_results_path = str(target)
@@ -489,6 +506,8 @@ def _append_caption_result(job: SmartTagJobState, path: str, caption: str) -> No
     preview = {
         "path": row["path"],
         "caption": row["caption"][:200],
+        "booru_text": row["booru_text"][:200],
+        "nl_text": row["nl_text"][:200],
     }
     job.recent_caption_results.append(preview)
     if len(job.recent_caption_results) > SMART_TAG_RECENT_RESULT_LIMIT:
@@ -531,6 +550,8 @@ def get_caption_results_page(
                         results.append({
                             "path": str(row.get("path") or ""),
                             "caption": str(row.get("caption") or ""),
+                            "booru_text": str(row.get("booru_text") or ""),
+                            "nl_text": str(row.get("nl_text") or ""),
                         })
         except OSError:
             results = []

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -89,6 +90,12 @@ def _is_local_openai_compat_endpoint(provider_name: str, endpoint: str) -> bool:
     return False
 
 
+class SmartTagCaptionProfile(str, Enum):
+    """Supported model-specific caption contracts."""
+
+    KREA2_LONG_NL = "krea2_long_nl"
+
+
 @dataclass
 class SmartTagRequest:
     """Input contract for ``start_smart_tag_job``.
@@ -117,6 +124,7 @@ class SmartTagRequest:
     copyright_threshold: float = 0.35
     max_tags_per_image: int = 0
     natural_language_mode: str = "vlm"  # vlm | toriigate
+    caption_profile: Optional[SmartTagCaptionProfile] = None
     # v3.2.2 T-power-PR2 (D): multi-tagger consensus.
     # When ``taggers`` is non-empty, the orchestrator runs each one
     # sequentially against the image and fuses the per-tag votes via
@@ -222,6 +230,21 @@ def _coerce_toriigate_max_tokens(raw: Any) -> int:
     return max(32, min(1024, value))
 
 
+def _coerce_caption_profile(raw: object) -> Optional[SmartTagCaptionProfile]:
+    if raw is None:
+        return None
+    if isinstance(raw, SmartTagCaptionProfile):
+        return raw
+    value = str(raw).strip()
+    try:
+        return SmartTagCaptionProfile(value)
+    except ValueError as exc:
+        allowed = ", ".join(profile.value for profile in SmartTagCaptionProfile)
+        raise ValueError(
+            f"caption_profile must be one of: {allowed}. Received: {value!r}."
+        ) from exc
+
+
 def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
     image_ids = payload.get("image_ids") or []
     if not isinstance(image_ids, list):
@@ -293,12 +316,30 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
     # back to booru-only output. The user clicked "WD14 + VLM" so an empty
     # VLM config is an explicit configuration error, not a soft degrade.
     enable_vlm_flag = bool(payload.get("enable_vlm", True))
-    nl_mode_raw = str(payload.get("natural_language_mode") or "vlm").strip().lower()
+    nl_mode_value = payload.get("natural_language_mode")
+    nl_mode_raw = (
+        "vlm"
+        if nl_mode_value is None
+        else str(nl_mode_value).strip().lower()
+    )
     nl_mode_normalized = (
         "toriigate"
         if nl_mode_raw in {"toriigate", "torii", "toriigate-0.5"}
         else "vlm"
     )
+    caption_profile = _coerce_caption_profile(payload.get("caption_profile"))
+    if caption_profile is not None and not enable_vlm_flag:
+        raise ValueError(
+            "caption_profile requires enable_vlm=true because caption profiles "
+            "apply only to VLM natural-language captions. Remove caption_profile "
+            "or enable VLM captioning."
+        )
+    if caption_profile is not None and nl_mode_raw != "vlm":
+        raise ValueError(
+            "caption_profile requires natural_language_mode='vlm'; received "
+            f"natural_language_mode={nl_mode_raw!r}. Remove caption_profile "
+            "or select VLM natural-language captioning."
+        )
     if enable_vlm_flag and nl_mode_normalized == "vlm":
         try:
             # Lazy import to avoid hard coupling between the service layer
@@ -409,7 +450,7 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
         auto_strip_noise=bool(payload.get("auto_strip_noise", True)),
         skip_existing=bool(payload.get("skip_existing", True)),
         enable_wd14=bool(payload.get("enable_wd14", True)),
-        enable_vlm=bool(payload.get("enable_vlm", True)),
+        enable_vlm=enable_vlm_flag,
         tagger_model=tagger_model,
         use_gpu=bool(payload.get("use_gpu", True)),
         general_threshold=_coerce_threshold(
@@ -428,11 +469,8 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
             payload.get("max_tags_per_image"),
             max_tags_default,
         ),
-        natural_language_mode=(
-            "toriigate"
-            if str(payload.get("natural_language_mode") or "vlm").strip().lower() in {"toriigate", "torii", "toriigate-0.5"}
-            else "vlm"
-        ),
+        natural_language_mode=nl_mode_normalized,
+        caption_profile=caption_profile,
         taggers=cleaned_taggers,
         consensus_min=max(1, int(payload.get("consensus_min", 2) or 2)),
         consensus_skip_categories=skip_categories,

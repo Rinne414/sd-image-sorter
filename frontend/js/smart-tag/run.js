@@ -10,37 +10,113 @@
  * family renames applied.
  */
 'use strict';
+    function replaceSmartTagChannel(_existing, incoming, _separator) {
+        return incoming;
+    }
+
+    function appendSmartTagChannel(existing, incoming, separator) {
+        if (!existing || existing === incoming) return incoming;
+        return `${existing}${separator}${incoming}`;
+    }
+
+    function currentSmartTagChannel(pendingEdits, edits, originals, id) {
+        const value = pendingEdits.has(id)
+            ? pendingEdits.get(id)
+            : edits.has(id)
+                ? edits.get(id)
+                : originals?.get?.(id);
+        return String(value || '').trim();
+    }
+
+    function nextSmartTagChannel(pendingEdits, edits, originals, id, incoming, separator, mergeChannel) {
+        const normalized = String(incoming || '').trim();
+        if (!normalized) return null;
+        const existing = currentSmartTagChannel(pendingEdits, edits, originals, id);
+        const next = mergeChannel(existing, normalized, separator);
+        return next === existing ? null : next;
+    }
+
     async function applyPathCaptions(jobId, mergeStrategy) {
         const dm = window.DatasetMaker;
-        if (!jobId || !dm?.localItemPaths || !dm?.captionEdits) return 0;
+        if (!jobId || !dm?.localItemPaths || !dm?.captionEdits || !dm?.nlEdits) return 0;
+        const mergeChannel = mergeStrategy === 'replace'
+            ? replaceSmartTagChannel
+            : mergeStrategy === 'append'
+                ? appendSmartTagChannel
+                : null;
+        if (!mergeChannel) {
+            throw new TypeError(
+                `Unsupported Smart Tag merge strategy "${mergeStrategy}". Expected "replace" or "append".`
+            );
+        }
         const idByPath = new Map();
         for (const [id, path] of dm.localItemPaths.entries()) {
             idByPath.set(String(path), Number(id));
         }
         let offset = 0;
-        let applied = 0;
+        const appliedIds = new Set();
+        const pendingBooruEdits = new Map();
+        const pendingNlEdits = new Map();
         while (true) {
             const page = await getJson(`/api/smart-tag/results?job_id=${encodeURIComponent(jobId)}&offset=${offset}&limit=1000`);
-            for (const item of (page.results || [])) {
-                const id = idByPath.get(String(item.path || ''));
-                const caption = String(item.caption || '').trim();
-                if (!id || !caption) continue;
-                const existing = dm.captionEdits.get(id) || dm.captions?.get?.(id) || '';
-                const next = mergeStrategy === 'append' && existing && existing !== caption
-                    ? `${existing}, ${caption}`.replace(/^,\s*/, '').replace(/,\s*$/, '')
-                    : caption;
-                dm.captionEdits.set(id, next);
-                applied += 1;
+            if (!Array.isArray(page.results)) {
+                throw new TypeError(`Smart Tag results for job "${jobId}" must contain a results array.`);
             }
-            offset += page.results?.length || 0;
-            if (!page.has_more || !page.results?.length) break;
+            for (let index = 0; index < page.results.length; index += 1) {
+                const item = page.results[index];
+                if (
+                    !item
+                    || typeof item.path !== 'string'
+                    || typeof item.booru_text !== 'string'
+                    || typeof item.nl_text !== 'string'
+                ) {
+                    throw new TypeError(
+                        `Smart Tag result ${offset + index} for job "${jobId}" must contain path, booru_text, and nl_text strings.`
+                    );
+                }
+                const id = idByPath.get(item.path);
+                if (id === undefined) continue;
+                // `caption` is the legacy combined field. Writing it into the
+                // Booru editor would duplicate NL prose when both modes run.
+                const nextBooru = nextSmartTagChannel(
+                    pendingBooruEdits,
+                    dm.captionEdits,
+                    dm.captions,
+                    id,
+                    item.booru_text,
+                    ', ',
+                    mergeChannel
+                );
+                const nextNl = nextSmartTagChannel(
+                    pendingNlEdits,
+                    dm.nlEdits,
+                    dm.nlCaptions,
+                    id,
+                    item.nl_text,
+                    ' ',
+                    mergeChannel
+                );
+                if (nextBooru !== null) pendingBooruEdits.set(id, nextBooru);
+                if (nextNl !== null) pendingNlEdits.set(id, nextNl);
+                if (nextBooru !== null || nextNl !== null) appliedIds.add(id);
+            }
+            offset += page.results.length;
+            if (!page.has_more || !page.results.length) break;
         }
-        if (applied > 0) {
+        if (appliedIds.size > 0) {
+            for (const [id, value] of pendingBooruEdits.entries()) {
+                dm.captionEdits.set(id, value);
+            }
+            for (const [id, value] of pendingNlEdits.entries()) {
+                dm.nlEdits.set(id, value);
+            }
+            dm._scheduleSaveSession?.();
             dm._renderQueue?.();
             if (dm.activeId != null) dm._setActive?.(dm.activeId);
             dm._refreshVocab?.();
+            dm._refreshExportPreview?.();
         }
-        return applied;
+        return appliedIds.size;
     }
 
     async function onJobFinished(snap) {
@@ -49,12 +125,17 @@
         const fail = (snap.failed || 0);
         const total = snap.total || 0;
         showProgress(false);
+        let captionApplyFailed = false;
         if (status === 'completed' && (snap.caption_result_count || 0) > 0) {
             try {
                 await applyPathCaptions(snap.job_id, snap.settings?.merge_strategy || 'replace');
             } catch (err) {
+                captionApplyFailed = true;
+                const errorMessage = `Smart Tag captions were generated but could not be applied: ${err.message || err}`;
                 if (typeof window.showToast === 'function') {
-                    window.showToast(`Smart Tag captions were generated but could not be applied: ${err.message || err}`, 'error');
+                    window.showToast(errorMessage, 'error');
+                } else {
+                    (window.Logger?.error || console.error)('[smart-tag]', errorMessage);
                 }
             }
         }
@@ -68,9 +149,9 @@
                 ? `Smart Tag failed: ${snap.message || 'unknown error'}`
                 : `Smart Tag finished: ${ok} ok, ${fail} failed${noiseSuffix}.`;
 
-        if (typeof window.showToast === 'function') {
+        if (!captionApplyFailed && typeof window.showToast === 'function') {
             window.showToast(message, status === 'failed' ? 'error' : 'success');
-        } else {
+        } else if (!captionApplyFailed) {
             (window.Logger?.info || console.log)('[smart-tag]', message);
         }
 

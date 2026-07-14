@@ -120,6 +120,35 @@ def cancel_active_job() -> Optional[SmartTagJobState]:
 _TERMINAL_JOB_STATUSES = {"completed", "failed", "cancelled"}
 
 
+def _terminal_job_outcome(
+    job: SmartTagJobState,
+    req: SmartTagRequest,
+) -> Tuple[str, str]:
+    """Return the terminal status and user-facing message without mutating state."""
+    if job.cancel_requested:
+        return "cancelled", "Cancelled by user."
+    if job.status != "running":
+        return job.status, job.message
+    if (
+        req.caption_profile is not None
+        and job.succeeded == 0
+        and job.failed > 0
+    ):
+        for error in reversed(job.errors):
+            provider_error = error.get("error", "").strip()
+            if provider_error:
+                return (
+                    "failed",
+                    f"Caption profile {req.caption_profile.value!r} failed for all "
+                    f"{job.failed} image(s). Provider error: {provider_error}",
+                )
+        raise RuntimeError(
+            "Caption profile job recorded failures without error details: "
+            f"job_id={job.job_id!r}, failed={job.failed}."
+        )
+    return "completed", _completion_message(job)
+
+
 def _prune_finished_jobs_locked(keep: int = SMART_TAG_FINISHED_JOBS_KEPT) -> List[str]:
     """Drop all but the newest ``keep`` finished jobs from the registry.
 
@@ -336,12 +365,7 @@ def _run_windowed_pipeline(
         # mid-window cancel keeps finished work and just stops issuing new calls.
         _run_caption_phase(job, req, items, ctx)
 
-    if job.cancel_requested:
-        job.status = "cancelled"
-        job.message = "Cancelled by user."
-    elif job.status == "running":
-        job.status = "completed"
-        job.message = _completion_message(job)
+    job.status, job.message = _terminal_job_outcome(job, req)
 
 
 def _persist_booru_only(
@@ -463,12 +487,7 @@ def _run_two_phase_toriigate_pipeline(
             ctx,
         )
 
-    if job.cancel_requested:
-        job.status = "cancelled"
-        job.message = "Cancelled by user."
-    elif job.status == "running":
-        job.status = "completed"
-        job.message = _completion_message(job)
+    job.status, job.message = _terminal_job_outcome(job, req)
 
 
 def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
@@ -528,7 +547,7 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                         )
                     vlm_provider = _get_vlm_provider(vlm_config)
                 except Exception as exc:
-                    if not req.enable_wd14:
+                    if not req.enable_wd14 or req.caption_profile is not None:
                         raise
                     logger.warning("VLM provider not available, continuing without it: %s", exc)
                     vlm_provider = None
@@ -696,12 +715,7 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                         ctx,
                     )
 
-                if job.cancel_requested:
-                    job.status = "cancelled"
-                    job.message = "Cancelled by user."
-                elif job.status == "running":
-                    job.status = "completed"
-                    job.message = _completion_message(job)
+                job.status, job.message = _terminal_job_outcome(job, req)
         elif req.enable_vlm and req.natural_language_mode == "toriigate":
             # Single-tagger + local ToriiGate: two-phase (tag all → release
             # booru session → load ToriiGate → caption all) so the two heavy
@@ -770,6 +784,11 @@ def start_smart_tag_job(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "taggers": list(req.taggers),
                 "consensus_min": req.consensus_min,
                 "natural_language_mode": req.natural_language_mode,
+                "caption_profile": (
+                    req.caption_profile.value
+                    if req.caption_profile is not None
+                    else None
+                ),
                 "general_threshold": req.general_threshold,
                 "character_threshold": req.character_threshold,
                 "copyright_threshold": req.copyright_threshold,

@@ -15,6 +15,7 @@
         const consensusMode = smartTag$('#smart-tag-consensus-mode')?.value || 'or';
         const booruEnabled = !!smartTag$('#smart-tag-enable-wd14')?.checked;
         const naturalEnabled = !!smartTag$('#smart-tag-enable-vlm')?.checked;
+        const naturalLanguageMode = smartTag$('#smart-tag-nl-mode')?.value || 'vlm';
         const generalThreshold = toFiniteThreshold(smartTag$('#smart-tag-general-threshold')?.value, 0.35);
         const characterThreshold = toFiniteThreshold(smartTag$('#smart-tag-character-threshold')?.value, 0.85);
         const copyrightThreshold = toFiniteThreshold(smartTag$('#smart-tag-copyright-threshold')?.value, generalThreshold);
@@ -30,19 +31,24 @@
         };
         const primaryThresholds = getPayloadThresholdsForModel(uniqueTaggers[0] || '', sharedThresholds);
         const sources = getDatasetSources();
+        const isDatasetSource = sources.source === 'dataset' || sources.source === 'dataset-dom';
+        const captionProfile = isDatasetSource && naturalEnabled && naturalLanguageMode === 'vlm'
+            ? window.TargetModel?.captionProfile?.() || undefined
+            : undefined;
         const form = {
             image_ids: sources.imageIds,
             selection_token: sources.selectionToken || undefined,
             image_paths: sources.imagePaths,
             dataset_scan_token: sources.datasetScanToken || undefined,
             training_purpose: smartTag$('#smart-tag-purpose')?.value || 'general',
+            caption_profile: captionProfile,
             trigger_word: (smartTag$('#smart-tag-trigger')?.value || '').trim(),
             merge_strategy: smartTag$('#smart-tag-merge')?.value || 'replace',
             auto_strip_noise: !!smartTag$('#smart-tag-strip-noise')?.checked,
             skip_existing: !!smartTag$('#smart-tag-skip-existing')?.checked,
             enable_wd14: booruEnabled,
             enable_vlm: naturalEnabled,
-            natural_language_mode: smartTag$('#smart-tag-nl-mode')?.value || 'vlm',
+            natural_language_mode: naturalLanguageMode,
             use_gpu: !!smartTag$('#smart-tag-use-gpu')?.checked,
             toriigate_caption_length: smartTag$('#smart-tag-torii-length')?.value || 'detailed',
             vlm_grounding: smartTag$('#smart-tag-vlm-grounding')

@@ -4090,6 +4090,12 @@ window.I18nLang_zhCN = {
     'dataset.helpRule3': "✕ 不要 — 把所有图都共有的恒定特征写出来，那是触发词的工作。",
     'dataset.helpRule4': "✕ 不要 — 留空的 .txt，空 caption 等于啥都没教会模型。",
     'dataset.helpShortcut': '捷径：直接在 Step A 点「给所有图打标」就够了 — WD14 tagger 会自动给每张图写一份合格的起手 caption。',
+    'dataset.krea2HelpIntro': 'Krea 2 LoRA 训练时，每个 .txt 应是一段经人工审核、如实且较长的自然语言 caption。请在 Krea-2-Raw 上训练，再用于 Turbo 推理。',
+    'dataset.krea2HelpRule1': '✓ 要 — 描述画面中可见的主体、姿势、环境、光线、构图、颜色、材质和空间关系。',
+    'dataset.krea2HelpRule2': '✓ 要 — 人工检查自动 caption 并删除臆造细节；机器标签只是线索，不是事实依据。',
+    'dataset.krea2HelpRule3': '✓ 要 — 写出不希望 LoRA 吸收的一次性细节。Krea 官方指南没有规定 trigger 惯例。',
+    'dataset.krea2HelpRule4': '✕ 不要 — 留空 .txt；Krea 2 训练要求每张图片都有 caption。',
+    'dataset.krea2HelpShortcut': '先运行 Smart Tag 的 Krea 2 长自然语言配置，再逐张审核 caption 后导出。',
 
     'dataset.separationConsoleTitle': '分离控制台',
     'dataset.separationConsoleHelp': '整个队列的每个标签：保留 = 推理时可控变量；剪除 = 让触发词吸收它。频率就是判断依据。',

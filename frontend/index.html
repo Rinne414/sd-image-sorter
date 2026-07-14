@@ -3628,16 +3628,17 @@
                                              title="What makes a good caption?">❓</summary>
                                     <div class="dataset-editor-help-body">
                                         <strong data-i18n="dataset.helpTitle">What makes a good caption?</strong>
-                                        <p data-i18n="dataset.helpIntro">
+                                        <p id="dataset-caption-help-intro" data-i18n="dataset.helpIntro">
                                             For LoRA training each .txt should describe what's in the image with a few short tags. The trainer learns to associate your trigger word with everything those tags share across images.
                                         </p>
                                         <ul>
-                                            <li data-i18n="dataset.helpRule1">DO include character / subject features (hair color, clothes, pose, scene).</li>
-                                            <li data-i18n="dataset.helpRule2">DO include your trigger word once (use Workbench "Common tags" so it lands in every caption).</li>
-                                            <li data-i18n="dataset.helpRule3">DON'T describe things that are constant across all images — that's what your trigger word is for.</li>
-                                            <li data-i18n="dataset.helpRule4">DON'T leave .txt files empty — empty captions teach the model nothing.</li>
+                                            <li id="dataset-caption-help-rule-1" data-i18n="dataset.helpRule1">DO include character / subject features (hair color, clothes, pose, scene).</li>
+                                            <li id="dataset-caption-help-rule-2" data-i18n="dataset.helpRule2">DO include your trigger word once (use Workbench "Common tags" so it lands in every caption).</li>
+                                            <li id="dataset-caption-help-rule-3" data-i18n="dataset.helpRule3">DON'T describe things that are constant across all images — that's what your trigger word is for.</li>
+                                            <li id="dataset-caption-help-rule-4" data-i18n="dataset.helpRule4">DON'T leave .txt files empty — empty captions teach the model nothing.</li>
                                         </ul>
-                                        <p class="dataset-help-shortcut" data-i18n="dataset.helpShortcut">
+                                        <p id="dataset-caption-help-shortcut"
+                                           class="dataset-help-shortcut" data-i18n="dataset.helpShortcut">
                                             Shortcut: click "Tag all images" in Step A and you're done — the WD14 tagger writes a perfectly serviceable starter caption per image.
                                         </p>
                                     </div>
@@ -5647,7 +5648,7 @@
                                         <option value="" data-i18n="modal.tagBaseModelNone">— Pick to get tag-count suggestion —</option>
                                         <option value="sdxl">SD 1.5 / SDXL / Pony / Illustrious / NoobAI (≈ 50 tags)</option>
                                         <option value="flux">FLUX / SD3 (≈ 120 tags)</option>
-                                        <option value="krea2">Krea 2 (Qwen3-VL — NL captions first, ≈ 200 tags)</option>
+                                        <option value="krea2">Krea 2 (long NL captions; tags for search/review)</option>
                                         <option value="anima_style">Anima — STYLE LoRA (@-prefixed trigger, ≈ 200 tags)</option>
                                         <option value="anima_character">Anima — CHARACTER LoRA (≈ 200 tags)</option>
                                     </select>
