@@ -14,6 +14,9 @@
             button: 'Guide',
             subtitle: 'What this tab does and how to use it',
             close: 'Close',
+            closeAria: 'Close guide',
+            tour: '🎓 Restart tour',
+            tourTitle: 'Restart the onboarding tour from the beginning',
             refreshI18n: '🔄 Refresh translations',
             refreshI18nTitle: 'Re-fetch lang/*.js without losing your scan, filters, or selection',
             refreshI18nDone: 'Translations refreshed without losing your data.',
@@ -117,16 +120,20 @@
                     icon: '🎮',
                     title: 'Manual Sort',
                     purpose: [
-                        'Rapidly triage images into up to four target folders with keyboard-driven sorting, while keeping a dedicated Manual Sort filter state.',
+                        'Review images with Slot sort (WASD), A/B Showdown, or Keep / Reject while keeping a dedicated Manual Sort filter state.',
                     ],
                     steps: [
-                        'Configure the folders for W, A, S, and D before starting.',
+                        'Choose Slot sort (WASD), A/B Showdown, or Keep / Reject before starting.',
+                        'For Slot sort, configure the folders for W, A, S, and D.',
+                        'For A/B Showdown, choose where the winner goes; for Keep / Reject, choose both destination collections.',
                         'Use the Manual Sort filters when you only want to review one slice of the library.',
-                        'Start the session and use W/A/S/D to move, Space to skip, and Z to undo.',
+                        'Start the session and use the visible shortcut card for the selected mode.',
                         'Watch the minimap and progress cards to track what is processed, skipped, or still pending.',
                     ],
                     features: [
-                        'Four-way folder mapping for fast keep/delete/best/needs-work style workflows.',
+                        'Slot sort provides four-way folder mapping for fast keep/delete/best/needs-work workflows.',
+                        'A/B Showdown compares pairs until one winner remains without moving the source files.',
+                        'Keep / Reject records one decision per image and routes both outcomes to collections.',
                         'Undo and redo support so a single bad key press does not ruin the session.',
                         'Resume banner for unfinished sessions.',
                         'Status strip, minimap, and shortcut card for high-speed operation.',
@@ -231,6 +238,9 @@
             button: '指南',
             subtitle: '这个标签页能做什么，以及应该怎么用',
             close: '关闭',
+            closeAria: '关闭指南',
+            tour: '🎓 重新开始引导',
+            tourTitle: '从头重新开始新手引导',
             refreshI18n: '🔄 重新载入界面文字',
             refreshI18nTitle: '重新拉取 lang/*.js，不会清空扫描结果、筛选或选择',
             refreshI18nDone: '界面文字已刷新，资料没有被清空。',
@@ -334,16 +344,20 @@
                     icon: '🎮',
                     title: '手动排序',
                     purpose: [
-                        '使用键盘把图片快速分流到最多四个目标文件夹里，同时保留独立的手动排序筛选状态。',
+                        '使用槽位整理（WASD）、A/B 擂台或留 / 汰来审核图片，同时保留独立的手动排序筛选状态。',
                     ],
                     steps: [
-                        '开始前先设置 W、A、S、D 对应的文件夹。',
+                        '开始前先选择槽位整理（WASD）、A/B 擂台或留 / 汰。',
+                        '使用槽位整理时，设置 W、A、S、D 对应的文件夹。',
+                        '使用 A/B 擂台时设置胜者合集；使用留 / 汰时设置两个结果合集。',
                         '需要的话，先用手动排序筛选器缩小工作集，只处理这一轮真正想看的图片。',
-                        '开始排序后，使用 W/A/S/D 移动，Space 跳过，Z 撤销。',
+                        '开始后按照当前模式显示的快捷键卡操作。',
                         '结合缩略图小地图和进度统计，随时掌握哪些已经处理、哪些还没处理。',
                     ],
                     features: [
-                        '四方向文件夹映射，适合保留、删除、精选、待复查这类高速分类流程。',
+                        '槽位整理提供四方向文件夹映射，适合保留、删除、精选、待复查等高速流程。',
+                        'A/B 擂台逐对比较，直到选出唯一胜者，同时不会移动源文件。',
+                        '留 / 汰逐张记录决定，并把两种结果分别送入指定合集。',
                         '支持撤销和重做，避免一次误按毁掉整轮排序。',
                         '检测到未完成会话时可直接恢复。',
                         '状态栏、小地图与快捷键卡片适合长时间高频操作。',
@@ -543,6 +557,7 @@
         _styleEl: null,
         _initialized: false,
         _openTab: null,
+        _returnFocusEl: null,
 
         getCurrentTab() {
             const currentView = window.App?.AppState?.currentView
@@ -810,19 +825,19 @@
             overlay.id = 'guide-overlay';
             overlay.innerHTML = `
                 <div class="guide-overlay-backdrop"></div>
-                <div class="guide-modal" role="dialog" aria-modal="true">
+                <div class="guide-modal" role="dialog" aria-modal="true" aria-labelledby="guide-modal-title">
                     <div class="guide-modal-header">
                         <span class="guide-modal-icon" aria-hidden="true"></span>
                         <div>
-                            <h3 class="guide-modal-title"></h3>
+                            <h3 class="guide-modal-title" id="guide-modal-title"></h3>
                             <span class="guide-modal-subtitle"></span>
                         </div>
-                        <button class="guide-modal-close" aria-label="Close">✕</button>
+                        <button type="button" class="guide-modal-close" aria-label="Close">✕</button>
                     </div>
                     <div class="guide-modal-body"></div>
                     <div class="guide-modal-footer">
-                        <button class="guide-modal-tour" title="Restart onboarding tour">🎓 Tour</button>
-                        <button class="guide-modal-action"></button>
+                        <button type="button" class="guide-modal-tour" title="Restart onboarding tour">🎓 Tour</button>
+                        <button type="button" class="guide-modal-action"></button>
                     </div>
                 </div>
             `;
@@ -854,10 +869,21 @@
             this._openTab = tabName;
 
             const modal = this._modalEl;
+            if (!modal.classList.contains('visible')) {
+                this._returnFocusEl = document.activeElement instanceof HTMLElement
+                    ? document.activeElement
+                    : null;
+            }
             modal.querySelector('.guide-modal-icon').textContent = tab.icon;
             modal.querySelector('.guide-modal-title').textContent = tab.title;
             modal.querySelector('.guide-modal-subtitle').textContent = copy.subtitle;
-            modal.querySelector('.guide-modal-action').textContent = copy.close;
+            const closeButton = modal.querySelector('.guide-modal-close');
+            const tourButton = modal.querySelector('.guide-modal-tour');
+            const actionButton = modal.querySelector('.guide-modal-action');
+            closeButton.setAttribute('aria-label', copy.closeAria);
+            tourButton.textContent = copy.tour;
+            tourButton.title = copy.tourTitle;
+            actionButton.textContent = copy.close;
 
             modal.querySelector('.guide-modal-body').innerHTML = [
                 this._renderSection(copy.sections.purpose, tab.purpose),
@@ -868,11 +894,31 @@
             ].join('');
 
             modal.classList.add('visible');
-            modal.querySelector('.guide-modal-action').focus();
+            actionButton.focus();
 
+            if (this._escHandler) {
+                document.removeEventListener('keydown', this._escHandler, true);
+            }
             this._escHandler = (event) => {
                 if (event.key === 'Escape') {
+                    event.preventDefault();
                     this.hide();
+                    return;
+                }
+                if (event.key !== 'Tab') return;
+
+                const focusableControls = Array.from(modal.querySelectorAll('button:not([disabled])'))
+                    .filter((element) => element instanceof HTMLElement && element.offsetParent !== null);
+                if (focusableControls.length === 0) return;
+
+                const firstControl = focusableControls[0];
+                const lastControl = focusableControls[focusableControls.length - 1];
+                if (event.shiftKey && document.activeElement === firstControl) {
+                    event.preventDefault();
+                    lastControl.focus();
+                } else if (!event.shiftKey && document.activeElement === lastControl) {
+                    event.preventDefault();
+                    firstControl.focus();
                 }
             };
             document.addEventListener('keydown', this._escHandler, true);
@@ -886,6 +932,11 @@
             if (this._escHandler) {
                 document.removeEventListener('keydown', this._escHandler, true);
                 this._escHandler = null;
+            }
+            const returnFocusEl = this._returnFocusEl;
+            this._returnFocusEl = null;
+            if (returnFocusEl instanceof HTMLElement && returnFocusEl.isConnected) {
+                returnFocusEl.focus({ preventScroll: true });
             }
         },
 

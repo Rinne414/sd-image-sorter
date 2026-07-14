@@ -36,6 +36,9 @@ type GuideCopy = {
   button: string
   subtitle: string
   close: string
+  closeAria: string
+  tour: string
+  tourTitle: string
   refreshI18n: string
   refreshI18nTitle: string
   refreshI18nDone: string
@@ -325,4 +328,80 @@ test('section rendering escapes titles and list items instead of creating execut
   expect(probe.items).toEqual(['<script>window.__guideXss = true</script>', 'safe & sound'])
   expect(probe.html).toContain('&lt;img')
   expect(probe.html).toContain('&lt;script&gt;')
+})
+
+test('re-show replaces the keydown listener and closing restores focus to the help trigger', async ({ page }) => {
+  await page.locator('#btn-help').focus()
+
+  const probe = await page.evaluate(() => {
+    const guide = (window as GuideWindow).Guide
+    guide.show('gallery')
+    const firstHandler = guide._escHandler
+    guide.show('gallery')
+    const secondHandler = guide._escHandler
+    guide.hide()
+
+    const originalHide = guide.hide
+    let leakedHideCalls = 0
+    guide.hide = function (this: GuideFacade): void {
+      leakedHideCalls += 1
+      originalHide.call(this)
+    }
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    guide.hide = originalHide
+    if (firstHandler) document.removeEventListener('keydown', firstHandler, true)
+
+    return {
+      distinctHandlers: firstHandler !== secondHandler,
+      leakedHideCalls,
+      focusedId: document.activeElement instanceof HTMLElement ? document.activeElement.id : null,
+    }
+  })
+
+  expect(probe.distinctHandlers).toBe(true)
+  expect(probe.leakedHideCalls).toBe(0)
+  expect(probe.focusedId).toBe('btn-help')
+})
+
+test('the localized dialog has an accessible name and traps focus inside its controls', async ({ page }) => {
+  await page.evaluate(() => {
+    const w = window as GuideWindow
+    w.I18n.setLang('zh-CN')
+    w.Guide.show('gallery')
+  })
+
+  const dialog = page.getByRole('dialog', { name: '图库' })
+  await expect(dialog).toBeVisible()
+  const closeButton = dialog.locator('.guide-modal-close')
+  const tourButton = dialog.locator('.guide-modal-tour')
+  const actionButton = dialog.locator('.guide-modal-action')
+  await expect(closeButton).toHaveAttribute('aria-label', '关闭指南')
+  await expect(tourButton).toHaveText('🎓 重新开始引导')
+  await expect(tourButton).toHaveAttribute('title', '从头重新开始新手引导')
+  await expect(actionButton).toBeFocused()
+
+  await page.keyboard.press('Tab')
+  await expect(closeButton).toBeFocused()
+  await page.keyboard.press('Shift+Tab')
+  await expect(actionButton).toBeFocused()
+})
+
+test('Manual Sort guide covers Slot Sort, A/B Showdown, and Keep/Reject in both languages', async ({ page }) => {
+  await page.evaluate(() => {
+    const w = window as GuideWindow
+    w.App.switchView('sorting')
+    w._switchSortingSub('manual')
+    w.I18n.setLang('en')
+    w.Guide.show('manual')
+  })
+
+  const body = page.locator('.guide-modal-body')
+  await expect(body).toContainText('Slot sort (WASD)')
+  await expect(body).toContainText('A/B Showdown')
+  await expect(body).toContainText('Keep / Reject')
+
+  await page.evaluate(() => (window as GuideWindow).I18n.setLang('zh-CN'))
+  await expect(body).toContainText('槽位整理（WASD）')
+  await expect(body).toContainText('A/B 擂台')
+  await expect(body).toContainText('留 / 汰')
 })
