@@ -85,7 +85,7 @@ async function stubDetect(page: Page, detections: Array<Record<string, unknown>>
   await page.route('**/api/censor/detect', async (route) => {
     calls.push(route.request().postDataJSON() as Record<string, unknown>)
     await route.fulfill({
-      json: { status: 'ok', image_id: IMAGES[0].id, model_type: 'nudenet', detections, ...extra },
+      json: { status: 'ok', image_id: IMAGES[0].id, model_type: 'nudenet', detections, warnings: [], ...extra },
     })
   })
   return calls
@@ -180,6 +180,82 @@ test('detect current: request wire format, region sort, box bake, processed mark
   await expect.poll(() => isPixelBlack(page, 48, 48)).toBe(true)   // inside box 2
   await expect.poll(() => isPixelBlack(page, 12, 12)).toBe(true)   // inside box 1
   expect(await isPixelBlack(page, 2, 40)).toBe(false)              // outside both
+})
+
+test('partial detector warnings are deduplicated and malformed warning contracts fail before bake', async ({ page }) => {
+  await stubCensorBackend(page)
+  const partialWarning = 'NudeNet detection failed; combined mode used Legacy YOLO only. runtime unavailable'
+  let detectCalls = 0
+  await page.route('**/api/censor/detect', async (route) => {
+    detectCalls += 1
+    await route.fulfill({
+      json: {
+        status: 'ok',
+        image_id: detectCalls === 1 ? IMAGES[0].id : IMAGES[1].id,
+        model_type: 'both',
+        detections: [
+          { box: [8, 8, 24, 24], label: 'exposed_breasts', confidence: 0.9, source: 'legacy' },
+        ],
+        warnings: detectCalls === 1 ? [partialWarning, partialWarning] : 'invalid warning payload',
+      },
+    })
+  })
+  await seedCensorQueue(page)
+  await page.selectOption('#censor-style', 'black_bar')
+
+  await page.locator('#btn-auto-detect-current').click()
+  await expect.poll(() => detectCalls).toBe(1)
+  await expect(page.locator('#toast-container .toast.warning .toast-message')).toHaveText(partialWarning)
+  await expect(
+    page.locator(`#censor-queue-list .queue-thumb-v2[data-id="${IMAGES[0].id}"]`)
+  ).toHaveClass(/processed/)
+
+  await page.locator(`#censor-queue-list .queue-thumb-v2[data-id="${IMAGES[1].id}"]`).click()
+  await expect.poll(() => page.evaluate(() => (window as any).__CENSOR_STATE__?.activeId)).toBe(IMAGES[1].id)
+  await expect.poll(() => page.evaluate(() => (window as any).__CENSOR_STATE__?.isLoadingImage)).toBe(false)
+  await page.locator('#btn-auto-detect-current').click()
+
+  await expect.poll(() => detectCalls).toBe(2)
+  await expect(page.locator('#toast-container .toast.error')).toContainText(
+    'Censor detection response requires a warnings array'
+  )
+  await expect(
+    page.locator(`#censor-queue-list .queue-thumb-v2[data-id="${IMAGES[1].id}"]`)
+  ).not.toHaveClass(/processed/)
+})
+
+test('detect all preserves item failures instead of reporting false success', async ({ page }) => {
+  await stubCensorBackend(page)
+  const detectImageIds: number[] = []
+  await page.route('**/api/censor/detect', async (route) => {
+    const body = route.request().postDataJSON() as { image_id: number }
+    detectImageIds.push(body.image_id)
+    if (body.image_id === IMAGES[0].id) {
+      await route.fulfill({ status: 503, json: { detail: 'Both detection engines failed' } })
+      return
+    }
+    await route.fulfill({
+      json: {
+        status: 'ok',
+        image_id: body.image_id,
+        model_type: 'both',
+        detections: [],
+        warnings: [],
+      },
+    })
+  })
+  await seedCensorQueue(page)
+
+  await page.locator('#btn-auto-detect-all-sidebar').click()
+
+  await expect.poll(() => detectImageIds).toEqual(IMAGES.map((image) => image.id))
+  await expect(
+    page.locator(`#censor-queue-list .queue-thumb-v2[data-id="${IMAGES[0].id}"]`)
+  ).toHaveClass(/batch-error/)
+  await expect(page.locator('#toast-container .toast.warning')).toContainText(
+    'Detection: 1/2 processed · 1 failed'
+  )
+  await expect(page.locator('#toast-container')).not.toContainText('Detection complete: 2/2 images processed')
 })
 
 test('box shape mode strips polygon/mask geometry from stored regions', async ({ page }) => {
@@ -310,6 +386,46 @@ test('review conveyor: detect → checklist → exclude one → approve bakes an
   await expect(page.locator('#censor-review-progress')).toContainText('2 / 2')
   // Review state resets for the next image: checklist emptied, overlay off.
   await expect(rows).toHaveCount(0)
+  await expect.poll(() =>
+    page.evaluate(() => (document.getElementById('censor-review-overlay') as HTMLElement).style.opacity)
+  ).toBe('0')
+})
+
+test('review detection surfaces partial warnings and rejects malformed warnings before approval', async ({ page }) => {
+  await stubCensorBackend(page)
+  const partialWarning = 'NudeNet detection failed; combined mode used Legacy YOLO only. runtime unavailable'
+  let detectCalls = 0
+  await page.route('**/api/censor/detect', async (route) => {
+    detectCalls += 1
+    await route.fulfill({
+      json: {
+        status: 'ok',
+        image_id: IMAGES[0].id,
+        model_type: 'both',
+        detections: [
+          { box: [8, 8, 24, 24], label: 'exposed_breasts', confidence: 0.9, source: 'legacy' },
+        ],
+        warnings: detectCalls === 1 ? [partialWarning, partialWarning] : 'invalid warning payload',
+      },
+    })
+  })
+  await seedCensorQueue(page)
+  await page.locator('.censor-tab[data-censor-tab="review"]').click()
+
+  const rows = page.locator('#censor-review-regions .censor-review-region')
+  await page.locator('#btn-review-detect').click()
+  await expect.poll(() => detectCalls).toBe(1)
+  await expect(page.locator('#toast-container .toast.warning .toast-message')).toHaveText(partialWarning)
+  await expect(rows).toHaveCount(1)
+  await expect(page.locator('#btn-review-approve')).toBeEnabled()
+
+  await page.locator('#btn-review-detect').click()
+  await expect.poll(() => detectCalls).toBe(2)
+  await expect(page.locator('#censor-review-status')).toContainText(
+    'Censor detection response requires a warnings array'
+  )
+  await expect(rows).toHaveCount(0)
+  await expect(page.locator('#btn-review-approve')).toBeDisabled()
   await expect.poll(() =>
     page.evaluate(() => (document.getElementById('censor-review-overlay') as HTMLElement).style.opacity)
   ).toBe('0')

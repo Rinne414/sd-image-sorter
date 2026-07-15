@@ -5,6 +5,23 @@
  * classic-script global lexical scoping keeps them single instances across parts.
  * Load order is pinned in index.html - see censor/state.js for the full note.
  */
+function readCensorDetectionWarnings(result) {
+    if (!result || typeof result !== 'object' || Array.isArray(result)) {
+        throw new TypeError('Censor detection response must be an object');
+    }
+    if (!Array.isArray(result.warnings)) {
+        throw new TypeError('Censor detection response requires a warnings array');
+    }
+
+    const warnings = result.warnings.map((warning) => {
+        if (typeof warning !== 'string' || !warning.trim()) {
+            throw new TypeError('Censor detection warnings must be non-empty strings');
+        }
+        return warning.trim();
+    });
+    return Array.from(new Set(warnings));
+}
+
 function getLegacyBackendStatus() {
     return (CensorState.backendModelStatus?.models || []).find(model => model.id === 'legacy') || null;
 }
@@ -223,6 +240,7 @@ async function runAutoCensorBatch() {
     showLoading(true, censorT('censor.autoCensorPreparing', null, 'Auto Censor · preparing queue...'));
 
     let count = 0;
+    const detectionWarnings = new Set();
     const result = await processCensorBatchItems(async (item, { index, total }) => {
         showLoading(true, window.App.buildProgressText({
             progress: { message: item.originalFilename || item.outputFilename || `Image ${item.id}` },
@@ -232,7 +250,8 @@ async function runAutoCensorBatch() {
             defaultMessage: censorT('censor.autoCensorRunning', null, 'Running auto-censor...'),
             primaryLabel: censorT('censor.autoCensorPrimary', null, 'Auto Censor')
         }));
-        await runDetectionForImage(item, true, executionPlan); // true = silent/no-refresh
+        const warnings = await runDetectionForImage(item, true, executionPlan); // true = silent/no-refresh
+        warnings.forEach((warning) => detectionWarnings.add(warning));
         count += 1;
     });
 
@@ -284,6 +303,10 @@ async function runAutoCensorBatch() {
                 : censorT('censor.batchProcessingComplete', { count, total: result.total }, 'Batch processing complete'),
             'success'
         );
+    }
+
+    if (detectionWarnings.size > 0) {
+        showToast(Array.from(detectionWarnings).join(' '), 'warning');
     }
 }
 
@@ -390,7 +413,7 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
                     'warning'
                 );
             }
-            return;
+            return [];
         }
 
         // Single-image runs resolve their own plan; batch runs warn once up
@@ -411,6 +434,7 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
             }
         }
         const data = await window.App.API.post('/api/censor/detect', detectBody);
+        const detectionWarnings = readCensorDetectionWarnings(data);
 
         const useBoxShape = CensorState.maskShape === 'box';
         const rawRegions = [...(data.detections || [])].sort((a, b) => b.confidence - a.confidence);
@@ -470,6 +494,11 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
             }
         }
 
+        if (!silent && detectionWarnings.length > 0) {
+            window.App.showToast(detectionWarnings.join(' '), 'warning');
+        }
+        return detectionWarnings;
+
     } catch (e) {
         Logger.error(e);
         // Batch callers: mark the item failed so runAutoCensorBatch reports an
@@ -484,6 +513,7 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
                 'error'
             );
         }
+        return [];
     }
 }
 
@@ -554,6 +584,7 @@ async function runDetectionForAll() {
     showLoading(true, censorT('censor.loadingDetectPreparing', null, 'Detect All · preparing queue...'));
     let count = 0;
     let failedCount = 0;
+    const detectionWarnings = new Set();
 
     const result = await processCensorBatchItems(async (item, { index, total }) => {
         try {
@@ -565,7 +596,12 @@ async function runDetectionForAll() {
                 defaultMessage: censorT('censor.loadingDetectDefault', null, 'Running detection...'),
                 primaryLabel: censorT('censor.loadingDetectPrimary', null, 'Detect All')
             }));
-            await runDetectionForImage(item, true, executionPlan);
+            const warnings = await runDetectionForImage(item, true, executionPlan);
+            warnings.forEach((warning) => detectionWarnings.add(warning));
+            if (item.batchStatus === 'failed') {
+                failedCount += 1;
+                return;
+            }
             item.batchStatus = 'detected';
             count++;
         } catch (e) {
@@ -597,6 +633,10 @@ async function runDetectionForAll() {
                 : censorT('censor.detectComplete', { count, total }, 'Detection complete: {count}/{total} images processed'),
             'success'
         );
+    }
+
+    if (detectionWarnings.size > 0) {
+        showToast(Array.from(detectionWarnings).join(' '), 'warning');
     }
 }
 

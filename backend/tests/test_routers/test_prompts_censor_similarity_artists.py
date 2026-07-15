@@ -1012,6 +1012,215 @@ class TestCensorRouterValidation:
         assert data["image_width"] == 80
         assert data["image_height"] == 80
 
+    def test_detect_both_fails_when_neither_backend_runs(self, test_client, monkeypatch, tmp_path):
+        import censor as censor_module
+        import nudenet_detector as nudenet_module
+        from services import censor_service as censor_service_module
+
+        image_path = tmp_path / "combined-total-failure.png"
+        Image.new("RGB", (64, 64), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        class FailedNudeNet:
+            def detect(self, _image_path, *, conf_threshold, exposed_only):
+                raise RuntimeError(
+                    f"nudenet runtime unavailable at threshold={conf_threshold}, exposed_only={exposed_only}"
+                )
+
+        class FailedLegacyDetector:
+            def __init__(self, model_path):
+                self.model_path = model_path
+                self.session = None
+
+            def load(self):
+                self.session = object()
+
+            def detect(self, _image_path, _threshold):
+                raise RuntimeError("legacy inference session failed")
+
+        monkeypatch.setattr(nudenet_module, "get_nudenet_detector", lambda: FailedNudeNet())
+        monkeypatch.setattr(
+            censor_service_module,
+            "get_default_legacy_model_path",
+            lambda: str(tmp_path / "wenaka_yolov8s-seg.onnx"),
+        )
+        monkeypatch.setattr(censor_module, "CensorDetector", FailedLegacyDetector)
+
+        response = test_client.post(
+            "/api/censor/detect",
+            json={"image_id": image_id, "model_type": "both", "confidence_threshold": 0.42},
+        )
+
+        assert response.status_code == 500, response.text
+        error_text = response.json()["error"]
+        assert "both detection engines failed" in error_text.lower()
+        assert "NudeNet" in error_text
+        assert "nudenet runtime unavailable" in error_text
+        assert "Legacy YOLO" in error_text
+        assert "legacy inference session failed" in error_text
+
+    def test_detect_both_returns_partial_results_with_warning(self, test_client, monkeypatch, tmp_path):
+        import censor as censor_module
+        import nudenet_detector as nudenet_module
+        from services import censor_service as censor_service_module
+
+        image_path = tmp_path / "combined-partial-success.png"
+        Image.new("RGB", (64, 64), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        class FailedNudeNet:
+            def detect(self, _image_path, *, conf_threshold, exposed_only):
+                raise RuntimeError(
+                    f"nudenet dependency failed at threshold={conf_threshold}, exposed_only={exposed_only}"
+                )
+
+        class WorkingLegacyDetector:
+            def __init__(self, model_path):
+                self.model_path = model_path
+                self.session = None
+
+            def load(self):
+                self.session = object()
+
+            def detect(self, _image_path, _threshold):
+                return [{"class": "breasts", "confidence": 0.91, "box": [4, 4, 20, 20]}]
+
+        monkeypatch.setattr(nudenet_module, "get_nudenet_detector", lambda: FailedNudeNet())
+        monkeypatch.setattr(
+            censor_service_module,
+            "get_default_legacy_model_path",
+            lambda: str(tmp_path / "wenaka_yolov8s-seg.onnx"),
+        )
+        monkeypatch.setattr(censor_module, "CensorDetector", WorkingLegacyDetector)
+
+        response = test_client.post(
+            "/api/censor/detect",
+            json={"image_id": image_id, "model_type": "both", "confidence_threshold": 0.42},
+        )
+
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert result["detections"] == [
+            {
+                "class": "breasts",
+                "confidence": 0.91,
+                "box": [4, 4, 20, 20],
+                "source": "legacy",
+            }
+        ]
+        assert len(result["warnings"]) == 1
+        assert "NudeNet" in result["warnings"][0]
+        assert "nudenet dependency failed" in result["warnings"][0]
+        assert "Legacy YOLO" in result["warnings"][0]
+
+    def test_detect_both_clean_empty_result_has_no_warnings(self, test_client, monkeypatch, tmp_path):
+        import censor as censor_module
+        import nudenet_detector as nudenet_module
+        from services import censor_service as censor_service_module
+
+        image_path = tmp_path / "combined-clean-empty.png"
+        Image.new("RGB", (64, 64), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        class EmptyNudeNet:
+            def detect(self, _image_path, *, conf_threshold, exposed_only):
+                assert conf_threshold == 0.42
+                assert exposed_only is True
+                return []
+
+        class EmptyLegacyDetector:
+            def __init__(self, model_path):
+                self.model_path = model_path
+                self.session = None
+
+            def load(self):
+                self.session = object()
+
+            def detect(self, _image_path, threshold):
+                assert threshold == 0.42
+                return []
+
+        monkeypatch.setattr(nudenet_module, "get_nudenet_detector", lambda: EmptyNudeNet())
+        monkeypatch.setattr(
+            censor_service_module,
+            "get_default_legacy_model_path",
+            lambda: str(tmp_path / "wenaka_yolov8s-seg.onnx"),
+        )
+        monkeypatch.setattr(censor_module, "CensorDetector", EmptyLegacyDetector)
+
+        response = test_client.post(
+            "/api/censor/detect",
+            json={"image_id": image_id, "model_type": "both", "confidence_threshold": 0.42},
+        )
+
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert result["detections"] == []
+        assert result["warnings"] == []
+
+    def test_detect_both_keeps_empty_partial_result_with_warning(self, test_client, monkeypatch, tmp_path):
+        import censor as censor_module
+        import nudenet_detector as nudenet_module
+        from services import censor_service as censor_service_module
+
+        image_path = tmp_path / "combined-empty-partial.png"
+        Image.new("RGB", (64, 64), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        class EmptyNudeNet:
+            def detect(self, _image_path, *, conf_threshold, exposed_only):
+                assert conf_threshold == 0.42
+                assert exposed_only is True
+                return []
+
+        class FailedLegacyDetector:
+            def __init__(self, model_path):
+                self.model_path = model_path
+                self.session = None
+
+            def load(self):
+                self.session = object()
+
+            def detect(self, _image_path, _threshold):
+                raise RuntimeError("legacy model could not run")
+
+        monkeypatch.setattr(nudenet_module, "get_nudenet_detector", lambda: EmptyNudeNet())
+        monkeypatch.setattr(
+            censor_service_module,
+            "get_default_legacy_model_path",
+            lambda: str(tmp_path / "wenaka_yolov8s-seg.onnx"),
+        )
+        monkeypatch.setattr(censor_module, "CensorDetector", FailedLegacyDetector)
+
+        response = test_client.post(
+            "/api/censor/detect",
+            json={"image_id": image_id, "model_type": "both", "confidence_threshold": 0.42},
+        )
+
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert result["detections"] == []
+        assert len(result["warnings"]) == 1
+        assert "Legacy YOLO" in result["warnings"][0]
+        assert "legacy model could not run" in result["warnings"][0]
+        assert "NudeNet" in result["warnings"][0]
+
     def test_detect_returns_cached_mask_ref_for_large_combined_masks(self, test_client, monkeypatch, tmp_path):
         import censor as censor_module
         from services import censor_service as censor_service_module

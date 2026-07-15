@@ -1005,6 +1005,14 @@ Structured errors can include:
 #### POST /api/censor/detect
 Run censor detection.
 
+`model_type` accepts `legacy`, `nudenet`, `sam3`, or `both`. Every successful
+response includes `warnings: string[]`. In `both` mode, one detector may fail
+while the other still returns usable detections; that partial result remains
+HTTP 200 and `warnings` names the failed detector and cause. If neither
+detector completes, the endpoint returns a non-2xx actionable error containing
+both failure causes. A clean run with zero detections remains a successful
+response with `warnings: []`.
+
 #### POST /api/censor/preview
 Preview censoring.
 Opaque previews return JPEG data URLs. Sources with transparency return PNG data URLs so alpha survives; the MIME prefix always matches the encoded bytes.

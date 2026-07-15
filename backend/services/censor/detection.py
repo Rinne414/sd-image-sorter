@@ -18,7 +18,7 @@ import logging
 import os
 import traceback
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, TypedDict
 
 from fastapi import HTTPException
 from PIL import Image
@@ -29,6 +29,14 @@ if TYPE_CHECKING:  # annotation-only; never imported at runtime (no facade cycle
     from services.censor_service import CensorDetectRequest
 
 logger = logging.getLogger("services.censor_service")
+
+
+class DetectionBackendFailure(TypedDict):
+    """Structured failure from one combined-detection backend."""
+
+    backend: str
+    status_code: int
+    detail: str
 
 
 def _svc():
@@ -197,6 +205,51 @@ class _DetectionMixin:
             detail=f"Detection failed: {message} / 检测失败：{message}",
         )
 
+    @classmethod
+    def _describe_detection_backend_failure(
+        cls,
+        backend: str,
+        exc: Exception,
+    ) -> DetectionBackendFailure:
+        """Normalize one detector failure without hiding its actionable cause."""
+        mapped = exc if isinstance(exc, HTTPException) else cls._detection_error_to_http(exc)
+        return {
+            "backend": backend,
+            "status_code": int(mapped.status_code),
+            "detail": str(mapped.detail),
+        }
+
+    @staticmethod
+    def _combined_detection_failure_to_http(
+        image_id: int,
+        failures: List[DetectionBackendFailure],
+    ) -> HTTPException:
+        """Return one actionable error when no combined detector completed."""
+        status_codes = {failure["status_code"] for failure in failures}
+        status_code = next(iter(status_codes)) if len(status_codes) == 1 else 500
+        reasons = "; ".join(
+            f'{failure["backend"]}: {failure["detail"]}'
+            for failure in failures
+        )
+        return HTTPException(
+            status_code=status_code,
+            detail=(
+                f"Both detection engines failed for image_id={image_id}. {reasons}"
+            ),
+        )
+
+    @staticmethod
+    def _combined_detection_warning(
+        failure: DetectionBackendFailure,
+        successful_backends: List[str],
+    ) -> str:
+        """Explain that combined detection completed with only one backend."""
+        successful_label = ", ".join(successful_backends)
+        return (
+            f'{failure["backend"]} detection failed; combined mode used '
+            f'{successful_label} only. {failure["detail"]}'
+        )
+
     def detect(self, request: CensorDetectRequest) -> Dict[str, Any]:
         """
         Run detection on an image to find regions to censor.
@@ -218,6 +271,7 @@ class _DetectionMixin:
 
         try:
             model_type = request.model_type
+            detection_warnings: List[str] = []
 
             if model_type == "sam3":
                 from sam3_refiner import get_sam3_refiner
@@ -256,7 +310,9 @@ class _DetectionMixin:
                     raise HTTPException(status_code=422, detail=str(exc)) from exc
 
             elif model_type == "both":
-                all_detections = []
+                all_detections: List[Dict[str, Any]] = []
+                successful_backends: List[str] = []
+                backend_failures: List[DetectionBackendFailure] = []
 
                 try:
                     from nudenet_detector import get_nudenet_detector
@@ -266,11 +322,20 @@ class _DetectionMixin:
                         conf_threshold=request.confidence_threshold,
                         exposed_only=request.exposed_only,
                     )
-                    for d in nn_results:
-                        d["source"] = "nudenet"
-                    all_detections.extend(nn_results)
-                except Exception as e:
-                    logger.warning("NudeNet detection failed: %s", e)
+                    all_detections.extend({**detection, "source": "nudenet"} for detection in nn_results)
+                    successful_backends.append("NudeNet")
+                except Exception as exc:
+                    failure = self._describe_detection_backend_failure("NudeNet", exc)
+                    backend_failures.append(failure)
+                    logger.warning(
+                        "Combined detection backend failed",
+                        extra={
+                            "backend": failure["backend"],
+                            "status_code": failure["status_code"],
+                            "image_id": request.image_id,
+                            "detail": failure["detail"],
+                        },
+                    )
 
                 try:
                     from censor import CensorDetector
@@ -285,11 +350,31 @@ class _DetectionMixin:
                             self._detector = CensorDetector(legacy_model_path)
                             self._detector.load()
                         legacy_results = self._detector.detect(image_path, request.confidence_threshold)
-                        for d in legacy_results:
-                            d["source"] = "legacy"
-                        all_detections.extend(legacy_results)
-                except Exception as e:
-                    logger.warning("Legacy detection failed: %s", e)
+                        all_detections.extend({**detection, "source": "legacy"} for detection in legacy_results)
+                        successful_backends.append("Legacy YOLO")
+                except Exception as exc:
+                    failure = self._describe_detection_backend_failure("Legacy YOLO", exc)
+                    backend_failures.append(failure)
+                    logger.warning(
+                        "Combined detection backend failed",
+                        extra={
+                            "backend": failure["backend"],
+                            "status_code": failure["status_code"],
+                            "image_id": request.image_id,
+                            "detail": failure["detail"],
+                        },
+                    )
+
+                if not successful_backends:
+                    raise self._combined_detection_failure_to_http(
+                        request.image_id,
+                        backend_failures,
+                    )
+
+                detection_warnings = [
+                    self._combined_detection_warning(failure, successful_backends)
+                    for failure in backend_failures
+                ]
 
                 detections = all_detections
 
@@ -347,6 +432,7 @@ class _DetectionMixin:
                 "image_width": combined_mask_payload["image_width"],
                 "image_height": combined_mask_payload["image_height"],
                 "geometry_mode": geometry_mode,
+                "warnings": detection_warnings,
             }
         except HTTPException:
             raise

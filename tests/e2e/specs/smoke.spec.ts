@@ -4368,6 +4368,7 @@ test.describe('Smoke Tests', () => {
           detections: [],
           image_width: 64,
           image_height: 64,
+          warnings: [],
         },
       })
     })
@@ -6489,6 +6490,7 @@ test.describe('Smoke Tests', () => {
           ],
           combined_mask: null,
           geometry_mode: 'box',
+          warnings: [],
         },
       })
     })
@@ -6640,6 +6642,7 @@ test.describe('Smoke Tests', () => {
           ],
           combined_mask: MIXED_MASK_DATA_URL,
           geometry_mode: 'mixed',
+          warnings: [],
         },
       })
     })

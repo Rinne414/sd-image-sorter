@@ -226,6 +226,7 @@ async function censorReviewDetect() {
     updateCensorReviewPanel();
     const statusEl = document.getElementById('censor-review-status');
     const setStatus = (msg) => { if (statusEl) statusEl.textContent = msg; };
+    let failureMessage = '';
     setStatus(censorT('censor.processing', null, 'Processing...'));
 
     try {
@@ -233,7 +234,8 @@ async function censorReviewDetect() {
         if (!plan?.ok) {
             CensorReviewState.regions = [];
             CensorReviewState.detectedForId = null;
-            setStatus(plan?.message || censorT('censor.detectFailed', null, 'Detection failed'));
+            failureMessage = plan?.message || censorT('censor.detectFailed', null, 'Detection failed');
+            setStatus(failureMessage);
             return;
         }
         const detectBody = {
@@ -248,6 +250,7 @@ async function censorReviewDetect() {
             if (customInput) detectBody.text_prompts = customInput.split(',').map((s) => s.trim()).filter(Boolean);
         }
         const data = await window.App.API.post('/api/censor/detect', detectBody);
+        const detectionWarnings = readCensorDetectionWarnings(data);
         const useBoxShape = CensorState.maskShape === 'box';
         const raw = [...(data.detections || [])].sort((a, b) => b.confidence - a.confidence);
         const regions = useBoxShape ? raw.map(({ polygon, mask, ...rest }) => rest) : raw;
@@ -260,14 +263,19 @@ async function censorReviewDetect() {
         setStatus(regions.length === 0
             ? censorT('censor.reviewNoRegions', null, 'No regions detected. Try a lower confidence or another model.')
             : censorT('censor.reviewRegionsFound', { count: regions.length }, '{count} region(s) found — uncheck any to leave it uncensored'));
+        if (detectionWarnings.length > 0) {
+            window.App.showToast(detectionWarnings.join(' '), 'warning');
+        }
     } catch (e) {
         Logger.error(e);
         CensorReviewState.regions = [];
         CensorReviewState.detectedForId = null;
-        setStatus(formatUserError(e, censorT('censor.detectFailed', null, 'Detection failed')));
+        failureMessage = formatUserError(e, censorT('censor.detectFailed', null, 'Detection failed'));
+        setStatus(failureMessage);
     } finally {
         CensorReviewState.busy = false;
         updateCensorReviewPanel();
+        if (failureMessage) setStatus(failureMessage);
     }
 }
 
