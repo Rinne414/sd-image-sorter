@@ -46,14 +46,17 @@ That package is meant to cover the common workflows:
 
 ### macOS: Source-Install Only (No Portable Bundle Yet)
 
-There is **no `macos-portable-*.tar.gz` asset** by design. macOS users should clone the repo (or download `linux.tar.gz` — its `run.sh` works on macOS too) and run `./run.sh` against system Python (Homebrew / pyenv / asdf / `uv` all work; the app's lockfile supports Python 3.12 and 3.13).
+There is **no `macos-portable-*.tar.gz` asset** by design. macOS users should clone the repository and run `./run.sh` against system Python (Homebrew / pyenv / asdf / `uv` all work; the app's lockfile supports Python 3.12 and 3.13). The published Linux archive is a Linux release package and intentionally refuses macOS.
+
+Intel Mac supports the **core runtime and core-only development/test lock**. `backend/requirements-dev.txt` extends `requirements-core.txt`, excludes Torch/CUDA packages, and remains installable for Intel Mac CI and contributors. Do not install the separate full-AI `backend/requirements.txt` there because upstream publishes no current macOS x86_64 Torch wheel. Full-AI development requires macOS 14+ Apple Silicon, Windows, or Linux; ordinary Intel Mac users should keep the default core install.
+
 
 The reasons are documented in [`docs/AI_DECISION_LOG.md`](AI_DECISION_LOG.md) under **ADR-2026-05-24: macOS portable bundle deferred**, summarised here:
 
 1. **Gatekeeper friction without notarization.** A macOS portable would need [Apple Developer notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution) (\$99 / yr Apple Developer Program) to launch without `"developer cannot be verified"` warnings on every fresh download. Without notarization, every user has to right-click → Open or `xattr -dr com.apple.quarantine sd-image-sorter/` before launching — a much worse first-run experience than the Windows / Linux portable double-click flow.
 2. **macOS users almost always already have Python.** Homebrew, `pyenv`, `asdf`, and `uv` are standard on macOS dev machines, so the "no system Python" pain point that drove the Linux portable basically does not exist on macOS. The existing `./run.sh` source path already creates a venv and installs deps; PR #12 fixed Darwin-clone detection so this works on the source bundle.
-3. **macOS Intel is fading upstream.** PyTorch dropped macOS Intel (`x86_64-apple-darwin`) wheels after `2.2.2`; the lockfile pins that legacy version explicitly. Shipping an Intel macOS portable today would freeze users to an upstream-deprecated stack — a worse outcome than `run.sh` against `brew install python@3.13`, which lets the user manage upgrades on their own schedule.
-4. **Apple Silicon under macOS works fine via source.** M1 / M2 / M3 / M4 users get full functionality through `./run.sh`; ONNX Runtime auto-selects the optimal provider (CoreML or CPU). No CUDA on macOS means heavy GPU paths are not the value-add anyway.
+3. **macOS Intel is core-only for a reason.** PyTorch dropped Intel Mac wheels after `2.2.2`, and that legacy branch now carries many known advisories. The app no longer silently pins it: Intel Mac keeps the core gallery, sorting, metadata, and ONNX features, while Torch-backed Prepare fails before download with an actionable platform message.
+4. **Safe Apple Silicon Torch has a clear floor.** The current security-supported Torch 2.13 wheel targets macOS 14. Apple Silicon on macOS 14+ can prepare Torch-backed features from source; older macOS stays on the core/ONNX feature set rather than downgrading to an advisory-bearing runtime.
 
 This decision will be revisited if any of the following becomes true:
 
@@ -69,7 +72,7 @@ cd sd-image-sorter
 ./run.sh
 ```
 
-…OR download `sd-image-sorter-vX.X.X-linux.tar.gz` and run `./run.sh` from the extracted directory (the script detects Darwin and behaves correctly).
+Do not use `sd-image-sorter-vX.X.X-linux.tar.gz` on macOS; its package manifest marks it as a Linux release and the launcher fails closed on Darwin.
 
 ## Model Download Sources
 

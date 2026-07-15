@@ -295,7 +295,7 @@ run.bat
 默认会在 `http://127.0.0.1:8487` 启动（可通过 `SD_IMAGE_SORTER_PORT` 覆盖）。
 
 > [!TIP]
-> macOS 用户直接用 `./run.sh` 即可。脚本会自动创建 Python venv 并安装依赖。Apple Silicon (M1/M2/M3/M4) 和 Intel Mac 均支持，AI 推理走 CPU（ONNX Runtime 自动选择最优 provider）。
+> macOS 用户直接用 `./run.sh` 即可。Apple Silicon 和 Intel Mac 都支持核心图库、整理与 ONNX 功能；一般 Torch 重型 AI 仅支持 **macOS 14+ Apple Silicon**。SAM3 仍是 NVIDIA CUDA-only，macOS 不支持。Intel Mac 或较旧 macOS 会在安装前明确拒绝不安全的旧 Torch，但核心功能不受影响。
 
 > [!TIP]
 > Windows 便携版自带 Python 3.12。源码 / Linux 用户只要装 Python 3.12 或 3.13 都可以——v3.2.2 起 lockfile 同时锁了两个版本（3.12 走 numpy 1.x，3.13 走 numpy 2.x）。默认只安装轻量核心依赖；CLIP / NudeNet / YOLO / SAM3 / 美学评分 / 画师识别等重型 AI 运行库会在你点击 Feature Setup 的 Prepare / Download 后按需安装。若界面提示已安装 Python 包，请重启应用后再使用该功能。
@@ -309,7 +309,7 @@ run.bat
 |:--|:--|:--|
 | 第一次 `run.bat` 后直接可用 | 扫描 / 导入图库、浏览、筛选、搜索、批量选择、自动分类、WASD 手动分类、Prompt Lab、元数据读取、手动打码编辑器、导出同名 sidecar | 只依赖轻量核心包；不会主动拉 Torch / SAM3 / NudeNet / Ultralytics / FastEmbed。 |
 | 需要下载模型文件，但不需要额外 Python 包 | WD14 / Camie / PixAI ONNX 打标 | 点击 **功能准备 / Prepare** 或首次打标时下载模型文件；ONNX Runtime 已在核心依赖里。 |
-| 需要 Prepare / Download，可能要求重启 | CLIP 相似搜索、美学评分、画师识别、NudeNet、Privacy YOLO、SAM3、ToriiGate | 如果准备过程安装了 Python 包，界面会提示重启；必须重启后再用对应功能。ToriiGate 首次模型约 5 GB，SAM3 / Torch 也会占用较多空间。 |
+| 需要 Prepare / Download，可能要求重启 | CLIP 相似搜索、美学评分、画师识别、NudeNet、Privacy YOLO、SAM3、ToriiGate | 如果准备过程安装了 Python 包，界面会提示重启。一般 Torch 功能在 macOS 上仅支持 macOS 14+ Apple Silicon；SAM3 仍需 Windows/Linux 的 NVIDIA CUDA。ToriiGate 首次模型约 5 GB，SAM3 / Torch 也会占用较多空间。 |
 
 缩略图缓存默认上限是 **500 MB**。它只删可重新生成的缩略图，不会删原图；你可以在 **功能准备 → 磁盘占用 → 缩略图缓存上限** 改大小，填 `0` 可关闭持久缩略图缓存。界面会提示取舍：上限越低越省磁盘，但大图库滚动时可能更常重建缩略图，CPU / 硬盘 IO 会更忙。
 
@@ -318,7 +318,8 @@ run.bat
 ### GPU / 运行时说明
 
 - 默认启动走轻量核心依赖，不会主动下载 Torch / SAM3 / NudeNet / Ultralytics / FastEmbed 等重型包
-- 需要一次性安装旧的全量 AI 运行库时，可先设置 `SD_IMAGE_SORTER_INSTALL_FULL_AI=1` 再运行启动器
+- 需要一次性安装全量 AI 运行库时，可先设置 `SD_IMAGE_SORTER_INSTALL_FULL_AI=1` 再运行启动器
+- macOS 全量 AI 仅支持 macOS 14+ Apple Silicon；Intel Mac / 旧 macOS 保持轻量核心与 ONNX 功能；SAM3 当前在所有 macOS 上均不可用
 - NVIDIA 显卡在全量模式下会优先使用 `onnxruntime-gpu`
 - NVIDIA 全量模式首次启动如果停在 `Checking Windows ONNX Runtime package state...`，可能是在补 CUDA / cuDNN 运行库；新版会显示真实 pip 进度，不是死机
 - Intel Arc / AMD Radeon 在全量模式下会切到 `onnxruntime-directml`
@@ -688,7 +689,7 @@ cd sd-image-sorter
 ```
 
 > [!TIP]
-> macOS users can run `./run.sh` directly. The script creates a Python venv and installs dependencies automatically. Both Apple Silicon (M1/M2/M3/M4) and Intel Macs are supported; AI inference runs on CPU (ONNX Runtime auto-selects the optimal provider).
+> macOS users can run `./run.sh` directly. Apple Silicon and Intel Macs both support the core gallery, organization, and ONNX features. General Torch-backed AI requires **macOS 14+ on Apple Silicon**; SAM3 remains NVIDIA CUDA-only and is unavailable on macOS. Intel or older macOS is rejected before an unsafe legacy Torch install while the core app remains usable.
 
 
 ### What Works Immediately vs. What Needs Setup?
@@ -697,7 +698,7 @@ cd sd-image-sorter
 |:--|:--|:--|
 | Ready after first launch | Scan/import, gallery browsing, metadata reading, filters/search, batch selection, auto-separate, WASD manual sort, Prompt Lab, manual censor editor, sidecar export | Uses only the lightweight core install. It does not pull Torch / SAM3 / NudeNet / Ultralytics / FastEmbed automatically. |
 | Needs model files only | WD14 / Camie / PixAI ONNX tagging | Click **Setup Now / Prepare** or start tagging to download model files; ONNX Runtime is already part of core. |
-| Needs Prepare / Download and may need restart | CLIP similarity, aesthetic scoring, Artist ID, NudeNet, Privacy YOLO, SAM3, ToriiGate | If Prepare installs Python packages, restart before using that feature. ToriiGate first model download is about 5 GB; SAM3 / Torch can also be large. |
+| Needs Prepare / Download and may need restart | CLIP similarity, aesthetic scoring, Artist ID, NudeNet, Privacy YOLO, SAM3, ToriiGate | If Prepare installs Python packages, restart before using that feature. General Torch-backed features on macOS require macOS 14+ Apple Silicon; SAM3 still requires NVIDIA CUDA on Windows/Linux. ToriiGate is about 5 GB; SAM3 / Torch can also be large. |
 
 Thumbnail cache is capped at **500 MB** by default. It only removes regeneratable thumbnails, never original images. Change it in **Setup Now → Disk Usage → Thumbnail cache limit**; set `0` to disable persistent thumbnail caching. The UI explains the trade-off: lower limits save disk, but large-gallery scrolling can spend more CPU / disk I/O regenerating thumbnails.
 

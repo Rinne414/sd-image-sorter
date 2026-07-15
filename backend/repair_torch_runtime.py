@@ -17,7 +17,9 @@ import subprocess
 import sys
 from importlib import metadata
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from packaging.version import InvalidVersion, Version
+
 
 # Embedded Python (used by the portable Windows launcher) ships a
 # ``python312._pth`` file that fully controls ``sys.path``. Unlike a normal
@@ -46,11 +48,6 @@ except ImportError as _exc:  # pragma: no cover - defensive fallback for direct 
         return {"vendors": [], "primary": None, "devices": []}
 
 
-# Must match the torch pin in backend/requirements.txt. If you bump torch there,
-# bump this too. We keep it as a single named constant so it is easy to grep.
-_FALLBACK_TORCH_VERSION = "2.11.0"
-
-
 # requirements.txt locks numpy per Python: 1.26.4 for Python <3.13 (matches the
 # numpy-1 C ABI of the existing onnxruntime/SAM3/opencv/scipy wheels for that
 # Python), 2.x for Python >=3.13 (numpy 1.26.4 has no cp313 wheel). The CUDA
@@ -69,11 +66,22 @@ def _numpy_sam3_constraint() -> str:
 
 
 TORCH_CUDA_INDEXES: Sequence[Tuple[str, str, Tuple[int, int]]] = (
-    ("cu128", "https://download.pytorch.org/whl/cu128", (12, 8)),
+    ("cu130", "https://download.pytorch.org/whl/cu130", (13, 0)),
     ("cu126", "https://download.pytorch.org/whl/cu126", (12, 6)),
-    ("cu124", "https://download.pytorch.org/whl/cu124", (12, 4)),
-    ("cu121", "https://download.pytorch.org/whl/cu121", (12, 1)),
 )
+TORCH_CUDA_PACKAGE_VERSIONS: Mapping[str, Tuple[str, str]] = {
+    "cu130": ("2.13.0", "0.28.0"),
+    "cu126": ("2.13.0", "0.28.0"),
+}
+
+
+def _cuda_package_versions(label: str) -> Tuple[str, str]:
+    try:
+        return TORCH_CUDA_PACKAGE_VERSIONS[label]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported official CUDA wheel label: {label}") from exc
+
+
 PYTORCH_FALLBACK_INDEX = "https://pypi.org/simple"
 SAM3_RUNTIME_IMPORTS: Sequence[Tuple[str, str]] = (
     ("transformers", "transformers>=5.6.0"),
@@ -93,11 +101,48 @@ def _version(dist_name: str) -> Optional[str]:
         return None
 
 
-def _base_version(version: Optional[str]) -> Optional[str]:
-    if not version:
-        return None
-    return str(version).split("+", 1)[0]
+def _version_matches_cuda_candidate(
+    version: object,
+    expected_base: str,
+    label: str,
+) -> bool:
+    if not isinstance(version, str):
+        return False
+    try:
+        parsed = Version(version.strip())
+    except InvalidVersion:
+        return False
+    return parsed.base_version == expected_base and parsed.local == label
 
+
+def _cuda_state_matches_candidate(
+    state: Mapping[str, Any],
+    candidate: Tuple[str, str, Tuple[int, int]],
+) -> bool:
+    label, _index_url, cuda_runtime = candidate
+    torch_version, torchvision_version = _cuda_package_versions(label)
+    expected_cuda_build = ".".join(str(part) for part in cuda_runtime)
+    return (
+        _version_matches_cuda_candidate(
+            state.get("torch_version"),
+            torch_version,
+            label,
+        )
+        and _version_matches_cuda_candidate(
+            state.get("torchvision_version"),
+            torchvision_version,
+            label,
+        )
+        and state.get("torch_cuda_build") == expected_cuda_build
+        and state.get("torch_cuda_available") is True
+    )
+
+
+def _is_supported_cuda_torch_state(state: Mapping[str, Any]) -> bool:
+    return any(
+        _cuda_state_matches_candidate(state, candidate)
+        for candidate in TORCH_CUDA_INDEXES
+    )
 
 def _module_available(module_name: str) -> bool:
     try:
@@ -234,11 +279,11 @@ def _detect_nvidia_cuda_version() -> Optional[Tuple[int, int]]:
             if parsed:
                 return parsed
 
-    # Path 2: full ``nvidia-smi`` header. The header line looks like:
-    #   ``NVIDIA-SMI 591.86   Driver Version: 591.86   CUDA Version: 13.1``
+    # Path 2: full nvidia-smi header. Driver branches report either
+    # CUDA Version: 13.1 or CUDA UMD Version: 13.3.
     # The plain ``\d+\.\d+`` regex used by ``_parse_cuda_version`` would
     # match the driver version (591.86) before the CUDA version (13.1), so
-    # we must anchor the match on the explicit ``CUDA Version:`` marker.
+    # anchor the match on the explicit CUDA marker.
     try:
         raw = subprocess.check_output(
             ["nvidia-smi"],
@@ -251,7 +296,7 @@ def _detect_nvidia_cuda_version() -> Optional[Tuple[int, int]]:
         return None
 
     for line in raw.splitlines():
-        match = re.search(r"CUDA[\s:]*Version[\s:]*(\d+)\.(\d+)", line, re.IGNORECASE)
+        match = re.search(r"CUDA(?:\s+UMD)?\s+Version\s*:\s*(\d+)\.(\d+)", line, re.IGNORECASE)
         if match:
             return int(match.group(1)), int(match.group(2))
 
@@ -279,34 +324,68 @@ def _resolve_torch_cuda_host() -> str:
     return "https://download.pytorch.org/whl"
 
 
-def _cuda_index_candidates(max_cuda: Optional[Tuple[int, int]]) -> List[Tuple[str, str, Tuple[int, int]]]:
+def _configured_cuda_index_candidate(
+    configured_url: str,
+) -> Tuple[str, str, Tuple[int, int]]:
+    url = configured_url.strip().rstrip("/")
+    match = re.search(r"/(cu130|cu126)$", url, re.IGNORECASE)
+    if match is None:
+        raise ValueError(
+            "SD_IMAGE_SORTER_TORCH_CUDA_INDEX_URL must end with cu130 or cu126; "
+            f"received {_redact_command_argument(configured_url)!r}."
+        )
+
+    label = match.group(1).lower()
+    runtime_version = next(
+        candidate[2]
+        for candidate in TORCH_CUDA_INDEXES
+        if candidate[0] == label
+    )
+    return label, url, runtime_version
+
+
+def _cuda_index_candidates(
+    max_cuda: Optional[Tuple[int, int]],
+) -> List[Tuple[str, str, Tuple[int, int]]]:
+    if max_cuda is None:
+        return []
+
     configured = os.environ.get("SD_IMAGE_SORTER_TORCH_CUDA_INDEX_URL")
     if configured:
-        return [("custom", configured.strip(), (99, 99))]
+        candidate = _configured_cuda_index_candidate(configured)
+        if candidate[2] > max_cuda:
+            required = ".".join(str(part) for part in candidate[2])
+            detected = ".".join(str(part) for part in max_cuda)
+            raise ValueError(
+                f"Configured CUDA index {candidate[0]} requires CUDA {required}, "
+                f"but the NVIDIA driver reports CUDA {detected}. Choose a "
+                "compatible index or update the NVIDIA driver."
+            )
+        return [candidate]
 
-    if not max_cuda:
-        base = list(TORCH_CUDA_INDEXES)
-    else:
-        compatible = [candidate for candidate in TORCH_CUDA_INDEXES if candidate[2] <= max_cuda]
-        base = compatible or [TORCH_CUDA_INDEXES[-1]]
-
+    compatible = [
+        candidate
+        for candidate in TORCH_CUDA_INDEXES
+        if candidate[2] <= max_cuda
+    ]
+    selected = compatible[:1]
     host = _resolve_torch_cuda_host()
     if host == "https://download.pytorch.org/whl":
-        return base
-    return [(label, f"{host}/{label}", runtime_version) for label, _orig_url, runtime_version in base]
-
+        return selected
+    return [
+        (label, f"{host}/{label}", runtime_version)
+        for label, _original_url, runtime_version in selected
+    ]
 
 def _resolve_pypi_fallback_index() -> str:
-    """Pick the ``--extra-index-url`` value for the CUDA torch reinstall.
+    """Pick the primary package index for the explicit NumPy pre-install.
 
-    The CUDA torch wheel itself comes from ``download.pytorch.org``, but
-    the install cascades to deps (numpy, sympy, networkx, …) which live
-    on PyPI. Honouring the same mirror selection as ``launcher_pip.py``
-    means a Chinese user does not have to wait on Fastly for those deps
-    just because torch's own wheel host is fast.
+    CUDA Torch uses only its selected CUDA index with ``--no-deps``. NumPy
+    is installed separately so its ABI constraint comes from PyPI without
+    giving pip any opportunity to substitute a CPU Torch wheel. Honour the
+    same mirror selection as ``launcher_pip.py`` for that NumPy request.
 
-    Falls back to the existing constant on any selector failure so a
-    broken or offline mirror cannot block the repair.
+    Falls back to public PyPI if mirror selection itself is unavailable.
     """
 
     try:
@@ -322,17 +401,54 @@ def _resolve_pypi_fallback_index() -> str:
 def _run_pip(args: List[str], *, stream: bool = False) -> subprocess.CompletedProcess[str]:
     command = [sys.executable, "-m", "pip", "--disable-pip-version-check", *args]
     if stream:
-        print("[torch-runtime] Running: python -m pip --disable-pip-version-check " + " ".join(args), flush=True)
+        display_args = " ".join(_redact_command_argument(argument) for argument in args)
+        print("[torch-runtime] Running: python -m pip --disable-pip-version-check " + display_args, flush=True)
         return subprocess.run(command, check=True, text=True)
     try:
         return subprocess.run(command, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as exc:
         if exc.stdout:
-            print(exc.stdout, end="", file=sys.stdout)
+            print(
+                _redact_command_argument(exc.stdout), end="", file=sys.stdout
+            )
         if exc.stderr:
-            print(exc.stderr, end="", file=sys.stderr)
+            print(
+                _redact_command_argument(exc.stderr), end="", file=sys.stderr
+            )
         raise
 
+
+def _redact_command_argument(argument: object) -> str:
+    return re.sub(
+        r"(https?://)[^/@\s]+@",
+        r"\1***@",
+        str(argument),
+        flags=re.IGNORECASE,
+    )
+
+
+def _format_subprocess_error(error: BaseException) -> str:
+    if not isinstance(error, subprocess.CalledProcessError):
+        return f"{type(error).__name__}: {error}"
+
+    command = [
+        _redact_command_argument(argument)
+        for argument in (
+            error.cmd
+            if isinstance(error.cmd, (list, tuple))
+            else [error.cmd]
+        )
+    ]
+    stdout = _redact_command_argument(
+        (error.stdout or error.output or "").strip()
+    )
+    stderr = _redact_command_argument(
+        (error.stderr or "").strip()
+    )
+    return (
+        f"command={command!r}; exit_code={error.returncode}; "
+        f"stdout={stdout!r}; stderr={stderr!r}"
+    )
 
 def _record_action(actions: List[str], message: str, *, stream_pip: bool) -> None:
     actions.append(message)
@@ -357,26 +473,39 @@ def get_install_state() -> Dict[str, Any]:
 
 
 def _install_cuda_torch(actions: List[str], state: Dict[str, Any], *, stream_pip: bool) -> bool:
-    torch_version = _base_version(state.get("torch_version"))
-    torchvision_version = _base_version(state.get("torchvision_version"))
-    if not torch_version:
-        logger.info(
-            "torch is not currently installed; falling back to %s for the CUDA install.",
-            _FALLBACK_TORCH_VERSION,
+    cuda_version = _parse_cuda_version(
+        str(state.get("nvidia_cuda_version") or "")
+    )
+    if cuda_version is None:
+        _record_action(
+            actions,
+            "Could not determine the NVIDIA driver CUDA capability from "
+            "nvidia-smi. CUDA PyTorch was not changed. Verify or update the "
+            "NVIDIA driver, then retry Prepare.",
+            stream_pip=stream_pip,
         )
-        torch_version = _FALLBACK_TORCH_VERSION
+        return False
 
-    cuda_version = _parse_cuda_version(str(state.get("nvidia_cuda_version") or ""))
+    candidates = _cuda_index_candidates(cuda_version)
+    if not candidates:
+        reported_version = state.get("nvidia_cuda_version")
+        _record_action(
+            actions,
+            "NVIDIA driver reports CUDA "
+            f"{reported_version}, but secure CUDA PyTorch requires driver "
+            "support for CUDA 12.6 or newer. Update the NVIDIA driver, then "
+            "retry Prepare. Keeping the existing PyTorch runtime; no packages "
+            "were changed.",
+            stream_pip=stream_pip,
+        )
+        return False
+
+    candidate = candidates[0]
+    label, index_url, runtime_version = candidate
+    torch_version, torchvision_version = _cuda_package_versions(label)
     fallback_index = _resolve_pypi_fallback_index()
 
-    # numpy lives on PyPI (not on download.pytorch.org). Install it once, up
-    # front, with the SAM3-friendly upper bound. Doing this OUTSIDE the
-    # CUDA-index pip call lets us drop --extra-index-url from the torch step,
-    # which previously let pip silently fall back to PyPI's CPU torch wheel
-    # whenever the CUDA index hit a transient network error (IncompleteRead,
-    # DNS failure, etc.). With +cuXXX local versions plus a single index, a
-    # broken CUDA host now produces a clean "could not find" error instead of
-    # leaving the user with CPU torch and no diagnostic.
+    # Numpy lives on PyPI, so validate its ABI constraint before changing Torch.
     numpy_constraint = _numpy_sam3_constraint()
     try:
         _run_pip(
@@ -390,54 +519,63 @@ def _install_cuda_torch(actions: List[str], state: Dict[str, Any], *, stream_pip
             stream=stream_pip,
         )
     except Exception as exc:
+        detail = _format_subprocess_error(exc)
+        message = (
+            f"{numpy_constraint} pre-install failed; CUDA PyTorch was not changed. "
+            f"Resolve the package-index error and retry Prepare: {detail}"
+        )
         _record_action(
             actions,
-            f"{numpy_constraint} pre-install failed (continuing): {exc}",
+            message,
             stream_pip=stream_pip,
         )
+        raise RuntimeError(message) from None
 
-    last_error: Optional[BaseException] = None
-    for label, index_url, _runtime_version in _cuda_index_candidates(cuda_version):
-        # Pin the explicit local-version label (e.g. ``2.12.0+cu126``) so pip
-        # cannot silently fall back to a CPU wheel from PyPI when the CUDA
-        # index is briefly unreachable. The CPU wheel on PyPI is published as
-        # plain ``2.12.0`` with no local-version suffix and does not match.
-        torch_pinned = f"torch=={torch_version}+{label}"
-        torchvision_pinned: Optional[str] = None
-        if torchvision_version:
-            torchvision_pinned = f"torchvision=={torchvision_version}+{label}"
-        packages = [torch_pinned]
-        if torchvision_pinned:
-            packages.append(torchvision_pinned)
-        _record_action(
-            actions,
-            f"Installing CUDA PyTorch from {label} for NVIDIA GPU: {', '.join(packages)}",
-            stream_pip=stream_pip,
+    torch_pinned = f"torch=={torch_version}+{label}"
+    torchvision_pinned = f"torchvision=={torchvision_version}+{label}"
+    packages = [torch_pinned, torchvision_pinned]
+    _record_action(
+        actions,
+        f"Installing CUDA PyTorch from {label} for NVIDIA GPU: {', '.join(packages)}",
+        stream_pip=stream_pip,
+    )
+    try:
+        _run_pip(
+            [
+                "install",
+                "--upgrade",
+                "--force-reinstall",
+                "--no-deps",
+                "--no-warn-script-location",
+                "--index-url",
+                index_url,
+                *packages,
+            ],
+            stream=stream_pip,
         )
-        try:
-            _run_pip(
-                [
-                    "install",
-                    "--upgrade",
-                    "--force-reinstall",
-                    "--no-deps",
-                    "--no-warn-script-location",
-                    "--index-url",
-                    index_url,
-                    *packages,
-                ],
-                stream=stream_pip,
-            )
-            if _torch_probe_subprocess().get("torch_cuda_build"):
-                return True
-            last_error = RuntimeError(f"{label} install completed, but torch.version.cuda is still empty")
-        except Exception as exc:
-            last_error = exc
-            _record_action(actions, f"CUDA PyTorch install from {label} failed: {exc}", stream_pip=stream_pip)
-    if last_error:
-        raise RuntimeError(f"Could not install a CUDA-enabled PyTorch build: {last_error}")
-    return False
+    except Exception as exc:
+        detail = _format_subprocess_error(exc)
+        message = f"CUDA PyTorch install from {label} failed: {detail}"
+        _record_action(actions, message, stream_pip=stream_pip)
+        raise RuntimeError(message) from None
 
+    fresh_probe = _torch_probe_subprocess()
+    if _cuda_state_matches_candidate(fresh_probe, candidate):
+        return True
+
+    expected_cuda = ".".join(str(part) for part in runtime_version)
+    message = (
+        f"{label} install verification failed; expected torch "
+        f"{torch_version}+{label}, torchvision {torchvision_version}+{label}, "
+        f"and usable CUDA {expected_cuda}; observed "
+        f"torch={fresh_probe.get('torch_version')!r}, "
+        f"torchvision={fresh_probe.get('torchvision_version')!r}, "
+        f"CUDA={fresh_probe.get('torch_cuda_build')!r}, "
+        f"available={fresh_probe.get('torch_cuda_available')!r}, "
+        f"error={fresh_probe.get('torch_probe_error')!r}."
+    )
+    _record_action(actions, message, stream_pip=stream_pip)
+    raise RuntimeError(message)
 
 def _install_sam3_runtime(actions: List[str], *, stream_pip: bool) -> None:
     missing = _missing_sam3_runtime_packages()
@@ -482,16 +620,26 @@ def repair_windows_torch_runtime(*, stream_pip: bool = False) -> Dict[str, Any]:
         return state
 
     installed_cuda_torch = False
-    if not state.get("torch_cuda_build"):
-        _install_cuda_torch(actions, state, stream_pip=stream_pip)
-        installed_cuda_torch = True
+    if not _is_supported_cuda_torch_state(state):
+        installed_cuda_torch = _install_cuda_torch(
+            actions,
+            state,
+            stream_pip=stream_pip,
+        )
+        if not installed_cuda_torch:
+            state["actions"] = actions
+            state["repaired"] = False
+            return state
     else:
         actions.append(f"CUDA PyTorch already installed ({state.get('torch_cuda_build')})")
 
     if not _env_truthy("SD_IMAGE_SORTER_SKIP_SAM3_RUNTIME_REPAIR"):
         _install_sam3_runtime(actions, stream_pip=stream_pip)
 
-    final_state = get_install_state()
+    final_state = dict(state)
+    final_state["sam3_missing_runtime_packages"] = (
+        _missing_sam3_runtime_packages()
+    )
     if installed_cuda_torch:
         final_state.update(_torch_probe_subprocess())
     final_state["actions"] = actions or ["No repair needed"]
@@ -505,8 +653,11 @@ def main() -> int:
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON output.")
     args = parser.parse_args()
 
-    state = get_install_state()
-    result = repair_windows_torch_runtime(stream_pip=not args.json) if args.auto else state
+    result = (
+        repair_windows_torch_runtime(stream_pip=not args.json)
+        if args.auto
+        else get_install_state()
+    )
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))

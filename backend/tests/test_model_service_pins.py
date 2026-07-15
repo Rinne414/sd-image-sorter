@@ -846,8 +846,10 @@ def test_prepare_sam3_fresh_download_skips_existing_and_assembles(
     downloaded = []
 
     monkeypatch.setattr(
-        model_service.platform, "system", lambda: "Darwin"
-    )  # skip ensure_group + repair
+        model_service,
+        "ensure_group",
+        lambda group: model_service.DependencyInstallResult((), False),
+    )
     monkeypatch.setattr(model_service, "get_sam3_model_dir", lambda: str(sam3_root))
     monkeypatch.setattr(model_service, "get_model_health", lambda: ready)
     # checkpoint_before is None (fresh install), refreshed path resolves after downloads.
@@ -881,7 +883,11 @@ def test_prepare_sam3_fresh_download_raises_when_checkpoint_incomplete(
 ):
     sam3_root = tmp_path / "sam3"
 
-    monkeypatch.setattr(model_service.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(
+        model_service,
+        "ensure_group",
+        lambda group: model_service.DependencyInstallResult((), False),
+    )
     monkeypatch.setattr(model_service, "get_sam3_model_dir", lambda: str(sam3_root))
     monkeypatch.setattr(model_service, "get_model_health", lambda: _base_health())
     monkeypatch.setattr(

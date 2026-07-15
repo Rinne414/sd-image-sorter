@@ -67,7 +67,7 @@ const localRuntimeLdPath = localRuntimeLibDirs.length
 const e2eFixtureRoot = path.join(repoRoot, '.tmp', 'e2e-model-fixtures')
 const e2eDataDir = path.join(repoRoot, '.tmp', `e2e-data-${basePort}`)
 const e2eDatabasePath = path.join(e2eDataDir, 'images.db')
-const e2eStubModulesDir = path.join(e2eFixtureRoot, 'python-stubs')
+const e2eStubModulesDir = path.join(e2eFixtureRoot, `python-stubs-${basePort}`)
 
 process.env.SD_IMAGE_SORTER_DATA_DIR = process.env.SD_IMAGE_SORTER_DATA_DIR || e2eDataDir
 process.env.SD_IMAGE_SORTER_DB_PATH = process.env.SD_IMAGE_SORTER_DB_PATH || e2eDatabasePath
@@ -120,6 +120,7 @@ function writeStubPackageMetadata(packageName: string, version: string) {
 }
 
 fs.mkdirSync(e2eFixtureRoot, { recursive: true })
+fs.rmSync(e2eStubModulesDir, { recursive: true, force: true })
 const artistRuntimeZip = path.join(e2eFixtureRoot, 'comfyui-lsnet-runtime.zip')
 const artistRuntimeSource = path.join(e2eFixtureRoot, 'comfyui-lsnet-runtime-source')
 const artistCheckpoint = path.join(e2eFixtureRoot, 'best_checkpoint.pth')
@@ -145,10 +146,10 @@ ensureFile(path.join(sam3BundleDir, 'model.safetensors'), 32 * 1024 * 1024, 's')
 for (const [sam3FileName, sam3FileContents] of Object.entries(sam3BundleSmallFiles)) {
   fs.writeFileSync(path.join(sam3BundleDir, sam3FileName), sam3FileContents)
 }
-writeStubModule('torch.py', `__version__ = '2.9.0+cu128'\nclass version:\n    cuda = '12.8'\nclass cuda:\n    @staticmethod\n    def is_available():\n        return True\n`)
-writeStubModule('transformers.py', `__version__ = '5.9.0'\n`)
+writeStubModule('torch.py', `__version__ = '2.13.0+cu126'\nclass version:\n    cuda = '12.6'\nclass cuda:\n    @staticmethod\n    def is_available():\n        return True\n`)
+writeStubModule('transformers.py', `__version__ = '5.6.2'\n`)
 writeStubModule('safetensors.py', `__version__ = '0.7.0'\n`)
-writeStubModule('timm.py', '')
+writeStubModule('timm.py', `__version__ = '1.0.26'\n`)
 writeStubModule('sam3/__init__.py', '')
 writeStubModule('einops.py', '')
 writeStubModule('hydra.py', '')
@@ -157,9 +158,9 @@ writeStubModule('pycocotools/__init__.py', '')
 writeStubModule('decord.py', '')
 writeStubModule('iopath/__init__.py', '')
 writeStubModule('cv2.py', '')
-writeStubPackageMetadata('torch', '2.9.0')
-writeStubPackageMetadata('transformers', '5.9.0')
-writeStubPackageMetadata('timm', '1.0.0')
+writeStubPackageMetadata('torch', '2.13.0+cu126')
+writeStubPackageMetadata('transformers', '5.6.2')
+writeStubPackageMetadata('timm', '1.0.26')
 writeStubPackageMetadata('safetensors', '0.7.0')
 
 // The onboarding tour's auto-start was retired (QA P3-4) so its completion

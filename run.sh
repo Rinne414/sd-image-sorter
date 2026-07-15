@@ -111,6 +111,27 @@ fi
 echo "[OK] Python $PY_VER detected."
 echo
 
+# Torch 2.13 has no Intel Mac wheel and its Apple Silicon wheel targets macOS 14.
+# Keep the core app available instead of silently installing advisory-heavy legacy Torch.
+if [ "${SD_IMAGE_SORTER_INSTALL_FULL_AI:-}" = "1" ] && [ "$(uname -s)" = "Darwin" ]; then
+    MAC_ARCH="$(uname -m)"
+    if [ "${MAC_ARCH}" != "arm64" ]; then
+        echo "[ERROR] Full AI setup requires Apple Silicon; Intel Mac is core-only."
+        echo "        Gallery, metadata, sorting, and ONNX features remain available."
+        echo "        Use Apple Silicon with macOS 14+, Windows, or Linux for Torch-backed features."
+        exit 1
+    fi
+
+    MACOS_VERSION="$(sw_vers -productVersion 2>/dev/null || true)"
+    MACOS_MAJOR="${MACOS_VERSION%%.*}"
+    if ! [[ "${MACOS_MAJOR}" =~ ^[0-9]+$ ]] || [ "${MACOS_MAJOR}" -lt 14 ]; then
+        echo "[ERROR] Full AI setup requires macOS 14 or newer on Apple Silicon."
+        echo "        Detected macOS: ${MACOS_VERSION:-unknown}."
+        echo "        Upgrade macOS or continue with the core feature set."
+        exit 1
+    fi
+fi
+
 # ── Detect first run ────────────────────────────────────────────
 FIRST_RUN=0
 if [ ! -d "backend/venv" ]; then
@@ -241,7 +262,7 @@ if [ "$NEED_INSTALL" -eq 1 ]; then
     HASH_REQUIREMENTS="${INSTALL_REQUIREMENTS}"
     if [ "${INSTALL_REQUIREMENTS}" = "backend/requirements.txt" ] && [ "$(uname -s)" = "Linux" ]; then
         echo "[INFO] Installing CPU PyTorch baseline for reliable Linux first run..."
-        if ! backend/venv/bin/python backend/launcher_pip.py install --index-url https://download.pytorch.org/whl/cpu torch==2.11.0 torchvision==0.26.0; then
+        if ! backend/venv/bin/python backend/launcher_pip.py install --index-url https://download.pytorch.org/whl/cpu torch==2.13.0 torchvision==0.28.0; then
             echo
             echo "[ERROR] Failed to install CPU PyTorch runtime."
             echo "        Check your internet connection and try again."

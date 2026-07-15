@@ -180,9 +180,7 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
         }, dependency_result)
 
     if normalized_model_id == "sam3":
-        dependency_result = _svc().DependencyInstallResult(installed_packages=())
-        if _svc().platform.system() != "Darwin":
-            dependency_result = _svc().ensure_group("sam3")
+        dependency_result = _svc().ensure_group("sam3")
         restart_result = _svc()._dependency_restart_result(normalized_model_id, dependency_result)
         if restart_result:
             return restart_result

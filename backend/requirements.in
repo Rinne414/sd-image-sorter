@@ -16,7 +16,10 @@ onnxruntime>=1.20.0; sys_platform == "linux" and python_version >= "3.13"
 onnxruntime==1.19.2; sys_platform == "darwin" and python_version < "3.13"
 onnxruntime>=1.20.0; sys_platform == "darwin" and python_version >= "3.13"
 onnxruntime-gpu>=1.21.0; sys_platform == "win32"
-Pillow>=10.0.0
+# Security floor: Pillow 12.3.0 fixes multiple untrusted-image parsing issues.
+Pillow>=12.3.0
+# Security floor: setuptools 83.0.0 fixes GHSA-h35f-9h28-mq5c, a Unicode-normalization exclusion bypass in macOS source distributions.
+setuptools>=83.0.0
 # numpy: see comment in requirements-core.in. Python 3.12 stays on 1.x ABI for
 # binary compat with the locked SAM3/torch/scipy/opencv wheels; Python 3.13
 # users get numpy 2.x because no cp313 wheel exists for numpy 1.26.4.
@@ -49,14 +52,11 @@ sortedcontainers>=2.4.0
 # (see vlm_providers/base.py make_async_client) instead of crashing the request.
 socksio>=1.0.0
 transformers>=5.6.0
-# torch / torchvision: PyTorch dropped macOS Intel (x86_64) wheels after 2.2.2.
-# Anyone still on a pre-Apple-Silicon Mac is pinned to that legacy version on
-# macOS Intel; everywhere else the resolver picks the latest matching torch
-# (currently 2.11.0 with cp310-cp313 wheels for Linux/Windows/macOS arm64).
-torch==2.2.2; sys_platform == "darwin" and platform_machine == "x86_64"
-torchvision==0.17.2; sys_platform == "darwin" and platform_machine == "x86_64"
-torch>=2.0.0; sys_platform != "darwin" or platform_machine != "x86_64"
-torchvision>=0.17.0; sys_platform != "darwin" or platform_machine != "x86_64"
+# Torch 2.13 is the first current branch without known advisories and with
+# setuptools 83 compatibility. Intel Mac has no matching wheel and stays
+# core-only; Apple Silicon requires macOS 14+, enforced before optional install.
+torch==2.13.0; sys_platform != "darwin" or platform_machine == "arm64"
+torchvision==0.28.0; sys_platform != "darwin" or platform_machine == "arm64"
 # opencv-python: 4.11.0.86 ships only macOS 13+ wheels. Pin older versions
 # for macOS so users on Big Sur (11) / Monterey (12) / Ventura (13) older
 # point releases still get a wheel instead of falling through to a slow

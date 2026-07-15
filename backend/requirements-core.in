@@ -2,15 +2,19 @@ fastapi>=0.109.0
 starlette<1.0
 uvicorn[standard]>=0.27.0
 uvloop>=0.19.0; sys_platform != "win32"
-# onnxruntime: Python 3.12 stays on the existing tested pins. Python 3.13
-# introduced cp313 wheels in the 1.20 line, so the >=3.13 branch picks the
-# newest 1.20+ build the resolver finds.
+# onnxruntime: Python 3.12 stays on the existing tested pins. Python 3.13 uses
+# current platform wheels. macOS pins 1.23.2, the newest release with both
+# x86_64 and arm64 cp313 wheels; newer releases are arm64-only.
 onnxruntime==1.25.0; sys_platform == "linux" and python_version < "3.13"
 onnxruntime>=1.20.0; sys_platform == "linux" and python_version >= "3.13"
-onnxruntime==1.19.2; sys_platform == "darwin"
+onnxruntime==1.19.2; sys_platform == "darwin" and python_version < "3.13"
+onnxruntime==1.23.2; sys_platform == "darwin" and python_version >= "3.13"
 onnxruntime==1.20.1; sys_platform == "win32" and python_version < "3.13"
 onnxruntime>=1.20.0; sys_platform == "win32" and python_version >= "3.13"
-Pillow>=10.0.0
+# Security floor: Pillow 12.3.0 fixes multiple untrusted-image parsing issues.
+Pillow>=12.3.0
+# Security floor: setuptools 83.0.0 fixes GHSA-h35f-9h28-mq5c, a Unicode-normalization exclusion bypass in macOS source distributions.
+setuptools>=83.0.0
 # numpy: 3.12 stays on the 1.x ABI (matches existing onnxruntime/SAM3 binary
 # builds, see ADR-AI-20260524 in docs/AI_DECISION_LOG.md). 3.13 has no cp313
 # wheel for numpy 1.26.4 (last 1.x release), so the resolver picks 2.x.

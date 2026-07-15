@@ -974,17 +974,31 @@ Response shape:
 ```
 
 #### POST /api/models/prepare
-Prepare or download a model/runtime.
+Starts model/runtime preparation in a background worker.
 
-For `model_id = "censor-legacy"`, a Civitai login wall now returns a structured `409 Conflict` instead of a generic `500`.
-The JSON payload includes:
+The request returns immediately with HTTP 200:
+
+```json
+{
+  "status": "downloading",
+  "model_id": "sam3",
+  "message": "Download started in background."
+}
+```
+
+Poll `GET /api/models/download-progress` and read `prepare_result` for completion, warnings, or actionable errors.
+
+Structured errors can include:
 
 - `error`
-- `type`
+- `error_type`
 - `message`
 - `provider`
 - `manual_steps`
+- `target_dir`
 - `external_url`
+
+`UnsupportedPlatformRuntime` keeps macOS core/ONNX features available while providing persistent steps for unsupported Torch or SAM3 runtimes.
 
 ### Censor
 

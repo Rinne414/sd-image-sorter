@@ -15,8 +15,7 @@ on an opaque error.
 """
 from __future__ import annotations
 
-import importlib
-import importlib.metadata
+import builtins
 
 
 import optional_dependencies
@@ -29,14 +28,26 @@ def _fake_install(installed_list):
     return _mock
 
 
-def _patch_module_already_installed(monkeypatch, version="999.0.0"):
+def _locked_version(package_name: str) -> str:
+    normalized = optional_dependencies._normalize_package_name(package_name)
+    locked_spec = optional_dependencies._load_requirement_version_map()[normalized]
+    prefix = f"{package_name}=="
+    if not locked_spec.startswith(prefix):
+        raise AssertionError(
+            f"Expected an exact release lock for {package_name}: {locked_spec}"
+        )
+    return locked_spec[len(prefix):]
+
+
+def _patch_module_already_installed(monkeypatch):
+    monkeypatch.setattr(optional_dependencies.platform, "system", lambda: "Windows")
     monkeypatch.setattr(
         optional_dependencies.importlib.util, "find_spec", lambda module: object()
     )
     monkeypatch.setattr(
         optional_dependencies.importlib.metadata,
         "version",
-        lambda package: version,
+        _locked_version,
     )
 
 
@@ -46,7 +57,7 @@ def test_dll_load_failure_triggers_reinstall(monkeypatch):
     installed: list[str] = []
     monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
 
-    real_import = importlib.import_module
+    real_import = builtins.__import__
 
     def import_with_dll_error(name, *args, **kwargs):
         if name == "ultralytics":
@@ -74,7 +85,7 @@ def test_import_error_still_triggers_reinstall(monkeypatch):
     installed: list[str] = []
     monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
 
-    real_import = importlib.import_module
+    real_import = builtins.__import__
 
     def import_with_module_error(name, *args, **kwargs):
         if name == "ultralytics":
@@ -93,7 +104,7 @@ def test_clean_import_does_not_trigger_reinstall(monkeypatch):
     installed: list[str] = []
     monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
 
-    real_import = importlib.import_module
+    real_import = builtins.__import__
 
     def import_returns_module(name, *args, **kwargs):
         if name == "ultralytics":
@@ -115,7 +126,7 @@ def test_dll_load_failure_for_fastembed(monkeypatch):
     installed: list[str] = []
     monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
 
-    real_import = importlib.import_module
+    real_import = builtins.__import__
 
     def import_with_dll_error(name, *args, **kwargs):
         if name == "fastembed":
@@ -134,7 +145,7 @@ def test_dll_load_failure_for_nudenet(monkeypatch):
     installed: list[str] = []
     monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
 
-    real_import = importlib.import_module
+    real_import = builtins.__import__
 
     def import_with_dll_error(name, *args, **kwargs):
         if name == "nudenet":

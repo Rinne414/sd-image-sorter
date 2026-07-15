@@ -1,4 +1,4 @@
--r requirements.txt
+-r requirements-core.txt
 
 pip-tools>=7.5.0
 pytest>=8.0.0

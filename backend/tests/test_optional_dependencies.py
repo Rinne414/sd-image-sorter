@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import platform
 import sys
+from pathlib import Path
+
+import pytest
 
 import optional_dependencies
 
@@ -11,16 +14,10 @@ def test_requirement_lock_map_uses_release_pins():
 
     lock_map = optional_dependencies._load_requirement_version_map()
 
-    # The universal lockfile (uv pip compile --universal) keeps per-platform
-    # pins for torch / torchvision / opencv-python because:
-    #   - PyTorch dropped macOS Intel (x86_64) wheels after 2.2.2, so darwin
-    #     x86_64 stays on torch 2.2.2 / torchvision 0.17.2 (numpy 1 only).
-    #   - opencv-python 4.11.0.86 ships only macOS 13+ wheels; older macOS
-    #     point releases (Big Sur / Monterey) need 4.10.0.84 (arm64) or
-    #     4.9.0.80 (x86_64), so darwin keeps the older pins.
-    #   - Linux / Windows / macOS arm64 on Python 3.10+ all get the latest
-    #     torch (2.11.0) and opencv (4.11.0.86).
-    expected_torch = "torch==2.2.2" if sys.platform == "darwin" and platform.machine() == "x86_64" else "torch==2.11.0"
+    # The universal lock keeps the security-supported Torch pair current.
+    # Intel Mac and pre-14 Apple Silicon are rejected before optional install.
+    # OpenCV retains its separate legacy macOS wheel compatibility markers.
+    expected_torch = "torch==2.13.0"
     expected_opencv = (
         "opencv-python==4.10.0.84"
         if sys.platform == "darwin" and platform.machine() == "arm64"
@@ -37,6 +34,102 @@ def test_requirement_lock_map_uses_release_pins():
     assert optional_dependencies._lock_package_spec("torch>=2.0.0") == expected_torch
 
 
+def test_torch_lock_excludes_vulnerable_macos_legacy_pins():
+    requirements_path = Path(__file__).resolve().parents[1] / "requirements.in"
+    requirements_text = requirements_path.read_text(encoding="utf-8")
+
+    assert "torch==2.2.2" not in requirements_text
+    assert "torch==2.10.0" not in requirements_text
+    assert "torchvision==0.17.2" not in requirements_text
+    assert "torchvision==0.25.0" not in requirements_text
+    assert (
+        'torch==2.13.0; sys_platform != "darwin" or platform_machine == "arm64"'
+        in requirements_text
+    )
+
+
+@pytest.mark.parametrize(
+    "group",
+    ("aesthetic", "artist", "sam3", "toriigate", "yolo"),
+)
+def test_torch_group_rejects_intel_macos_before_install(monkeypatch, group):
+    monkeypatch.setattr(optional_dependencies.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(optional_dependencies.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(
+        optional_dependencies,
+        "_needs_install",
+        lambda module_name, package_spec: False,
+    )
+
+    with pytest.raises(
+        optional_dependencies.UnsupportedOptionalDependencyError,
+        match="Intel Mac|CUDA-only",
+    ):
+        optional_dependencies.ensure_group(group)
+
+
+def test_torch_group_rejects_pre_14_macos_before_install(monkeypatch):
+    monkeypatch.setattr(optional_dependencies.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(optional_dependencies.platform, "machine", lambda: "arm64")
+    monkeypatch.setattr(
+        optional_dependencies.platform,
+        "mac_ver",
+        lambda: ("13.6.9", ("", "", ""), "arm64"),
+    )
+    monkeypatch.setattr(
+        optional_dependencies,
+        "_needs_install",
+        lambda module_name, package_spec: False,
+    )
+
+    with pytest.raises(
+        optional_dependencies.UnsupportedOptionalDependencyError,
+        match="macOS 14",
+    ):
+        optional_dependencies.ensure_group("toriigate")
+
+
+def test_torch_group_allows_macos_14_apple_silicon(monkeypatch):
+    monkeypatch.setattr(optional_dependencies.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(optional_dependencies.platform, "machine", lambda: "arm64")
+    monkeypatch.setattr(
+        optional_dependencies.platform,
+        "mac_ver",
+        lambda: ("14.7.1", ("", "", ""), "arm64"),
+    )
+    monkeypatch.setattr(
+        optional_dependencies,
+        "_needs_install",
+        lambda module_name, package_spec: False,
+    )
+
+    result = optional_dependencies.ensure_group("aesthetic")
+
+    assert result == optional_dependencies.DependencyInstallResult(
+        installed_packages=(),
+    )
+
+def test_sam3_group_rejects_macos_14_apple_silicon(monkeypatch):
+    monkeypatch.setattr(optional_dependencies.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(optional_dependencies.platform, "machine", lambda: "arm64")
+    monkeypatch.setattr(
+        optional_dependencies.platform,
+        "mac_ver",
+        lambda: ("14.7.1", ("", "", ""), "arm64"),
+    )
+    monkeypatch.setattr(
+        optional_dependencies,
+        "_needs_install",
+        lambda module_name, package_spec: False,
+    )
+
+    with pytest.raises(
+        optional_dependencies.UnsupportedOptionalDependencyError,
+        match="CUDA-only",
+    ):
+        optional_dependencies.ensure_group("sam3")
+
+
 def _fake_install(installed_list):
     """Return a mock install_packages that records calls and returns False (no DLL lock)."""
     def _mock(packages):
@@ -45,14 +138,59 @@ def _fake_install(installed_list):
     return _mock
 
 
+def _release_locked_version(package_name: str) -> str:
+    normalized = optional_dependencies._normalize_package_name(package_name)
+    locked_spec = optional_dependencies._load_requirement_version_map()[normalized]
+    operator, separator, version = locked_spec.partition("==")
+    if not separator or not operator or not version:
+        raise AssertionError(f"Expected an exact release lock for {package_name}: {locked_spec}")
+    return version
+
+@pytest.mark.parametrize(
+    ("installed_version", "package_spec", "expected"),
+    (
+        ("2.13.0+cu130", "torch==2.13.0", True),
+        ("2.13.0.post1", "torch==2.13.0", False),
+        ("2.13.0rc1", "torch==2.13.0", False),
+        ("2.13.1", "torch>=2.13.0", True),
+    ),
+)
+def test_installed_version_satisfies_uses_pep440(
+    monkeypatch,
+    installed_version,
+    package_spec,
+    expected,
+):
+    monkeypatch.setattr(
+        optional_dependencies.importlib.metadata,
+        "version",
+        lambda package_name: installed_version,
+    )
+
+    assert optional_dependencies._installed_version_satisfies(package_spec) is expected
+
+
+def test_installed_version_satisfies_rejects_invalid_installed_version(monkeypatch):
+    monkeypatch.setattr(
+        optional_dependencies.importlib.metadata,
+        "version",
+        lambda package_name: "not-a-version",
+    )
+
+    with pytest.raises(RuntimeError, match="invalid installed version"):
+        optional_dependencies._installed_version_satisfies("torch==2.13.0")
+
+
+
 def test_ensure_group_installs_missing_or_too_old_packages(monkeypatch):
     installed = []
 
+    monkeypatch.setattr(optional_dependencies.platform, "system", lambda: "Windows")
     monkeypatch.setattr(optional_dependencies.importlib.util, "find_spec", lambda module: object())
     monkeypatch.setattr(
         optional_dependencies.importlib.metadata,
         "version",
-        lambda package: "5.5.0" if package == "transformers" else "999.0.0",
+        lambda package: "5.5.0" if package == "transformers" else _release_locked_version(package),
     )
     monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
 
@@ -62,15 +200,60 @@ def test_ensure_group_installs_missing_or_too_old_packages(monkeypatch):
     assert result.installed_packages == ("transformers==5.6.2",)
     assert result.restart_recommended is True
 
+def test_ensure_group_upgrades_torch_to_release_lock(monkeypatch):
+    installed = []
+
+    monkeypatch.setattr(optional_dependencies.importlib.util, "find_spec", lambda module: object())
+    monkeypatch.setattr(optional_dependencies.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        optional_dependencies.importlib.metadata,
+        "version",
+        lambda package: {
+            "torch": "2.10.0",
+            "open-clip-torch": "3.3.0",
+        }[package],
+    )
+    monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
+
+    result = optional_dependencies.ensure_group("aesthetic")
+
+    assert installed == ["torch==2.13.0"]
+    assert result.installed_packages == ("torch==2.13.0",)
+
+def test_yolo_group_upgrades_transitive_torch_to_release_lock(monkeypatch):
+    installed = []
+
+    monkeypatch.setattr(optional_dependencies.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(optional_dependencies.importlib.util, "find_spec", lambda module: object())
+    monkeypatch.setitem(sys.modules, "ultralytics", type(sys)("ultralytics"))
+    monkeypatch.setattr(
+        optional_dependencies.importlib.metadata,
+        "version",
+        lambda package: (
+            "2.10.0"
+            if package == "torch"
+            else _release_locked_version(package)
+        ),
+    )
+    monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
+
+    result = optional_dependencies.ensure_group("yolo")
+
+    assert installed == ["torch==2.13.0"]
+    assert result.installed_packages == ("torch==2.13.0",)
+
+
+
 
 def test_toriigate_requires_transformers_version_with_qwen35_support(monkeypatch):
     installed = []
 
     monkeypatch.setattr(optional_dependencies.importlib.util, "find_spec", lambda module: object())
+    monkeypatch.setattr(optional_dependencies.platform, "system", lambda: "Windows")
     monkeypatch.setattr(
         optional_dependencies.importlib.metadata,
         "version",
-        lambda package: "5.5.0" if package == "transformers" else "999.0.0",
+        lambda package: "5.5.0" if package == "transformers" else _release_locked_version(package),
     )
     monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
 
@@ -85,7 +268,8 @@ def test_ensure_group_skips_already_satisfied_packages(monkeypatch):
     installed = []
 
     monkeypatch.setattr(optional_dependencies.importlib.util, "find_spec", lambda module: object())
-    monkeypatch.setattr(optional_dependencies.importlib.metadata, "version", lambda package: "999.0.0")
+    monkeypatch.setattr(optional_dependencies.importlib.metadata, "version", _release_locked_version)
+    monkeypatch.setattr(optional_dependencies.platform, "system", lambda: "Windows")
     monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
 
     result = optional_dependencies.ensure_group("aesthetic")

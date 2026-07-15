@@ -680,7 +680,15 @@ def test_core_requirements_exclude_heavy_ai_packages():
         for line in onnxruntime_lines
     )
     assert any(
-        line.startswith("onnxruntime==1.19.2") and 'sys_platform == "darwin"' in line
+        line.startswith("onnxruntime==1.19.2")
+        and 'python_full_version < "3.13"' in line
+        and 'sys_platform == "darwin"' in line
+        for line in onnxruntime_lines
+    )
+    assert any(
+        line.startswith("onnxruntime==1.23.2")
+        and 'python_full_version >= "3.13"' in line
+        and 'sys_platform == "darwin"' in line
         for line in onnxruntime_lines
     )
     assert any(
@@ -719,8 +727,72 @@ def test_prepare_flow_frontend_warns_when_restart_is_needed():
 
 
 def test_dev_requirements_keep_platform_specific_wheels_guarded():
-    """The dev lock must not regress to a Linux-only runtime closure."""
-    _assert_platform_specific_wheels_guarded(ROOT / "backend" / "requirements-dev.txt")
+    """The dev lock must stay core-only and installable on every CI platform."""
+    path = ROOT / "backend" / "requirements-dev.txt"
+    text = path.read_text(encoding="utf-8")
+    input_text = (ROOT / "backend" / "requirements-dev.in").read_text(encoding="utf-8")
+
+    normalized_lines = [
+        line.replace("'", '"')
+        for line in text.splitlines()
+        if line and not line.startswith(("#", " "))
+    ]
+    assert "uv pip compile --universal" in text
+    assert "--no-emit-package pip" in text
+    assert "--no-emit-package setuptools" not in text
+    assert "setuptools==83.0.0" in text
+
+    assert input_text.splitlines()[0] == "-r requirements-core.txt"
+    forbidden_prefixes = (
+        "torch==",
+        "torchvision==",
+        "ultralytics==",
+        "nvidia-",
+        "cuda-",
+        "triton==",
+        "triton-windows==",
+    )
+    assert not any(
+        line.startswith(forbidden_prefixes)
+        for line in normalized_lines
+    )
+
+    assert any(
+        line.startswith("onnxruntime==1.25.0")
+        and 'python_full_version < "3.13"' in line
+        and 'sys_platform == "linux"' in line
+        for line in normalized_lines
+    )
+    assert any(
+        line.startswith("onnxruntime==1.19.2")
+        and 'python_full_version < "3.13"' in line
+        and 'sys_platform == "darwin"' in line
+        for line in normalized_lines
+    )
+    assert any(
+        line.startswith("onnxruntime==1.23.2")
+        and 'python_full_version >= "3.13"' in line
+        and 'sys_platform == "darwin"' in line
+        for line in normalized_lines
+    )
+    assert any(
+        line.startswith("onnxruntime==1.20.1")
+        and 'python_full_version < "3.13"' in line
+        and 'sys_platform == "win32"' in line
+        for line in normalized_lines
+    )
+    assert any(
+        line.startswith("onnxruntime==1.26.0")
+        and 'python_full_version >= "3.13"' in line
+        and 'sys_platform == "linux"' in line
+        and 'sys_platform == "win32"' in line
+        for line in normalized_lines
+    )
+    assert any(
+        line.startswith("uvloop==0.22.1")
+        and 'sys_platform != "win32"' in line
+        for line in normalized_lines
+    )
 
 
 def test_linux_release_package_uses_linux_only_name():
@@ -1068,7 +1140,9 @@ def test_launchers_reject_python_older_than_runtime_lock():
     assert "backend\\mirror_probe_stdlib.py" in run_bat
     assert "--index-url \"!PIP_INDEX_URL!\"" in run_bat
     assert "macOS is not supported by this release package" in run_sh
-    assert "--index-url https://download.pytorch.org/whl/cpu torch==2.11.0 torchvision==0.26.0" in run_sh
+    assert "Full AI setup requires Apple Silicon" in run_sh
+    assert "Full AI setup requires macOS 14 or newer" in run_sh
+    assert "--index-url https://download.pytorch.org/whl/cpu torch==2.13.0 torchvision==0.28.0" in run_sh
     assert "requirements-linux-runtime.txt" in run_sh
     assert "HASH_REQUIREMENTS=\"${INSTALL_REQUIREMENTS}\"" in run_sh
     assert "md5sum \"${HASH_REQUIREMENTS}\"" in run_sh
@@ -1152,6 +1226,19 @@ def test_playwright_ci_inputs_are_tracked_or_generated():
     assert "suiteStorageState" in config
     assert "sd-image-sorter-onboarding-completed" not in config
     assert "scripts/build_review_dataset.py" in reader_live
+
+
+def test_playwright_ai_runtime_stubs_match_exact_lock():
+    config = (ROOT / "tests" / "e2e" / "playwright.config.ts").read_text(encoding="utf-8")
+
+    assert "fs.rmSync(e2eStubModulesDir, { recursive: true, force: true })" in config
+    assert "__version__ = '2.13.0+cu126'" in config
+    assert "cuda = '12.6'" in config
+    assert "writeStubPackageMetadata('torch', '2.13.0+cu126')" in config
+    assert "writeStubModule('transformers.py', `__version__ = '5.6.2'\\n`)" in config
+    assert "writeStubPackageMetadata('transformers', '5.6.2')" in config
+    assert "writeStubModule('timm.py', `__version__ = '1.0.26'\\n`)" in config
+    assert "writeStubPackageMetadata('timm', '1.0.26')" in config
 
 
 def test_frontend_i18n_and_censor_css_keep_safety_contracts():

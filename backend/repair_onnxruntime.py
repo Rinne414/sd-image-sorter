@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import platform
 import re
 import subprocess
@@ -42,7 +43,7 @@ import sys
 import tempfile
 from importlib import metadata
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional, TypedDict
 
 # Embedded Python (used by the portable Windows launcher) ships a
 # ``python312._pth`` file that fully controls ``sys.path`` and does NOT
@@ -54,6 +55,25 @@ from typing import Any, Dict, List, Optional
 _THIS_DIR = str(Path(__file__).resolve().parent)
 if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
+
+logger = logging.getLogger(__name__)
+
+GpuVendor = Literal["nvidia", "amd", "intel", "unknown"]
+
+
+class GpuDevice(TypedDict):
+    name: str
+    vendor: GpuVendor
+
+
+class GpuDetection(TypedDict):
+    vendors: List[GpuVendor]
+    primary: Optional[GpuVendor]
+    devices: List[GpuDevice]
+
+
+def _empty_gpu_detection() -> GpuDetection:
+    return {"vendors": [], "primary": None, "devices": []}
 
 
 def _version(dist_name: str) -> Optional[str]:
@@ -154,14 +174,30 @@ def _core_requirements_constraint_args() -> List[str]:
     return ["--constraint", str(constraints_path)]
 
 
-def _detect_linux_nvidia_gpu(result: Dict[str, Any]) -> Dict[str, Any]:
-    """NVIDIA-only detection on Linux via nvidia-smi.
+def _log_detection_warning(
+    *,
+    probe: str,
+    reason: str,
+    error: Optional[BaseException],
+) -> None:
+    fields: Dict[str, str] = {
+        "event": "gpu_detection_inconclusive",
+        "probe": probe,
+        "reason": reason,
+    }
+    if error is not None:
+        fields["error_type"] = type(error).__name__
+        fields["error"] = str(error)
+    message = (
+        "Windows CIM GPU detection failed; trying the NVIDIA driver CLI."
+        if probe == "windows-cim"
+        else "NVIDIA driver CLI GPU detection was inconclusive."
+    )
+    logger.warning(message, extra=fields)
 
-    onnxruntime-gpu is the only PyPI-published accelerated ONNX Runtime for
-    Linux and it is CUDA-only, so AMD / Intel GPUs are intentionally left
-    undetected here: they keep the CPU runtime instead of getting a package
-    that cannot use their hardware.
-    """
+
+def _detect_nvidia_gpu() -> GpuDetection:
+    """Detect NVIDIA GPUs through the vendor-supported driver CLI."""
     try:
         raw = subprocess.check_output(
             ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
@@ -169,96 +205,174 @@ def _detect_linux_nvidia_gpu(result: Dict[str, Any]) -> Dict[str, Any]:
             timeout=10,
             stderr=subprocess.DEVNULL,
         )
-    except Exception:
-        # nvidia-smi missing or failing means no usable NVIDIA driver.
-        return result
+    except (
+        FileNotFoundError,
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        OSError,
+    ) as exc:
+        _log_detection_warning(
+            probe="nvidia-smi",
+            reason="command_failed",
+            error=exc,
+        )
+        return _empty_gpu_detection()
 
     names = [line.strip() for line in raw.splitlines() if line.strip()]
     if not names:
-        return result
+        _log_detection_warning(
+            probe="nvidia-smi",
+            reason="empty_output",
+            error=None,
+        )
+        return _empty_gpu_detection()
 
-    result["devices"] = [{"name": name, "vendor": "nvidia"} for name in names]
-    result["vendors"] = ["nvidia"]
-    result["primary"] = "nvidia"
-    return result
-
-
-def _detect_gpu_vendor() -> Dict[str, Any]:
-    """Best-effort primary GPU vendor detection (Windows CIM / Linux nvidia-smi).
-
-    Returns a dict with:
-    - vendors: list of vendors present ("nvidia", "intel", "amd", "unknown")
-    - primary: preferred vendor for ONNX Runtime (nvidia > amd > intel > unknown)
-    - devices: list of {name, vendor} for diagnostic logging
-    """
-    result: Dict[str, Any] = {
-        "vendors": [],
-        "primary": None,
-        "devices": [],
+    devices: List[GpuDevice] = [
+        {"name": name, "vendor": "nvidia"}
+        for name in names
+    ]
+    return {
+        "devices": devices,
+        "vendors": ["nvidia"],
+        "primary": "nvidia",
     }
 
-    if platform.system() == "Linux":
-        return _detect_linux_nvidia_gpu(result)
 
-    if platform.system() != "Windows":
-        return result
+def _vendor_from_device_name(name: str) -> GpuVendor:
+    lowered = name.lower()
+    if "nvidia" in lowered:
+        return "nvidia"
+    if "amd" in lowered or "radeon" in lowered:
+        return "amd"
+    if "intel" in lowered:
+        return "intel"
+    return "unknown"
+
+
+def _primary_vendor(vendors: List[GpuVendor]) -> Optional[GpuVendor]:
+    for preferred in ("nvidia", "amd", "intel"):
+        if preferred in vendors:
+            return preferred
+    return vendors[0] if vendors else None
+
+
+def _parse_windows_cim_output(raw: str) -> GpuDetection:
+    parsed: object = json.loads(raw)
+    if isinstance(parsed, dict):
+        rows: List[object] = [parsed]
+    elif isinstance(parsed, list):
+        rows = list(parsed)
+    else:
+        raise TypeError(
+            "Windows CIM GPU output must be a JSON object or array."
+        )
+
+    devices: List[GpuDevice] = []
+    vendors: List[GpuVendor] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            raise TypeError("Each Windows CIM GPU row must be a JSON object.")
+        raw_name = row.get("Name")
+        if not isinstance(raw_name, str) or not raw_name.strip():
+            raise ValueError(
+                "Each Windows CIM GPU row must contain a non-empty string Name."
+            )
+
+        name = raw_name.strip()
+        lowered = name.lower()
+        if "virtual" in lowered and "nvidia" not in lowered:
+            continue
+        if "microsoft basic render" in lowered:
+            continue
+
+        vendor = _vendor_from_device_name(name)
+        devices.append({"name": name, "vendor": vendor})
+        if vendor not in vendors:
+            vendors.append(vendor)
+
+    return {
+        "devices": devices,
+        "vendors": vendors,
+        "primary": _primary_vendor(vendors),
+    }
+
+
+def _detect_windows_cim_gpu() -> Optional[GpuDetection]:
+    command = [
+        "powershell",
+        "-NoProfile",
+        "-Command",
+        (
+            "Get-CimInstance Win32_VideoController | "
+            "Select-Object Name | ConvertTo-Json -Compress"
+        ),
+    ]
+    try:
+        raw = subprocess.check_output(
+            command,
+            text=True,
+            timeout=10,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (
+        FileNotFoundError,
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        OSError,
+    ) as exc:
+        _log_detection_warning(
+            probe="windows-cim",
+            reason="command_failed",
+            error=exc,
+        )
+        return None
+
+    if not raw:
+        _log_detection_warning(
+            probe="windows-cim",
+            reason="empty_output",
+            error=None,
+        )
+        return None
 
     try:
-        command = [
-            "powershell",
-            "-NoProfile",
-            "-Command",
-            (
-                "Get-CimInstance Win32_VideoController | "
-                "Select-Object Name | ConvertTo-Json -Compress"
-            ),
-        ]
-        raw = subprocess.check_output(command, text=True, timeout=10).strip()
-        if not raw:
-            return result
+        detection = _parse_windows_cim_output(raw)
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        _log_detection_warning(
+            probe="windows-cim",
+            reason="invalid_output",
+            error=exc,
+        )
+        return None
 
-        parsed = json.loads(raw)
-        rows = parsed if isinstance(parsed, list) else [parsed]
-        vendors_seen: List[str] = []
-        for row in rows:
-            name = str(row.get("Name") or "").strip()
-            if not name:
-                continue
-            lowered = name.lower()
-            # Skip virtual adapters and Microsoft basic render (software fallback)
-            if "virtual" in lowered and "nvidia" not in lowered:
-                continue
-            if "microsoft basic render" in lowered:
-                continue
+    if not detection["devices"]:
+        _log_detection_warning(
+            probe="windows-cim",
+            reason="no_usable_devices",
+            error=None,
+        )
+    return detection
 
-            if "nvidia" in lowered:
-                vendor = "nvidia"
-            elif "amd" in lowered or "radeon" in lowered:
-                vendor = "amd"
-            elif "intel" in lowered:
-                vendor = "intel"
-            else:
-                vendor = "unknown"
 
-            result["devices"].append({"name": name, "vendor": vendor})
-            if vendor not in vendors_seen:
-                vendors_seen.append(vendor)
+def _detect_gpu_vendor() -> GpuDetection:
+    """Best-effort GPU vendor detection with a Windows NVIDIA fallback."""
+    system = platform.system()
+    if system == "Linux":
+        return _detect_nvidia_gpu()
+    if system != "Windows":
+        return _empty_gpu_detection()
 
-        result["vendors"] = vendors_seen
-        # Prefer NVIDIA > AMD > Intel > unknown for runtime selection.
-        # NVIDIA wins for hybrid laptops (Intel iGPU + NVIDIA dGPU).
-        for preferred in ("nvidia", "amd", "intel"):
-            if preferred in vendors_seen:
-                result["primary"] = preferred
-                break
-        if result["primary"] is None and vendors_seen:
-            result["primary"] = vendors_seen[0]
-    except Exception:
-        # Best-effort only. Fall through with empty result.
-        pass
+    cim_detection = _detect_windows_cim_gpu()
+    if (
+        cim_detection is not None
+        and cim_detection["primary"] in ("nvidia", "amd", "intel")
+    ):
+        return cim_detection
 
-    return result
-
+    nvidia_detection = _detect_nvidia_gpu()
+    if nvidia_detection["primary"] == "nvidia":
+        return nvidia_detection
+    return cim_detection or _empty_gpu_detection()
 
 def get_install_state() -> Dict[str, Any]:
     cpu_version = _version("onnxruntime")

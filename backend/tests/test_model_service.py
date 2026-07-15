@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import optional_dependencies
 
 from services import model_service
 
@@ -300,8 +301,36 @@ def test_prepare_model_unknown_id_is_domain_error():
         model_service.ModelService().prepare_model("not-a-model")
 
 
+def test_prepare_sam3_rejects_macos_before_checkpoint_or_download(monkeypatch):
+    ensure_calls = []
+
+    monkeypatch.setattr(model_service.platform, "system", lambda: "Darwin")
+
+    def reject_sam3(group):
+        ensure_calls.append(group)
+        raise optional_dependencies.UnsupportedOptionalDependencyError(
+            "SAM3 is CUDA-only and unavailable on macOS."
+        )
+
+    monkeypatch.setattr(model_service, "ensure_group", reject_sam3)
+    monkeypatch.setattr(
+        model_service,
+        "get_sam3_checkpoint_path",
+        lambda: pytest.fail("SAM3 platform validation must run before checkpoint access."),
+    )
+
+    with pytest.raises(
+        optional_dependencies.UnsupportedOptionalDependencyError,
+        match="CUDA-only",
+    ):
+        model_service.ModelService().prepare_model("sam3")
+
+    assert ensure_calls == ["sam3"]
+
+
 def test_prepare_sam3_existing_checkpoint_reports_runtime_gap(monkeypatch):
     checkpoint = "/models/sam3/facebook-sam3-modelscope/model.safetensors"
+    repair_calls: list[bool] = []
     health = _fake_health()
     health["censor"]["sam3"] = {
         "available": False,
@@ -315,6 +344,11 @@ def test_prepare_sam3_existing_checkpoint_reports_runtime_gap(monkeypatch):
     monkeypatch.setattr(model_service, "get_sam3_checkpoint_path", lambda: checkpoint)
     monkeypatch.setattr(model_service, "get_model_health", lambda: health)
     monkeypatch.setattr(model_service, "ensure_group", lambda group: model_service.DependencyInstallResult((), False))
+    monkeypatch.setattr(
+        model_service,
+        "_repair_sam3_runtime_if_possible",
+        lambda: repair_calls.append(True) or {"attempted": True, "ok": False},
+    )
 
     result = model_service.ModelService().prepare_model("sam3")
 
@@ -324,6 +358,8 @@ def test_prepare_sam3_existing_checkpoint_reports_runtime_gap(monkeypatch):
     assert result["missing_dependency_packages"] == ["transformers", "safetensors"]
     assert "checkpoint is installed" in result["message"]
     assert "CPU-only PyTorch" in result["message"]
+    assert result["runtime_repair"] == {"attempted": True, "ok": False}
+    assert repair_calls == [True]
 
 
 def test_sam3_default_download_urls_do_not_fallback_to_sam2_checkpoint(monkeypatch):

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import subprocess
+import pytest
+
 
 import repair_onnxruntime
 
@@ -466,6 +468,85 @@ def _linux_install_state(**overrides):
     }
     state.update(overrides)
     return state
+
+
+def test_windows_detect_gpu_vendor_falls_back_to_nvidia_smi_when_cim_denied(monkeypatch):
+    monkeypatch.setattr(repair_onnxruntime.platform, "system", lambda: "Windows")
+    calls = []
+
+    def fake_check_output(command, **kwargs):
+        calls.append(tuple(command))
+        if command[0] == "powershell":
+            raise subprocess.CalledProcessError(1, command)
+        assert command[0] == "nvidia-smi"
+        return "NVIDIA GeForce RTX 3090\n"
+
+    monkeypatch.setattr(repair_onnxruntime.subprocess, "check_output", fake_check_output)
+
+    result = repair_onnxruntime._detect_gpu_vendor()
+
+    assert result["primary"] == "nvidia"
+    assert result["vendors"] == ["nvidia"]
+    assert result["devices"] == [
+        {"name": "NVIDIA GeForce RTX 3090", "vendor": "nvidia"},
+    ]
+    assert [call[0] for call in calls] == ["powershell", "nvidia-smi"]
+
+
+def test_windows_detect_gpu_vendor_falls_back_to_nvidia_smi_when_cim_is_empty(monkeypatch):
+    monkeypatch.setattr(repair_onnxruntime.platform, "system", lambda: "Windows")
+    calls = []
+
+    def fake_check_output(command, **kwargs):
+        calls.append(tuple(command))
+        if command[0] == "powershell":
+            return ""
+        assert command[0] == "nvidia-smi"
+        return "NVIDIA GeForce RTX 4070 Laptop GPU\n"
+
+    monkeypatch.setattr(repair_onnxruntime.subprocess, "check_output", fake_check_output)
+
+    result = repair_onnxruntime._detect_gpu_vendor()
+
+    assert result["primary"] == "nvidia"
+    assert result["vendors"] == ["nvidia"]
+    assert result["devices"] == [
+        {"name": "NVIDIA GeForce RTX 4070 Laptop GPU", "vendor": "nvidia"},
+    ]
+    assert [call[0] for call in calls] == ["powershell", "nvidia-smi"]
+
+@pytest.mark.parametrize(
+    "cim_output",
+    (
+        "not-json",
+        '[{"Name":"Microsoft Basic Render Driver"}]',
+    ),
+)
+def test_windows_detect_gpu_vendor_falls_back_when_cim_has_no_usable_device(
+    monkeypatch,
+    cim_output,
+):
+    monkeypatch.setattr(repair_onnxruntime.platform, "system", lambda: "Windows")
+    calls = []
+
+    def fake_check_output(command, **kwargs):
+        calls.append(tuple(command))
+        if command[0] == "powershell":
+            return cim_output
+        assert command[0] == "nvidia-smi"
+        return "NVIDIA GeForce RTX 3090\n"
+
+    monkeypatch.setattr(repair_onnxruntime.subprocess, "check_output", fake_check_output)
+
+    result = repair_onnxruntime._detect_gpu_vendor()
+
+    assert result == {
+        "primary": "nvidia",
+        "vendors": ["nvidia"],
+        "devices": [{"name": "NVIDIA GeForce RTX 3090", "vendor": "nvidia"}],
+    }
+    assert [call[0] for call in calls] == ["powershell", "nvidia-smi"]
+
 
 
 def test_linux_detect_gpu_vendor_parses_nvidia_smi(monkeypatch):

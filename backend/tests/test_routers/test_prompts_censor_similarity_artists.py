@@ -1710,6 +1710,37 @@ class TestSimilarityRouterValidation:
         assert "system Python environment" in pr["message"]
         assert any("run-portable.bat" in step for step in pr["manual_steps"])
 
+    def test_prepare_unsupported_platform_returns_persistent_guidance(self, test_client, monkeypatch):
+        import time
+        from routers import models as models_router
+        from services import model_service
+        from optional_dependencies import UnsupportedOptionalDependencyError
+
+        def raise_unsupported_platform(self, model_id, source, variant):
+            raise UnsupportedOptionalDependencyError(
+                "SAM3 is CUDA-only in the current verified product runtime and is unavailable on macOS."
+            )
+
+        monkeypatch.setattr(model_service.ModelService, "prepare_model", raise_unsupported_platform)
+        models_router._prepare_result.update(active=False, model_id="", status="", message="", error="")
+
+        response = test_client.post("/api/models/prepare", json={"model_id": "sam3"})
+        assert response.status_code == 200
+
+        for _ in range(50):
+            time.sleep(0.05)
+            prog = test_client.get("/api/models/download-progress").json()
+            pr = prog.get("prepare_result", {})
+            if not pr.get("active") and pr.get("status") == "error":
+                break
+
+        assert pr["status"] == "error"
+        assert pr["error_type"] == "UnsupportedPlatformRuntime"
+        assert "unavailable on macOS" in pr["message"]
+        assert pr["provider"] == "Torch / CUDA runtime"
+        assert any("core Gallery" in step for step in pr["manual_steps"])
+        assert any("NVIDIA CUDA" in step for step in pr["manual_steps"])
+
     def test_prepare_censor_legacy_bad_archive_returns_structured_download_failure(self, test_client, monkeypatch):
         import time
         from routers import models as models_router

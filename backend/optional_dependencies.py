@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from typing import Iterable, Sequence
 
 from packaging.markers import InvalidMarker, Marker
+from packaging.requirements import InvalidRequirement, Requirement
+from packaging.version import InvalidVersion, Version
 
 
 @dataclass(frozen=True)
@@ -30,6 +32,10 @@ class UnsafeDependencyInstallError(RuntimeError):
     """Raised when optional packages would be installed outside the app venv."""
 
 
+class UnsupportedOptionalDependencyError(RuntimeError):
+    """Raised when a dependency group has no security-supported platform build."""
+
+
 _TRITON_PACKAGE = "triton-windows" if sys.platform == "win32" else "triton>=3.0.0"
 
 OPTIONAL_DEPENDENCY_GROUPS: dict[str, tuple[str, ...]] = {
@@ -37,7 +43,7 @@ OPTIONAL_DEPENDENCY_GROUPS: dict[str, tuple[str, ...]] = {
     "aesthetic": ("torch>=2.0.0", "open-clip-torch>=2.24.0"),
     "artist": ("torch>=2.0.0", "transformers>=5.6.0", "timm>=0.9.0", "safetensors>=0.4.0"),
     "nudenet": ("nudenet>=3.0.0",),
-    "yolo": ("ultralytics>=8.4.0",),
+    "yolo": ("torch>=2.0.0", "ultralytics>=8.4.0"),
     "sam3": (
         "torch>=2.0.0",
         "transformers>=5.6.0",
@@ -47,6 +53,61 @@ OPTIONAL_DEPENDENCY_GROUPS: dict[str, tuple[str, ...]] = {
     "toriigate": ("torch>=2.0.0", "transformers>=5.6.0", "safetensors>=0.4.0"),
     "translation": ("translators==6.0.4",),
 }
+
+TORCH_DEPENDENCY_GROUPS: frozenset[str] = frozenset(
+    {"aesthetic", "artist", "sam3", "toriigate", "yolo"}
+)
+
+
+def _torch_runtime_support_error(
+    system: str,
+    machine: str,
+    macos_version: str,
+) -> str | None:
+    if system != "Darwin":
+        return None
+    if machine.lower() != "arm64":
+        return (
+            "Full AI Torch features are unavailable on Intel Mac because "
+            "PyTorch no longer publishes a security-supported Intel Mac wheel. "
+            "Core Gallery, metadata, sorting, and ONNX features remain available. "
+            "Use Apple Silicon with macOS 14 or newer, Windows, or Linux for "
+            "Torch-backed features."
+        )
+
+    version_match = re.match(r"^(\d+)", macos_version.strip())
+    macos_major = int(version_match.group(1)) if version_match else None
+    if macos_major is None or macos_major < 14:
+        detected_version = macos_version.strip() or "unknown"
+        return (
+            "Full AI Torch features require macOS 14 or newer on Apple Silicon "
+            "because the security-supported Torch 2.13 wheel targets macOS 14. "
+            f"Detected macOS version: {detected_version}. Upgrade macOS or "
+            "continue with the core features."
+        )
+    return None
+
+
+def _validate_optional_group_platform(group: str) -> None:
+    if group not in TORCH_DEPENDENCY_GROUPS:
+        return
+
+    system = platform.system()
+    if group == "sam3" and system == "Darwin":
+        raise UnsupportedOptionalDependencyError(
+            "SAM3 is CUDA-only in the current verified product runtime and "
+            "is unavailable on macOS. Core Gallery, metadata, sorting, and "
+            "ONNX features remain available."
+        )
+
+    support_error = _torch_runtime_support_error(
+        system,
+        platform.machine(),
+        platform.mac_ver()[0],
+    )
+    if support_error is not None:
+        raise UnsupportedOptionalDependencyError(support_error)
+
 
 SOFT_DEPENDENCY_GROUPS: dict[str, tuple[tuple[str, str], ...]] = {
     "artist": (("triton", _TRITON_PACKAGE),),
@@ -58,7 +119,7 @@ GROUP_IMPORTS: dict[str, tuple[str, ...]] = {
     "aesthetic": ("torch", "open_clip"),
     "artist": ("torch", "transformers", "timm", "safetensors"),
     "nudenet": ("nudenet",),
-    "yolo": ("ultralytics",),
+    "yolo": ("torch", "ultralytics"),
     "sam3": ("torch", "transformers", "safetensors", "cv2"),
     "toriigate": ("torch", "transformers", "safetensors"),
     "translation": ("translators",),
@@ -144,33 +205,35 @@ def missing_imports(module_names: Iterable[str]) -> list[str]:
     return [module_name for module_name in module_names if importlib.util.find_spec(module_name) is None]
 
 
-def _version_tuple(version: str) -> tuple[int, ...]:
-    parts = []
-    for part in re.split(r"[.+!-]", version):
-        if not part.isdigit():
-            break
-        parts.append(int(part))
-    return tuple(parts)
-
-
 def _installed_version_satisfies(package_spec: str) -> bool:
-    match = re.match(r"^([A-Za-z0-9_.-]+)\s*(==|>=)\s*([^;\[]+)", package_spec)
-    if not match:
-        return True
-    package_name, operator, required_version = match.groups()
     try:
-        installed_version = importlib.metadata.version(package_name)
+        requirement = Requirement(package_spec)
+    except InvalidRequirement as exc:
+        raise ValueError(
+            f"Invalid optional dependency requirement {package_spec!r}: {exc}"
+        ) from exc
+
+    if not requirement.specifier:
+        return True
+
+    try:
+        installed_text = importlib.metadata.version(requirement.name)
     except importlib.metadata.PackageNotFoundError:
         return False
 
-    installed = _version_tuple(installed_version)
-    required = _version_tuple(required_version.strip())
-    if not installed or not required:
-        return True
-    if operator == "==":
-        return installed == required
-    return installed >= required
+    try:
+        installed_version = Version(installed_text)
+    except InvalidVersion as exc:
+        raise RuntimeError(
+            f"Package {requirement.name!r} reported invalid installed version "
+            f"{installed_text!r} while checking {package_spec!r}. Reinstall the "
+            "exact package from the application lock."
+        ) from exc
 
+    return requirement.specifier.contains(
+        installed_version,
+        prereleases=None,
+    )
 
 def _needs_install(module_name: str, package_spec: str) -> bool:
     """Check if a module needs installation.
@@ -321,7 +384,7 @@ def ensure_imports(module_names: Iterable[str]) -> DependencyInstallResult:
     for module_name in module_names:
         package_spec = IMPORT_TO_PACKAGE_HINT.get(module_name, module_name)
         locked_package = _lock_package_spec(package_spec)
-        if _needs_install(module_name, package_spec) and locked_package not in packages:
+        if _needs_install(module_name, locked_package) and locked_package not in packages:
             packages.append(locked_package)
     dll_locked = install_packages(packages)
     return DependencyInstallResult(
@@ -331,6 +394,7 @@ def ensure_imports(module_names: Iterable[str]) -> DependencyInstallResult:
 
 
 def ensure_group(group: str) -> DependencyInstallResult:
+    _validate_optional_group_platform(group)
     packages = OPTIONAL_DEPENDENCY_GROUPS.get(group)
     imports = GROUP_IMPORTS.get(group)
     if not packages or imports is None:
@@ -339,7 +403,7 @@ def ensure_group(group: str) -> DependencyInstallResult:
     packages_to_install = []
     for module_name, package in zip(imports, packages):
         locked_package = _lock_package_spec(package)
-        if _needs_install(module_name, package) and locked_package not in packages_to_install:
+        if _needs_install(module_name, locked_package) and locked_package not in packages_to_install:
             packages_to_install.append(locked_package)
 
     dll_locked = install_packages(packages_to_install)
@@ -367,7 +431,7 @@ def ensure_group_with_soft_deps(group: str) -> DependencyInstallResult:
     soft_installed: list[str] = []
     for module_name, package_spec in soft_entries:
         locked_package = _lock_package_spec(package_spec)
-        if not _needs_install(module_name, package_spec):
+        if not _needs_install(module_name, locked_package):
             continue
         try:
             install_packages([locked_package])

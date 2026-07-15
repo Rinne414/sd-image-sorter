@@ -14,7 +14,10 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from optional_dependencies import UnsafeDependencyInstallError
+from optional_dependencies import (
+    UnsafeDependencyInstallError,
+    UnsupportedOptionalDependencyError,
+)
 from services.model_service import (
     ExternalAuthRequiredError,
     ModelPreparationFailedError,
@@ -187,6 +190,29 @@ def _run_prepare_blocking(service: ModelService, model_id: str, source: Optional
                 manual_steps=list(exc.payload.get("manual_steps") or []),
                 target_dir=str(exc.payload.get("target_dir") or ""),
                 external_url=str(exc.payload.get("external_url") or ""),
+            )
+    except UnsupportedOptionalDependencyError as exc:
+        message = str(exc)
+        normalized_model_id = model_id.strip().lower()
+        manual_steps = (
+            [
+                "Keep using the core Gallery, metadata, sorting, and ONNX features on this Mac.",
+                "Use a Windows or Linux machine with an NVIDIA CUDA GPU for SAM3.",
+            ]
+            if normalized_model_id == "sam3"
+            else [
+                "Keep using the core Gallery, metadata, sorting, and ONNX features on this Mac.",
+                "Use Apple Silicon with macOS 14 or newer, Windows, or Linux for Torch-backed AI features.",
+            ]
+        )
+        with _prepare_lock:
+            _prepare_result.update(
+                status="error",
+                error=message,
+                message=message,
+                error_type="UnsupportedPlatformRuntime",
+                provider="Torch / CUDA runtime",
+                manual_steps=manual_steps,
             )
     except UnsafeDependencyInstallError as exc:
         message = str(exc)

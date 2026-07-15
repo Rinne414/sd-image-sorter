@@ -14,7 +14,7 @@ LOCK_INPUT_HASH_PREFIX = "# lock-input-sha256: "
 LOCK_TARGETS = {
     "requirements-core.txt": ("requirements-core.in",),
     "requirements.txt": ("requirements.in",),
-    "requirements-dev.txt": ("requirements.in", "requirements.txt", "requirements-dev.in"),
+    "requirements-dev.txt": ("requirements-core.in", "requirements-core.txt", "requirements-dev.in"),
 }
 
 
@@ -88,7 +88,8 @@ def _check_lockfile(lock_name: str, *, write: bool) -> bool:
         f"{', '.join(f'backend/{name}' for name in LOCK_TARGETS[lock_name])}"
     )
     print(
-        "[lock] Re-run pip-compile as needed, then refresh embedded lock hashes with:\n"
+        "[lock] Re-run the uv universal compile command recorded at the top of "
+        "each lock file, then refresh embedded lock hashes with:\n"
         "  python scripts/check_lockfiles.py --write"
     )
     return False
