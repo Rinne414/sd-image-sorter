@@ -71,6 +71,10 @@ async function gotoManualSetup(page: Page, seeds?: Record<string, string>): Prom
     }, seeds)
   }
   await page.goto('/')
+  await openManualSetupAfterNavigation(page)
+}
+
+async function openManualSetupAfterNavigation(page: Page): Promise<void> {
   await page.waitForLoadState('domcontentloaded')
   await page.waitForFunction(() => {
     const w = window as ManualWin
@@ -103,6 +107,7 @@ test('manual sort start stays in the first viewport and gives actionable feedbac
   const pageFailures: string[] = []
   const failedApiRequests: string[] = []
   const failedApiResponses: string[] = []
+  let documentNavigationActive = false
 
   page.on('console', (message) => {
     if (message.type() === 'error' || message.type() === 'warning') {
@@ -116,6 +121,15 @@ test('manual sort start stays in the first viewport and gives actionable feedbac
     // Scope refreshes deliberately cancel the previous count request through
     // AbortController; that cancellation is not an HTTP or runtime failure.
     if (url.pathname === '/api/images/count' && errorText === 'net::ERR_ABORTED') return
+    // Reloading between desktop viewport checks cancels image-element fetches
+    // from the previous document. Keep every other thumbnail failure visible.
+    if (
+      documentNavigationActive &&
+      request.method() === 'GET' &&
+      request.resourceType() === 'image' &&
+      url.pathname.startsWith('/api/image-thumbnail/') &&
+      errorText === 'net::ERR_ABORTED'
+    ) return
     if (url.pathname.startsWith('/api/')) {
       failedApiRequests.push(`${request.method()} ${url.pathname}: ${errorText}`)
     }
@@ -139,7 +153,13 @@ test('manual sort start stays in the first viewport and gives actionable feedbac
 
   for (const viewport of MANUAL_SORT_DESKTOP_VIEWPORTS) {
     await page.setViewportSize(viewport)
-    await gotoManualSetup(page)
+    documentNavigationActive = true
+    try {
+      await page.goto('/')
+    } finally {
+      documentNavigationActive = false
+    }
+    await openManualSetupAfterNavigation(page)
 
     const startButton = page.locator('#btn-start-sorting')
     const actionArea = page.locator('#sort-setup-actions')
