@@ -321,10 +321,9 @@ Object.assign(window.ArtistIdent, {
         const progressContainer = document.getElementById('artist-progress-container');
         const progressFill = document.getElementById('artist-progress-fill');
         const progressText = document.getElementById('artist-progress-text');
-        const selectedIds = window.App?.AppState?.selectedIds;
-        const normalizedSelectedIds = selectedIds instanceof Set ? selectedIds : new Set(selectedIds || []);
+        const selectedImageIds = this._getExplicitGallerySelectionIds();
 
-        if (normalizedSelectedIds.size === 0) {
+        if (selectedImageIds.length === 0) {
             showToast(this.tText('No images selected', '没有选中图片'), 'warning');
             return;
         }
@@ -355,18 +354,18 @@ Object.assign(window.ArtistIdent, {
                     'artist.identifyingSelected',
                     'Identifying {count} selected image(s)...',
                     '正在识别 {count} 张已选图片...',
-                    { count: normalizedSelectedIds.size }
+                    { count: selectedImageIds.length }
                 );
             }
 
             await window.App.API.post(
                 '/api/artists/identify-batch',
-                this._getIdentifyPayload(Array.from(normalizedSelectedIds)),
+                this._getIdentifyPayload(selectedImageIds),
             );
 
             const progress = await this.pollProgress();
             await this.loadStats();
-            const completion = this._buildCompletionToast(progress, normalizedSelectedIds.size);
+            const completion = this._buildCompletionToast(progress, selectedImageIds.length);
             showToast(completion.message, completion.level);
 
         } catch (e) {

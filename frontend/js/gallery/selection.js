@@ -121,8 +121,36 @@ Object.assign(window.Gallery, {
     },
 
     toggleSelection(imageId) {
-        const { AppState, updateSelectionState, updateSelectionUI } = getGalleryAppContext();
+        const { AppState, updateSelectionState, updateSelectionUI, showToast } = getGalleryAppContext();
         const normalizedImageId = Number.isFinite(Number(imageId)) ? Number(imageId) : imageId;
+
+        const filteredTokenActive = AppState.selectionScope === 'filtered'
+            && Boolean(AppState.selectionToken)
+            && window.App?.isFilteredSelectionActiveForCurrentFilters?.();
+        if (filteredTokenActive) {
+            const currentlySelected = isGalleryImageSelected(AppState, normalizedImageId);
+            const nextExcludedIds = new Set(AppState.selectedIds || []);
+            if (currentlySelected) {
+                nextExcludedIds.add(normalizedImageId);
+            } else {
+                nextExcludedIds.delete(normalizedImageId);
+            }
+            const updateExclusions = window.App?.updateFilteredSelectionExclusions;
+            const translatedFailure = window.I18n?.t?.('selection.exclusionRefreshFailed');
+            const failureMessage = translatedFailure
+                && translatedFailure !== 'selection.exclusionRefreshFailed'
+                ? translatedFailure
+                : 'Could not update the filtered selection. The previous selection was restored.';
+            if (typeof updateExclusions !== 'function') {
+                showToast?.(`${failureMessage} Selection refresh is unavailable.`, 'error');
+                return;
+            }
+            Promise.resolve(updateExclusions(nextExcludedIds)).catch((error) => {
+                const reason = error instanceof Error ? error.message : String(error);
+                showToast?.(`${failureMessage} ${reason}`, 'error');
+            });
+            return;
+        }
 
         const isNowSelected = !AppState.selectedIds.has(normalizedImageId);
 

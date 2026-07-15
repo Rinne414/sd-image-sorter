@@ -157,13 +157,12 @@
         },
 
         _getGallerySelectedIds() {
-            if (typeof window.getSelectedGalleryIds === 'function') {
-                try { return window.getSelectedGalleryIds() || []; } catch {}
-            }
-            if (window.AppState && window.AppState.selectedIds) {
-                try { return Array.from(window.AppState.selectedIds); } catch {}
-            }
-            return [];
+            const selectedIds = window.AppFilterAccess?.getSelectedImageIds?.();
+            return Array.isArray(selectedIds)
+                ? selectedIds
+                    .map((id) => Number(id))
+                    .filter((id) => Number.isFinite(id) && id > 0)
+                : [];
         },
 
         async _resolveGallerySelectionIds() {
@@ -171,8 +170,7 @@
             if (explicit.length > 0) return explicit;
 
             const app = window.App || {};
-            const state = app.AppState || window.AppState || {};
-            const token = state.selectionScope === 'filtered' ? state.selectionToken : null;
+            const token = window.AppFilterAccess?.getActiveSelectionToken?.() || null;
             const api = app.API;
             if (!token || !api || typeof api.getSelectionChunk !== 'function') {
                 return [];

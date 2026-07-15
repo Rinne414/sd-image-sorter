@@ -16,13 +16,20 @@ function getSelectedGalleryExamples(ids, limit = 5) {
 
 function getSelectedGalleryCount() {
     if (AppState.selectionScope === 'filtered' && AppState.selectionToken) {
-        return Math.max(0, Number(AppState.selectionTotal || AppState.selectedIds?.size || 0) || 0);
+        const selectionTotal = Number(AppState.selectionTotal);
+        return Number.isFinite(selectionTotal) ? Math.max(0, selectionTotal) : 0;
     }
     return AppState.selectedIds?.size || 0;
 }
 
 function getActiveSelectionTokenForActions() {
     if (AppState.selectionScope !== 'filtered' || !AppState.selectionToken) {
+        return null;
+    }
+    if (isFilteredSelectionTokenRefreshPending()) {
+        return null;
+    }
+    if (getSelectedGalleryCount() === 0) {
         return null;
     }
     if (AppState.selectionFilterKey !== getSelectionFilterCacheKey(AppState.filters)) {
@@ -32,7 +39,9 @@ function getActiveSelectionTokenForActions() {
 }
 
 function isFilteredSelectionActiveForCurrentFilters() {
-    return Boolean(getActiveSelectionTokenForActions());
+    return AppState.selectionScope === 'filtered'
+        && Boolean(AppState.selectionToken)
+        && AppState.selectionFilterKey === getSelectionFilterCacheKey(AppState.filters);
 }
 
 function clearGallerySelectionAfterBulkAction() {
@@ -47,6 +56,9 @@ function clearGallerySelectionAfterBulkAction() {
 }
 
 function getSelectedGalleryIds() {
+    if (AppState.selectionScope === 'filtered' && AppState.selectionToken) {
+        return [];
+    }
     return Array.from(AppState.selectedIds)
         .map((id) => Number(id))
         .filter((id) => Number.isFinite(id) && id > 0);

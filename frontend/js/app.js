@@ -141,6 +141,8 @@ function buildAppContext() {
         emitSelectionStateChanged,
         getSelectedGalleryCount,
         isFilteredSelectionActiveForCurrentFilters,
+        isFilteredSelectionTokenRefreshPending,
+        updateFilteredSelectionExclusions,
         showConfirm,
         showRandomImage,
         showAnalytics,

@@ -52,6 +52,9 @@ function getSelectionScopeSummaryText(scope = AppState.selectionScope || 'visibl
         return appT('selection.scopeLoaded', 'Selected from loaded gallery items');
     }
     if (scope === 'filtered') {
+        if (isFilteredSelectionTokenRefreshPending()) {
+            return appT('selection.scopeFilteredUpdating', 'Updating filtered selection...');
+        }
         return AppState.selectionToken
             ? appT('selection.scopeFiltered', 'Selected all current filter matches')
             : appT('selection.scopeFilteredExplicit', 'Selected current filter matches');
@@ -69,6 +72,144 @@ function normalizeSelectionImageIds(rawIds) {
             .map((id) => Number(id))
             .filter((id) => Number.isFinite(id) && id > 0)
         : [];
+}
+
+let filteredSelectionRefreshSequence = 0;
+let filteredSelectionRefreshState = null;
+
+function isFilteredSelectionTokenRefreshPending() {
+    const pending = filteredSelectionRefreshState;
+    if (!pending) return false;
+    return AppState.selectionScope === 'filtered'
+        && Boolean(AppState.selectionToken)
+        && AppState.selectionFilterKey === pending.filterKey
+        && AppState.selectionToken === pending.sourceToken
+        && getSelectionFilterCacheKey(AppState.filters) === pending.filterKey;
+}
+
+function invalidateFilteredSelectionTokenRefresh() {
+    filteredSelectionRefreshSequence += 1;
+    filteredSelectionRefreshState = null;
+}
+
+function syncFilteredSelectionPresentation() {
+    resetSelectionDataCache();
+    if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
+        Gallery.syncSelectionState();
+    } else {
+        updateSelectionUI();
+    }
+    emitSelectionStateChanged();
+}
+
+function captureConfirmedFilteredSelection() {
+    return {
+        selectedIds: new Set(AppState.selectedIds || []),
+        selectionToken: String(AppState.selectionToken || ''),
+        selectionTotal: Math.max(0, Number(AppState.selectionTotal || 0) || 0),
+    };
+}
+
+async function updateFilteredSelectionExclusions(rawExcludedIds) {
+    if (!isFilteredSelectionActiveForCurrentFilters()) {
+        throw new Error('Filtered selection is no longer active for the current Gallery filters');
+    }
+
+    const excludedIds = new Set(normalizeSelectionImageIds(Array.from(rawExcludedIds || [])));
+    const filterPayload = buildSelectionFilterRequest();
+    const filterKey = JSON.stringify(filterPayload);
+    const previousPending = isFilteredSelectionTokenRefreshPending()
+        ? filteredSelectionRefreshState
+        : null;
+    const confirmed = previousPending
+        ? {
+            selectedIds: new Set(previousPending.confirmed.selectedIds),
+            selectionToken: previousPending.confirmed.selectionToken,
+            selectionTotal: previousPending.confirmed.selectionTotal,
+        }
+        : captureConfirmedFilteredSelection();
+    const baseTotal = confirmed.selectionTotal + confirmed.selectedIds.size;
+    const requestId = filteredSelectionRefreshSequence + 1;
+    filteredSelectionRefreshSequence = requestId;
+    filteredSelectionRefreshState = {
+        requestId,
+        filterKey,
+        sourceToken: confirmed.selectionToken,
+        confirmed,
+    };
+
+    updateSelectionState((selection) => {
+        selection.selectedIds = new Set(excludedIds);
+        selection.selectionTotal = Math.max(0, baseTotal - excludedIds.size);
+    });
+    syncFilteredSelectionPresentation();
+
+    try {
+        const result = await API.createSelectionToken(
+            filterPayload,
+            FILTERED_SELECTION_CHUNK_SIZE,
+            { excludedImageIds: Array.from(excludedIds) }
+        );
+        const refreshedToken = typeof result?.selection_token === 'string'
+            ? result.selection_token.trim()
+            : '';
+        const refreshedTotal = Number(result?.total_estimate);
+        if (!refreshedToken) {
+            throw new TypeError('Selection token refresh response was missing selection_token');
+        }
+        if (!Number.isFinite(refreshedTotal) || refreshedTotal < 0) {
+            throw new TypeError(
+                `Selection token refresh returned invalid total_estimate: ${String(result?.total_estimate)}`
+            );
+        }
+
+        const pending = filteredSelectionRefreshState;
+        if (!pending || pending.requestId !== requestId) return false;
+        const stateStillMatches = AppState.selectionScope === 'filtered'
+            && AppState.selectionFilterKey === filterKey
+            && AppState.selectionToken === pending.sourceToken
+            && getSelectionFilterCacheKey(AppState.filters) === filterKey;
+        if (!stateStillMatches) {
+            filteredSelectionRefreshState = null;
+            return false;
+        }
+
+        updateSelectionState((selection) => {
+            selection.selectedIds = new Set(excludedIds);
+            selection.selectionToken = refreshedToken;
+            selection.selectionTotal = refreshedTotal;
+        });
+        filteredSelectionRefreshState = null;
+        syncFilteredSelectionPresentation();
+        return true;
+    } catch (error) {
+        const pending = filteredSelectionRefreshState;
+        if (!pending || pending.requestId !== requestId) return false;
+        const stateStillMatches = AppState.selectionScope === 'filtered'
+            && AppState.selectionFilterKey === filterKey
+            && AppState.selectionToken === pending.sourceToken
+            && getSelectionFilterCacheKey(AppState.filters) === filterKey;
+        filteredSelectionRefreshState = null;
+        if (!stateStillMatches) return false;
+
+        updateSelectionState((selection) => {
+            selection.selectedIds = new Set(confirmed.selectedIds);
+            selection.selectionToken = confirmed.selectionToken;
+            selection.selectionTotal = confirmed.selectionTotal;
+        });
+        syncFilteredSelectionPresentation();
+        showToast(
+            formatUserError(
+                error,
+                appT(
+                    'selection.exclusionRefreshFailed',
+                    'Could not update the filtered selection. The previous selection was restored.'
+                )
+            ),
+            'error'
+        );
+        return false;
+    }
 }
 
 function confirmLargeFilteredSelection(total) {
@@ -151,6 +292,8 @@ async function selectAllFilteredResults() {
             return;
         }
 
+        invalidateFilteredSelectionTokenRefresh();
+
         updateSelectionState((selection) => {
             selection.selectedIds = result.selectionToken ? new Set() : new Set(result.imageIds);
             selection.scope = 'filtered';
@@ -174,6 +317,13 @@ async function selectAllFilteredResults() {
 }
 
 async function invertAllFilteredResults() {
+    if (isFilteredSelectionTokenRefreshPending()) {
+        showToast(
+            appT('selection.scopeFilteredUpdating', 'Updating filtered selection...'),
+            'info'
+        );
+        return;
+    }
     const invertFilteredBtn = $('#btn-invert-selection-filtered');
     if (invertFilteredBtn) {
         invertFilteredBtn.disabled = true;
@@ -182,7 +332,9 @@ async function invertAllFilteredResults() {
     try {
         const filterPayload = buildSelectionFilterRequest();
         const filterKey = JSON.stringify(filterPayload);
-        const excludedImageIds = getSelectedGalleryIds();
+        const excludedImageIds = AppState.selectionScope === 'filtered' && AppState.selectionToken
+            ? Array.from(AppState.selectedIds || [])
+            : getSelectedGalleryIds();
         const result = await resolveFilteredSelectionIds(filterPayload, { excludedImageIds });
         if (result.cancelled) {
             updateSelectionUI();
@@ -195,10 +347,14 @@ async function invertAllFilteredResults() {
         }
 
         const currentSelected = new Set(AppState.selectedIds || []);
-        const activeSelectionToken = getActiveSelectionTokenForActions();
+        const hasActiveFilteredToken = AppState.selectionScope === 'filtered'
+            && Boolean(AppState.selectionToken)
+            && isFilteredSelectionActiveForCurrentFilters();
+
+        invalidateFilteredSelectionTokenRefresh();
 
         updateSelectionState((selection) => {
-            if (activeSelectionToken) {
+            if (hasActiveFilteredToken) {
                 if (currentSelected.size === 0) {
                     selection.selectedIds = new Set();
                     selection.scope = 'visible';
@@ -283,6 +439,7 @@ function setSelectionMode(enabled, options = {}) {
     });
 
     if (!nextMode) {
+        invalidateFilteredSelectionTokenRefresh();
         collapseSelectionMoreActions();
     }
 

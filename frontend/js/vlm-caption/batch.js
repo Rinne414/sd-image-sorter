@@ -26,6 +26,11 @@ Object.assign(window.VLMCaption, {
             const batchTarget = Array.isArray(imageIdsOverride)
                 ? this._buildImageIdsBatchTarget(imageIdsOverride)
                 : this._getBatchTarget();
+            if (batchTarget?.blockedReason) {
+                this._showBatchUI(false, { keepPanel: true });
+                this._showStatus('vlm-batch-status', batchTarget.blockedReason, 'warning');
+                return;
+            }
             if (!batchTarget || !batchTarget.count) {
                 this._showBatchUI(false, { keepPanel: true });
                 this._showStatus('vlm-batch-status', 'No images to caption. Select images or use current view.', 'error');
@@ -239,11 +244,29 @@ Object.assign(window.VLMCaption, {
     },
 
     _getBatchTarget() {
+        const selectionState = window.AppFilterAccess?.getSelectionState?.();
+        if (selectionState?.selectionTokenPending === true) {
+            return {
+                count: 0,
+                payload: null,
+                blockedReason: this._t(
+                    'selection.scopeFilteredUpdating',
+                    'Updating filtered selection...'
+                ),
+            };
+        }
+        const tokenScoped = selectionState?.scope === 'filtered'
+            && Boolean(selectionState?.selectionToken);
+        const scopedTotal = Number(selectionState?.selectionTotal);
+        if (tokenScoped && (!Number.isFinite(scopedTotal) || scopedTotal <= 0)) {
+            return this._buildImageIdsBatchTarget([]);
+        }
+
         const selectionToken = window.AppFilterAccess?.getActiveSelectionToken?.();
         if (selectionToken) {
-            const total = Number(window.AppFilterAccess?.getSelectionTotal?.() || 0);
+            const total = Number(window.AppFilterAccess?.getSelectionTotal?.());
             return {
-                count: total > 0 ? total : 1,
+                count: Number.isFinite(total) && total > 0 ? total : 0,
                 payload: { selection_token: selectionToken },
             };
         }

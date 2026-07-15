@@ -63,17 +63,26 @@ window.AppFilterAccess = {
     getSelectionState() {
         const state = AppSelectionStore?.getState?.();
         if (!state) return null;
+        const selectionTotal = Number(state.selectionTotal);
         return {
             selectedIds: state.selectedIds,
             scope: state.scope,
             filterKey: state.filterKey || null,
             selectionToken: state.selectionToken || null,
-            selectionTotal: state.selectionTotal || 0,
+            selectionTotal: Number.isFinite(selectionTotal) ? Math.max(0, selectionTotal) : 0,
+            selectionTokenPending: typeof isFilteredSelectionTokenRefreshPending === 'function'
+                ? isFilteredSelectionTokenRefreshPending()
+                : false,
         };
     },
     getActiveSelectionToken() {
         const state = AppSelectionStore?.getState?.();
         if (!state || state.scope !== 'filtered' || !state.selectionToken) return null;
+        const tokenPending = typeof isFilteredSelectionTokenRefreshPending === 'function'
+            && isFilteredSelectionTokenRefreshPending();
+        if (tokenPending) return null;
+        const selectionTotal = Number(state.selectionTotal);
+        if (!Number.isFinite(selectionTotal) || selectionTotal <= 0) return null;
         const isActive = typeof window.App?.isFilteredSelectionActiveForCurrentFilters === 'function'
             ? window.App.isFilteredSelectionActiveForCurrentFilters()
             : (typeof isFilteredSelectionActiveForCurrentFilters === 'function'
@@ -86,12 +95,14 @@ window.AppFilterAccess = {
     },
     getSelectionTotal() {
         const state = AppSelectionStore?.getState?.();
-        return Number(state?.selectionTotal || 0);
+        const selectionTotal = Number(state?.selectionTotal);
+        return Number.isFinite(selectionTotal) ? Math.max(0, selectionTotal) : 0;
     },
     /** Returns only explicitly selected IDs already held by the UI. */
     getSelectedImageIds() {
         const state = AppSelectionStore?.getState?.();
         if (!state) return [];
+        if (state.scope === 'filtered' && state.selectionToken) return [];
         if (state.selectedIds instanceof Set) return Array.from(state.selectedIds);
         if (Array.isArray(state.selectedIds)) return [...state.selectedIds];
         return [];

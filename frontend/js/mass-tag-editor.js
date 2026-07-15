@@ -133,15 +133,31 @@
 
         // ---- Modal open / close ------------------------------------------
 
+        _getSelectionBoundary() {
+            const state = window.AppFilterAccess?.getSelectionState?.();
+            return {
+                pending: state?.selectionTokenPending === true,
+                tokenScoped: state?.scope === "filtered" && Boolean(state?.selectionToken),
+            };
+        },
+
         async openModal(preferredScope = null) {
             this._resetResult();
             this._setStatus("");
+            const selectionBoundary = this._getSelectionBoundary();
             const selectionToken = window.AppFilterAccess?.getActiveSelectionToken?.();
             const selectionIds = window.AppFilterAccess?.getSelectedImageIds?.() || [];
-            const scope = preferredScope || (selectionToken || selectionIds.length ? "selection" : "filter");
+            const scope = preferredScope
+                || (selectionBoundary.tokenScoped || selectionToken || selectionIds.length ? "selection" : "filter");
             const scopeRadio = document.querySelector(`input[name="mass-tag-scope"][value="${scope}"]`);
             if (scopeRadio) scopeRadio.checked = true;
             await this.refreshScopeLabels();
+            if (selectionBoundary.pending) {
+                this._setStatus(
+                    this.t("Updating filtered selection...", "正在更新筛选选择范围..."),
+                    "info",
+                );
+            }
             // v3.2.2: prefer the global showModal so this modal gets the
             // same Escape-key handler, focus trap, and focus restore as
             // every other modal in the app. Falls back to the manual
@@ -186,6 +202,7 @@
         // ---- Scope --------------------------------------------------------
 
         async refreshScopeLabels() {
+            const selectionBoundary = this._getSelectionBoundary();
             const selectionToken = window.AppFilterAccess?.getActiveSelectionToken?.();
             const selectionIds = window.AppFilterAccess?.getSelectedImageIds?.() || [];
             const selCount = selectionToken
@@ -193,10 +210,17 @@
                 : selectionIds.length;
             const selEl = document.getElementById("mass-tag-scope-selection-count");
             if (selEl) {
-                const suffix = selectionToken
-                    ? this.t(" filtered-token selection", " 个筛选 token 选择")
-                    : this.t(" images", " 张");
-                selEl.textContent = `— ${selCount.toLocaleString()}${suffix}`;
+                if (selectionBoundary.pending) {
+                    selEl.textContent = this.t(
+                        "— updating filtered selection...",
+                        "— 正在更新筛选选择范围...",
+                    );
+                } else {
+                    const suffix = selectionToken
+                        ? this.t(" filtered-token selection", " 个筛选 token 选择")
+                        : this.t(" images", " 张");
+                    selEl.textContent = `— ${selCount.toLocaleString()}${suffix}`;
+                }
             }
             const filterEl = document.getElementById("mass-tag-scope-filter-count");
             if (filterEl) {
@@ -212,6 +236,13 @@
 
         /** Resolve the current scope choice to backend scope fields. */
         async resolveScopePayload() {
+            if (this._getSelectionBoundary().pending) {
+                this._setStatus(
+                    this.t("Updating filtered selection...", "正在更新筛选选择范围..."),
+                    "warning",
+                );
+                return null;
+            }
             const scope = this.getScopeValue();
             if (scope === "selection") {
                 const selectionToken = window.AppFilterAccess?.getActiveSelectionToken?.();

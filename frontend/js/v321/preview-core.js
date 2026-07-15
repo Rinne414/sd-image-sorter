@@ -203,11 +203,15 @@ Object.assign(window.V321Integration, {
             filterKey: appState.selectionFilterKey,
             selectionToken: appState.selectionToken,
             selectionTotal: appState.selectionTotal,
+            selectionTokenPending: window.App?.isFilteredSelectionTokenRefreshPending?.() === true,
         };
     },
 
     _getExplicitSelectedImageIds(cap = Infinity) {
         const state = this._getSelectionState();
+        if ((state?.scope || 'visible') === 'filtered' && state?.selectionToken) {
+            return [];
+        }
         const source = state?.selectedIds;
         const ids = source instanceof Set
             ? Array.from(source)
@@ -224,6 +228,13 @@ Object.assign(window.V321Integration, {
         const state = this._getSelectionState();
         const token = state?.selectionToken;
         if ((state?.scope || 'visible') !== 'filtered' || !token) {
+            return null;
+        }
+        if (state?.selectionTokenPending === true
+            || window.App?.isFilteredSelectionTokenRefreshPending?.() === true) {
+            return null;
+        }
+        if (this._selectionTotalFromState() === 0) {
             return null;
         }
         if (typeof window.App?.isFilteredSelectionActiveForCurrentFilters === 'function') {

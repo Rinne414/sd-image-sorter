@@ -9,6 +9,12 @@ const MOCK_AUTOSEP_DESTINATION =
 const MOCK_MANUAL_SORT_DESTINATION =
   process.env.SD_TEST_MANUAL_SORT_TARGET ?? path.join(os.tmpdir(), 'sd-image-sorter-mock-manual-sort')
 
+interface SelectionTokenRequestPayload {
+  sortBy?: string
+  chunkSize?: number
+  excludedImageIds?: number[]
+}
+
 // AutoSep keeps its own filter state in localStorage under this key (see
 // autosep.js:11 AUTOSEP_FILTER_STATE_KEY). Tests must seed this directly —
 // writing to window.App.AppState.filters has no effect on AutoSep since v3.0.0.
@@ -2990,6 +2996,7 @@ test.describe('Smoke Tests', () => {
       buildMockGalleryImage(22, { filename: 'filtered-2.png', prompt: 'filtered two' }),
     ]
     let selectionTokenRequests = 0
+    const selectionTokenPayloads: SelectionTokenRequestPayload[] = []
     const selectionChunkOffsets: number[] = []
     const exportDataPayloads: any[] = []
     let legacySelectionIdsRequests = 0
@@ -3016,14 +3023,19 @@ test.describe('Smoke Tests', () => {
     await page.route('**/api/images/selection-token', async (route) => {
       selectionTokenRequests += 1
       expect(route.request().method()).toBe('POST')
-      expect(route.request().postDataJSON()).toMatchObject({
+      const payload = route.request().postDataJSON() as SelectionTokenRequestPayload
+      selectionTokenPayloads.push(payload)
+      expect(payload).toMatchObject({
         sortBy: 'newest',
         chunkSize: 2000,
       })
+      const excludedIds = Array.isArray(payload.excludedImageIds) ? payload.excludedImageIds : []
       await route.fulfill({
         json: {
-          selection_token: 'filtered-selection-token',
-          total_estimate: 4,
+          selection_token: excludedIds.length > 0
+            ? 'filtered-selection-token-minus-22'
+            : 'filtered-selection-token',
+          total_estimate: excludedIds.length > 0 ? 3 : 4,
           exact_total: true,
           chunk_size: 2,
         },
@@ -3067,11 +3079,11 @@ test.describe('Smoke Tests', () => {
         json: {
           images: [
             { id: 11, prompt: 'filtered one', tags: ['filtered'] },
-            { id: 22, prompt: 'filtered two', tags: ['filtered'] },
+            { id: 33, prompt: 'filtered three', tags: ['filtered'] },
           ],
           missing_ids: [],
           count: 2,
-          total: 4,
+          total: 3,
           offset: 0,
           limit: 2000,
           next_offset: 2,
@@ -3103,14 +3115,25 @@ test.describe('Smoke Tests', () => {
     await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(0)
     await expect(page.locator('#selection-scope-summary')).toContainText('all current filter matches')
 
+    const excludedCard = page.locator('#gallery-grid .gallery-item[data-id="22"]')
+    await excludedCard.click()
+    await expect.poll(() => selectionTokenRequests).toBe(2)
+    expect(selectionTokenPayloads[1].excludedImageIds).toEqual([22])
+    await expect(excludedCard).toHaveAttribute('aria-selected', 'false')
+    await expect(page.locator('#selection-count')).toContainText('3 items selected')
+    await expect.poll(() => page.evaluate(() => window.App.AppState.selectionToken))
+      .toBe('filtered-selection-token-minus-22')
+
     await openSelectionPanelSection(page, 'Export')
     await page.locator('#btn-export-selected').click()
     await expect(page.locator('#export-modal.visible')).toBeVisible()
     await expect(page.locator('#export-text')).toHaveValue(/filtered one/)
-    await expect(page.locator('#export-text')).toHaveValue(/Preview only shows the first 2 of 4 selected images/)
+    await expect(page.locator('#export-text')).toHaveValue(/filtered three/)
+    await expect(page.locator('#export-text')).not.toHaveValue(/filtered two/)
+    await expect(page.locator('#export-text')).toHaveValue(/Preview only shows the first 2 of 3 selected images/)
     await expect.poll(() => exportDataPayloads.length).toBe(1)
     expect(exportDataPayloads[0]).toMatchObject({
-      selection_token: 'filtered-selection-token',
+      selection_token: 'filtered-selection-token-minus-22',
       offset: 0,
       limit: 2000,
     })
@@ -3125,6 +3148,375 @@ test.describe('Smoke Tests', () => {
     })
     await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(0)
     await expect(page.locator('#selection-scope-summary')).toContainText('Selected manually from Gallery')
+  })
+
+  test('filtered selection token refresh should be fail-closed and last-write-wins', async ({ page }) => {
+    const loadedImages = [
+      buildMockGalleryImage(11, { filename: 'rapid-filtered-1.png' }),
+      buildMockGalleryImage(22, { filename: 'rapid-filtered-2.png' }),
+    ]
+    await mockGalleryImages(page, loadedImages)
+
+    let tokenRequestCount = 0
+    let massTagFallbackTokenRequests = 0
+    let vlmBatchRequests = 0
+    let staleResponseFulfilled = false
+    let releaseStaleResponse!: () => void
+    const staleResponseGate = new Promise<void>((resolve) => {
+      releaseStaleResponse = resolve
+    })
+
+    await page.route('**/api/images/selection-token', async (route) => {
+      const payload = route.request().postDataJSON()
+      if (payload.chunkSize === 5000) {
+        massTagFallbackTokenRequests += 1
+        await route.fulfill({
+          json: {
+            selection_token: 'unexpected-mass-tag-filter-token',
+            total_estimate: 2,
+            exact_total: true,
+            chunk_size: 5000,
+          },
+        })
+        return
+      }
+      tokenRequestCount += 1
+      if (tokenRequestCount === 1) {
+        await route.fulfill({
+          json: {
+            selection_token: 'rapid-original-token',
+            total_estimate: 2,
+            exact_total: true,
+            chunk_size: 2000,
+          },
+        })
+        return
+      }
+      if (tokenRequestCount === 2) {
+        expect(payload.excludedImageIds).toEqual([11])
+        await staleResponseGate
+        await route.fulfill({
+          json: {
+            selection_token: 'rapid-stale-minus-11-token',
+            total_estimate: 1,
+            exact_total: true,
+            chunk_size: 2000,
+          },
+        })
+        staleResponseFulfilled = true
+        return
+      }
+
+      expect(payload.excludedImageIds).toBeUndefined()
+      await route.fulfill({
+        json: {
+          selection_token: 'rapid-latest-all-token',
+          total_estimate: 2,
+          exact_total: true,
+          chunk_size: 2000,
+        },
+      })
+    })
+
+    await page.route('**/api/vlm/caption-batch', async (route) => {
+      vlmBatchRequests += 1
+      await route.fulfill({ json: { status: 'started' } })
+    })
+    await page.route('**/api/vlm/caption-batch/progress', async (route) => {
+      await route.fulfill({ json: { running: false, total: 0, completed: 0, failed: 0 } })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await page.locator('#btn-toggle-select').click()
+    await page.locator('#btn-select-all').click()
+
+    const firstCard = page.locator('#gallery-grid .gallery-item[data-id="11"]')
+    await firstCard.click()
+    await expect.poll(() => tokenRequestCount).toBe(2)
+    await expect(firstCard).toHaveAttribute('aria-selected', 'false')
+    await expect(page.locator('#selection-scope-summary')).toContainText('Updating filtered selection')
+
+    const pendingActionIds = [
+      'btn-select-all',
+      'btn-invert-selection-filtered',
+      'btn-move-selected',
+      'btn-copy-selected',
+      'btn-export-selected',
+      'btn-batch-export-tags',
+      'btn-send-to-censor',
+      'btn-send-selection-to-dataset-maker',
+      'btn-add-selected-to-collection',
+      'btn-publish-selected',
+      'btn-remove-selected-gallery',
+      'btn-delete-selected-files',
+    ]
+    const enabledPendingActionIds = await page.evaluate((actionIds) => actionIds.filter((actionId) => {
+      const button = document.getElementById(actionId) as HTMLButtonElement | null
+      return button && !button.disabled
+    }), pendingActionIds)
+    expect(enabledPendingActionIds).toEqual([])
+
+    const pendingConsumerState = await page.evaluate(async () => {
+      const w = window as any
+      return {
+        actionToken: w.AppFilterAccess?.getActiveSelectionToken?.() ?? null,
+        actionIds: w.AppFilterAccess?.getSelectedImageIds?.() ?? [],
+        datasetIds: await w.DatasetMaker?._resolveGallerySelectionIds?.(),
+        artistIds: w.ArtistIdent?._getExplicitGallerySelectionIds?.(),
+      }
+    })
+    expect(pendingConsumerState).toEqual({
+      actionToken: null,
+      actionIds: [],
+      datasetIds: [],
+      artistIds: [],
+    })
+
+    const pendingToolState = await page.evaluate(async () => {
+      const w = window as any
+      const vlm = w.VLMCaption
+      const massTag = w.MassTagEditor
+      await vlm.startBatchCaption()
+      vlm.stopPolling()
+      vlm.isRunning = false
+      vlm._startInFlight = false
+      await massTag.openModal()
+      const massTagScope = massTag.getScopeValue()
+      const massTagPayload = await massTag.resolveScopePayload()
+      const state = {
+        vlmStatus: document.getElementById('vlm-batch-status')?.textContent || '',
+        massTagStatus: document.getElementById('mass-tag-status')?.textContent || '',
+        massTagScope,
+        massTagPayload,
+      }
+      massTag.closeModal()
+      return state
+    })
+    expect(vlmBatchRequests).toBe(0)
+    expect(massTagFallbackTokenRequests).toBe(0)
+    expect(pendingToolState.vlmStatus).toContain('Updating filtered selection')
+    expect(pendingToolState.massTagStatus).toContain('Updating filtered selection')
+    expect(pendingToolState.massTagScope).toBe('selection')
+    expect(pendingToolState.massTagPayload).toBeNull()
+
+    await firstCard.click({ button: 'right' })
+    const reincludeMenuItem = page.getByRole('menuitem', { name: 'Select Image', exact: true })
+    await expect(reincludeMenuItem).toBeVisible()
+    await reincludeMenuItem.click()
+    await expect.poll(() => tokenRequestCount).toBe(3)
+    await expect.poll(() => page.evaluate(() => window.App.AppState.selectionToken))
+      .toBe('rapid-latest-all-token')
+    await expect(firstCard).toHaveAttribute('aria-selected', 'true')
+    await expect(page.locator('#selection-count')).toContainText('2 items selected')
+
+    releaseStaleResponse()
+    await expect.poll(() => staleResponseFulfilled).toBe(true)
+    await page.waitForLoadState('networkidle')
+    await expect.poll(() => page.evaluate(() => window.App.AppState.selectionToken))
+      .toBe('rapid-latest-all-token')
+    await expect(firstCard).toHaveAttribute('aria-selected', 'true')
+    await expect(page.locator('#selection-count')).toContainText('2 items selected')
+    await expect(page.locator('#btn-delete-selected-files')).toBeEnabled()
+  })
+
+  test('filtered selection token refresh failure restores confirmed scope and explicit selection still works', async ({ page }) => {
+    const loadedImages = [
+      buildMockGalleryImage(11, { filename: 'failed-filtered-1.png' }),
+      buildMockGalleryImage(22, { filename: 'failed-filtered-2.png' }),
+    ]
+    await mockGalleryImages(page, loadedImages)
+
+    let tokenRequestCount = 0
+    await page.route('**/api/images/selection-token', async (route) => {
+      tokenRequestCount += 1
+      if (tokenRequestCount === 1) {
+        await route.fulfill({
+          json: {
+            selection_token: 'failure-confirmed-token',
+            total_estimate: 2,
+            exact_total: true,
+            chunk_size: 2000,
+          },
+        })
+        return
+      }
+      expect(route.request().postDataJSON().excludedImageIds).toEqual([11])
+      await route.fulfill({
+        status: 503,
+        json: { detail: 'selection token service unavailable for exclusion refresh' },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await page.locator('#btn-toggle-select').click()
+    await page.locator('#btn-select-all').click()
+
+    const firstCard = page.locator('#gallery-grid .gallery-item[data-id="11"]')
+    await firstCard.click()
+    await expect.poll(() => tokenRequestCount).toBe(2)
+    await expect(page.locator('#toast-container')).toContainText('previous selection was restored')
+    await expect(page.locator('#toast-container')).toContainText('selection token service unavailable for exclusion refresh')
+    await expect.poll(() => page.evaluate(() => window.App.AppState.selectionToken))
+      .toBe('failure-confirmed-token')
+    await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(0)
+    await expect(firstCard).toHaveAttribute('aria-selected', 'true')
+    await expect(page.locator('#selection-count')).toContainText('2 items selected')
+
+    await page.locator('#btn-clear-selection').click()
+    await firstCard.click()
+    await expect(firstCard).toHaveAttribute('aria-selected', 'true')
+    await expect(page.locator('#selection-count')).toContainText('1 item')
+    await expect.poll(() => page.evaluate(() => Array.from(window.App.AppState.selectedIds)))
+      .toEqual([11])
+    expect(tokenRequestCount).toBe(2)
+  })
+
+  test('filtered selection should keep an all-excluded token action-safe and allow re-including a card', async ({ page }) => {
+    const loadedImages = [
+      buildMockGalleryImage(11, { filename: 'zero-filtered-1.png' }),
+      buildMockGalleryImage(22, { filename: 'zero-filtered-2.png' }),
+    ]
+    await mockGalleryImages(page, loadedImages)
+
+    const tokenPayloads: SelectionTokenRequestPayload[] = []
+    let vlmBatchRequests = 0
+    await page.route('**/api/images/selection-token', async (route) => {
+      const payload = route.request().postDataJSON() as SelectionTokenRequestPayload
+      tokenPayloads.push(payload)
+      const excludedIds = Array.isArray(payload.excludedImageIds)
+        ? Array.from(new Set(payload.excludedImageIds.map(Number))).filter((id) => id === 11 || id === 22)
+        : []
+      await route.fulfill({
+        json: {
+          selection_token: `zero-selection-token-${excludedIds.join('-') || 'all'}`,
+          total_estimate: 2 - excludedIds.length,
+          exact_total: true,
+          chunk_size: 2000,
+        },
+      })
+    })
+    await page.route('**/api/vlm/caption-batch', async (route) => {
+      vlmBatchRequests += 1
+      await route.fulfill({ json: { status: 'started' } })
+    })
+    await page.route('**/api/vlm/caption-batch/progress', async (route) => {
+      await route.fulfill({ json: { running: false, total: 0, completed: 0, failed: 0 } })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await page.locator('#btn-toggle-select').click()
+    await page.locator('#btn-select-all').click()
+
+    const firstCard = page.locator('#gallery-grid .gallery-item[data-id="11"]')
+    const secondCard = page.locator('#gallery-grid .gallery-item[data-id="22"]')
+    await firstCard.click()
+    await expect.poll(() => tokenPayloads.length).toBe(2)
+    await secondCard.click()
+    await expect.poll(() => tokenPayloads.length).toBe(3)
+    await expect.poll(() => page.evaluate(() => ({
+      total: window.App.AppState.selectionTotal,
+      pending: window.App.isFilteredSelectionTokenRefreshPending(),
+    }))).toEqual({ total: 0, pending: false })
+
+    const zeroSelectionState = await page.evaluate(async () => {
+      const w = window as any
+      const vlm = w.VLMCaption
+      const massTag = w.MassTagEditor
+      await vlm.startBatchCaption()
+      vlm.stopPolling()
+      vlm.isRunning = false
+      vlm._startInFlight = false
+      await massTag.openModal()
+      const massTagScope = massTag.getScopeValue()
+      massTag.closeModal()
+      return {
+        count: w.App.getSelectedGalleryCount(),
+        total: w.App.AppState.selectionTotal,
+        exclusions: Array.from(w.App.AppState.selectedIds),
+        actionToken: w.AppFilterAccess.getActiveSelectionToken(),
+        actionIds: w.AppFilterAccess.getSelectedImageIds(),
+        massTagScope,
+        vlmStatus: document.getElementById('vlm-batch-status')?.textContent || '',
+      }
+    })
+    expect(zeroSelectionState).toEqual({
+      count: 0,
+      total: 0,
+      exclusions: [11, 22],
+      actionToken: null,
+      actionIds: [],
+      massTagScope: 'selection',
+      vlmStatus: 'No images to caption. Select images or use current view.',
+    })
+    expect(vlmBatchRequests).toBe(0)
+    await expect(firstCard).toHaveAttribute('aria-selected', 'false')
+    await expect(secondCard).toHaveAttribute('aria-selected', 'false')
+    await expect(page.locator('#btn-delete-selected-files')).toBeDisabled()
+    await expect(page.locator('#btn-export-selected')).toBeDisabled()
+
+    await firstCard.click()
+    await expect.poll(() => tokenPayloads.length).toBe(4)
+    await expect.poll(() => page.evaluate(() => window.App.AppState.selectionTotal)).toBe(1)
+    await expect(firstCard).toHaveAttribute('aria-selected', 'true')
+    await expect(secondCard).toHaveAttribute('aria-selected', 'false')
+    await expect(page.locator('#selection-count')).toContainText('1 item')
+    await expect.poll(() => page.evaluate(() => (window as any).AppFilterAccess.getActiveSelectionToken()))
+      .toBe('zero-selection-token-22')
+  })
+
+  test('all-excluded filtered selection should invert back to the full explicit selection', async ({ page }) => {
+    const loadedImages = [
+      buildMockGalleryImage(11, { filename: 'invert-zero-filtered-1.png' }),
+      buildMockGalleryImage(22, { filename: 'invert-zero-filtered-2.png' }),
+    ]
+    await mockGalleryImages(page, loadedImages)
+
+    const exclusionPayloads: number[][] = []
+    await page.route('**/api/images/selection-token', async (route) => {
+      const payload = route.request().postDataJSON() as SelectionTokenRequestPayload
+      const excludedIds = Array.isArray(payload.excludedImageIds)
+        ? Array.from(new Set(payload.excludedImageIds.map(Number))).filter((id) => id === 11 || id === 22)
+        : []
+      exclusionPayloads.push(excludedIds)
+      await route.fulfill({
+        json: {
+          selection_token: `invert-zero-token-${excludedIds.join('-') || 'all'}`,
+          total_estimate: 2 - excludedIds.length,
+          exact_total: true,
+          chunk_size: 2000,
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await page.locator('#btn-toggle-select').click()
+    await page.locator('#btn-select-all').click()
+
+    const firstCard = page.locator('#gallery-grid .gallery-item[data-id="11"]')
+    const secondCard = page.locator('#gallery-grid .gallery-item[data-id="22"]')
+    await firstCard.click()
+    await expect.poll(() => exclusionPayloads.length).toBe(2)
+    await secondCard.click()
+    await expect.poll(() => page.evaluate(() => ({
+      total: window.App.AppState.selectionTotal,
+      pending: window.App.isFilteredSelectionTokenRefreshPending(),
+    }))).toEqual({ total: 0, pending: false })
+
+    await page.locator('#btn-invert-selection-filtered').click()
+    await expect.poll(() => exclusionPayloads.length).toBe(4)
+    expect(exclusionPayloads[3]).toEqual([11, 22])
+    await expect.poll(() => page.evaluate(() => ({
+      scope: window.App.AppState.selectionScope,
+      token: window.App.AppState.selectionToken,
+      ids: Array.from(window.App.AppState.selectedIds),
+      count: window.App.getSelectedGalleryCount(),
+    }))).toEqual({ scope: 'filtered', token: null, ids: [11, 22], count: 2 })
+    await expect(firstCard).toHaveAttribute('aria-selected', 'true')
+    await expect(secondCard).toHaveAttribute('aria-selected', 'true')
   })
 
   test('filtered selection should require confirmation for very large result sets', async ({ page }) => {

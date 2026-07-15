@@ -14,7 +14,8 @@ function updateSelectionUI() {
     const selectedCount = getSelectedGalleryCount();
     const hasSelection = selectedCount > 0;
     const selectionPanelVisible = AppState.selectionMode && AppState.currentView === 'gallery';
-    const canRunBatchActions = selectionPanelVisible && hasSelection;
+    const tokenRefreshPending = isFilteredSelectionTokenRefreshPending();
+    const canRunBatchActions = selectionPanelVisible && hasSelection && !tokenRefreshPending;
     const buttonIds = [
         'btn-move-selected',
         'btn-copy-selected',
@@ -58,12 +59,16 @@ function updateSelectionUI() {
 
     const selectAllBtn = $('#btn-select-all');
     if (selectAllBtn) {
-        selectAllBtn.disabled = !selectionPanelVisible || (AppState.pagination.total || 0) === 0;
+        selectAllBtn.disabled = tokenRefreshPending
+            || !selectionPanelVisible
+            || (AppState.pagination.total || 0) === 0;
     }
 
     const invertFilteredBtn = $('#btn-invert-selection-filtered');
     if (invertFilteredBtn) {
-        invertFilteredBtn.disabled = !selectionPanelVisible || (AppState.pagination.total || 0) === 0;
+        invertFilteredBtn.disabled = tokenRefreshPending
+            || !selectionPanelVisible
+            || (AppState.pagination.total || 0) === 0;
     }
 
     const clearSelectionBtn = $('#btn-clear-selection');

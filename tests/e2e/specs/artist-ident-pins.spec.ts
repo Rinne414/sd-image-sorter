@@ -564,13 +564,15 @@ test('the run buttons are gated on availability, in-flight state, and (for Ident
     const w = window as any
     w.App = w.App || {}
     w.App.AppState = w.App.AppState || {}
+    let explicitSelectionIds = [1, 2]
+    w.AppFilterAccess = w.AppFilterAccess || {}
+    w.AppFilterAccess.getSelectedImageIds = () => [...explicitSelectionIds]
     const identifyAll = () => (document.getElementById('btn-identify-all') as HTMLButtonElement).disabled
     const identifySel = () => (document.getElementById('btn-identify-selected') as HTMLButtonElement).disabled
 
     // Unavailable runtime -> Identify All disabled regardless of selection.
     A.isIdentifying = false
     A.diagnostics = { available: false }
-    w.App.AppState.selectedIds = new Set([1, 2])
     A.refreshAvailabilityState()
     const unavailableAll = identifyAll()
 
@@ -581,17 +583,31 @@ test('the run buttons are gated on availability, in-flight state, and (for Ident
     const availableSelWithPick = identifySel()
 
     // Available but NO selection -> Identify Selected disabled, Identify All still enabled.
-    w.App.AppState.selectedIds = new Set()
+    explicitSelectionIds = []
     A.syncSelectionActionState()
     const availableSelNoPick = identifySel()
     const availableAllNoPick = identifyAll()
+
+    // Filtered-token exclusions are internal negative state, never explicit Artist input.
+    w.App.AppState.selectionToken = 'filtered-token'
+    w.App.AppState.selectedIds = new Set([99])
+    A.syncSelectionActionState()
+    const availableSelWithFilteredExclusion = identifySel()
 
     // A run in progress disables Identify All even when available.
     A.isIdentifying = true
     A.refreshAvailabilityState()
     const runningAll = identifyAll()
     A.isIdentifying = false
-    return { unavailableAll, availableAll, availableSelWithPick, availableSelNoPick, availableAllNoPick, runningAll }
+    return {
+      unavailableAll,
+      availableAll,
+      availableSelWithPick,
+      availableSelNoPick,
+      availableAllNoPick,
+      availableSelWithFilteredExclusion,
+      runningAll,
+    }
   })
 
   expect(probe.unavailableAll).toBe(true)
@@ -599,6 +615,7 @@ test('the run buttons are gated on availability, in-flight state, and (for Ident
   expect(probe.availableSelWithPick).toBe(false)
   expect(probe.availableSelNoPick).toBe(true)
   expect(probe.availableAllNoPick).toBe(false)
+  expect(probe.availableSelWithFilteredExclusion).toBe(true)
   expect(probe.runningAll).toBe(true)
 })
 

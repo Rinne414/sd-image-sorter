@@ -74,6 +74,15 @@ const ArtistIdent = {
         return raw;
     },
 
+    _getExplicitGallerySelectionIds() {
+        const selectedIds = window.AppFilterAccess?.getSelectedImageIds?.();
+        return Array.isArray(selectedIds)
+            ? selectedIds
+                .map((id) => Number(id))
+                .filter((id) => Number.isFinite(id) && id > 0)
+            : [];
+    },
+
     getArtistStat(artist) {
         return this.stats?.artist_stats?.[artist] || { count: 0, avg_confidence: 0, max_confidence: 0 };
     },

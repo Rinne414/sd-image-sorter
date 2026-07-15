@@ -13,9 +13,7 @@ Object.assign(window.ArtistIdent, {
         const identifySelectedBtn = document.getElementById('btn-identify-selected');
         if (!identifySelectedBtn) return;
 
-        const selectedIds = window.App?.AppState?.selectedIds;
-        const normalizedSelectedIds = selectedIds instanceof Set ? selectedIds : new Set(selectedIds || []);
-        const hasSelection = normalizedSelectedIds.size > 0;
+        const hasSelection = this._getExplicitGallerySelectionIds().length > 0;
         const isAvailable = this.diagnostics ? this.diagnostics.available !== false : true;
         const disabled = this.isIdentifying || !hasSelection || !isAvailable;
 

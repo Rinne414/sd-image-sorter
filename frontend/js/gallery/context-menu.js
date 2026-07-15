@@ -20,8 +20,14 @@ Object.assign(window.Gallery, {
         const app = window.App || {};
         const imageId = Number(image?.id);
         const selectedIds = app.AppState?.selectedIds instanceof Set ? app.AppState.selectedIds : new Set();
-        const isSelected = selectedIds.has(imageId) || selectedIds.has(String(image?.id));
-        const selectedImageIds = Array.from(selectedIds)
+        const tokenScoped = app.AppState?.selectionScope === 'filtered'
+            && Boolean(app.AppState?.selectionToken);
+        const tokenActive = tokenScoped
+            && app.isFilteredSelectionActiveForCurrentFilters?.();
+        const isSelected = tokenActive
+            ? isGalleryImageSelected(app.AppState, imageId)
+            : !tokenScoped && (selectedIds.has(imageId) || selectedIds.has(String(image?.id)));
+        const selectedImageIds = (tokenScoped ? [] : Array.from(selectedIds))
             .map((id) => Number(id))
             .filter((id) => Number.isFinite(id) && id > 0);
         const actionImageIds = isSelected && selectedImageIds.length > 1 ? selectedImageIds : [imageId];
@@ -46,7 +52,13 @@ Object.assign(window.Gallery, {
 
         const items = [
             { label: t('gallery.contextPreview', 'Preview'), icon: '\u{1F5BC}', action: () => this.openPreview(image.id) },
-            { label: isSelected ? t('gallery.contextDeselectImage', 'Deselect Image') : t('gallery.contextSelectImage', 'Select Image'), icon: isSelected ? '\u2715' : '\u2713', action: () => this._setContextImageSelection(image.id, !isSelected) },
+            { label: isSelected ? t('gallery.contextDeselectImage', 'Deselect Image') : t('gallery.contextSelectImage', 'Select Image'), icon: isSelected ? '\u2715' : '\u2713', action: () => {
+                if (tokenActive) {
+                    this.toggleSelection(image.id);
+                    return;
+                }
+                this._setContextImageSelection(image.id, !isSelected);
+            } },
             { type: 'separator' },
             { label: t('gallery.contextCopyTags', 'Copy Tags'), icon: '\u{1F3F7}', action: async () => {
                 const copy = window.TagCategoryCopy;

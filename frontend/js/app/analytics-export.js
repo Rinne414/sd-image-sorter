@@ -491,6 +491,12 @@ function getActiveSelectionExportToken() {
     if (AppState.selectionScope !== 'filtered' || !AppState.selectionToken) {
         return null;
     }
+    if (isFilteredSelectionTokenRefreshPending()) {
+        return null;
+    }
+    if (getSelectedGalleryCount() === 0) {
+        return null;
+    }
     if (AppState.selectionFilterKey !== getSelectionFilterCacheKey(AppState.filters)) {
         return null;
     }
@@ -639,7 +645,7 @@ async function executeBatchExport() {
     const overwritePolicy = $('#batch-export-overwrite')?.value || 'unique';
 
     const selectionToken = getActiveSelectionTokenForActions();
-    const imageIds = selectionToken ? [] : Array.from(AppState.selectedIds);
+    const imageIds = selectionToken ? [] : getSelectedGalleryIds();
 
     // Show progress
     const progressEl = $('#batch-export-progress');
