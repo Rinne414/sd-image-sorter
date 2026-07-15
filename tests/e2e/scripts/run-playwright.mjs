@@ -6,6 +6,12 @@ import net from 'node:net'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
+import {
+  resolveShardCount,
+  runShardedPlaywright,
+  shouldShardFullRun,
+} from './playwright-shards.mjs'
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const e2eRoot = path.resolve(__dirname, '..')
@@ -39,7 +45,7 @@ const debSearchDirs = [
   path.join(repoRoot, '.tools', 'local-libs'),
 ]
 
-const defaultPlaywrightPorts = [19087, 19187, 19287]
+const defaultPlaywrightPorts = [19087, 19187, 19287, 19387, 19487, 19587, 19687, 19787]
 
 function fileExists(candidate) {
   try {
@@ -177,6 +183,65 @@ async function reserveEphemeralPort() {
     })
   })
 }
+function parsePort(value, fieldName) {
+  const port = Number(value)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new RangeError(`${fieldName} must be an integer between 1 and 65535, received ${String(value)}`)
+  }
+  return port
+}
+
+async function assignServerPorts(env, count) {
+  const candidates = []
+  if (env.PW_WEB_SERVER_PORT) {
+    candidates.push(parsePort(env.PW_WEB_SERVER_PORT, 'PW_WEB_SERVER_PORT'))
+  }
+  candidates.push(...defaultPlaywrightPorts)
+
+  const ports = []
+  const seen = new Set()
+  for (const candidate of candidates) {
+    if (seen.has(candidate)) {
+      continue
+    }
+    seen.add(candidate)
+    if (await tryListen(candidate)) {
+      ports.push(candidate)
+      if (ports.length === count) {
+        return ports
+      }
+    }
+  }
+
+  while (ports.length < count) {
+    const candidate = await reserveEphemeralPort()
+    if (!seen.has(candidate)) {
+      seen.add(candidate)
+      ports.push(candidate)
+    }
+  }
+  return ports
+}
+
+async function waitForPortsReleased(ports, timeoutMs, intervalMs) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const released = await Promise.all(ports.map((port) => tryListen(port)))
+    if (released.every(Boolean)) {
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+  }
+  const stillListening = []
+  for (const port of ports) {
+    if (!(await tryListen(port))) {
+      stillListening.push(port)
+    }
+  }
+  throw new Error(
+    `Playwright shard cleanup left listening ports after ${timeoutMs}ms: ${stillListening.join(', ')}`,
+  )
+}
 
 async function assignServerPort(env, args) {
   const [command] = args
@@ -219,6 +284,30 @@ async function main() {
   }
 
   const baseEnv = buildEnv()
+  if (shouldShardFullRun(args, baseEnv)) {
+    const shardCount = resolveShardCount(baseEnv)
+    if (shardCount > 1) {
+      const ports = await assignServerPorts(baseEnv, shardCount)
+      const runId = `${Date.now()}-${process.pid}`
+      try {
+        const status = await runShardedPlaywright({
+          args,
+          baseEnv,
+          e2eRoot,
+          playwrightCli,
+          ports,
+          repoRoot,
+          runId,
+          shardCount,
+        })
+        process.exitCode = status
+      } finally {
+        await waitForPortsReleased(ports, 10_000, 100)
+        console.error(`[playwright-runtime] Released shard ports: ${ports.join(', ')}.`)
+      }
+      return
+    }
+  }
   const { env, args: resolvedArgs } = await assignServerPort(baseEnv, args)
 
   const result = spawnSync(process.execPath, [playwrightCli, ...resolvedArgs], {

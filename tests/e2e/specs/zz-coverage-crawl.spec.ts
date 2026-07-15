@@ -23,7 +23,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { test, expect, type Page } from '../fixtures/click-ledger'
 
-const ARTIFACTS_DIR = path.resolve(__dirname, '..', '..', '..', 'artifacts')
+const DEFAULT_ARTIFACTS_DIR = path.resolve(__dirname, '..', '..', '..', 'artifacts')
+const ARTIFACTS_DIR = process.env.PW_RUN_ARTIFACT_DIR
+    ? path.resolve(process.env.PW_RUN_ARTIFACT_DIR)
+    : DEFAULT_ARTIFACTS_DIR
 
 // Buttons the crawl must NOT press. Matched against the synthesized control
 // key (lowercased). Keep in sync with the waiver rationale in

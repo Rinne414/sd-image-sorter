@@ -4,7 +4,9 @@ import { expect, test, type Page } from '../fixtures/click-ledger'
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..')
 const defaultPort = process.env.PW_WEB_SERVER_PORT || process.env.SD_IMAGE_SORTER_PORT || '19087'
-const e2eDataDir = path.join(repoRoot, '.tmp', `e2e-data-${defaultPort}`)
+const e2eDataDir = process.env.PW_E2E_DATA_ROOT
+  ? path.resolve(process.env.PW_E2E_DATA_ROOT)
+  : path.join(repoRoot, '.tmp', `e2e-data-${defaultPort}`)
 
 async function resetModelFixtures() {
   await fs.rm(path.join(e2eDataDir, 'models'), { recursive: true, force: true })

@@ -15,7 +15,15 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { test as base } from '@playwright/test'
 
-const ARTIFACT_DIR = path.resolve(__dirname, '..', '..', '..', 'artifacts', 'click-coverage')
+const DEFAULT_ARTIFACT_ROOT = path.resolve(__dirname, '..', '..', '..', 'artifacts')
+const ARTIFACT_ROOT = process.env.PW_RUN_ARTIFACT_DIR
+    ? path.resolve(process.env.PW_RUN_ARTIFACT_DIR)
+    : DEFAULT_ARTIFACT_ROOT
+const ARTIFACT_DIR = path.join(ARTIFACT_ROOT, 'click-coverage')
+const SHARD_INDEX = process.env.PW_SHARD_INDEX || ''
+if (SHARD_INDEX && !/^[1-9]\d*$/.test(SHARD_INDEX)) {
+    throw new Error(`PW_SHARD_INDEX must be a positive integer when set, received ${SHARD_INDEX}`)
+}
 const CONTROL_KEY_SCRIPT = path.join(__dirname, 'control-key.js')
 
 interface LedgerEntry {
@@ -56,7 +64,8 @@ export const test = base.extend({
 
         if (entries.length) {
             fs.mkdirSync(ARTIFACT_DIR, { recursive: true })
-            const file = path.join(ARTIFACT_DIR, `raw-worker-${testInfo.workerIndex}.jsonl`)
+            const shardSegment = SHARD_INDEX ? `shard-${SHARD_INDEX}-` : ''
+            const file = path.join(ARTIFACT_DIR, `raw-${shardSegment}worker-${testInfo.workerIndex}.jsonl`)
             const testId = testInfo.titlePath.join(' › ')
             const lines = entries.map((entry) => JSON.stringify({ test: testId, ...entry }))
             fs.appendFileSync(file, `${lines.join('\n')}\n`)

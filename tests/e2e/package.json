@@ -4,6 +4,7 @@
   "description": "E2E tests for SD Image Sorter",
   "scripts": {
     "test": "node ./scripts/run-playwright.mjs test",
+    "test:runner": "node ./scripts/run-playwright.test.mjs",
     "test:headed": "node ./scripts/run-playwright.mjs test --headed",
     "test:debug": "node ./scripts/run-playwright.mjs test --debug",
     "test:ui": "node ./scripts/run-playwright.mjs test --ui",

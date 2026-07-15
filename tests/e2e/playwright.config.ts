@@ -9,6 +9,16 @@ const baseURL = process.env.BASE_URL || `http://127.0.0.1:${defaultPort}`
 const browserChannel = process.env.PW_BROWSER_CHANNEL || ''
 const basePort = Number(new URL(baseURL).port || defaultPort)
 const repoRoot = path.resolve(__dirname, '..', '..')
+const coverageLedgerOwner = process.env.PW_COVERAGE_LEDGER_OWNER || ''
+if (coverageLedgerOwner && coverageLedgerOwner !== 'runner') {
+  throw new Error(`PW_COVERAGE_LEDGER_OWNER must be "runner" when set, received ${coverageLedgerOwner}`)
+}
+const globalSetupConfig = coverageLedgerOwner === 'runner'
+  ? {}
+  : { globalSetup: './fixtures/global-setup.ts' }
+const testOutputConfig = process.env.PW_TEST_OUTPUT_DIR
+  ? { outputDir: path.resolve(process.env.PW_TEST_OUTPUT_DIR) }
+  : {}
 const backendPythonCandidates = process.platform === 'win32' ? [
   path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe'),
   path.join(repoRoot, 'backend', 'venv', 'bin', 'python'),
@@ -64,8 +74,12 @@ const localRuntimeLibDirs = [
 const localRuntimeLdPath = localRuntimeLibDirs.length
   ? [localRuntimeLibDirs.join(path.delimiter), process.env.LD_LIBRARY_PATH || ''].filter(Boolean).join(path.delimiter)
   : process.env.LD_LIBRARY_PATH
-const e2eFixtureRoot = path.join(repoRoot, '.tmp', 'e2e-model-fixtures')
-const e2eDataDir = path.join(repoRoot, '.tmp', `e2e-data-${basePort}`)
+const e2eFixtureRoot = process.env.PW_E2E_FIXTURE_ROOT
+  ? path.resolve(process.env.PW_E2E_FIXTURE_ROOT)
+  : path.join(repoRoot, '.tmp', 'e2e-model-fixtures')
+const e2eDataDir = process.env.PW_E2E_DATA_ROOT
+  ? path.resolve(process.env.PW_E2E_DATA_ROOT)
+  : path.join(repoRoot, '.tmp', `e2e-data-${basePort}`)
 const e2eDatabasePath = path.join(e2eDataDir, 'images.db')
 const e2eStubModulesDir = path.join(e2eFixtureRoot, `python-stubs-${basePort}`)
 
@@ -189,9 +203,10 @@ const suiteStorageState = {
  * Tests run against the local FastAPI server on a configurable localhost port.
  */
 export default defineConfig({
+  ...globalSetupConfig,
+  ...testOutputConfig,
   testDir: './specs',
-  // Coverage ledger (Phase 2): reset artifacts/click-coverage once per run.
-  globalSetup: './fixtures/global-setup.ts',
+  // The outer shard runner owns the shared coverage reset for full runs.
   fullyParallel: false, // Sequential execution for state-dependent tests
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
