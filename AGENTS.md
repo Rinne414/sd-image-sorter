@@ -336,6 +336,8 @@ Weight routine choices approximately 40% user-visible value, 30% correctness and
 
 Work on one independently committable outcome at a time. Before implementation, record in one active task entry:
 
+For a long-running product goal, the goal is the execution envelope and each slice is the unit of implementation, review, verification, and commit. Finishing one slice does not narrow or complete the wider goal.
+
 - user-visible outcome;
 - exact scope and likely files;
 - acceptance criteria;
@@ -371,7 +373,10 @@ Additional rules:
 
 ## Evidence and Context Discipline
 
+- Never infer a model capability, compatible dependency set, performance result, or competitive feature from naming or marketing alone.
 - Prefer official papers, vendor documentation, release metadata, security advisories, upstream repositories, installed dependency source, and real product benchmarks.
+- Benchmark a replacement model against the current model on representative product data before changing the default or removing the current option.
+- Treat Krea 2 as a natural-language-first target. Do not reintroduce Booru-only prompt assumptions into its workflow without contrary first-party evidence.
 - Record a decision once and reuse it until the relevant version or evidence changes.
 - Store large logs and artifacts by path and hash. Do not paste full web pages, lockfiles, JSON reports, diffs, or test logs into task context.
 - Use isolated databases and copied data for destructive tests; never mutate a user's external library for validation.
@@ -389,6 +394,22 @@ Maintain evidence for these core workflows without duplicating documentation: Sc
 - Never stage temporary reports, artifacts, caches, databases, `.plans` noise, or unrelated files.
 - Do not push, publish a release, or change the application version without explicit user authority.
 - After a commit, report only the user-visible result, evidence/tests, commit hash, and next highest-priority slice.
+
+## Goal Completion Standard
+
+Passing tests for one change is not proof that a long-running product goal is complete. Completion requires current evidence that:
+
+- every core workflow has a verified positive path and an important failure or recovery path;
+- supported desktop layouts have no critical clipping, overlap, hidden primary action, or horizontal overflow;
+- no known P0/P1 correctness, security, data-integrity, stability, or UX defect remains;
+- confirmed architectural debt is fixed, disproven as a defect, or remains explicitly open rather than disappearing from the plan;
+- model and dependency choices are current, secure, platform-compatible, and evidence-backed;
+- major competitive gaps have been compared with currently maintained similar software through official evidence and real testing;
+- backend, frontend, coverage, and complete desktop E2E gates pass on the final frozen worktree;
+- the repository is clean except for recorded user-owned files; and
+- no release, external push, tag, or application-version change was made without explicit authority.
+
+Do not redefine success around already-finished work, elapsed effort, or the available budget. Reuse committed and independently proven slice evidence instead of repeating it, while preserving every still-open requirement of the wider goal.
 
 ## Known Pitfalls
 
