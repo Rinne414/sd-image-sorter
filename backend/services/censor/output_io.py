@@ -30,6 +30,7 @@ from fastapi import HTTPException
 from PIL import Image, PngImagePlugin
 
 import database as db
+from services.image_metadata_writer import prepare_image_for_save
 from services.indexed_file_mutation_service import save_and_reconcile_checked
 from utils.source_paths import resolve_existing_indexed_image_path
 
@@ -40,6 +41,11 @@ logger = logging.getLogger("services.censor_service")
 
 
 CensorOutputFormat = Literal['png', 'jpg', 'webp']
+
+
+def _combine_save_warnings(writer_warnings: List[str], reconcile_warnings: List[str]) -> List[str]:
+    '''Return stable, de-duplicated warnings from image conversion and reconciliation.'''
+    return list(dict.fromkeys([*writer_warnings, *reconcile_warnings]))
 
 
 def _image_has_alpha(image: Image.Image) -> bool:
@@ -291,8 +297,8 @@ class _OutputMixin:
             output_filename = f"{base_name}{safe_suffix}{ext}"
             output_path = self._ensure_output_path(output_folder, output_filename)
 
-            def _write_censored_image(final_output_path: str, _overwrite_requested: bool) -> None:
-                self._save_image_with_format(censored, final_output_path, output_format, {})
+            def _write_censored_image(final_output_path: str, _overwrite_requested: bool) -> List[str]:
+                return self._save_image_with_format(censored, final_output_path, output_format, {})
 
             write_result = save_and_reconcile_checked(
                 output_path,
@@ -306,7 +312,7 @@ class _OutputMixin:
             return self._save_response(
                 output_path,
                 output_filename,
-                warnings=write_result.warnings,
+                warnings=_combine_save_warnings(write_result.writer_result, write_result.warnings),
                 target_existed=write_result.target_existed,
             )
         except HTTPException:
@@ -357,8 +363,8 @@ class _OutputMixin:
                     output_format
                 )
 
-            def _write_canvas_save(final_output_path: str, _overwrite_requested: bool) -> None:
-                self._save_image_with_format(image, final_output_path, output_format, save_kwargs)
+            def _write_canvas_save(final_output_path: str, _overwrite_requested: bool) -> List[str]:
+                return self._save_image_with_format(image, final_output_path, output_format, save_kwargs)
 
             write_result = save_and_reconcile_checked(
                 output_path,
@@ -372,7 +378,7 @@ class _OutputMixin:
             return self._save_response(
                 output_path,
                 output_filename,
-                warnings=write_result.warnings,
+                warnings=_combine_save_warnings(write_result.writer_result, write_result.warnings),
                 target_existed=write_result.target_existed,
             )
         except HTTPException:
@@ -560,16 +566,17 @@ class _OutputMixin:
         output_path: str,
         output_format: str,
         save_kwargs: Dict[str, object]
-    ) -> None:
+    ) -> List[str]:
         """Save image in the specified format."""
+        warnings: List[str] = []
         if output_format == 'webp':
             webp_kwargs = {k: v for k, v in save_kwargs.items() if k in ['exif', 'icc_profile']}
             image.save(output_path, format='WEBP', quality=95, **webp_kwargs)
         elif output_format in ['jpg', 'jpeg']:
-            if image.mode == 'RGBA':
-                image = image.convert('RGB')
+            image = prepare_image_for_save(image, 'JPEG', warnings)
             jpeg_kwargs = {k: v for k, v in save_kwargs.items() if k in ['exif', 'icc_profile', 'dpi']}
             image.save(output_path, format='JPEG', quality=95, **jpeg_kwargs)
         else:
             png_kwargs = {k: v for k, v in save_kwargs.items() if k in ['pnginfo', 'dpi', 'icc_profile']}
             image.save(output_path, format='PNG', **png_kwargs)
+        return warnings

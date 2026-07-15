@@ -314,11 +314,11 @@ test('save-all wire format: /save-data payload, strip default, un-censored items
   const saveOpsCalls: Array<Record<string, unknown>> = []
   await page.route('**/api/censor/save-data', async (route) => {
     saveDataCalls.push(route.request().postDataJSON() as Record<string, unknown>)
-    await route.fulfill({ json: { status: 'ok', saved_path: `${OUTPUT_FOLDER}/out.png` } })
+    await route.fulfill({ json: { status: 'ok', saved_path: `${OUTPUT_FOLDER}/out.png`, warnings: [] } })
   })
   await page.route('**/api/censor/save-operations', async (route) => {
     saveOpsCalls.push(route.request().postDataJSON() as Record<string, unknown>)
-    await route.fulfill({ json: { status: 'ok' } })
+    await route.fulfill({ json: { status: 'ok', warnings: [] } })
   })
   await seedCensorQueue(page)
 
@@ -374,11 +374,11 @@ test('items with edit operations save via /save-operations with the operation li
   const saveOpsCalls: Array<Record<string, unknown>> = []
   await page.route('**/api/censor/save-data', async (route) => {
     saveDataCalls.push(route.request().postDataJSON() as Record<string, unknown>)
-    await route.fulfill({ json: { status: 'ok' } })
+    await route.fulfill({ json: { status: 'ok', warnings: [] } })
   })
   await page.route('**/api/censor/save-operations', async (route) => {
     saveOpsCalls.push(route.request().postDataJSON() as Record<string, unknown>)
-    await route.fulfill({ json: { status: 'ok' } })
+    await route.fulfill({ json: { status: 'ok', warnings: [] } })
   })
   await seedCensorQueue(page)
 
@@ -422,6 +422,41 @@ test('items with edit operations save via /save-operations with the operation li
     output_format: 'webp',
     allow_overwrite: false,
   })
+})
+
+test('save warnings are deduplicated and malformed warning contracts fail explicitly', async ({ page }) => {
+  await stubCensorBackend(page)
+  const jpegWarning = 'JPEG does not support transparency; transparent pixels were flattened onto a white background.'
+  let saveCalls = 0
+  await page.route('**/api/censor/save-data', async (route) => {
+    saveCalls += 1
+    await route.fulfill({
+      json: saveCalls === 1
+        ? { status: 'ok', warnings: [jpegWarning, jpegWarning] }
+        : { status: 'ok', warnings: 'invalid warning payload' },
+    })
+  })
+  await seedCensorQueue(page)
+
+  await page.evaluate(({ ids, dataUrl }) => {
+    for (const id of ids) {
+      const item = (window as any).__CENSOR_STATE__.queue.find((entry: any) => entry.id === id)
+      item.currentDataUrl = dataUrl
+      item.isProcessed = true
+    }
+  }, { ids: IMAGES.map((image) => image.id), dataUrl: WHITE_PNG_DATA_URL })
+
+  await saveAllWithOptions(page, { folder: OUTPUT_FOLDER, format: 'jpg' })
+
+  await expect.poll(() => saveCalls).toBe(2)
+  expect((await itemState(page, IMAGES[0].id)).batchStatus).toBe('saved')
+  expect((await itemState(page, IMAGES[1].id)).batchStatus).toBe('failed')
+  const failedItem = await page.evaluate((id) => {
+    return (window as any).__CENSOR_STATE__.queue.find((entry: any) => entry.id === id)
+  }, IMAGES[1].id)
+  expect(failedItem.batchError).toContain('Censor save response requires a warnings array')
+  await expect(page.locator('#toast-container .toast.warning', { hasText: jpegWarning })).toHaveCount(1)
+  await expect(page.locator('#toast-container .toast.warning', { hasText: '1 failed' })).toBeVisible()
 })
 
 test('zoom controls scale the shared canvas container and fit resets it', async ({ page }) => {

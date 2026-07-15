@@ -70,6 +70,22 @@ function markGalleryRefreshAfterCensorSave(result) {
     }
 }
 
+function readCensorSaveWarnings(result) {
+    if (!result || typeof result !== 'object' || Array.isArray(result)) {
+        throw new TypeError('Censor save response must be an object');
+    }
+    if (!Array.isArray(result.warnings)) {
+        throw new TypeError('Censor save response requires a warnings array');
+    }
+
+    return result.warnings.map((warning) => {
+        if (typeof warning !== 'string' || !warning.trim()) {
+            throw new TypeError('Censor save warnings must be non-empty strings');
+        }
+        return warning.trim();
+    });
+}
+
 async function saveCensorQueueItem(item, formatOption = 'png', metadataOption = 'strip', allowOverwrite = false) {
     const folder = CensorState.outputFolder;
     const baseName = item.outputFilename.replace(/\.[^/.]+$/, '');
@@ -132,6 +148,7 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
     let count = 0;
     let failedCount = 0;
     let skippedCount = 0;
+    const saveWarnings = new Set();
     await processCensorBatchItems(async (item, { index, total }) => {
         // "Save All Processed" must never write an un-censored original as if it
         // were done — that would violate the never-fallback-to-uncensored
@@ -156,7 +173,8 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
                 primaryLabel: censorT('censor.loadingSavePrimary', null, 'Save')
             }));
 
-            await saveCensorQueueItem(item, formatOption, metadataOption, allowOverwrite);
+            const result = await saveCensorQueueItem(item, formatOption, metadataOption, allowOverwrite);
+            readCensorSaveWarnings(result).forEach((warning) => saveWarnings.add(warning));
             item.batchStatus = 'saved';
             count++;
         } catch (e) {
@@ -196,6 +214,10 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
             censorT('censor.saveSuccess', { count, folder }, 'Saved {count} images to {folder}'),
             'success'
         );
+    }
+
+    if (saveWarnings.size > 0) {
+        window.App.showToast(Array.from(saveWarnings).join(' '), 'warning');
     }
 }
 

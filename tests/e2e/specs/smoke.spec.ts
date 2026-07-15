@@ -5918,6 +5918,7 @@ test.describe('Smoke Tests', () => {
           status: 'ok',
           output_path: 'L:/mock-output/censor-proxy-save.png',
           filename: 'censor-proxy-save.png',
+          warnings: [],
         },
       })
     })
@@ -5928,6 +5929,7 @@ test.describe('Smoke Tests', () => {
           status: 'ok',
           output_path: 'L:/mock-output/censor-proxy-save.png',
           filename: 'censor-proxy-save.png',
+          warnings: [],
         },
       })
     })
@@ -6057,6 +6059,7 @@ test.describe('Smoke Tests', () => {
           status: 'ok',
           output_path: 'L:/mock-output/censor-sam3-mask-ref.png',
           filename: 'censor-sam3-mask-ref.png',
+          warnings: [],
         },
       })
     })
@@ -6067,6 +6070,7 @@ test.describe('Smoke Tests', () => {
           status: 'ok',
           output_path: 'L:/mock-output/censor-sam3-mask-ref.png',
           filename: 'censor-sam3-mask-ref.png',
+          warnings: [],
         },
       })
     })
@@ -6177,6 +6181,7 @@ test.describe('Smoke Tests', () => {
           status: 'ok',
           output_path: 'L:/mock-output/censor-sam3-inline-small.png',
           filename: 'censor-sam3-inline-small.png',
+          warnings: [],
         },
       })
     })
@@ -6187,6 +6192,7 @@ test.describe('Smoke Tests', () => {
           status: 'ok',
           output_path: 'L:/mock-output/censor-sam3-inline-small.png',
           filename: 'censor-sam3-inline-small.png',
+          warnings: [],
         },
       })
     })

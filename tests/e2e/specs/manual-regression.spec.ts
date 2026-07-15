@@ -7,6 +7,21 @@ import { expect, test, type APIRequestContext, type Page } from '../fixtures/cli
 
 test.describe.configure({ mode: 'serial' })
 
+type CensorTestQueueItem = {
+  id: number
+  isModified?: boolean
+  currentDataUrl?: string | null
+}
+
+type CensorTestState = {
+  activeCanvasId?: string
+  activeId?: number
+  isLoadingImage?: boolean
+  queue?: CensorTestQueueItem[]
+}
+
+type CensorTestWindow = Window & { __CENSOR_STATE__?: CensorTestState }
+
 const repoRoot = path.resolve(__dirname, '..', '..', '..')
 
 function commandExists(candidate: string): boolean {
@@ -57,6 +72,12 @@ const manualSortBottom = path.join(manualRoot, 'manual-bottom')
 const saveOutPng = path.join(manualRoot, 'save-out-png')
 const saveOutWebp = path.join(manualRoot, 'save-out-webp')
 const saveOutJpg = path.join(manualRoot, 'save-out-jpg')
+const censorJpegAlphaRoot = path.join(manualRoot, 'censor-jpeg-alpha')
+const censorJpegAlphaSource = path.join(censorJpegAlphaRoot, 'source')
+const censorJpegAlphaOutput = path.join(censorJpegAlphaRoot, 'output')
+const censorJpegAlphaFilename = 'manual-censor-jpeg-alpha-source.png'
+const censorJpegAlphaOutputFilename = 'manual-censor-jpeg-alpha-source.jpg'
+const jpegAlphaWarning = 'JPEG does not support transparency; transparent pixels were flattened onto a white background.'
 const scanBrowserRoot = path.join(manualRoot, 'scan-browser-root')
 const scanBrowserPicked = path.join(scanBrowserRoot, 'picked-folder')
 const tagIoRoot = path.join(manualRoot, 'tag-io')
@@ -361,6 +382,104 @@ async function resetSaveOutputs() {
   for (const dir of [saveOutPng, saveOutWebp, saveOutJpg]) {
     await clearDir(dir)
   }
+}
+
+function cleanupCensorJpegAlphaFixture() {
+  runBackendScript(`
+import shutil
+import sys
+from pathlib import Path
+
+sys.path.insert(0, ${JSON.stringify(path.join(repoRoot, 'backend'))})
+import database as db
+
+fixture_root = Path(${JSON.stringify(censorJpegAlphaRoot)})
+fixture_filenames = (${JSON.stringify(censorJpegAlphaFilename)}, ${JSON.stringify(censorJpegAlphaOutputFilename)})
+with db.get_db() as conn:
+    conn.execute("DELETE FROM images WHERE filename IN (?, ?)", fixture_filenames)
+
+if fixture_root.exists():
+    shutil.rmtree(fixture_root)
+
+print("ok")
+`)
+}
+
+function prepareCensorJpegAlphaFixture(): {
+  imageId: number
+  filename: string
+  outputDirectory: string
+  outputPath: string
+} {
+  const paths = runBackendJson<{
+    sourcePath: string
+    outputDirectory: string
+    outputPath: string
+  }>(`
+import json
+from pathlib import Path
+from PIL import Image, ImageDraw
+
+source_dir = Path(${JSON.stringify(censorJpegAlphaSource)})
+output_dir = Path(${JSON.stringify(censorJpegAlphaOutput)})
+source_dir.mkdir(parents=True, exist_ok=True)
+output_dir.mkdir(parents=True, exist_ok=True)
+image_path = source_dir / ${JSON.stringify(censorJpegAlphaFilename)}
+output_path = output_dir / ${JSON.stringify(censorJpegAlphaOutputFilename)}
+
+image = Image.new("RGBA", (64, 64), color=(0, 0, 0, 0))
+ImageDraw.Draw(image).rectangle((24, 24, 39, 39), fill=(48, 96, 192, 255))
+image.save(image_path, format="PNG")
+
+print(json.dumps({
+    "sourcePath": str(image_path.resolve()),
+    "outputDirectory": str(output_dir.resolve()),
+    "outputPath": str(output_path.resolve()),
+}))
+`)
+
+  if (!path.isAbsolute(paths.sourcePath) || !path.isAbsolute(paths.outputDirectory) || !path.isAbsolute(paths.outputPath)) {
+    throw new TypeError('Censor JPEG alpha fixture requires absolute source and output paths')
+  }
+  const indexedImage = ensureLibraryImageEntry(paths.sourcePath)
+  if (!indexedImage || !Number.isInteger(indexedImage.id) || indexedImage.id <= 0) {
+    throw new TypeError('Censor JPEG alpha fixture requires a positive integer imageId')
+  }
+  if (indexedImage.filename !== censorJpegAlphaFilename) {
+    throw new TypeError(`Unexpected Censor JPEG alpha fixture filename: ${indexedImage.filename}`)
+  }
+
+  return {
+    imageId: indexedImage.id,
+    filename: indexedImage.filename,
+    outputDirectory: paths.outputDirectory,
+    outputPath: paths.outputPath,
+  }
+}
+
+function inspectCensorJpegOutput(outputPath: string): {
+  format: string
+  mode: string
+  corner: number[]
+  center: number[]
+} {
+  return runBackendJson(`
+import json
+from pathlib import Path
+from PIL import Image
+
+output_path = Path(${JSON.stringify(outputPath)})
+with Image.open(output_path) as image:
+    image.load()
+    result = {
+        "format": image.format,
+        "mode": image.mode,
+        "corner": list(image.getpixel((0, 0))),
+        "center": list(image.getpixel((32, 32))),
+    }
+
+print(json.dumps(result))
+`)
 }
 
 // The e2e DB persists across runs (per-port file), so favorites left by a prior
@@ -1729,6 +1848,102 @@ test('Keep/Reject cull should switch modes, keep/reject/skip, and route kept ima
     const payload = await (await request.get('/api/collections/favorites/ids')).json()
     return Number(payload.count ?? (payload.image_ids || []).length)
   }, { timeout: 10000 }).toBe(baselineFavorites + 2)
+})
+
+test('manual censor JPEG save should flatten transparent pixels onto white and preserve the pen edit', async ({ page }) => {
+  test.setTimeout(120000)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  cleanupCensorJpegAlphaFixture()
+
+  try {
+    const fixture = prepareCensorJpegAlphaFixture()
+    await openMainPage(page)
+    await setGallerySearch(page, fixture.filename)
+
+    const galleryItem = page.locator(`#gallery-grid .gallery-item[data-id="${fixture.imageId}"]`)
+    await expect(galleryItem).toBeVisible()
+    await page.locator('#btn-toggle-select').click()
+    await galleryItem.click()
+    await page.locator('#btn-send-to-censor').click()
+
+    await expect(page.locator('#view-censor.active')).toBeVisible()
+    await expect(page.locator('#censor-queue-list .queue-thumb-v2')).toHaveCount(1, { timeout: 15000 })
+    await expect.poll(async () => {
+      return await page.evaluate((imageId) => {
+        const state = (window as CensorTestWindow).__CENSOR_STATE__
+        const canvas = document.getElementById(state?.activeCanvasId || '') as HTMLCanvasElement | null
+        return Boolean(
+          state?.activeId === imageId
+            && state?.isLoadingImage === false
+            && canvas?.width === 64
+            && canvas?.height === 64
+        )
+      }, fixture.imageId)
+    }, { timeout: 15000 }).toBe(true)
+
+    const activeCanvasId = await page.evaluate(() => {
+      return (window as CensorTestWindow).__CENSOR_STATE__?.activeCanvasId || ''
+    })
+    expect(['censor-canvas', 'censor-canvas-buffer']).toContain(activeCanvasId)
+    const activeCanvas = page.locator(`#${activeCanvasId}`)
+    await expect(activeCanvas).toBeVisible()
+
+    const penTool = page.locator('.tool-btn-v2[data-tool="pen"]')
+    await penTool.click()
+    await expect(penTool).toHaveClass(/active/)
+    const canvasBox = await activeCanvas.boundingBox()
+    if (!canvasBox) {
+      throw new Error(`Active Censor canvas ${activeCanvasId} has no visible bounding box`)
+    }
+    const centerX = canvasBox.x + canvasBox.width / 2
+    const centerY = canvasBox.y + canvasBox.height / 2
+    await page.mouse.move(centerX, centerY)
+    await page.mouse.down()
+    await page.mouse.move(centerX + 3, centerY, { steps: 2 })
+    await page.mouse.up()
+
+    await expect.poll(async () => {
+      return await page.evaluate((imageId) => {
+        const state = (window as CensorTestWindow).__CENSOR_STATE__
+        const item = state?.queue?.find((entry) => entry.id === imageId)
+        const canvas = document.getElementById(state?.activeCanvasId || '') as HTMLCanvasElement | null
+        const pixel = canvas?.getContext('2d')?.getImageData(32, 32, 1, 1).data
+        return Boolean(
+          item?.isModified
+            && item?.currentDataUrl
+            && pixel
+            && pixel[0] >= 220
+            && pixel[1] <= 40
+            && pixel[2] <= 40
+            && pixel[3] === 255
+        )
+      }, fixture.imageId)
+    }).toBe(true)
+
+    await page.locator('#btn-save-all-processed').click()
+    await expect(page.locator('#save-options-modal.visible')).toBeVisible()
+    await page.locator('#save-output-folder').fill(fixture.outputDirectory)
+    await page.selectOption('#save-metadata-option', 'strip')
+    await page.selectOption('#save-format-option', 'jpg')
+    await page.locator('#btn-confirm-save-options').click()
+
+    await expect(page.locator('#toast-container')).toContainText(jpegAlphaWarning, { timeout: 30000 })
+    await expect.poll(() => fsSync.existsSync(fixture.outputPath), { timeout: 30000 }).toBe(true)
+
+    const decoded = inspectCensorJpegOutput(fixture.outputPath)
+    expect(decoded.format).toBe('JPEG')
+    expect(decoded.mode).toBe('RGB')
+    expect(decoded.corner).toHaveLength(3)
+    for (const channel of decoded.corner) {
+      expect(channel).toBeGreaterThanOrEqual(245)
+    }
+    expect(decoded.center).toHaveLength(3)
+    expect(decoded.center[0]).toBeGreaterThanOrEqual(220)
+    expect(decoded.center[1]).toBeLessThanOrEqual(40)
+    expect(decoded.center[2]).toBeLessThanOrEqual(40)
+  } finally {
+    cleanupCensorJpegAlphaFixture()
+  }
 })
 
 test('censor detect and save should work through the real UI flow', async ({ page, request }) => {

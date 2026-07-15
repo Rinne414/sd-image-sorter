@@ -26,6 +26,7 @@ from fastapi import HTTPException
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageEnhance, ImageFilter
 
 import database as db
+from services.censor.output_io import _combine_save_warnings
 from services.indexed_file_mutation_service import save_and_reconcile_checked
 
 if TYPE_CHECKING:  # annotation-only; never imported at runtime (no facade cycle)
@@ -100,8 +101,8 @@ class _EditOpsMixin:
                     output_format,
                 )
 
-            def _write_operations_save(final_output_path: str, _overwrite_requested: bool) -> None:
-                self._save_image_with_format(image_to_save, final_output_path, output_format, save_kwargs)
+            def _write_operations_save(final_output_path: str, _overwrite_requested: bool) -> List[str]:
+                return self._save_image_with_format(image_to_save, final_output_path, output_format, save_kwargs)
 
             write_result = save_and_reconcile_checked(
                 output_path,
@@ -115,7 +116,7 @@ class _EditOpsMixin:
             return self._save_response(
                 output_path,
                 output_filename,
-                warnings=write_result.warnings,
+                warnings=_combine_save_warnings(write_result.writer_result, write_result.warnings),
                 target_existed=write_result.target_existed,
             )
         except HTTPException:
