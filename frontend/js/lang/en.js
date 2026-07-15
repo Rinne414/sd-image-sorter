@@ -487,7 +487,7 @@ window.I18nLang_en = {
     'massTag.selectionOpen': 'Edit Selected Tags',
     'massTag.selectionTooltip': 'Bulk tag operations on selected images',
     'massTag.title': '🧹 Mass Tag Editor',
-    'massTag.description': 'Bulk operations on stored tags. Always run "Dry-run preview" before "Apply" — these changes can\'t be undone.',
+    'massTag.description': 'Bulk operations on stored tags. Run "Dry-run preview" before "Apply". Successful edits offer Undo when an undo journal can be saved.',
     'massTag.scope': 'Scope',
     'massTag.scopeSelection': 'Current selection',
     'massTag.scopeFilter': 'Current filter',
@@ -511,7 +511,7 @@ window.I18nLang_en = {
     'massTag.apply': 'Apply',
     'massTag.sampleChanges': 'Sample changes (first 5)',
     'massTag.confirmTitle': 'Confirm bulk edit',
-    'massTag.confirmNote': 'This is a DELETE + INSERT operation and cannot be undone. Make sure the dry-run looked right.',
+    'massTag.confirmNote': 'This rewrites stored tag rows. Review the dry-run carefully; Undo is offered only when this operation\'s journal can be saved.',
     'massTag.confirmCountdown': 'Apply in 2s…',
 
     // View modes

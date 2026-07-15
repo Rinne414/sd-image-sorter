@@ -489,7 +489,7 @@ window.I18nLang_zhCN = {
     'massTag.selectionOpen': '编辑选中标签',
     'massTag.selectionTooltip': '对选中图片进行批量标签操作',
     'massTag.title': '🧹 批量标签编辑器',
-    'massTag.description': '对已存的标签做批量操作。在按「应用」之前请先点「试算预览」，这些更改不能撤销。',
+    'massTag.description': '对已存标签进行批量操作。请先「试算预览」再「应用」；成功操作会在撤销日志可保存时提供「撤销」。',
     'massTag.scope': '范围',
     'massTag.scopeSelection': '当前选择',
     'massTag.scopeFilter': '当前筛选',
@@ -513,7 +513,7 @@ window.I18nLang_zhCN = {
     'massTag.apply': '应用',
     'massTag.sampleChanges': '前 5 条修改示例',
     'massTag.confirmTitle': '确认批量编辑',
-    'massTag.confirmNote': '这是 DELETE + INSERT 操作且不可撤销，请确认试算结果无误。',
+    'massTag.confirmNote': '这会重写已存标签行。请仔细核对试算结果；仅当本次操作的撤销日志可保存时才会提供「撤销」。',
     'massTag.confirmCountdown': '2 秒后可应用…',
 
     // View modes

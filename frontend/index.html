@@ -7872,7 +7872,7 @@
             <button class="modal-close" id="btn-mass-tag-close" aria-label="Close mass tag editor">✕</button>
             <h3 id="mass-tag-modal-title" data-i18n="massTag.title">🧹 Mass Tag Editor</h3>
             <p class="modal-description" data-i18n="massTag.description">
-                Bulk operations on stored tags. Always run "Dry-run preview" before "Apply" — these changes can't be undone.
+                Bulk operations on stored tags. Run "Dry-run preview" before "Apply". Successful edits offer Undo when an undo journal can be saved.
             </p>
 
             <section class="mass-tag-scope" aria-labelledby="mass-tag-scope-title">
@@ -7993,7 +7993,7 @@
             </h3>
             <dl class="mass-tag-confirm-summary" id="mass-tag-confirm-summary"></dl>
             <p class="mass-tag-confirm-note" data-i18n="massTag.confirmNote">
-                This is a DELETE + INSERT operation and cannot be undone. Make sure the dry-run looked right.
+                This rewrites stored tag rows. Review the dry-run carefully; Undo is offered only when this operation's journal can be saved.
             </p>
             <div class="modal-actions">
                 <button type="button" class="btn btn-ghost" id="btn-mass-tag-confirm-cancel" data-i18n="common.cancel">Cancel</button>

@@ -125,6 +125,12 @@ test('applied changes surface an undo-journal warning without hiding the result'
   await expect(page.locator('#view-gallery')).toBeVisible()
   await page.locator('#btn-mass-tag-editor').click()
   await expect(page.locator('#mass-tag-modal')).toHaveClass(/visible/)
+  await expect(page.locator('#mass-tag-modal .modal-description')).toContainText(
+    'Successful edits offer Undo when an undo journal can be saved.',
+  )
+  await expect(page.locator('.mass-tag-confirm-note')).toContainText(
+    'Undo is offered only when this operation\'s journal can be saved.',
+  )
 
   const dispatched = await performBulkAddAndCaptureDispatch(page)
 
