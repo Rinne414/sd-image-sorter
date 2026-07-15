@@ -4909,6 +4909,7 @@ test.describe('Smoke Tests', () => {
   })
 
   test('manual sort resume banner should show saved session mode and folders context', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
     await mockImageAsset(page, 1)
 
     await page.route('**/api/sort/current', async (route) => {
@@ -4937,6 +4938,61 @@ test.describe('Smoke Tests', () => {
     await expect(banner).toContainText('A: C:/sorted/keep')
     await expect(banner).toContainText('D: C:/sorted/best')
     await expect(banner).toContainText('Setup preferences here may differ from the active saved session.')
+
+    const layout = await page.evaluate(() => {
+      const actions = document.getElementById('sort-setup-actions')
+      const count = document.getElementById('sort-scope-count')
+      const resume = document.getElementById('sort-resume-banner')
+      const columns = document.querySelector('.sort-setup-columns')
+      if (!actions || !count || !resume || !columns) {
+        throw new Error('Missing Manual Sort resume layout element')
+      }
+
+      const actionRect = actions.getBoundingClientRect()
+      const countRect = count.getBoundingClientRect()
+      const resumeRect = resume.getBoundingClientRect()
+      const columnsRect = columns.getBoundingClientRect()
+      const isContained = (inner: DOMRect, outer: DOMRect): boolean => (
+        inner.top >= outer.top &&
+        inner.left >= outer.left &&
+        inner.bottom <= outer.bottom &&
+        inner.right <= outer.right
+      )
+      const overlapsColumns = (
+        actionRect.left < columnsRect.right &&
+        actionRect.right > columnsRect.left &&
+        actionRect.top < columnsRect.bottom &&
+        actionRect.bottom > columnsRect.top
+      )
+
+      return {
+        actionFullyVisible: (
+          actionRect.top >= 0 &&
+          actionRect.left >= 0 &&
+          actionRect.bottom <= window.innerHeight &&
+          actionRect.right <= window.innerWidth
+        ),
+        countContained: isContained(countRect, actionRect),
+        resumeContained: isContained(resumeRect, actionRect),
+        resumeFullyVisible: (
+          resumeRect.top >= 0 &&
+          resumeRect.left >= 0 &&
+          resumeRect.bottom <= window.innerHeight &&
+          resumeRect.right <= window.innerWidth
+        ),
+        hasHorizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        overlapsColumns,
+      }
+    })
+
+    expect(layout).toEqual({
+      actionFullyVisible: true,
+      countContained: true,
+      resumeContained: true,
+      resumeFullyVisible: true,
+      hasHorizontalOverflow: false,
+      overlapsColumns: false,
+    })
   })
 
   test('manual sort start should resume unfinished session instead of starting over', async ({ page }) => {

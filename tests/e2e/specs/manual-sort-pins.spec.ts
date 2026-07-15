@@ -92,6 +92,158 @@ async function gotoManualSetup(page: Page, seeds?: Record<string, string>): Prom
   await expect(page.locator('#sort-setup')).toBeVisible()
 }
 
+const MANUAL_SORT_DESKTOP_VIEWPORTS = [
+  { width: 1366, height: 768 },
+  { width: 1920, height: 1080 },
+  { width: 2560, height: 1440 },
+] as const
+
+test('manual sort start stays in the first viewport and gives actionable feedback', async ({ page }) => {
+  const consoleFailures: string[] = []
+  const pageFailures: string[] = []
+  const failedApiRequests: string[] = []
+  const failedApiResponses: string[] = []
+
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning') {
+      consoleFailures.push(`${message.type()}: ${message.text()}`)
+    }
+  })
+  page.on('pageerror', (error) => pageFailures.push(error.message))
+  page.on('requestfailed', (request) => {
+    const url = new URL(request.url())
+    const errorText = request.failure()?.errorText ?? 'unknown failure'
+    // Scope refreshes deliberately cancel the previous count request through
+    // AbortController; that cancellation is not an HTTP or runtime failure.
+    if (url.pathname === '/api/images/count' && errorText === 'net::ERR_ABORTED') return
+    if (url.pathname.startsWith('/api/')) {
+      failedApiRequests.push(`${request.method()} ${url.pathname}: ${errorText}`)
+    }
+  })
+  page.on('response', (response) => {
+    const url = new URL(response.url())
+    if (url.pathname.startsWith('/api/') && !response.ok()) {
+      failedApiResponses.push(`${response.status()} ${response.request().method()} ${url.pathname}`)
+    }
+  })
+
+  const geometryResults: Array<{
+    viewport: string
+    actionFullyVisible: boolean
+    fullyVisible: boolean
+    countVisible: boolean
+    visibleActionChildrenContained: boolean
+    hasHorizontalOverflow: boolean
+    overlapsConfiguration: boolean
+  }> = []
+
+  for (const viewport of MANUAL_SORT_DESKTOP_VIEWPORTS) {
+    await page.setViewportSize(viewport)
+    await gotoManualSetup(page)
+
+    const startButton = page.locator('#btn-start-sorting')
+    const actionArea = page.locator('#sort-setup-actions')
+    const scopeCount = page.locator('#sort-scope-count')
+    const toastContainer = page.locator('#toast-container')
+    await expect(actionArea).toBeVisible()
+    await expect(scopeCount).toBeVisible()
+    await expect(scopeCount).not.toHaveClass(/is-counting/)
+    await expect(startButton).toBeVisible()
+
+    const geometry = await page.evaluate(() => {
+      const start = document.getElementById('btn-start-sorting')
+      const actions = document.getElementById('sort-setup-actions')
+      const count = document.getElementById('sort-scope-count')
+      const resume = document.getElementById('sort-resume-banner')
+      if (!start || !actions || !count || !resume) {
+        throw new Error('Missing Manual Sort action-area element')
+      }
+
+      const startRect = start.getBoundingClientRect()
+      const actionRect = actions.getBoundingClientRect()
+      const countRect = count.getBoundingClientRect()
+      const resumeRect = resume.getBoundingClientRect()
+      const configurationIds = [
+        'sort-mode-switch',
+        'sort-preset-bar',
+        'manual-sort-filter-summary',
+        'manual-sort-execution-scope',
+        'manual-sort-operation-help',
+      ]
+      const rectanglesOverlap = (first: DOMRect, second: DOMRect): boolean => (
+        first.left < second.right &&
+        first.right > second.left &&
+        first.top < second.bottom &&
+        first.bottom > second.top
+      )
+      const isContained = (inner: DOMRect, outer: DOMRect): boolean => (
+        inner.top >= outer.top &&
+        inner.left >= outer.left &&
+        inner.bottom <= outer.bottom &&
+        inner.right <= outer.right
+      )
+      const overlapsConfiguration = configurationIds.some((id) => {
+        const element = document.getElementById(id)
+        if (!element) throw new Error(`Missing #${id}`)
+        return rectanglesOverlap(actionRect, element.getBoundingClientRect())
+      })
+      const visibleActionChildren = [
+        { element: count, rect: countRect },
+        { element: start, rect: startRect },
+        { element: resume, rect: resumeRect },
+      ].filter(({ element }) => element.getClientRects().length > 0)
+
+      return {
+        actionFullyVisible: (
+          actionRect.top >= 0 &&
+          actionRect.left >= 0 &&
+          actionRect.bottom <= window.innerHeight &&
+          actionRect.right <= window.innerWidth
+        ),
+        fullyVisible: (
+          startRect.top >= 0 &&
+          startRect.left >= 0 &&
+          startRect.bottom <= window.innerHeight &&
+          startRect.right <= window.innerWidth
+        ),
+        countVisible: count.getClientRects().length > 0,
+        visibleActionChildrenContained: visibleActionChildren.every(({ rect }) => isContained(rect, actionRect)),
+        hasHorizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        overlapsConfiguration,
+      }
+    })
+
+    geometryResults.push({
+      viewport: `${viewport.width}x${viewport.height}`,
+      ...geometry,
+    })
+
+    const alertCountBefore = await toastContainer.locator('[role="alert"]').count()
+    await startButton.click()
+    const validationAlert = toastContainer.locator('[role="alert"]').nth(alertCountBefore)
+    await expect(validationAlert).toBeVisible()
+    await expect(validationAlert).toContainText(/configure at least one destination folder|请至少配置一个目标文件夹/i)
+    await expect(page.locator('#sort-setup')).toBeVisible()
+    expect(await page.evaluate(() => Boolean((window as ManualWin).ManualSortState.active))).toBe(false)
+  }
+
+  expect(geometryResults).toEqual(
+    MANUAL_SORT_DESKTOP_VIEWPORTS.map((viewport) => ({
+      viewport: `${viewport.width}x${viewport.height}`,
+      actionFullyVisible: true,
+      fullyVisible: true,
+      countVisible: true,
+      visibleActionChildrenContained: true,
+      hasHorizontalOverflow: false,
+      overlapsConfiguration: false,
+    }))
+  )
+  expect(consoleFailures).toEqual([])
+  expect(pageFailures).toEqual([])
+  expect(failedApiRequests).toEqual([])
+  expect(failedApiResponses).toEqual([])
+})
+
 // ---------------------------------------------------------------------------
 // 1. Cross-module window surface — the ENTIRE public contract of the file.
 //    A verbatim split must keep every one of these attached, or _switchSortingSub

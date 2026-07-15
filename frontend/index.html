@@ -1732,6 +1732,34 @@
                             </button>
                         </div>
 
+                        <div class="sort-setup-actions" id="sort-setup-actions">
+                            <!-- Live scoped image count. Lives OUTSIDE #btn-start-sorting on
+                                 purpose: ui-refresh.js rebuilds the button's inner spans, which
+                                 would clobber any count placed inside it. -->
+                            <div class="sort-scope-count" id="sort-scope-count" aria-live="polite" hidden>
+                                <span class="sort-scope-count-icon" aria-hidden="true">🖼️</span>
+                                <span id="sort-scope-count-text"></span>
+                            </div>
+                            <button class="btn btn-primary btn-large btn-glow" id="btn-start-sorting">
+                                🎮 <span id="sort-start-label" data-i18n="manual.startSorting">Start Sorting</span>
+                            </button>
+
+                            <!-- Resume banner shown when a saved session is detected -->
+                            <div id="sort-resume-banner" style="display:none; flex-direction:column; align-items:flex-start; gap:8px; margin-top:12px; padding:12px 16px; background:var(--bg-secondary,#2a2a2a); border:1px solid var(--accent,#7c6af7); border-radius:8px;">
+                                <div>
+                                    <span data-i18n="manual.resumeBannerTitle">Unfinished session detected:</span>
+                                    <strong class="resume-count"></strong>
+                                </div>
+                                <div class="helper-text resume-operation"></div>
+                                <div class="helper-text resume-folders"></div>
+                                <div class="helper-text resume-note" data-i18n="manual.resumeBannerNote">Setup preferences here may differ from the active saved session.</div>
+                                <div style="display:flex; gap:12px;">
+                                <button class="btn btn-primary" id="btn-resume-sorting" data-i18n="manual.resume">Resume</button>
+                                <button class="btn btn-secondary" id="btn-discard-session" data-i18n="manual.discard">Discard</button>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- v3.5.0 rule-6: setup was a 1900px+ single column. At
                              desktop widths the destination config (left) and the
                              scope/behavior sections (right) sit side by side. -->
@@ -1836,31 +1864,6 @@
                             </div>
                         </div>
 
-                        <!-- Live scoped image count. Lives OUTSIDE #btn-start-sorting on
-                             purpose: ui-refresh.js rebuilds the button's inner spans, which
-                             would clobber any count placed inside it. -->
-                        <div class="sort-scope-count" id="sort-scope-count" aria-live="polite" hidden>
-                            <span class="sort-scope-count-icon" aria-hidden="true">🖼️</span>
-                            <span id="sort-scope-count-text"></span>
-                        </div>
-                        <button class="btn btn-primary btn-large btn-glow" id="btn-start-sorting">
-                            🎮 <span id="sort-start-label" data-i18n="manual.startSorting">Start Sorting</span>
-                        </button>
-
-                        <!-- Resume banner shown when a saved session is detected -->
-                        <div id="sort-resume-banner" style="display:none; flex-direction:column; align-items:flex-start; gap:8px; margin-top:12px; padding:12px 16px; background:var(--bg-secondary,#2a2a2a); border:1px solid var(--accent,#7c6af7); border-radius:8px;">
-                            <div>
-                                <span data-i18n="manual.resumeBannerTitle">Unfinished session detected:</span>
-                                <strong class="resume-count"></strong>
-                            </div>
-                            <div class="helper-text resume-operation"></div>
-                            <div class="helper-text resume-folders"></div>
-                            <div class="helper-text resume-note" data-i18n="manual.resumeBannerNote">Setup preferences here may differ from the active saved session.</div>
-                            <div style="display:flex; gap:12px;">
-                            <button class="btn btn-primary" id="btn-resume-sorting" data-i18n="manual.resume">Resume</button>
-                            <button class="btn btn-secondary" id="btn-discard-session" data-i18n="manual.discard">Discard</button>
-                            </div>
-                        </div>
                         </div><!-- /.sort-setup-col-main -->
 
                         <div class="sort-setup-col sort-setup-col-side">

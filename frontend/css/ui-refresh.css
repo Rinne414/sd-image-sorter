@@ -2771,6 +2771,26 @@ textarea:focus,
 #view-manual .setup-description {
     margin-bottom: 20px;
 }
+
+.sort-setup-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    margin: 16px 0 20px;
+    text-align: center;
+}
+
+.sort-setup-actions #btn-start-sorting {
+    margin: 0 auto;
+}
+
+.sort-setup-actions #sort-resume-banner {
+    width: min(760px, 100%);
+    margin-inline: auto;
+    text-align: left;
+}
+
 @media (min-width: 1280px) {
     .sort-setup-columns {
         display: grid;
@@ -2813,18 +2833,6 @@ textarea:focus,
     }
     .sort-setup-col-main .folder-row-middle .space-key {
         padding: 8px 24px;
-    }
-    /* Count + start CTA + resume banner live at the end of the left column
-       (balances the taller right column); keep them centered like before. */
-    .sort-setup-col-main .sort-scope-count {
-        justify-content: center;
-    }
-    .sort-setup-col-main #btn-start-sorting {
-        display: block;
-        margin: 14px auto 0;
-    }
-    .sort-setup-col-main #sort-resume-banner {
-        margin-top: 14px;
     }
 }
 
