@@ -3762,6 +3762,11 @@ test.describe('Smoke Tests', () => {
           moved: 1,
           errors: 1,
           message: 'Completed! Moved 1 images. 1 errors.',
+          recent_errors: [{
+            image_id: 2,
+            filename: 'partial-match-2.png',
+            error: 'Permission denied while writing the destination file',
+          }],
         },
       })
     })
@@ -3788,7 +3793,131 @@ test.describe('Smoke Tests', () => {
     const warningToast = page.locator('.toast.warning').last()
     await expect(warningToast).toContainText('Moved 1 images')
     await expect(warningToast).toContainText('1 failed')
+    const errorPanel = page.locator('#autosep-move-errors')
+    await expect(errorPanel).toBeVisible()
+    await expect(errorPanel).toContainText('partial-match-2.png')
+    await expect(errorPanel).toContainText('Permission denied while writing the destination file')
+    await expect(errorPanel).not.toContainText('[object Object]')
     await expect(page.locator('#autosep-preview .stat-number')).toHaveText('0')
+  })
+
+  test('auto-separate progress should reject missing or malformed error details', async ({ page }) => {
+    await openMainPage(page)
+    await openSortingSubView(page, 'autosep')
+
+    const failures = await page.evaluate(() => {
+      const progressUpdates = [
+        { current: 1, total: 1, moved: 0, errors: 1 },
+        { current: 1, total: 1, moved: 0, errors: 1, recent_errors: { filename: 'bad.png', error: 'failed' } },
+        { current: 1, total: 1, moved: 0, errors: 1, recent_errors: [] },
+        { current: 1, total: 1, moved: 0, errors: 1, recent_errors: [{ filename: '', error: 'failed' }] },
+        { current: 1, total: 1, moved: 0, errors: 1, recent_errors: [{ filename: 'bad.png', error: ' ' }] },
+      ]
+
+      ;(window as any).showAutosepMoveProgress(1)
+      return progressUpdates.map((progress) => {
+        try {
+          ;(window as any).updateAutosepMoveProgress(progress, 1)
+          return null
+        } catch (error) {
+          return {
+            name: error instanceof Error ? error.name : typeof error,
+            message: error instanceof Error ? error.message : String(error),
+          }
+        }
+      })
+    })
+
+    expect(failures).toEqual([
+      {
+        name: 'TypeError',
+        message: 'Auto-Separate progress reports errors but recent_errors is not an array',
+      },
+      {
+        name: 'TypeError',
+        message: 'Auto-Separate progress reports errors but recent_errors is not an array',
+      },
+      {
+        name: 'TypeError',
+        message: 'Auto-Separate progress reports errors but recent_errors is empty',
+      },
+      {
+        name: 'TypeError',
+        message: 'Auto-Separate error detail requires non-empty filename and error fields',
+      },
+      {
+        name: 'TypeError',
+        message: 'Auto-Separate error detail requires non-empty filename and error fields',
+      },
+    ])
+  })
+
+  test('auto-separate progress should not rewrite unchanged alert details', async ({ page }) => {
+    await openMainPage(page)
+    await openSortingSubView(page, 'autosep')
+
+    const result = await page.evaluate(async () => {
+      ;(window as any).showAutosepMoveProgress(2)
+      const alert = document.querySelector('#autosep-move-errors[role="alert"]')
+      if (!(alert instanceof HTMLElement)) {
+        throw new Error('Auto-Separate error alert was not rendered')
+      }
+
+      let mutations = 0
+      let mutationsAfterFirstRender = 0
+      let initialErrorNode: Element | null = null
+      const observer = new MutationObserver((records) => {
+        mutations += records.length
+      })
+      observer.observe(alert, { childList: true, subtree: true, characterData: true })
+
+      const progressResponses = [
+        {
+          status: 'running', current: 1, total: 2, moved: 0, errors: 1,
+          recent_errors: [{ image_id: 1, filename: 'bad.png', error: 'Permission denied' }],
+        },
+        {
+          status: 'running', current: 1, total: 2, moved: 0, errors: 1,
+          recent_errors: [{ image_id: 99, filename: 'bad.png', error: 'Permission denied' }],
+        },
+        {
+          status: 'done', current: 2, total: 2, moved: 1, errors: 1,
+          recent_errors: [{ image_id: 1, filename: 'bad.png', error: 'Permission denied' }],
+        },
+      ]
+      let responseIndex = 0
+      ;(window as any).App.API.get = async () => {
+        if (responseIndex === 1) {
+          mutationsAfterFirstRender = mutations
+          initialErrorNode = alert.firstElementChild
+        }
+        const response = progressResponses[Math.min(responseIndex, progressResponses.length - 1)]
+        responseIndex += 1
+        return response
+      }
+
+      await (window as any).pollAutosepMoveProgress(2, '')
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      const unchangedMutationCount = mutations - mutationsAfterFirstRender
+      const preservedNode = alert.firstElementChild === initialErrorNode
+
+      mutations = 0
+      ;(window as any).updateAutosepMoveProgress({
+        status: 'done', current: 2, total: 2, moved: 1, errors: 1,
+        recent_errors: [{ image_id: 1, filename: 'bad.png', error: 'Disk full' }],
+      }, 2)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      const changedMutationCount = mutations
+      const changedText = alert.textContent
+      observer.disconnect()
+
+      return { unchangedMutationCount, preservedNode, changedMutationCount, changedText }
+    })
+
+    expect(result.unchangedMutationCount).toBe(0)
+    expect(result.preservedNode).toBe(true)
+    expect(result.changedMutationCount).toBeGreaterThan(0)
+    expect(result.changedText).toContain('bad.png: Disk full')
   })
 
   test('auto-separate visible copy mode should send copy operation', async ({ page }) => {

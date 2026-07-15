@@ -5,6 +5,8 @@ Unit tests for scan progress callbacks.
 import os
 import sys
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
@@ -71,6 +73,142 @@ def test_copy_image_is_file_only_and_never_indexes_the_copy(test_db, tmp_path: P
     with db.get_db() as conn:
         rows_after = conn.execute("SELECT COUNT(*) FROM images").fetchone()[0]
     assert rows_after == rows_before
+
+
+def test_copy_image_removes_partial_destination_when_copy_fails(test_db, tmp_path: Path, monkeypatch):
+    source_dir = tmp_path / "copy-failure-source"
+    destination_dir = tmp_path / "copy-failure-dest"
+    source_dir.mkdir()
+    destination_dir.mkdir()
+    source_path = source_dir / "interrupted-copy.png"
+    Image.new("RGB", (32, 32), color="orange").save(source_path)
+    source_bytes = source_path.read_bytes()
+    image_id = db.add_image(path=str(source_path), filename=source_path.name)
+
+    def fail_after_partial_write(_source_path: str, destination_path: str) -> None:
+        Path(destination_path).write_bytes(b"partial-copy")
+        raise OSError("simulated interrupted copy")
+
+    monkeypatch.setattr(image_manager.shutil, "copy2", fail_after_partial_write)
+
+    with pytest.raises(FileOperationError, match="simulated interrupted copy"):
+        image_manager.copy_image(image_id, str(destination_dir), str(source_path))
+
+    assert source_path.read_bytes() == source_bytes
+    assert list(destination_dir.iterdir()) == []
+    assert db.get_image_by_id(image_id)["path"] == str(source_path)
+
+
+def test_concurrent_same_name_copies_publish_distinct_complete_files(test_db, tmp_path: Path, monkeypatch):
+    source_a_dir = tmp_path / "copy-concurrent-source-a"
+    source_b_dir = tmp_path / "copy-concurrent-source-b"
+    destination_dir = tmp_path / "copy-concurrent-dest"
+    source_a_dir.mkdir()
+    source_b_dir.mkdir()
+    destination_dir.mkdir()
+
+    source_a = source_a_dir / "same-name.png"
+    source_b = source_b_dir / "same-name.png"
+    Image.new("RGB", (32, 32), color="red").save(source_a)
+    Image.new("RGB", (32, 32), color="blue").save(source_b)
+    source_a_bytes = source_a.read_bytes()
+    source_b_bytes = source_b.read_bytes()
+    image_a_id = db.add_image(path=str(source_a), filename=source_a.name)
+    image_b_id = db.add_image(path=str(source_b), filename=source_b.name)
+
+    original_copy_file_atomically = image_manager._copy_file_atomically
+    copy_call_lock = threading.Lock()
+    both_copy_calls_started = threading.Event()
+    copy_call_count = 0
+
+    def coordinate_copy_calls(source_path: str, destination_path: str) -> None:
+        nonlocal copy_call_count
+        with copy_call_lock:
+            copy_call_count += 1
+            if copy_call_count == 2:
+                both_copy_calls_started.set()
+        both_copy_calls_started.wait(timeout=0.5)
+        original_copy_file_atomically(source_path, destination_path)
+
+    monkeypatch.setattr(image_manager, "_copy_file_atomically", coordinate_copy_calls)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_a = executor.submit(image_manager.copy_image, image_a_id, str(destination_dir), str(source_a))
+        future_b = executor.submit(image_manager.copy_image, image_b_id, str(destination_dir), str(source_b))
+        result_a = future_a.result(timeout=5)
+        result_b = future_b.result(timeout=5)
+
+    assert result_a["new_path"] != result_b["new_path"]
+    assert Path(result_a["new_path"]).read_bytes() == source_a_bytes
+    assert Path(result_b["new_path"]).read_bytes() == source_b_bytes
+    assert {Path(result_a["new_path"]).name, Path(result_b["new_path"]).name} == {
+        "same-name.png",
+        "same-name_1.png",
+    }
+
+
+def test_concurrent_same_name_copy_and_move_publish_distinct_complete_files(test_db, tmp_path: Path, monkeypatch):
+    copy_source_dir = tmp_path / "copy-move-copy-source"
+    move_source_dir = tmp_path / "copy-move-move-source"
+    destination_dir = tmp_path / "copy-move-dest"
+    copy_source_dir.mkdir()
+    move_source_dir.mkdir()
+    destination_dir.mkdir()
+
+    copy_source = copy_source_dir / "same-name.png"
+    move_source = move_source_dir / "same-name.png"
+    Image.new("RGB", (32, 32), color="orange").save(copy_source)
+    Image.new("RGB", (32, 32), color="green").save(move_source)
+    copy_source_bytes = copy_source.read_bytes()
+    move_source_bytes = move_source.read_bytes()
+    copy_image_id = db.add_image(path=str(copy_source), filename=copy_source.name)
+    move_image_id = db.add_image(path=str(move_source), filename=move_source.name)
+
+    original_copy_file_atomically = image_manager._copy_file_atomically
+    original_move = image_manager.shutil.move
+    copy_publish_paused = threading.Event()
+    allow_copy_publish = threading.Event()
+    move_publish_attempted = threading.Event()
+
+    def pause_copy_before_publish(source_path: str, destination_path: str) -> None:
+        copy_publish_paused.set()
+        if not allow_copy_publish.wait(timeout=5):
+            raise AssertionError("Timed out waiting to publish the concurrent copy")
+        original_copy_file_atomically(source_path, destination_path)
+
+    def observe_move_publish(source_path: str, destination_path: str) -> str:
+        move_publish_attempted.set()
+        return original_move(source_path, destination_path)
+
+    monkeypatch.setattr(image_manager, "_copy_file_atomically", pause_copy_before_publish)
+    monkeypatch.setattr(image_manager.shutil, "move", observe_move_publish)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        copy_future = executor.submit(
+            image_manager.copy_image,
+            copy_image_id,
+            str(destination_dir),
+            str(copy_source),
+        )
+        assert copy_publish_paused.wait(timeout=2)
+        move_future = executor.submit(
+            image_manager.move_image,
+            move_image_id,
+            str(destination_dir),
+            str(move_source),
+        )
+        move_publish_attempted.wait(timeout=0.5)
+        allow_copy_publish.set()
+        copy_result = copy_future.result(timeout=5)
+        move_result = move_future.result(timeout=5)
+
+    assert copy_result["new_path"] != move_result
+    assert Path(copy_result["new_path"]).read_bytes() == copy_source_bytes
+    assert Path(move_result).read_bytes() == move_source_bytes
+    assert copy_source.read_bytes() == copy_source_bytes
+    assert not move_source.exists()
+    assert db.get_image_by_id(copy_image_id)["path"] == str(copy_source)
+    assert db.get_image_by_id(move_image_id)["path"] == move_result
 
 
 def test_scan_folder_default_uses_count_first_then_import(test_db, tmp_path: Path):

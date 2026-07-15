@@ -47,7 +47,7 @@ function showAutosepMoveProgress(total) {
                 <div class="progress-fill" id="autosep-move-fill" style="width: 0%"></div>
             </div>
             <div class="progress-text" id="autosep-move-text">Moving images...</div>
-            <div class="autosep-move-errors" id="autosep-move-errors" style="display: none;"></div>
+            <div class="autosep-move-errors" id="autosep-move-errors" role="alert" aria-live="polite" style="display: none;"></div>
             <div class="operation-controls">
                 <button class="btn-cancel-operation" id="btn-cancel-autosep-move">${window.escapeHtml(cancelLabel)}</button>
                 <button class="btn-cancel-operation" id="btn-hide-autosep-move">${window.escapeHtml(hideLabel)}</button>
@@ -119,13 +119,41 @@ function hideAutosepMoveProgress() {
     autosepMoveController = null;
 }
 
-function renderAutosepMoveErrors(errors = []) {
+function formatAutosepMoveError(entry) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        throw new TypeError('Auto-Separate error detail must be an object');
+    }
+
+    const filename = typeof entry.filename === 'string' ? entry.filename.trim() : '';
+    const error = typeof entry.error === 'string' ? entry.error.trim() : '';
+    if (!filename || !error) {
+        throw new TypeError('Auto-Separate error detail requires non-empty filename and error fields');
+    }
+
+    return `${filename}: ${error}`;
+}
+
+function preserveAutosepMoveErrorDetails() {
+    const cancelBtn = document.getElementById('btn-cancel-autosep-move');
+    if (cancelBtn) cancelBtn.disabled = true;
+
+    const hideBtn = document.getElementById('btn-hide-autosep-move');
+    if (hideBtn) hideBtn.textContent = tKey('common.close', 'Close', '关闭');
+}
+
+function renderAutosepMoveErrors(errors) {
     const errorsEl = document.getElementById('autosep-move-errors');
     if (!errorsEl) return;
+    if (!Array.isArray(errors)) {
+        throw new TypeError('Auto-Separate error details must be an array');
+    }
 
-    const normalizedErrors = Array.isArray(errors)
-        ? errors.map((entry) => String(entry || '').trim()).filter(Boolean)
-        : [];
+    const normalizedErrors = errors.map(formatAutosepMoveError);
+    const renderedSignature = JSON.stringify(normalizedErrors);
+    if (errorsEl.dataset.autosepMoveErrorSignature === renderedSignature) {
+        return;
+    }
+    errorsEl.dataset.autosepMoveErrorSignature = renderedSignature;
 
     if (!normalizedErrors.length) {
         errorsEl.style.display = 'none';
@@ -139,15 +167,21 @@ function renderAutosepMoveErrors(errors = []) {
         .join('');
 }
 
-function updateAutosepMoveProgress(progress = {}, fallbackTotal = 0) {
+function updateAutosepMoveProgress(progress, fallbackTotal) {
     const fillEl = document.getElementById('autosep-move-fill');
     const textEl = document.getElementById('autosep-move-text');
+    const errors = Number(progress.errors || 0);
+    if (errors > 0 && !Array.isArray(progress.recent_errors)) {
+        throw new TypeError('Auto-Separate progress reports errors but recent_errors is not an array');
+    }
+    if (errors > 0 && progress.recent_errors.length === 0) {
+        throw new TypeError('Auto-Separate progress reports errors but recent_errors is empty');
+    }
     
     if (fillEl && textEl) {
         const current = Number(progress.current || 0);
         const total = Number(progress.total || fallbackTotal || 0);
         const moved = Number(progress.moved || 0);
-        const errors = Number(progress.errors || 0);
         const operationMode = normalizeAutoSepOperationMode(progress.operation || getAutoSepOperationMode());
         const percent = total > 0 ? Math.round((current / total) * 100) : 0;
         fillEl.style.width = percent + '%';
@@ -181,10 +215,10 @@ function updateAutosepMoveProgress(progress = {}, fallbackTotal = 0) {
         }
     }
 
-    renderAutosepMoveErrors(progress.recent_errors || []);
+    renderAutosepMoveErrors(Array.isArray(progress.recent_errors) ? progress.recent_errors : []);
 }
 
-async function pollAutosepMoveProgress(expectedTotal, destination = '') {
+async function pollAutosepMoveProgress(expectedTotal, destination) {
     if (autosepMoveController?.active) return;
 
     const controller = { active: true, destination };
@@ -223,10 +257,14 @@ async function pollAutosepMoveProgress(expectedTotal, destination = '') {
 
             if (progress.status === 'done') {
                 setTimeout(() => {
-                    hideAutosepMoveProgress();
                     const movedCount = Number(progress.moved || 0);
                     const errorCount = Number(progress.errors || 0);
                     const operationMode = normalizeAutoSepOperationMode(progress.operation || getAutoSepOperationMode());
+                    if (errorCount > 0) {
+                        preserveAutosepMoveErrorDetails();
+                    } else {
+                        hideAutosepMoveProgress();
+                    }
 
                     if (movedCount > 0 && errorCount > 0) {
                         window.App.showToast(
@@ -358,7 +396,7 @@ async function resumeAutosepMoveProgress() {
         const expectedTotal = Number(progress.total || 0);
         showAutosepMoveProgress(expectedTotal);
         updateAutosepMoveProgress(progress, expectedTotal);
-        pollAutosepMoveProgress(expectedTotal);
+        pollAutosepMoveProgress(expectedTotal, '');
     } catch (error) {
         Logger.warn('Failed to resume auto-separate move progress:', error);
     }

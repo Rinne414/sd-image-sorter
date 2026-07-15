@@ -5,6 +5,8 @@ import gzip
 import logging
 import os
 import shutil
+import tempfile
+import threading
 import time
 import itertools
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, ThreadPoolExecutor, wait
@@ -54,6 +56,7 @@ SCAN_METADATA_EXECUTOR_MODE = os.environ.get(
     "SD_IMAGE_SORTER_SCAN_METADATA_EXECUTOR",
     "process",
 ).strip().lower()
+_DESTINATION_OPERATION_LOCK = threading.Lock()
 
 
 # --- Decomposition (2026-07): the executor-lifecycle helpers, pure gate
@@ -933,26 +936,27 @@ def move_image(image_id: int, destination_folder: str, image_path: str) -> str:
         FileOperationError: If the move operation fails
     """
     try:
-        image_path, new_path = _prepare_destination_path(image_path, destination_folder, "move")
+        with _DESTINATION_OPERATION_LOCK:
+            image_path, new_path = _prepare_destination_path(image_path, destination_folder, "move")
 
-        shutil.move(image_path, new_path)
-        try:
-            update_image_path(image_id, new_path)
-        except Exception as db_error:
+            shutil.move(image_path, new_path)
             try:
-                if os.path.exists(new_path):
-                    shutil.move(new_path, image_path)
-            except Exception as rollback_error:
+                update_image_path(image_id, new_path)
+            except Exception as db_error:
+                try:
+                    if os.path.exists(new_path):
+                        shutil.move(new_path, image_path)
+                except Exception as rollback_error:
+                    raise FileOperationError(
+                        f"Database update failed after moving file, and rollback failed: {db_error}; rollback error: {rollback_error}",
+                        path=image_path,
+                        operation="move",
+                    ) from db_error
                 raise FileOperationError(
-                    f"Database update failed after moving file, and rollback failed: {db_error}; rollback error: {rollback_error}",
+                    f"Database update failed after moving file; file was restored to original path: {db_error}",
                     path=image_path,
                     operation="move",
                 ) from db_error
-            raise FileOperationError(
-                f"Database update failed after moving file; file was restored to original path: {db_error}",
-                path=image_path,
-                operation="move",
-            ) from db_error
 
         return new_path
     except FileOperationError:
@@ -977,6 +981,34 @@ def move_image(image_id: int, destination_folder: str, image_path: str) -> str:
         ) from e
 
 
+def _copy_file_atomically(source_path: str, destination_path: str) -> None:
+    """Copy into a same-directory temporary file before publishing the result."""
+    destination_directory = os.path.dirname(destination_path)
+    temporary_prefix = f".{os.path.basename(destination_path)}."
+    descriptor, temporary_path = tempfile.mkstemp(
+        dir=destination_directory,
+        prefix=temporary_prefix,
+        suffix=".tmp",
+    )
+    os.close(descriptor)
+
+    try:
+        shutil.copy2(source_path, temporary_path)
+        os.replace(temporary_path, destination_path)
+    except Exception as copy_error:
+        try:
+            os.unlink(temporary_path)
+        except FileNotFoundError:
+            pass
+        except OSError as cleanup_error:
+            raise FileOperationError(
+                f"Copy failed and temporary file cleanup also failed: {copy_error}; cleanup error: {cleanup_error}",
+                path=destination_path,
+                operation="copy",
+            ) from copy_error
+        raise
+
+
 def copy_image(
     image_id: int,
     destination_folder: str,
@@ -985,11 +1017,12 @@ def copy_image(
     """
     Copy an image file to a new folder WITHOUT indexing the copy.
 
-    v3.5.0 (owner decision): a copy is a plain file output. It no longer
-    gets its own database row, so copy-based sorting does not double every
-    image in the gallery. The copy only enters the library if its folder
-    is scanned later. ``new_image_id`` stays in the payload for callers
-    and persisted sort histories, but it is always None now.
+    A copy is a plain file output. It is written to a same-directory temporary
+    file and atomically published only after the copy completes. It does not
+    get its own database row, so copy-based sorting does not double every image
+    in the gallery. The copy only enters the library if its folder is scanned
+    later. ``new_image_id`` stays in the payload for callers and persisted sort
+    histories, but it is always None.
 
     Args:
         image_id: Database ID of the source image (kept for signature
@@ -1004,9 +1037,9 @@ def copy_image(
         FileOperationError: If the copy operation fails
     """
     try:
-        image_path, new_path = _prepare_destination_path(image_path, destination_folder, "copy")
-
-        shutil.copy2(image_path, new_path)
+        with _DESTINATION_OPERATION_LOCK:
+            image_path, new_path = _prepare_destination_path(image_path, destination_folder, "copy")
+            _copy_file_atomically(image_path, new_path)
 
         return {
             "new_path": new_path,

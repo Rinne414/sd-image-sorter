@@ -45,6 +45,8 @@ const manualRoot = path.join(repoRoot, '.tmp', 'manual-test')
 
 const autoSepInbox = path.join(manualRoot, 'autosep-inbox')
 const autoSepOut = path.join(manualRoot, 'autosep-out')
+const autoSepCopySource = path.join(manualRoot, 'autosep-copy-source')
+const autoSepCopyOut = path.join(manualRoot, 'autosep-copy-out')
 
 const manualSortInbox = path.join(manualRoot, 'manual-sort-inbox')
 const manualSortTop = path.join(manualRoot, 'manual-top')
@@ -243,6 +245,106 @@ async function resetAutoSeparateFixture() {
   await moveFilesBack(autoSepOut, autoSepInbox)
   await clearDir(autoSepOut)
   ensureMoveSortFixtureImages()
+}
+
+function prepareAutoSeparateCopyPartialFixture(): {
+  successfulFilename: string
+  failedFilename: string
+  successfulPath: string
+  failedPath: string
+  search: string
+} {
+  return runBackendJson(`
+import json
+from pathlib import Path
+import sys
+from PIL import Image
+
+sys.path.insert(0, ${JSON.stringify(path.join(repoRoot, 'backend'))})
+import database as db
+
+source_dir = Path(${JSON.stringify(autoSepCopySource)})
+output_dir = Path(${JSON.stringify(autoSepCopyOut)})
+source_dir.mkdir(parents=True, exist_ok=True)
+output_dir.mkdir(parents=True, exist_ok=True)
+successful_filename = "manual-autosep-copy-ok.png"
+failed_filename = "manual-autosep-copy-fail.png"
+search = "manual_test_autosep_copy_partial_20260715"
+
+for child in output_dir.iterdir():
+    if child.is_file():
+        child.unlink()
+
+successful_path = source_dir / successful_filename
+failed_path = source_dir / failed_filename
+Image.new("RGB", (96, 96), color=(60, 180, 255)).save(successful_path)
+Image.new("RGB", (96, 96), color=(255, 140, 60)).save(failed_path)
+
+with db.get_db() as conn:
+    conn.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename IN (?, ?))", (successful_filename, failed_filename))
+    conn.execute("DELETE FROM images WHERE filename IN (?, ?)", (successful_filename, failed_filename))
+
+for image_path in (successful_path, failed_path):
+    stat_result = image_path.stat()
+    db.add_image(
+        path=str(image_path.resolve()),
+        filename=image_path.name,
+        generator="unknown",
+        prompt=search,
+        negative_prompt="",
+        metadata_json="{}",
+        width=96,
+        height=96,
+        file_size=stat_result.st_size,
+        source_mtime_ns=stat_result.st_mtime_ns,
+        source_size=stat_result.st_size,
+        metadata_status="complete",
+    )
+
+print(json.dumps({
+    "successfulFilename": successful_filename,
+    "failedFilename": failed_filename,
+    "successfulPath": str(successful_path.resolve()),
+    "failedPath": str(failed_path.resolve()),
+    "search": search,
+}))
+`)
+}
+
+function cleanupAutoSeparateCopyPartialFixtureRows() {
+  runBackendScript(`
+import sqlite3
+from pathlib import Path
+
+db_path = Path(${JSON.stringify(runtimeDatabasePath)})
+fixture_names = ("manual-autosep-copy-ok.png", "manual-autosep-copy-fail.png")
+with sqlite3.connect(db_path) as conn:
+    conn.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename IN (?, ?))", fixture_names)
+    conn.execute("DELETE FROM images WHERE filename IN (?, ?)", fixture_names)
+print("ok")
+`)
+}
+
+async function seedAutoSeparateSearchState(page: Page, search: string) {
+  await page.addInitScript((searchValue) => {
+    localStorage.setItem('autosep_filter_state_v1', JSON.stringify({
+      generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
+      ratings: ['general', 'sensitive', 'questionable', 'explicit'],
+      tags: [],
+      checkpoints: [],
+      loras: [],
+      prompts: [],
+      artist: null,
+      search: searchValue,
+      minWidth: null,
+      maxWidth: null,
+      minHeight: null,
+      maxHeight: null,
+      aspectRatio: '',
+      minAesthetic: null,
+      maxAesthetic: null,
+    }))
+  }, search)
 }
 
 async function resetManualSortFixture() {
@@ -735,6 +837,9 @@ test.beforeEach(async ({ page }) => {
 
 test.afterAll(async () => {
   cleanupExtendedFixtureRows()
+  cleanupAutoSeparateCopyPartialFixtureRows()
+  await fs.rm(autoSepCopySource, { recursive: true, force: true })
+  await fs.rm(autoSepCopyOut, { recursive: true, force: true })
 })
 
 test('gallery selection actions should stay in the left sidebar instead of floating over the grid', async ({ page }) => {
@@ -1223,25 +1328,7 @@ test('artist identify selected should work on a real image', async ({ page, requ
 
 test('auto-separate should honor search and move the matching files', async ({ page, request }) => {
   await resetAutoSeparateFixture()
-  await page.addInitScript((search) => {
-    localStorage.setItem('autosep_filter_state_v1', JSON.stringify({
-      generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
-      ratings: ['general', 'sensitive', 'questionable', 'explicit'],
-      tags: [],
-      checkpoints: [],
-      loras: [],
-      prompts: [],
-      artist: null,
-      search,
-      minWidth: null,
-      maxWidth: null,
-      minHeight: null,
-      maxHeight: null,
-      aspectRatio: '',
-      minAesthetic: null,
-      maxAesthetic: null,
-    }))
-  }, 'manual_test_autosep_token_20260405')
+  await seedAutoSeparateSearchState(page, 'manual_test_autosep_token_20260405')
 
   await openMainPage(page)
 
@@ -1280,6 +1367,77 @@ test('auto-separate should honor search and move the matching files', async ({ p
   for (const movedImage of movedPayload.images) {
     expect(String(movedImage.path)).toContain('autosep-out')
   }
+})
+
+test('auto-separate copy keeps complete sources and exposes real partial-failure details', async ({ page, request }) => {
+  test.setTimeout(120000)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const fixture = prepareAutoSeparateCopyPartialFixture()
+  await seedAutoSeparateSearchState(page, fixture.search)
+
+  await openMainPage(page)
+  await setGallerySearch(page, fixture.search)
+  await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(2)
+
+  await openSortingSubView(page, 'autosep')
+  await page.locator('#autosep-action-mode-panel input[data-autosep-operation-mode][value="copy"]').check({ force: true })
+  await page.locator('#autosep-destination').fill(autoSepCopyOut)
+  await page.locator('#btn-preview-autosep').click()
+  await expect(page.locator('#autosep-preview .stat-number')).toHaveText('2')
+  await expect(page.locator('#autosep-preview-list')).toContainText(fixture.successfulFilename)
+  await expect(page.locator('#autosep-preview-list')).toContainText(fixture.failedFilename)
+
+  const successfulSourceBytes = await fs.readFile(fixture.successfulPath)
+  await fs.writeFile(fixture.failedPath, Buffer.from('truncated image data'))
+  const previousProgressResponse = await request.get('/api/batch-move/progress')
+  expect(previousProgressResponse.ok()).toBeTruthy()
+  const previousProgress = await previousProgressResponse.json()
+  const previousStartedAt = Number(previousProgress.started_at || 0)
+
+  await page.locator('#btn-execute-autosep').click()
+  await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+  await page.locator('#btn-confirm-ok').click()
+
+  await expect.poll(async () => {
+    const response = await request.get('/api/batch-move/progress')
+    expect(response.ok()).toBeTruthy()
+    const progress = await response.json()
+    const startedAt = Number(progress.started_at || 0)
+    if (progress.status !== 'done' || progress.operation !== 'copy' || startedAt <= previousStartedAt) return null
+    return progress
+  }, { timeout: 30000 }).not.toBeNull()
+
+  const progressResponse = await request.get('/api/batch-move/progress')
+  const progress = await progressResponse.json()
+  expect(progress).toMatchObject({ status: 'done', operation: 'copy', moved: 1, errors: 1 })
+  expect(progress.recent_errors).toHaveLength(1)
+  expect(progress.recent_errors[0].filename).toBe(fixture.failedFilename)
+  expect(String(progress.recent_errors[0].error || '')).not.toBe('')
+
+  const closeButton = page.locator('#btn-hide-autosep-move')
+  await expect(closeButton).toHaveText(/^(Close|关闭)$/)
+  await expect(page.locator('#btn-cancel-autosep-move')).toBeDisabled()
+  const errorPanel = page.locator('#autosep-move-errors')
+  await expect(errorPanel).toBeVisible()
+  await expect(errorPanel).toContainText(fixture.failedFilename)
+  await expect(errorPanel).toContainText(String(progress.recent_errors[0].error))
+  await expect(errorPanel).not.toContainText('[object Object]')
+
+  const copiedPath = path.join(autoSepCopyOut, fixture.successfulFilename)
+  expect(await fs.readFile(fixture.successfulPath)).toEqual(successfulSourceBytes)
+  expect(await fs.readFile(copiedPath)).toEqual(successfulSourceBytes)
+  expect(fsSync.existsSync(path.join(autoSepCopyOut, fixture.failedFilename))).toBe(false)
+
+  const imagesResponse = await request.get(`/api/images?limit=10&search=${encodeURIComponent(fixture.search)}`)
+  const imagesPayload = await imagesResponse.json()
+  expect(imagesPayload.images).toHaveLength(1)
+  expect(imagesPayload.images[0].filename).toBe(fixture.successfulFilename)
+  expect(imagesPayload.images[0].path).toBe(fixture.successfulPath)
+
+  await expect(errorPanel).toBeVisible()
+  await closeButton.click()
+  await expect(page.locator('#autosep-move-progress')).not.toHaveClass(/visible/)
+  await expect(errorPanel).toBeHidden()
 })
 
 test('manual sort should honor search and support move, skip, and undo', async ({ page }) => {
