@@ -299,10 +299,32 @@ test('detect all preserves item failures instead of reporting false success', as
   await expect(page.locator('#queue-solitaire.active')).toBeVisible()
   await expect(failureToasts).toHaveCount(1)
   await expect(failureToasts.last()).toHaveText(exactFailureReason)
+
+  await page.evaluate(() => {
+    document.querySelectorAll('#toast-container .toast').forEach((toast) => toast.remove())
+  })
+  await solitaireFailedBadge.focus()
+  await solitaireFailedBadge.press('Space')
+  await expect(page.locator('#queue-solitaire.active')).toBeVisible()
+  await expect(failureToasts).toHaveCount(1)
+  await expect(failureToasts.last()).toHaveText(exactFailureReason)
+
   await expect(solitaireNoMatchBadge).toBeVisible()
   await expect(solitaireNoMatchBadge).toHaveText('No match')
   await expect(solitaireNoMatchBadge).not.toHaveAttribute('role', 'status')
   await expect(solitaireNoMatchBadge).toHaveCSS('pointer-events', 'none')
+
+  await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
+  await expect(failedBadge).toHaveText('失败')
+  await expect(failedBadge).toHaveAttribute('aria-label', `显示 ${IMAGES[0].filename} 的失败原因`)
+  await expect(failedBadge).toHaveAttribute('title', `失败原因：${exactFailureReason}`)
+  await expect(noMatchBadge).toHaveText('未匹配')
+  await expect(solitaireFailedBadge).toHaveText('失败')
+  await expect(solitaireFailedBadge).toHaveAttribute('aria-label', `显示 ${IMAGES[0].filename} 的失败原因`)
+  await expect(solitaireFailedBadge).toHaveAttribute('title', `失败原因：${exactFailureReason}`)
+  await expect(solitaireNoMatchBadge).toHaveText('未匹配')
+  await expect(page.locator('#queue-solitaire.active')).toBeVisible()
+
   const solitaireBadgeLayout = await page.evaluate(() => {
     return Array.from(document.querySelectorAll('#qs-sections [data-testid="censor-batch-outcome-badge"]'))
       .map((element) => {

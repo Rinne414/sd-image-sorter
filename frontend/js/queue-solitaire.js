@@ -1830,6 +1830,10 @@
     // Export
     window.QueueSolitaire = { open, close, init, state };
 
+    document.addEventListener('languageChanged', () => {
+        if (state.active) render();
+    });
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {

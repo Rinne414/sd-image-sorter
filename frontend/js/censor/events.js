@@ -84,6 +84,11 @@ function closeCensorModal(modalId) {
     }
 }
 
+function refreshLocalizedCensorContent() {
+    markRecommendedDetectorMode();
+    renderQueue();
+}
+
 function bindEvents() {
     const { $, $$ } = window.App;
 
@@ -199,10 +204,9 @@ function bindEvents() {
         renderCensorCapabilityPanel();
     });
 
-    // i18n resets the detector option labels on language switch (data-i18n ->
-    // textContent); re-apply the "(Recommended)" marker afterwards. The event is
-    // dispatched after i18n.applyToDOM(), so this runs last.
-    document.addEventListener('languageChanged', markRecommendedDetectorMode);
+    // i18n resets detector labels and cannot translate JS-created outcome
+    // badges in place. Refresh both after applyToDOM() has finished.
+    document.addEventListener('languageChanged', refreshLocalizedCensorContent);
 
     $('#censor-style')?.addEventListener('change', (e) => CensorState.style = e.target.value);
 
