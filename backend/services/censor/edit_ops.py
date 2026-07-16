@@ -17,6 +17,7 @@ instead of exposing raw pixels (never-fallback-to-uncensored).
 from __future__ import annotations
 
 import logging
+import math
 import os
 from io import BytesIO
 from pathlib import Path
@@ -323,6 +324,37 @@ class _EditOpsMixin:
                 mask,
             )
 
+    @staticmethod
+    def _get_stroke_mask_bounds(
+        points: List[tuple[float, float]],
+        brush_size: float,
+        image_size: tuple[int, int],
+    ) -> Optional[tuple[int, int, int, int]]:
+        if not points:
+            return None
+
+        image_width, image_height = image_size
+        if image_width <= 0 or image_height <= 0:
+            return None
+
+        radius = max(0.5, brush_size / 2.0)
+        # Keep Pillow's inclusive line/ellipse edge pixels inside the crop; the
+        # rendered mask is tightened with getbbox() before applying the effect.
+        padding = 2.0
+        left = max(0, math.floor(min(x for x, _ in points) - radius - padding))
+        top = max(0, math.floor(min(y for _, y in points) - radius - padding))
+        right = min(
+            image_width,
+            math.ceil(max(x for x, _ in points) + radius + padding) + 1,
+        )
+        bottom = min(
+            image_height,
+            math.ceil(max(y for _, y in points) + radius + padding) + 1,
+        )
+        if right <= left or bottom <= top:
+            return None
+        return (left, top, right, bottom)
+
     @classmethod
     def _apply_stroke_operation(
         cls,
@@ -347,12 +379,27 @@ class _EditOpsMixin:
             )
             return
 
-        mask = Image.new("L", image.size, 0)
-        cls._draw_stroke_mask(mask, points, brush_size)
-        cls._apply_mask_style(
+        mask_bounds = cls._get_stroke_mask_bounds(points, brush_size, image.size)
+        if mask_bounds is None:
+            return
+        x1, y1, x2, y2 = mask_bounds
+        mask = Image.new("L", (x2 - x1, y2 - y1), 0)
+        local_points = [(x - x1, y - y1) for x, y in points]
+        cls._draw_stroke_mask(mask, local_points, brush_size)
+        local_bbox = mask.getbbox()
+        if local_bbox is None:
+            return
+        effect_bbox = (
+            x1 + local_bbox[0],
+            y1 + local_bbox[1],
+            x1 + local_bbox[2],
+            y1 + local_bbox[3],
+        )
+        cls._apply_mask_crop_style(
             image,
             original_image,
-            mask,
+            mask.crop(local_bbox),
+            effect_bbox,
             style=operation.get("style") if tool == "brush" else tool,
             block_size=int(operation.get("block_size", 16) or 16),
             blur_radius=int(operation.get("blur_radius", 20) or 20),

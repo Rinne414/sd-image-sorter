@@ -373,6 +373,135 @@ class TestEditOperationBudget:
         assert exc.value.status_code == 413
 
 
+def _apply_full_canvas_stroke_reference(
+    image: Image.Image,
+    original_image: Image.Image,
+    operation: dict[str, object],
+) -> None:
+    tool = str(operation.get("tool") or "brush").strip().lower()
+    points = CensorService._normalize_operation_points(operation.get("points"))
+    brush_size = CensorService._clamp_float(operation.get("brush_size", 1), 1.0, 4096.0)
+    mask = Image.new("L", image.size, 0)
+    CensorService._draw_stroke_mask(mask, points, brush_size)
+    CensorService._apply_mask_style(
+        image,
+        original_image,
+        mask,
+        style=operation.get("style") if tool == "brush" else tool,
+        block_size=int(operation.get("block_size", 16) or 16),
+        blur_radius=int(operation.get("blur_radius", 20) or 20),
+        pen_color=str(operation.get("pen_color") or "#ff0000"),
+        pen_opacity=CensorService._clamp_float(operation.get("pen_opacity", 1.0), 0.0, 1.0),
+    )
+
+
+class TestCropLocalStrokeMasks:
+    """Localized strokes must not allocate masks at full source resolution."""
+
+    @staticmethod
+    def _operation(
+        tool: str,
+        style: str,
+        points: list[dict[str, float]],
+    ) -> dict[str, object]:
+        return {
+            "kind": "stroke",
+            "tool": tool,
+            "style": style,
+            "points": points,
+            "brush_size": 20,
+            "block_size": 7,
+            "blur_radius": 4,
+            "pen_color": "#28b4d8",
+            "pen_opacity": 0.65,
+        }
+
+    @staticmethod
+    def _track_l_mask_sizes(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, int]]:
+        real_image_new = Image.new
+        mask_sizes: list[tuple[int, int]] = []
+
+        def tracked_image_new(mode: str, size: tuple[int, int], color: object) -> Image.Image:
+            if mode == "L":
+                mask_sizes.append(size)
+            return real_image_new(mode, size, color)
+
+        monkeypatch.setattr(Image, "new", tracked_image_new)
+        return mask_sizes
+
+    def test_small_stroke_allocates_only_a_crop_mask(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        original = Image.new("RGBA", (200, 120), (40, 80, 120, 255))
+        working = original.copy()
+        mask_sizes = self._track_l_mask_sizes(monkeypatch)
+        CensorService._apply_stroke_operation(
+            working,
+            original,
+            self._operation(
+                "brush",
+                "black_bar",
+                [{"x": 90.0, "y": 50.0}, {"x": 110.0, "y": 70.0}],
+            ),
+        )
+
+        assert mask_sizes
+        assert max(width * height for width, height in mask_sizes) < 4_096
+        assert (200, 120) not in mask_sizes
+
+    def test_fully_off_canvas_stroke_allocates_no_mask(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        original = Image.new("RGBA", (80, 60), (40, 80, 120, 255))
+        working = original.copy()
+        unchanged = working.tobytes()
+        mask_sizes = self._track_l_mask_sizes(monkeypatch)
+        CensorService._apply_stroke_operation(
+            working,
+            original,
+            self._operation(
+                "brush",
+                "mosaic",
+                [{"x": -100.0, "y": -100.0}, {"x": -80.0, "y": -80.0}],
+            ),
+        )
+
+        assert mask_sizes == []
+        assert working.tobytes() == unchanged
+
+    @pytest.mark.parametrize(
+        ("tool", "style", "points"),
+        [
+            ("brush", "mosaic", [{"x": 22.0, "y": 24.0}, {"x": 58.0, "y": 42.0}]),
+            ("brush", "blur", [{"x": -5.0, "y": 5.0}, {"x": 18.0, "y": 16.0}]),
+            ("brush", "black_bar", [{"x": 45.0, "y": 30.0}, {"x": 90.0, "y": 55.0}]),
+            ("brush", "white_bar", [{"x": 70.0, "y": 4.0}, {"x": 112.0, "y": 18.0}]),
+            ("brush", "mosaic", [{"x": 127.5, "y": 79.5}]),
+            ("pen", "", [{"x": 12.0, "y": 60.0}, {"x": 72.0, "y": 48.0}]),
+            ("eraser", "", [{"x": 104.0, "y": 62.0}, {"x": 126.0, "y": 78.0}]),
+        ],
+    )
+    def test_crop_local_stroke_matches_full_canvas_reference(
+        self,
+        tool: str,
+        style: str,
+        points: list[dict[str, float]],
+    ) -> None:
+        original = Image.new("RGBA", (128, 80), (35, 70, 105, 255))
+        original_draw = ImageDraw.Draw(original)
+        original_draw.rectangle([8, 6, 118, 72], fill=(180, 90, 30, 255))
+        original_draw.line([(0, 79), (127, 0)], fill=(20, 210, 140, 255), width=5)
+
+        expected = original.copy()
+        actual = original.copy()
+        ImageDraw.Draw(expected).rectangle([0, 0, 127, 79], fill=(80, 45, 150, 255))
+        ImageDraw.Draw(actual).rectangle([0, 0, 127, 79], fill=(80, 45, 150, 255))
+        operation = self._operation(tool, style, points)
+
+        _apply_full_canvas_stroke_reference(expected, original, operation)
+        CensorService._apply_stroke_operation(actual, original, operation)
+
+        assert actual.mode == expected.mode
+        assert actual.size == expected.size
+        assert actual.tobytes() == expected.tobytes()
+
+
 class TestNeverFallbackToUncensored:
     """SAFETY INVARIANT: a requested censor never resolves to raw pixels."""
 
