@@ -4,6 +4,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 import { expect, test } from '../fixtures/click-ledger'
+import { observeManualScanTerminal } from '../fixtures/scan-terminal-observer'
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..')
 const runtimeDatabasePath = process.env.SD_IMAGE_SORTER_DB_PATH
@@ -139,23 +140,22 @@ test('find moved images reconnects a file through the real gallery UI', async ({
   await page.locator('#scan-folder-path').fill(oldDir)
   await disableScanAutoTag(page)
   await expect(page.locator('#scan-auto-tag')).not.toBeChecked()
-  // /api/scan/progress is a global singleton: without a reset, the poll below
-  // can false-match a PREVIOUS test's terminal "done" state — the fixture scan
-  // then lands AFTER fs.rename below and indexes nothing (proven full-suite
-  // flake: the late scan logged WinError 2 on the already-moved file).
+  // Reset the shared scan state so this click owns a fresh run.
   await request.post('/api/scan/reset')
-  await page.locator('#btn-start-scan').click()
-
-  await expect.poll(async () => {
-    const response = await request.get('/api/scan/progress')
-    const payload = await response.json()
-    return String(payload.status || '')
-  }, { timeout: 90000 }).toBe('done')
+  const scanObserver = observeManualScanTerminal(page)
+  try {
+    await page.locator('#btn-start-scan').click()
+    const terminal = await scanObserver.waitForTerminal(90000)
+    expect(terminal.status, terminal.message).toBe('done')
+  } finally {
+    scanObserver.stop()
+  }
 
   await expect.poll(async () => {
     const images = await getImagesByFilename(request)
     return images.length === 1 ? String(images[0].path || '') : ''
-  }, { timeout: 15000 }).toContain(oldDir)
+  }, { timeout: 90000 }).toContain(oldDir)
+  await expect(page.locator('#btn-start-scan')).toBeEnabled({ timeout: 90000 })
 
   await fs.rename(oldImagePath, newImagePath)
   expect(fsSync.existsSync(oldImagePath)).toBe(false)
@@ -166,11 +166,7 @@ test('find moved images reconnects a file through the real gallery UI', async ({
   // to cover #btn-reconnect-missing at this viewport). The banner is NOT
   // guaranteed: the app deliberately shows a warning toast instead when the
   // scan counted any transient per-file error (app.js scan done-branch), so
-  // requiring it here flakes. #btn-start-scan is re-enabled in the same
-  // synchronous done-branch that settles banner-vs-toast, and the poll loop
-  // stops afterwards — wait for that, then dismiss the banner only if it
-  // actually appeared.
-  await expect(page.locator('#btn-start-scan')).toBeEnabled({ timeout: 15000 })
+  // requiring it here flakes. Dismiss the banner only if it appeared.
   if (await page.locator('#pipeline-next-step.visible').isVisible()) {
     await page.locator('#pipeline-next-step .pns-dismiss').click()
     await expect(page.locator('#pipeline-next-step.visible')).toHaveCount(0)

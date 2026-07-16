@@ -41,13 +41,10 @@ let _scanStartToastAt = 0;
 // v3.4.3: folder of the most recent scan, for the "Create collection" CTA —
 // lets users keep each imported dataset separated without manual selection.
 let _scanLastFolderPath = '';
-// v3.3.0 USR-2: pollScanProgress is a self-rescheduling setTimeout loop with no
-// cancellation token. A previous scan's loop could stay alive and keep
-// repainting the OLD folder's progress when a new scan started ("闪回/猛回头").
-// Every poll captures the generation active when it was scheduled; if a newer
-// scan (or resume) bumps the counter, the stale loop bails on its next tick so
-// exactly ONE poll loop is ever live.
-let _scanPollGeneration = 0;
+// Each scan poller owns one backend run identity. Overlapping response timing
+// cannot cancel another run's consumer; a changed identity is re-dispatched by
+// source and duplicate pollers for the same run are coalesced.
+const _scanPollersByIdentity = new Map();
 let _reconnectPollTimer = null;
 let _tagProgressTracker = createProgressTracker();
 

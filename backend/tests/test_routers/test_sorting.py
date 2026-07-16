@@ -236,6 +236,110 @@ class TestScan:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "started"
+        assert data["run_id"] > 0
+        assert data["source"] == "manual"
+
+    def test_scan_start_response_filters_internal_fields(
+        self,
+        test_client,
+        tmp_path: Path,
+        monkeypatch,
+    ):
+        from routers.sorting import get_sorting_service
+
+        service = get_sorting_service()
+
+        def fake_start_scan(request, background_tasks, source):
+            return {
+                "status": "started",
+                "message": "started",
+                "run_id": 14,
+                "source": source,
+                "internal_only": "must not cross the API boundary",
+            }
+
+        monkeypatch.setattr(service, "start_scan", fake_start_scan)
+
+        response = test_client.post(
+            "/api/scan",
+            json={"folder_path": str(tmp_path), "recursive": False},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "started",
+            "message": "started",
+            "run_id": 14,
+            "source": "manual",
+        }
+
+    def test_scan_progress_response_filters_internal_fields(self, test_client):
+        from routers.sorting import get_sorting_service
+
+        service = get_sorting_service()
+        progress = service._build_default_scan_progress_state()
+        progress.update({
+            "run_id": 15,
+            "source": "manual",
+            "status": "done",
+            "step": "done",
+            "internal_only": "must not cross the API boundary",
+        })
+        service.set_scan_progress(progress)
+
+        response = test_client.get("/api/scan/progress")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["run_id"] == 15
+        assert payload["source"] == "manual"
+        assert "internal_only" not in payload
+
+    def test_auto_refresh_idle_response_uses_strict_public_shape(self, test_client):
+        response = test_client.post("/api/library/auto-refresh", json={})
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "idle",
+            "reason": "no_enabled_roots",
+        }
+
+    def test_auto_refresh_started_response_includes_nested_identity(
+        self,
+        test_client,
+        tmp_path: Path,
+        monkeypatch,
+    ):
+        import database as db
+        from routers.sorting import get_sorting_service
+
+        db.add_library_root(str(tmp_path))
+        service = get_sorting_service()
+
+        def fake_start_scan(request, background_tasks, source):
+            return {
+                "status": "started",
+                "message": "started",
+                "run_id": 16,
+                "source": source,
+                "internal_only": "filtered",
+            }
+
+        monkeypatch.setattr(service, "start_scan", fake_start_scan)
+
+        response = test_client.post("/api/library/auto-refresh", json={})
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "started",
+            "root": str(tmp_path).replace("\\", "/"),
+            "scan": {
+                "status": "started",
+                "message": "started",
+                "run_id": 16,
+                "source": "library_auto_refresh",
+            },
+        }
 
     def test_scan_progress_after_start(self, test_client, tmp_path: Path):
         """After starting scan, progress should be queryable."""
@@ -413,6 +517,7 @@ class TestScan:
                 isolated_sorting_service.start_scan(
                     ScanRequest(folder_path=str(tmp_path), recursive=False),
                     background_tasks,
+                    "manual",
                 )
                 background_tasks.tasks[0].func()
         finally:
@@ -563,6 +668,223 @@ class TestScan:
         for key in ["counted", "import_complete", "metadata_total_final", "total_final", "quick_import"]:
             assert key in progress
 
+    def test_scan_reset_accepts_terminal_state_while_worker_finishes(self, isolated_sorting_service):
+        """A published terminal result must be resettable without client retries."""
+
+        class FinishingWorker:
+            def is_alive(self):
+                return True
+
+        isolated_sorting_service._scan_progress = {
+            **isolated_sorting_service._build_default_scan_progress_state(),
+            "run_id": 21,
+            "source": "manual",
+            "status": "done",
+            "step": "done",
+        }
+        isolated_sorting_service._scan_worker_thread = FinishingWorker()
+
+        result = isolated_sorting_service.reset_scan_progress()
+
+        assert result["status"] == "reset"
+        assert isolated_sorting_service.get_scan_progress()["status"] == "idle"
+
+    def test_terminal_acknowledgement_cannot_clear_a_newer_run(self, test_client, tmp_path: Path):
+        from routers.sorting import get_sorting_service
+        from services.sorting_models import SCAN_SOURCE_MANUAL, ScanRequest
+
+        service = get_sorting_service()
+        service._scan_run_id = 30
+        service._scan_progress = {
+            **service._build_default_scan_progress_state(),
+            "run_id": 30,
+            "source": SCAN_SOURCE_MANUAL,
+            "status": "done",
+            "step": "done",
+        }
+        stale_identity = {"run_id": 30, "source": SCAN_SOURCE_MANUAL}
+        new_start = service.start_scan(
+            ScanRequest(folder_path=str(tmp_path)),
+            BackgroundTasks(),
+            SCAN_SOURCE_MANUAL,
+        )
+
+        response = test_client.post("/api/scan/acknowledge", json=stale_identity)
+
+        assert response.status_code == 409
+        payload = response.json()
+        assert payload["code"] == "scan_identity_mismatch"
+        assert payload["error"] == payload["message"]
+        assert payload["type"] == "HTTPException"
+        assert "detail" not in payload
+        progress = service.get_scan_progress()
+        assert progress["run_id"] == new_start["run_id"]
+        assert progress["source"] == SCAN_SOURCE_MANUAL
+        assert progress["status"] == "starting"
+
+    def test_terminal_acknowledgement_atomically_clears_the_observed_manual_run(self, test_client):
+        from routers.sorting import get_sorting_service
+        from services.sorting_models import SCAN_SOURCE_MANUAL
+
+        service = get_sorting_service()
+        service._scan_progress = {
+            **service._build_default_scan_progress_state(),
+            "run_id": 32,
+            "source": SCAN_SOURCE_MANUAL,
+            "status": "done",
+            "step": "done",
+        }
+
+        response = test_client.post(
+            "/api/scan/acknowledge",
+            json={"run_id": 32, "source": SCAN_SOURCE_MANUAL},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "acknowledged",
+            "run_id": 32,
+            "source": SCAN_SOURCE_MANUAL,
+        }
+        progress = service.get_scan_progress()
+        assert progress["run_id"] == 0
+        assert progress["source"] is None
+        assert progress["status"] == "idle"
+
+    def test_terminal_acknowledgement_rejects_the_observed_active_run(self, test_client):
+        from routers.sorting import get_sorting_service
+        from services.sorting_models import SCAN_SOURCE_MANUAL
+
+        service = get_sorting_service()
+        service._scan_progress = {
+            **service._build_default_scan_progress_state(),
+            "run_id": 33,
+            "source": SCAN_SOURCE_MANUAL,
+            "status": "running",
+            "step": "scanning",
+        }
+
+        response = test_client.post(
+            "/api/scan/acknowledge",
+            json={"run_id": 33, "source": SCAN_SOURCE_MANUAL},
+        )
+
+        assert response.status_code == 409
+        payload = response.json()
+        assert payload["code"] == "scan_not_terminal"
+        assert payload["error"] == payload["message"]
+        assert payload["type"] == "HTTPException"
+        assert "detail" not in payload
+        progress = service.get_scan_progress()
+        assert progress["run_id"] == 33
+        assert progress["status"] == "running"
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"run_id": "34", "source": "manual"},
+            {"run_id": 0, "source": "manual"},
+            {"run_id": 34, "source": "library_rescan"},
+        ],
+    )
+    def test_terminal_acknowledgement_requires_strict_manual_identity(self, test_client, payload):
+        response = test_client.post("/api/scan/acknowledge", json=payload)
+
+        assert response.status_code == 400
+
+    def test_cancel_scan_cannot_cancel_a_newer_run(self, test_client, tmp_path: Path):
+        from routers.sorting import get_sorting_service
+        from services.sorting_models import SCAN_SOURCE_MANUAL, ScanRequest
+
+        service = get_sorting_service()
+        service._scan_run_id = 40
+        service._scan_progress = {
+            **service._build_default_scan_progress_state(),
+            "run_id": 40,
+            "source": SCAN_SOURCE_MANUAL,
+            "status": "done",
+            "step": "done",
+        }
+        stale_identity = {"run_id": 40, "source": SCAN_SOURCE_MANUAL}
+        new_start = service.start_scan(
+            ScanRequest(folder_path=str(tmp_path)),
+            BackgroundTasks(),
+            SCAN_SOURCE_MANUAL,
+        )
+
+        response = test_client.post("/api/scan/cancel", json=stale_identity)
+
+        assert response.status_code == 409
+        payload = response.json()
+        assert payload["code"] == "scan_identity_mismatch"
+        assert "detail" not in payload
+        progress = service.get_scan_progress()
+        assert progress["run_id"] == new_start["run_id"]
+        assert progress["source"] == SCAN_SOURCE_MANUAL
+        assert progress["status"] == "starting"
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {},
+            {"run_id": "41", "source": "manual"},
+            {"run_id": 0, "source": "manual"},
+            {"run_id": 41, "source": "unsupported"},
+        ],
+    )
+    def test_cancel_scan_requires_strict_identity(self, test_client, payload):
+        response = test_client.post("/api/scan/cancel", json=payload)
+
+        assert response.status_code == 400
+
+    def test_force_reset_invalidates_a_queued_starting_worker(
+        self,
+        isolated_sorting_service,
+        tmp_path: Path,
+        monkeypatch,
+    ):
+        from services import sorting_service as sorting_service_module
+        from services.sorting_models import SCAN_SOURCE_MANUAL, ScanRequest
+
+        scan_calls = 0
+
+        def fake_scan_folder(*args, **kwargs):
+            nonlocal scan_calls
+            scan_calls += 1
+            return {
+                "total": 0,
+                "counted": 0,
+                "total_final": True,
+                "import_complete": True,
+                "errors": 0,
+                "new": 0,
+                "updated": 0,
+                "removed": 0,
+                "library_ready": True,
+                "metadata_processed": 0,
+                "metadata_total": 0,
+                "metadata_total_final": True,
+                "recent_errors": [],
+            }
+
+        monkeypatch.setattr(sorting_service_module, "scan_folder", fake_scan_folder)
+        background_tasks = BackgroundTasks()
+        start = isolated_sorting_service.start_scan(
+            ScanRequest(folder_path=str(tmp_path)),
+            background_tasks,
+            SCAN_SOURCE_MANUAL,
+        )
+        queued_cancel_event = isolated_sorting_service._scan_cancel_event
+
+        reset = isolated_sorting_service.reset_scan_progress()
+        background_tasks.tasks[0].func()
+
+        assert reset["status"] == "reset"
+        assert queued_cancel_event is not None and queued_cancel_event.is_set()
+        assert isolated_sorting_service._scan_run_id > start["run_id"]
+        assert isolated_sorting_service.get_scan_progress()["status"] == "idle"
+        assert scan_calls == 0
+
     def test_scan_cleanup_missing_removes_stale_entries_in_scope(self, test_client, tmp_path: Path):
         """Folder sync should remove indexed rows whose files no longer exist under the scanned scope."""
         import database as db
@@ -611,15 +933,20 @@ class TestScan:
     def test_cancel_scan_marks_idle_worker_as_cancelled(self, isolated_sorting_service):
         """Cancel should flip the shared scan state to cancelled when no live worker remains."""
         import threading
+        from services.sorting_models import ScanCancelRequest
         from services.sorting_service import ScanRequest
 
         bg = BackgroundTasks()
-        isolated_sorting_service.start_scan(
+        start = isolated_sorting_service.start_scan(
             ScanRequest(folder_path=os.getcwd(), recursive=False),
             bg,
+            "manual",
         )
 
         isolated_sorting_service._scan_progress = {
+            **isolated_sorting_service._build_default_scan_progress_state(),
+            "run_id": start["run_id"],
+            "source": start["source"],
             "status": "running",
             "step": "scanning",
             "current": 3,
@@ -636,7 +963,10 @@ class TestScan:
         isolated_sorting_service._scan_cancel_event = threading.Event()
         isolated_sorting_service._scan_worker_thread = None
 
-        result = isolated_sorting_service.cancel_scan()
+        result = isolated_sorting_service.cancel_scan(ScanCancelRequest(
+            run_id=start["run_id"],
+            source=start["source"],
+        ))
         progress = isolated_sorting_service.get_scan_progress()
 
         assert result["status"] == "cancelled"
@@ -647,12 +977,16 @@ class TestScan:
     def test_cancel_scan_sets_cancelling_when_worker_is_alive(self, isolated_sorting_service):
         """Cancel should request cooperative stop and leave the run in cancelling until the worker exits."""
         import threading
+        from services.sorting_models import ScanCancelRequest
 
         class AliveThread:
             def is_alive(self):
                 return True
 
         isolated_sorting_service._scan_progress = {
+            **isolated_sorting_service._build_default_scan_progress_state(),
+            "run_id": 1,
+            "source": "manual",
             "status": "running",
             "step": "scanning",
             "current": 4,
@@ -668,13 +1002,57 @@ class TestScan:
         }
         isolated_sorting_service._scan_cancel_event = threading.Event()
         isolated_sorting_service._scan_worker_thread = AliveThread()
+        isolated_sorting_service._scan_run_id = 1
 
-        result = isolated_sorting_service.cancel_scan()
+        result = isolated_sorting_service.cancel_scan(ScanCancelRequest(
+            run_id=1,
+            source="manual",
+        ))
         progress = isolated_sorting_service.get_scan_progress()
 
         assert result["status"] == "cancelling"
         assert isolated_sorting_service._scan_cancel_event.is_set() is True
         assert progress["status"] == "cancelling"
+
+    def test_cancel_scan_invalidates_a_queued_starting_worker(
+        self,
+        isolated_sorting_service,
+        tmp_path: Path,
+        monkeypatch,
+    ):
+        from services import sorting_service as sorting_service_module
+        from services.sorting_models import SCAN_SOURCE_MANUAL, ScanCancelRequest, ScanRequest
+
+        scan_calls = 0
+
+        def fake_scan_folder(*args, **kwargs):
+            nonlocal scan_calls
+            scan_calls += 1
+            raise AssertionError("A cancelled queued scan must not start")
+
+        monkeypatch.setattr(sorting_service_module, "scan_folder", fake_scan_folder)
+        background_tasks = BackgroundTasks()
+        start = isolated_sorting_service.start_scan(
+            ScanRequest(folder_path=str(tmp_path)),
+            background_tasks,
+            SCAN_SOURCE_MANUAL,
+        )
+        queued_cancel_event = isolated_sorting_service._scan_cancel_event
+
+        result = isolated_sorting_service.cancel_scan(ScanCancelRequest(
+            run_id=start["run_id"],
+            source=start["source"],
+        ))
+        progress = isolated_sorting_service.get_scan_progress()
+        background_tasks.tasks[0].func()
+
+        assert result["status"] == "cancelled"
+        assert queued_cancel_event is not None and queued_cancel_event.is_set()
+        assert progress["run_id"] == start["run_id"]
+        assert progress["source"] == SCAN_SOURCE_MANUAL
+        assert progress["status"] == "cancelled"
+        assert isolated_sorting_service._scan_run_id > start["run_id"]
+        assert scan_calls == 0
 
 
 class TestMove:

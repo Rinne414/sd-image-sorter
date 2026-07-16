@@ -6,7 +6,7 @@ Refactored to use Service Layer pattern with dependency injection.
 """
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter, Body, Depends, BackgroundTasks, Query, UploadFile, File
+from fastapi import APIRouter, Body, Depends, BackgroundTasks, File, Query, UploadFile
 
 from services.service_provider import ServiceProvider
 from services.state_compat import MutableStateProxy
@@ -14,9 +14,17 @@ from services.sorting_models import (
     BatchMoveRequest,
     BrowseFolderRequest,
     FolderConfig,
+    LibraryAutoRefreshResponse,
     ManualSortStartRequest,
     MoveRequest,
+    SCAN_SOURCE_MANUAL,
+    ScanAcknowledgeRequest,
+    ScanAcknowledgeResponse,
+    ScanCancelRequest,
+    ScanCancelResponse,
+    ScanProgressResponse,
     ScanRequest,
+    ScanStartResponse,
     ValidatePathRequest,
 )
 from services.sorting_service import SortingService
@@ -27,7 +35,6 @@ router = APIRouter(prefix="/api", tags=["sorting"])
 # Service instance - will be set via dependency injection
 scan_progress: Any = None
 sort_session: Any = None
-
 
 def _bind_sorting_compat_state(service: SortingService) -> None:
     """Keep legacy router-level state handles pointed at the service-owned state."""
@@ -212,6 +219,7 @@ async def import_files(
 
 @router.post(
     "/scan",
+    response_model=ScanStartResponse,
     summary="Start folder scan",
     description="""
 Start scanning a folder for images to add to the database.
@@ -228,11 +236,23 @@ Scans recursively by default, extracting metadata from PNG/WebP files.
     responses={
         200: {
             "description": "Scan started",
-            "content": {"application/json": {"example": {"status": "started", "message": "Scan started in background"}}}
+            "content": {"application/json": {"example": {
+                "status": "started",
+                "message": "Scan started in background",
+                "run_id": 42,
+                "source": "manual",
+            }}}
         },
         400: {
-            "description": "Invalid folder or scan already running",
-            "content": {"application/json": {"example": {"detail": "Scan already in progress"}}}
+            "description": "Invalid folder",
+        },
+        409: {
+            "description": "Scan already running or prior manual completion is pending",
+            "content": {"application/json": {"example": {
+                "error": "Scan already in progress",
+                "type": "HTTPException",
+                "status_code": 409,
+            }}}
         }
     }
 )
@@ -242,10 +262,10 @@ async def start_scan(
     service: SortingService = Depends(get_sorting_service),
 ):
     """Start scanning a folder for images."""
-    return service.start_scan(request, background_tasks)
+    return service.start_scan(request, background_tasks, SCAN_SOURCE_MANUAL)
 
 
-@router.get("/scan/progress")
+@router.get("/scan/progress", response_model=ScanProgressResponse)
 async def get_scan_progress(
     service: SortingService = Depends(get_sorting_service),
 ):
@@ -253,12 +273,22 @@ async def get_scan_progress(
     return service.get_scan_progress()
 
 
-@router.post("/scan/cancel")
+@router.post("/scan/acknowledge", response_model=ScanAcknowledgeResponse)
+async def acknowledge_scan_terminal(
+    request: ScanAcknowledgeRequest,
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Clear the exact manual terminal scan result observed by the client."""
+    return service.acknowledge_scan_terminal(request)
+
+
+@router.post("/scan/cancel", response_model=ScanCancelResponse)
 async def cancel_scan(
+    request: ScanCancelRequest,
     service: SortingService = Depends(get_sorting_service),
 ):
     """Request cancellation of the current scan task."""
-    return service.cancel_scan()
+    return service.cancel_scan(request)
 
 
 @router.post("/scan/reset")
@@ -284,6 +314,7 @@ async def remove_library_root(
 
 @router.post(
     "/library-roots/{root_id}/rescan",
+    response_model=ScanStartResponse,
     summary="Rescan a library root",
     description="v3.3.2 Library Navigation: quick-import re-scan of a registered root to pick up new or changed files. Runs in the background; poll /api/scan/progress.",
 )
@@ -298,6 +329,8 @@ async def rescan_library_root(
 
 @router.post(
     "/library/auto-refresh",
+    response_model=LibraryAutoRefreshResponse,
+    response_model_exclude_none=True,
     summary="Idle auto-refresh of library roots",
     description="v3.3.2 Library Navigation: quick-import re-scan of the stalest enabled root to surface newly added files. No-op while a scan is running or when no roots are enabled; never runs AI tagging (GPU safety).",
 )

@@ -57,16 +57,65 @@
             if (!this._enabled) return;
             if (document.hidden) return;
             if (Date.now() - this._lastActivity < IDLE_MS) return; // user is active
-            const api = window.App?.API;
-            if (!api?.post) return;
+            const app = window.App;
+            const api = app?.API;
+            if (!api?.post) {
+                const message = appT(
+                    'libraryRoots.autoRefreshUnavailable',
+                    'Idle library refresh is unavailable. Restart the app and try again.'
+                );
+                window.Logger?.error?.('Idle auto-refresh API is unavailable', { appAvailable: Boolean(app) });
+                app?.showToast?.(message, 'error');
+                return;
+            }
             try {
                 const result = await api.post('/api/library/auto-refresh', {});
-                if (result && result.status === 'started') {
-                    // Quietly surface newly-found folders in the sidebar tree.
+                const status = typeof result?.status === 'string' ? result.status : '';
+                const reason = typeof result?.reason === 'string' ? result.reason : '';
+                if (status === 'started') {
+                    if (typeof app.beginAutoRefreshScanProgress !== 'function') {
+                        throw new TypeError('The idle auto-refresh progress handler is unavailable');
+                    }
+                    app.beginAutoRefreshScanProgress(result.scan);
                     window.FolderTreeUI?.refresh?.();
+                    return;
                 }
+                if (
+                    (status === 'skipped' && reason === 'scan_in_progress')
+                    || (status === 'skipped' && reason === 'manual_completion_pending')
+                    || (status === 'idle' && reason === 'no_enabled_roots')
+                ) return;
+
+                const statusLabel = status || '<missing>';
+                const reasonLabel = reason || '<missing>';
+                const detailLabel = typeof result?.detail === 'string' && result.detail.trim()
+                    ? result.detail.trim()
+                    : '<missing>';
+                window.Logger?.error?.('Idle auto-refresh start returned an unexpected result', {
+                    detail: detailLabel,
+                    reason: reasonLabel,
+                    status: statusLabel,
+                });
+                app.showToast(
+                    appT(
+                        'libraryRoots.autoRefreshUnexpectedStart',
+                        'Idle library refresh did not start (status: {status}, reason: {reason}, detail: {detail}). Open Library Folders and run Rescan.'
+                    )
+                        .replace('{status}', statusLabel)
+                        .replace('{reason}', reasonLabel)
+                        .replace('{detail}', detailLabel),
+                    'error'
+                );
             } catch (error) {
-                /* background nicety — stay silent on failure */
+                const detail = error instanceof Error ? error.message : String(error);
+                window.Logger?.error?.('Idle auto-refresh start failed', { error });
+                app.showToast(
+                    appT(
+                        'libraryRoots.autoRefreshStartFailed',
+                        'Could not start idle library refresh: {detail}. Open Library Folders and run Rescan.'
+                    ).replace('{detail}', detail),
+                    'error'
+                );
             }
         },
     };

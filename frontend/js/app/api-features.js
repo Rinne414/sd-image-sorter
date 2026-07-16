@@ -206,8 +206,11 @@ Object.assign(API, {
         return this.post('/api/support/open-log', {});
     },
 
-    async cancelScan() {
-        return this.post('/api/scan/cancel');
+    async cancelScan(identity) {
+        return this.post('/api/scan/cancel', {
+            run_id: identity.runId,
+            source: identity.source,
+        });
     },
 
     async startReconnectMissing(folderPath, options = {}) {

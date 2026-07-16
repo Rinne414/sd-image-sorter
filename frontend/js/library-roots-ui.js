@@ -157,12 +157,23 @@
 
         async _rescan(id) {
             try {
-                await appRef().API?.post?.(`/api/library-roots/${id}/rescan`, {});
+                const app = appRef();
+                const result = await app.API?.post?.(`/api/library-roots/${id}/rescan`, {});
+                if (typeof app.beginLibraryRescanScanProgress !== 'function') {
+                    throw new TypeError('The library rescan progress handler is unavailable');
+                }
+                app.beginLibraryRescanScanProgress(result);
                 toast(t('libraryRoots.rescanStarted', 'Rescan started — new files will appear shortly'), 'success');
             } catch (error) {
-                const message = error?.apiStatus === 409
-                    ? t('libraryRoots.scanBusy', 'A scan is already running')
-                    : t('libraryRoots.rescanFailed', 'Could not start rescan');
+                const errorCode = error?.apiData?.code;
+                const message = errorCode === 'manual_completion_pending'
+                    ? t(
+                        'libraryRoots.manualCompletionPending',
+                        'The previous import finished but its completion is still pending. Reload the app to acknowledge it, then run Rescan again.'
+                    )
+                    : error?.apiStatus === 409
+                        ? t('libraryRoots.scanBusy', 'A scan is already running')
+                        : t('libraryRoots.rescanFailed', 'Could not start rescan');
                 toast(message, 'error');
             }
         },

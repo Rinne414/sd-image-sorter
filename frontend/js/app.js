@@ -8,7 +8,7 @@
  * the wiring that must run last: initEventListeners (a thin composer
  * over the app/boot-listeners-* binders), the two DOMContentLoaded boot
  * blocks, and buildAppContext() + Object.seal(window.App) — the one
- * place the sealed 93-key public surface is assembled. This file must stay a real servable asset
+ * place the sealed public surface is assembled. This file must stay a real servable asset
  * (test_cache_bust GETs /static/js/app.js) and contract tests read the
  * whole family via _app_family_source().
  */
@@ -213,6 +213,8 @@ function buildAppContext() {
         removeGalleryImagesByIds,
         addRecentFolder,
         getRecentFolders,
+        beginAutoRefreshScanProgress,
+        beginLibraryRescanScanProgress,
         updateScanDiagnosticsCard,
         copyScanDiagnostics,
         openScanLogFile,

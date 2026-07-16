@@ -771,8 +771,11 @@ Start folder scan. The default scan path is single-pass streaming: progress repo
 Get scan progress.
 The payload includes step-oriented fields such as `step`, `current_item`, `started_at`, `updated_at`, `recent_errors`, `metadata_pending`, `attention_required`, `attention_message`, `stalled_seconds`, `diagnostics_available`, and `diagnostics_endpoint`. When `attention_required=true`, clients should show a visible stalled-scan warning and offer diagnostics copy/open actions instead of leaving the user with a frozen-looking progress bar. Corrupt / truncated files are reported by filename and excluded from the normal library.
 
+#### POST /api/scan/acknowledge
+Atomically claim and clear the exact completed manual scan observed by the client. The JSON request body requires positive integer `run_id` and `source` set to `"manual"`. Returns `409` when that identity is no longer the pending terminal result; callers that lose this claim must not repeat completion side effects.
+
 #### POST /api/scan/cancel
-Cancel the active scan task.
+Cancel the exact active scan task observed by the client. The JSON request body requires positive integer `run_id` and `source` (`manual`, `library_auto_refresh`, or `library_rescan`). Returns `409` if a newer or different scan owns the active state.
 
 #### POST /api/scan/reset
 Reset stuck scan progress.

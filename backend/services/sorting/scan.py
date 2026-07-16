@@ -9,14 +9,21 @@ the facade module at call time so existing monkeypatches keep landing
 import logging
 import threading
 import time
-from typing import Dict
-
 from fastapi import BackgroundTasks, HTTPException
 
 import database as db
 import image_manager as image_manager_module
 from services import entry_stats_service
-from services.sorting_models import ScanRequest
+from services.sorting_models import (
+    BACKGROUND_SCAN_SOURCES,
+    SCAN_ACTIVE_STATUSES,
+    SCAN_SOURCE_MANUAL,
+    SCAN_TERMINAL_STATUSES,
+    VALID_SCAN_SOURCES,
+    ScanRequest,
+    ScanSource,
+    ScanStartResult,
+)
 from utils.path_validation import normalize_user_path, validate_folder_path
 
 # NOTE(decomposition): keep the historical logger channel — tests attach
@@ -49,9 +56,12 @@ class ScanMixin:
     def start_scan(
         self,
         request: ScanRequest,
-        background_tasks: BackgroundTasks
-    ) -> Dict[str, str]:
+        background_tasks: BackgroundTasks,
+        source: ScanSource,
+    ) -> ScanStartResult:
         """Start scanning a folder for images."""
+        if source not in VALID_SCAN_SOURCES:
+            raise ValueError(f"Unsupported scan source: {source}")
         normalized_folder_path = normalize_user_path(request.folder_path)
         is_valid, error = validate_folder_path(normalized_folder_path)
         if not is_valid:
@@ -59,6 +69,7 @@ class ScanMixin:
 
         with self._scan_lock:
             current_status = self._scan_progress["status"]
+            current_source = self._scan_progress.get("source")
             worker_alive = bool(self._scan_worker_thread and self._scan_worker_thread.is_alive())
             # v3.2.2: previously this only rejected when ``status == 'running'``
             # AND ``worker_alive``. Three concurrent POSTs to /api/scan all
@@ -74,13 +85,30 @@ class ScanMixin:
             # state (status=running but worker died) is recovered through
             # /api/scan/reset which the UI's "Reset stuck scan" button
             # already calls; we should not silently overwrite it here.
-            ACTIVE_STATUSES = {"running", "cancelling", "starting"}
-            if current_status in ACTIVE_STATUSES:
+            if current_status in SCAN_ACTIVE_STATUSES:
                 if worker_alive or current_status in {"starting", "cancelling"}:
                     raise HTTPException(status_code=409, detail="Scan already in progress")
                 raise HTTPException(
                     status_code=409,
                     detail="Previous scan is in a stale state. Call /api/scan/reset first.",
+                )
+            if (
+                source in BACKGROUND_SCAN_SOURCES
+                and current_status in SCAN_TERMINAL_STATUSES
+                and current_source in {None, SCAN_SOURCE_MANUAL}
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "manual_completion_pending",
+                        "message": (
+                            "A manual scan result is waiting to be acknowledged. "
+                            "Acknowledge that result before starting a library refresh."
+                        ),
+                        "run_id": self._scan_progress.get("run_id"),
+                        "source": current_source,
+                        "status": current_status,
+                    },
                 )
 
             self._scan_run_id += 1
@@ -90,6 +118,8 @@ class ScanMixin:
             self._scan_cancel_event = cancel_event
             self._scan_worker_thread = None
             self._scan_progress = {
+                "run_id": run_id,
+                "source": source,
                 "status": "starting",
                 "step": "starting",
                 "current": 0,
@@ -110,6 +140,7 @@ class ScanMixin:
                 "metadata_pending": 0,
                 "message": "正在同步文件夹索引 / Syncing folder index..." if request.cleanup_missing else "导入前统计图片数量 / Counting images before import...",
                 "current_item": None,
+                "recent_errors": [],
                 "started_at": started_at,
                 "updated_at": started_at,
             }
@@ -352,6 +383,8 @@ class ScanMixin:
                 self._set_scan_progress_if_current(
                     run_id,
                     {
+                        "run_id": run_id,
+                        "source": source,
                         "status": "done",
                         "step": "done",
                         "current": result["total"],
@@ -394,6 +427,8 @@ class ScanMixin:
                     self._set_scan_progress_if_current(
                         run_id,
                         {
+                            "run_id": run_id,
+                            "source": source,
                             "status": "cancelled",
                             "step": "cancelled",
                             "current": current_state.get("current", 0),
@@ -418,6 +453,7 @@ class ScanMixin:
                                 else f"扫描已取消（已扫 {current_state.get('processed', current_state.get('current', 0))}）/ Scan cancelled after {current_state.get('processed', current_state.get('current', 0))} scanned."
                             ),
                             "current_item": current_state.get("current_item"),
+                            "recent_errors": current_state.get("recent_errors", []),
                             "started_at": current_state.get("started_at"),
                             "updated_at": now,
                         }
@@ -434,6 +470,8 @@ class ScanMixin:
                     self._set_scan_progress_if_current(
                         run_id,
                         {
+                            "run_id": run_id,
+                            "source": source,
                             "status": "error",
                             "step": "error",
                             "current": current_state.get("current", 0),
@@ -454,6 +492,7 @@ class ScanMixin:
                             "metadata_pending": current_state.get("metadata_pending", 0),
                             "message": "扫描因内部错误失败 / Scan failed due to an internal error",
                             "current_item": current_state.get("current_item"),
+                            "recent_errors": current_state.get("recent_errors", []),
                             "started_at": current_state.get("started_at"),
                             "updated_at": now,
                         }
@@ -475,4 +514,9 @@ class ScanMixin:
                 self._clear_scan_worker_refs_if_current(run_id)
 
         background_tasks.add_task(run_scan)
-        return {"status": "started", "message": "扫描已在后台开始 / Scan started in background"}
+        return {
+            "status": "started",
+            "message": "扫描已在后台开始 / Scan started in background",
+            "run_id": run_id,
+            "source": source,
+        }

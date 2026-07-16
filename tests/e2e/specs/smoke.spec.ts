@@ -1935,7 +1935,7 @@ test.describe('Smoke Tests', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'started' }),
+        body: JSON.stringify({ status: 'started', run_id: 991, source: 'manual' }),
       })
     })
 
@@ -1944,7 +1944,7 @@ test.describe('Smoke Tests', () => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ status: 'idle', current: 0, total: 0, message: '' }),
+          body: JSON.stringify({ status: 'idle', run_id: 0, source: null, current: 0, total: 0, message: '' }),
         })
         return
       }
@@ -1954,7 +1954,7 @@ test.describe('Smoke Tests', () => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ status: 'starting', current: 0, total: 0, message: 'Starting...' }),
+          body: JSON.stringify({ status: 'starting', run_id: 991, source: 'manual', current: 0, total: 0, message: 'Starting...' }),
         })
         return
       }
@@ -1962,7 +1962,7 @@ test.describe('Smoke Tests', () => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ status: 'running', current: 5, total: 10, processed: 5, message: 'Importing images...' }),
+          body: JSON.stringify({ status: 'running', run_id: 991, source: 'manual', current: 5, total: 10, processed: 5, message: 'Importing images...' }),
         })
         return
       }
@@ -1971,6 +1971,8 @@ test.describe('Smoke Tests', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           status: 'done',
+          run_id: 991,
+          source: 'manual',
           current: 10,
           total: 10,
           processed: 10,
@@ -1978,6 +1980,15 @@ test.describe('Smoke Tests', () => {
           errors: 0,
           message: 'Import complete',
         }),
+      })
+    })
+
+    await page.route('**/api/scan/acknowledge', async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'acknowledged', run_id: 991, source: 'manual' }),
       })
     })
 

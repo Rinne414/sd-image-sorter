@@ -13,7 +13,16 @@ from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
 
-from services.sorting_models import SORT_MODE_DEFAULT
+from services.sorting_models import (
+    SCAN_ACTIVE_STATUSES,
+    SCAN_TERMINAL_STATUSES,
+    SORT_MODE_DEFAULT,
+    ScanAcknowledgeRequest,
+    ScanAcknowledgeResult,
+    ScanCancelRequest,
+    ScanCancelResult,
+    ScanSource,
+)
 from services.state_compat import MutableStateProxy
 
 
@@ -37,6 +46,8 @@ class SortingStateMixin:
     def _build_default_scan_progress_state() -> Dict[str, Any]:
         """Return the canonical idle scan-progress payload."""
         return {
+            "run_id": 0,
+            "source": None,
             "status": "idle",
             "step": "idle",
             "current": 0,
@@ -57,6 +68,7 @@ class SortingStateMixin:
             "metadata_pending": 0,
             "message": "",
             "current_item": None,
+            "recent_errors": [],
             "started_at": None,
             "updated_at": None,
             "attention_required": False,
@@ -183,38 +195,136 @@ class SortingStateMixin:
         with self._scan_lock:
             self._scan_progress = self._coerce_scan_progress_state(state)
 
+    def _set_scan_progress_idle_locked(self, message: str) -> None:
+        """Replace scan progress with canonical idle state while holding the lock."""
+        self._scan_progress = self._build_default_scan_progress_state()
+        self._scan_progress.update({
+            "message": message,
+            "updated_at": time.time(),
+        })
+        self._scan_cancel_event = None
+        self._scan_worker_thread = None
+
+    def _invalidate_scan_run_locked(self) -> None:
+        """Signal and invalidate a queued or stale run while holding the lock."""
+        if self._scan_cancel_event is not None:
+            self._scan_cancel_event.set()
+        progress_run_id = int(self._scan_progress.get("run_id", 0) or 0)
+        self._scan_run_id = max(self._scan_run_id, progress_run_id) + 1
+
+    def _require_scan_identity_locked(
+        self,
+        run_id: int,
+        source: ScanSource,
+        action: str,
+    ) -> str:
+        """Return current status when the requested identity owns scan progress."""
+        current_run_id = self._scan_progress.get("run_id")
+        current_source = self._scan_progress.get("source")
+        current_status = self._scan_progress.get("status")
+        if current_run_id == run_id and current_source == source:
+            return str(current_status)
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "scan_identity_mismatch",
+                "message": (
+                    f"Scan progress changed before {action}. "
+                    "Fetch the current progress and retry with that scan identity."
+                ),
+                "requested": {
+                    "run_id": run_id,
+                    "source": source,
+                },
+                "current": {
+                    "run_id": current_run_id,
+                    "source": current_source,
+                    "status": current_status,
+                },
+            },
+        )
+
+    def acknowledge_scan_terminal(
+        self,
+        request: ScanAcknowledgeRequest,
+    ) -> ScanAcknowledgeResult:
+        """Atomically clear the exact manual terminal result observed by a client."""
+        with self._scan_lock:
+            current_status = self._require_scan_identity_locked(
+                request.run_id,
+                request.source,
+                "acknowledgement",
+            )
+            if current_status not in SCAN_TERMINAL_STATUSES:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "scan_not_terminal",
+                        "message": (
+                            "The identified scan has not reached a terminal state. "
+                            "Wait for done, cancelled, or error before acknowledging it."
+                        ),
+                        "run_id": request.run_id,
+                        "source": request.source,
+                        "status": current_status,
+                    },
+                )
+
+            result: ScanAcknowledgeResult = {
+                "status": "acknowledged",
+                "run_id": request.run_id,
+                "source": request.source,
+            }
+            self._set_scan_progress_idle_locked("Acknowledged by client")
+            return result
+
     def reset_scan_progress(self) -> Dict[str, Any]:
         """Reset a stuck scan task back to idle."""
         with self._scan_lock:
+            status = self._scan_progress["status"]
             worker_alive = bool(self._scan_worker_thread and self._scan_worker_thread.is_alive())
-            if worker_alive:
-                return {"status": self._scan_progress["status"], "message": "Cannot reset while scan worker is still running"}
-            if self._scan_progress["status"] in {"running", "cancelling", "error", "done", "cancelled"}:
-                self._scan_progress = self._build_default_scan_progress_state()
-                self._scan_progress.update({
-                    "message": "Reset by user",
-                    "updated_at": time.time(),
-                })
-                self._scan_cancel_event = None
-                self._scan_worker_thread = None
+            can_reset = status in SCAN_TERMINAL_STATUSES or (
+                status in SCAN_ACTIVE_STATUSES and not worker_alive
+            )
+            if can_reset:
+                self._invalidate_scan_run_locked()
+                self._set_scan_progress_idle_locked("Reset by user")
                 return {"status": "reset", "message": "Scan progress reset to idle"}
-            return {"status": self._scan_progress["status"], "message": "Nothing to reset (not running)"}
+            if worker_alive:
+                return {"status": status, "message": "Cannot reset while scan worker is still running"}
+            return {"status": status, "message": "Nothing to reset (not running)"}
 
-    def cancel_scan(self) -> Dict[str, Any]:
+    def cancel_scan(self, request: ScanCancelRequest) -> ScanCancelResult:
         """Request cooperative cancellation of the current scan task."""
         with self._scan_lock:
-            if self._scan_progress["status"] not in {"running", "cancelling"}:
-                return {"status": self._scan_progress["status"], "message": "No scan task is running"}
+            current_status = self._require_scan_identity_locked(
+                request.run_id,
+                request.source,
+                "cancellation",
+            )
+            if current_status not in SCAN_ACTIVE_STATUSES:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "scan_not_active",
+                        "message": (
+                            "The identified scan is no longer active. "
+                            "Fetch current progress before trying to cancel again."
+                        ),
+                        "run_id": request.run_id,
+                        "source": request.source,
+                        "status": current_status,
+                    },
+                )
 
             current = int(self._scan_progress.get("current", 0) or 0)
             total = int(self._scan_progress.get("total", 0) or 0)
             total_final = bool(self._scan_progress.get("total_final", False))
             worker_alive = bool(self._scan_worker_thread and self._scan_worker_thread.is_alive())
 
-            if self._scan_cancel_event is not None:
-                self._scan_cancel_event.set()
-
             if worker_alive:
+                if self._scan_cancel_event is not None:
+                    self._scan_cancel_event.set()
                 self._scan_progress["status"] = "cancelling"
                 self._scan_progress["step"] = "cancelling"
                 self._scan_progress["message"] = (
@@ -223,8 +333,14 @@ class SortingStateMixin:
                     else f"Cancelling scan... ({current} scanned)"
                 )
                 self._scan_progress["updated_at"] = time.time()
-                return {"status": "cancelling", "message": "Scan cancellation requested"}
+                return {
+                    "status": "cancelling",
+                    "message": "Scan cancellation requested",
+                    "run_id": request.run_id,
+                    "source": request.source,
+                }
 
+            self._invalidate_scan_run_locked()
             self._scan_progress["status"] = "cancelled"
             self._scan_progress["step"] = "cancelled"
             self._scan_progress["message"] = (
@@ -235,7 +351,12 @@ class SortingStateMixin:
             self._scan_progress["updated_at"] = time.time()
             self._scan_cancel_event = None
             self._scan_worker_thread = None
-            return {"status": "cancelled", "message": "Scan cancelled"}
+            return {
+                "status": "cancelled",
+                "message": "Scan cancelled",
+                "run_id": request.run_id,
+                "source": request.source,
+            }
 
     def _set_scan_worker_refs_if_current(self, run_id: int, cancel_event: threading.Event, worker_thread: Optional[threading.Thread]) -> bool:
         """Only the active scan run may own the shared worker references."""

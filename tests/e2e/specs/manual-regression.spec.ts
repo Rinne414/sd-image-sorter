@@ -4,6 +4,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 import { expect, test, type APIRequestContext, type Page } from '../fixtures/click-ledger'
+import { observeManualScanTerminal } from '../fixtures/scan-terminal-observer'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -2041,18 +2042,23 @@ test('scan folder browser should pick a real folder and scan it through the UI',
 
   await disableScanAutoTag(page)
   await expect(page.locator('#scan-auto-tag')).not.toBeChecked()
-  // /api/scan/progress is a global singleton: without a reset, the poll below
-  // can false-match the PREVIOUS test's terminal "done" state before this
-  // test's scan even starts (proven full-suite flake — the filename assertion
-  // then ran ahead of the real scan).
+  // Reset the shared scan state so this click owns a fresh run.
   await request.post('/api/scan/reset')
-  await page.locator('#btn-start-scan').click()
+  const scanObserver = observeManualScanTerminal(page)
+  try {
+    await page.locator('#btn-start-scan').click()
+    const terminal = await scanObserver.waitForTerminal(90000)
+    expect(terminal.status, terminal.message).toBe('done')
+  } finally {
+    scanObserver.stop()
+  }
 
   await expect.poll(async () => {
-    const response = await request.get('/api/scan/progress')
-    const payload = await response.json()
-    return `${payload.status}:${payload.new || 0}:${payload.updated || 0}`
-  }, { timeout: 90000 }).toMatch(/^done:(2|0):(0|2)$/)
+    const images = await getImagesByFilenames(request, ['manual-scan-browser-1.png', 'manual-scan-browser-2.png'])
+    return images.length
+  }, { timeout: 90000 }).toBe(2)
+  await expect(page.locator('#btn-start-scan')).toBeEnabled({ timeout: 90000 })
+  await expect(page.locator('#scan-modal.visible')).toHaveCount(0)
 
   const scannedImages = await getImagesByFilenames(request, ['manual-scan-browser-1.png', 'manual-scan-browser-2.png'])
   expect(scannedImages).toHaveLength(2)
@@ -2315,13 +2321,21 @@ test('scan then tag through the real UI should finish and write tags for the new
   await page.locator('#scan-folder-path').fill(tagLiveRoot)
   await disableScanAutoTag(page)
   await expect(page.locator('#scan-auto-tag')).not.toBeChecked()
-  await page.locator('#btn-start-scan').click()
+  const scanObserver = observeManualScanTerminal(page)
+  try {
+    await page.locator('#btn-start-scan').click()
+    const terminal = await scanObserver.waitForTerminal(90000)
+    expect(terminal.status, terminal.message).toBe('done')
+  } finally {
+    scanObserver.stop()
+  }
 
   await expect.poll(async () => {
-    const response = await request.get('/api/scan/progress')
-    const payload = await response.json()
-    return `${payload.status}:${payload.new || 0}:${payload.updated || 0}`
-  }, { timeout: 90000 }).toMatch(/^done:(2|0):(0|2)$/)
+    const images = await getImagesByFilenames(request, ['manual-tag-live-1.png', 'manual-tag-live-2.png'])
+    return images.length
+  }, { timeout: 90000 }).toBe(2)
+  await expect(page.locator('#btn-start-scan')).toBeEnabled({ timeout: 90000 })
+  await expect(page.locator('#scan-modal.visible')).toHaveCount(0)
 
   await page.locator('#btn-tag').click()
   await expect(page.locator('#tag-modal.visible')).toBeVisible()

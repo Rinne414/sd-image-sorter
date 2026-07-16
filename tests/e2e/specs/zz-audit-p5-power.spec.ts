@@ -2,6 +2,7 @@ import fsSync from 'node:fs'
 import path from 'node:path'
 
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { observeManualScanTerminal } from '../fixtures/scan-terminal-observer'
 
 /**
  * TEMPORARY AUDIT SPEC (persona 5 — power user, port 19509).
@@ -84,19 +85,18 @@ test('00 scan reference library', async ({ page, request }) => {
       await quickImport.check({ force: true }).catch(() => {})
     }
     await page.screenshot({ path: shot('00a-scan-modal.png') })
-    // /api/scan/progress is a global singleton; reset the previous terminal
-    // state so this poll cannot complete before the new scan starts.
+    // Reset the shared scan state so this click owns a fresh run.
     await request.post('/api/scan/reset')
-    await page.locator('#btn-start-scan').click()
-
-    let done = false
-    for (let i = 0; i < 1100; i += 1) {
-      const progress = await (await request.get('/api/scan/progress')).json()
-      if (progress.status === 'done') { done = true; break }
-      if (progress.status === 'error') throw new Error(`scan error: ${JSON.stringify(progress)}`)
-      await page.waitForTimeout(500)
+    const scanObserver = observeManualScanTerminal(page)
+    try {
+      await page.locator('#btn-start-scan').click()
+      const terminal = await scanObserver.waitForTerminal(600000)
+      expect(terminal.status, terminal.message).toBe('done')
+    } finally {
+      scanObserver.stop()
     }
-    expect(done).toBe(true)
+    await expect(page.locator('#btn-start-scan')).toBeEnabled({ timeout: 600000 })
+    await expect(page.locator('#scan-modal.visible')).toHaveCount(0)
   }
 
   await openGallery(page)

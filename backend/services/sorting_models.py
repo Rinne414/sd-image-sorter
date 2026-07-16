@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional, TypedDict, Union
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from constants import VALID_ASPECT_RATIOS
 
@@ -41,6 +41,214 @@ VALID_BRACKET_ACTIONS = ["champion", "challenger", "skip", "undo", "redo"]
 VALID_CULL_ACTIONS = ["keep", "reject", "skip", "undo", "redo"]
 VALID_FILE_OPERATIONS = ["move", "copy"]
 VALID_PROMPT_MATCH_MODES = {"exact", "contains"}
+SCAN_SOURCE_MANUAL = "manual"
+SCAN_SOURCE_LIBRARY_AUTO_REFRESH = "library_auto_refresh"
+SCAN_SOURCE_LIBRARY_RESCAN = "library_rescan"
+VALID_SCAN_SOURCES = frozenset({
+    SCAN_SOURCE_MANUAL,
+    SCAN_SOURCE_LIBRARY_AUTO_REFRESH,
+    SCAN_SOURCE_LIBRARY_RESCAN,
+})
+BACKGROUND_SCAN_SOURCES = frozenset({
+    SCAN_SOURCE_LIBRARY_AUTO_REFRESH,
+    SCAN_SOURCE_LIBRARY_RESCAN,
+})
+SCAN_ACTIVE_STATUSES = frozenset({"starting", "running", "cancelling"})
+SCAN_TERMINAL_STATUSES = frozenset({"done", "error", "cancelled"})
+ScanSource = Literal[
+    "manual",
+    "library_auto_refresh",
+    "library_rescan",
+]
+ScanStatus = Literal[
+    "idle",
+    "starting",
+    "running",
+    "cancelling",
+    "done",
+    "cancelled",
+    "error",
+]
+
+
+class ScanStartResult(TypedDict):
+    """Stable identity returned by every accepted scan start."""
+
+    status: Literal["started"]
+    message: str
+    run_id: int
+    source: ScanSource
+
+
+class ScanStartResponse(BaseModel):
+    """Public scan-start response with a stable run identity."""
+
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+    status: Literal["started"]
+    message: str
+    run_id: int = Field(gt=0)
+    source: ScanSource
+
+
+class ScanAcknowledgeResult(TypedDict):
+    """Identity of a manual terminal result cleared by the client."""
+
+    status: Literal["acknowledged"]
+    run_id: int
+    source: Literal["manual"]
+
+
+class ScanAcknowledgeRequest(BaseModel):
+    """Strict identity required to clear a manual terminal result."""
+
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+    run_id: int = Field(gt=0)
+    source: Literal["manual"]
+
+
+class ScanAcknowledgeResponse(BaseModel):
+    """Public confirmation that one manual terminal result was cleared."""
+
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+    status: Literal["acknowledged"]
+    run_id: int = Field(gt=0)
+    source: Literal["manual"]
+
+
+class ScanCancelResult(TypedDict):
+    """Identity and state returned by a cooperative scan cancellation."""
+
+    status: Literal["cancelling", "cancelled"]
+    message: str
+    run_id: int
+    source: ScanSource
+
+
+class ScanCancelRequest(BaseModel):
+    """Strict identity required to cancel the currently observed scan."""
+
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+    run_id: int = Field(gt=0)
+    source: ScanSource
+
+
+class ScanCancelResponse(BaseModel):
+    """Public cancellation response bound to one scan identity."""
+
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+    status: Literal["cancelling", "cancelled"]
+    message: str
+    run_id: int = Field(gt=0)
+    source: ScanSource
+
+
+class ScanRecentErrorResponse(BaseModel):
+    """Bounded unreadable-file detail exposed by scan progress."""
+
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+    filename: str
+    error: str
+    kind: str
+
+
+class ScanProgressResponse(BaseModel):
+    """Public scan-progress state with identity validation."""
+
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+    run_id: int = Field(ge=0)
+    source: Optional[ScanSource]
+    status: ScanStatus
+    step: str
+    current: int
+    processed: int
+    total: int
+    counted: int
+    total_final: bool
+    import_complete: bool
+    errors: int
+    new: int
+    updated: int
+    removed: int
+    library_ready: bool
+    quick_import: bool
+    metadata_processed: int
+    metadata_total: int
+    metadata_total_final: bool
+    metadata_pending: int
+    message: str
+    current_item: Optional[str]
+    started_at: Optional[float]
+    updated_at: Optional[float]
+    attention_required: bool
+    attention_message: str
+    stalled_seconds: int
+    diagnostics_available: bool
+    diagnostics_endpoint: str
+    recent_errors: List[ScanRecentErrorResponse]
+
+    @model_validator(mode="after")
+    def validate_run_identity(self) -> "ScanProgressResponse":
+        if self.status == "idle":
+            if self.run_id != 0 or self.source is not None:
+                raise ValueError("idle scan progress must use run_id=0 and source=null")
+            return self
+        if self.run_id <= 0 or self.source is None:
+            raise ValueError("non-idle scan progress requires a positive run_id and source")
+        return self
+
+
+class LibraryAutoRefreshStartedResponse(BaseModel):
+    """Accepted idle library refresh."""
+
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+    status: Literal["started"]
+    root: str
+    scan: ScanStartResponse
+
+
+class LibraryAutoRefreshExpectedSkipResponse(BaseModel):
+    """Expected idle library refresh skip."""
+
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+    status: Literal["skipped"]
+    reason: Literal["scan_in_progress", "manual_completion_pending"]
+
+
+class LibraryAutoRefreshFailedResponse(BaseModel):
+    """Actionable idle library refresh start failure."""
+
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+    status: Literal["skipped"]
+    reason: Literal["scan_start_failed"]
+    detail: str
+    status_code: int
+
+
+class LibraryAutoRefreshIdleResponse(BaseModel):
+    """Idle library refresh with no enabled roots."""
+
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+    status: Literal["idle"]
+    reason: Literal["no_enabled_roots"]
+
+
+LibraryAutoRefreshResponse = Union[
+    LibraryAutoRefreshStartedResponse,
+    LibraryAutoRefreshExpectedSkipResponse,
+    LibraryAutoRefreshFailedResponse,
+    LibraryAutoRefreshIdleResponse,
+]
 
 
 class ScanRequest(BaseModel):

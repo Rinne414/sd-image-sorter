@@ -54,6 +54,8 @@ test('window.App is sealed and exposes the load-bearing public surface', async (
       'createGuideOverlay', 'copyTextToClipboard', 'showGlobalLoading', 'hideGlobalLoading',
       'createProgressTracker', 'resetProgressTracker', 'updateProgressTracker', 'buildProgressText',
       'formatDurationCompact', 'formatSize', 'loadImages', 'loadStats', 'beginTaggingProgress',
+      'beginAutoRefreshScanProgress',
+      'beginLibraryRescanScanProgress',
       'refreshAestheticStatus', 'updateSelectionUI', 'emitSelectionStateChanged', 'getSelectedGalleryCount',
       'isFilteredSelectionActiveForCurrentFilters', 'showRandomImage', 'showAnalytics', 'showExportModal',
       'showExportTagsModal', 'moveOrCopyGalleryImages', 'updateCollapsibleFilterUI', 'openModelSelect',

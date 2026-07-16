@@ -179,7 +179,7 @@ async function startScan() {
     try {
         addRecentFolder(folderPath);
         _scanLastFolderPath = folderPath;
-        await API.startScan(folderPath, {
+        const scanStart = await API.startScan(folderPath, {
             recursive,
             quickImport,
             forceReparse,
@@ -203,10 +203,8 @@ async function startScan() {
             'info'
         );
 
-        // v3.3.0 USR-2: invalidate any stale poll loop from a previous scan,
-        // then attach exactly one loop bound to this generation.
-        _scanPollGeneration += 1;
-        pollScanProgress(0, _scanPollGeneration);
+        // Attach one source-specific poller to the accepted backend run.
+        beginManualScanProgress(scanStart);
     } catch (error) {
         // v3.3.0 USR-2: a 409 means a scan is already running — the leftover
         // loop (if any) keeps owning the UI. Tell the user plainly instead of
@@ -232,15 +230,53 @@ async function startScan() {
 }
 
 async function requestStopScan() {
-    const progress = await API.getScanProgress().catch(() => null);
-    if (!progress || !['running', 'cancelling'].includes(progress.status)) {
+    let progress;
+    try {
+        progress = await API.getScanProgress();
+    } catch (error) {
+        Logger.error('Could not read scan progress before cancellation', { error });
+        showToast(
+            formatUserError(
+                error,
+                appT('scan.failedCancelProgress', 'Could not read import progress before stopping it')
+            ),
+            'error'
+        );
+        return;
+    }
+
+    const status = typeof progress?.status === 'string' ? progress.status : '';
+    if (status === 'idle' || SCAN_TERMINAL_STATUSES.has(status)) {
         hideModal('scan-modal');
         unlockLiveProgressText('#scan-progress-text', 'modal.scanStarting', 'Starting...');
         return;
     }
+    if (!['starting', 'running', 'cancelling'].includes(status)) {
+        showToast(
+            appT(
+                'scan.cancelUnavailableStatus',
+                'Import cannot be stopped because the server returned status "{status}". Reload the app and try again.'
+            ).replace('{status}', status || '<missing>'),
+            'error'
+        );
+        return;
+    }
 
     try {
-        const result = await API.cancelScan();
+        const identity = requireScanIdentity(progress, 'Scan cancellation');
+        const result = await API.cancelScan(identity);
+        const resultIdentity = requireScanIdentity(result, 'Scan cancellation response');
+        if (!scanIdentitiesMatch(identity, resultIdentity)) {
+            throw new Error(
+                `Scan cancellation changed identity from ${scanIdentityKey(identity)} `
+                + `to ${scanIdentityKey(resultIdentity)}`
+            );
+        }
+        if (!['cancelled', 'cancelling'].includes(result?.status)) {
+            throw new Error(
+                `Scan cancellation returned unexpected status ${result?.status ?? '<missing>'}`
+            );
+        }
         const processed = Number(progress.processed ?? progress.current ?? 0);
         const total = Number(progress.total || 0);
         const totalFinal = progress?.total_final === true;
@@ -259,6 +295,7 @@ async function requestStopScan() {
             'info'
         );
         if (result?.status === 'cancelled') {
+            hideModal('scan-modal');
             $('#scan-progress-container').style.display = 'none';
             $('#btn-start-scan').disabled = false;
             setScanCancelButtonState('idle');

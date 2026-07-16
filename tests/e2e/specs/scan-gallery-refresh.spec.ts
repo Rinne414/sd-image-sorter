@@ -144,7 +144,9 @@ test.describe('Scan gallery refresh stability', () => {
       const dom = await sampleScanDom(page)
       samples.push({ progress, dom })
 
-      if (progress.status === 'done') {
+      const completionClaimed = progress.status === 'idle'
+        && await page.locator('#pipeline-next-step').isVisible()
+      if (progress.status === 'done' || completionClaimed) {
         done = true
         break
       }
@@ -215,7 +217,9 @@ test.describe('Scan gallery refresh stability', () => {
         await page.evaluate(() => (window as any).App.switchView('gallery'))
       }
 
-      if (progress.status === 'done') {
+      const completionClaimed = progress.status === 'idle'
+        && await page.locator('#pipeline-next-step').isVisible()
+      if (progress.status === 'done' || completionClaimed) {
         done = true
         break
       }

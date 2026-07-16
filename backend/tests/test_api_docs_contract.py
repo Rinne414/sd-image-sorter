@@ -47,6 +47,22 @@ def _format_endpoint_list(endpoints: set[tuple[str, str]]) -> str:
     return "\n".join(f"- {method} {path}" for method, path in sorted(endpoints))
 
 
+def _load_documented_endpoint_section(method: str, path: str) -> str:
+    heading = f"#### {method} {path}"
+    lines = DOCS_API.read_text(encoding="utf-8").splitlines()
+    try:
+        start_index = lines.index(heading)
+    except ValueError as error:
+        raise AssertionError(f"docs/API.md is missing heading: {heading}") from error
+
+    section_lines: list[str] = []
+    for line in lines[start_index + 1 :]:
+        if line.startswith("#### "):
+            break
+        section_lines.append(line)
+    return "\n".join(section_lines)
+
+
 def _load_exported_openapi_schema() -> dict:
     result = subprocess.run(
         [sys.executable, str(EXPORT_OPENAPI)],
@@ -81,6 +97,46 @@ def test_docs_api_endpoint_headings_match_fastapi_routes() -> None:
         "docs/API.md documents endpoint(s) not exposed by FastAPI:\n"
         + _format_endpoint_list(stale_docs)
     )
+
+
+def test_scan_identity_mutations_document_required_request_fields() -> None:
+    schema = _load_exported_openapi_schema()
+    expected_fields = {"run_id", "source"}
+
+    for method, path in (
+        ("POST", "/api/scan/acknowledge"),
+        ("POST", "/api/scan/cancel"),
+    ):
+        operation = schema["paths"][path][method.lower()]
+        request_body = operation["requestBody"]
+        assert request_body["required"] is True
+        body_schema = request_body["content"]["application/json"]["schema"]
+        schema_ref = body_schema["$ref"]
+        component_name = schema_ref.rsplit("/", maxsplit=1)[-1]
+        component = schema["components"]["schemas"][component_name]
+        assert set(component["required"]) == expected_fields
+
+        docs_section = _load_documented_endpoint_section(method, path)
+        missing_fields = [
+            field for field in sorted(expected_fields) if f"`{field}`" not in docs_section
+        ]
+        assert not missing_fields, (
+            f"docs/API.md {method} {path} is missing required request field(s): "
+            + ", ".join(missing_fields)
+        )
+
+
+def test_scan_conflict_example_uses_global_error_contract() -> None:
+    schema = _load_exported_openapi_schema()
+    conflict_example = schema["paths"]["/api/scan"]["post"]["responses"]["409"][
+        "content"
+    ]["application/json"]["example"]
+
+    assert conflict_example == {
+        "error": "Scan already in progress",
+        "type": "HTTPException",
+        "status_code": 409,
+    }
 
 
 def test_docs_api_version_matches_app_info() -> None:

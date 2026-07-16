@@ -18,13 +18,27 @@ from fastapi import BackgroundTasks, HTTPException
 
 import database as db
 from app_info import APP_VERSION, GITHUB_REPOSITORY_URL
-from services.sorting_models import ScanRequest, ValidatePathRequest
+from services.sorting_models import (
+    SCAN_ACTIVE_STATUSES,
+    SCAN_SOURCE_LIBRARY_AUTO_REFRESH,
+    SCAN_SOURCE_LIBRARY_RESCAN,
+    SCAN_SOURCE_MANUAL,
+    SCAN_TERMINAL_STATUSES,
+    ScanRequest,
+    ScanStartResult,
+    ValidatePathRequest,
+)
 from utils.path_validation import normalize_user_path, validate_folder_path
 
 # NOTE(decomposition): keep the historical logger channel — tests attach
 # handlers / caplog filters to "services.sorting_service" (heartbeat pins),
 # and log routing/output must stay byte-identical after the package split.
 logger = logging.getLogger("services.sorting_service")
+
+
+def _is_manual_completion_pending(status: Optional[str], source: Optional[str]) -> bool:
+    """Return whether a manual terminal result still owns shared scan progress."""
+    return status in SCAN_TERMINAL_STATUSES and source in {None, SCAN_SOURCE_MANUAL}
 
 
 def _svc():
@@ -69,7 +83,7 @@ class LibraryMixin:
             raise HTTPException(status_code=404, detail="Library root not found")
         return {"status": "removed", "id": int(root_id)}
 
-    def rescan_library_root(self, root_id: int, background_tasks: BackgroundTasks) -> Dict[str, str]:
+    def rescan_library_root(self, root_id: int, background_tasks: BackgroundTasks) -> ScanStartResult:
         """Re-scan a registered root to pick up new/changed files (quick import)."""
         root = db.get_library_root(int(root_id))
         if not root:
@@ -81,7 +95,7 @@ class LibraryMixin:
             cleanup_missing=False,
             force_reparse=False,
         )
-        return self.start_scan(request, background_tasks)
+        return self.start_scan(request, background_tasks, SCAN_SOURCE_LIBRARY_RESCAN)
 
     def auto_refresh_library(self, background_tasks: BackgroundTasks) -> Dict[str, Any]:
         """Idle-triggered quick-scan of the stalest enabled root (v3.3.2 Library Navigation).
@@ -93,8 +107,11 @@ class LibraryMixin:
         """
         with self._scan_lock:
             status = self._scan_progress.get("status")
-        if status in {"running", "cancelling", "starting"}:
+            source = self._scan_progress.get("source")
+        if status in SCAN_ACTIVE_STATUSES:
             return {"status": "skipped", "reason": "scan_in_progress"}
+        if _is_manual_completion_pending(status, source):
+            return {"status": "skipped", "reason": "manual_completion_pending"}
 
         roots = [r for r in db.list_library_roots() if r.get("enabled")]
         if not roots:
@@ -110,11 +127,28 @@ class LibraryMixin:
             force_reparse=False,
         )
         try:
-            scan = self.start_scan(request, background_tasks)
+            scan = self.start_scan(
+                request,
+                background_tasks,
+                SCAN_SOURCE_LIBRARY_AUTO_REFRESH,
+            )
         except HTTPException as exc:
-            # Lost a race with a manual scan, or the folder is gone/unplugged —
-            # auto-refresh degrades quietly and never surfaces an error.
-            return {"status": "skipped", "reason": str(exc.detail)}
+            if exc.status_code == 409:
+                with self._scan_lock:
+                    current_status = self._scan_progress.get("status")
+                    current_source = self._scan_progress.get("source")
+                reason = (
+                    "manual_completion_pending"
+                    if _is_manual_completion_pending(current_status, current_source)
+                    else "scan_in_progress"
+                )
+                return {"status": "skipped", "reason": reason}
+            return {
+                "status": "skipped",
+                "reason": "scan_start_failed",
+                "detail": str(exc.detail),
+                "status_code": exc.status_code,
+            }
         return {"status": "started", "root": target["path"], "scan": scan}
 
     def get_analytics(
