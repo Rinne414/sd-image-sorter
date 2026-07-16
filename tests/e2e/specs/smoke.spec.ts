@@ -492,6 +492,100 @@ async function mockTaggerCatalog(page: Page) {
   })
 }
 
+interface TagCancelMockResponse {
+  status: string
+  message: string
+  removed_queued: number | string
+  owner_kind: 'gallery'
+}
+
+interface QueuedTagRouteProbe {
+  cancelRequests: () => number
+  inFlightProgressResponses: () => number
+  progressPollsAfterCancel: () => number
+  releaseInFlightProgress: () => void
+  waitForInFlightProgress: () => Promise<void>
+}
+
+async function mockQueuedGalleryTagCancellation(
+  page: Page,
+  cancelResponse: TagCancelMockResponse,
+): Promise<QueuedTagRouteProbe> {
+  let started = false
+  let cancelRequestCount = 0
+  let cancelResponseSent = false
+  let progressPollCountAfterCancel = 0
+  let inFlightProgressResponseCount = 0
+  let progressRequestHeld = false
+  let releaseProgressRequest: (() => void) | null = null
+  let reportProgressRequest: (() => void) | null = null
+  const progressRequestStarted = new Promise<void>((resolve) => {
+    reportProgressRequest = resolve
+  })
+  const progressRequestGate = new Promise<void>((resolve) => {
+    releaseProgressRequest = resolve
+  })
+
+  await page.route('**/api/tag/start', async (route) => {
+    started = true
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'queued',
+        pipeline_queued: true,
+        queue_position: 1,
+      }),
+    })
+  })
+
+  await page.route('**/api/tag/cancel', async (route) => {
+    cancelRequestCount += 1
+    cancelResponseSent = true
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(cancelResponse),
+    })
+  })
+
+  await page.route('**/api/tag/progress', async (route) => {
+    const wasQueuedWhenRequested = started && !cancelResponseSent
+    if (wasQueuedWhenRequested && !progressRequestHeld) {
+      progressRequestHeld = true
+      reportProgressRequest?.()
+      await progressRequestGate
+    } else if (cancelResponseSent) {
+      progressPollCountAfterCancel += 1
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'idle',
+        processed: 0,
+        total: 0,
+        tagged: 0,
+        errors: 0,
+        message: '',
+        pipeline_queue: {
+          queued: wasQueuedWhenRequested ? [{ kind: 'gallery', position: 1 }] : [],
+          total_queued: wasQueuedWhenRequested ? 1 : 0,
+        },
+      }),
+    })
+    if (wasQueuedWhenRequested) inFlightProgressResponseCount += 1
+  })
+
+  return {
+    cancelRequests: () => cancelRequestCount,
+    inFlightProgressResponses: () => inFlightProgressResponseCount,
+    progressPollsAfterCancel: () => progressPollCountAfterCancel,
+    releaseInFlightProgress: () => releaseProgressRequest?.(),
+    waitForInFlightProgress: () => progressRequestStarted,
+  }
+}
+
 async function mockArtistDiagnosticsReady(page: Page) {
   await page.route('**/api/artists/diagnostics', async (route) => {
     await route.fulfill({
@@ -1824,7 +1918,11 @@ test.describe('Smoke Tests', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'cancelling', message: 'Cancellation requested' }),
+        body: JSON.stringify({
+          status: 'cancelling',
+          message: 'Cancellation requested',
+          removed_queued: 0,
+        }),
       })
     })
 
@@ -1917,6 +2015,80 @@ test.describe('Smoke Tests', () => {
     await expect.poll(() => cancelRequested).toBe(1)
     await expect(page.locator('#bg-tag-progress-text')).toContainText(/Cancelling|取消/i)
     await expect(page.locator('#bg-tag-progress')).toBeHidden({ timeout: 10000 })
+  })
+
+  test('queued tag cancellation should stop polling and restore the Start action', async ({ page }) => {
+    const probe = await mockQueuedGalleryTagCancellation(page, {
+      status: 'idle',
+      message: 'No tagging task is running',
+      removed_queued: 1,
+      owner_kind: 'gallery',
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await page.locator('#btn-tag').click()
+    await expect(page.locator('#tag-modal.visible')).toBeVisible()
+    await page.locator('#btn-start-tag').click()
+    await expect(page.locator('#tag-progress-container')).toBeVisible()
+    await page.locator('#btn-cancel-tag').click()
+    await expect(page.locator('#tag-modal.visible')).toHaveCount(0)
+    await expect(page.locator('#bg-tag-progress')).toBeVisible()
+    await probe.waitForInFlightProgress()
+
+    await page.locator('#bg-tag-cancel').click()
+
+    await expect.poll(probe.cancelRequests).toBe(1)
+    await expect(page.locator('#bg-tag-progress')).toBeHidden()
+    await expect(
+      page.locator('#toast-container .toast.info .toast-message').filter({ hasText: /cancelled|已取消/i }),
+    ).toBeVisible()
+    probe.releaseInFlightProgress()
+    await expect.poll(probe.inFlightProgressResponses).toBe(1)
+    await page.waitForTimeout(1200)
+    expect(probe.progressPollsAfterCancel()).toBe(0)
+    await expect(page.locator('#tag-progress-text')).not.toContainText(/Queued|排队/i)
+    const terminalState = await page.evaluate<{
+      pollingActive: boolean
+      queuedWaiting: boolean
+      timerActive: boolean
+    }>(() => window.eval(`({
+      pollingActive: _tagPollingActive,
+      queuedWaiting: _tagQueuedWaiting,
+      timerActive: _tagProgressTimer !== null,
+    })`))
+    expect(terminalState).toEqual({
+      pollingActive: false,
+      queuedWaiting: false,
+      timerActive: false,
+    })
+
+    await page.locator('#btn-tag').click()
+    await expect(page.locator('#tag-modal.visible')).toBeVisible()
+    await expect(page.locator('#tag-progress-container')).toBeHidden()
+    await expect(page.locator('#btn-start-tag')).toBeEnabled()
+  })
+
+  test('malformed queued tag cancellation data should fail explicitly', async ({ page }) => {
+    const probe = await mockQueuedGalleryTagCancellation(page, {
+      status: 'idle',
+      message: 'No tagging task is running',
+      removed_queued: '1',
+      owner_kind: 'gallery',
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await page.locator('#btn-tag').click()
+    await page.locator('#btn-start-tag').click()
+    await page.locator('#btn-cancel-tag').click()
+    await expect(page.locator('#bg-tag-progress')).toBeVisible()
+    await probe.waitForInFlightProgress()
+
+    await page.locator('#bg-tag-cancel').click()
+
+    await expect(page.locator('#toast-container .toast.error .toast-message')).toContainText(/removed_queued|cancel response/i)
+    probe.releaseInFlightProgress()
   })
 
   test('scan poller should survive the backend starting status window', async ({ page }) => {

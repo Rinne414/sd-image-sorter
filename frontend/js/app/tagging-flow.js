@@ -86,6 +86,56 @@ function minimizeTaggingToBackground() {
     showToast(appT('tagger.minimizedToBackground', 'Tagging continues in the background. Use the progress bar to stop or check details.'), 'info');
 }
 
+const TAG_CANCELLATION_TERMINAL_STATUSES = new Set([
+    'idle',
+    'done',
+    'cancelled',
+    'error',
+    'queue_cleared',
+]);
+
+function parseTagCancellationResponse(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new TypeError('Tag cancel response must be an object.');
+    }
+
+    if (typeof value.status !== 'string' || !value.status.trim()) {
+        throw new TypeError('Tag cancel response field "status" must be a non-empty string.');
+    }
+    if (!Number.isInteger(value.removed_queued) || value.removed_queued < 0) {
+        throw new TypeError('Tag cancel response field "removed_queued" must be a non-negative integer.');
+    }
+    if (typeof value.message !== 'string') {
+        throw new TypeError('Tag cancel response field "message" must be a string.');
+    }
+
+    return {
+        status: value.status.trim(),
+        removedQueued: value.removed_queued,
+        message: value.message,
+    };
+}
+
+function isQueuedTagCancellationComplete(result) {
+    return result.removedQueued > 0 && TAG_CANCELLATION_TERMINAL_STATUSES.has(result.status);
+}
+
+function finishCancelledTagging(message) {
+    window.__liveTagProgress = null;
+    _tagPollingActive = false;
+    _tagStartInFlight = false;
+    _tagQueuedWaiting = false;
+    _tagQueuedSince = 0;
+    clearTagProgressTimer();
+    _hideBgTagProgress();
+    showToast(message || appT('tagger.progressCancelled', 'Tagging cancelled'), 'info');
+    $('#tag-progress-container').style.display = 'none';
+    unlockLiveProgressText('#tag-progress-text', 'modal.tagLoadingModel', 'Loading model...');
+    setTaggingUiState(false);
+    resetTagUiProgressState();
+    syncTaggerModelUi();
+}
+
 async function requestStopTagging() {
     if (!_tagPollingActive) {
         hideModal('tag-modal');
@@ -94,7 +144,11 @@ async function requestStopTagging() {
     }
 
     try {
-        await API.cancelTagging();
+        const cancelResult = parseTagCancellationResponse(await API.cancelTagging());
+        if (isQueuedTagCancellationComplete(cancelResult)) {
+            finishCancelledTagging(appT('tagger.progressCancelled', 'Tagging cancelled'));
+            return;
+        }
         _tagMinimizedToBackground = true;
         _updateBgTagProgress(
             _tagLastProgressPercent,
@@ -400,6 +454,9 @@ async function pollTagProgress(retryCount = 0) {
 
     try {
         const progress = await API.getTagProgress();
+        // A queue-only cancellation can finish while this request is in flight.
+        // Do not let that stale response restore queued state or re-arm a timer.
+        if (!_tagPollingActive) return;
         window.__liveTagProgress = progress;
         syncTaggerModelUi();
 
@@ -562,16 +619,7 @@ async function pollTagProgress(retryCount = 0) {
                 /* event dispatch is best-effort */
             }
         } else if (progress.status === 'cancelled') {
-            window.__liveTagProgress = null;
-            _tagPollingActive = false;
-            clearTagProgressTimer();
-            _hideBgTagProgress();
-            showToast(progress.message || appT('tagger.progressCancelled', 'Tagging cancelled'), 'info');
-            $('#tag-progress-container').style.display = 'none';
-            unlockLiveProgressText('#tag-progress-text', 'modal.tagLoadingModel', 'Loading model...');
-            setTaggingUiState(false);
-            resetTagUiProgressState();
-            syncTaggerModelUi();
+            finishCancelledTagging(progress.message || appT('tagger.progressCancelled', 'Tagging cancelled'));
         } else if (progress.status === 'running') {
             scheduleTagProgressPoll(500);
         } else if (progress.status === 'cancelling') {
@@ -591,6 +639,7 @@ async function pollTagProgress(retryCount = 0) {
             scheduleTagProgressPoll(500);
         }
     } catch (error) {
+        if (!_tagPollingActive) return;
         // A single transient fetch failure must not tear down the whole
         // tagging UI — the backend job keeps running regardless. Mirror the
         // scan poller: retry up to 3 consecutive times, then surface the error.
