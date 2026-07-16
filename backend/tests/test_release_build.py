@@ -1204,6 +1204,21 @@ def test_release_ci_keeps_security_audit_and_windows_linux_guardrails():
     assert "cache: \"pip\"" in workflow
 
 
+def test_release_ci_runs_runtime_dependency_check_as_a_blocking_step():
+    run_ci = (ROOT / "scripts" / "run_ci.py").read_text(encoding="utf-8")
+    checker_path = ROOT / "scripts" / "check_runtime_dependencies.py"
+
+    assert checker_path.is_file()
+    assert re.search(
+        r"\(\s*['\"]runtime dependency consistency['\"]\s*,\s*"
+        r"\[\s*str\(BACKEND_PYTHON\)\s*,\s*"
+        r"['\"]scripts/check_runtime_dependencies\.py['\"]\s*,?\s*\]",
+        run_ci,
+        re.DOTALL,
+    )
+    assert "non_blocking_checks: set[str] = set()" in run_ci
+
+
 def test_playwright_specs_are_not_an_empty_ci_shell():
     specs_dir = ROOT / "tests" / "e2e" / "specs"
     specs = sorted(specs_dir.glob("*.spec.ts"))

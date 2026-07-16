@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import importlib.machinery
+import importlib.metadata as importlib_metadata
 import platform
+import subprocess
 import sys
+import types
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from packaging.requirements import InvalidRequirement, Requirement
+from packaging.utils import canonicalize_name
 
 import optional_dependencies
 
@@ -351,3 +358,342 @@ def test_install_packages_allows_portable_python(monkeypatch, tmp_path):
 
     assert calls
     assert "fastembed>=0.4.0" in calls[0][0]
+
+
+def _write_test_distribution(
+    site_packages: Path,
+    name: str,
+    version: str,
+    requirements: tuple[str, ...],
+) -> None:
+    dist_info_name = canonicalize_name(name).replace("-", "_")
+    dist_info = site_packages / f"{dist_info_name}-{version}.dist-info"
+    dist_info.mkdir(parents=True)
+    metadata_lines = [
+        "Metadata-Version: 2.3",
+        f"Name: {name}",
+        f"Version: {version}",
+        *(f"Requires-Dist: {requirement}" for requirement in requirements),
+        "",
+    ]
+    (dist_info / "METADATA").write_text("\n".join(metadata_lines), encoding="utf-8")
+
+
+def _load_test_distributions(site_packages: Path) -> tuple[importlib_metadata.Distribution, ...]:
+    return tuple(importlib_metadata.distributions(path=[str(site_packages)]))
+
+
+def _patch_distribution_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    distributions: tuple[importlib_metadata.Distribution, ...],
+) -> None:
+    distributions_by_name = {
+        canonicalize_name(distribution.metadata["Name"]): distribution
+        for distribution in distributions
+    }
+
+    def get_distribution(package_name: str) -> importlib_metadata.Distribution:
+        distribution = distributions_by_name.get(canonicalize_name(package_name))
+        if distribution is None:
+            raise importlib_metadata.PackageNotFoundError(package_name)
+        return distribution
+
+    packages_to_distributions: dict[str, list[str]] = {}
+    for distribution in distributions:
+        distribution_name = distribution.metadata["Name"]
+        module_name = (
+            "onnxruntime"
+            if canonicalize_name(distribution_name).startswith("onnxruntime")
+            else canonicalize_name(distribution_name).replace("-", "_")
+        )
+        packages_to_distributions.setdefault(module_name, []).append(distribution_name)
+
+    def iter_distributions(
+        **kwargs: str,
+    ) -> Iterator[importlib_metadata.Distribution]:
+        requested_name = kwargs.get("name")
+        if requested_name is None:
+            return iter(distributions)
+        canonical_name = canonicalize_name(requested_name)
+        return iter(
+            distribution
+            for distribution in distributions
+            if canonicalize_name(distribution.metadata["Name"]) == canonical_name
+        )
+
+    monkeypatch.setattr(importlib_metadata, "distributions", iter_distributions)
+    monkeypatch.setattr(importlib_metadata, "distribution", get_distribution)
+    monkeypatch.setattr(
+        importlib_metadata,
+        "metadata",
+        lambda package_name: get_distribution(package_name).metadata,
+    )
+    monkeypatch.setattr(
+        importlib_metadata,
+        "requires",
+        lambda package_name: get_distribution(package_name).requires,
+    )
+    monkeypatch.setattr(
+        importlib_metadata,
+        "version",
+        lambda package_name: get_distribution(package_name).version,
+    )
+    monkeypatch.setattr(
+        importlib_metadata,
+        "packages_distributions",
+        lambda: packages_to_distributions,
+    )
+
+
+def _record_pip_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[tuple[str, ...]]:
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(
+        command: list[str],
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(tuple(command))
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+
+    monkeypatch.setattr(optional_dependencies.subprocess, "run", fake_run)
+    monkeypatch.setattr(optional_dependencies.importlib, "invalidate_caches", lambda: None)
+    return calls
+
+
+def _command_requirements(command: tuple[str, ...]) -> tuple[str, ...]:
+    if "install" not in command:
+        return ()
+    install_index = command.index("install")
+    requirements: list[str] = []
+    for token in command[install_index + 1 :]:
+        try:
+            Requirement(token)
+        except InvalidRequirement:
+            continue
+        requirements.append(token)
+    return tuple(requirements)
+
+
+@pytest.mark.parametrize(
+    (
+        "package_spec",
+        "module_name",
+        "provider_name",
+        "metadata_requirements",
+        "expected_lock_names",
+        "inactive_lock_name",
+    ),
+    (
+        (
+            "fastembed==0.8.0",
+            "fastembed",
+            "onnxruntime-gpu",
+            (
+                "numpy>=1.26; python_version >= '3'",
+                "onnxruntime>=1.17.0,!=1.20.0",
+                "pillow>=10.3.0,<13.0",
+                "tokenizers>=0.15,<1.0",
+                "requests>=2.31; python_version < '3'",
+            ),
+            ("numpy", "pillow", "tokenizers"),
+            "requests",
+        ),
+        (
+            "nudenet==3.4.2",
+            "nudenet",
+            "onnxruntime-directml",
+            (
+                "numpy",
+                "onnxruntime",
+                "opencv-python-headless",
+                "tqdm; python_version < '3'",
+            ),
+            ("numpy", "opencv-python-headless"),
+            "tqdm",
+        ),
+    ),
+    ids=("fastembed-gpu", "nudenet-directml"),
+)
+def test_ort_consumers_preserve_existing_provider_and_install_locked_metadata_dependencies(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    package_spec: str,
+    module_name: str,
+    provider_name: str,
+    metadata_requirements: tuple[str, ...],
+    expected_lock_names: tuple[str, ...],
+    inactive_lock_name: str,
+):
+    site_packages = tmp_path / "site-packages"
+    site_packages.mkdir()
+    package_version = package_spec.split("==", 1)[1]
+    provider_version = "1.21.0"
+    _write_test_distribution(
+        site_packages,
+        module_name,
+        package_version,
+        metadata_requirements,
+    )
+    _write_test_distribution(site_packages, provider_name, provider_version, ())
+    unrelated_metadata = site_packages / "unrelated_broken-1.0.0.dist-info"
+    unrelated_metadata.mkdir()
+    (unrelated_metadata / "METADATA").write_text(
+        "Metadata-Version: 2.3\nName: unrelated-broken\n",
+        encoding="utf-8",
+    )
+    module_path = site_packages / module_name
+    module_path.mkdir()
+    (module_path / "__init__.py").write_text(
+        "METADATA_INSTALL_IMPORT_SUCCEEDED = True\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(site_packages))
+    _patch_distribution_metadata(
+        monkeypatch,
+        _load_test_distributions(site_packages),
+    )
+    monkeypatch.setattr(optional_dependencies, "_running_in_virtualenv", lambda: True)
+    optional_dependencies._REQUIREMENTS_CACHE = None
+    calls = _record_pip_calls(monkeypatch)
+
+    onnxruntime_module = types.ModuleType("onnxruntime")
+    onnxruntime_module.__version__ = provider_version
+    onnxruntime_module.__spec__ = importlib.machinery.ModuleSpec(
+        "onnxruntime",
+        loader=None,
+    )
+    monkeypatch.setitem(sys.modules, "onnxruntime", onnxruntime_module)
+    previous_module = sys.modules.pop(module_name, None)
+    try:
+        optional_dependencies.install_packages([package_spec])
+
+        assert calls
+        main_command = calls[0]
+        assert "--no-deps" in main_command
+        assert _command_requirements(main_command) == (package_spec,)
+
+        lock_map = optional_dependencies._load_requirement_version_map()
+        expected_locked_requirements = {
+            lock_map[optional_dependencies._normalize_package_name(package_name)]
+            for package_name in expected_lock_names
+        }
+        installed_dependency_requirements = {
+            requirement
+            for command in calls[1:]
+            for requirement in _command_requirements(command)
+        }
+        assert installed_dependency_requirements == expected_locked_requirements
+        assert lock_map[optional_dependencies._normalize_package_name(inactive_lock_name)] not in (
+            installed_dependency_requirements
+        )
+        for command in calls:
+            for requirement_text in _command_requirements(command):
+                requirement_name = canonicalize_name(Requirement(requirement_text).name)
+                assert requirement_name != "onnxruntime"
+        assert module_name in sys.modules
+        assert sys.modules[module_name].METADATA_INSTALL_IMPORT_SUCCEEDED is True
+    finally:
+        sys.modules.pop(module_name, None)
+        if previous_module is not None:
+            sys.modules[module_name] = previous_module
+
+
+@pytest.mark.parametrize(
+    "cpu_provider_name",
+    (None, "onnxruntime"),
+    ids=("no-provider", "cpu-provider"),
+)
+def test_ort_consumers_keep_normal_resolver_without_gpu_or_directml_provider(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    cpu_provider_name: str | None,
+):
+    site_packages = tmp_path / "site-packages"
+    site_packages.mkdir()
+    if cpu_provider_name is not None:
+        _write_test_distribution(site_packages, cpu_provider_name, "1.21.0", ())
+    _patch_distribution_metadata(
+        monkeypatch,
+        _load_test_distributions(site_packages),
+    )
+    monkeypatch.setattr(optional_dependencies, "_running_in_virtualenv", lambda: True)
+    calls = _record_pip_calls(monkeypatch)
+
+    optional_dependencies.install_packages(["fastembed==0.8.0"])
+
+    assert len(calls) == 1
+    assert "--no-deps" not in calls[0]
+    assert _command_requirements(calls[0]) == ("fastembed==0.8.0",)
+
+
+def test_ort_consumer_rejects_provider_below_installed_metadata_requirement(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    site_packages = tmp_path / "site-packages"
+    site_packages.mkdir()
+    _write_test_distribution(
+        site_packages,
+        "fastembed",
+        "0.8.0",
+        ("onnxruntime>=1.22",),
+    )
+    _write_test_distribution(
+        site_packages,
+        "onnxruntime-gpu",
+        "1.21.0",
+        (),
+    )
+    module_path = site_packages / "fastembed"
+    module_path.mkdir()
+    (module_path / "__init__.py").write_text("", encoding="utf-8")
+    monkeypatch.syspath_prepend(str(site_packages))
+    _patch_distribution_metadata(
+        monkeypatch,
+        _load_test_distributions(site_packages),
+    )
+    monkeypatch.setattr(optional_dependencies, "_running_in_virtualenv", lambda: True)
+    calls = _record_pip_calls(monkeypatch)
+
+    onnxruntime_module = types.ModuleType("onnxruntime")
+    onnxruntime_module.__version__ = "1.21.0"
+    onnxruntime_module.__spec__ = importlib.machinery.ModuleSpec(
+        "onnxruntime",
+        loader=None,
+    )
+    monkeypatch.setitem(sys.modules, "onnxruntime", onnxruntime_module)
+
+    with pytest.raises(optional_dependencies.RuntimeDependencyError) as error:
+        optional_dependencies.install_packages(["fastembed==0.8.0"])
+
+    message = str(error.value)
+    assert "onnxruntime>=1.22" in message
+    assert "1.21.0" in message
+    assert len(calls) == 1
+    assert "--no-deps" in calls[0]
+
+
+def test_import_verification_probes_clean_process_when_module_is_cached(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    cached_module = types.ModuleType("fastembed")
+    cached_module.__spec__ = importlib.machinery.ModuleSpec(
+        "fastembed",
+        loader=None,
+    )
+    monkeypatch.setitem(sys.modules, "fastembed", cached_module)
+    calls = _record_pip_calls(monkeypatch)
+
+    optional_dependencies._import_optional_package("fastembed", "fastembed")
+
+    assert len(calls) == 1
+    command = calls[0]
+    assert command[:2] == (sys.executable, "-c")
+    assert "importlib.import_module('fastembed')" in command[2]

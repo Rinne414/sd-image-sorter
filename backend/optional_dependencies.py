@@ -19,7 +19,19 @@ from typing import Iterable, Sequence
 
 from packaging.markers import InvalidMarker, Marker
 from packaging.requirements import InvalidRequirement, Requirement
+from packaging.utils import canonicalize_name
 from packaging.version import InvalidVersion, Version
+
+from runtime_dependency_check import (
+    ORT_DISTRIBUTION_NAMES,
+    InstalledDistribution,
+    RuntimeDependencyError,
+    RuntimeSnapshot,
+    active_distribution_requirements,
+    capture_named_runtime_snapshot,
+    validate_runtime_dependencies,
+    validated_onnxruntime_provider,
+)
 
 
 @dataclass(frozen=True)
@@ -34,6 +46,14 @@ class UnsafeDependencyInstallError(RuntimeError):
 
 class UnsupportedOptionalDependencyError(RuntimeError):
     """Raised when a dependency group has no security-supported platform build."""
+
+
+class OptionalDependencyMetadataError(RuntimeError):
+    """Raised when an optional package cannot be installed from locked metadata."""
+
+
+class OptionalDependencyImportError(RuntimeError):
+    """Raised when a newly installed optional package cannot be imported."""
 
 
 _TRITON_PACKAGE = "triton-windows" if sys.platform == "win32" else "triton>=3.0.0"
@@ -309,24 +329,205 @@ _log = logging.getLogger(__name__)
 
 _WINDOWS_DLL_LOCK_MARKERS = ("WinError 5", "Access is denied", "存取被拒")
 
+_ORT_CONSUMER_IMPORTS: dict[str, str] = {
+    "fastembed": "fastembed",
+    "nudenet": "nudenet",
+}
 
-def install_packages(packages: Sequence[str]) -> bool:
-    """Install packages via pip. Returns True if a DLL-lock fallback was used."""
+
+def _requirement_name(package_spec: str) -> str | None:
+    try:
+        return canonicalize_name(Requirement(package_spec).name)
+    except InvalidRequirement:
+        return None
+
+
+def _installed_distribution(
+    snapshot: RuntimeSnapshot,
+    package_name: str,
+) -> InstalledDistribution:
+    canonical_name = canonicalize_name(package_name)
+    matches = tuple(
+        distribution
+        for distribution in snapshot.distributions
+        if canonicalize_name(distribution.name) == canonical_name
+    )
+    if len(matches) != 1:
+        raise OptionalDependencyMetadataError(
+            f"Expected exactly one installed {package_name!r} distribution after pip "
+            f"completed, but found {len(matches)}. Reinstall the feature from the "
+            "application lock."
+        )
+    return matches[0]
+
+
+def _locked_requirement(
+    consumer: InstalledDistribution,
+    requirement: Requirement,
+) -> str:
+    lock_map = _load_requirement_version_map()
+    locked_spec = lock_map.get(_normalize_package_name(requirement.name))
+    if locked_spec is None:
+        raise OptionalDependencyMetadataError(
+            f"Installed optional package {consumer.name} {consumer.version} requires "
+            f"{requirement}, but {requirement.name!r} has no active exact version in "
+            "backend/requirements.txt. Refresh the application dependency lock before "
+            "preparing this feature."
+        )
+
+    try:
+        locked_requirement = Requirement(locked_spec)
+    except InvalidRequirement as error:
+        raise OptionalDependencyMetadataError(
+            f"Application lock entry {locked_spec!r} for {requirement.name!r} is "
+            f"invalid: {error}"
+        ) from error
+    exact_versions = tuple(
+        specifier.version
+        for specifier in locked_requirement.specifier
+        if specifier.operator == "==" and not specifier.version.endswith(".*")
+    )
+    if len(exact_versions) != 1:
+        raise OptionalDependencyMetadataError(
+            f"Application lock entry {locked_spec!r} for {requirement.name!r} must "
+            "contain one exact non-wildcard version."
+        )
+    try:
+        locked_version = Version(exact_versions[0])
+    except InvalidVersion as error:
+        raise OptionalDependencyMetadataError(
+            f"Application lock entry {locked_spec!r} contains invalid version "
+            f"{exact_versions[0]!r}."
+        ) from error
+    if requirement.specifier and not requirement.specifier.contains(
+        locked_version,
+        prereleases=None,
+    ):
+        raise OptionalDependencyMetadataError(
+            f"Installed optional package {consumer.name} {consumer.version} requires "
+            f"{requirement}, but the application lock selects {locked_spec}. Refresh "
+            "the lock with a compatible version before preparing this feature."
+        )
+
+    if not requirement.extras:
+        return locked_spec
+    extras = ",".join(sorted(requirement.extras))
+    return f"{locked_requirement.name}[{extras}]=={exact_versions[0]}"
+
+
+def _validate_ort_requirement(
+    consumer: InstalledDistribution,
+    requirement: Requirement,
+    provider: InstalledDistribution,
+    snapshot: RuntimeSnapshot,
+) -> None:
+    validate_runtime_dependencies(
+        RuntimeSnapshot(
+            distributions=(
+                InstalledDistribution(
+                    name=consumer.name,
+                    version=consumer.version,
+                    requirements=(str(requirement),),
+                ),
+                InstalledDistribution(
+                    name=provider.name,
+                    version=provider.version,
+                    requirements=(),
+                ),
+            ),
+            onnxruntime_module_version=snapshot.onnxruntime_module_version,
+            marker_environment=snapshot.marker_environment,
+        )
+    )
+
+
+def _locked_non_ort_dependencies(
+    consumer: InstalledDistribution,
+    provider: InstalledDistribution,
+    snapshot: RuntimeSnapshot,
+) -> tuple[str, ...]:
+    locked_dependencies: list[str] = []
+    for requirement in active_distribution_requirements(
+        consumer,
+        snapshot.marker_environment,
+    ):
+        requirement_name = canonicalize_name(requirement.name)
+        if requirement_name in ORT_DISTRIBUTION_NAMES:
+            _validate_ort_requirement(
+                consumer,
+                requirement,
+                provider,
+                snapshot,
+            )
+            continue
+        locked_spec = _locked_requirement(consumer, requirement)
+        if locked_spec not in locked_dependencies:
+            locked_dependencies.append(locked_spec)
+    return tuple(locked_dependencies)
+
+
+def _install_without_dependencies(
+    package_spec: str,
+    index_args: Sequence[str],
+) -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "--disable-pip-version-check",
+            "install",
+            "--no-deps",
+            *index_args,
+            package_spec,
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    importlib.invalidate_caches()
+
+
+def _import_optional_package(package_name: str, module_name: str) -> None:
+    importlib.invalidate_caches()
+    try:
+        importlib.import_module(module_name)
+    except (ImportError, OSError) as error:
+        raise OptionalDependencyImportError(
+            f"Installed optional package {package_name!r}, but importing module "
+            f"{module_name!r} failed with {type(error).__name__}: {error}. Check the "
+            "preceding pip output and reinstall the feature from the application lock."
+        ) from error
+    probe_code = (
+        "import importlib; "
+        f"importlib.import_module({module_name!r})"
+    )
+    try:
+        subprocess.run(
+            [sys.executable, "-c", probe_code],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as error:
+        output = "\n".join(
+            value.strip()
+            for value in (error.stdout or "", error.stderr or "")
+            if value.strip()
+        )
+        raise OptionalDependencyImportError(
+            f"Installed optional package {package_name!r}, but a clean Python "
+            f"process could not import {module_name!r} (exit code "
+            f"{error.returncode}). Output: {output or 'no output'}"
+        ) from error
+
+
+def _install_with_resolver(
+    packages: Sequence[str],
+    index_args: Sequence[str],
+) -> bool:
     if not packages:
         return False
-    _assert_safe_install_target(packages)
-
-    # Use the fastest PyPI mirror (cached 30 min) so runtime installs
-    # don't crawl on slow paths to pypi.org's Fastly CDN.
-    index_args: list[str] = []
-    try:
-        from config import get_data_dir
-        import mirror_selector
-        selection = mirror_selector.select_pypi_index(data_dir=get_data_dir())
-        if selection and selection.index_url:
-            index_args = ["--index-url", selection.index_url, "--extra-index-url", "https://pypi.org/simple"]
-    except Exception:
-        pass  # fall back to default PyPI
 
     try:
         subprocess.run(
@@ -377,6 +578,104 @@ def install_packages(packages: Sequence[str]) -> bool:
             raise
     importlib.invalidate_caches()
     return False
+
+
+def _install_ort_consumers(
+    package_specs: Sequence[str],
+    provider: InstalledDistribution,
+    index_args: Sequence[str],
+) -> bool:
+    dll_locked = False
+    for package_spec in package_specs:
+        package_name = _requirement_name(package_spec)
+        if package_name is None:
+            raise OptionalDependencyMetadataError(
+                f"Invalid optional package requirement {package_spec!r}."
+            )
+        module_name = _ORT_CONSUMER_IMPORTS[package_name]
+        _install_without_dependencies(package_spec, index_args)
+        snapshot = capture_named_runtime_snapshot(
+            (*ORT_DISTRIBUTION_NAMES, package_name)
+        )
+        current_provider = validated_onnxruntime_provider(snapshot)
+        provider_changed = current_provider is None or (
+            canonicalize_name(current_provider.name) != canonicalize_name(provider.name)
+            or current_provider.version != provider.version
+        )
+        if provider_changed:
+            current_description = (
+                f"{current_provider.name} {current_provider.version}"
+                if current_provider is not None
+                else "none"
+            )
+            raise RuntimeDependencyError(
+                f"ONNX Runtime provider changed while installing {package_spec}: "
+                f"expected {provider.name} {provider.version}, found "
+                f"{current_description}. Run the application runtime repair before "
+                "preparing this feature again."
+            )
+        consumer = _installed_distribution(snapshot, package_name)
+        locked_dependencies = _locked_non_ort_dependencies(
+            consumer,
+            current_provider,
+            snapshot,
+        )
+        dll_locked = _install_with_resolver(
+            locked_dependencies,
+            index_args,
+        ) or dll_locked
+        _import_optional_package(package_name, module_name)
+    return dll_locked
+
+
+def install_packages(packages: Sequence[str]) -> bool:
+    """Install packages via pip. Returns True if a DLL-lock fallback was used."""
+    if not packages:
+        return False
+    _assert_safe_install_target(packages)
+
+    # Use the fastest PyPI mirror (cached 30 min) so runtime installs
+    # don't crawl on slow paths to pypi.org's Fastly CDN.
+    index_args: list[str] = []
+    try:
+        from config import get_data_dir
+        import mirror_selector
+        selection = mirror_selector.select_pypi_index(data_dir=get_data_dir())
+        if selection and selection.index_url:
+            index_args = ["--index-url", selection.index_url, "--extra-index-url", "https://pypi.org/simple"]
+    except Exception:
+        pass  # fall back to default PyPI
+
+    package_names = tuple(_requirement_name(package) for package in packages)
+    ort_consumers = tuple(
+        package
+        for package, package_name in zip(packages, package_names)
+        if package_name in _ORT_CONSUMER_IMPORTS
+    )
+    if not ort_consumers:
+        return _install_with_resolver(packages, index_args)
+
+    snapshot = capture_named_runtime_snapshot(ORT_DISTRIBUTION_NAMES)
+    provider = validated_onnxruntime_provider(snapshot)
+    non_cpu_provider = provider is not None and canonicalize_name(provider.name) in {
+        "onnxruntime-gpu",
+        "onnxruntime-directml",
+    }
+    if not non_cpu_provider:
+        return _install_with_resolver(packages, index_args)
+
+    ordinary_packages = tuple(
+        package
+        for package, package_name in zip(packages, package_names)
+        if package_name not in _ORT_CONSUMER_IMPORTS
+    )
+    dll_locked = _install_with_resolver(ordinary_packages, index_args)
+    ort_consumer_dll_locked = _install_ort_consumers(
+        ort_consumers,
+        provider,
+        index_args,
+    )
+    return dll_locked or ort_consumer_dll_locked
 
 
 def ensure_imports(module_names: Iterable[str]) -> DependencyInstallResult:

@@ -267,6 +267,14 @@ def _run_ci(
             ROOT,
         ),
         (
+            "runtime dependency consistency",
+            [
+                str(BACKEND_PYTHON),
+                "scripts/check_runtime_dependencies.py",
+            ],
+            ROOT,
+        ),
+        (
             "dependency security audit",
             [
                 str(BACKEND_PYTHON),

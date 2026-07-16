@@ -589,6 +589,25 @@ print("ok")
   runBackendScript(script)
 }
 
+function readTagsForImage(imageId: number): string[] {
+  const script = `
+import json
+import sqlite3
+from pathlib import Path
+
+repo_root = Path(${JSON.stringify(repoRoot)})
+db_path = Path(${JSON.stringify(runtimeDatabasePath)})
+with sqlite3.connect(db_path) as conn:
+    cur = conn.cursor()
+    rows = cur.execute(
+        "SELECT tag FROM tags WHERE image_id = ? ORDER BY tag",
+        (${imageId},),
+    ).fetchall()
+print(json.dumps([row[0] for row in rows]))
+`
+  return runBackendJson<string[]>(script)
+}
+
 function prepareTagLiveFixture() {
   const script = `
 from pathlib import Path
@@ -2067,7 +2086,7 @@ test('scan folder browser should pick a real folder and scan it through the UI',
   }
 })
 
-test('tag export and import should roundtrip through the real UI', async ({ page, request }) => {
+test('tag export and import should roundtrip through the real UI', async ({ page }) => {
   test.setTimeout(120000)
   const fixture = prepareTagIoFixture()
   const exportPath = path.join(manualRoot, 'manual-tag-export-roundtrip.json')
@@ -2087,22 +2106,14 @@ test('tag export and import should roundtrip through the real UI', async ({ page
   expect((exportedFixture.tags || []).some((tag: any) => tag.tag === fixture.expectedTag)).toBeTruthy()
 
   clearTagsForImage(fixture.imageId)
-  await expect.poll(async () => {
-    const response = await request.get(`/api/images/${fixture.imageId}`)
-    const payload = await response.json()
-    return Array.isArray(payload.tags) ? payload.tags.length : -1
-  }, { timeout: 10000 }).toBe(0)
+  expect(readTagsForImage(fixture.imageId)).toEqual([])
 
   await page.locator('#import-tags-file').setInputFiles(exportPath)
   await expect(page.locator('#confirm-modal.visible')).toBeVisible()
   await page.locator('#btn-confirm-ok').click()
   await expect(page.locator('#toast-container')).toContainText('Imported tags', { timeout: 15000 })
 
-  await expect.poll(async () => {
-    const response = await request.get(`/api/images/${fixture.imageId}`)
-    const payload = await response.json()
-    return (payload.tags || []).map((tag: any) => tag.tag).join(',')
-  }, { timeout: 15000 }).toContain(fixture.expectedTag)
+  expect(readTagsForImage(fixture.imageId)).toContain(fixture.expectedTag)
 })
 
 test('censor batch rename should update preview and apply only selected queue items', async ({ page, request }) => {
