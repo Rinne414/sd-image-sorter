@@ -407,6 +407,133 @@ class _EditOpsMixin:
             pen_opacity=cls._clamp_float(operation.get("pen_opacity", 1.0), 0.0, 1.0),
         )
 
+    @staticmethod
+    def _normalize_geometry_coordinate(
+        value: Any,
+        *,
+        label: str,
+        minimum: int,
+        maximum: int,
+    ) -> int:
+        try:
+            coordinate = float(value)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid geometry coordinate at {label}: expected a finite number",
+            ) from exc
+        if not math.isfinite(coordinate):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid geometry coordinate at {label}: expected a finite number",
+            )
+        if coordinate < minimum or coordinate > maximum:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Invalid geometry coordinate at {label}: {coordinate!r} is outside "
+                    f"the supported range [{minimum}, {maximum}]"
+                ),
+            )
+        # Pillow truncates polygon coordinates to C integers before rasterizing.
+        return int(coordinate)
+
+    @staticmethod
+    def _get_canvas_candidate_polygon_regions(
+        polygon_regions: List[List[tuple[int, int]]],
+        image_size: tuple[int, int],
+    ) -> List[List[tuple[int, int]]]:
+        image_width, image_height = image_size
+        return [
+            polygon
+            for polygon in polygon_regions
+            if max(x for x, _ in polygon) >= 0
+            and max(y for _, y in polygon) >= 0
+            and min(x for x, _ in polygon) < image_width
+            and min(y for _, y in polygon) < image_height
+        ]
+
+    @staticmethod
+    def _get_polygon_mask_bounds(
+        polygon_regions: List[List[tuple[int, int]]],
+        image_size: tuple[int, int],
+    ) -> Optional[tuple[int, int, int, int]]:
+        if not polygon_regions:
+            return None
+
+        image_width, image_height = image_size
+        # Keep global X coordinates so Pillow's float scanline rounding stays
+        # byte-identical. Mode 1 stores this height-local strip at one bit per
+        # pixel; getbbox() tightens both axes before compositing.
+        top = max(0, min(y for polygon in polygon_regions for _, y in polygon) - 1)
+        bottom = min(
+            image_height,
+            max(y for polygon in polygon_regions for _, y in polygon) + 2,
+        )
+        if bottom <= top:
+            return None
+        return (0, top, image_width, bottom)
+
+    @staticmethod
+    def _get_box_mask_bounds(
+        box_regions: List[List[int]],
+        image_size: tuple[int, int],
+    ) -> Optional[tuple[int, int, int, int]]:
+        if not box_regions:
+            return None
+
+        for x1, y1, x2, y2 in box_regions:
+            if x2 < x1:
+                raise ValueError("x1 must be greater than or equal to x0")
+            if y2 < y1:
+                raise ValueError("y1 must be greater than or equal to y0")
+
+        image_width, image_height = image_size
+        visible_boxes: List[List[int]] = [
+            box
+            for box in box_regions
+            if box[2] >= 0 and box[3] >= 0 and box[0] < image_width and box[1] < image_height
+        ]
+        if not visible_boxes:
+            return None
+
+        left = max(0, min(box[0] for box in visible_boxes))
+        top = max(0, min(box[1] for box in visible_boxes))
+        right = min(image_width, max(box[2] for box in visible_boxes) + 1)
+        bottom = min(image_height, max(box[3] for box in visible_boxes) + 1)
+        if right <= left or bottom <= top:
+            return None
+        return (left, top, right, bottom)
+
+    @classmethod
+    def _apply_geometry_mask_crop(
+        cls,
+        image: Image.Image,
+        original_image: Image.Image,
+        mask: Image.Image,
+        mask_origin: tuple[int, int],
+        operation: Dict[str, Any],
+    ) -> None:
+        local_bbox = mask.getbbox()
+        if local_bbox is None:
+            return
+        origin_x, origin_y = mask_origin
+        effect_bbox = (
+            origin_x + local_bbox[0],
+            origin_y + local_bbox[1],
+            origin_x + local_bbox[2],
+            origin_y + local_bbox[3],
+        )
+        cls._apply_mask_crop_style(
+            image,
+            original_image,
+            mask.crop(local_bbox),
+            effect_bbox,
+            style=str(operation.get("style") or "mosaic"),
+            block_size=int(operation.get("block_size", 16) or 16),
+            blur_radius=int(operation.get("blur_radius", 20) or 20),
+        )
+
     @classmethod
     def _apply_geometry_effect_operation(
         cls,
@@ -418,49 +545,96 @@ class _EditOpsMixin:
         if not isinstance(regions, list) or not regions:
             return
 
-        polygon_mask = Image.new("L", image.size, 0)
-        polygon_draw = ImageDraw.Draw(polygon_mask)
+        polygon_regions: List[List[tuple[int, int]]] = []
         box_regions: List[List[int]] = []
+        image_width, image_height = image.size
+        # Product geometry is emitted in source-image coordinates. Keep two
+        # canvas extents of clipping tolerance beyond either edge, but reject
+        # unbounded values before Pillow's C-int/float scanline rasterizer.
+        x_coordinate_range = (-image_width * 2, image_width * 3)
+        y_coordinate_range = (-image_height * 2, image_height * 3)
 
-        for region in regions:
+        for region_index, region in enumerate(regions):
             if not isinstance(region, dict):
                 continue
             polygon = region.get("polygon")
             if isinstance(polygon, list):
-                points = [
-                    (float(point[0]), float(point[1]))
-                    for point in polygon
-                    if isinstance(point, (list, tuple)) and len(point) >= 2
-                ]
+                points: List[tuple[int, int]] = []
+                for point_index, point in enumerate(polygon):
+                    if not isinstance(point, (list, tuple)) or len(point) < 2:
+                        continue
+                    points.append(
+                        (
+                            cls._normalize_geometry_coordinate(
+                                point[0],
+                                label=f"regions[{region_index}].polygon[{point_index}].x",
+                                minimum=x_coordinate_range[0],
+                                maximum=x_coordinate_range[1],
+                            ),
+                            cls._normalize_geometry_coordinate(
+                                point[1],
+                                label=f"regions[{region_index}].polygon[{point_index}].y",
+                                minimum=y_coordinate_range[0],
+                                maximum=y_coordinate_range[1],
+                            ),
+                        )
+                    )
                 if len(points) >= 3:
-                    polygon_draw.polygon(points, fill=255)
+                    polygon_regions.append(points)
                     continue
 
             box = region.get("box")
             if isinstance(box, list) and len(box) == 4:
-                box_regions.append([int(float(value)) for value in box])
+                normalized_box: List[int] = []
+                for coordinate_index, value in enumerate(box):
+                    coordinate_range = (
+                        x_coordinate_range if coordinate_index % 2 == 0 else y_coordinate_range
+                    )
+                    normalized_box.append(
+                        cls._normalize_geometry_coordinate(
+                            value,
+                            label=f"regions[{region_index}].box[{coordinate_index}]",
+                            minimum=coordinate_range[0],
+                            maximum=coordinate_range[1],
+                        )
+                    )
+                box_regions.append(normalized_box)
 
-        cls._apply_mask_style(
-            image,
-            original_image,
-            polygon_mask,
-            style=str(operation.get("style") or "mosaic"),
-            block_size=int(operation.get("block_size", 16) or 16),
-            blur_radius=int(operation.get("blur_radius", 20) or 20),
+        candidate_polygon_regions = cls._get_canvas_candidate_polygon_regions(
+            polygon_regions,
+            image.size,
         )
-
-        if box_regions:
-            mask = Image.new("L", image.size, 0)
-            draw = ImageDraw.Draw(mask)
-            for x1, y1, x2, y2 in box_regions:
-                draw.rectangle([x1, y1, x2, y2], fill=255)
-            cls._apply_mask_style(
+        polygon_bounds = cls._get_polygon_mask_bounds(candidate_polygon_regions, image.size)
+        if polygon_bounds is not None:
+            x1, y1, x2, y2 = polygon_bounds
+            polygon_mask = Image.new("1", (x2 - x1, y2 - y1), 0)
+            polygon_draw = ImageDraw.Draw(polygon_mask)
+            for polygon in candidate_polygon_regions:
+                polygon_draw.polygon([(x - x1, y - y1) for x, y in polygon], fill=1)
+            cls._apply_geometry_mask_crop(
                 image,
                 original_image,
-                mask,
-                style=str(operation.get("style") or "mosaic"),
-                block_size=int(operation.get("block_size", 16) or 16),
-                blur_radius=int(operation.get("blur_radius", 20) or 20),
+                polygon_mask,
+                (x1, y1),
+                operation,
+            )
+
+        box_bounds = cls._get_box_mask_bounds(box_regions, image.size)
+        if box_bounds is not None:
+            origin_x, origin_y, right, bottom = box_bounds
+            box_mask = Image.new("L", (right - origin_x, bottom - origin_y), 0)
+            box_draw = ImageDraw.Draw(box_mask)
+            for x1, y1, x2, y2 in box_regions:
+                box_draw.rectangle(
+                    [x1 - origin_x, y1 - origin_y, x2 - origin_x, y2 - origin_y],
+                    fill=255,
+                )
+            cls._apply_geometry_mask_crop(
+                image,
+                original_image,
+                box_mask,
+                (origin_x, origin_y),
+                operation,
             )
 
     @classmethod

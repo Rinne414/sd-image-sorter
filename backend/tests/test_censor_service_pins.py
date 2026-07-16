@@ -395,6 +395,34 @@ def _apply_full_canvas_stroke_reference(
     )
 
 
+def _track_l_mask_sizes(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, int]]:
+    real_image_new = Image.new
+    mask_sizes: list[tuple[int, int]] = []
+
+    def tracked_image_new(mode: str, size: tuple[int, int], color: object) -> Image.Image:
+        if mode == "L":
+            mask_sizes.append(size)
+        return real_image_new(mode, size, color)
+
+    monkeypatch.setattr(Image, "new", tracked_image_new)
+    return mask_sizes
+
+
+def _track_geometry_mask_allocations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[tuple[str, tuple[int, int]]]:
+    real_image_new = Image.new
+    allocations: list[tuple[str, tuple[int, int]]] = []
+
+    def tracked_image_new(mode: str, size: tuple[int, int], color: object) -> Image.Image:
+        if mode in {"1", "L"}:
+            allocations.append((mode, size))
+        return real_image_new(mode, size, color)
+
+    monkeypatch.setattr(Image, "new", tracked_image_new)
+    return allocations
+
+
 class TestCropLocalStrokeMasks:
     """Localized strokes must not allocate masks at full source resolution."""
 
@@ -416,23 +444,10 @@ class TestCropLocalStrokeMasks:
             "pen_opacity": 0.65,
         }
 
-    @staticmethod
-    def _track_l_mask_sizes(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, int]]:
-        real_image_new = Image.new
-        mask_sizes: list[tuple[int, int]] = []
-
-        def tracked_image_new(mode: str, size: tuple[int, int], color: object) -> Image.Image:
-            if mode == "L":
-                mask_sizes.append(size)
-            return real_image_new(mode, size, color)
-
-        monkeypatch.setattr(Image, "new", tracked_image_new)
-        return mask_sizes
-
     def test_small_stroke_allocates_only_a_crop_mask(self, monkeypatch: pytest.MonkeyPatch) -> None:
         original = Image.new("RGBA", (200, 120), (40, 80, 120, 255))
         working = original.copy()
-        mask_sizes = self._track_l_mask_sizes(monkeypatch)
+        mask_sizes = _track_l_mask_sizes(monkeypatch)
         CensorService._apply_stroke_operation(
             working,
             original,
@@ -451,7 +466,7 @@ class TestCropLocalStrokeMasks:
         original = Image.new("RGBA", (80, 60), (40, 80, 120, 255))
         working = original.copy()
         unchanged = working.tobytes()
-        mask_sizes = self._track_l_mask_sizes(monkeypatch)
+        mask_sizes = _track_l_mask_sizes(monkeypatch)
         CensorService._apply_stroke_operation(
             working,
             original,
@@ -496,6 +511,299 @@ class TestCropLocalStrokeMasks:
 
         _apply_full_canvas_stroke_reference(expected, original, operation)
         CensorService._apply_stroke_operation(actual, original, operation)
+
+        assert actual.mode == expected.mode
+        assert actual.size == expected.size
+        assert actual.tobytes() == expected.tobytes()
+
+
+def _apply_full_canvas_geometry_reference(
+    image: Image.Image,
+    original_image: Image.Image,
+    operation: dict[str, object],
+) -> None:
+    regions = operation.get("regions") or []
+    assert isinstance(regions, list)
+    polygon_mask = Image.new("L", image.size, 0)
+    polygon_draw = ImageDraw.Draw(polygon_mask)
+    box_regions: list[list[int]] = []
+
+    for region in regions:
+        if not isinstance(region, dict):
+            continue
+        polygon = region.get("polygon")
+        if isinstance(polygon, list):
+            points = [
+                (float(point[0]), float(point[1]))
+                for point in polygon
+                if isinstance(point, (list, tuple)) and len(point) >= 2
+            ]
+            if len(points) >= 3:
+                polygon_draw.polygon(points, fill=255)
+                continue
+
+        box = region.get("box")
+        if isinstance(box, list) and len(box) == 4:
+            box_regions.append([int(float(value)) for value in box])
+
+    CensorService._apply_mask_style(
+        image,
+        original_image,
+        polygon_mask,
+        style=str(operation.get("style") or "mosaic"),
+        block_size=int(operation.get("block_size", 16) or 16),
+        blur_radius=int(operation.get("blur_radius", 20) or 20),
+    )
+
+    if box_regions:
+        box_mask = Image.new("L", image.size, 0)
+        box_draw = ImageDraw.Draw(box_mask)
+        for x1, y1, x2, y2 in box_regions:
+            box_draw.rectangle([x1, y1, x2, y2], fill=255)
+        CensorService._apply_mask_style(
+            image,
+            original_image,
+            box_mask,
+            style=str(operation.get("style") or "mosaic"),
+            block_size=int(operation.get("block_size", 16) or 16),
+            blur_radius=int(operation.get("blur_radius", 20) or 20),
+        )
+
+
+class TestCropLocalGeometryMasks:
+    """Localized polygon and box effects must not allocate full-canvas masks."""
+
+    @staticmethod
+    def _operation(regions: list[dict[str, object]], style: str) -> dict[str, object]:
+        return {
+            "kind": "geometry_effect",
+            "regions": regions,
+            "style": style,
+            "block_size": 7,
+            "blur_radius": 4,
+        }
+
+    def test_box_only_allocates_one_crop_mask(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        original = Image.new("RGBA", (200, 120), (40, 80, 120, 255))
+        working = original.copy()
+        mask_allocations = _track_geometry_mask_allocations(monkeypatch)
+
+        CensorService._apply_geometry_effect_operation(
+            working,
+            original,
+            self._operation([{"box": [90, 50, 110, 70]}], "black_bar"),
+        )
+
+        assert mask_allocations == [("L", (21, 21))]
+
+    def test_polygon_only_allocates_one_height_local_bit_mask(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        original = Image.new("RGBA", (200, 120), (40, 80, 120, 255))
+        working = original.copy()
+        mask_allocations = _track_geometry_mask_allocations(monkeypatch)
+
+        CensorService._apply_geometry_effect_operation(
+            working,
+            original,
+            self._operation(
+                [{"polygon": [[80, 40], [120, 45], [105, 80], [75, 65]]}],
+                "mosaic",
+            ),
+        )
+
+        assert mask_allocations == [("1", (200, 43))]
+        width, height = mask_allocations[0][1]
+        assert ((width + 7) // 8) * height < 2_048
+
+    def test_fully_off_canvas_geometry_allocates_no_mask(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        original = Image.new("RGBA", (80, 60), (40, 80, 120, 255))
+        working = original.copy()
+        unchanged = working.tobytes()
+        mask_allocations = _track_geometry_mask_allocations(monkeypatch)
+
+        CensorService._apply_geometry_effect_operation(
+            working,
+            original,
+            self._operation(
+                [
+                    {"polygon": [[-90, -80], [-60, -80], [-70, -50]]},
+                    {"polygon": [[140, 100], [170, 100], [155, 130]]},
+                    {"box": [-140, 10, -100, 40]},
+                    {"box": [100, 10, 140, 40]},
+                ],
+                "mosaic",
+            ),
+        )
+
+        assert mask_allocations == []
+        assert working.tobytes() == unchanged
+
+    def test_disjoint_polygon_with_canvas_crossing_aabb_uses_bounded_bit_mask(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        original = Image.new("RGBA", (80, 80), (40, 80, 120, 255))
+        working = original.copy()
+        unchanged = working.tobytes()
+        mask_allocations = _track_geometry_mask_allocations(monkeypatch)
+
+        CensorService._apply_geometry_effect_operation(
+            working,
+            original,
+            self._operation(
+                [{"polygon": [[-80, 79], [79, -80], [-80, -80]]}],
+                "mosaic",
+            ),
+        )
+
+        assert mask_allocations == [("1", (80, 80))]
+        assert ((80 + 7) // 8) * 80 < 1_024
+        assert working.tobytes() == unchanged
+
+    def test_pillow_visible_boundary_spike_is_not_filtered(self) -> None:
+        original = Image.new("RGBA", (80, 60), (40, 80, 120, 255))
+        expected = original.copy()
+        actual = original.copy()
+        operation = self._operation(
+            [
+                {
+                    "polygon": [
+                        [79, -120],
+                        [80, 180],
+                        [81, 180],
+                        [80, -120],
+                    ]
+                }
+            ],
+            "black_bar",
+        )
+
+        _apply_full_canvas_geometry_reference(expected, original, operation)
+        CensorService._apply_geometry_effect_operation(actual, original, operation)
+
+        assert expected.getpixel((79, 0)) == (0, 0, 0, 255)
+        assert actual.tobytes() == expected.tobytes()
+
+    @pytest.mark.parametrize(
+        "coordinate",
+        [float("nan"), float("inf"), float("-inf"), 10**400],
+    )
+    def test_non_finite_or_overflowing_polygon_coordinate_fails_with_actionable_400(
+        self,
+        coordinate: object,
+    ) -> None:
+        original = Image.new("RGBA", (80, 60), (40, 80, 120, 255))
+
+        with pytest.raises(HTTPException) as exc:
+            CensorService._apply_geometry_effect_operation(
+                original.copy(),
+                original,
+                self._operation(
+                    [{"polygon": [[coordinate, 10], [20, 20], [10, 30]]}],
+                    "mosaic",
+                ),
+            )
+
+        assert exc.value.status_code == 400
+        assert "finite number" in str(exc.value.detail)
+        assert "regions[0].polygon[0].x" in str(exc.value.detail)
+
+    def test_polygon_coordinate_beyond_canvas_envelope_fails_with_actionable_400(self) -> None:
+        original = Image.new("RGBA", (17, 13), (40, 80, 120, 255))
+
+        with pytest.raises(HTTPException) as exc:
+            CensorService._apply_geometry_effect_operation(
+                original.copy(),
+                original,
+                self._operation(
+                    [{"polygon": [[1e9, 6.5], [8.5, 0.1], [5e8, 12]]}],
+                    "mosaic",
+                ),
+            )
+
+        assert exc.value.status_code == 400
+        assert "outside the supported range" in str(exc.value.detail)
+        assert "regions[0].polygon[0].x" in str(exc.value.detail)
+
+    @pytest.mark.parametrize(
+        ("box", "expected_path"),
+        [
+            ([0, 0, float("inf"), 10], "regions[0].box[2]"),
+            ([0, -1e9, 10, 10], "regions[0].box[1]"),
+        ],
+    )
+    def test_invalid_box_coordinate_fails_with_actionable_400(
+        self,
+        box: list[float],
+        expected_path: str,
+    ) -> None:
+        original = Image.new("RGBA", (80, 60), (40, 80, 120, 255))
+
+        with pytest.raises(HTTPException) as exc:
+            CensorService._apply_geometry_effect_operation(
+                original.copy(),
+                original,
+                self._operation([{"box": box}], "mosaic"),
+            )
+
+        assert exc.value.status_code == 400
+        assert expected_path in str(exc.value.detail)
+
+    def test_reversed_box_remains_fail_loud(self) -> None:
+        original = Image.new("RGBA", (80, 60), (40, 80, 120, 255))
+        with pytest.raises(ValueError):
+            CensorService._apply_geometry_effect_operation(
+                original.copy(),
+                original,
+                self._operation([{"box": [50, 40, 20, 10]}], "mosaic"),
+            )
+
+    @pytest.mark.parametrize(
+        ("style", "regions"),
+        [
+            ("mosaic", [{"polygon": [[20.25, 18.75], [62.5, 20.25], [44.75, 55.5]]}]),
+            ("blur", [{"polygon": [[-8, 4], [25, 2], [18, 28], [-4, 24]]}]),
+            ("black_bar", [{"box": [42, 26, 88, 54]}]),
+            ("white_bar", [{"box": [104, 60, 140, 90]}]),
+            (
+                "mosaic",
+                [
+                    {"polygon": [[24, 20], [86, 18], [66, 62], [30, 54]]},
+                    {"box": [50, 34, 104, 72]},
+                ],
+            ),
+            ("blur", [{"polygon": [[18, 16], [64, 14], [52, 48]], "box": [0, 0, 127, 79]}]),
+            ("mosaic", [{"polygon": [[20, 20], [30, 30]], "box": [12, 10, 40, 35]}]),
+            (
+                "black_bar",
+                [{"polygon": [[-10, -10], [140, -10], [140, 90], [-10, 90]]}],
+            ),
+            (
+                "white_bar",
+                [{"polygon": [[-10, 40], [64, -10], [138, 40], [64, 90]]}],
+            ),
+        ],
+    )
+    def test_crop_local_geometry_matches_full_canvas_reference(
+        self,
+        style: str,
+        regions: list[dict[str, object]],
+    ) -> None:
+        original = Image.new("RGBA", (128, 80), (35, 70, 105, 255))
+        original_draw = ImageDraw.Draw(original)
+        original_draw.rectangle([8, 6, 118, 72], fill=(180, 90, 30, 255))
+        original_draw.line([(0, 79), (127, 0)], fill=(20, 210, 140, 255), width=5)
+
+        expected = original.copy()
+        actual = original.copy()
+        ImageDraw.Draw(expected).rectangle([0, 0, 127, 79], fill=(80, 45, 150, 255))
+        ImageDraw.Draw(actual).rectangle([0, 0, 127, 79], fill=(80, 45, 150, 255))
+        operation = self._operation(regions, style)
+
+        _apply_full_canvas_geometry_reference(expected, original, operation)
+        CensorService._apply_geometry_effect_operation(actual, original, operation)
 
         assert actual.mode == expected.mode
         assert actual.size == expected.size

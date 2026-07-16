@@ -694,6 +694,54 @@ class TestCensorRouterValidation:
             pixel = result.convert("RGBA").getpixel((10, 10))
             assert pixel[:3] == (0, 0, 0)
 
+    @pytest.mark.parametrize(
+        ("coordinate", "expected_detail"),
+        [
+            (1e9, "outside the supported range"),
+            (10**400, "expected a finite number"),
+        ],
+    )
+    def test_save_operations_rejects_invalid_geometry_coordinate(
+        self,
+        test_client,
+        tmp_path,
+        coordinate,
+        expected_detail,
+    ):
+        image_path = tmp_path / "invalid-geometry-source.png"
+        Image.new("RGB", (32, 32), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        response = test_client.post(
+            "/api/censor/save-operations",
+            json={
+                "original_image_id": image_id,
+                "operations": [
+                    {
+                        "kind": "geometry_effect",
+                        "style": "mosaic",
+                        "regions": [
+                            {"polygon": [[coordinate, 6.5], [8.5, 0.1], [5e8, 12]]},
+                        ],
+                    }
+                ],
+                "filename": "invalid-geometry-output.png",
+                "output_folder": str(tmp_path / "out"),
+                "metadata_option": "strip",
+                "output_format": "png",
+            },
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        detail = data.get("detail") or data.get("error") or data.get("message") or ""
+        assert expected_detail in detail
+        assert "regions[0].polygon[0].x" in detail
+
     def test_save_operations_overwrite_refreshes_indexed_state(self, test_client, tmp_path):
         from image_fingerprint import compute_image_content_fingerprint
 
