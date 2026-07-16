@@ -56,6 +56,117 @@ def test_model_health_sam3_probe_does_not_import_torch_in_parent(monkeypatch):
     assert health["censor"]["sam3"]["torch_probe_source"] == "subprocess"
 
 
+def test_model_health_blocks_toriigate_and_sam3_for_windows_cuda13(
+    monkeypatch,
+    tmp_path,
+):
+    import model_health
+
+    toriigate_root = tmp_path / "toriigate"
+    toriigate_dir = toriigate_root / "toriigate-0.5"
+    toriigate_dir.mkdir(parents=True)
+    (toriigate_dir / "config.json").write_text("{}", encoding="utf-8")
+    (toriigate_dir / "model.safetensors").write_bytes(b"model")
+    sam3_checkpoint = tmp_path / "sam3" / "model.safetensors"
+    sam3_checkpoint.parent.mkdir(parents=True)
+    sam3_checkpoint.write_bytes(b"model")
+
+    monkeypatch.setattr(model_health.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(model_health, "get_toriigate_model_dir", lambda: str(toriigate_root))
+    monkeypatch.setattr(model_health, "get_sam3_checkpoint_path", lambda: str(sam3_checkpoint))
+    monkeypatch.setattr(model_health, "_module_installed", lambda module_name: True)
+    monkeypatch.setattr(
+        model_health,
+        "_probe_torch_runtime",
+        lambda: {
+            "torch_version": "2.13.0+cu130",
+            "torch_cuda_build": "13.0",
+            "torch_cuda_available": True,
+            "torch_probe_error": None,
+            "torch_probe_source": "subprocess",
+        },
+    )
+
+    health = model_health.get_model_health()
+
+    toriigate = health["toriigate"]
+    sam3 = health["censor"]["sam3"]
+    assert toriigate["available"] is False
+    assert sam3["available"] is False
+    assert toriigate["runtime_compatible"] is False
+    assert sam3["runtime_compatible"] is False
+    assert "Model Manager" in toriigate["message"]
+    assert "Prepare" in sam3["message"]
+    assert "restart" in sam3["message"]
+
+
+def test_torch_onnx_runtime_health_keeps_non_windows_cuda13_policy_unchanged(
+    monkeypatch,
+):
+    import model_health
+
+    monkeypatch.setattr(model_health.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(
+        model_health,
+        "_probe_torch_runtime",
+        lambda: {
+            "torch_version": "2.13.0+cu130",
+            "torch_cuda_build": "13.0",
+            "torch_cuda_available": True,
+            "torch_probe_error": None,
+            "torch_probe_source": "subprocess",
+        },
+    )
+
+    runtime = model_health.get_torch_onnx_runtime_health()
+
+    assert runtime["runtime_compatible"] is True
+    assert runtime["runtime_compatibility_error"] is None
+
+
+def test_model_health_keeps_non_windows_explicit_cpu_toriigate_available(
+    monkeypatch,
+    tmp_path,
+):
+    import model_health
+
+    toriigate_root = tmp_path / "toriigate"
+    toriigate_dir = toriigate_root / "toriigate-0.5"
+    toriigate_dir.mkdir(parents=True)
+    (toriigate_dir / "config.json").write_text("{}", encoding="utf-8")
+    (toriigate_dir / "model.safetensors").write_bytes(b"model")
+
+    monkeypatch.setattr(model_health.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(
+        model_health,
+        "get_toriigate_model_dir",
+        lambda: str(toriigate_root),
+    )
+    monkeypatch.setattr(
+        model_health,
+        "_module_installed",
+        lambda module_name: module_name in {"torch", "transformers"},
+    )
+    monkeypatch.setattr(
+        model_health,
+        "_probe_torch_runtime",
+        lambda: {
+            "torch_version": "2.13.0+cpu",
+            "torch_cuda_build": None,
+            "torch_cuda_available": False,
+            "torch_probe_error": None,
+            "torch_probe_source": "subprocess",
+        },
+    )
+
+    toriigate = model_health.get_model_health()["toriigate"]
+
+    assert toriigate["available"] is True
+    assert toriigate["requires_gpu"] is False
+    assert toriigate["runtime_compatible"] is True
+    assert toriigate["message"] == "ToriiGate runtime files are ready."
+
+
 def test_model_health_marks_sam3_unsupported_on_macos(monkeypatch):
     import model_health
 

@@ -329,6 +329,18 @@ def _release_booru_sessions(taggers: List[Any]) -> None:
 
 def _load_toriigate_for_phase2(job: SmartTagJobState, req: "SmartTagRequest"):
     """Load ToriiGate after the booru phase (two-phase residency contract)."""
+    from model_health import get_torch_onnx_runtime_health
+
+    runtime_health = get_torch_onnx_runtime_health()
+    compatibility_error = runtime_health.get("runtime_compatibility_error")
+    if compatibility_error:
+        raise RuntimeError(compatibility_error)
+    if req.use_gpu and runtime_health.get("torch_cuda_available") is not True:
+        raise RuntimeError(
+            "ToriiGate CUDA runtime is not ready. Open Model Manager, run Prepare, "
+            "then restart the app."
+        )
+
     from toriigate_tagger import get_toriigate_tagger
 
     job.message = "Loading ToriiGate natural-language model..."

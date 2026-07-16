@@ -2027,8 +2027,18 @@ def test_phase2_toriigate_load_disables_cpu_fallback(monkeypatch) -> None:
         return _FakeTorii()
 
     import toriigate_tagger as torii_module
+    import model_health
 
     monkeypatch.setattr(torii_module, "get_toriigate_tagger", _fake_get_toriigate_tagger)
+    monkeypatch.setattr(
+        model_health,
+        "get_torch_onnx_runtime_health",
+        lambda: {
+            "torch_cuda_available": True,
+            "runtime_compatible": True,
+            "runtime_compatibility_error": None,
+        },
+    )
 
     job = SmartTagJobState(job_id="phase2-load-options")
     req = SmartTagRequest(
@@ -2044,6 +2054,45 @@ def test_phase2_toriigate_load_disables_cpu_fallback(monkeypatch) -> None:
     assert captured["use_gpu"] is True
     assert captured["allow_cpu_fallback"] is False
     assert captured["loaded"] is True
+
+
+def test_phase2_toriigate_blocks_incompatible_runtime_before_import(monkeypatch) -> None:
+    import model_health
+
+    imported = []
+    monkeypatch.setattr(
+        model_health,
+        "get_torch_onnx_runtime_health",
+        lambda: {
+            "torch_cuda_available": True,
+            "runtime_compatible": False,
+            "runtime_compatibility_error": (
+                "PyTorch CUDA 13.0 is incompatible with ONNX Runtime CUDA 12.x. "
+                "Open Model Manager, run Prepare, then restart the app."
+            ),
+        },
+        raising=False,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "toriigate_tagger",
+        SimpleNamespace(
+            get_toriigate_tagger=lambda **kwargs: imported.append(kwargs)
+        ),
+    )
+    job = SmartTagJobState(job_id="phase2-incompatible-runtime")
+    req = SmartTagRequest(
+        image_paths=["/tmp/img-0.png"],
+        enable_wd14=True,
+        enable_vlm=True,
+        natural_language_mode="toriigate",
+        use_gpu=True,
+    )
+
+    with pytest.raises(RuntimeError, match="Model Manager.*Prepare.*restart"):
+        smart_tag_service._load_toriigate_for_phase2(job, req)
+
+    assert imported == []
 
 
 def test_run_pipeline_routes_toriigate_to_two_phase(monkeypatch) -> None:

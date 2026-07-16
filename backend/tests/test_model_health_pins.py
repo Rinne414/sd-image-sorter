@@ -675,6 +675,8 @@ def test_health_sam3_subshape_and_torch_probe_passthrough(monkeypatch, tmp_path)
         "torch_cuda_build",
         "torch_probe_error",
         "torch_probe_source",
+        "runtime_compatible",
+        "runtime_compatibility_error",
         "message",
         "runtime_note",
         "capabilities",
@@ -683,6 +685,8 @@ def test_health_sam3_subshape_and_torch_probe_passthrough(monkeypatch, tmp_path)
     assert sam3["torch_version"] == "2.11.0+cpu"
     assert sam3["torch_probe_source"] == "current-process"
     assert sam3["cuda_available"] is False
+    assert sam3["runtime_compatible"] is True
+    assert sam3["runtime_compatibility_error"] is None
 
 
 def test_health_sam3_available_requires_all_four_gates(monkeypatch, tmp_path):

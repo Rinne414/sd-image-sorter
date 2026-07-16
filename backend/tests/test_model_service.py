@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -382,7 +383,7 @@ def test_sam3_default_download_urls_do_not_fallback_to_sam2_checkpoint(monkeypat
     assert "tokenizer.json" in filenames
 
 
-def test_prepare_sam3_existing_checkpoint_repairs_runtime_before_final_status(monkeypatch):
+def test_prepare_sam3_existing_checkpoint_requires_restart_when_runtime_changed(monkeypatch):
     checkpoint = "/models/sam3/facebook-sam3-modelscope/model.safetensors"
     before = _fake_health()
     before["censor"]["sam3"] = {
@@ -394,34 +395,189 @@ def test_prepare_sam3_existing_checkpoint_repairs_runtime_before_final_status(mo
         "torch_cuda_build": None,
         "message": "SAM3 checkpoint is installed, but runtime is incomplete.",
     }
-    after = _fake_health()
-    after["censor"]["sam3"] = {
-        "available": True,
-        "checkpoint_path": checkpoint,
-        "missing_dependencies": [],
-        "missing_dependency_packages": [],
-        "cuda_available": True,
-        "torch_cuda_build": "12.8",
-        "message": "SAM3 checkpoint and runtime dependencies are ready.",
-    }
-    health_results = iter([before, after])
+    health_calls = []
     repair_calls = []
 
     monkeypatch.setattr(model_service, "get_sam3_checkpoint_path", lambda: checkpoint)
-    monkeypatch.setattr(model_service, "get_model_health", lambda: next(health_results))
+    monkeypatch.setattr(
+        model_service,
+        "get_model_health",
+        lambda: health_calls.append(True) or before,
+    )
     monkeypatch.setattr(model_service, "ensure_group", lambda group: model_service.DependencyInstallResult((), False))
     monkeypatch.setattr(
         model_service,
         "_repair_sam3_runtime_if_possible",
-        lambda: repair_calls.append(True) or {"attempted": True, "ok": True},
+        lambda: repair_calls.append(True)
+        or {
+            "attempted": True,
+            "ok": True,
+            "repaired": True,
+            "restart_required": True,
+        },
     )
 
     result = model_service.ModelService().prepare_model("sam3")
 
+    assert health_calls == [True]
     assert repair_calls == [True]
+    assert result["status"] == "needs_restart"
+    assert result["ready"] is False
+    assert result["restart_recommended"] is True
+    assert result["runtime_repair"] == {
+        "attempted": True,
+        "ok": True,
+        "repaired": True,
+        "restart_required": True,
+    }
+
+
+def test_torch_runtime_repair_parses_json_and_requires_restart(monkeypatch):
+    calls = []
+    payload = {
+        "platform": "Windows",
+        "torch_version": "2.13.0+cu126",
+        "torch_cuda_build": "12.6",
+        "torch_cuda_available": True,
+        "repaired": True,
+        "actions": ["Installed cu126"],
+    }
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(payload),
+            stderr="",
+        )
+
+    monkeypatch.setattr(model_service.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(model_service.subprocess, "run", fake_run)
+
+    result = model_service._repair_torch_runtime_if_possible()
+
+    assert result["ok"] is True
+    assert result["repaired"] is True
+    assert result["restart_required"] is True
+    command, kwargs = calls[0]
+    assert command[-2:] == ["--auto", "--json"]
+    assert kwargs["capture_output"] is True
+
+
+def test_torch_runtime_repair_rejects_exit_zero_incompatible_state(monkeypatch):
+    payload = {
+        "platform": "Windows",
+        "torch_version": "2.13.0+cu130",
+        "torch_cuda_build": "13.0",
+        "torch_cuda_available": True,
+        "repaired": False,
+        "actions": ["No repair needed"],
+    }
+    monkeypatch.setattr(model_service.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        model_service.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(payload),
+            stderr="",
+        ),
+    )
+
+    result = model_service._repair_torch_runtime_if_possible()
+
+    assert result["ok"] is False
+    assert result["returncode"] == 0
+    assert "CUDA 13.0" in result["error"]
+    assert "cu126" in result["error"]
+
+
+def test_prepare_sam3_runtime_change_stops_for_restart(monkeypatch):
+    checkpoint = "/models/sam3/facebook-sam3-modelscope/model.safetensors"
+    health = _fake_health()
+    health["censor"]["sam3"] = {
+        "available": False,
+        "checkpoint_path": checkpoint,
+        "missing_dependencies": [],
+        "missing_dependency_packages": [],
+        "cuda_available": True,
+        "torch_cuda_build": "13.0",
+        "runtime_compatible": False,
+        "message": "PyTorch CUDA 13.0 is incompatible. Run Prepare, then restart.",
+    }
+    monkeypatch.setattr(model_service, "get_sam3_checkpoint_path", lambda: checkpoint)
+    monkeypatch.setattr(model_service, "get_model_health", lambda: health)
+    monkeypatch.setattr(
+        model_service,
+        "ensure_group",
+        lambda group: model_service.DependencyInstallResult((), False),
+    )
+    monkeypatch.setattr(
+        model_service,
+        "_repair_sam3_runtime_if_possible",
+        lambda: {
+            "attempted": True,
+            "ok": True,
+            "repaired": True,
+            "restart_required": True,
+        },
+    )
+
+    result = model_service.ModelService().prepare_model("sam3")
+
+    assert result["status"] == "needs_restart"
+    assert result["ready"] is False
+    assert result["restart_recommended"] is True
+
+
+def test_prepare_sam3_refreshes_health_when_repair_changed_nothing(monkeypatch):
+    checkpoint = "/models/sam3/facebook-sam3-modelscope/model.safetensors"
+    before = _fake_health()
+    before["censor"]["sam3"] = {
+        "available": False,
+        "checkpoint_path": checkpoint,
+        "missing_dependencies": [],
+        "missing_dependency_packages": [],
+        "cuda_available": False,
+        "torch_cuda_build": "12.6",
+        "runtime_compatible": True,
+        "message": "CUDA probe was not ready.",
+    }
+    after = _fake_health()
+    after["censor"]["sam3"] = {
+        **before["censor"]["sam3"],
+        "available": True,
+        "cuda_available": True,
+        "message": "SAM3 checkpoint and runtime dependencies are ready.",
+    }
+    health_results = iter((before, after))
+
+    monkeypatch.setattr(model_service, "get_sam3_checkpoint_path", lambda: checkpoint)
+    monkeypatch.setattr(model_service, "get_model_health", lambda: next(health_results))
+    monkeypatch.setattr(
+        model_service,
+        "ensure_group",
+        lambda group: model_service.DependencyInstallResult((), False),
+    )
+    monkeypatch.setattr(
+        model_service,
+        "_repair_sam3_runtime_if_possible",
+        lambda: {
+            "attempted": True,
+            "ok": True,
+            "repaired": False,
+            "restart_required": False,
+        },
+    )
+
+    result = model_service.ModelService().prepare_model("sam3")
+
     assert result["status"] == "ok"
     assert result["ready"] is True
-    assert result["runtime_repair"] == {"attempted": True, "ok": True}
+    assert "restart_recommended" not in result
+    assert result["runtime_repair"]["repaired"] is False
 
 
 def test_model_inventory_explains_sam3_checkpoint_with_missing_runtime(monkeypatch):
@@ -483,6 +639,111 @@ def test_prepare_toriigate_returns_restart_hint_when_runtime_installed(monkeypat
     assert result["restart_recommended"] is True
 
 
+def test_prepare_toriigate_repairs_incompatible_runtime_before_model_import(
+    monkeypatch,
+):
+    monkeypatch.setattr(model_service.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        model_service,
+        "ensure_group",
+        lambda group: model_service.DependencyInstallResult((), False),
+    )
+    monkeypatch.setattr(
+        model_service,
+        "get_torch_onnx_runtime_health",
+        lambda: {
+            "torch_cuda_available": True,
+            "runtime_compatible": False,
+            "runtime_compatibility_error": "PyTorch CUDA 13.0 is incompatible.",
+        },
+        raising=False,
+    )
+    monkeypatch.setattr(
+        model_service,
+        "_repair_torch_runtime_if_possible",
+        lambda: {
+            "attempted": True,
+            "ok": True,
+            "repaired": True,
+            "restart_required": True,
+        },
+        raising=False,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "toriigate_tagger",
+        SimpleNamespace(
+            ToriiGateTagger=lambda *args, **kwargs: pytest.fail(
+                "ToriiGate must not import or initialize before restart."
+            )
+        ),
+    )
+
+    result = model_service.ModelService().prepare_model("toriigate")
+
+    assert result["status"] == "needs_restart"
+    assert result["restart_recommended"] is True
+    assert result["runtime_repair"]["repaired"] is True
+
+
+def test_prepare_toriigate_continues_when_repair_changed_nothing(
+    monkeypatch,
+    tmp_path,
+):
+    model_dir = tmp_path / "toriigate"
+    tagger_calls = []
+
+    class FakeToriiGateTagger:
+        def __init__(self, model_name, model_dir, use_gpu):
+            tagger_calls.append((model_name, model_dir, use_gpu))
+            self.model_dir = model_dir
+
+        def _download_model(self):
+            return str(Path(self.model_dir) / "toriigate-0.5")
+
+    monkeypatch.setattr(model_service.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        model_service,
+        "ensure_group",
+        lambda group: model_service.DependencyInstallResult((), False),
+    )
+    monkeypatch.setattr(
+        model_service,
+        "get_torch_onnx_runtime_health",
+        lambda: {
+            "torch_cuda_available": True,
+            "runtime_compatible": False,
+            "runtime_compatibility_error": "Stale incompatible probe.",
+        },
+    )
+    monkeypatch.setattr(
+        model_service,
+        "_repair_torch_runtime_if_possible",
+        lambda: {
+            "attempted": True,
+            "ok": True,
+            "repaired": False,
+            "restart_required": False,
+        },
+    )
+    monkeypatch.setattr(
+        model_service,
+        "get_toriigate_model_dir",
+        lambda: str(model_dir),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "toriigate_tagger",
+        SimpleNamespace(ToriiGateTagger=FakeToriiGateTagger),
+    )
+
+    result = model_service.ModelService().prepare_model("toriigate")
+
+    assert result["status"] == "ok"
+    assert "restart_recommended" not in result
+    assert tagger_calls == [("toriigate-0.5", str(model_dir), False)]
+
+
 def test_prepare_toriigate_downloads_after_runtime_exists(monkeypatch, tmp_path):
     installed_groups = []
     fake_tagger_calls = []
@@ -504,6 +765,15 @@ def test_prepare_toriigate_downloads_after_runtime_exists(monkeypatch, tmp_path)
         "ensure_group",
         lambda group: installed_groups.append(group) or model_service.DependencyInstallResult((), False),
     )
+    monkeypatch.setattr(
+        model_service,
+        "get_torch_onnx_runtime_health",
+        lambda: {
+            "torch_cuda_available": True,
+            "runtime_compatible": True,
+            "runtime_compatibility_error": None,
+        },
+    )
     monkeypatch.setattr(model_service, "get_toriigate_model_dir", lambda: str(model_dir))
     monkeypatch.setitem(sys.modules, "toriigate_tagger", SimpleNamespace(ToriiGateTagger=FakeToriiGateTagger))
 
@@ -512,6 +782,58 @@ def test_prepare_toriigate_downloads_after_runtime_exists(monkeypatch, tmp_path)
     assert installed_groups == ["toriigate"]
     assert fake_tagger_calls == [("toriigate-0.5", str(model_dir), False)]
     assert result["status"] == "ok"
+    assert Path(result["paths"]["model_dir"]).name == "toriigate-0.5"
+
+
+def test_prepare_toriigate_keeps_non_windows_cpu_download_path(
+    monkeypatch,
+    tmp_path,
+):
+    model_dir = tmp_path / "toriigate"
+    repair_calls = []
+
+    class FakeToriiGateTagger:
+        def __init__(self, model_name, model_dir, use_gpu):
+            self.model_dir = model_dir
+
+        def _download_model(self):
+            return str(Path(self.model_dir) / "toriigate-0.5")
+
+    monkeypatch.setattr(model_service.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(
+        model_service,
+        "ensure_group",
+        lambda group: model_service.DependencyInstallResult((), False),
+    )
+    monkeypatch.setattr(
+        model_service,
+        "get_torch_onnx_runtime_health",
+        lambda: {
+            "torch_cuda_available": False,
+            "runtime_compatible": True,
+            "runtime_compatibility_error": None,
+        },
+    )
+    monkeypatch.setattr(
+        model_service,
+        "_repair_torch_runtime_if_possible",
+        lambda: repair_calls.append(True),
+    )
+    monkeypatch.setattr(
+        model_service,
+        "get_toriigate_model_dir",
+        lambda: str(model_dir),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "toriigate_tagger",
+        SimpleNamespace(ToriiGateTagger=FakeToriiGateTagger),
+    )
+
+    result = model_service.ModelService().prepare_model("toriigate")
+
+    assert result["status"] == "ok"
+    assert repair_calls == []
     assert Path(result["paths"]["model_dir"]).name == "toriigate-0.5"
 
 

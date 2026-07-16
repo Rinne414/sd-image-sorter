@@ -22,7 +22,7 @@ import subprocess
 import sys
 import warnings
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, TypedDict
 
 _BACKEND_DIR = str(Path(__file__).resolve().parent)
 if _BACKEND_DIR not in sys.path:
@@ -104,6 +104,57 @@ SAM3_REQUIRED_MODULES = (
 SAM3_IMPORT_TO_PACKAGE = dict(SAM3_REQUIRED_MODULES)
 
 
+class TorchOnnxRuntimeHealth(TypedDict):
+    torch_version: Optional[str]
+    torch_cuda_build: Optional[str]
+    torch_cuda_available: bool
+    torch_probe_error: Optional[str]
+    torch_probe_source: Optional[str]
+    runtime_compatible: bool
+    runtime_compatibility_error: Optional[str]
+
+
+def _optional_probe_text(value: object) -> Optional[str]:
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _windows_torch_onnx_runtime_error(
+    system: str,
+    torch_cuda_build: Optional[str],
+) -> Optional[str]:
+    if system != "Windows" or torch_cuda_build is None:
+        return None
+
+    cuda_major = torch_cuda_build.split(".", 1)[0]
+    if cuda_major == "12":
+        return None
+
+    return (
+        f"PyTorch CUDA {torch_cuda_build} is incompatible with ONNX Runtime "
+        "CUDA 12.x used by this app. Open Model Manager, run Prepare for "
+        "ToriiGate or SAM3, then restart the app."
+    )
+
+
+def get_torch_onnx_runtime_health() -> TorchOnnxRuntimeHealth:
+    raw_state = _probe_torch_runtime()
+    torch_version = _optional_probe_text(raw_state.get("torch_version"))
+    torch_cuda_build = _optional_probe_text(raw_state.get("torch_cuda_build"))
+    compatibility_error = _windows_torch_onnx_runtime_error(
+        platform.system(),
+        torch_cuda_build,
+    )
+    return {
+        "torch_version": torch_version,
+        "torch_cuda_build": torch_cuda_build,
+        "torch_cuda_available": raw_state.get("torch_cuda_available") is True,
+        "torch_probe_error": _optional_probe_text(raw_state.get("torch_probe_error")),
+        "torch_probe_source": _optional_probe_text(raw_state.get("torch_probe_source")),
+        "runtime_compatible": compatibility_error is None,
+        "runtime_compatibility_error": compatibility_error,
+    }
+
+
 def _sam3_missing_dependency_packages(missing_imports: Iterable[str]) -> List[str]:
     packages: List[str] = []
     for module_name in missing_imports:
@@ -166,10 +217,12 @@ def get_model_health() -> Dict[str, Any]:
     artist_checkpoint = get_artist_checkpoint_path()
     artist_class_mapping = get_artist_class_mapping_path()
 
-    torch_state = _probe_torch_runtime()
+    torch_state = get_torch_onnx_runtime_health()
     torch_version = torch_state.get("torch_version")
     torch_cuda_build = torch_state.get("torch_cuda_build")
     cuda_available = bool(torch_state.get("torch_cuda_available"))
+    runtime_compatible = bool(torch_state.get("runtime_compatible"))
+    runtime_compatibility_error = torch_state.get("runtime_compatibility_error")
     uses_cpu_only_torch = bool(torch_version) and torch_cuda_build is None
 
     sam3_supported = _sam3_supported_on_platform()
@@ -230,14 +283,26 @@ def get_model_health() -> Dict[str, Any]:
                 and (toriigate_dir / "model.safetensors").exists()
                 and _module_installed("transformers")
                 and (bool(torch_version) or _module_installed("torch"))
+                and runtime_compatible
             ),
             "model_name": "toriigate-0.5",
             "model_dir": str(toriigate_dir.resolve()),
-            "requires_gpu": True,
+            "requires_gpu": False,
+            "cuda_available": cuda_available,
+            "torch_version": torch_version,
+            "torch_cuda_build": torch_cuda_build,
+            "runtime_compatible": runtime_compatible,
+            "runtime_compatibility_error": runtime_compatibility_error,
             "message": (
-                "ToriiGate runtime files are ready."
-                if (toriigate_dir / "config.json").exists() and (toriigate_dir / "model.safetensors").exists()
-                else "ToriiGate files are not downloaded yet. The first run will need a large model download."
+                runtime_compatibility_error
+                or (
+                    "ToriiGate runtime files are ready."
+                    if (
+                        (toriigate_dir / "config.json").exists()
+                        and (toriigate_dir / "model.safetensors").exists()
+                    )
+                    else "ToriiGate files are not downloaded yet. The first run will need a large model download."
+                )
             ),
         },
         "oppai_oracle": {
@@ -318,7 +383,13 @@ def get_model_health() -> Dict[str, Any]:
                 },
             },
             "sam3": {
-                "available": sam3_supported and bool(sam3_checkpoint) and not sam3_missing and cuda_available,
+                "available": (
+                    sam3_supported
+                    and bool(sam3_checkpoint)
+                    and not sam3_missing
+                    and cuda_available
+                    and runtime_compatible
+                ),
                 "checkpoint_path": sam3_checkpoint,
                 "expected_path": str(Path(get_sam3_model_dir())),
                 "missing_dependencies": sam3_missing,
@@ -328,12 +399,17 @@ def get_model_health() -> Dict[str, Any]:
                 "torch_cuda_build": torch_cuda_build,
                 "torch_probe_error": torch_state.get("torch_probe_error"),
                 "torch_probe_source": torch_state.get("torch_probe_source"),
-                "message": _format_sam3_readiness_message(
-                    checkpoint_path=sam3_checkpoint,
-                    missing_packages=sam3_missing_packages,
-                    cuda_available=cuda_available,
-                    uses_cpu_only_torch=uses_cpu_only_torch,
-                    supported_on_platform=sam3_supported,
+                "runtime_compatible": runtime_compatible,
+                "runtime_compatibility_error": runtime_compatibility_error,
+                "message": (
+                    runtime_compatibility_error
+                    or _format_sam3_readiness_message(
+                        checkpoint_path=sam3_checkpoint,
+                        missing_packages=sam3_missing_packages,
+                        cuda_available=cuda_available,
+                        uses_cpu_only_torch=uses_cpu_only_torch,
+                        supported_on_platform=sam3_supported,
+                    )
                 ),
                 "runtime_note": (
                     "SAM3 is currently only prepared on Windows/Linux CUDA environments."

@@ -76,6 +76,43 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
         restart_result = _svc()._dependency_restart_result(normalized_model_id, dependency_result)
         if restart_result:
             return restart_result
+
+        runtime_health = _svc().get_torch_onnx_runtime_health()
+        windows_runtime_incompatible = (
+            _svc().platform.system() == "Windows"
+            and runtime_health.get("runtime_compatible") is not True
+        )
+        if windows_runtime_incompatible:
+            runtime_repair = _svc()._repair_torch_runtime_if_possible()
+            if runtime_repair.get("ok") is not True:
+                message = (
+                    runtime_repair.get("error")
+                    or runtime_health.get("runtime_compatibility_error")
+                    or (
+                        "ToriiGate CUDA runtime is not ready. Open Model Manager, run Prepare, "
+                        "then restart the app."
+                    )
+                )
+                return _svc()._with_dependency_result({
+                    "status": "needs_runtime",
+                    "model_id": normalized_model_id,
+                    "ready": False,
+                    "message": message,
+                    "runtime_repair": runtime_repair,
+                }, dependency_result)
+            if runtime_repair.get("restart_required") is True:
+                return _svc()._with_dependency_result({
+                    "status": "needs_restart",
+                    "model_id": normalized_model_id,
+                    "ready": False,
+                    "restart_recommended": True,
+                    "message": (
+                        "ToriiGate's supported cu126 runtime is prepared. Restart the app, "
+                        "then run Prepare again to download or verify the model files."
+                    ),
+                    "runtime_repair": runtime_repair,
+                }, dependency_result)
+
         from toriigate_tagger import ToriiGateTagger
 
         model_dir = _svc().get_toriigate_model_dir()
@@ -200,14 +237,41 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
                 "missing_dependency_packages": health.get("missing_dependency_packages") or [],
                 "cuda_available": health.get("cuda_available"),
                 "torch_cuda_build": health.get("torch_cuda_build"),
+                "runtime_compatible": health.get("runtime_compatible"),
             }
+
+        def repair_sam3_result(
+            result: Dict[str, Any],
+            checkpoint_path: str,
+        ) -> Dict[str, Any]:
+            runtime_repair = _svc()._repair_sam3_runtime_if_possible()
+            if runtime_repair.get("ok") is not True:
+                return _svc()._with_dependency_result({
+                    **result,
+                    "runtime_repair": runtime_repair,
+                }, dependency_result)
+            if runtime_repair.get("restart_required") is True:
+                return _svc()._with_dependency_result({
+                    **result,
+                    "status": "needs_restart",
+                    "ready": False,
+                    "restart_recommended": True,
+                    "message": (
+                        "SAM3's supported cu126 runtime is prepared. Restart the app before "
+                        "using SAM3 so the backend cannot reuse stale Torch DLLs."
+                    ),
+                    "runtime_repair": runtime_repair,
+                }, dependency_result)
+            return _svc()._with_dependency_result({
+                **sam3_prepare_result(checkpoint_path),
+                "runtime_repair": runtime_repair,
+            }, dependency_result)
 
         checkpoint_before = _svc().get_sam3_checkpoint_path()
         if checkpoint_before:
             result = sam3_prepare_result(checkpoint_before)
             if not result.get("ready"):
-                result["runtime_repair"] = _svc()._repair_sam3_runtime_if_possible()
-                result = {**sam3_prepare_result(checkpoint_before), "runtime_repair": result["runtime_repair"]}
+                return repair_sam3_result(result, checkpoint_before)
             return _svc()._with_dependency_result(result, dependency_result)
 
         sam3_dir = Path(_svc().get_sam3_model_dir()) / "facebook-sam3-modelscope"
@@ -237,8 +301,7 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
             )
         result = sam3_prepare_result(refreshed_path)
         if not result.get("ready"):
-            result["runtime_repair"] = _svc()._repair_sam3_runtime_if_possible()
-            result = {**sam3_prepare_result(refreshed_path), "runtime_repair": result["runtime_repair"]}
+            return repair_sam3_result(result, refreshed_path)
         return _svc()._with_dependency_result(result, dependency_result)
 
     if normalized_model_id == "aesthetic":

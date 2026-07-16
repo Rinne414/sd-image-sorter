@@ -38,7 +38,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from app_info import APP_VERSION
 from config import TAGGER_MODELS, get_artist_model_dir, get_sam3_model_dir, get_toriigate_model_dir, get_wd14_model_dir, get_yolo_model_dir
-from model_health import get_model_health, get_sam3_checkpoint_path
+from model_health import (
+    get_model_health,
+    get_sam3_checkpoint_path,
+    get_torch_onnx_runtime_health,
+)
 from optional_dependencies import DependencyInstallResult, ensure_group, ensure_group_with_soft_deps
 
 # ---------------------------------------------------------------------------
@@ -272,7 +276,25 @@ def _sam3_download_urls() -> List[Tuple[str, str]]:
     return [(name, f"{base}/{name}") for name in _SAM3_DOWNLOAD_FILES]
 
 
-def _repair_sam3_runtime_if_possible() -> Dict[str, Any]:
+def _torch_runtime_failure_result(
+    error: str,
+    returncode: Optional[int],
+    stdout: str,
+    stderr: str,
+) -> Dict[str, Any]:
+    return {
+        "attempted": True,
+        "ok": False,
+        "repaired": False,
+        "restart_required": False,
+        "returncode": returncode,
+        "error": error,
+        "stdout": stdout,
+        "stderr": stderr,
+    }
+
+
+def _repair_torch_runtime_if_possible() -> Dict[str, Any]:
     if platform.system() != "Windows":
         return {"attempted": False, "reason": "non_windows"}
     if os.environ.get("SD_IMAGE_SORTER_SKIP_TORCH_REPAIR", "").strip().lower() in {"1", "true", "yes", "on"}:
@@ -282,54 +304,121 @@ def _repair_sam3_runtime_if_possible() -> Dict[str, Any]:
     if not repair_script.exists():
         return {"attempted": False, "reason": "repair_script_missing"}
 
-    _model_logger.info("Checking and repairing SAM3/PyTorch runtime before reporting SAM3 readiness")
+    _model_logger.info("Checking the shared PyTorch runtime before preparing a GPU model")
     try:
         completed = subprocess.run(
-            [sys.executable, str(repair_script), "--auto"],
+            [sys.executable, str(repair_script), "--auto", "--json"],
             cwd=str(repair_script.parent),
+            capture_output=True,
             text=True,
             timeout=int(os.environ.get("SD_IMAGE_SORTER_TORCH_REPAIR_TIMEOUT", "3600") or "3600"),
             check=False,
         )
-    except Exception as exc:
-        _model_logger.warning("SAM3 runtime repair could not be started: %s", exc)
-        return {"attempted": True, "ok": False, "error": str(exc)}
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        return _torch_runtime_failure_result(
+            f"Could not start the PyTorch runtime repair: {type(exc).__name__}: {exc}",
+            None,
+            "",
+            "",
+        )
+
+    stdout = completed.stdout or ""
+    stderr = completed.stderr or ""
+    if completed.returncode != 0:
+        return _torch_runtime_failure_result(
+            (
+                f"PyTorch runtime repair exited with code {completed.returncode}. "
+                f"stdout={stdout.strip()!r}; stderr={stderr.strip()!r}"
+            ),
+            completed.returncode,
+            stdout,
+            stderr,
+        )
+
+    try:
+        payload = json.loads(stdout)
+    except (json.JSONDecodeError, TypeError) as exc:
+        return _torch_runtime_failure_result(
+            (
+                "PyTorch runtime repair returned invalid JSON despite exit code 0: "
+                f"{type(exc).__name__}: {exc}; stdout={stdout.strip()!r}; "
+                f"stderr={stderr.strip()!r}"
+            ),
+            completed.returncode,
+            stdout,
+            stderr,
+        )
+
+    if not isinstance(payload, dict):
+        return _torch_runtime_failure_result(
+            f"PyTorch runtime repair returned {type(payload).__name__}; expected a JSON object.",
+            completed.returncode,
+            stdout,
+            stderr,
+        )
+
+    torch_version = payload.get("torch_version")
+    torch_cuda_build = payload.get("torch_cuda_build")
+    torch_cuda_available = payload.get("torch_cuda_available")
+    repaired = payload.get("repaired")
+    actions = payload.get("actions")
+    valid_payload = (
+        (torch_version is None or isinstance(torch_version, str))
+        and (torch_cuda_build is None or isinstance(torch_cuda_build, str))
+        and isinstance(torch_cuda_available, bool)
+        and isinstance(repaired, bool)
+        and isinstance(actions, list)
+        and all(isinstance(action, str) for action in actions)
+    )
+    if not valid_payload:
+        return _torch_runtime_failure_result(
+            (
+                "PyTorch runtime repair JSON is missing required typed fields: "
+                "torch_version, torch_cuda_build, torch_cuda_available, repaired, actions."
+            ),
+            completed.returncode,
+            stdout,
+            stderr,
+        )
+
+    compatible = (
+        isinstance(torch_version, str)
+        and isinstance(torch_cuda_build, str)
+        and torch_cuda_build.split(".", 1)[0] == "12"
+        and torch_cuda_available is True
+    )
+    if not compatible:
+        return {
+            **_torch_runtime_failure_result(
+                (
+                    "PyTorch repair exited with code 0 but left an incompatible GPU runtime: "
+                    f"torch={torch_version or 'missing'}, CUDA {torch_cuda_build or 'missing'}, "
+                    f"available={torch_cuda_available!r}. Use Model Manager Prepare to "
+                    "install the supported cu126 runtime, then restart the app."
+                ),
+                completed.returncode,
+                stdout,
+                stderr,
+            ),
+            "actions": list(actions),
+        }
 
     importlib.invalidate_caches()
-    # Reset SAM3 module-level singletons so a fresh import picks up the newly
-    # installed runtime. We hold ``exclusive_ai_runtime("sam3-load")`` so
-    # in-flight SAM3 work elsewhere does not observe a half-reset state.
-    try:
-        from ai_runtime_guard import exclusive_ai_runtime
-    except Exception as exc:  # noqa: BLE001 — only fires if the guard module is unavailable
-        _model_logger.warning(
-            "ai_runtime_guard unavailable; resetting SAM3 singletons without a lock: %s", exc
-        )
-        exclusive_ai_runtime = None  # type: ignore[assignment]
+    return {
+        "attempted": True,
+        "ok": True,
+        "repaired": repaired,
+        "restart_required": repaired,
+        "returncode": completed.returncode,
+        "torch_version": torch_version,
+        "torch_cuda_build": torch_cuda_build,
+        "torch_cuda_available": torch_cuda_available,
+        "actions": list(actions),
+    }
 
-    def _reset_sam3_singletons() -> None:
-        try:
-            import sam3_refiner
 
-            sam3_refiner._sam3_available = None
-            sam3_refiner._sam3_model = None
-            sam3_refiner._sam3_processor = None
-            sam3_refiner._sam3_device = None
-        except ImportError as exc:
-            _model_logger.warning("Could not import sam3_refiner to reset singletons: %s", exc)
-        except AttributeError as exc:
-            _model_logger.warning("sam3_refiner singleton attribute layout changed: %s", exc)
-
-    if exclusive_ai_runtime is None:
-        _reset_sam3_singletons()
-    else:
-        with exclusive_ai_runtime("sam3-load"):
-            _reset_sam3_singletons()
-
-    if completed.returncode != 0:
-        _model_logger.warning("SAM3 runtime repair exited with code %s", completed.returncode)
-        return {"attempted": True, "ok": False, "returncode": completed.returncode}
-    return {"attempted": True, "ok": True}
+def _repair_sam3_runtime_if_possible() -> Dict[str, Any]:
+    return _repair_torch_runtime_if_possible()
 
 
 def _ensure_artist_runtime_direct() -> str:
