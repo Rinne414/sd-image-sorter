@@ -637,6 +637,98 @@ class _EditOpsMixin:
                 operation,
             )
 
+    @staticmethod
+    def _normalize_inline_mask_bounds(
+        value: Any,
+        image_size: tuple[int, int],
+    ) -> tuple[int, int, int, int]:
+        if not isinstance(value, (list, tuple)) or len(value) != 4:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid inline mask bounds: expected [x1, y1, x2, y2]",
+            )
+
+        coordinates: List[int] = []
+        for index, raw_coordinate in enumerate(value):
+            try:
+                coordinate = float(raw_coordinate)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid inline mask bounds coordinate at index {index}",
+                ) from exc
+            if not math.isfinite(coordinate) or not coordinate.is_integer():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid inline mask bounds coordinate at index {index}",
+                )
+            coordinates.append(int(coordinate))
+
+        x1, y1, x2, y2 = coordinates
+        image_width, image_height = image_size
+        if (
+            x1 < 0
+            or y1 < 0
+            or x2 > image_width
+            or y2 > image_height
+            or x2 <= x1
+            or y2 <= y1
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Invalid inline mask bounds: bounds must be non-empty and contained "
+                    f"within the {image_width}x{image_height} source image"
+                ),
+            )
+        return x1, y1, x2, y2
+
+    @staticmethod
+    def _validate_inline_mask_source_size(
+        operation: Dict[str, Any],
+        image_size: tuple[int, int],
+    ) -> None:
+        raw_width = operation.get("mask_image_width")
+        raw_height = operation.get("mask_image_height")
+        if raw_width is None and raw_height is None:
+            return
+        if raw_width is None or raw_height is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid inline mask source size: width and height must be provided together",
+            )
+
+        try:
+            width = float(raw_width)
+            height = float(raw_height)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid inline mask source size: expected positive integers",
+            ) from exc
+        if (
+            not math.isfinite(width)
+            or not math.isfinite(height)
+            or not width.is_integer()
+            or not height.is_integer()
+            or width <= 0
+            or height <= 0
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid inline mask source size: expected positive integers",
+            )
+
+        normalized_size = (int(width), int(height))
+        if normalized_size != image_size:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Invalid inline mask source size: expected {image_size[0]}x{image_size[1]}, "
+                    f"received {normalized_size[0]}x{normalized_size[1]}"
+                ),
+            )
+
     @classmethod
     def _apply_mask_effect_operation(
         cls,
@@ -646,7 +738,6 @@ class _EditOpsMixin:
     ) -> None:
         mask_data = str(operation.get("mask_data") or "").strip()
         mask_ref = str(operation.get("mask_ref") or "").strip()
-        alpha: Optional[Image.Image] = None
 
         if mask_ref:
             entry = cls._get_cached_mask_entry(mask_ref)
@@ -673,22 +764,49 @@ class _EditOpsMixin:
                 blur_radius=int(operation.get("blur_radius", 20) or 20),
             )
             return
-        elif mask_data:
-            mask_bytes, _ = cls._decode_operation_mask_header(mask_data)
-            mask_image = Image.open(BytesIO(mask_bytes)).convert("RGBA")
-            mask_pixels = mask_image.width * mask_image.height
-            if mask_pixels > _svc().MAX_INLINE_OPERATION_MASK_PIXELS:
-                raise HTTPException(
-                    status_code=413,
-                    detail="Inline edit mask is too large. Use cached mask refs for large masks.",
-                )
-            alpha = mask_image.getchannel("A") if "A" in mask_image.getbands() else mask_image.convert("L")
-            if mask_image.size != image.size:
-                alpha = alpha.resize(image.size, Image.Resampling.LANCZOS)
-
-        if alpha is None:
+        if not mask_data:
             return
 
+        mask_bytes, _ = cls._decode_operation_mask_header(mask_data)
+        with Image.open(BytesIO(mask_bytes)) as mask_source:
+            mask_image = mask_source.convert("RGBA")
+        mask_pixels = mask_image.width * mask_image.height
+        if mask_pixels > _svc().MAX_INLINE_OPERATION_MASK_PIXELS:
+            raise HTTPException(
+                status_code=413,
+                detail="Inline edit mask is too large. Use cached mask refs for large masks.",
+            )
+        alpha = mask_image.getchannel("A")
+
+        raw_bounds = operation.get("mask_bounds")
+        has_bounded_crop = raw_bounds is not None and raw_bounds != []
+        if has_bounded_crop:
+            bounds = cls._normalize_inline_mask_bounds(raw_bounds, image.size)
+            cls._validate_inline_mask_source_size(operation, image.size)
+            expected_size = (bounds[2] - bounds[0], bounds[3] - bounds[1])
+            if alpha.size != expected_size:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Invalid inline mask crop size: expected {expected_size[0]}x{expected_size[1]}, "
+                        f"received {alpha.width}x{alpha.height}"
+                    ),
+                )
+            if alpha.getbbox() is None:
+                return
+            cls._apply_geometry_mask_crop(
+                image,
+                original_image,
+                alpha,
+                (bounds[0], bounds[1]),
+                operation,
+            )
+            return
+
+        if alpha.getbbox() is None:
+            return
+        if mask_image.size != image.size:
+            alpha = alpha.resize(image.size, Image.Resampling.LANCZOS)
         cls._apply_mask_style(
             image,
             original_image,

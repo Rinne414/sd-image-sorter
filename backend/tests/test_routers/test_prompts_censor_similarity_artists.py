@@ -657,6 +657,87 @@ class TestCensorRouterValidation:
             assert rgba.getpixel((16, 16))[:3] == (0, 0, 0)
             assert rgba.getpixel((2, 2))[:3] == (255, 255, 255)
 
+    def test_save_operations_applies_bounded_inline_mask_crop(self, test_client, tmp_path):
+        from services.censor_service import CensorService
+
+        image_path = tmp_path / "inline-mask-source.png"
+        Image.new("RGB", (32, 32), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+        mask_image = Image.new("L", (32, 32), 0)
+        ImageDraw.Draw(mask_image).rectangle([8, 9, 13, 15], fill=255)
+        payload = CensorService._build_mask_payload(mask_image)
+
+        response = test_client.post(
+            "/api/censor/save-operations",
+            json={
+                "original_image_id": image_id,
+                "operations": [
+                    {
+                        "kind": "mask_effect",
+                        "style": "black_bar",
+                        "mask_data": payload["mask"],
+                        "mask_bounds": payload["mask_bounds"],
+                        "mask_image_width": payload["image_width"],
+                        "mask_image_height": payload["image_height"],
+                    }
+                ],
+                "filename": "inline-mask-output.png",
+                "output_folder": str(tmp_path / "out"),
+                "metadata_option": "strip",
+                "output_format": "png",
+            },
+        )
+
+        assert response.status_code == 200
+        with Image.open(Path(response.json()["output_path"])) as result:
+            rgba = result.convert("RGBA")
+            assert rgba.getpixel((10, 12))[:3] == (0, 0, 0)
+            assert rgba.getpixel((2, 2))[:3] == (255, 255, 255)
+
+    def test_save_operations_rejects_mismatched_bounded_inline_mask(self, test_client, tmp_path):
+        image_path = tmp_path / "mismatched-inline-source.png"
+        Image.new("RGB", (32, 32), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+        rgba_mask = Image.new("RGBA", (5, 5), (255, 255, 255, 255))
+        buffer = io.BytesIO()
+        rgba_mask.save(buffer, format="PNG")
+        mask_data = f"data:image/png;base64,{base64.b64encode(buffer.getvalue()).decode('ascii')}"
+        output_folder = tmp_path / "out"
+
+        response = test_client.post(
+            "/api/censor/save-operations",
+            json={
+                "original_image_id": image_id,
+                "operations": [
+                    {
+                        "kind": "mask_effect",
+                        "style": "black_bar",
+                        "mask_data": mask_data,
+                        "mask_bounds": [8, 8, 16, 16],
+                        "mask_image_width": 32,
+                        "mask_image_height": 32,
+                    }
+                ],
+                "filename": "must-not-exist.png",
+                "output_folder": str(output_folder),
+                "metadata_option": "strip",
+                "output_format": "png",
+            },
+        )
+
+        assert response.status_code == 400
+        assert "inline mask" in response.text.lower()
+        remaining_outputs = list(output_folder.glob("*")) if output_folder.exists() else []
+        assert remaining_outputs == []
+
     def test_save_operations_applies_box_geometry_effect(self, test_client, tmp_path):
         image_path = tmp_path / "geometry-source.png"
         Image.new("RGB", (32, 32), color="white").save(image_path)

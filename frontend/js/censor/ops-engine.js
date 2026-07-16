@@ -478,11 +478,51 @@ async function applyMaskOperationToCanvas(canvas, originalImage, operation, scal
     if (!(canvas instanceof HTMLCanvasElement)) return;
     const maskCanvas = createWorkingCanvas(canvas.width, canvas.height);
     const maskCtx = maskCanvas.getContext('2d');
-    const maskBounds = operation?.mask_data
-        ? null
-        : getMaskOperationCanvasBounds(operation, scaleX, scaleY, canvas);
+    const rawMaskBounds = operation?.mask_bounds;
+    const hasMaskBounds = rawMaskBounds !== null
+        && rawMaskBounds !== undefined
+        && (!Array.isArray(rawMaskBounds) || rawMaskBounds.length > 0);
+    const maskBounds = getMaskOperationCanvasBounds(operation, scaleX, scaleY, canvas);
+    if (operation?.mask_data && hasMaskBounds && !maskBounds) {
+        throw new Error('Invalid inline mask bounds');
+    }
     const maskImage = await loadMaskImageForOperation(operation, maskBounds);
     if (!maskImage) return;
+
+    if (operation?.mask_data && maskBounds) {
+        const coordinates = rawMaskBounds.map((value) => Number(value));
+        const [x1, y1, x2, y2] = coordinates;
+        const sourceWidth = Number(operation.mask_image_width || 0);
+        const sourceHeight = Number(operation.mask_image_height || 0);
+        const intrinsicWidth = maskImage.naturalWidth || maskImage.width;
+        const intrinsicHeight = maskImage.naturalHeight || maskImage.height;
+        const expectedSourceWidth = canvas.width / scaleX;
+        const expectedSourceHeight = canvas.height / scaleY;
+        const validCoordinates = coordinates.every((value) => Number.isInteger(value))
+            && x1 >= 0
+            && y1 >= 0
+            && x2 > x1
+            && y2 > y1;
+        const validSourceSize = (sourceWidth === 0 && sourceHeight === 0)
+            || (
+                Number.isInteger(sourceWidth)
+                && Number.isInteger(sourceHeight)
+                && sourceWidth > 0
+                && sourceHeight > 0
+                && x2 <= sourceWidth
+                && y2 <= sourceHeight
+                && Math.abs(sourceWidth - expectedSourceWidth) < 1e-6
+                && Math.abs(sourceHeight - expectedSourceHeight) < 1e-6
+            );
+        if (
+            !validCoordinates
+            || !validSourceSize
+            || intrinsicWidth !== x2 - x1
+            || intrinsicHeight !== y2 - y1
+        ) {
+            throw new Error('Invalid inline mask crop dimensions');
+        }
+    }
 
     if (maskBounds) {
         maskCtx.drawImage(maskImage, maskBounds.x, maskBounds.y, maskBounds.width, maskBounds.height);
@@ -700,6 +740,8 @@ function createMaskEffectOperation(maskSource) {
     }
     if (maskSource?.mask_ref) {
         operation.mask_ref = String(maskSource.mask_ref);
+    }
+    if (operation.mask_data || operation.mask_ref) {
         if (Array.isArray(maskSource?.mask_bounds) && maskSource.mask_bounds.length === 4) {
             operation.mask_bounds = cloneNumberArray(maskSource.mask_bounds);
         }

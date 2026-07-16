@@ -50,7 +50,7 @@ class _MaskCacheMixin:
         if normalized.getbbox() is None:
             # Return 1x1 transparent PNG for empty masks instead of None
             buf = BytesIO()
-            Image.new("L", (1, 1), 0).save(buf, format="PNG")
+            Image.new("RGBA", (1, 1), (255, 255, 255, 0)).save(buf, format="PNG")
             return f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}"
 
         rgba_mask = Image.new("RGBA", normalized.size, (255, 255, 255, 0))
@@ -194,19 +194,18 @@ class _MaskCacheMixin:
         }
         bbox = normalized.getbbox()
         if bbox is None:
-            payload["mask"] = cls._encode_mask_image_as_data_url(normalized)
             return payload
 
         payload["mask_bounds"] = [int(value) for value in bbox]
         if normalized.width * normalized.height <= _svc().MASK_INLINE_DATA_PIXEL_THRESHOLD:
-            payload["mask"] = cls._encode_mask_image_as_data_url(normalized)
+            payload["mask"] = cls._encode_mask_image_as_data_url(normalized.crop(bbox))
             return payload
 
         cached = cls._cache_mask_image(normalized)
         if cached:
             payload.update(cached)
         else:
-            payload["mask"] = cls._encode_mask_image_as_data_url(normalized)
+            payload["mask"] = cls._encode_mask_image_as_data_url(normalized.crop(bbox))
         return payload
 
     @staticmethod

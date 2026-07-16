@@ -18,8 +18,8 @@ import { expect, test, type Page, type Route } from '../fixtures/click-ledger'
 
 test.describe.configure({ mode: 'serial' })
 
-// 1x1 fully-OPAQUE-white PNG → normalizeMaskDataUrl keeps it a solid mask that
-// covers the whole canvas when scaled (the combined_mask path). NOTE: the
+// 1x1 fully-OPAQUE-white PNG → normalizeMaskDataUrl keeps it a solid mask. A
+// legacy operation without mask_bounds covers the whole canvas when scaled. NOTE: the
 // widely copy-pasted "TINY_PNG" constant from mask-editor.spec.ts is actually
 // a 1x1 semi-transparent RED pixel (255,0,0,127) — do not reuse it for masks.
 const TINY_PNG_BASE64 =
@@ -424,6 +424,47 @@ test('precise shape: combined_mask drives a mask bake (not boxes)', async ({ pag
   // The all-white combined mask covers the WHOLE image — including pixels far
   // outside the detection box, which a box bake would never touch.
   await expect.poll(() => isPixelBlack(page, 2, 60)).toBe(true)
+})
+
+test('bounded inline combined_mask keeps crop bounds through operation replay', async ({ page }) => {
+  await stubCensorBackend(page)
+  const detectCalls = await stubDetect(
+    page,
+    [
+      {
+        box: [8, 9, 9, 10],
+        polygon: [[8, 9], [9, 9], [9, 10], [8, 10]],
+        label: 'exposed_breasts',
+        confidence: 0.9,
+        source: 'legacy',
+      },
+    ],
+    {
+      combined_mask: WHITE_PNG_DATA_URL,
+      combined_mask_bounds: [8, 9, 9, 10],
+      image_width: 64,
+      image_height: 64,
+    }
+  )
+  await seedCensorQueue(page)
+  await page.selectOption('#censor-style', 'black_bar')
+
+  const operation = await page.evaluate((mask) => {
+    return (window as any).createMaskEffectOperation({
+      mask,
+      mask_bounds: [8, 9, 9, 10],
+      image_width: 64,
+      image_height: 64,
+    })
+  }, WHITE_PNG_DATA_URL)
+  expect(operation.mask_bounds).toEqual([8, 9, 9, 10])
+  expect(operation.mask_image_width).toBe(64)
+  expect(operation.mask_image_height).toBe(64)
+
+  await page.locator('#btn-auto-detect-current').click()
+  await expect.poll(() => detectCalls.length).toBe(1)
+  await expect.poll(() => isPixelBlack(page, 8, 9)).toBe(true)
+  await expect.poll(() => isPixelBlack(page, 2, 60)).toBe(false)
 })
 
 test('review conveyor: detect → checklist → exclude one → approve bakes and advances', async ({ page }) => {

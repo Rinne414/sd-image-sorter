@@ -22,6 +22,7 @@ import base64
 import os
 import sys
 import types
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -325,6 +326,13 @@ class TestMaskCacheClassState:
         assert payload["mask"].startswith("data:image/png;base64,")
         assert payload["mask_ref"] is None
         assert payload["mask_bounds"] == [4, 4, 21, 21]
+        assert payload["image_width"] == 32
+        assert payload["image_height"] == 32
+
+        encoded = payload["mask"].split(",", 1)[1]
+        with Image.open(BytesIO(base64.b64decode(encoded))) as inline_mask:
+            assert inline_mask.size == (17, 17)
+            assert inline_mask.convert("RGBA").getchannel("A").getbbox() == (0, 0, 17, 17)
 
     def test_build_payload_caches_large_mask(self, isolated_cache, monkeypatch):
         monkeypatch.setattr(cs, "MASK_INLINE_DATA_PIXEL_THRESHOLD", 1)
@@ -332,10 +340,25 @@ class TestMaskCacheClassState:
         assert payload["mask"] is None
         assert payload["mask_ref"]
 
+    def test_build_payload_returns_explicit_noop_for_empty_mask(self, isolated_cache):
+        payload = CensorService._build_mask_payload(Image.new("L", (32, 24), 0))
+
+        assert payload == {
+            "mask": None,
+            "mask_ref": None,
+            "mask_bounds": None,
+            "image_width": 32,
+            "image_height": 24,
+        }
+
     def test_encode_empty_mask_returns_transparent_pixel(self):
         # An empty mask yields a 1x1 transparent PNG, never None.
         url = CensorService._encode_mask_image_as_data_url(Image.new("L", (8, 8), 0))
         assert url.startswith("data:image/png;base64,")
+        encoded = url.split(",", 1)[1]
+        with Image.open(BytesIO(base64.b64decode(encoded))) as empty_mask:
+            assert empty_mask.size == (1, 1)
+            assert empty_mask.convert("RGBA").getpixel((0, 0))[3] == 0
 
 
 class TestEditOperationBudget:
@@ -371,6 +394,200 @@ class TestEditOperationBudget:
         with pytest.raises(HTTPException) as exc:
             CensorService._validate_edit_operation_budget(ops, image_size=(10, 10))
         assert exc.value.status_code == 413
+
+
+def _encode_inline_mask_data_url(alpha: Image.Image) -> str:
+    rgba = Image.new("RGBA", alpha.size, (255, 255, 255, 0))
+    rgba.putalpha(alpha.convert("L"))
+    buffer = BytesIO()
+    rgba.save(buffer, format="PNG")
+    return f"data:image/png;base64,{base64.b64encode(buffer.getvalue()).decode('ascii')}"
+
+
+def _bounded_inline_mask_operation(
+    alpha: Image.Image,
+    bounds: list[int],
+    image_size: tuple[int, int],
+    style: str,
+) -> dict[str, object]:
+    return {
+        "kind": "mask_effect",
+        "style": style,
+        "block_size": 7,
+        "blur_radius": 4,
+        "mask_data": _encode_inline_mask_data_url(alpha),
+        "mask_bounds": bounds,
+        "mask_image_width": image_size[0],
+        "mask_image_height": image_size[1],
+    }
+
+
+def _patterned_rgba(size: tuple[int, int], phase: int) -> Image.Image:
+    image = Image.new("RGBA", size)
+    pixels = image.load()
+    for y in range(size[1]):
+        for x in range(size[0]):
+            pixels[x, y] = (
+                (x * 37 + y * 11 + phase) % 256,
+                (x * 13 + y * 41 + phase * 3) % 256,
+                (x * 29 + y * 17 + phase * 7) % 256,
+                255,
+            )
+    return image
+
+
+class TestCropLocalInlineMasks:
+    """Inline mask crops must stay bounded without changing rendered pixels."""
+
+    def test_bounded_inline_mask_never_resizes_to_canvas(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        image_size = (96, 64)
+        original = _patterned_rgba(image_size, 19)
+        working = original.copy()
+        alpha = Image.new("L", (7, 5), 255)
+        resize_targets: list[tuple[int, int]] = []
+        real_resize = Image.Image.resize
+
+        def tracked_resize(
+            source: Image.Image,
+            size: tuple[int, int],
+            *args: object,
+            **kwargs: object,
+        ) -> Image.Image:
+            resize_targets.append(size)
+            return real_resize(source, size, *args, **kwargs)
+
+        monkeypatch.setattr(Image.Image, "resize", tracked_resize)
+        CensorService._apply_mask_effect_operation(
+            working,
+            original,
+            _bounded_inline_mask_operation(alpha, [41, 27, 48, 32], image_size, "black_bar"),
+        )
+
+        assert image_size not in resize_targets
+        assert working.getpixel((44, 29)) == (0, 0, 0, 255)
+        assert working.getpixel((4, 4)) == original.getpixel((4, 4))
+
+    def test_empty_legacy_inline_mask_returns_before_resize_or_effect(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        image_size = (96, 64)
+        original = _patterned_rgba(image_size, 23)
+        working = original.copy()
+        unchanged = working.tobytes()
+        empty_mask_data = CensorService._encode_mask_image_as_data_url(
+            Image.new("L", (1, 1), 0)
+        )
+
+        def unexpected_resize(*_args: object, **_kwargs: object) -> Image.Image:
+            raise AssertionError("empty inline mask must not resize")
+
+        def unexpected_effect(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError("empty inline mask must not invoke an effect")
+
+        monkeypatch.setattr(Image.Image, "resize", unexpected_resize)
+        monkeypatch.setattr(CensorService, "_apply_mask_style", unexpected_effect)
+        CensorService._apply_mask_effect_operation(
+            working,
+            original,
+            {
+                "kind": "mask_effect",
+                "style": "mosaic",
+                "mask_data": empty_mask_data,
+            },
+        )
+
+        assert working.tobytes() == unchanged
+
+    @pytest.mark.parametrize("style", ["mosaic", "blur", "black_bar", "white_bar"])
+    def test_bounded_inline_mask_matches_full_canvas_reference(self, style: str) -> None:
+        image_size = (128, 80)
+        bounds = [43, 21, 68, 42]
+        alpha = Image.new("L", (25, 21), 0)
+        ImageDraw.Draw(alpha).ellipse([1, 2, 23, 19], fill=255)
+        original = _patterned_rgba(image_size, 31)
+        expected = _patterned_rgba(image_size, 79)
+        actual = expected.copy()
+        full_alpha = Image.new("L", image_size, 0)
+        full_alpha.paste(alpha, (bounds[0], bounds[1]))
+
+        CensorService._apply_mask_style(
+            expected,
+            original,
+            full_alpha,
+            style=style,
+            block_size=7,
+            blur_radius=4,
+        )
+        CensorService._apply_mask_effect_operation(
+            actual,
+            original,
+            _bounded_inline_mask_operation(alpha, bounds, image_size, style),
+        )
+
+        assert actual.tobytes() == expected.tobytes()
+
+    def test_legacy_inline_mask_without_bounds_keeps_full_canvas_scaling(self) -> None:
+        image_size = (64, 48)
+        alpha = Image.new("L", (4, 3), 0)
+        ImageDraw.Draw(alpha).rectangle([1, 1, 3, 2], fill=255)
+        original = _patterned_rgba(image_size, 37)
+        expected = original.copy()
+        actual = original.copy()
+        scaled_alpha = alpha.resize(image_size, Image.Resampling.LANCZOS)
+
+        CensorService._apply_mask_style(
+            expected,
+            original,
+            scaled_alpha,
+            style="black_bar",
+            block_size=7,
+            blur_radius=4,
+        )
+        CensorService._apply_mask_effect_operation(
+            actual,
+            original,
+            {
+                "kind": "mask_effect",
+                "style": "black_bar",
+                "block_size": 7,
+                "blur_radius": 4,
+                "mask_data": _encode_inline_mask_data_url(alpha),
+            },
+        )
+
+        assert actual.tobytes() == expected.tobytes()
+
+    @pytest.mark.parametrize(
+        ("bounds", "alpha_size", "source_size"),
+        [
+            ([12, 10, 8, 15], (4, 5), (64, 48)),
+            ([12, 10, 18, 16], (5, 6), (64, 48)),
+            ([12, 10, 17, 16], (5, 6), (63, 48)),
+        ],
+    )
+    def test_malformed_bounded_inline_mask_fails_without_mutation(
+        self,
+        bounds: list[int],
+        alpha_size: tuple[int, int],
+        source_size: tuple[int, int],
+    ) -> None:
+        image_size = (64, 48)
+        original = _patterned_rgba(image_size, 41)
+        working = original.copy()
+        unchanged = working.tobytes()
+        alpha = Image.new("L", alpha_size, 255)
+        operation = _bounded_inline_mask_operation(alpha, bounds, source_size, "black_bar")
+
+        with pytest.raises(HTTPException) as exc:
+            CensorService._apply_mask_effect_operation(working, original, operation)
+
+        assert exc.value.status_code == 400
+        assert "inline mask" in str(exc.value.detail).lower()
+        assert working.tobytes() == unchanged
 
 
 def _apply_full_canvas_stroke_reference(
