@@ -536,12 +536,20 @@ class SimilarityIndex(_IndexCoreMixin, _VectorCacheMixin, _TopKMixin):
 
 
 # Singleton
-_index = None
+_index: Optional[SimilarityIndex] = None
+_index_lock = threading.Lock()
 
 
 def get_similarity_index(db_module=None) -> SimilarityIndex:
     """Get the singleton similarity index."""
     global _index
-    if _index is None:
-        _index = SimilarityIndex(db_module=db_module)
-    return _index
+    current_index = _index
+    if current_index is not None:
+        return current_index
+
+    with _index_lock:
+        current_index = _index
+        if current_index is None:
+            current_index = SimilarityIndex(db_module=db_module)
+            _index = current_index
+        return current_index

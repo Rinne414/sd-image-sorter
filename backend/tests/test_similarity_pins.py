@@ -25,10 +25,12 @@ import contextlib
 import os
 import sqlite3
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Sequence
 
 import numpy as np
 import pytest
+from fastapi import BackgroundTasks
 
 import similarity as similarity_module
 import similarity_ann
@@ -246,6 +248,114 @@ def test_embed_batch_passes_similarity_file_as_backend_anchor(tmp_path, monkeypa
 # ===========================================================================
 # Group D — lazy singleton families + shared lock (intel c)
 # ===========================================================================
+
+
+def _install_blocking_index_constructor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[threading.Event, threading.Event, threading.Event, dict[str, int]]:
+    first_constructing = threading.Event()
+    duplicate_constructed = threading.Event()
+    release_first = threading.Event()
+    count_lock = threading.Lock()
+    counts = {"constructed": 0}
+
+    class BlockingIndex:
+        def __init__(self, db_module):
+            self.db = db_module
+            with count_lock:
+                counts["constructed"] += 1
+                construction_number = counts["constructed"]
+            if construction_number == 1:
+                first_constructing.set()
+                if not release_first.wait(timeout=3):
+                    raise RuntimeError("Timed out waiting to release first similarity index")
+            else:
+                duplicate_constructed.set()
+
+        def get_progress(self):
+            return {"running": False}
+
+        def embed_batch(self, image_ids):
+            return image_ids
+
+    monkeypatch.setattr(similarity_module, "_index", None)
+    monkeypatch.setattr(similarity_module, "SimilarityIndex", BlockingIndex)
+    return first_constructing, duplicate_constructed, release_first, counts
+
+
+def test_concurrent_get_similarity_index_constructs_once(monkeypatch):
+    first_constructing, duplicate_constructed, release_first, counts = (
+        _install_blocking_index_constructor(monkeypatch)
+    )
+    database_sentinel = object()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first_future = executor.submit(
+            similarity_module.get_similarity_index,
+            database_sentinel,
+        )
+        try:
+            assert first_constructing.wait(timeout=1)
+            second_future = executor.submit(
+                similarity_module.get_similarity_index,
+                database_sentinel,
+            )
+            duplicate_observed = duplicate_constructed.wait(timeout=0.5)
+        finally:
+            release_first.set()
+
+        first = first_future.result(timeout=3)
+        second = second_future.result(timeout=3)
+
+    assert duplicate_observed is False
+    assert first is second
+    assert counts == {"constructed": 1}
+
+
+def test_concurrent_embed_starts_schedule_the_canonical_index(monkeypatch):
+    from services import similarity_service as similarity_service_module
+
+    first_constructing, duplicate_constructed, release_first, counts = (
+        _install_blocking_index_constructor(monkeypatch)
+    )
+    monkeypatch.setattr(
+        similarity_service_module,
+        "get_similarity_index",
+        similarity_module.get_similarity_index,
+    )
+    monkeypatch.setattr(
+        similarity_service_module,
+        "ensure_clip_model_ready",
+        lambda: "fastembed:in-memory",
+    )
+
+    service = similarity_service_module.SimilarityService()
+    first_tasks = BackgroundTasks()
+    second_tasks = BackgroundTasks()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first_future = executor.submit(service.embed_images, first_tasks, [1])
+        try:
+            assert first_constructing.wait(timeout=1)
+            second_future = executor.submit(service.embed_images, second_tasks, [2])
+            duplicate_observed = duplicate_constructed.wait(timeout=0.5)
+        finally:
+            release_first.set()
+
+        first_result = first_future.result(timeout=3)
+        second_result = second_future.result(timeout=3)
+
+    canonical_index = similarity_module.get_similarity_index()
+    scheduled_indexes = [
+        first_tasks.tasks[0].func.__self__,
+        second_tasks.tasks[0].func.__self__,
+    ]
+
+    assert first_result["status"] == "started"
+    assert second_result["status"] == "started"
+    assert duplicate_observed is False
+    assert scheduled_indexes == [canonical_index, canonical_index]
+    assert counts == {"constructed": 1}
 
 
 def test_get_similarity_index_is_a_singleton(monkeypatch):
