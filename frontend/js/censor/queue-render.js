@@ -5,6 +5,39 @@
  * classic-script global lexical scoping keeps them single instances across parts.
  * Load order is pinned in index.html - see censor/state.js for the full note.
  */
+function createCensorBatchOutcomeBadge(item, layoutClass) {
+    if (typeof layoutClass !== 'string' || !layoutClass.trim()) {
+        throw new TypeError('A non-empty layout class is required for a censor batch outcome badge.');
+    }
+
+    const presentation = getCensorBatchOutcomePresentation(item);
+    if (!presentation) return null;
+
+    const badge = document.createElement(presentation.isFailure ? 'button' : 'span');
+    badge.className = `censor-batch-outcome-badge ${layoutClass} is-${presentation.code}`;
+    badge.dataset.testid = 'censor-batch-outcome-badge';
+    badge.dataset.imageId = String(item.id);
+    badge.dataset.status = presentation.code;
+    badge.textContent = presentation.label;
+
+    if (presentation.isFailure) {
+        badge.type = 'button';
+        badge.setAttribute('aria-label', presentation.failureAriaLabel);
+        badge.title = presentation.failureTooltip;
+        badge.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            showCensorBatchFailureReason(item);
+        });
+        badge.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.stopPropagation();
+        });
+    }
+
+    return badge;
+}
+
 function renderQueue() {
     // Every queue mutation funnels through a re-render, so this is the single
     // chokepoint that keeps the persisted copy in sync (QA P3-11).
@@ -47,7 +80,9 @@ function renderQueue() {
     // Remove thumbnails not in queue anymore
     existingThumbs.forEach(thumb => {
         if (!queueIds.has(thumb.dataset.id)) {
-            thumb.remove();
+            const shell = thumb.closest('.queue-thumb-shell-v2');
+            if (shell) shell.remove();
+            else thumb.remove();
         }
     });
 
@@ -59,9 +94,13 @@ function renderQueue() {
     CensorState.queue.forEach((item, index) => {
         const itemIdStr = item.id.toString();
         let img = list.querySelector(`.queue-thumb-v2[data-id="${itemIdStr}"]`);
+        let shell = img?.closest('.queue-thumb-shell-v2') || null;
 
         if (!img) {
             // Create new thumbnail
+            shell = document.createElement('div');
+            shell.className = 'queue-thumb-shell-v2';
+            shell.dataset.imageId = itemIdStr;
             img = document.createElement('img');
             img.className = 'queue-thumb-v2';
             img.draggable = true;
@@ -122,11 +161,18 @@ function renderQueue() {
             img.addEventListener('dragenter', (e) => e.target.classList.add('drag-over'));
             img.addEventListener('dragleave', (e) => e.target.classList.remove('drag-over'));
 
-            list.appendChild(img);
+            shell.appendChild(img);
+            list.appendChild(shell);
+        } else if (!shell) {
+            shell = document.createElement('div');
+            shell.className = 'queue-thumb-shell-v2';
+            shell.dataset.imageId = itemIdStr;
+            img.replaceWith(shell);
+            shell.appendChild(img);
         }
 
-        // Always append to maintain order (appendChild moves existing node to end)
-        list.appendChild(img);
+        // Always append to maintain order (appendChild moves existing node to end).
+        list.appendChild(shell);
 
         // Update properties (always update these - they may have changed)
         img.dataset.index = index;
@@ -152,6 +198,10 @@ function renderQueue() {
         img.classList.toggle('batch-refined', batchRefined && !isProcessed);
         img.setAttribute('aria-selected', String(isSelected));
         img.setAttribute('aria-pressed', String(isSelected));
+
+        shell.querySelector('.censor-batch-outcome-main')?.remove();
+        const outcomeBadge = createCensorBatchOutcomeBadge(item, 'censor-batch-outcome-main');
+        if (outcomeBadge) shell.appendChild(outcomeBadge);
     });
 
     renderTokenQueueLoadMoreControl(list);

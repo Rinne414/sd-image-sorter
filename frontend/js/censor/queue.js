@@ -353,6 +353,79 @@ function renderTokenQueueLoadMoreControl(list) {
 
 // ============== Queue Logic ==============
 
+const CENSOR_BATCH_OUTCOME_LABELS = Object.freeze({
+    saved: Object.freeze({ key: 'censor.batchOutcomeSaved', fallback: 'Saved' }),
+    skipped: Object.freeze({ key: 'censor.batchOutcomeSkipped', fallback: 'Skipped' }),
+    failed: Object.freeze({ key: 'censor.batchOutcomeFailed', fallback: 'Failed' }),
+    refined: Object.freeze({ key: 'censor.batchOutcomeRefined', fallback: 'Refined' }),
+    censored: Object.freeze({ key: 'censor.batchOutcomeCensored', fallback: 'Censored' }),
+    'no-match': Object.freeze({ key: 'censor.batchOutcomeNoMatch', fallback: 'No match' }),
+});
+
+function getCensorBatchOutcome(item) {
+    const status = typeof item?.batchStatus === 'string' ? item.batchStatus : '';
+    if (status === 'saved' || status === 'skipped' || status === 'failed' || status === 'refined') {
+        return status;
+    }
+    if (status === 'done' || status === 'detected') {
+        return Number(item.batchRegionCount) > 0 ? 'censored' : 'no-match';
+    }
+    return null;
+}
+
+function getCensorBatchOutcomePresentation(item) {
+    const code = getCensorBatchOutcome(item);
+    if (!code) return null;
+
+    const definition = CENSOR_BATCH_OUTCOME_LABELS[code];
+    const label = censorT(definition.key, null, definition.fallback);
+    if (code !== 'failed') {
+        return Object.freeze({
+            code,
+            label,
+            isFailure: false,
+            failureReason: '',
+            failureAriaLabel: '',
+            failureTooltip: '',
+        });
+    }
+
+    const filename = String(item?.outputFilename || item?.originalFilename || item?.id || '').trim();
+    const failureReason = String(item?.batchError || '').trim();
+    return Object.freeze({
+        code,
+        label,
+        isFailure: true,
+        failureReason,
+        failureAriaLabel: censorT(
+            'censor.batchOutcomeFailureAria',
+            { filename },
+            'Show failure reason for {filename}'
+        ),
+        failureTooltip: censorT(
+            'censor.batchOutcomeFailureTooltip',
+            { reason: failureReason },
+            'Failure reason: {reason}'
+        ),
+    });
+}
+
+function showCensorBatchFailureReason(item) {
+    if (getCensorBatchOutcome(item) !== 'failed') {
+        throw new TypeError('A censor batch failure reason can only be shown for an item with failed status.');
+    }
+
+    const failureReason = String(item?.batchError || '').trim();
+    if (!failureReason) {
+        throw new Error(`Censor queue item ${item?.id || 'unknown'} has failed status without a batchError.`);
+    }
+    if (typeof window.App?.showToast !== 'function') {
+        throw new Error('Cannot show the censor batch failure reason because App.showToast is unavailable.');
+    }
+
+    window.App.showToast(failureReason, 'error');
+}
+
 function _resetBatchStatus(items = CensorState.queue) {
     items.forEach((item) => {
         delete item.batchStatus;

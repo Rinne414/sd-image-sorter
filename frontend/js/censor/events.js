@@ -414,7 +414,8 @@ function bindEvents() {
         const filterText = String(e.target.value || '').toLowerCase().trim();
         document.querySelectorAll('.queue-thumb-v2').forEach(thumb => {
             const itemTitle = String(thumb.title || '').toLowerCase();
-            thumb.style.display = (!filterText || itemTitle.includes(filterText)) ? '' : 'none';
+            const queueItem = thumb.closest('.queue-thumb-shell-v2') || thumb;
+            queueItem.style.display = (!filterText || itemTitle.includes(filterText)) ? '' : 'none';
         });
     });
 

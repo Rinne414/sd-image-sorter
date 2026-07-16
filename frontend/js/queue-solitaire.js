@@ -1303,6 +1303,13 @@
             </div>`;
         }).join('');
 
+        container.querySelectorAll('.qs-thumb-wrap[data-id]').forEach((wrap) => {
+            const imageId = Number.parseInt(wrap.dataset.id, 10);
+            const item = getQueueItem(imageId);
+            const outcomeBadge = createCensorBatchOutcomeBadge(item, 'censor-batch-outcome-solitaire');
+            if (outcomeBadge) wrap.appendChild(outcomeBadge);
+        });
+
         // Bind events
         bindSectionEvents(container);
 

@@ -321,6 +321,67 @@ test('save-all wire format: /save-data payload, strip default, un-censored items
     await route.fulfill({ json: { status: 'ok', warnings: [] } })
   })
   await seedCensorQueue(page)
+  await expect(
+    page.locator('#censor-queue-list [data-testid="censor-batch-outcome-badge"]')
+  ).toHaveCount(0)
+
+  const outcomeMapping = await page.evaluate(() => {
+    const samples = [
+      { batchStatus: 'saved' },
+      { batchStatus: 'skipped' },
+      { batchStatus: 'failed', batchError: 'Exact failure' },
+      { batchStatus: 'refined' },
+      { batchStatus: 'done', batchRegionCount: 2 },
+      { batchStatus: 'done', batchRegionCount: 0 },
+      { batchStatus: 'detected', batchRegionCount: 1 },
+      { batchStatus: 'detected', batchRegionCount: 0 },
+      { isProcessed: true },
+    ]
+    return samples.map((sample) => {
+      const before = JSON.stringify(sample)
+      const outcome = (window as any).getCensorBatchOutcome(sample)
+      return { outcome, unchanged: JSON.stringify(sample) === before }
+    })
+  })
+  expect(outcomeMapping).toEqual([
+    { outcome: 'saved', unchanged: true },
+    { outcome: 'skipped', unchanged: true },
+    { outcome: 'failed', unchanged: true },
+    { outcome: 'refined', unchanged: true },
+    { outcome: 'censored', unchanged: true },
+    { outcome: 'no-match', unchanged: true },
+    { outcome: 'censored', unchanged: true },
+    { outcome: 'no-match', unchanged: true },
+    { outcome: null, unchanged: true },
+  ])
+
+  await page.evaluate(() => {
+    const queue = (window as any).__CENSOR_STATE__.queue
+    const renderCensorQueue = (window as any).renderQueue
+    queue[0].batchStatus = 'refined'
+    queue[1].batchStatus = 'done'
+    queue[1].batchRegionCount = 1
+    renderCensorQueue()
+  })
+  const refinedBadge = page.locator(
+    `#censor-queue-list [data-testid="censor-batch-outcome-badge"][data-image-id="${IMAGES[0].id}"][data-status="refined"]`
+  )
+  const censoredBadge = page.locator(
+    `#censor-queue-list [data-testid="censor-batch-outcome-badge"][data-image-id="${IMAGES[1].id}"][data-status="censored"]`
+  )
+  await expect(refinedBadge).toHaveText('Refined')
+  await expect(refinedBadge).not.toHaveAttribute('role', 'status')
+  await expect(censoredBadge).toHaveText('Censored')
+  await expect(censoredBadge).not.toHaveAttribute('role', 'status')
+  await page.evaluate(() => {
+    const resetBatchStatus = (window as any)._resetBatchStatus
+    const renderCensorQueue = (window as any).renderQueue
+    resetBatchStatus()
+    renderCensorQueue()
+  })
+  await expect(
+    page.locator('#censor-queue-list [data-testid="censor-batch-outcome-badge"]')
+  ).toHaveCount(0)
 
   // Attempt 1 — nothing censored yet. The never-fallback-to-uncensored
   // invariant: no request may leave the browser, and the toast says so.
@@ -365,6 +426,27 @@ test('save-all wire format: /save-data payload, strip default, un-censored items
   await expect(page.locator('#toast-container .toast', { hasText: 'skipped 1' }).first()).toBeVisible()
   expect((await itemState(page, IMAGES[0].id)).batchStatus).toBe('saved')
   expect((await itemState(page, IMAGES[1].id)).batchStatus).toBe('skipped')
+  const savedBadge = page.locator(
+    `#censor-queue-list [data-testid="censor-batch-outcome-badge"][data-image-id="${IMAGES[0].id}"][data-status="saved"]`
+  )
+  const skippedBadge = page.locator(
+    `#censor-queue-list [data-testid="censor-batch-outcome-badge"][data-image-id="${IMAGES[1].id}"][data-status="skipped"]`
+  )
+  await expect(savedBadge).toBeVisible()
+  await expect(savedBadge).toHaveText('Saved')
+  await expect(savedBadge).not.toHaveAttribute('role', 'status')
+  await expect(savedBadge).toHaveCSS('pointer-events', 'none')
+  await expect(skippedBadge).toBeVisible()
+  await expect(skippedBadge).toHaveText('Skipped')
+  await expect(skippedBadge).not.toHaveAttribute('role', 'status')
+
+  await page.locator('#btn-queue-filter').click()
+  await page.locator('#queue-filter-input').fill(IMAGES[0].filename)
+  await expect(savedBadge).toBeVisible()
+  await expect(skippedBadge).toBeHidden()
+  await expect(
+    page.locator(`#censor-queue-list .queue-thumb-shell-v2[data-image-id="${IMAGES[1].id}"]`)
+  ).toBeHidden()
   expect(await page.evaluate(() => localStorage.getItem('censor_output_folder'))).toBe(OUTPUT_FOLDER)
 })
 

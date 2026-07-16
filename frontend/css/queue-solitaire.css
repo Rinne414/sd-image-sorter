@@ -370,6 +370,14 @@
 .qs-thumb-dot.processed { background: #22c55e; box-shadow: 0 0 4px rgba(34, 197, 94, 0.5); }
 .qs-thumb-dot.detected { background: var(--accent-primary); box-shadow: 0 0 4px rgba(var(--accent-primary-rgb), 0.5); }
 
+.censor-batch-outcome-solitaire {
+    position: absolute;
+    right: 3px;
+    bottom: 3px;
+    z-index: 6;
+    max-width: 94px;
+}
+
 /* Hover preview popup */
 .qs-hover-preview {
     display: none;

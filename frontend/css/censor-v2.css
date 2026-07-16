@@ -273,6 +273,79 @@
     background: #000;
 }
 
+.queue-thumb-shell-v2 {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    aspect-ratio: 1;
+}
+
+.queue-thumb-shell-v2 .queue-thumb-v2 {
+    display: block;
+    height: 100%;
+}
+
+.censor-batch-outcome-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 18px;
+    padding: 2px 5px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+    background: rgba(8, 15, 24, 0.9);
+    color: #e2e8f0;
+    font: 700 9px/1.2 var(--font-sans);
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+}
+
+button.censor-batch-outcome-badge {
+    appearance: none;
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+button.censor-batch-outcome-badge:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+}
+
+.censor-batch-outcome-badge.is-saved,
+.censor-batch-outcome-badge.is-censored {
+    border-color: rgba(34, 197, 94, 0.75);
+    background: rgba(20, 83, 45, 0.92);
+    color: #dcfce7;
+}
+
+.censor-batch-outcome-badge.is-skipped,
+.censor-batch-outcome-badge.is-no-match {
+    border-color: rgba(148, 163, 184, 0.7);
+    background: rgba(51, 65, 85, 0.94);
+    color: #f1f5f9;
+}
+
+.censor-batch-outcome-badge.is-failed {
+    border-color: rgba(248, 113, 113, 0.9);
+    background: rgba(127, 29, 29, 0.96);
+    color: #fee2e2;
+}
+
+.censor-batch-outcome-badge.is-refined {
+    border-color: rgba(56, 189, 248, 0.8);
+    background: rgba(12, 74, 110, 0.94);
+    color: #e0f2fe;
+}
+
+.censor-batch-outcome-main {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    z-index: 4;
+    max-width: calc(100% - 8px);
+}
+
 .queue-thumb-v2:hover {
     transform: translateY(-2px) scale(1.02);
     border-color: rgba(var(--censor-accent-rgb), 0.4);

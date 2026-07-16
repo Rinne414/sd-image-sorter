@@ -252,10 +252,92 @@ test('detect all preserves item failures instead of reporting false success', as
   await expect(
     page.locator(`#censor-queue-list .queue-thumb-v2[data-id="${IMAGES[0].id}"]`)
   ).toHaveClass(/batch-error/)
+  const failedBadge = page.locator(
+    `#censor-queue-list [data-testid="censor-batch-outcome-badge"][data-image-id="${IMAGES[0].id}"][data-status="failed"]`
+  )
+  const noMatchBadge = page.locator(
+    `#censor-queue-list [data-testid="censor-batch-outcome-badge"][data-image-id="${IMAGES[1].id}"][data-status="no-match"]`
+  )
+  await expect(failedBadge).toBeVisible()
+  await expect(failedBadge).toHaveText('Failed')
+  await expect(failedBadge).toHaveAttribute('type', 'button')
+  await expect(failedBadge).toHaveAttribute('aria-label', `Show failure reason for ${IMAGES[0].filename}`)
+  await expect(failedBadge).toHaveCSS('pointer-events', 'auto')
+  await expect(noMatchBadge).toBeVisible()
+  await expect(noMatchBadge).toHaveText('No match')
+  await expect(noMatchBadge).not.toHaveAttribute('role', 'status')
   await expect(page.locator('#toast-container .toast.warning')).toContainText(
     'Detection: 1/2 processed · 1 failed'
   )
   await expect(page.locator('#toast-container')).not.toContainText('Detection complete: 2/2 images processed')
+
+  const exactFailureReason = await page.evaluate((imageId) => {
+    const item = (window as any).__CENSOR_STATE__.queue.find((entry: any) => entry.id === imageId)
+    return item.batchError
+  }, IMAGES[0].id)
+  expect(exactFailureReason).toBeTruthy()
+  await expect(failedBadge).toHaveAttribute('title', `Failure reason: ${exactFailureReason}`)
+  await failedBadge.click()
+  await expect(page.locator('#toast-container .toast.error .toast-message')).toHaveText(exactFailureReason)
+
+  await page.locator('#btn-open-queue-manager').click()
+  await expect(page.locator('#queue-solitaire.active')).toBeVisible()
+  const solitaireFailedBadge = page.locator(
+    `#qs-sections [data-testid="censor-batch-outcome-badge"][data-image-id="${IMAGES[0].id}"][data-status="failed"]`
+  )
+  const solitaireNoMatchBadge = page.locator(
+    `#qs-sections [data-testid="censor-batch-outcome-badge"][data-image-id="${IMAGES[1].id}"][data-status="no-match"]`
+  )
+  await expect(solitaireFailedBadge).toBeVisible()
+  await expect(solitaireFailedBadge).toHaveText('Failed')
+  await expect(solitaireFailedBadge).toHaveAttribute('type', 'button')
+  await expect(solitaireFailedBadge).toHaveCSS('pointer-events', 'auto')
+  const failureToasts = page.locator('#toast-container .toast.error .toast-message')
+  await expect(failureToasts).toHaveCount(0, { timeout: 10_000 })
+  await solitaireFailedBadge.focus()
+  await solitaireFailedBadge.press('Enter')
+  await expect(page.locator('#queue-solitaire.active')).toBeVisible()
+  await expect(failureToasts).toHaveCount(1)
+  await expect(failureToasts.last()).toHaveText(exactFailureReason)
+  await expect(solitaireNoMatchBadge).toBeVisible()
+  await expect(solitaireNoMatchBadge).toHaveText('No match')
+  await expect(solitaireNoMatchBadge).not.toHaveAttribute('role', 'status')
+  await expect(solitaireNoMatchBadge).toHaveCSS('pointer-events', 'none')
+  const solitaireBadgeLayout = await page.evaluate(() => {
+    return Array.from(document.querySelectorAll('#qs-sections [data-testid="censor-batch-outcome-badge"]'))
+      .map((element) => {
+        const badge = element as HTMLElement
+        const wrap = badge.closest('.qs-thumb-wrap') as HTMLElement
+        const badgeRect = badge.getBoundingClientRect()
+        const wrapRect = wrap.getBoundingClientRect()
+        return {
+          imageId: badge.dataset.imageId,
+          wrapWidth: wrapRect.width,
+          wrapHeight: wrapRect.height,
+          withinHorizontalBounds: badgeRect.left >= wrapRect.left && badgeRect.right <= wrapRect.right,
+          withinVerticalBounds: badgeRect.top >= wrapRect.top && badgeRect.bottom <= wrapRect.bottom,
+          textClipped: badge.scrollWidth > badge.clientWidth || badge.scrollHeight > badge.clientHeight,
+        }
+      })
+  })
+  expect(solitaireBadgeLayout).toEqual([
+    {
+      imageId: String(IMAGES[0].id),
+      wrapWidth: 100,
+      wrapHeight: 100,
+      withinHorizontalBounds: true,
+      withinVerticalBounds: true,
+      textClipped: false,
+    },
+    {
+      imageId: String(IMAGES[1].id),
+      wrapWidth: 100,
+      wrapHeight: 100,
+      withinHorizontalBounds: true,
+      withinVerticalBounds: true,
+      textClipped: false,
+    },
+  ])
 })
 
 test('box shape mode strips polygon/mask geometry from stored regions', async ({ page }) => {
