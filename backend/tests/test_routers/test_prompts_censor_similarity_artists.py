@@ -8,11 +8,13 @@ import base64
 import io
 import sys
 import tempfile
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
 import pytest
-from fastapi import BackgroundTasks
+from fastapi import BackgroundTasks, HTTPException
 from PIL import Image, ImageDraw
 
 # Add parent directories to path for imports
@@ -792,6 +794,300 @@ class TestCensorRouterValidation:
         data = response.json()
         detail = data.get("detail") or data.get("error") or data.get("message") or ""
         assert "Confirm overwrite" in detail
+
+    def test_concurrent_legacy_cold_start_loads_once_and_both_calls_succeed(
+        self,
+        test_db,
+        monkeypatch,
+        tmp_path,
+    ):
+        import censor as censor_module
+        from services import censor_service as censor_service_module
+        from services.censor_service import CensorDetectRequest, CensorService
+
+        image_path = tmp_path / "concurrent-censor.png"
+        Image.new("RGB", (32, 32), color="red").save(image_path)
+        image_id = test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+        model_path = str(tmp_path / "privacy.onnx")
+        call_barrier = threading.Barrier(2)
+        construction_barrier = threading.Barrier(2)
+        counts = {"constructed": 0, "loaded": 0}
+        counts_lock = threading.Lock()
+
+        class ConcurrentDetector:
+            def __init__(self, selected_model_path):
+                self.model_path = selected_model_path
+                self.session = None
+                with counts_lock:
+                    counts["constructed"] += 1
+                try:
+                    construction_barrier.wait(timeout=0.25)
+                except threading.BrokenBarrierError:
+                    assert counts["constructed"] == 1
+
+            def load(self):
+                with counts_lock:
+                    counts["loaded"] += 1
+                self.session = object()
+
+            def detect(self, _image_path, _threshold):
+                if self.session is None:
+                    raise RuntimeError("Model not loaded")
+                return []
+
+        monkeypatch.setattr(censor_module, "_detector", None)
+        monkeypatch.setattr(censor_module, "CensorDetector", ConcurrentDetector)
+        monkeypatch.setattr(
+            censor_service_module,
+            "get_default_legacy_model_path",
+            lambda: model_path,
+        )
+        service = CensorService()
+        request = CensorDetectRequest(image_id=image_id, model_type="legacy")
+
+        def detect_after_both_threads_start():
+            call_barrier.wait(timeout=1)
+            return service.detect(request)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(detect_after_both_threads_start) for _ in range(2)]
+            results = [future.result(timeout=3) for future in futures]
+
+        assert [result["status"] for result in results] == ["ok", "ok"]
+        assert counts == {"constructed": 1, "loaded": 1}
+
+    def test_failed_legacy_switch_preserves_previous_detector_and_next_call_retries(
+        self,
+        test_db,
+        monkeypatch,
+        tmp_path,
+    ):
+        import censor as censor_module
+        from services import censor_service as censor_service_module
+        from services.censor_service import CensorDetectRequest, CensorService
+
+        image_path = tmp_path / "retry-censor.png"
+        Image.new("RGB", (32, 32), color="green").save(image_path)
+        image_id = test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+        model_path = str(tmp_path / "retry.onnx")
+        counts = {"constructed": 0, "loaded": 0}
+
+        class PreviousDetector:
+            def __init__(self):
+                self.model_path = str(tmp_path / "previous.onnx")
+                self.session = object()
+
+        class RetryDetector:
+            def __init__(self, selected_model_path):
+                counts["constructed"] += 1
+                self.model_path = selected_model_path
+                self.session = None
+
+            def load(self):
+                counts["loaded"] += 1
+                if counts["loaded"] == 1:
+                    raise RuntimeError("Failed to load legacy test model")
+                self.session = object()
+
+            def detect(self, _image_path, _threshold):
+                if self.session is None:
+                    raise RuntimeError("Model not loaded")
+                return []
+
+        previous_detector = PreviousDetector()
+        monkeypatch.setattr(censor_module, "_detector", previous_detector)
+        monkeypatch.setattr(censor_module, "CensorDetector", RetryDetector)
+        monkeypatch.setattr(
+            censor_service_module,
+            "get_default_legacy_model_path",
+            lambda: model_path,
+        )
+        service = CensorService()
+        request = CensorDetectRequest(image_id=image_id, model_type="legacy")
+
+        with pytest.raises(HTTPException, match="Failed to load legacy test model"):
+            service.detect(request)
+
+        assert service._detector is None
+        assert censor_module._detector is previous_detector
+
+        result = service.detect(request)
+
+        assert result["status"] == "ok"
+        assert counts == {"constructed": 2, "loaded": 2}
+        assert censor_module._detector is not previous_detector
+        assert censor_module._detector.model_path == model_path
+
+    def test_concurrent_detector_switch_returns_each_requested_instance(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        import censor as censor_module
+
+        model_a = str(tmp_path / "return-window-a.onnx")
+        model_b = str(tmp_path / "return-window-b.onnx")
+
+        class ConfiguredDetector:
+            def __init__(self, selected_model_path):
+                self.model_path = selected_model_path
+                self.session = None
+
+            def load(self):
+                self.session = object()
+
+        class PublishWindowLock:
+            def __init__(self):
+                self._lock = threading.Lock()
+                self._state_lock = threading.Lock()
+                self._exit_count = 0
+                self.first_publish_exited = threading.Event()
+                self.second_publish_exited = threading.Event()
+
+            def __enter__(self):
+                if not self._lock.acquire(timeout=3):
+                    raise RuntimeError("Timed out acquiring detector test lock")
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                self._lock.release()
+                with self._state_lock:
+                    self._exit_count += 1
+                    exit_count = self._exit_count
+                if exit_count == 1:
+                    self.first_publish_exited.set()
+                    if not self.second_publish_exited.wait(timeout=3):
+                        raise RuntimeError("Timed out waiting for second detector publish")
+                elif exit_count == 2:
+                    self.second_publish_exited.set()
+                return False
+
+        publish_lock = PublishWindowLock()
+        monkeypatch.setattr(censor_module, "_detector", None)
+        monkeypatch.setattr(censor_module, "_detector_lock", publish_lock)
+        monkeypatch.setattr(censor_module, "CensorDetector", ConfiguredDetector)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first_future = executor.submit(censor_module.get_detector, model_a)
+            assert publish_lock.first_publish_exited.wait(timeout=1)
+            second_future = executor.submit(censor_module.get_detector, model_b)
+            first_detector = first_future.result(timeout=3)
+            second_detector = second_future.result(timeout=3)
+
+        assert first_detector.model_path == model_a
+        assert second_detector.model_path == model_b
+        assert first_detector is not second_detector
+
+    def test_concurrent_legacy_configuration_changes_use_the_requested_detector(
+        self,
+        test_db,
+        monkeypatch,
+        tmp_path,
+    ):
+        import censor as censor_module
+        from services.censor_service import CensorDetectRequest, CensorService
+
+        image_paths = []
+        image_ids = []
+        for name, color in (("config-a.png", "blue"), ("config-b.png", "yellow")):
+            image_path = tmp_path / name
+            Image.new("RGB", (32, 32), color=color).save(image_path)
+            image_paths.append(str(image_path))
+            image_ids.append(
+                test_db.add_image(
+                    path=str(image_path),
+                    filename=name,
+                    metadata_json="{}",
+                )
+            )
+
+        model_a = str(tmp_path / "model-a.onnx")
+        model_b = str(tmp_path / "model-b.onnx")
+        first_load_started = threading.Event()
+        release_first_load = threading.Event()
+        second_load_called = threading.Event()
+        release_second_load = threading.Event()
+        load_lock = threading.Lock()
+
+        class ConfiguredDetector:
+            def __init__(self, selected_model_path):
+                self.model_path = selected_model_path
+                self.session = None
+
+            def load(self):
+                if self.model_path == model_b:
+                    second_load_called.set()
+                with load_lock:
+                    if self.model_path == model_a:
+                        first_load_started.set()
+                        if not release_first_load.wait(timeout=3):
+                            raise RuntimeError("Timed out releasing model A load")
+                    elif not release_second_load.wait(timeout=3):
+                        raise RuntimeError("Timed out releasing model B load")
+                    self.session = object()
+
+            def detect(self, image_path, _threshold):
+                if self.session is None:
+                    raise RuntimeError("Model not loaded")
+                return [
+                    {
+                        "class": "breasts",
+                        "confidence": 0.9,
+                        "box": [0, 0, 8, 8],
+                        "model_path": self.model_path,
+                        "image_path": image_path,
+                    }
+                ]
+
+        monkeypatch.setattr(censor_module, "_detector", None)
+        monkeypatch.setattr(censor_module, "CensorDetector", ConfiguredDetector)
+        service = CensorService()
+        monkeypatch.setattr(
+            service,
+            "_resolve_legacy_model_path",
+            lambda requested_path, *, allowed_base: requested_path,
+        )
+        requests = (
+            CensorDetectRequest(
+                image_id=image_ids[0],
+                model_type="legacy",
+                model_path=model_a,
+            ),
+            CensorDetectRequest(
+                image_id=image_ids[1],
+                model_type="legacy",
+                model_path=model_b,
+            ),
+        )
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first_future = executor.submit(service.detect, requests[0])
+            assert first_load_started.wait(timeout=1)
+            second_future = executor.submit(service.detect, requests[1])
+            second_started_before_first_finished = second_load_called.wait(timeout=0.25)
+            release_first_load.set()
+            try:
+                first_result = first_future.result(timeout=3)
+            except Exception as exc:
+                first_result = exc
+            finally:
+                release_second_load.set()
+            second_result = second_future.result(timeout=3)
+
+        assert not isinstance(first_result, Exception)
+        assert second_started_before_first_finished is False
+        assert first_result["detections"][0]["model_path"] == model_a
+        assert first_result["detections"][0]["image_path"] == image_paths[0]
+        assert second_result["detections"][0]["model_path"] == model_b
+        assert second_result["detections"][0]["image_path"] == image_paths[1]
 
     def test_detect_legacy_uses_local_default_model_when_path_is_blank(self, test_client, monkeypatch, tmp_path):
         from PIL import Image

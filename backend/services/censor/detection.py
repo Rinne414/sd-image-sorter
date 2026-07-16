@@ -6,10 +6,10 @@ and list_models() resolve get_model_health, and _resolve_legacy_model_path
 resolves get_default_legacy_model_path, through _svc() at call time. Both names
 are patched on the facade module object across the reader suites, so a bare
 re-import here would make those patches silently miss. The lazy in-method
-imports (censor.CensorDetector, nudenet_detector, sam3_refiner, config) are
-patched on their ORIGIN modules and move freely; self._detector (the
-legacy-YOLO CensorDetector cache) stays an instance attr initialized by the
-facade __init__.
+imports (censor.get_detector, nudenet_detector, sam3_refiner, config) are
+patched on their ORIGIN modules and move freely. Legacy YOLO publication stays
+inside censor.get_detector so concurrent service calls only receive a fully
+loaded detector.
 """
 
 from __future__ import annotations
@@ -338,7 +338,7 @@ class _DetectionMixin:
                     )
 
                 try:
-                    from censor import CensorDetector
+                    from censor import get_detector
                     from config import PROJECT_ROOT
 
                     legacy_model_path = self._resolve_legacy_model_path(
@@ -346,10 +346,11 @@ class _DetectionMixin:
                         allowed_base=str(PROJECT_ROOT / "models"),
                     )
                     if legacy_model_path:
-                        if self._detector is None or self._detector.model_path != legacy_model_path or self._detector.session is None:
-                            self._detector = CensorDetector(legacy_model_path)
-                            self._detector.load()
-                        legacy_results = self._detector.detect(image_path, request.confidence_threshold)
+                        detector = get_detector(legacy_model_path)
+                        legacy_results = detector.detect(
+                            image_path,
+                            request.confidence_threshold,
+                        )
                         all_detections.extend({**detection, "source": "legacy"} for detection in legacy_results)
                         successful_backends.append("Legacy YOLO")
                 except Exception as exc:
@@ -379,7 +380,7 @@ class _DetectionMixin:
                 detections = all_detections
 
             else:
-                from censor import CensorDetector
+                from censor import get_detector
                 from config import PROJECT_ROOT
 
                 legacy_model_path = self._resolve_legacy_model_path(
@@ -387,13 +388,11 @@ class _DetectionMixin:
                     allowed_base=str(PROJECT_ROOT / "models"),
                 )
 
-                if self._detector is None or self._detector.model_path != legacy_model_path or self._detector.session is None:
-                    logger.info("Loading censor model: %s", legacy_model_path)
-                    self._detector = CensorDetector(legacy_model_path)
-                    self._detector.load()
-                    logger.info("Model loaded successfully")
-
-                detections = self._detector.detect(image_path, request.confidence_threshold)
+                detector = get_detector(legacy_model_path)
+                detections = detector.detect(
+                    image_path,
+                    request.confidence_threshold,
+                )
 
             filtered_detections = self._filter_detections_by_targets(detections, request.target_classes)
 

@@ -824,26 +824,41 @@ _detector: Optional[CensorDetector] = None
 _detector_lock = threading.Lock()
 
 
+def _detector_requires_reload(
+    detector: Optional[CensorDetector],
+    model_path: Optional[str],
+) -> bool:
+    """Return whether the requested detector must be constructed and loaded."""
+    if detector is None:
+        return True
+    if not model_path:
+        return False
+    return detector.model_path != model_path or detector.session is None
+
+
 def get_detector(model_path: Optional[str] = None) -> CensorDetector:
     """Get or create the global detector instance."""
     global _detector
 
-    if _detector is None or (model_path and _detector.model_path != model_path):
-        with _detector_lock:
-            if _detector is None or (model_path and _detector.model_path != model_path):
-                detector = CensorDetector(model_path)
-                if model_path:
-                    # If load() raises, do NOT leave a half-initialized detector
-                    # cached at module scope. A cached detector with session=None
-                    # would make every later detect() fail "Model not loaded"
-                    # until process restart, because the double-checked guard
-                    # above would treat it as already-present. Only publish the
-                    # module-level _detector after a successful load.
-                    try:
-                        detector.load()
-                    except Exception:
-                        _detector = None
-                        raise
-                _detector = detector
+    current_detector = _detector
+    if current_detector is not None and not _detector_requires_reload(
+        current_detector,
+        model_path,
+    ):
+        return current_detector
 
-    return _detector
+    with _detector_lock:
+        current_detector = _detector
+        if current_detector is not None and not _detector_requires_reload(
+            current_detector,
+            model_path,
+        ):
+            return current_detector
+
+        detector = CensorDetector(model_path)
+        if model_path:
+            # Publish only after load succeeds so a failed replacement cannot
+            # displace the previous healthy detector.
+            detector.load()
+        _detector = detector
+        return detector
