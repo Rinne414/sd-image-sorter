@@ -3,6 +3,7 @@ Unit tests for scan progress callbacks.
 """
 
 import os
+import subprocess
 import sys
 import json
 import threading
@@ -17,10 +18,34 @@ from PIL.PngImagePlugin import PngInfo
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from exceptions import FileOperationError, ScanCancelledError  # noqa: E402
+from exceptions import FileOperationError, ScanCancelledError, ScanError  # noqa: E402
 import image_manager  # noqa: E402
+import utils.source_paths as source_paths  # noqa: E402
 from image_fingerprint import compute_image_content_fingerprint  # noqa: E402
 from image_manager import scan_folder  # noqa: E402
+
+
+def _create_windows_junction(link_path: Path, target_path: Path) -> None:
+    if os.name != "nt":
+        pytest.skip("Windows junction behavior is only available on Windows")
+    completed = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link_path), str(target_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+    if completed.returncode != 0:
+        pytest.fail(
+            "Could not create the Windows junction required by this test: "
+            f"stdout={completed.stdout!r}, stderr={completed.stderr!r}"
+        )
+
+
+def _remove_windows_junction(link_path: Path) -> None:
+    if link_path.parent == link_path or not os.path.isjunction(link_path):
+        return
+    os.rmdir(link_path)
 
 
 def test_move_image_restores_file_when_database_update_fails(test_db, tmp_path: Path, monkeypatch):
@@ -340,6 +365,151 @@ def test_scan_folder_precise_total_counts_before_import(test_db, tmp_path: Path)
     assert first_import["total"] == 2
     assert first_import["filename"]
     assert first_import["details"].get("total_final") is True
+
+
+def test_scan_folder_rejects_a_windows_junction_root(test_db, tmp_path: Path):
+    target = tmp_path / "junction-target"
+    target.mkdir()
+    junction = tmp_path / "junction-root"
+    _create_windows_junction(junction, target)
+
+    try:
+        with pytest.raises(ScanError, match="junction"):
+            scan_folder(str(junction), recursive=True)
+    finally:
+        _remove_windows_junction(junction)
+
+
+def test_scan_folder_skips_a_windows_junction_loop_and_reports_it(test_db, tmp_path: Path):
+    library = tmp_path / "junction-loop-library"
+    library.mkdir()
+    Image.new("RGB", (32, 32), color="green").save(library / "visible.png")
+    junction = library / "loop"
+    _create_windows_junction(junction, library)
+    cancel_checks = 0
+
+    def stop_runaway_traversal() -> bool:
+        nonlocal cancel_checks
+        cancel_checks += 1
+        return cancel_checks > 250
+
+    try:
+        result = scan_folder(
+            str(library),
+            recursive=True,
+            stop_requested=stop_runaway_traversal,
+        )
+    finally:
+        _remove_windows_junction(junction)
+
+    assert result["new"] == 1
+    assert result["errors"] == 1
+    assert result["recent_errors"] == [
+        {
+            "filename": "loop",
+            "error": "Skipped Windows junction directory to prevent traversal cycles",
+            "kind": "directory_junction",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("error_type", "expected_kind"),
+    [
+        (PermissionError, "directory_permission"),
+        (OSError, "directory_os_error"),
+    ],
+)
+def test_scan_folder_continues_after_child_directory_access_errors(
+    test_db,
+    tmp_path: Path,
+    monkeypatch,
+    error_type,
+    expected_kind: str,
+):
+    library = tmp_path / f"{expected_kind}-library"
+    blocked = library / "blocked"
+    blocked.mkdir(parents=True)
+    Image.new("RGB", (32, 32), color="blue").save(library / "visible.png")
+    Image.new("RGB", (32, 32), color="red").save(blocked / "hidden.png")
+    real_os = image_manager.os
+    blocked_key = os.path.normcase(os.path.abspath(blocked))
+
+    class ScanOsProxy:
+        path = real_os.path
+
+        def __getattr__(self, name: str):
+            return getattr(real_os, name)
+
+        def scandir(self, path):
+            if os.path.normcase(os.path.abspath(path)) == blocked_key:
+                raise error_type(5, "simulated directory access failure", str(path))
+            return real_os.scandir(path)
+
+    monkeypatch.setattr(image_manager, "os", ScanOsProxy())
+
+    result = scan_folder(str(library), recursive=True)
+
+    assert result["new"] == 1
+    assert result["errors"] == 1
+    assert len(result["recent_errors"]) == 1
+    issue = result["recent_errors"][0]
+    assert issue["filename"] == "blocked"
+    assert issue["kind"] == expected_kind
+    assert "simulated directory access failure" in issue["error"]
+
+
+def test_scan_folder_skips_repeated_directory_identity(test_db, tmp_path: Path, monkeypatch):
+    library = tmp_path / "repeated-identity-library"
+    first = library / "first"
+    second = library / "second"
+    first.mkdir(parents=True)
+    second.mkdir()
+    Image.new("RGB", (16, 16), color="white").save(first / "first.png")
+    Image.new("RGB", (16, 16), color="black").save(second / "second.png")
+    real_os = image_manager.os
+    duplicate_keys = {
+        os.path.normcase(os.path.abspath(first)),
+        os.path.normcase(os.path.abspath(second)),
+    }
+
+    class DuplicateDirectoryStat:
+        st_dev = 97
+        st_ino = 101
+
+    class IdentityOsProxy:
+        path = real_os.path
+
+        def __getattr__(self, name: str):
+            return getattr(real_os, name)
+
+        def stat(self, path, *args, **kwargs):
+            if os.path.normcase(os.path.abspath(path)) in duplicate_keys:
+                return DuplicateDirectoryStat()
+            return real_os.stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(image_manager, "os", IdentityOsProxy())
+
+    result = scan_folder(str(library), recursive=True)
+
+    assert result["new"] == 1
+    assert result["errors"] == 1
+    assert result["recent_errors"][0]["kind"] == "directory_cycle"
+    assert result["recent_errors"][0]["filename"] in {"first", "second"}
+
+
+def test_scan_folder_keeps_legitimate_deep_directories_unlimited(test_db, tmp_path: Path):
+    current = tmp_path / "deep-library"
+    current.mkdir()
+    for _index in range(80):
+        current = current / "d"
+        current.mkdir()
+    Image.new("RGB", (16, 16), color="purple").save(current / "deep.png")
+
+    result = scan_folder(str(tmp_path / "deep-library"), recursive=True)
+
+    assert result["new"] == 1
+    assert result["errors"] == 0
 
 
 def test_scan_folder_throttles_bulk_import_progress(test_db, tmp_path: Path, monkeypatch):
@@ -871,6 +1041,50 @@ def test_scan_folder_cleanup_missing_entries(test_db, tmp_path: Path):
 
     assert result["removed"] == 1
     assert [image["filename"] for image in images] == ["good.png"]
+
+
+def test_scan_folder_cleanup_preserves_rows_when_path_access_is_indeterminate(
+    test_db,
+    tmp_path: Path,
+    monkeypatch,
+):
+    library = tmp_path / "cleanup-indeterminate"
+    library.mkdir()
+    image_path = library / "still-present.png"
+    Image.new("RGB", (32, 32), color="orange").save(image_path)
+    missing_path = library / "definitely-missing.png"
+    missing_id = db.add_image(path=str(missing_path), filename=missing_path.name)
+    image_id = db.add_image(path=str(image_path), filename=image_path.name)
+    real_os = source_paths.os
+    image_key = os.path.normcase(os.path.abspath(image_path))
+
+    class PathProxy:
+        def __getattr__(self, name: str):
+            return getattr(real_os.path, name)
+
+        def exists(self, path) -> bool:
+            if os.path.normcase(os.path.abspath(path)) == image_key:
+                raise PermissionError(13, "simulated indexed-path access denial", str(path))
+            return real_os.path.exists(path)
+
+    class SourcePathOsProxy:
+        path = PathProxy()
+
+        def __getattr__(self, name: str):
+            return getattr(real_os, name)
+
+        def stat(self, path, *args, **kwargs):
+            if os.path.normcase(os.path.abspath(path)) == image_key:
+                raise PermissionError(13, "simulated indexed-path access denial", str(path))
+            return real_os.stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(source_paths, "os", SourcePathOsProxy())
+
+    with pytest.raises(ScanError, match="simulated indexed-path access denial"):
+        scan_folder(str(library), recursive=False, cleanup_missing=True)
+
+    assert db.get_image_by_id(missing_id) is not None
+    assert db.get_image_by_id(image_id) is not None
 
 
 def test_get_folder_stats_skips_symlinked_images(tmp_path: Path):

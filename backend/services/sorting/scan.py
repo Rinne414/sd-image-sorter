@@ -13,6 +13,7 @@ from fastapi import BackgroundTasks, HTTPException
 
 import database as db
 import image_manager as image_manager_module
+from exceptions import ScanCancelledError, ScanError
 from services import entry_stats_service
 from services.sorting_models import (
     BACKGROUND_SCAN_SOURCES,
@@ -24,7 +25,11 @@ from services.sorting_models import (
     ScanSource,
     ScanStartResult,
 )
-from utils.path_validation import normalize_user_path, validate_folder_path
+from utils.path_validation import (
+    is_directory_symlink_or_junction,
+    normalize_user_path,
+    validate_folder_path,
+)
 
 # NOTE(decomposition): keep the historical logger channel — tests attach
 # handlers / caplog filters to "services.sorting_service" (heartbeat pins),
@@ -66,6 +71,14 @@ class ScanMixin:
         is_valid, error = validate_folder_path(normalized_folder_path)
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid folder path")
+        if is_directory_symlink_or_junction(normalized_folder_path):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Scan root cannot be a symbolic link or Windows junction. "
+                    "Choose the real target folder."
+                ),
+            )
 
         with self._scan_lock:
             current_status = self._scan_progress["status"]
@@ -332,11 +345,11 @@ class ScanMixin:
                 if removed_count:
                     summary += f" 移除 {removed_count} 条失效记录 / {removed_count} missing removed."
                 if errors:
-                    summary += f" {errors} 张失败 / {errors} failed."
+                    summary += f" {errors} 个问题 / {errors} scan issue(s)."
                 recent_errors = result.get("recent_errors") or []
                 if recent_errors:
                     filenames = ", ".join(item.get("filename", "unknown") for item in recent_errors[-3:])
-                    summary += f" 问题文件 / Bad files: {filenames}."
+                    summary += f" 问题项 / Issues: {filenames}."
                 duration_seconds = max(0.0, now - float(self._scan_progress.get("started_at") or now))
                 metadata_processed = result.get("metadata_processed", 0)
                 metadata_total = result.get("metadata_total", 0)
@@ -371,11 +384,11 @@ class ScanMixin:
 
                 if recent_errors:
                     samples = "; ".join(
-                        f"{item.get('filename', 'unknown')}: {item.get('error', 'Unreadable image')}"
+                        f"{item.get('filename', 'unknown')}: {item.get('error', 'Scan issue')}"
                         for item in recent_errors[-3:]
                     )
                     logger.warning(
-                        "Scan skipped %s unreadable file(s). Samples: %s. Open Scan Progress in the UI for recent errors; set SD_IMAGE_SORTER_LOG_LEVEL=DEBUG for parser tracebacks.",
+                        "Scan completed with %s issue(s). Samples: %s. Open Scan Progress in the UI for recent errors; set SD_IMAGE_SORTER_LOG_LEVEL=DEBUG for parser tracebacks.",
                         errors,
                         samples,
                     )
@@ -412,8 +425,6 @@ class ScanMixin:
                     }
                 )
             except Exception as e:
-                from exceptions import ScanCancelledError
-
                 now = time.time()
                 if isinstance(e, ScanCancelledError):
                     current_state = self.get_scan_progress()
@@ -467,6 +478,11 @@ class ScanMixin:
                         current_state.get("total", 0),
                         current_state.get("errors", 0),
                     )
+                    failure_message = (
+                        f"扫描失败：{e.message} / Scan failed: {e.message}"
+                        if isinstance(e, ScanError)
+                        else "扫描因内部错误失败 / Scan failed due to an internal error"
+                    )
                     self._set_scan_progress_if_current(
                         run_id,
                         {
@@ -490,7 +506,7 @@ class ScanMixin:
                             "metadata_total": current_state.get("metadata_total", 0),
                             "metadata_total_final": current_state.get("metadata_total_final", False),
                             "metadata_pending": current_state.get("metadata_pending", 0),
-                            "message": "扫描因内部错误失败 / Scan failed due to an internal error",
+                            "message": failure_message,
                             "current_item": current_state.get("current_item"),
                             "recent_errors": current_state.get("recent_errors", []),
                             "started_at": current_state.get("started_at"),

@@ -415,6 +415,51 @@ class TestScan:
         assert result["total"] == 3
         assert result["metadata_total_final"] is True
 
+    def test_scan_progress_surfaces_actionable_scan_errors(
+        self,
+        test_client,
+        tmp_path: Path,
+        monkeypatch,
+    ):
+        from exceptions import ScanError
+        from services import sorting_service as sorting_service_module
+
+        def fail_scan(*_args, **_kwargs):
+            raise ScanError("Cannot read scan root: simulated access denial")
+
+        monkeypatch.setattr(sorting_service_module, "scan_folder", fail_scan)
+
+        response = test_client.post(
+            "/api/scan",
+            json={"folder_path": str(tmp_path), "recursive": True},
+        )
+
+        assert response.status_code == 200
+        progress = test_client.get("/api/scan/progress").json()
+        assert progress["status"] == "error"
+        assert "simulated access denial" in progress["message"]
+        assert "internal error" not in progress["message"].lower()
+
+    def test_scan_rejects_a_linked_or_junction_root_before_background_start(
+        self,
+        test_client,
+        tmp_path: Path,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(
+            "services.sorting.scan.is_directory_symlink_or_junction",
+            lambda _path: True,
+        )
+
+        response = test_client.post(
+            "/api/scan",
+            json={"folder_path": str(tmp_path), "recursive": True},
+        )
+
+        assert response.status_code == 400
+        assert "Windows junction" in response.json()["error"]
+        assert test_client.get("/api/scan/progress").json()["status"] == "idle"
+
     def test_scan_skips_unreadable_images(self, test_client, tmp_path: Path):
         """Unreadable image files should count as errors and not be inserted."""
         import database as db
@@ -554,7 +599,7 @@ class TestScan:
         messages = [record.getMessage() for record in caplog.records]
         assert any("Scan started:" in message and str(tmp_path) in message for message in messages)
         assert any("Scan completed:" in message and "errors=1" in message for message in messages)
-        assert any("Scan skipped 1 unreadable file(s)" in message and "broken.png" in message for message in messages)
+        assert any("Scan completed with 1 issue(s)" in message and "broken.png" in message for message in messages)
         assert not any(
             "Invalid PNG signature" in record.getMessage() and record.levelno >= logging.ERROR
             for record in caplog.records
@@ -594,7 +639,7 @@ class TestScan:
         assert progress["status"] == "done"
         assert progress["new"] == 1
         assert progress["errors"] == 2
-        assert "Bad files:" in progress["message"]
+        assert "Issues:" in progress["message"]
         assert "truncated.png" in progress["message"]
         assert "corrupt.png" in progress["message"]
         assert [entry["filename"] for entry in progress["recent_errors"]] == ["corrupt.png", "truncated.png"]

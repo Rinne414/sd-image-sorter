@@ -10,12 +10,14 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.source_paths import (  # noqa: E402
+    IndexedPathAccessError,
     build_indexed_folder_scope_query_patterns,
     build_indexed_image_lookup_candidates,
     build_indexed_image_path_candidates,
     is_indexed_image_path_in_folder_scope,
     normalize_indexed_image_path,
     resolve_existing_indexed_image_path,
+    resolve_indexed_image_path_for_cleanup,
     translate_posix_mnt_path_to_windows_drive,
 )
 
@@ -129,3 +131,43 @@ def test_resolve_existing_indexed_image_path_allows_symlink_when_explicitly_enab
     )
 
     assert resolved == str(link)
+
+
+def test_resolve_indexed_image_path_for_cleanup_returns_none_only_when_missing(tmp_path: Path):
+    missing = tmp_path / "missing.png"
+
+    resolved = resolve_indexed_image_path_for_cleanup(
+        str(missing),
+        backend_file=__file__,
+    )
+
+    assert resolved is None
+
+
+def test_resolve_indexed_image_path_for_cleanup_raises_on_indeterminate_access(
+    tmp_path: Path,
+    monkeypatch,
+):
+    candidate = tmp_path / "inaccessible.png"
+    real_os = __import__("os")
+
+    class SourcePathOsProxy:
+        path = real_os.path
+
+        def __getattr__(self, name: str):
+            return getattr(real_os, name)
+
+        def stat(self, path, *args, **kwargs):
+            raise PermissionError(13, "simulated cleanup probe denial", str(path))
+
+    monkeypatch.setattr("utils.source_paths.os", SourcePathOsProxy())
+    monkeypatch.setattr(
+        "utils.source_paths.build_indexed_image_path_candidates",
+        lambda *_args, **_kwargs: [str(candidate)],
+    )
+
+    with pytest.raises(IndexedPathAccessError, match="simulated cleanup probe denial"):
+        resolve_indexed_image_path_for_cleanup(
+            str(candidate),
+            backend_file=__file__,
+        )

@@ -676,7 +676,7 @@ function createAutoRefreshBackgroundScanMessages() {
         ),
         completedWithErrors: appT(
             'libraryRoots.autoRefreshCompletedWithErrors',
-            'Idle library refresh finished with {count} file errors.'
+            'Idle library refresh finished with {count} scan issue(s).'
         ),
         cancelled: appT(
             'libraryRoots.autoRefreshCancelled',
@@ -710,7 +710,7 @@ function createLibraryRescanBackgroundScanMessages() {
         ),
         completedWithErrors: appT(
             'libraryRoots.rescanCompletedWithErrors',
-            'Library Rescan finished with {count} file errors.'
+            'Library Rescan finished with {count} scan issue(s).'
         ),
         cancelled: appT(
             'libraryRoots.rescanCancelled',

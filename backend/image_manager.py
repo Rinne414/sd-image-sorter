@@ -32,8 +32,12 @@ from image_fingerprint import compute_image_content_fingerprint
 from metadata_storage import compact_metadata_json
 from metadata_parser import PARSED_METADATA_VERSION, parse_image
 from exceptions import ScanError, ScanCancelledError, FileOperationError
-from utils.path_validation import validate_folder_path
-from utils.source_paths import normalize_indexed_image_path, resolve_existing_indexed_image_path
+from utils.path_validation import is_directory_symlink_or_junction, validate_folder_path
+from utils.source_paths import (
+    IndexedPathAccessError,
+    normalize_indexed_image_path,
+    resolve_indexed_image_path_for_cleanup,
+)
 import scan_state
 
 logger = logging.getLogger(__name__)
@@ -187,7 +191,16 @@ def _cleanup_missing_scope_entries(
         candidate_path = row.get("path")
         if not candidate_path:
             continue
-        resolved_path = resolve_existing_indexed_image_path(candidate_path, backend_file=__file__, allow_symlink=True)
+        try:
+            resolved_path = resolve_indexed_image_path_for_cleanup(
+                candidate_path,
+                backend_file=__file__,
+            )
+        except IndexedPathAccessError as exc:
+            raise ScanError(
+                f"Missing-file cleanup could not safely verify an indexed path: {exc}",
+                path=candidate_path,
+            ) from exc
         if not resolved_path or os.path.islink(resolved_path):
             removed_ids.append(int(row["id"]))
 
@@ -253,8 +266,11 @@ def scan_folder(
     # can opt out with ``precise_total=False`` to start importing
     # immediately at the cost of a "?" total in heartbeats.
     folder = Path(folder_path)
-    if folder.is_symlink():
-        raise ScanError("Refusing to scan symlinked folders", path=folder_path)
+    if is_directory_symlink_or_junction(folder):
+        raise ScanError(
+            "Refusing to scan a symbolic link or Windows junction folder",
+            path=folder_path,
+        )
     if not folder.exists():
         raise ScanError("Folder does not exist", path=folder_path)
     if not folder.is_dir():
@@ -266,14 +282,80 @@ def scan_folder(
         if callable(stop_requested) and stop_requested():
             raise ScanCancelledError(path=folder_path)
 
+    def _record_scan_error(
+        filename: str,
+        error: str,
+        kind: str = "unreadable",
+    ) -> Dict[str, str]:
+        entry = {
+            "filename": filename,
+            "error": error,
+            "kind": kind,
+        }
+        result["errors"] += 1
+        result["recent_errors"].append(entry)
+        result["recent_errors"] = result["recent_errors"][-10:]
+        return entry
+
+    reported_directory_issues: set[tuple[str, str]] = set()
+
+    def _directory_label(path: str) -> str:
+        try:
+            relative = os.path.relpath(path, normalized_folder_path)
+        except (OSError, ValueError):
+            return os.path.basename(path) or path
+        return os.path.basename(path) if relative == "." else relative
+
+    def _record_directory_issue(path: str, error: str, kind: str) -> None:
+        issue_key = (os.path.normcase(os.path.abspath(path)), kind)
+        if issue_key in reported_directory_issues:
+            return
+        reported_directory_issues.add(issue_key)
+        _record_scan_error(_directory_label(path), error, kind)
+        logger.warning(
+            "Skipping scan directory",
+            extra={
+                "scan_directory": path,
+                "scan_issue_kind": kind,
+                "scan_issue_error": error,
+            },
+        )
+
+    def _directory_identity(stat_result: os.stat_result) -> Optional[tuple[int, int]]:
+        inode = int(stat_result.st_ino)
+        if inode == 0:
+            return None
+        return (int(stat_result.st_dev), inode)
+
     def _iter_images():
         pending_dirs = [os.fspath(folder)]
         root_dir = os.path.abspath(os.fspath(folder))
+        seen_directory_ids: set[tuple[int, int]] = set()
 
         while pending_dirs:
             current_dir = pending_dirs.pop()
             _check_cancel()
+            current_abs = os.path.abspath(current_dir)
+            if current_abs != root_dir and is_directory_symlink_or_junction(current_dir):
+                _record_directory_issue(
+                    current_dir,
+                    "Skipped Windows junction directory to prevent traversal cycles",
+                    "directory_junction",
+                )
+                continue
             try:
+                directory_stat = os.stat(current_dir, follow_symlinks=False)
+                identity = _directory_identity(directory_stat)
+                if identity is not None:
+                    if identity in seen_directory_ids:
+                        _record_directory_issue(
+                            current_dir,
+                            "Skipped repeated directory identity to prevent traversal cycles",
+                            "directory_cycle",
+                        )
+                        continue
+                    seen_directory_ids.add(identity)
+
                 with os.scandir(current_dir) as entries:
                     for entry in entries:
                         _check_cancel()
@@ -298,10 +380,25 @@ def scan_folder(
                             }
                         except FileNotFoundError:
                             continue
-            except PermissionError:
-                if os.path.abspath(current_dir) == root_dir:
-                    raise
-                logger.warning("Permission denied listing directory during scan: %s", current_dir)
+                        except OSError as exc:
+                            kind = (
+                                "directory_permission"
+                                if isinstance(exc, PermissionError)
+                                else "directory_os_error"
+                            )
+                            _record_directory_issue(entry.path, str(exc), kind)
+            except OSError as exc:
+                if current_abs == root_dir:
+                    raise ScanError(
+                        f"Cannot access scan root: {exc}",
+                        path=current_dir,
+                    ) from exc
+                kind = (
+                    "directory_permission"
+                    if isinstance(exc, PermissionError)
+                    else "directory_os_error"
+                )
+                _record_directory_issue(current_dir, str(exc), kind)
                 continue
 
     if cleanup_missing:
@@ -332,17 +429,6 @@ def scan_folder(
                 )
             except TypeError:
                 progress_callback(0, 0, "")
-
-    def _record_scan_error(filename: str, error: str, kind: str = "unreadable") -> Dict[str, str]:
-        entry = {
-            "filename": filename,
-            "error": error,
-            "kind": kind,
-        }
-        result["errors"] += 1
-        result["recent_errors"].append(entry)
-        result["recent_errors"] = result["recent_errors"][-10:]
-        return entry
 
     def _flush_placeholder_records(pending_records: List[Dict[str, Any]]) -> None:
         if not pending_records:

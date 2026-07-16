@@ -37,6 +37,11 @@ class PathValidationError(ValueError):
     """Raised when a requested file path fails security validation."""
 
 
+def is_directory_symlink_or_junction(path: str | os.PathLike[str]) -> bool:
+    """Return whether a directory path is a symbolic link or Windows junction."""
+    return os.path.islink(path) or os.path.isjunction(path)
+
+
 @dataclass(frozen=True)
 class ImageOutputPath:
     """Validated destination for writing an image file."""

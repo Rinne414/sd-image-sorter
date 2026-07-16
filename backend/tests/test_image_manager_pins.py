@@ -653,12 +653,12 @@ class TestCleanupMissingScopeSeam:
         db.add_image(path=str(p), filename=p.name)
         captured = {}
 
-        def fake_resolve(candidate, *, backend_file, allow_symlink=False):
+        def fake_resolve(candidate, *, backend_file):
             captured["backend_file"] = backend_file
             return candidate  # pretend it still exists -> not removed
 
         monkeypatch.setattr(
-            image_manager, "resolve_existing_indexed_image_path", fake_resolve
+            image_manager, "resolve_indexed_image_path_for_cleanup", fake_resolve
         )
         removed = _cleanup_missing_scope_entries(str(tmp_path), True)
         assert captured["backend_file"] == image_manager.__file__

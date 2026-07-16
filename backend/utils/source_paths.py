@@ -13,6 +13,17 @@ WINDOWS_DRIVE_PATH_RE = re.compile(r"^[A-Za-z]:(?:[\\/]|$)")
 POSIX_MNT_DRIVE_PATH_RE = re.compile(r"^/mnt/([A-Za-z])(?:/(.*))?$")
 
 
+class IndexedPathAccessError(OSError):
+    """Raised when cleanup cannot distinguish a missing path from an I/O failure."""
+
+    def __init__(self, path: str, cause: OSError | ValueError):
+        self.path = path
+        self.cause = cause
+        super().__init__(
+            f"Cannot determine whether indexed image path exists at '{path}': {cause}"
+        )
+
+
 def _looks_windows_style_path(raw_path: str) -> bool:
     text = str(raw_path or "").strip()
     return bool(WINDOWS_DRIVE_PATH_RE.match(text) or text.startswith("\\\\"))
@@ -253,4 +264,31 @@ def resolve_existing_indexed_image_path(
             return candidate_path
         except OSError:
             continue
+    return None
+
+
+def resolve_indexed_image_path_for_cleanup(
+    primary_path: str,
+    *,
+    backend_file: str,
+) -> Optional[str]:
+    """Resolve a cleanup target, returning None only when every candidate is missing."""
+    first_access_error: Optional[tuple[str, OSError | ValueError]] = None
+    for candidate in build_indexed_image_path_candidates(
+        primary_path,
+        backend_file=backend_file,
+    ):
+        try:
+            candidate_path = os.path.abspath(normalize_user_path(candidate))
+            os.stat(candidate_path)
+            return candidate_path
+        except (FileNotFoundError, NotADirectoryError):
+            continue
+        except (OSError, ValueError) as exc:
+            if first_access_error is None:
+                first_access_error = (str(candidate), exc)
+
+    if first_access_error is not None:
+        candidate, cause = first_access_error
+        raise IndexedPathAccessError(candidate, cause) from cause
     return None
