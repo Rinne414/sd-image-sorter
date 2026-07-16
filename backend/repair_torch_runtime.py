@@ -66,11 +66,9 @@ def _numpy_sam3_constraint() -> str:
 
 
 TORCH_CUDA_INDEXES: Sequence[Tuple[str, str, Tuple[int, int]]] = (
-    ("cu130", "https://download.pytorch.org/whl/cu130", (13, 0)),
     ("cu126", "https://download.pytorch.org/whl/cu126", (12, 6)),
 )
 TORCH_CUDA_PACKAGE_VERSIONS: Mapping[str, Tuple[str, str]] = {
-    "cu130": ("2.13.0", "0.28.0"),
     "cu126": ("2.13.0", "0.28.0"),
 }
 
@@ -176,13 +174,11 @@ def _torch_probe() -> Dict[str, Any]:
 
 
 def _torch_probe_subprocess() -> Dict[str, Any]:
-    """Probe Torch in a fresh interpreter after pip may have replaced it.
+    """Probe Torch without locking its extension modules in the repair process.
 
-    The launcher process imports ``torch`` while checking the current install
-    state. If we then use pip to replace CPU Torch with a CUDA wheel, the old
-    already-imported module remains in ``sys.modules`` for this process. A fresh
-    interpreter is the only reliable way to verify the newly installed wheel
-    without making users download every CUDA wheel in sequence.
+    Windows cannot replace loaded Torch extension modules. A short-lived child
+    reports the current state and exits before pip starts, then the same probe
+    verifies the installed wheel without reusing stale modules in the parent.
     """
 
     code = (
@@ -328,10 +324,18 @@ def _configured_cuda_index_candidate(
     configured_url: str,
 ) -> Tuple[str, str, Tuple[int, int]]:
     url = configured_url.strip().rstrip("/")
-    match = re.search(r"/(cu130|cu126)$", url, re.IGNORECASE)
+    if re.search(r"/cu130$", url, re.IGNORECASE):
+        raise ValueError(
+            "Configured cu130 PyTorch wheels are incompatible with ONNX Runtime "
+            "CUDA 12.x used by SD Image Sorter. Set "
+            "SD_IMAGE_SORTER_TORCH_CUDA_INDEX_URL to a mirror URL ending in "
+            "cu126."
+        )
+
+    match = re.search(r"/(cu126)$", url, re.IGNORECASE)
     if match is None:
         raise ValueError(
-            "SD_IMAGE_SORTER_TORCH_CUDA_INDEX_URL must end with cu130 or cu126; "
+            "SD_IMAGE_SORTER_TORCH_CUDA_INDEX_URL must end with cu126; "
             f"received {_redact_command_argument(configured_url)!r}."
         )
 
@@ -457,11 +461,12 @@ def _record_action(actions: List[str], message: str, *, stream_pip: bool) -> Non
 
 
 def get_install_state() -> Dict[str, Any]:
-    gpu_vendor = _detect_gpu_vendor() if platform.system() == "Windows" else {"vendors": [], "primary": None, "devices": []}
-    torch_state = _torch_probe()
+    system = platform.system()
+    gpu_vendor = _detect_gpu_vendor() if system == "Windows" else {"vendors": [], "primary": None, "devices": []}
+    torch_state = _torch_probe_subprocess() if system == "Windows" else _torch_probe()
     cuda_version = _detect_nvidia_cuda_version() if gpu_vendor.get("primary") == "nvidia" else None
     return {
-        "platform": platform.system(),
+        "platform": system,
         "python": sys.executable,
         "gpu_vendor_primary": gpu_vendor.get("primary"),
         "gpu_vendors_detected": gpu_vendor.get("vendors", []),

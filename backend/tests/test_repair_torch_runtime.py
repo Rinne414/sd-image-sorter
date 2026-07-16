@@ -12,9 +12,11 @@ import repair_torch_runtime
 
 
 def test_cuda_index_candidates_follow_driver_cap():
-    assert repair_torch_runtime._cuda_index_candidates((13, 0))[0][0] == "cu130"
+    assert repair_torch_runtime._cuda_index_candidates((13, 0))[0][0] == "cu126"
     assert repair_torch_runtime._cuda_index_candidates((12, 9))[0][0] == "cu126"
     assert repair_torch_runtime._cuda_index_candidates((12, 8))[0][0] == "cu126"
+    assert repair_torch_runtime._cuda_index_candidates((12, 6))[0][0] == "cu126"
+    assert repair_torch_runtime._cuda_index_candidates((12, 5)) == []
     assert repair_torch_runtime._cuda_index_candidates((12, 4)) == []
     assert repair_torch_runtime._cuda_index_candidates((12, 0)) == []
     assert repair_torch_runtime._cuda_index_candidates(None) == []
@@ -29,7 +31,7 @@ def test_custom_cuda_index_preserves_secure_wheel_label(monkeypatch):
     ]
 
 
-def test_custom_cuda_index_respects_driver_cap(monkeypatch):
+def test_custom_cu130_index_is_rejected_for_onnxruntime_compatibility(monkeypatch):
     monkeypatch.setenv(
         "SD_IMAGE_SORTER_TORCH_CUDA_INDEX_URL",
         "https://mirror.example/pytorch-wheels/cu130",
@@ -37,9 +39,22 @@ def test_custom_cuda_index_respects_driver_cap(monkeypatch):
 
     with pytest.raises(
         ValueError,
-        match=r"requires CUDA 13\.0.*reports CUDA 12\.6",
+        match=r"cu130.*incompatible.*ONNX Runtime.*CUDA 12",
     ):
-        repair_torch_runtime._cuda_index_candidates((12, 6))
+        repair_torch_runtime._cuda_index_candidates((13, 0))
+
+
+def test_custom_cu126_index_respects_driver_cap(monkeypatch):
+    monkeypatch.setenv(
+        "SD_IMAGE_SORTER_TORCH_CUDA_INDEX_URL",
+        "https://mirror.example/pytorch-wheels/cu126",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"requires CUDA 12\.6.*reports CUDA 12\.4",
+    ):
+        repair_torch_runtime._cuda_index_candidates((12, 4))
 
 
 def test_custom_cuda_index_rejects_url_without_supported_label(monkeypatch):
@@ -48,7 +63,7 @@ def test_custom_cuda_index_rejects_url_without_supported_label(monkeypatch):
         "https://user:secret@mirror.example/pytorch-wheels/custom",
     )
 
-    with pytest.raises(ValueError, match="cu130 or cu126") as exc_info:
+    with pytest.raises(ValueError, match="must end with cu126") as exc_info:
         repair_torch_runtime._cuda_index_candidates((13, 0))
 
     message = str(exc_info.value)
@@ -88,9 +103,10 @@ def test_cuda_index_candidates_official_host_keeps_pinned_urls_untouched(monkeyp
 
 
 def test_cuda_package_versions_match_official_wheel_matrix():
-    assert repair_torch_runtime._cuda_package_versions("cu130") == ("2.13.0", "0.28.0")
     assert repair_torch_runtime._cuda_package_versions("cu126") == ("2.13.0", "0.28.0")
-    assert set(repair_torch_runtime.TORCH_CUDA_PACKAGE_VERSIONS) == {"cu130", "cu126"}
+    assert set(repair_torch_runtime.TORCH_CUDA_PACKAGE_VERSIONS) == {"cu126"}
+    with pytest.raises(ValueError, match="Unsupported official CUDA wheel label: cu130"):
+        repair_torch_runtime._cuda_package_versions("cu130")
 
 
 def test_supported_cuda_state_requires_release_pair_and_available_device():
@@ -112,9 +128,82 @@ def test_supported_cuda_state_requires_release_pair_and_available_device():
         {
             **state,
             "torch_version": "2.13.0+cu130",
+            "torchvision_version": "0.28.0+cu130",
             "torch_cuda_build": "13.0",
         }
     ) is False
+
+
+def test_windows_nvidia_cu130_install_triggers_supported_runtime_repair(monkeypatch):
+    installed_state = {
+        "platform": "Windows",
+        "gpu_vendor_primary": "nvidia",
+        "torch_version": "2.13.0+cu130",
+        "torchvision_version": "0.28.0+cu130",
+        "torch_cuda_build": "13.0",
+        "torch_cuda_available": True,
+    }
+    attempted_states = []
+
+    monkeypatch.setattr(
+        repair_torch_runtime,
+        "get_install_state",
+        lambda: dict(installed_state),
+    )
+    monkeypatch.setattr(
+        repair_torch_runtime,
+        "_install_cuda_torch",
+        lambda actions, state, stream_pip: attempted_states.append(dict(state)) or False,
+    )
+
+    result = repair_torch_runtime.repair_windows_torch_runtime()
+
+    assert attempted_states == [installed_state]
+    assert result["repaired"] is False
+
+
+def test_windows_install_state_probes_torch_in_short_lived_subprocess(monkeypatch):
+    probe_state = {
+        "torch_version": "2.13.0+cu130",
+        "torchvision_version": "0.28.0+cu130",
+        "torch_cuda_build": "13.0",
+        "torch_cuda_available": True,
+        "torch_probe_error": None,
+    }
+
+    def reject_in_process_probe():
+        raise AssertionError(
+            "Windows repair must not import Torch in the parent process before pip "
+            "replaces its locked extension modules."
+        )
+
+    monkeypatch.setattr(repair_torch_runtime.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        repair_torch_runtime,
+        "_detect_gpu_vendor",
+        lambda: {"primary": "nvidia", "vendors": ["nvidia"], "devices": []},
+    )
+    monkeypatch.setattr(
+        repair_torch_runtime,
+        "_detect_nvidia_cuda_version",
+        lambda: (13, 0),
+    )
+    monkeypatch.setattr(repair_torch_runtime, "_torch_probe", reject_in_process_probe)
+    monkeypatch.setattr(
+        repair_torch_runtime,
+        "_torch_probe_subprocess",
+        lambda: dict(probe_state),
+    )
+    monkeypatch.setattr(
+        repair_torch_runtime,
+        "_missing_sam3_runtime_packages",
+        lambda: [],
+    )
+
+    state = repair_torch_runtime.get_install_state()
+
+    assert state["torch_version"] == "2.13.0+cu130"
+    assert state["nvidia_cuda_version"] == "13.0"
 
 
 def test_non_windows_does_not_run_pip(monkeypatch):
@@ -158,7 +247,8 @@ def test_nvidia_cpu_torch_installs_cuda_torch_and_sam3_runtime(monkeypatch):
     probe_results = iter(
         [
             {"torch_version": "2.13.0+cpu", "torchvision_version": "0.28.0", "torch_cuda_build": None, "torch_cuda_available": False},
-            {"torch_version": "2.13.0+cu126", "torchvision_version": "0.28.0", "torch_cuda_build": "12.6", "torch_cuda_available": True},
+            {"torch_version": "2.13.0+cu126", "torchvision_version": "0.28.0+cu126", "torch_cuda_build": "12.6", "torch_cuda_available": True, "torch_probe_error": None},
+            {"torch_version": "2.13.0+cu126", "torchvision_version": "0.28.0+cu126", "torch_cuda_build": "12.6", "torch_cuda_available": True, "torch_probe_error": None},
         ]
     )
 
@@ -169,11 +259,10 @@ def test_nvidia_cpu_torch_installs_cuda_torch_and_sam3_runtime(monkeypatch):
     monkeypatch.setattr(repair_torch_runtime.platform, "system", lambda: "Windows")
     monkeypatch.setattr(repair_torch_runtime, "_detect_gpu_vendor", lambda: {"primary": "nvidia", "vendors": ["nvidia"], "devices": []})
     monkeypatch.setattr(repair_torch_runtime, "_detect_nvidia_cuda_version", lambda: (12, 8))
-    monkeypatch.setattr(repair_torch_runtime, "_torch_probe", lambda: next(probe_results))
     monkeypatch.setattr(
         repair_torch_runtime,
         "_torch_probe_subprocess",
-        lambda: {"torch_version": "2.13.0+cu126", "torchvision_version": "0.28.0+cu126", "torch_cuda_build": "12.6", "torch_cuda_available": True, "torch_probe_error": None},
+        lambda: next(probe_results),
     )
     monkeypatch.setattr(repair_torch_runtime, "_missing_sam3_runtime_packages", lambda: ["transformers>=5.6.0", "safetensors"])
     monkeypatch.setattr(repair_torch_runtime, "_run_pip", fake_run_pip)
@@ -612,18 +701,18 @@ def test_repair_reports_fresh_cuda_state_after_reinstall(monkeypatch):
     probe_results = iter(
         [
             {"torch_version": "2.13.0+cpu", "torchvision_version": "0.28.0", "torch_cuda_build": None, "torch_cuda_available": False},
-            {"torch_version": "2.13.0+cpu", "torchvision_version": "0.28.0", "torch_cuda_build": None, "torch_cuda_available": False},
+            {"torch_version": "2.13.0+cu126", "torchvision_version": "0.28.0+cu126", "torch_cuda_build": "12.6", "torch_cuda_available": True, "torch_probe_error": None},
+            {"torch_version": "2.13.0+cu126", "torchvision_version": "0.28.0+cu126", "torch_cuda_build": "12.6", "torch_cuda_available": True, "torch_probe_error": None},
         ]
     )
 
     monkeypatch.setattr(repair_torch_runtime.platform, "system", lambda: "Windows")
     monkeypatch.setattr(repair_torch_runtime, "_detect_gpu_vendor", lambda: {"primary": "nvidia", "vendors": ["nvidia"], "devices": []})
     monkeypatch.setattr(repair_torch_runtime, "_detect_nvidia_cuda_version", lambda: (12, 8))
-    monkeypatch.setattr(repair_torch_runtime, "_torch_probe", lambda: next(probe_results))
     monkeypatch.setattr(
         repair_torch_runtime,
         "_torch_probe_subprocess",
-        lambda: {"torch_version": "2.13.0+cu126", "torchvision_version": "0.28.0+cu126", "torch_cuda_build": "12.6", "torch_cuda_available": True, "torch_probe_error": None},
+        lambda: next(probe_results),
     )
     monkeypatch.setattr(repair_torch_runtime, "_missing_sam3_runtime_packages", lambda: [])
     monkeypatch.setattr(repair_torch_runtime, "_run_pip", lambda args, stream=False: pip_calls.append(args) or subprocess.CompletedProcess(args, 0))
