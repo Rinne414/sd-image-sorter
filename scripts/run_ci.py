@@ -7,9 +7,13 @@ import subprocess
 import sys
 import os
 import json
+import re
 import shutil
 import socket
+import uuid
+from contextlib import contextmanager
 from pathlib import Path
+from typing import BinaryIO, Iterator
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -34,6 +38,132 @@ PLAYWRIGHT_CLI = ROOT / "tests" / "e2e" / "node_modules" / "playwright" / "cli.j
 PLAYWRIGHT_WRAPPER = ROOT / "tests" / "e2e" / "scripts" / "run-playwright.mjs"
 REVIEW_DATASET_BUILDER = ROOT / "scripts" / "build_review_dataset.py"
 FRONTEND_JS_FILES = sorted((ROOT / "frontend" / "js").glob("**/*.js"))
+CI_LOCK_PATH = ROOT / ".tmp" / "run-ci.lock"
+CI_LOCK_BYTE_OFFSET = 4096
+CI_SHARD_COUNT_PATTERN = re.compile(r"^[0-9]+$")
+CI_MIN_SHARD_COUNT = 2
+CI_MAX_SHARD_COUNT = 8
+
+
+class CiLockError(RuntimeError):
+    """Raised when another full CI invocation owns the workspace lock."""
+
+
+def _lock_file(handle: BinaryIO) -> None:
+    handle.seek(CI_LOCK_BYTE_OFFSET)
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _unlock_file(handle: BinaryIO) -> None:
+    handle.seek(CI_LOCK_BYTE_OFFSET)
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def _read_lock_owner(handle: BinaryIO, lock_path: Path) -> str:
+    try:
+        handle.seek(0)
+        raw_owner = handle.read(CI_LOCK_BYTE_OFFSET).rstrip(b"\0").decode("utf-8")
+    except (OSError, UnicodeError) as error:
+        return f"unreadable owner ({error})"
+    return raw_owner or f"unknown owner in {lock_path}"
+
+
+@contextmanager
+def _exclusive_ci_lock(lock_path: Path, run_id: str) -> Iterator[None]:
+    if not run_id:
+        raise ValueError("run_id must be a non-empty string")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    handle = os.fdopen(descriptor, "r+b", buffering=0)
+    locked = False
+    try:
+        handle.seek(0, os.SEEK_END)
+        if handle.tell() <= CI_LOCK_BYTE_OFFSET:
+            handle.seek(CI_LOCK_BYTE_OFFSET)
+            handle.write(b"\0")
+            handle.flush()
+        try:
+            _lock_file(handle)
+        except OSError as error:
+            owner = _read_lock_owner(handle, lock_path)
+            raise CiLockError(
+                "another full CI invocation owns the workspace coverage lock; "
+                f"wait for it to finish. lock={lock_path}, owner={owner}"
+            ) from error
+        locked = True
+        owner = json.dumps({"pid": os.getpid(), "runId": run_id})
+        owner_bytes = owner.encode("utf-8")
+        if len(owner_bytes) >= CI_LOCK_BYTE_OFFSET:
+            raise ValueError("CI lock owner record exceeds the reserved header size")
+        handle.seek(0)
+        handle.write(owner_bytes)
+        handle.write(b"\0" * (CI_LOCK_BYTE_OFFSET - len(owner_bytes)))
+        handle.seek(CI_LOCK_BYTE_OFFSET)
+        handle.write(b"\0")
+        handle.truncate(CI_LOCK_BYTE_OFFSET + 1)
+        handle.flush()
+        os.fsync(handle.fileno())
+        yield
+    finally:
+        active_error = sys.exception()
+        unlock_error: OSError | None = None
+        try:
+            if locked:
+                _unlock_file(handle)
+        except OSError as error:
+            unlock_error = error
+        finally:
+            handle.close()
+        if unlock_error is not None:
+            message = (
+                f"failed to release full CI workspace lock {lock_path}: "
+                f"{unlock_error}"
+            )
+            if active_error is not None:
+                active_error.add_note(message)
+            else:
+                raise CiLockError(message) from unlock_error
+
+
+def _create_coverage_run_id() -> str:
+    return f"ci-{uuid.uuid4().hex}"
+
+
+def _require_sharded_full_ci(environment: dict[str, str]) -> None:
+    incompatible: list[str] = []
+    if environment.get("PW_DISABLE_SHARDING") == "1":
+        incompatible.append("PW_DISABLE_SHARDING=1")
+    raw_shard_count = environment.get("PW_SHARD_COUNT")
+    if raw_shard_count not in (None, ""):
+        valid_count = CI_SHARD_COUNT_PATTERN.fullmatch(raw_shard_count)
+        shard_count = int(raw_shard_count) if valid_count else 0
+        if not CI_MIN_SHARD_COUNT <= shard_count <= CI_MAX_SHARD_COUNT:
+            incompatible.append(f"PW_SHARD_COUNT={raw_shard_count}")
+    for name in ("BASE_URL", "SD_IMAGE_SORTER_PORT"):
+        value = environment.get(name)
+        if value:
+            incompatible.append(f"{name}={value}")
+    if incompatible:
+        raise ValueError(
+            "full CI click coverage requires sharded Playwright; unset "
+            + ", ".join(incompatible)
+        )
 
 
 def _first_executable(*candidates: str | Path) -> str:
@@ -147,7 +277,7 @@ def _prepare_playwright_fixtures(env: dict[str, str]) -> bool:
     return result.returncode == 0
 
 
-def main() -> int:
+def _run_ci(coverage_run_id: str) -> int:
     checks: list[tuple[str, list[str], Path]] = [
         (
             "compiled lock freshness",
@@ -257,11 +387,27 @@ def main() -> int:
     non_blocking_checks: set[str] = set()
 
     all_ok = True
+    passed_checks: set[str] = set()
     for name, command, cwd in checks:
+        if name == "click coverage gate" and "playwright e2e" not in passed_checks:
+            print(
+                "[CI] SKIPPED: click coverage gate — playwright e2e did not "
+                "pass in this CI invocation."
+            )
+            all_ok = False
+            continue
+        if name == "click coverage gate":
+            command = [*command, "--expected-run-id", coverage_run_id]
         print(f"[CI] Working directory: {cwd}")
         env = os.environ.copy()
         _apply_stable_temp_env(env)
         if name == "playwright e2e":
+            try:
+                _require_sharded_full_ci(env)
+            except ValueError as error:
+                print(f"[CI] FAILED: {error}")
+                all_ok = False
+                continue
             if not _prepare_playwright_fixtures(env):
                 print("[CI] FAILED: playwright fixture prep")
                 all_ok = False
@@ -269,6 +415,7 @@ def main() -> int:
             env_values = {
                 "PW_REUSE_SERVER": "1",
                 "PW_WEB_SERVER_PORT": _find_available_port(19087, 19187, 19287),
+                "PW_COVERAGE_RUN_ID": coverage_run_id,
             }
             env.update(env_values)
             if str(command[0]).lower().endswith(".exe") and os.name != "nt":
@@ -302,8 +449,19 @@ def main() -> int:
                 all_ok = False
         else:
             print(f"[CI] PASSED: {name}")
+            passed_checks.add(name)
 
     return 0 if all_ok else 1
+
+
+def main() -> int:
+    coverage_run_id = _create_coverage_run_id()
+    try:
+        with _exclusive_ci_lock(CI_LOCK_PATH, coverage_run_id):
+            return _run_ci(coverage_run_id)
+    except CiLockError as error:
+        print(f"[CI] FAILED: {error}")
+        return 1
 
 
 if __name__ == "__main__":

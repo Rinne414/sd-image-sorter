@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 import {
+  resolveCoverageRunId,
   resolveShardCount,
   runShardedPlaywright,
   shouldShardFullRun,
@@ -304,7 +305,7 @@ async function main() {
     const shardCount = resolveShardCount(baseEnv)
     if (shardCount > 1) {
       const ports = await assignServerPorts(baseEnv, shardCount)
-      const runId = `${Date.now()}-${process.pid}`
+      const runId = resolveCoverageRunId(baseEnv, process.pid, Date.now())
       try {
         const status = await runShardedPlaywright({
           args,

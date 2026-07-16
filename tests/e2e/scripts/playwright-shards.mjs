@@ -9,6 +9,8 @@ import {
 
 const DEFAULT_SHARD_COUNT = 4
 const MAX_SHARD_COUNT = 8
+const COVERAGE_RUN_SCHEMA_VERSION = 1
+const COVERAGE_RUN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 
 function requireInteger(value, fieldName) {
   if (!Number.isInteger(value)) {
@@ -48,10 +50,25 @@ export function resolveRunPaths(repoRoot, runId) {
   requireNonEmptyString(runId, 'runId')
   const artifactsRoot = path.join(repoRoot, 'artifacts')
   const runRoot = path.join(artifactsRoot, 'playwright-runs', runId)
+  const cleanupParentRoot = path.join(artifactsRoot, 'playwright-cleanup')
+  const canonicalCoverageRunPath = path.join(artifactsRoot, 'click-coverage-run.json')
   return {
     artifactsRoot,
     blobRoot: path.join(runRoot, 'blob-reports'),
+    canonicalClickLedgerRoot: path.join(artifactsRoot, 'click-coverage'),
+    canonicalCoverageRunPath,
+    canonicalCoverageFilePaths: [
+      canonicalCoverageRunPath,
+      ...[
+        'click-coverage.json',
+        'control-inventory.json',
+        'js-coverage-unused.json',
+        'untested-controls.json',
+      ].map((name) => path.join(artifactsRoot, name)),
+    ],
     canonicalLastRunPath: path.join(repoRoot, 'tests', 'e2e', 'test-results', '.last-run.json'),
+    cleanupParentRoot,
+    cleanupRoot: path.join(cleanupParentRoot, runId),
     clickLedgerRoot: path.join(runRoot, 'click-coverage'),
     dataRoot: path.join(repoRoot, '.tmp', 'e2e-data-sharded', runId),
     fixtureRoot: path.join(repoRoot, '.tmp', 'e2e-model-fixtures-sharded', runId),
@@ -114,6 +131,9 @@ export function formatMergedSummary(stats) {
 
 export function prepareRunDirectories(paths) {
   fs.rmSync(paths.canonicalLastRunPath, { force: true })
+  for (const filePath of paths.canonicalCoverageFilePaths) fs.rmSync(filePath, { force: true })
+  fs.rmSync(paths.canonicalClickLedgerRoot, { recursive: true, force: true })
+  fs.rmSync(paths.cleanupParentRoot, { recursive: true, force: true })
   fs.rmSync(paths.runRoot, { recursive: true, force: true })
   fs.mkdirSync(paths.blobRoot, { recursive: true })
   fs.mkdirSync(paths.clickLedgerRoot, { recursive: true })
@@ -239,7 +259,38 @@ function replaceDirectory(source, target, runId) {
   fs.renameSync(staging, target)
 }
 
-function publishSuccessfulArtifacts(paths, runId) {
+function publishCoverageRunIdentity(paths, runId) {
+  requireNonEmptyString(runId, 'runId')
+  const stagingPath = `${paths.canonicalCoverageRunPath}.${runId}.tmp`
+  fs.rmSync(stagingPath, { force: true })
+  fs.writeFileSync(
+    stagingPath,
+    `${JSON.stringify({ schemaVersion: COVERAGE_RUN_SCHEMA_VERSION, runId }, null, 2)}\n`,
+    'utf8',
+  )
+  fs.rmSync(paths.canonicalCoverageRunPath, { force: true })
+  fs.renameSync(stagingPath, paths.canonicalCoverageRunPath)
+}
+
+export function resolveCoverageRunId(env, processId, timestampMs) {
+  if (!env || typeof env !== 'object' || Array.isArray(env)) {
+    throw new TypeError('env must be an object')
+  }
+  requireInteger(processId, 'processId')
+  requireInteger(timestampMs, 'timestampMs')
+  if (processId < 1) throw new RangeError(`processId must be positive, received ${processId}`)
+  if (timestampMs < 0) throw new RangeError(`timestampMs must not be negative, received ${timestampMs}`)
+  const configuredRunId = env.PW_COVERAGE_RUN_ID
+  if (configuredRunId === undefined) return `${timestampMs}-${processId}`
+  if (typeof configuredRunId !== 'string' || !COVERAGE_RUN_ID_PATTERN.test(configuredRunId)) {
+    throw new TypeError(
+      'PW_COVERAGE_RUN_ID must match /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/',
+    )
+  }
+  return configuredRunId
+}
+
+export function publishSuccessfulArtifacts(paths, runId) {
   replaceFile(paths.jsonPath, path.join(paths.artifactsRoot, 'playwright-results.json'), runId)
   replaceFile(
     path.join(paths.runRoot, 'control-inventory.json'),
@@ -252,16 +303,30 @@ function publishSuccessfulArtifacts(paths, runId) {
     runId,
   )
   replaceDirectory(paths.htmlRoot, path.join(paths.artifactsRoot, 'playwright-report'), runId)
-  replaceDirectory(paths.clickLedgerRoot, path.join(paths.artifactsRoot, 'click-coverage'), runId)
+  replaceDirectory(paths.clickLedgerRoot, paths.canonicalClickLedgerRoot, runId)
 }
 
-export function cleanupSuccessfulShardArtifacts(paths) {
-  fs.rmSync(paths.runRoot, { recursive: true, force: true })
+function stageSuccessfulShardCleanup(paths) {
   fs.rmSync(paths.dataRoot, { recursive: true, force: true })
   fs.rmSync(paths.fixtureRoot, { recursive: true, force: true })
   for (const parent of [path.dirname(paths.dataRoot), path.dirname(paths.fixtureRoot)]) {
     if (fs.existsSync(parent) && fs.readdirSync(parent).length === 0) fs.rmdirSync(parent)
   }
+  fs.mkdirSync(paths.cleanupParentRoot, { recursive: true })
+  if (fs.existsSync(paths.cleanupRoot)) {
+    throw new Error(`Deferred Playwright cleanup path already exists: ${paths.cleanupRoot}`)
+  }
+  fs.renameSync(paths.runRoot, paths.cleanupRoot)
+}
+
+function restoreDiagnosticRunRoot(paths) {
+  if (!fs.existsSync(paths.cleanupRoot)) return
+  if (fs.existsSync(paths.runRoot)) {
+    throw new Error(
+      `Cannot restore Playwright diagnostics because both paths exist: ${paths.runRoot}, ${paths.cleanupRoot}`,
+    )
+  }
+  fs.renameSync(paths.cleanupRoot, paths.runRoot)
 }
 
 function normalizeFailedTestIds(failedTests) {
@@ -288,7 +353,7 @@ function publishTerminalRunStatus(paths, runId, status, failedTests) {
   fs.rmSync(stagingPath, { force: true })
   fs.writeFileSync(
     stagingPath,
-    `${JSON.stringify({ status, failedTests: normalizedFailedTests }, null, 2)}\n`,
+    `${JSON.stringify({ status, failedTests: normalizedFailedTests, runId }, null, 2)}\n`,
     'utf8',
   )
   fs.rmSync(paths.canonicalLastRunPath, { force: true })
@@ -341,8 +406,24 @@ export function finishFailedRun(paths, runId, failedTests) {
 }
 
 export function finishSuccessfulRun(paths, runId) {
-  cleanupSuccessfulShardArtifacts(paths)
-  publishTerminalRunStatus(paths, runId, 'passed', [])
+  let diagnosticsStaged = false
+  try {
+    publishTerminalRunStatus(paths, runId, 'passed', [])
+    stageSuccessfulShardCleanup(paths)
+    diagnosticsStaged = true
+    publishCoverageRunIdentity(paths, runId)
+  } catch (error) {
+    if (!diagnosticsStaged) throw error
+    try {
+      restoreDiagnosticRunRoot(paths)
+    } catch (restoreError) {
+      throw new AggregateError(
+        [error, restoreError],
+        `Successful Playwright finalization failed and diagnostics could not be restored: ${paths.runRoot}`,
+      )
+    }
+    throw error
+  }
 }
 
 function finishFailedRunFromShards(paths, runId, shardCount) {
