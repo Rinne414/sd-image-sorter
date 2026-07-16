@@ -13,7 +13,10 @@ from typing import Any, Callable, Dict, List, Optional
 from exceptions import ImageFileNotFoundError, ImageNotFoundError, ServiceError, ValidationError
 
 import database as db
-from artist_identifier import get_artist_identifier as default_get_artist_identifier
+from artist_identifier import (
+    ARTIST_THRESHOLD_DEFAULT,
+    get_artist_identifier as default_get_artist_identifier,
+)
 from image_fingerprint import compute_image_content_fingerprint
 from services.derived_state_service import (
     write_artist_prediction,
@@ -35,6 +38,18 @@ class _E2EArtistIdentifierStub:
         self.threshold = float(threshold)
 
     def identify(self, image_path: str, top_k: int = 5) -> Dict[str, Any]:
+        return self.identify_with_threshold(
+            image_path=image_path,
+            top_k=top_k,
+            threshold=self.threshold,
+        )
+
+    def identify_with_threshold(
+        self,
+        image_path: str,
+        top_k: int,
+        threshold: float,
+    ) -> Dict[str, Any]:
         stem = os.path.splitext(os.path.basename(image_path))[0]
         artist = "fixture_artist"
         confidence = 0.97
@@ -44,7 +59,7 @@ class _E2EArtistIdentifierStub:
             {"artist": "undefined", "confidence": 0.01},
         ][: max(1, int(top_k or 1))]
         return {
-            "artist": artist if confidence >= self.threshold else "undefined",
+            "artist": artist if confidence >= threshold else "undefined",
             "confidence": confidence,
             "top_predictions": top_predictions,
             "model_loaded": True,
@@ -175,11 +190,17 @@ class ArtistService:
     def set_identifier_getter(self, identifier_getter: Callable[..., Any]) -> None:
         self._identifier_getter = identifier_getter
 
-    def _identifier(self, *, model_path: Optional[str], model_source: str, threshold: float, use_gpu: Optional[bool] = None) -> Any:
+    def _identifier(
+        self,
+        *,
+        model_path: Optional[str],
+        model_source: str,
+        use_gpu: Optional[bool],
+    ) -> Any:
         return self._identifier_getter(
             model_path=model_path,
             model_source=model_source,
-            threshold=threshold,
+            threshold=ARTIST_THRESHOLD_DEFAULT,
             use_gpu=use_gpu,
         )
 
@@ -245,10 +266,9 @@ class ArtistService:
         identifier = self._identifier(
             model_path=model_path,
             model_source=model_source,
-            threshold=threshold,
             use_gpu=use_gpu,
         )
-        result = identifier.identify(image_path, top_k=top_k)
+        result = identifier.identify_with_threshold(image_path, top_k, threshold)
         if result.get("error"):
             raise ServiceError(result["error"])
 
@@ -292,7 +312,6 @@ class ArtistService:
         identifier = self._identifier(
             model_path=model_path,
             model_source=model_source,
-            threshold=threshold,
             use_gpu=use_gpu,
         )
 
@@ -343,7 +362,7 @@ class ArtistService:
                         logger.debug("Failed to mark image %s unreadable in batch identification", image_id)
                     raise FileNotFoundError(f"Image file not found for image {image_id}")
 
-                result = identifier.identify(image_path, top_k=top_k)
+                result = identifier.identify_with_threshold(image_path, top_k, threshold)
                 if result.get("error"):
                     raise RuntimeError(result["error"])
 
@@ -392,8 +411,6 @@ class ArtistService:
         }
 
     def get_stats(self) -> Dict[str, Any]:
-        from artist_identifier import ARTIST_THRESHOLD_DEFAULT
-
         with db.get_db() as conn:
             cursor = conn.cursor()
 

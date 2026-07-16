@@ -25,7 +25,9 @@ No existing file is modified by this task.
 from __future__ import annotations
 
 import importlib
+import threading
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -251,12 +253,140 @@ class TestReloadContract:
 # 5. Singleton lifecycle — rebuild vs reuse
 # --------------------------------------------------------------------------- #
 class TestSingletonLifecycle:
-    def test_threshold_only_change_reuses_and_updates(self, monkeypatch):
+    def test_threshold_only_change_reuses_without_mutating_shared_state(self, monkeypatch):
         monkeypatch.setattr(ai, "_identifier", None)
         first = ai.get_artist_identifier(model_source="huggingface", threshold=0.03)
         same = ai.get_artist_identifier(model_source="huggingface", threshold=0.5)
         assert same is first
-        assert same.threshold == 0.5
+        assert same.threshold == 0.03
+
+    def test_concurrent_same_config_constructs_one_identifier(self, monkeypatch):
+        call_barrier = threading.Barrier(2)
+        construction_barrier = threading.Barrier(2)
+        counts = {"constructed": 0}
+        counts_lock = threading.Lock()
+
+        class ConcurrentIdentifier:
+            def __init__(self, model_path, model_source, threshold, use_gpu):
+                self.model_path = model_path
+                self.model_source = model_source
+                self.threshold = threshold
+                self.use_gpu = use_gpu
+                self._model = None
+                with counts_lock:
+                    counts["constructed"] += 1
+                try:
+                    construction_barrier.wait(timeout=0.25)
+                except threading.BrokenBarrierError:
+                    assert counts["constructed"] == 1
+
+            def set_threshold(self, threshold):
+                self.threshold = threshold
+
+        monkeypatch.setattr(ai, "_identifier", None)
+        monkeypatch.setattr(ai, "ArtistIdentifier", ConcurrentIdentifier)
+
+        def get_after_both_threads_start():
+            call_barrier.wait(timeout=1)
+            return ai.get_artist_identifier(
+                model_path=None,
+                model_source="huggingface",
+                threshold=0.03,
+                use_gpu=False,
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(get_after_both_threads_start) for _ in range(2)]
+            identifiers = [future.result(timeout=3) for future in futures]
+
+        assert identifiers[0] is identifiers[1]
+        assert counts == {"constructed": 1}
+
+    def test_placeholder_singleton_is_rebuilt_for_retry(self, monkeypatch):
+        failed = ai.ArtistIdentifier(
+            model_source="huggingface",
+            threshold=0.03,
+            use_gpu=False,
+        )
+        failed._model = "placeholder"
+        failed._load_error = "test load failure"
+        monkeypatch.setattr(ai, "_identifier", failed)
+
+        retry = ai.get_artist_identifier(
+            model_path=None,
+            model_source="huggingface",
+            threshold=0.03,
+            use_gpu=False,
+        )
+
+        assert retry is not failed
+        assert retry._model is None
+
+    def test_concurrent_config_switch_returns_each_selected_identifier(self, monkeypatch):
+        class ConfiguredIdentifier:
+            def __init__(self, model_path, model_source, threshold, use_gpu):
+                self.model_path = model_path
+                self.model_source = model_source
+                self.threshold = threshold
+                self.use_gpu = use_gpu
+                self._model = None
+
+            def set_threshold(self, threshold):
+                self.threshold = threshold
+
+        class PublishWindowLock:
+            def __init__(self):
+                self._lock = threading.Lock()
+                self._state_lock = threading.Lock()
+                self._exit_count = 0
+                self.first_publish_exited = threading.Event()
+                self.second_publish_exited = threading.Event()
+
+            def __enter__(self):
+                if not self._lock.acquire(timeout=3):
+                    raise RuntimeError("Timed out acquiring artist identifier test lock")
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                self._lock.release()
+                with self._state_lock:
+                    self._exit_count += 1
+                    exit_count = self._exit_count
+                if exit_count == 1:
+                    self.first_publish_exited.set()
+                    if not self.second_publish_exited.wait(timeout=3):
+                        raise RuntimeError("Timed out waiting for second artist publish")
+                elif exit_count == 2:
+                    self.second_publish_exited.set()
+                return False
+
+        publish_lock = PublishWindowLock()
+        monkeypatch.setattr(ai, "_identifier", None)
+        monkeypatch.setattr(ai, "_identifier_lock", publish_lock, raising=False)
+        monkeypatch.setattr(ai, "ArtistIdentifier", ConfiguredIdentifier)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            first_future = executor.submit(
+                ai.get_artist_identifier,
+                None,
+                "huggingface",
+                0.03,
+                False,
+            )
+            assert publish_lock.first_publish_exited.wait(timeout=1)
+            second_future = executor.submit(
+                ai.get_artist_identifier,
+                None,
+                "modelscope",
+                0.03,
+                False,
+            )
+            first = first_future.result(timeout=3)
+            second = second_future.result(timeout=3)
+
+        assert first.model_source == "huggingface"
+        assert second.model_source == "modelscope"
+        assert first is not second
 
     def test_model_source_change_rebuilds(self, monkeypatch):
         monkeypatch.setattr(ai, "_identifier", None)

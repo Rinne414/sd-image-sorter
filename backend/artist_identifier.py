@@ -483,12 +483,26 @@ class ArtistIdentifier:
         image_path: str,
         top_k: int = 5,
     ) -> Dict[str, Any]:
+        """Identify an artist using this instance's configured threshold."""
+        return self.identify_with_threshold(
+            image_path=image_path,
+            top_k=top_k,
+            threshold=self.threshold,
+        )
+
+    def identify_with_threshold(
+        self,
+        image_path: str,
+        top_k: int,
+        threshold: float,
+    ) -> Dict[str, Any]:
         """
-        Identify the artist/style of an image.
+        Identify the artist/style of an image with a request-local threshold.
 
         Args:
             image_path: Path to the image file
             top_k: Number of top predictions to return
+            threshold: Minimum confidence for assigning the top artist
 
         Returns:
             {
@@ -572,7 +586,7 @@ class ArtistIdentifier:
             # Set main result based on threshold
             if result["top_predictions"]:
                 top = result["top_predictions"][0]
-                if top["confidence"] >= self.threshold:
+                if top["confidence"] >= threshold:
                     result["artist"] = top["artist"]
                     result["confidence"] = top["confidence"]
                 else:
@@ -669,7 +683,24 @@ class ArtistIdentifier:
 
 
 # Singleton
-_identifier = None
+_identifier: Optional[ArtistIdentifier] = None
+_identifier_lock = threading.Lock()
+
+
+def _identifier_requires_rebuild(
+    identifier: Optional[ArtistIdentifier],
+    normalized_path: Optional[str],
+    model_source: str,
+    resolved_use_gpu: bool,
+) -> bool:
+    """Return whether a request needs a fresh identifier instance."""
+    return (
+        identifier is None
+        or identifier.model_source != model_source
+        or identifier.model_path != normalized_path
+        or identifier.use_gpu != resolved_use_gpu
+        or identifier._model == "placeholder"
+    )
 
 
 def get_artist_identifier(
@@ -688,18 +719,30 @@ def get_artist_identifier(
     normalized_path = str(model_path).strip() if model_path else None
     resolved_use_gpu = ARTIST_USE_GPU if use_gpu is None else bool(use_gpu)
 
-    if (
-        _identifier is None
-        or _identifier.model_source != model_source
-        or _identifier.model_path != normalized_path
-        or _identifier.use_gpu != resolved_use_gpu
+    current_identifier = _identifier
+    if current_identifier is not None and not _identifier_requires_rebuild(
+        current_identifier,
+        normalized_path,
+        model_source,
+        resolved_use_gpu,
     ):
-        _identifier = ArtistIdentifier(
+        return current_identifier
+
+    with _identifier_lock:
+        current_identifier = _identifier
+        if current_identifier is not None and not _identifier_requires_rebuild(
+            current_identifier,
+            normalized_path,
+            model_source,
+            resolved_use_gpu,
+        ):
+            return current_identifier
+
+        identifier = ArtistIdentifier(
             model_path=normalized_path,
             model_source=model_source,
             threshold=threshold,
             use_gpu=resolved_use_gpu,
         )
-    else:
-        _identifier.set_threshold(threshold)
-    return _identifier
+        _identifier = identifier
+        return identifier

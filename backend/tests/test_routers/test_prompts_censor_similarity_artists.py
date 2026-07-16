@@ -2398,6 +2398,9 @@ class TestArtistsRouterValidation:
             def identify(self, _image_path, top_k=5):
                 return {"error": "Artist model unavailable. Install the required dependencies and restart the app."}
 
+            def identify_with_threshold(self, _image_path, top_k, _threshold):
+                return self.identify(_image_path, top_k=top_k)
+
         monkeypatch.setattr(artists_router, "get_artist_identifier", lambda **kwargs: FakeIdentifier())
 
         response = test_client.post("/api/artists/identify", json={"image_id": image_id})
@@ -2428,6 +2431,9 @@ class TestArtistsRouterValidation:
                     "top_predictions": [{"artist": "artist_a", "confidence": 0.02}],
                     "model_loaded": True,
                 }
+
+            def identify_with_threshold(self, _image_path, top_k, _threshold):
+                return self.identify(_image_path, top_k=top_k)
 
         def fake_get_identifier(**kwargs):
             captured.update(kwargs)
@@ -2823,6 +2829,9 @@ class TestDerivedWriterPathResolution:
                     "model_loaded": True,
                 }
 
+            def identify_with_threshold(self, image_path, top_k, _threshold):
+                return self.identify(image_path, top_k=top_k)
+
         service = artist_service_module.ArtistService(identifier_getter=lambda **kwargs: FakeIdentifier())
         result = service.run_batch_identification(
             image_ids=[image_a, image_b],
@@ -2833,6 +2842,78 @@ class TestDerivedWriterPathResolution:
         assert result["errors"] == 0
         assert result["processed"] == 2
         assert captured_paths == [str(resolved_a), str(resolved_b)]
+
+
+class TestArtistServiceConcurrency:
+    def test_concurrent_identify_requests_keep_threshold_request_local(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        from services.artist_service import ArtistService
+
+        image_paths = {}
+        for image_id, name in ((1, "threshold-low.png"), (2, "threshold-high.png")):
+            image_path = tmp_path / name
+            Image.new("RGB", (32, 32), color="blue").save(image_path)
+            image_paths[image_id] = str(image_path)
+
+        identify_barrier = threading.Barrier(2)
+
+        class SharedIdentifier:
+            def __init__(self):
+                self.threshold = 0.03
+
+            @staticmethod
+            def _result(threshold):
+                confidence = 0.5
+                artist = "artist_a" if confidence >= threshold else "undefined"
+                return {
+                    "artist": artist,
+                    "confidence": confidence,
+                    "top_predictions": [
+                        {"artist": "artist_a", "confidence": confidence},
+                    ],
+                    "model_loaded": True,
+                }
+
+            def identify(self, _image_path, top_k=5):
+                identify_barrier.wait(timeout=1)
+                return self._result(self.threshold)
+
+            def identify_with_threshold(self, _image_path, top_k, threshold):
+                identify_barrier.wait(timeout=1)
+                return self._result(threshold)
+
+        identifier = SharedIdentifier()
+
+        def get_identifier(**kwargs):
+            identifier.threshold = float(kwargs["threshold"])
+            return identifier
+
+        service = ArtistService(identifier_getter=get_identifier)
+        monkeypatch.setattr(service, "_get_image_path", lambda image_id: image_paths[image_id])
+        monkeypatch.setattr(service, "_compute_content_fingerprint", lambda _path: None)
+        monkeypatch.setattr(service, "_store_prediction", lambda **_kwargs: None)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            low_future = executor.submit(
+                service.identify_image,
+                image_id=1,
+                threshold=0.4,
+                top_k=1,
+            )
+            high_future = executor.submit(
+                service.identify_image,
+                image_id=2,
+                threshold=0.6,
+                top_k=1,
+            )
+            low_result = low_future.result(timeout=3)
+            high_result = high_future.result(timeout=3)
+
+        assert low_result["artist"] == "artist_a"
+        assert high_result["artist"] == "undefined"
 
 
 class TestPromptGenerator:
