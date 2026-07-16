@@ -4,6 +4,12 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { defineConfig, devices } from '@playwright/test'
 
+if (process.env.PW_ENV_ISOLATION_ACTIVE !== '1') {
+  throw new Error(
+    'Playwright environment isolation is not active. Run tests through tests/e2e/scripts/run-playwright.mjs.',
+  )
+}
+
 const defaultPort = process.env.PW_WEB_SERVER_PORT || process.env.SD_IMAGE_SORTER_PORT || '19087'
 const baseURL = process.env.BASE_URL || `http://127.0.0.1:${defaultPort}`
 const browserChannel = process.env.PW_BROWSER_CHANNEL || ''
@@ -238,11 +244,11 @@ export default defineConfig({
     command: webServerCommand,
     url: baseURL,
     env: {
-      ...process.env,
       ...(localRuntimeLdPath ? { LD_LIBRARY_PATH: localRuntimeLdPath } : {}),
-      PYTHONPATH: [e2eStubModulesDir, process.env.PYTHONPATH || ''].filter(Boolean).join(path.delimiter),
+      PYTHONPATH: e2eStubModulesDir,
       SD_IMAGE_SORTER_DATA_DIR: e2eDataDir,
       SD_IMAGE_SORTER_DB_PATH: e2eDatabasePath,
+      SD_IMAGE_SORTER_DISABLE_ENV_FILES: '1',
       SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY: '1',
       SD_IMAGE_SORTER_ARTIST_RUNTIME_ZIP_URL: pathToFileURL(artistRuntimeZip).href,
       SD_IMAGE_SORTER_ARTIST_CHECKPOINT_URL: pathToFileURL(artistCheckpoint).href,

@@ -32,6 +32,7 @@ def _get_backend_dir() -> Path:
 
 
 _INITIAL_ENV_KEYS = set(os.environ.keys())
+_DISABLE_ENV_FILES_KEY = "SD_IMAGE_SORTER_DISABLE_ENV_FILES"
 
 
 def _parse_env_line(line: str) -> Optional[Tuple[str, str]]:
@@ -79,6 +80,14 @@ def _load_env_file(path: Path, *, override_loaded_values: bool = False) -> None:
 
 def _bootstrap_package_env() -> None:
     """Support both legacy backend/.env and package-root .env files."""
+    disable_env_files = os.environ.get(_DISABLE_ENV_FILES_KEY)
+    if disable_env_files == "1":
+        return
+    if disable_env_files not in {None, "0"}:
+        raise ValueError(
+            f'Invalid {_DISABLE_ENV_FILES_KEY}: expected "0" or "1", got {disable_env_files!r}'
+        )
+
     backend_env = _get_backend_dir() / ".env"
     package_env = _get_project_root() / ".env"
 

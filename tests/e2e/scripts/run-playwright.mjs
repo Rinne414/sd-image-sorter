@@ -11,27 +11,19 @@ import {
   runShardedPlaywright,
   shouldShardFullRun,
 } from './playwright-shards.mjs'
+import { buildPlaywrightChildEnv } from './playwright-env.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const e2eRoot = path.resolve(__dirname, '..')
 const repoRoot = path.resolve(e2eRoot, '..', '..')
 const playwrightCli = path.join(e2eRoot, 'node_modules', 'playwright', 'cli.js')
-const runtimeRoot = process.env.PLAYWRIGHT_LOCAL_RUNTIME_ROOT
-  ? path.resolve(process.env.PLAYWRIGHT_LOCAL_RUNTIME_ROOT)
-  : path.join(repoRoot, '.tools', 'local-libs', 'playwright-runtime')
-
 const requiredLibs = [
   'libnspr4.so',
   'libnss3.so',
   'libnssutil3.so',
   'libsmime3.so',
   'libasound.so.2',
-]
-
-const runtimeLibDirs = [
-  path.join(runtimeRoot, 'usr', 'lib', 'x86_64-linux-gnu'),
-  path.join(runtimeRoot, 'lib', 'x86_64-linux-gnu'),
 ]
 
 const debPrefixes = [
@@ -55,8 +47,21 @@ function fileExists(candidate) {
   }
 }
 
-function systemHasRequiredLibs() {
-  const result = spawnSync('ldconfig', ['-p'], { encoding: 'utf8' })
+function resolveRuntimeRoot(environment) {
+  return environment.PLAYWRIGHT_LOCAL_RUNTIME_ROOT
+    ? path.resolve(environment.PLAYWRIGHT_LOCAL_RUNTIME_ROOT)
+    : path.join(repoRoot, '.tools', 'local-libs', 'playwright-runtime')
+}
+
+function resolveRuntimeLibDirs(runtimeRoot) {
+  return [
+    path.join(runtimeRoot, 'usr', 'lib', 'x86_64-linux-gnu'),
+    path.join(runtimeRoot, 'lib', 'x86_64-linux-gnu'),
+  ]
+}
+
+function systemHasRequiredLibs(environment) {
+  const result = spawnSync('ldconfig', ['-p'], { encoding: 'utf8', env: environment })
   if (result.status !== 0 || !result.stdout) {
     return false
   }
@@ -64,7 +69,7 @@ function systemHasRequiredLibs() {
   return requiredLibs.every((lib) => result.stdout.includes(lib))
 }
 
-function runtimeHasRequiredLibs() {
+function runtimeHasRequiredLibs(runtimeLibDirs) {
   return requiredLibs.every((lib) =>
     runtimeLibDirs.some((dir) => fileExists(path.join(dir, lib))),
   )
@@ -86,16 +91,19 @@ function findDebFile(prefix) {
   return null
 }
 
-function ensureLocalRuntimeLibs() {
-  if (process.platform !== 'linux' || process.env.PLAYWRIGHT_SKIP_LOCAL_RUNTIME_BOOTSTRAP === '1') {
+function ensureLocalRuntimeLibs(environment) {
+  if (process.platform !== 'linux' || environment.PLAYWRIGHT_SKIP_LOCAL_RUNTIME_BOOTSTRAP === '1') {
     return []
   }
 
-  if (runtimeHasRequiredLibs()) {
+  const runtimeRoot = resolveRuntimeRoot(environment)
+  const runtimeLibDirs = resolveRuntimeLibDirs(runtimeRoot)
+
+  if (runtimeHasRequiredLibs(runtimeLibDirs)) {
     return runtimeLibDirs.filter(fileExists)
   }
 
-  if (systemHasRequiredLibs()) {
+  if (systemHasRequiredLibs(environment)) {
     return []
   }
 
@@ -114,13 +122,16 @@ function ensureLocalRuntimeLibs() {
   fs.mkdirSync(runtimeRoot, { recursive: true })
   for (const prefix of debPrefixes) {
     const debPath = findDebFile(prefix)
-    const result = spawnSync('dpkg-deb', ['-x', debPath, runtimeRoot], { stdio: 'inherit' })
+    const result = spawnSync('dpkg-deb', ['-x', debPath, runtimeRoot], {
+      env: environment,
+      stdio: 'inherit',
+    })
     if (result.status !== 0) {
       process.exit(result.status ?? 1)
     }
   }
 
-  if (!runtimeHasRequiredLibs()) {
+  if (!runtimeHasRequiredLibs(runtimeLibDirs)) {
     console.error('[playwright-runtime] Extracted local runtime packages but required shared libraries are still missing.')
     process.exit(1)
   }
@@ -128,9 +139,9 @@ function ensureLocalRuntimeLibs() {
   return runtimeLibDirs.filter(fileExists)
 }
 
-function buildEnv() {
-  const env = { ...process.env }
-  const localLibDirs = ensureLocalRuntimeLibs()
+function buildEnv(parentEnvironment, platform) {
+  const env = buildPlaywrightChildEnv(parentEnvironment, platform)
+  const localLibDirs = ensureLocalRuntimeLibs(env)
   if (localLibDirs.length === 0) {
     return env
   }
@@ -140,8 +151,8 @@ function buildEnv() {
   return env
 }
 
-function canAutoAssignServerPort(command, args) {
-  if (process.env.PW_WEB_SERVER_PORT || process.env.SD_IMAGE_SORTER_PORT || process.env.BASE_URL) {
+function canAutoAssignServerPort(command, args, environment) {
+  if (environment.PW_WEB_SERVER_PORT || environment.SD_IMAGE_SORTER_PORT || environment.BASE_URL) {
     return false
   }
 
@@ -245,7 +256,7 @@ async function waitForPortsReleased(ports, timeoutMs, intervalMs) {
 
 async function assignServerPort(env, args) {
   const [command] = args
-  if (!canAutoAssignServerPort(command, args)) {
+  if (!canAutoAssignServerPort(command, args, env)) {
     return { env, args }
   }
 
@@ -283,7 +294,12 @@ async function main() {
     process.exit(1)
   }
 
-  const baseEnv = buildEnv()
+  const baseEnv = buildEnv(process.env, process.platform)
+  if (baseEnv.PW_ENABLE_EXTERNAL_INTEGRATIONS === '1') {
+    console.warn(
+      '[playwright-runtime] External integrations are enabled; use isolated credentials and treat failure logs and artifacts as sensitive.',
+    )
+  }
   if (shouldShardFullRun(args, baseEnv)) {
     const shardCount = resolveShardCount(baseEnv)
     if (shardCount > 1) {
@@ -299,6 +315,7 @@ async function main() {
           repoRoot,
           runId,
           shardCount,
+          platform: process.platform,
         })
         process.exitCode = status
       } finally {

@@ -2,6 +2,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 
+import {
+  buildPlaywrightChildEnv,
+  buildPlaywrightReportEnv,
+} from './playwright-env.mjs'
+
 const DEFAULT_SHARD_COUNT = 4
 const MAX_SHARD_COUNT = 8
 
@@ -58,8 +63,9 @@ export function resolveRunPaths(repoRoot, runId) {
 }
 
 export function buildShardDescriptors(input) {
-  const { args, baseEnv, e2eRoot, ports, repoRoot, runId, shardCount } = input
+  const { args, baseEnv, e2eRoot, platform, ports, repoRoot, runId, shardCount } = input
   requireNonEmptyString(e2eRoot, 'e2eRoot')
+  requireNonEmptyString(platform, 'platform')
   requireNonEmptyString(repoRoot, 'repoRoot')
   requireNonEmptyString(runId, 'runId')
   requireInteger(shardCount, 'shardCount')
@@ -71,13 +77,14 @@ export function buildShardDescriptors(input) {
   }
 
   const paths = resolveRunPaths(repoRoot, runId)
+  const childBaseEnv = buildPlaywrightChildEnv(baseEnv, platform)
   return ports.map((port, index) => {
     requireInteger(port, `ports[${index}]`)
     const shardIndex = index + 1
     return {
       args: [...args, `--shard=${shardIndex}/${shardCount}`, '--workers=1', '--reporter=blob'],
       env: {
-        ...baseEnv,
+        ...childBaseEnv,
         PLAYWRIGHT_BLOB_OUTPUT_FILE: path.join(paths.blobRoot, `shard-${shardIndex}.zip`),
         PWTEST_BLOB_DO_NOT_REMOVE: '1',
         PW_COVERAGE_LEDGER_OWNER: 'runner',
@@ -175,14 +182,15 @@ async function runShardProcesses(descriptors, playwrightCli, e2eRoot) {
   }
 }
 
-function mergeBlobReports(baseEnv, e2eRoot, paths, playwrightCli) {
+function mergeBlobReports(baseEnv, e2eRoot, paths, playwrightCli, platform) {
+  const childBaseEnv = buildPlaywrightReportEnv(baseEnv, platform)
   const result = spawnSync(
     process.execPath,
     [playwrightCli, 'merge-reports', paths.blobRoot, '--reporter=json,html'],
     {
       cwd: e2eRoot,
       env: {
-        ...baseEnv,
+        ...childBaseEnv,
         PLAYWRIGHT_HTML_OPEN: 'never',
         PLAYWRIGHT_HTML_OUTPUT_DIR: paths.htmlRoot,
         PLAYWRIGHT_JSON_OUTPUT_FILE: paths.jsonPath,
@@ -342,7 +350,7 @@ function finishFailedRunFromShards(paths, runId, shardCount) {
 }
 
 export async function runShardedPlaywright(input) {
-  const { args, baseEnv, e2eRoot, playwrightCli, ports, repoRoot, runId, shardCount } = input
+  const { args, baseEnv, e2eRoot, platform, playwrightCli, ports, repoRoot, runId, shardCount } = input
   const paths = resolveRunPaths(repoRoot, runId)
   prepareRunDirectories(paths)
   try {
@@ -350,6 +358,7 @@ export async function runShardedPlaywright(input) {
       args,
       baseEnv,
       e2eRoot,
+      platform,
       ports,
       repoRoot,
       runId,
@@ -368,7 +377,7 @@ export async function runShardedPlaywright(input) {
       console.error(`[playwright-runtime] Failure artifacts: ${paths.runRoot}`)
       return 1
     }
-    const mergeStatus = mergeBlobReports(baseEnv, e2eRoot, paths, playwrightCli)
+    const mergeStatus = mergeBlobReports(baseEnv, e2eRoot, paths, playwrightCli, platform)
     if (mergeStatus !== 0) {
       finishFailedRunFromShards(paths, runId, shardCount)
       console.error(`[playwright-runtime] Failure artifacts: ${paths.runRoot}`)

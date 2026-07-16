@@ -243,6 +243,40 @@ class TestLoadEnvFile:
         config._load_env_file(env_file, override_loaded_values=True)
         assert os.environ["SD_IMAGE_SORTER_PIN_C"] == "new"
 
+    def test_bootstrap_skips_package_env_files_when_explicitly_disabled(
+        self, tmp_path, monkeypatch, _clean_env_pin_keys
+    ):
+        backend_dir = tmp_path / "backend"
+        package_root = tmp_path / "package"
+        backend_dir.mkdir()
+        package_root.mkdir()
+        (backend_dir / ".env").write_text(
+            "SD_IMAGE_SORTER_PIN_A=backend-file-sentinel\n",
+            encoding="utf-8",
+        )
+        (package_root / ".env").write_text(
+            "SD_IMAGE_SORTER_PIN_B=package-file-sentinel\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(config, "_INITIAL_ENV_KEYS", frozenset())
+        monkeypatch.setattr(config, "_get_backend_dir", lambda: backend_dir)
+        monkeypatch.setattr(config, "_get_project_root", lambda: package_root)
+        monkeypatch.setenv("SD_IMAGE_SORTER_DISABLE_ENV_FILES", "1")
+
+        config._bootstrap_package_env()
+
+        assert "SD_IMAGE_SORTER_PIN_A" not in os.environ
+        assert "SD_IMAGE_SORTER_PIN_B" not in os.environ
+
+    def test_bootstrap_rejects_invalid_env_file_disable_flag(self, monkeypatch):
+        monkeypatch.setenv("SD_IMAGE_SORTER_DISABLE_ENV_FILES", "sometimes")
+
+        with pytest.raises(
+            ValueError,
+            match='Invalid SD_IMAGE_SORTER_DISABLE_ENV_FILES: expected "0" or "1"',
+        ):
+            config._bootstrap_package_env()
+
 
 # ===========================================================================
 # Group D -- download mirror JSON IO
