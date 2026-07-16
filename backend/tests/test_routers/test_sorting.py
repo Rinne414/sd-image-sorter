@@ -639,6 +639,50 @@ class TestScan:
         assert "truncated.png" in progress["message"]
         assert [img["filename"] for img in db.get_images(limit=20)] == ["good.png"]
 
+    def test_scan_keeps_corrupt_exif_webp_and_surfaces_library_health_error(
+        self,
+        test_client,
+        tmp_path: Path,
+    ):
+        from PIL import Image
+
+        image_path = tmp_path / "corrupt-exif.webp"
+        Image.new("RGB", (32, 24), color="navy").save(
+            image_path,
+            format="WEBP",
+            exif=b"not-valid-tiff-exif",
+        )
+        with Image.open(image_path) as stored_image:
+            assert stored_image.size == (32, 24)
+            stored_image.verify()
+
+        response = test_client.post(
+            "/api/scan",
+            json={"folder_path": str(tmp_path), "recursive": False},
+        )
+
+        assert response.status_code == 200
+        images = test_client.test_db.get_images(limit=10)
+        assert len(images) == 1
+        stored = images[0]
+        assert stored["filename"] == image_path.name
+        assert stored["is_readable"] == 1
+        assert stored["width"] == 32
+        assert stored["height"] == 24
+        assert stored["metadata_status"] == "error"
+        assert stored["read_error"].startswith(
+            "WebP EXIF chunk could not be parsed:"
+        )
+
+        health_response = test_client.get("/api/library-health?sample_limit=3")
+        assert health_response.status_code == 200
+        health = health_response.json()
+        assert health["issue_counts"]["metadata_error"] == 1
+        sample = next(
+            item for item in health["issue_samples"] if item["id"] == stored["id"]
+        )
+        assert sample["read_error"] == stored["read_error"]
+
     def test_scan_reset(self, test_client):
         """Resetting scan progress should work."""
         response = test_client.post("/api/scan/reset")

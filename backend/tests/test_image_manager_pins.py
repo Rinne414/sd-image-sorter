@@ -70,6 +70,17 @@ def _png(path: Path, color: str = "white", size=(64, 64)) -> Path:
     return path
 
 
+def _webp(path: Path, exif: bytes | None) -> Path:
+    image = Image.new("RGB", (32, 24), color="navy")
+    if exif is None:
+        image.save(path, format="WEBP")
+    else:
+        image.save(path, format="WEBP", exif=exif)
+    with Image.open(path) as stored:
+        stored.verify()
+    return path
+
+
 # ---------------------------------------------------------------------------
 # Pure helpers (no DB, no filesystem)
 # ---------------------------------------------------------------------------
@@ -305,6 +316,35 @@ class TestRecordBuilders:
             "prompt": "raw"
         }
 
+    def test_metadata_success_record_preserves_nonfatal_metadata_error(self, tmp_path):
+        p = _png(tmp_path / "metadata-warning.png")
+        metadata_error = "WebP EXIF chunk could not be parsed: invalid TIFF header"
+        metadata = {
+            "generator": "unknown",
+            "prompt": None,
+            "negative_prompt": None,
+            "width": 32,
+            "height": 24,
+            "checkpoint": None,
+            "loras": [],
+            "metadata": {},
+            "metadata_error": metadata_error,
+        }
+
+        record = _build_metadata_success_record(
+            str(p),
+            p.name,
+            p.stat(),
+            metadata,
+            content_fingerprint=None,
+        )
+
+        assert record["is_readable"] is True
+        assert record["width"] == 32
+        assert record["height"] == 24
+        assert record["metadata_status"] == "error"
+        assert record["read_error"] == metadata_error
+
     def test_metadata_error_record_never_drops_the_row(self):
         """[SAFETY] timeout/permission/OS failures still produce a COMPLETE row
         (status='error', is_readable=False) — the file is never silently
@@ -424,6 +464,32 @@ class TestReparseImageMetadata:
         assert captured["read_error"] == "unreadable"
         # the caller's preserve_derived_state choice reaches the DB layer on both arms
         assert captured["preserve_derived_state"] is True
+
+    def test_corrupt_webp_exif_remains_readable_after_reparse(self, tmp_path, test_db):
+        image_path = _webp(tmp_path / "reparse-corrupt-exif.webp", b"not-valid-tiff-exif")
+        image_id = db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            generator="unknown",
+            width=32,
+            height=24,
+            file_size=image_path.stat().st_size,
+            metadata_json="{}",
+        )
+
+        result = reparse_image_metadata(image_id, str(image_path), preserve_derived_state=False)
+        stored = db.get_image_by_id(image_id)
+
+        assert result["parse_error"] is None
+        assert result["metadata_error"].startswith(
+            "WebP EXIF chunk could not be parsed:"
+        )
+        assert stored is not None
+        assert stored["is_readable"] == 1
+        assert stored["width"] == 32
+        assert stored["height"] == 24
+        assert stored["metadata_status"] == "error"
+        assert stored["read_error"] == result["metadata_error"]
 
 
 # ---------------------------------------------------------------------------

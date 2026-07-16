@@ -6,8 +6,42 @@ RIFF chunks to extract EXIF/XMP metadata without Pillow overhead.
 """
 import os
 import struct
+from pathlib import Path
+
 import pytest
+from PIL import Image
+
 from backend.metadata_parser import MetadataParser
+
+
+CORRUPT_WEBP_EXIF = b"not-valid-tiff-exif"
+WEBP_EXIF_ERROR_PREFIX = "WebP EXIF chunk could not be parsed:"
+
+
+def _corrupt_exif_ifd_offset() -> bytes:
+    payload = b"II\x2a\x00\x08\x00\x00\x00"
+    payload += b"\x01\x00"
+    payload += struct.pack("<HHI", 0x8769, 4, 1)
+    payload += struct.pack("<I", 0xFFFFFFF0)
+    payload += b"\x00\x00\x00\x00"
+    return payload
+
+
+def _write_verified_webp(
+    path: Path,
+    exif: bytes | Image.Exif | None,
+) -> Path:
+    """Write a real WebP and prove Pillow can decode its pixel stream."""
+    image = Image.new("RGB", (32, 24), color="navy")
+    if exif is None:
+        image.save(path, format="WEBP")
+    else:
+        image.save(path, format="WEBP", exif=exif)
+
+    with Image.open(path) as stored:
+        assert stored.size == (32, 24)
+        stored.verify()
+    return path
 
 
 class TestWebPFastPath:
@@ -212,6 +246,61 @@ class TestWebPIntegration:
     def parser(self):
         """Create a parser instance."""
         return MetadataParser()
+
+    def test_corrupt_exif_is_a_nonfatal_metadata_error(self, parser, tmp_path):
+        image_path = _write_verified_webp(
+            tmp_path / "corrupt-exif.webp",
+            CORRUPT_WEBP_EXIF,
+        )
+
+        result = parser.parse(str(image_path), validate_image_data=True)
+
+        assert result["parse_error"] is None
+        assert result["width"] == 32
+        assert result["height"] == 24
+        metadata_error = result["metadata_error"]
+        assert isinstance(metadata_error, str)
+        assert metadata_error.startswith(WEBP_EXIF_ERROR_PREFIX)
+        assert "not a TIFF file" in metadata_error
+
+    def test_lazy_corrupt_exif_warning_is_a_nonfatal_metadata_error(
+        self,
+        parser,
+        tmp_path,
+    ):
+        image_path = _write_verified_webp(
+            tmp_path / "corrupt-exif-offset.webp",
+            _corrupt_exif_ifd_offset(),
+        )
+
+        result = parser.parse(str(image_path), validate_image_data=True)
+
+        assert result["parse_error"] is None
+        assert (result["width"], result["height"]) == (32, 24)
+        metadata_error = result["metadata_error"]
+        assert isinstance(metadata_error, str)
+        assert metadata_error.startswith(WEBP_EXIF_ERROR_PREFIX)
+        assert "offset 4294967280 is outside" in metadata_error
+
+    def test_webp_without_exif_has_no_metadata_error(self, parser, tmp_path):
+        image_path = _write_verified_webp(tmp_path / "no-exif.webp", None)
+
+        result = parser.parse(str(image_path), validate_image_data=True)
+
+        assert result["parse_error"] is None
+        assert result["metadata_error"] is None
+        assert (result["width"], result["height"]) == (32, 24)
+
+    def test_webp_with_valid_exif_has_no_metadata_error(self, parser, tmp_path):
+        exif = Image.Exif()
+        exif[0x0131] = "SD Image Sorter Test"
+        image_path = _write_verified_webp(tmp_path / "valid-exif.webp", exif)
+
+        result = parser.parse(str(image_path), validate_image_data=True)
+
+        assert result["parse_error"] is None
+        assert result["metadata_error"] is None
+        assert (result["width"], result["height"]) == (32, 24)
 
     def test_webp_parse_with_exif_usercomment(self, parser, tmp_path):
         """Test full parse() flow with WEBP containing EXIF UserComment."""

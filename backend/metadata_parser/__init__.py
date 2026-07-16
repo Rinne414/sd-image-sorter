@@ -79,7 +79,9 @@ class MetadataParser(
                 "metadata": dict,  # Full raw metadata (includes _parsed key)
                 "width": int,
                 "height": int,
-                "file_size": int
+                "file_size": int,
+                "parse_error": str or None,  # Fatal image/container failure
+                "metadata_error": str or None  # Non-fatal embedded metadata failure
             }
         """
         result: Dict[str, Any] = {
@@ -93,6 +95,7 @@ class MetadataParser(
             "height": 0,
             "file_size": 0,
             "parse_error": None,
+            "metadata_error": None,
         }
 
         try:
@@ -100,6 +103,7 @@ class MetadataParser(
             metadata = self._load_image_metadata(image_path)
             result["width"] = metadata["width"]
             result["height"] = metadata["height"]
+            result["metadata_error"] = metadata.get("metadata_error")
 
             if validate_image_data:
                 # Full decode is much slower on large PNG/WebP files and is not

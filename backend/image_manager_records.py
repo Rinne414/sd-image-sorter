@@ -120,6 +120,7 @@ def _build_metadata_success_record(
 ) -> Dict[str, Any]:
     """Convert parsed metadata into a database row update."""
     metadata_json = compact_metadata_json(metadata.get("metadata"))
+    metadata_error = metadata.get("metadata_error")
 
     gen_params = metadata.get("metadata", {}).get("_parsed", {}).get("generation_params") or {}
     model_hash = gen_params.get("model_hash")
@@ -141,10 +142,10 @@ def _build_metadata_success_record(
         "created_at": datetime.fromtimestamp(stat_result.st_mtime),
         "model_hash": model_hash,
         "is_readable": True,
-        "read_error": None,
+        "read_error": metadata_error,
         "source_mtime_ns": int(stat_result.st_mtime_ns),
         "source_size": int(stat_result.st_size),
-        "metadata_status": "complete",
+        "metadata_status": "error" if metadata_error else "complete",
         "content_fingerprint": content_fingerprint,
         "raw_metadata_gz": _compress_raw_metadata_text(metadata.get("raw_metadata_text")),
     }

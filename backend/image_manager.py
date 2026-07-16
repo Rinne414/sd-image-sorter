@@ -1106,6 +1106,7 @@ def reparse_image_metadata(
         metadata_json = compact_metadata_json(metadata.get("metadata"))
     except (TypeError, ValueError):
         metadata_json = compact_metadata_json({})
+    metadata_error = metadata.get("metadata_error")
 
     try:
         content_fingerprint = compute_image_content_fingerprint(image_path)
@@ -1124,10 +1125,10 @@ def reparse_image_metadata(
         checkpoint=metadata["checkpoint"],
         loras=metadata["loras"],
         is_readable=True,
-        read_error=None,
+        read_error=metadata_error,
         source_mtime_ns=stat_result.st_mtime_ns,
         source_size=stat_result.st_size,
-        metadata_status="complete",
+        metadata_status="error" if metadata_error else "complete",
         content_fingerprint=content_fingerprint,
         preserve_derived_state=preserve_derived_state,
     )
