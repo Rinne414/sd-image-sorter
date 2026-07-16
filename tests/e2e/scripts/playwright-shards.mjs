@@ -26,6 +26,13 @@ function requireNonEmptyString(value, fieldName) {
   return value
 }
 
+function requireFunction(value, fieldName) {
+  if (typeof value !== 'function') {
+    throw new TypeError(`${fieldName} must be a function`)
+  }
+  return value
+}
+
 export function shouldShardFullRun(args, env) {
   if (!Array.isArray(args) || args.length !== 1 || args[0] !== 'test') return false
   if (env.PW_DISABLE_SHARDING === '1') return false
@@ -405,7 +412,21 @@ export function finishFailedRun(paths, runId, failedTests) {
   publishTerminalRunStatus(paths, runId, 'failed', failedTests)
 }
 
-export function finishSuccessfulRun(paths, runId) {
+export async function finishSuccessfulRun(paths, runId, verifyRuntimeReleased) {
+  requireFunction(verifyRuntimeReleased, 'verifyRuntimeReleased')
+  try {
+    await verifyRuntimeReleased()
+  } catch (error) {
+    try {
+      publishTerminalRunStatus(paths, runId, 'failed', [])
+    } catch (statusError) {
+      throw new AggregateError(
+        [error, statusError],
+        `Playwright runtime release failed and terminal status publication also failed: ${paths.runRoot}`,
+      )
+    }
+    throw error
+  }
   let diagnosticsStaged = false
   try {
     publishTerminalRunStatus(paths, runId, 'passed', [])
@@ -431,7 +452,19 @@ function finishFailedRunFromShards(paths, runId, shardCount) {
 }
 
 export async function runShardedPlaywright(input) {
-  const { args, baseEnv, e2eRoot, platform, playwrightCli, ports, repoRoot, runId, shardCount } = input
+  const {
+    args,
+    baseEnv,
+    e2eRoot,
+    platform,
+    playwrightCli,
+    ports,
+    repoRoot,
+    runId,
+    shardCount,
+    verifyRuntimeReleased,
+  } = input
+  requireFunction(verifyRuntimeReleased, 'verifyRuntimeReleased')
   const paths = resolveRunPaths(repoRoot, runId)
   prepareRunDirectories(paths)
   try {
@@ -478,7 +511,7 @@ export async function runShardedPlaywright(input) {
       return 1
     }
     publishSuccessfulArtifacts(paths, runId)
-    finishSuccessfulRun(paths, runId)
+    await finishSuccessfulRun(paths, runId, verifyRuntimeReleased)
     console.error(`[playwright-runtime] Published artifacts: ${paths.artifactsRoot}`)
     return 0
   } catch (error) {

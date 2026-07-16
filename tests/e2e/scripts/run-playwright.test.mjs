@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
+import { once } from 'node:events'
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import net from 'node:net'
@@ -26,6 +27,15 @@ import {
   buildPlaywrightChildEnv,
   buildPlaywrightReportEnv,
 } from './playwright-env.mjs'
+import {
+  enterPlaywrightWorkspaceLock,
+  requireWorkspaceLockRuntimeCompatibility,
+  resolveWorkspaceLockPython,
+  WORKSPACE_LOCK_CAPABILITY_ENV,
+  WORKSPACE_LOCK_HOLDER_PID_ENV,
+  WORKSPACE_LOCK_RUN_ID_ENV,
+  WORKSPACE_LOCK_SCOPE,
+} from './playwright-workspace-lock.mjs'
 
 const requireFromTest = createRequire(import.meta.url)
 const scriptsDir = path.dirname(fileURLToPath(import.meta.url))
@@ -42,6 +52,9 @@ const projectConfigPath = path.join(e2eRoot, 'playwright.config.ts')
 const playwrightTestModuleUrl = pathToFileURL(
   path.join(e2eRoot, 'node_modules', '@playwright', 'test', 'index.mjs'),
 ).href
+const backendPythonPath = process.platform === 'win32'
+  ? path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe')
+  : path.join(repoRoot, 'backend', 'venv', 'bin', 'python')
 const fakeParentCredentialName = 'PW_FAKE_PARENT_CREDENTIAL'
 const fakeParentCredentialValue = 'fake-playwright-parent-credential-value'
 const fakeProviderCredentialName = 'SD_IMAGE_SORTER_TRANSLATE_CUSTOM_KEY'
@@ -51,6 +64,62 @@ function makeTempRepo(t) {
   const tempRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'sd-sorter-playwright-runner-'))
   t.after(() => fs.rmSync(tempRepo, { recursive: true, force: true }))
   return tempRepo
+}
+
+async function readFirstChildLine(child, timeoutMs) {
+  if (!child.stdout) throw new Error('Child stdout pipe is required')
+  return new Promise((resolve, reject) => {
+    let buffered = ''
+    const timeout = setTimeout(() => {
+      cleanup()
+      reject(new Error(`Timed out after ${timeoutMs}ms waiting for child readiness`))
+    }, timeoutMs)
+    const cleanup = () => {
+      clearTimeout(timeout)
+      child.stdout.off('data', onData)
+      child.off('error', onError)
+      child.off('exit', onExit)
+    }
+    const onData = (chunk) => {
+      buffered += chunk.toString('utf8')
+      const newlineIndex = buffered.indexOf('\n')
+      if (newlineIndex === -1) return
+      const line = buffered.slice(0, newlineIndex).trim()
+      cleanup()
+      resolve(line)
+    }
+    const onError = (error) => {
+      cleanup()
+      reject(error)
+    }
+    const onExit = (code) => {
+      cleanup()
+      reject(new Error(`Child exited ${String(code)} before publishing readiness`))
+    }
+    child.stdout.on('data', onData)
+    child.once('error', onError)
+    child.once('exit', onExit)
+  })
+}
+
+async function closeChildInputAndWait(child, timeoutMs) {
+  if (child.exitCode !== null) return
+  const exitPromise = once(child, 'exit')
+  if (child.stdin && !child.stdin.destroyed) child.stdin.end()
+  let timeout
+  try {
+    await Promise.race([
+      exitPromise,
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => {
+          child.kill()
+          reject(new Error(`Timed out after ${timeoutMs}ms waiting for child exit`))
+        }, timeoutMs)
+      }),
+    ])
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 async function reserveProbePort() {
@@ -116,6 +185,176 @@ test('coverage run identity accepts a CI-provided value and validates local fall
   )
 })
 
+test('workspace lock rejects Windows/WSL filesystem boundary mixing', () => {
+  assert.throws(
+    () => requireWorkspaceLockRuntimeCompatibility(
+      { WSL_DISTRO_NAME: 'Ubuntu' },
+      '/mnt/l/sd-image-sorter',
+      'linux',
+    ),
+    /WSL on a Windows-mounted workspace/,
+  )
+  assert.throws(
+    () => requireWorkspaceLockRuntimeCompatibility(
+      {},
+      '\\\\wsl.localhost\\Ubuntu\\home\\user\\sd-image-sorter',
+      'win32',
+    ),
+    /Windows on a WSL filesystem workspace/,
+  )
+  assert.doesNotThrow(() => requireWorkspaceLockRuntimeCompatibility(
+    { WSL_DISTRO_NAME: 'Ubuntu' },
+    '/home/user/sd-image-sorter',
+    'linux',
+  ))
+  assert.doesNotThrow(() => requireWorkspaceLockRuntimeCompatibility(
+    {},
+    'L:\\sd-image-sorter',
+    'win32',
+  ))
+})
+
+test('workspace lock Python must use the same OS lock family as Node', () => {
+  const oppositePlatform = process.platform === 'win32' ? 'linux' : 'win32'
+  const environment = {
+    ...process.env,
+    PW_BACKEND_PYTHON: backendPythonPath,
+  }
+
+  assert.equal(
+    resolveWorkspaceLockPython(environment, repoRoot, process.platform),
+    backendPythonPath,
+  )
+  assert.throws(
+    () => resolveWorkspaceLockPython(environment, repoRoot, oppositePlatform),
+    /Python runtime.*OS lock family.*Node platform/,
+  )
+})
+
+test('workspace lock broker rejects overlap, verifies inheritance, and admits a successor', async (t) => {
+  const tempRepo = makeTempRepo(t)
+  const scriptsRoot = path.join(tempRepo, 'scripts')
+  fs.mkdirSync(scriptsRoot, { recursive: true })
+  fs.copyFileSync(
+    path.join(repoRoot, 'scripts', 'workspace_lock.py'),
+    path.join(scriptsRoot, 'workspace_lock.py'),
+  )
+  const probePath = path.join(tempRepo, 'lock-probe.mjs')
+  const probeMarkerPath = path.join(tempRepo, 'probe-entered.txt')
+  fs.writeFileSync(
+    probePath,
+    `import fs from 'node:fs'\nfs.writeFileSync(${JSON.stringify(probeMarkerPath)}, 'entered', 'utf8')\n`,
+    'utf8',
+  )
+  const lockPath = path.join(tempRepo, '.tmp', 'run-ci.lock')
+  const runId = 'fixture-overlap-run'
+  const capability = 'fixture-inherited-capability-value-00000000'
+  const holderScript = `
+import json
+import os
+import sys
+from pathlib import Path
+from scripts import workspace_lock
+
+owner = workspace_lock.create_lock_owner(
+    workspace_lock.CANONICAL_WORKSPACE_LOCK_SCOPE,
+    os.getpid(),
+    sys.argv[2],
+    sys.argv[3],
+)
+with workspace_lock.exclusive_workspace_lock(Path(sys.argv[1]), owner, "fixture workspace"):
+    print(json.dumps(owner), flush=True)
+    sys.stdin.readline()
+`
+  const holder = spawn(
+    backendPythonPath,
+    ['-c', holderScript, lockPath, runId, capability],
+    {
+      cwd: tempRepo,
+      env: buildSyntheticParentEnv({ PW_BACKEND_PYTHON: backendPythonPath }),
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+    },
+  )
+  t.after(() => closeChildInputAndWait(holder, 10_000))
+  const holderOwner = JSON.parse(await readFirstChildLine(holder, 10_000))
+  assert.equal(holderOwner.runId, runId)
+  assert.equal(Number.isSafeInteger(holderOwner.holderPid), true)
+
+  const inheritedEnvironment = buildSyntheticParentEnv({
+    PW_BACKEND_PYTHON: backendPythonPath,
+    [WORKSPACE_LOCK_CAPABILITY_ENV]: capability,
+    [WORKSPACE_LOCK_HOLDER_PID_ENV]: String(holderOwner.holderPid),
+    [WORKSPACE_LOCK_RUN_ID_ENV]: runId,
+  })
+  const inheritedResult = enterPlaywrightWorkspaceLock({
+    args: ['test'],
+    environment: inheritedEnvironment,
+    platform: process.platform,
+    repoRoot: tempRepo,
+    runId,
+    wrapperPath: probePath,
+  })
+  assert.deepEqual(inheritedResult, { delegated: false, status: 0 })
+
+  const wrongCapability = 'wrong-inherited-capability-value-000000000'
+  assert.throws(
+    () => enterPlaywrightWorkspaceLock({
+      args: ['test'],
+      environment: {
+        ...inheritedEnvironment,
+        [WORKSPACE_LOCK_CAPABILITY_ENV]: wrongCapability,
+      },
+      platform: process.platform,
+      repoRoot: tempRepo,
+      runId,
+      wrapperPath: probePath,
+    }),
+    (error) => error instanceof Error
+      && /owner mismatch/.test(error.message)
+      && !error.message.includes(wrongCapability),
+  )
+  assert.throws(
+    () => enterPlaywrightWorkspaceLock({
+      args: ['test'],
+      environment: {
+        PW_BACKEND_PYTHON: backendPythonPath,
+        [WORKSPACE_LOCK_RUN_ID_ENV]: runId,
+      },
+      platform: process.platform,
+      repoRoot: tempRepo,
+      runId,
+      wrapperPath: probePath,
+    }),
+    /environment is incomplete/,
+  )
+
+  const contenderResult = enterPlaywrightWorkspaceLock({
+    args: ['test'],
+    environment: buildSyntheticParentEnv({ PW_BACKEND_PYTHON: backendPythonPath }),
+    platform: process.platform,
+    repoRoot: tempRepo,
+    runId: 'fixture-contender-run',
+    wrapperPath: probePath,
+  })
+  assert.deepEqual(contenderResult, { delegated: true, status: 1 })
+  assert.equal(fs.existsSync(probeMarkerPath), false)
+
+  await closeChildInputAndWait(holder, 10_000)
+  assert.equal(holder.exitCode, 0)
+
+  const successorResult = enterPlaywrightWorkspaceLock({
+    args: ['test'],
+    environment: buildSyntheticParentEnv({ PW_BACKEND_PYTHON: backendPythonPath }),
+    platform: process.platform,
+    repoRoot: tempRepo,
+    runId: 'fixture-successor-run',
+    wrapperPath: probePath,
+  })
+  assert.deepEqual(successorResult, { delegated: true, status: 0 })
+  assert.equal(fs.readFileSync(probeMarkerPath, 'utf8'), 'entered')
+})
+
 test('child environment keeps runtime controls and drops unrelated, Python, CUDA, and provider inputs', () => {
   const childEnv = buildPlaywrightChildEnv({
     PATH: 'fixture-path',
@@ -124,6 +363,9 @@ test('child environment keeps runtime controls and drops unrelated, Python, CUDA
     WSL_INTEROP: '/run/WSL/fixture.sock',
     PW_WEB_SERVER_PORT: '19087',
     PW_COVERAGE_RUN_ID: 'ci-fixture-run',
+    [WORKSPACE_LOCK_CAPABILITY_ENV]: 'fixture-lock-capability-must-not-propagate',
+    [WORKSPACE_LOCK_HOLDER_PID_ENV]: '1234',
+    [WORKSPACE_LOCK_RUN_ID_ENV]: 'ci-fixture-run',
     PYTHONPATH: '/untrusted/python/modules',
     PYTHONHOME: '/untrusted/python/home',
     CUDA_VISIBLE_DEVICES: '0',
@@ -142,6 +384,9 @@ test('child environment keeps runtime controls and drops unrelated, Python, CUDA
     PW_COVERAGE_RUN_ID: 'ci-fixture-run',
     PW_ENV_ISOLATION_ACTIVE: '1',
   })
+  assert.equal(Object.hasOwn(childEnv, WORKSPACE_LOCK_CAPABILITY_ENV), false)
+  assert.equal(Object.hasOwn(childEnv, WORKSPACE_LOCK_HOLDER_PID_ENV), false)
+  assert.equal(Object.hasOwn(childEnv, WORKSPACE_LOCK_RUN_ID_ENV), false)
 })
 
 test('external integration inputs require explicit opt-in and never widen to generic provider keys', () => {
@@ -536,6 +781,7 @@ process.exitCode = 1
     repoRoot: tempRepo,
     runId: 'fixture-run',
     shardCount: 2,
+    verifyRuntimeReleased: async () => {},
   })
 
   assert.equal(status, 1)
@@ -550,7 +796,7 @@ process.exitCode = 1
   assert.equal(fs.existsSync(paths.canonicalClickLedgerRoot), false)
 })
 
-test('successful terminal state stages duplicate run artifacts for deferred cleanup', (t) => {
+test('successful terminal state stages duplicate run artifacts for deferred cleanup', async (t) => {
   const tempRepo = makeTempRepo(t)
   const paths = resolveRunPaths(tempRepo, 'fixture-run')
   prepareRunDirectories(paths)
@@ -558,7 +804,7 @@ test('successful terminal state stages duplicate run artifacts for deferred clea
   fs.mkdirSync(paths.fixtureRoot, { recursive: true })
   fs.writeFileSync(path.join(paths.runRoot, 'published-copy.txt'), 'duplicate')
 
-  finishSuccessfulRun(paths, 'fixture-run')
+  await finishSuccessfulRun(paths, 'fixture-run', async () => {})
 
   assert.deepEqual(JSON.parse(fs.readFileSync(paths.canonicalLastRunPath, 'utf8')), {
     status: 'passed',
@@ -571,7 +817,7 @@ test('successful terminal state stages duplicate run artifacts for deferred clea
   assert.equal(fs.existsSync(paths.fixtureRoot), false)
 })
 
-test('successful run finalizes matching coverage identity as the last publication step', (t) => {
+test('successful run finalizes matching coverage identity as the last publication step', async (t) => {
   const tempRepo = makeTempRepo(t)
   const paths = resolveRunPaths(tempRepo, 'fixture-run')
   prepareRunDirectories(paths)
@@ -583,7 +829,7 @@ test('successful run finalizes matching coverage identity as the last publicatio
   fs.writeFileSync(path.join(paths.htmlRoot, 'index.html'), 'fixture report')
 
   publishSuccessfulArtifacts(paths, 'fixture-run')
-  finishSuccessfulRun(paths, 'fixture-run')
+  await finishSuccessfulRun(paths, 'fixture-run', async () => {})
 
   assert.deepEqual(
     JSON.parse(fs.readFileSync(path.join(paths.artifactsRoot, 'click-coverage-run.json'), 'utf8')),
@@ -602,7 +848,30 @@ test('successful run finalizes matching coverage identity as the last publicatio
   assert.equal(fs.existsSync(paths.cleanupRoot), true)
 })
 
-test('terminal publication failure keeps diagnostics and never publishes coverage identity', (t) => {
+test('runtime release failure prevents terminal success and coverage identity publication', async (t) => {
+  const tempRepo = makeTempRepo(t)
+  const paths = resolveRunPaths(tempRepo, 'fixture-run')
+  prepareRunDirectories(paths)
+  fs.writeFileSync(path.join(paths.runRoot, 'diagnostic.txt'), 'retained')
+
+  await assert.rejects(
+    () => finishSuccessfulRun(paths, 'fixture-run', async () => {
+      throw new Error('synthetic shard ports remain in use')
+    }),
+    /synthetic shard ports remain in use/,
+  )
+
+  assert.deepEqual(JSON.parse(fs.readFileSync(paths.canonicalLastRunPath, 'utf8')), {
+    status: 'failed',
+    failedTests: [],
+    runId: 'fixture-run',
+  })
+  assert.equal(fs.existsSync(paths.canonicalCoverageRunPath), false)
+  assert.equal(fs.existsSync(paths.runRoot), true)
+  assert.equal(fs.readFileSync(path.join(paths.runRoot, 'diagnostic.txt'), 'utf8'), 'retained')
+})
+
+test('terminal publication failure keeps diagnostics and never publishes coverage identity', async (t) => {
   const tempRepo = makeTempRepo(t)
   const paths = resolveRunPaths(tempRepo, 'fixture-run')
   prepareRunDirectories(paths)
@@ -616,8 +885,8 @@ test('terminal publication failure keeps diagnostics and never publishes coverag
   fs.mkdirSync(path.dirname(path.dirname(paths.canonicalLastRunPath)), { recursive: true })
   fs.writeFileSync(path.dirname(paths.canonicalLastRunPath), 'blocks terminal status directory')
 
-  assert.throws(
-    () => finishSuccessfulRun(paths, 'fixture-run'),
+  await assert.rejects(
+    () => finishSuccessfulRun(paths, 'fixture-run', async () => {}),
     /EEXIST|ENOTDIR/,
   )
   assert.equal(fs.existsSync(paths.canonicalCoverageRunPath), false)
@@ -625,7 +894,7 @@ test('terminal publication failure keeps diagnostics and never publishes coverag
   assert.equal(fs.readFileSync(path.join(paths.runRoot, 'control-inventory.json'), 'utf8'), '{"controls":[]}\n')
 })
 
-test('cleanup staging failure keeps diagnostics and never publishes coverage identity', (t) => {
+test('cleanup staging failure keeps diagnostics and never publishes coverage identity', async (t) => {
   const tempRepo = makeTempRepo(t)
   const paths = resolveRunPaths(tempRepo, 'fixture-run')
   prepareRunDirectories(paths)
@@ -639,8 +908,8 @@ test('cleanup staging failure keeps diagnostics and never publishes coverage ide
   fs.mkdirSync(paths.cleanupRoot, { recursive: true })
   fs.writeFileSync(path.join(paths.cleanupRoot, 'collision.txt'), 'blocks cleanup staging')
 
-  assert.throws(
-    () => finishSuccessfulRun(paths, 'fixture-run'),
+  await assert.rejects(
+    () => finishSuccessfulRun(paths, 'fixture-run', async () => {}),
     /Deferred Playwright cleanup path already exists/,
   )
   assert.equal(fs.existsSync(paths.canonicalCoverageRunPath), false)
@@ -648,7 +917,7 @@ test('cleanup staging failure keeps diagnostics and never publishes coverage ide
   assert.equal(fs.readFileSync(path.join(paths.runRoot, 'control-inventory.json'), 'utf8'), '{"controls":[]}\n')
 })
 
-test('coverage marker publication failure restores the diagnostic run root', (t) => {
+test('coverage marker publication failure restores the diagnostic run root', async (t) => {
   const tempRepo = makeTempRepo(t)
   const paths = resolveRunPaths(tempRepo, 'fixture-run')
   prepareRunDirectories(paths)
@@ -661,8 +930,8 @@ test('coverage marker publication failure restores the diagnostic run root', (t)
   publishSuccessfulArtifacts(paths, 'fixture-run')
   fs.mkdirSync(paths.canonicalCoverageRunPath)
 
-  assert.throws(
-    () => finishSuccessfulRun(paths, 'fixture-run'),
+  await assert.rejects(
+    () => finishSuccessfulRun(paths, 'fixture-run', async () => {}),
     /EISDIR|EPERM/,
   )
   assert.equal(fs.existsSync(paths.runRoot), true)

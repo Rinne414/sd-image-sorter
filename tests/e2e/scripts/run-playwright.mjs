@@ -13,6 +13,10 @@ import {
   shouldShardFullRun,
 } from './playwright-shards.mjs'
 import { buildPlaywrightChildEnv } from './playwright-env.mjs'
+import {
+  enterPlaywrightWorkspaceLock,
+  WORKSPACE_LOCK_RUN_ID_ENV,
+} from './playwright-workspace-lock.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -301,11 +305,36 @@ async function main() {
       '[playwright-runtime] External integrations are enabled; use isolated credentials and treat failure logs and artifacts as sensitive.',
     )
   }
+  const isTestCommand = args[0] === 'test'
+  const inheritedWorkspaceRunId = process.env[WORKSPACE_LOCK_RUN_ID_ENV]
+  const workspaceRunId = isTestCommand
+    ? inheritedWorkspaceRunId || resolveCoverageRunId(baseEnv, process.pid, Date.now())
+    : null
+  if (isTestCommand) {
+    const lockResult = enterPlaywrightWorkspaceLock({
+      args,
+      environment: { ...process.env, ...baseEnv },
+      platform: process.platform,
+      repoRoot,
+      runId: workspaceRunId,
+      wrapperPath: __filename,
+    })
+    if (lockResult.delegated) {
+      process.exitCode = lockResult.status
+      return
+    }
+  }
   if (shouldShardFullRun(args, baseEnv)) {
     const shardCount = resolveShardCount(baseEnv)
     if (shardCount > 1) {
       const ports = await assignServerPorts(baseEnv, shardCount)
-      const runId = resolveCoverageRunId(baseEnv, process.pid, Date.now())
+      const runId = workspaceRunId
+      let releaseCheckStarted = false
+      const verifyRuntimeReleased = async () => {
+        releaseCheckStarted = true
+        await waitForPortsReleased(ports, 10_000, 100)
+        console.error(`[playwright-runtime] Released shard ports: ${ports.join(', ')}.`)
+      }
       try {
         const status = await runShardedPlaywright({
           args,
@@ -317,11 +346,11 @@ async function main() {
           runId,
           shardCount,
           platform: process.platform,
+          verifyRuntimeReleased,
         })
         process.exitCode = status
       } finally {
-        await waitForPortsReleased(ports, 10_000, 100)
-        console.error(`[playwright-runtime] Released shard ports: ${ports.join(', ')}.`)
+        if (!releaseCheckStarted) await verifyRuntimeReleased()
       }
       return
     }

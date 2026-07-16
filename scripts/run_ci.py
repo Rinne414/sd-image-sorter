@@ -6,14 +6,19 @@ from __future__ import annotations
 import subprocess
 import sys
 import os
-import json
 import re
+import secrets
 import shutil
 import socket
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import BinaryIO, Iterator
+from typing import Iterator
+
+if __package__:
+    from . import workspace_lock
+else:
+    import workspace_lock
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -39,110 +44,80 @@ PLAYWRIGHT_WRAPPER = ROOT / "tests" / "e2e" / "scripts" / "run-playwright.mjs"
 REVIEW_DATASET_BUILDER = ROOT / "scripts" / "build_review_dataset.py"
 FRONTEND_JS_FILES = sorted((ROOT / "frontend" / "js").glob("**/*.js"))
 CI_LOCK_PATH = ROOT / ".tmp" / "run-ci.lock"
-CI_LOCK_BYTE_OFFSET = 4096
+CI_LOCK_BYTE_OFFSET = workspace_lock.LOCK_BYTE_OFFSET
 CI_SHARD_COUNT_PATTERN = re.compile(r"^[0-9]+$")
 CI_MIN_SHARD_COUNT = 2
 CI_MAX_SHARD_COUNT = 8
 
 
-class CiLockError(RuntimeError):
-    """Raised when another full CI invocation owns the workspace lock."""
-
-
-def _lock_file(handle: BinaryIO) -> None:
-    handle.seek(CI_LOCK_BYTE_OFFSET)
-    if os.name == "nt":
-        import msvcrt
-
-        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-        return
-
-    import fcntl
-
-    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-
-def _unlock_file(handle: BinaryIO) -> None:
-    handle.seek(CI_LOCK_BYTE_OFFSET)
-    if os.name == "nt":
-        import msvcrt
-
-        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-        return
-
-    import fcntl
-
-    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-
-
-def _read_lock_owner(handle: BinaryIO, lock_path: Path) -> str:
-    try:
-        handle.seek(0)
-        raw_owner = handle.read(CI_LOCK_BYTE_OFFSET).rstrip(b"\0").decode("utf-8")
-    except (OSError, UnicodeError) as error:
-        return f"unreadable owner ({error})"
-    return raw_owner or f"unknown owner in {lock_path}"
+CiLockError = workspace_lock.WorkspaceLockError
 
 
 @contextmanager
-def _exclusive_ci_lock(lock_path: Path, run_id: str) -> Iterator[None]:
-    if not run_id:
-        raise ValueError("run_id must be a non-empty string")
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
-    handle = os.fdopen(descriptor, "r+b", buffering=0)
-    locked = False
+def _exclusive_ci_lock(
+    lock_path: Path,
+    run_id: str,
+    capability: str,
+) -> Iterator[workspace_lock.WorkspaceLockOwner]:
+    owner = workspace_lock.create_lock_owner(
+        workspace_lock.CANONICAL_WORKSPACE_LOCK_SCOPE,
+        os.getpid(),
+        run_id,
+        capability,
+    )
     try:
-        handle.seek(0, os.SEEK_END)
-        if handle.tell() <= CI_LOCK_BYTE_OFFSET:
-            handle.seek(CI_LOCK_BYTE_OFFSET)
-            handle.write(b"\0")
-            handle.flush()
-        try:
-            _lock_file(handle)
-        except OSError as error:
-            owner = _read_lock_owner(handle, lock_path)
-            raise CiLockError(
-                "another full CI invocation owns the workspace coverage lock; "
-                f"wait for it to finish. lock={lock_path}, owner={owner}"
-            ) from error
-        locked = True
-        owner = json.dumps({"pid": os.getpid(), "runId": run_id})
-        owner_bytes = owner.encode("utf-8")
-        if len(owner_bytes) >= CI_LOCK_BYTE_OFFSET:
-            raise ValueError("CI lock owner record exceeds the reserved header size")
-        handle.seek(0)
-        handle.write(owner_bytes)
-        handle.write(b"\0" * (CI_LOCK_BYTE_OFFSET - len(owner_bytes)))
-        handle.seek(CI_LOCK_BYTE_OFFSET)
-        handle.write(b"\0")
-        handle.truncate(CI_LOCK_BYTE_OFFSET + 1)
-        handle.flush()
-        os.fsync(handle.fileno())
-        yield
-    finally:
-        active_error = sys.exception()
-        unlock_error: OSError | None = None
-        try:
-            if locked:
-                _unlock_file(handle)
-        except OSError as error:
-            unlock_error = error
-        finally:
-            handle.close()
-        if unlock_error is not None:
-            message = (
-                f"failed to release full CI workspace lock {lock_path}: "
-                f"{unlock_error}"
-            )
-            if active_error is not None:
-                active_error.add_note(message)
-            else:
-                raise CiLockError(message) from unlock_error
+        with workspace_lock.exclusive_workspace_lock(
+            lock_path,
+            owner,
+            "full CI workspace",
+        ) as locked_owner:
+            yield locked_owner
+    except workspace_lock.WorkspaceLockBusyError as error:
+        raise CiLockError(
+            "another CI or Playwright test command owns the canonical workspace lock; "
+            f"wait for it to finish. {error}"
+        ) from error
 
 
 def _create_coverage_run_id() -> str:
     return f"ci-{uuid.uuid4().hex}"
+
+
+def _create_lock_capability() -> str:
+    return secrets.token_hex(32)
+
+
+def _require_workspace_lock_runtime_compatibility(
+    repo_root: Path,
+    node_executable: str,
+    host_os_name: str,
+    environment: dict[str, str],
+) -> None:
+    if host_os_name not in {"nt", "posix"}:
+        raise ValueError(f"unsupported CI host OS family: {host_os_name}")
+    normalized_root = str(repo_root).replace("\\", "/")
+    node_is_windows = node_executable.lower().endswith(".exe")
+    is_wsl = bool(environment.get("WSL_DISTRO_NAME") or environment.get("WSL_INTEROP"))
+    if host_os_name == "posix" and is_wsl and re.match(r"^/mnt/[A-Za-z]/", normalized_root):
+        raise ValueError(
+            "CI/Playwright cannot provide one coherent OS lock from WSL on a Windows-mounted "
+            f"workspace ({repo_root}). Run scripts/run_ci.py from Windows, or move the repository "
+            "to the WSL filesystem and use WSL-native Python and Node."
+        )
+    if host_os_name == "posix" and node_is_windows:
+        raise ValueError(
+            "CI/Playwright cannot mix a POSIX workspace lock with Windows node.exe. "
+            "Install a native Node.js runtime in this environment or run CI from Windows."
+        )
+    if host_os_name == "nt" and re.match(
+        r"^//(?:wsl\$|wsl\.localhost)/",
+        normalized_root,
+        flags=re.IGNORECASE,
+    ):
+        raise ValueError(
+            "CI/Playwright cannot provide one coherent OS lock from Windows on a WSL filesystem "
+            f"workspace ({repo_root}). Run CI inside that WSL distribution with native Python and Node."
+        )
 
 
 def _require_sharded_full_ci(environment: dict[str, str]) -> None:
@@ -277,7 +252,11 @@ def _prepare_playwright_fixtures(env: dict[str, str]) -> bool:
     return result.returncode == 0
 
 
-def _run_ci(coverage_run_id: str) -> int:
+def _run_ci(
+    coverage_run_id: str,
+    lock_capability: str,
+    lock_holder_pid: int,
+) -> int:
     checks: list[tuple[str, list[str], Path]] = [
         (
             "compiled lock freshness",
@@ -416,30 +395,12 @@ def _run_ci(coverage_run_id: str) -> int:
                 "PW_REUSE_SERVER": "1",
                 "PW_WEB_SERVER_PORT": _find_available_port(19087, 19187, 19287),
                 "PW_COVERAGE_RUN_ID": coverage_run_id,
+                "PW_BACKEND_PYTHON": str(BACKEND_PYTHON),
+                workspace_lock.CAPABILITY_ENV_NAME: lock_capability,
+                workspace_lock.HOLDER_PID_ENV_NAME: str(lock_holder_pid),
+                workspace_lock.RUN_ID_ENV_NAME: coverage_run_id,
             }
             env.update(env_values)
-            if str(command[0]).lower().endswith(".exe") and os.name != "nt":
-                script_path = command[1]
-                cli_args = command[2:]
-                env_assignments = "; ".join(
-                    f"process.env[{json.dumps(key)}]={json.dumps(value)}"
-                    for key, value in env_values.items()
-                )
-                argv = ", ".join(json.dumps(arg) for arg in cli_args)
-                command = [
-                    command[0],
-                    "-e",
-                    (
-                        f"{env_assignments}; "
-                        "const path = require('path'); "
-                        "const { pathToFileURL } = require('url'); "
-                        f"const script = {json.dumps(script_path)}; "
-                        f"process.argv = [process.execPath, script, {argv}]; "
-                        "(async () => { "
-                        "await import(pathToFileURL(path.resolve(script)).href); "
-                        "})().catch((error) => { console.error(error); process.exit(1); });"
-                    ),
-                ]
         result = subprocess.run(command, cwd=cwd, env=env)
         if result.returncode != 0:
             if name in non_blocking_checks:
@@ -456,10 +417,18 @@ def _run_ci(coverage_run_id: str) -> int:
 
 def main() -> int:
     coverage_run_id = _create_coverage_run_id()
+    lock_capability = _create_lock_capability()
+    lock_holder_pid = os.getpid()
     try:
-        with _exclusive_ci_lock(CI_LOCK_PATH, coverage_run_id):
-            return _run_ci(coverage_run_id)
-    except CiLockError as error:
+        _require_workspace_lock_runtime_compatibility(
+            ROOT,
+            str(NODE_EXECUTABLE),
+            os.name,
+            os.environ.copy(),
+        )
+        with _exclusive_ci_lock(CI_LOCK_PATH, coverage_run_id, lock_capability):
+            return _run_ci(coverage_run_id, lock_capability, lock_holder_pid)
+    except (CiLockError, ValueError) as error:
         print(f"[CI] FAILED: {error}")
         return 1
 
