@@ -43,6 +43,13 @@ from fastapi import HTTPException
 from services import ai_job_queue_store, smart_tag_service
 from services.service_provider import ServiceProvider
 
+# Facade split (2026-07): the write-through persistence/restore surface lives
+# in services/_tagging_pipeline_persistence.py (mixin assembled into the class
+# below). Every module-scope seam in claude-tagpipe-pins-REPORT.md section 5
+# -- the shared _start_lock, _server_loop + accessors, smart_tag_service,
+# _start_queued_vlm_batch, KIND_*, and the provider tail -- stays in THIS file.
+from services._tagging_pipeline_persistence import _TaggingPipelinePersistenceMixin
+
 if TYPE_CHECKING:  # pragma: no cover - imported for type checkers only
     import asyncio
 
@@ -215,41 +222,6 @@ def _default_legacy_service_resolver() -> Any:
     return get_tagging_service()
 
 
-def _serialize_payload(payload: Any) -> Any:
-    """Reduce a queue entry's payload to JSON-serializable request data.
-
-    Gallery payloads are ``TagRequest`` pydantic models; Smart Tag / VLM
-    payloads are already plain dicts.
-    """
-    if hasattr(payload, "model_dump"):
-        return payload.model_dump()
-    return payload
-
-
-def _deserialize_payload(kind: str, data: Dict[str, Any]) -> Any:
-    """Rebuild an entry payload from persisted request data.
-
-    Raises when the persisted gallery payload no longer validates so the
-    caller can skip the entry instead of restoring a malformed job.
-    """
-    if kind == KIND_GALLERY:
-        from services.tagging_service import TagRequest
-
-        return TagRequest(**data)
-    return dict(data)
-
-
-def _serialize_queue_entry(entry: "_QueuedPipelineJob", *, running: bool) -> Dict[str, Any]:
-    """On-disk form of a queue entry (request-shaped data only)."""
-    return {
-        "queue_id": entry.queue_id,
-        "kind": entry.kind,
-        "payload": _serialize_payload(entry.payload),
-        "enqueued_at": entry.enqueued_at,
-        "running": bool(running),
-    }
-
-
 class _ThreadLaunchBackgroundTasks:
     """Duck-typed stand-in for ``fastapi.BackgroundTasks`` at dispatch time.
 
@@ -299,7 +271,7 @@ def _start_queued_vlm_batch(entry: _QueuedPipelineJob) -> None:
         raise
 
 
-class TaggingPipelineService:
+class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
     """Coordinator shared by `/api/tag/*`, `/api/smart-tag/*`, and `/api/vlm/caption-batch`."""
 
     def __init__(
@@ -615,109 +587,6 @@ class TaggingPipelineService:
             return self._legacy_service_resolver()
         except Exception:
             logger.exception("Could not resolve the gallery tagging service for a queued job")
-            return None
-
-    # ------------------------------------------------------------------
-    # Persistence (write-through + restore)
-    # ------------------------------------------------------------------
-
-    def _persist_state_locked(self) -> None:
-        """Write the running entry (if any) + the queue through to disk.
-
-        Caller holds ``_start_lock``. Best-effort: a persistence failure must
-        never surface into the queue mutation that triggered it.
-        """
-        try:
-            entries: List[Dict[str, Any]] = []
-            if self._running_entry is not None:
-                entries.append(_serialize_queue_entry(self._running_entry, running=True))
-            entries.extend(_serialize_queue_entry(item, running=False) for item in self._queue)
-            ai_job_queue_store.write_queue_state(entries)
-        except Exception:  # noqa: BLE001 — persistence must never break a queue mutation
-            logger.exception("Failed to persist AI job queue state")
-
-    def _restore_persisted_queue(self) -> None:
-        """Load the persisted queue on startup (best-effort).
-
-        The RUNNING-at-shutdown entry is persisted first and restored as a
-        queued entry at HEAD (it cannot resume mid-flight). Entries that fail
-        validation are skipped; a corrupt/unreadable file yields an empty
-        queue. When anything restores and auto-dispatch is on, the dispatcher
-        is started so the queue resumes draining.
-        """
-        try:
-            raw_entries = ai_job_queue_store.read_queue_state()
-        except Exception:  # noqa: BLE001 — a bad file must never block construction
-            logger.exception("Failed to read the persisted AI job queue; starting empty")
-            return
-        if not raw_entries:
-            return
-
-        restored: List[_QueuedPipelineJob] = []
-        max_seq = 0
-        for data in raw_entries:
-            parsed = self._deserialize_persisted_entry(data)
-            if parsed is None:
-                continue
-            entry, seq = parsed
-            # Same consecutive-duplicate collapse as _enqueue_locked. Because
-            # the running entry is first, a running job identical to the first
-            # still-queued job merges here.
-            if restored and entry.fingerprint and restored[-1].fingerprint == entry.fingerprint:
-                continue
-            restored.append(entry)
-            max_seq = max(max_seq, seq)
-
-        if not restored:
-            return
-
-        with _start_lock:
-            self._queue = restored
-            self._queue_seq = max(self._queue_seq, max_seq)
-            # Persist the normalized (running-collapsed-into-queued) form so the
-            # file matches the in-memory queue immediately after restore.
-            self._persist_state_locked()
-            self._ensure_dispatcher_locked()
-        logger.info(
-            "Restored %d persisted AI job queue entr%s",
-            len(restored),
-            "y" if len(restored) == 1 else "ies",
-        )
-
-    def _deserialize_persisted_entry(self, data: Any) -> Optional[Tuple["_QueuedPipelineJob", int]]:
-        """Rebuild one queue entry from persisted data, or None if invalid."""
-        try:
-            if not isinstance(data, dict):
-                raise ValueError("entry is not an object")
-            kind = data.get("kind")
-            if kind not in (KIND_GALLERY, KIND_SMART, KIND_VLM):
-                raise ValueError(f"unknown kind {kind!r}")
-            raw_payload = data.get("payload")
-            if not isinstance(raw_payload, dict):
-                raise ValueError("payload is not an object")
-            payload = _deserialize_payload(kind, raw_payload)
-
-            queue_id = str(data.get("queue_id") or "").strip()
-            if queue_id.startswith("q") and queue_id[1:].isdigit():
-                seq = int(queue_id[1:])
-            else:
-                self._queue_seq += 1
-                queue_id = f"q{self._queue_seq}"
-                seq = self._queue_seq
-
-            enqueued_at = str(data.get("enqueued_at") or "").strip() or _utc_now_iso()
-            entry = _QueuedPipelineJob(
-                queue_id=queue_id,
-                kind=kind,
-                payload=payload,
-                legacy_service=None,
-                loop=None,
-                fingerprint=_fingerprint(kind, payload),
-                enqueued_at=enqueued_at,
-            )
-            return entry, seq
-        except Exception as exc:  # noqa: BLE001 — one bad entry never blocks restore
-            logger.warning("Skipping invalid persisted AI job queue entry: %s", exc)
             return None
 
     def _start_queued_entry(self, entry: _QueuedPipelineJob) -> None:
