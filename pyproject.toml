@@ -360,6 +360,19 @@ select = ["F", "E9"]
 # (claude-tagpipe-pins-REPORT.md §5; tests/test_tagging_pipeline_pins.py,
 # tests/test_tagging_pipeline_service.py patch this module object).
 "backend/services/tagging_pipeline_service.py" = ["F401"]
+# routers/vlm.py is the compatibility FILE facade for the vlm_models /
+# vlm_persistence / vlm_debug / vlm_batch_source / vlm_ollama sibling-module
+# split (2026-07). Same rationale as routers/images.py / routers/tags_bulk.py
+# above: the verbatim header import block stays (dataclass / datetime /
+# urlsplit / the pydantic names / Protocol / TypedDict are now called only
+# from the moved bodies) and the part re-imports are BY-REFERENCE re-exports
+# so every historical ``routers.vlm.<name>`` read and monkeypatch keeps
+# resolving on this module object — the 3 rebind seams, _batch_state(+lock),
+# the caption-batch accessor quartet, _build_config and _run_batch stay
+# DEFINED here with all their callers (tests/test_vlm_router_pins.py,
+# tests/test_routers/test_vlm.py, tests/test_vlm_tag_gate.py,
+# tests/test_tagging_pipeline_pins.py, tests/test_dataset_translate.py).
+"backend/routers/vlm.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.

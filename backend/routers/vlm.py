@@ -31,41 +31,41 @@ router = APIRouter(prefix="/api/vlm", tags=["vlm"])
 VLM_SETTINGS_PATH = CONFIG_DIR / "vlm-settings.json"
 
 
-class _StoredVLMTagRow(TypedDict):
-    tag: str
-    confidence: Optional[float]
-    source: Optional[str]
-    category: Optional[str]
-
-
-class _PersistedVLMTagRow(TypedDict):
-    tag: str
-    confidence: float
-    source: Optional[str]
-    category: Optional[str]
-
-
-class _VLMImageUpdate(TypedDict):
-    image_id: int
-    tags: List[_PersistedVLMTagRow]
-    ai_caption: Optional[str]
-    nl_caption: Optional[str]
-
-
-class _VLMPersistenceStore(Protocol):
-    def get_image_tags(self, image_id: int) -> List[_StoredVLMTagRow]: ...
-
-    def add_tags_batch(
-        self,
-        image_tags_list: List[_VLMImageUpdate],
-        *,
-        default_source: Optional[str],
-        replace_scope: str,
-    ) -> None: ...
-
-
-class VLMResultPersistenceError(RuntimeError):
-    """Raised when a generated VLM result cannot be saved atomically."""
+# ---------------------------------------------------------------------------
+# Decomposition (2026-07): request models + persistence-store types live in
+# routers/vlm_models.py; _persist_vlm_result/_persist_tags in
+# routers/vlm_persistence.py; pure debug/redaction/coercion helpers in
+# routers/vlm_debug.py; batch image-source builders in
+# routers/vlm_batch_source.py; the 5 Ollama endpoints (route positions 13-17)
+# + _pull_state + _do_pull in routers/vlm_ollama.py, which registers on THIS
+# module's shared ``router`` at the tail import at the bottom of this file
+# (routers/images_parts precedent; claude-vlmrouter-pins-REPORT.md split map).
+# THIS module stays a real FILE and the single import/monkeypatch surface:
+# the 3 rebind seams (_batch_task/_pull_task/_debug_chat_next_id) +
+# _batch_state(+lock) + the caption-batch accessor quartet + _build_config +
+# _load_/_save_vlm_settings + VLM_SETTINGS_PATH + _resolve_image_path +
+# _run_batch and every reader-patched name stay DEFINED here with ALL their
+# callers; everything below is re-imported BY REFERENCE so every historical
+# ``routers.vlm.<name>`` read (and monkeypatch) resolves to the SAME objects
+# (tests/test_vlm_router_pins.py census). Header imports stay verbatim even
+# where now unused (F401 ignored in pyproject.toml, like routers/images.py).
+from routers.vlm_models import (
+    BatchCaptionRequest, CaptionSingleRequest, DeleteModelRequest,
+    DetectProviderRequest, PullModelRequest, SaveSettingsRequest,
+    VLMResultPersistenceError, _BatchImageSource, _PersistedVLMTagRow,
+    _StoredVLMTagRow, _VLMImageUpdate, _VLMPersistenceStore,
+)
+from routers.vlm_persistence import _persist_tags, _persist_vlm_result
+from routers.vlm_debug import (
+    _build_debug_request_event, _coerce_float_setting, _coerce_int_setting,
+    _normalize_openai_endpoint, _redact_debug_endpoint, _redact_debug_text,
+    _utc_now_iso,
+)
+from routers.vlm_batch_source import (
+    _BATCH_ID_CHUNK_SIZE, _build_batch_image_source,
+    _create_selection_token_from_filters, _filters_to_selection_kwargs,
+    _iter_image_id_chunks,
+)
 
 
 _batch_state_lock = threading.Lock()
@@ -202,52 +202,6 @@ def _save_vlm_settings(settings: Dict[str, Any]) -> None:
     VLM_SETTINGS_PATH.write_text(json.dumps(safe, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def _redact_debug_text(value: Any, limit: int = 5000) -> str:
-    text = "" if value is None else str(value)
-    if len(text) > limit:
-        return text[:limit] + f"\n...[truncated {len(text) - limit} chars]"
-    return text
-
-
-def _redact_debug_endpoint(value: Any) -> str:
-    """Hide endpoint credentials and query tokens before exposing debug events."""
-    endpoint = str(value or "").strip()
-    if not endpoint:
-        return ""
-    try:
-        parsed = urlsplit(endpoint)
-    except ValueError:
-        return _redact_debug_text(endpoint.split("?", 1)[0], 500)
-    if not parsed.scheme or not parsed.netloc:
-        return _redact_debug_text(endpoint.split("?", 1)[0], 500)
-    host = parsed.hostname or ""
-    if parsed.port:
-        host = f"{host}:{parsed.port}"
-    redacted_query = "..." if parsed.query else ""
-    redacted = urlunsplit((parsed.scheme, host, parsed.path, redacted_query, ""))
-    return _redact_debug_text(redacted, 500)
-
-
-def _coerce_int_setting(value: Any, default: int, *, minimum: int, maximum: int) -> int:
-    try:
-        coerced = int(value)
-    except (TypeError, ValueError):
-        coerced = default
-    return max(minimum, min(maximum, coerced))
-
-
-def _coerce_float_setting(value: Any, default: float, *, minimum: float, maximum: float) -> float:
-    try:
-        coerced = float(value)
-    except (TypeError, ValueError):
-        coerced = default
-    return max(minimum, min(maximum, coerced))
-
-
 def _resolve_image_path(image: Dict[str, Any]) -> str:
     image_path = str((image or {}).get("path") or "")
     resolved_path = resolve_existing_indexed_image_path(image_path, backend_file=__file__)
@@ -266,31 +220,6 @@ def _append_debug_chat_event(event: Dict[str, Any]) -> int:
         if len(_debug_chat_events) > _DEBUG_CHAT_LIMIT:
             del _debug_chat_events[:-_DEBUG_CHAT_LIMIT]
         return event_id
-
-
-def _build_debug_request_event(
-    *,
-    image_id: int,
-    image_name: str,
-    config: VLMConfig,
-    provider_name: str,
-    tags: List[str],
-    user_message: str,
-) -> Dict[str, Any]:
-    return {
-        "phase": "request",
-        "image_id": image_id,
-        "image_name": image_name,
-        "provider": provider_name,
-        "model": config.model,
-        "output_format": config.output_format,
-        "endpoint": _redact_debug_endpoint(config.endpoint),
-        "system_prompt": _redact_debug_text(config.system_prompt),
-        "user_prompt": _redact_debug_text(user_message),
-        "tags": tags[:120],
-        "tags_count": len(tags),
-        "note": "Image bytes are sent to the API but hidden here; API keys and base64 payloads are never shown.",
-    }
 
 
 def _append_debug_response_event(
@@ -323,38 +252,6 @@ def _reset_debug_chat_events() -> None:
     with _batch_state_lock:
         _debug_chat_events.clear()
         _debug_chat_next_id = 1
-
-
-def _normalize_openai_endpoint(url: str) -> str:
-    """Auto-append ``/v1`` for OpenAI-compatible endpoints missing the version path.
-
-    A common new-user mistake is to paste ``https://aihubmix.com`` (or any
-    other OpenAI gateway) into the VLM endpoint field without the ``/v1``
-    suffix. The provider then builds ``https://aihubmix.com/chat/completions``
-    which the gateway's CDN often answers with an XML 401 "AuthenticationRequired"
-    from the underlying object storage instead of a useful API error.
-
-    We only touch URLs whose path is empty or ``/``. URLs that already have
-    any non-trivial path (e.g. ``/v1``, ``/openai/v1``, ``/api/proxy``) are
-    left alone — the user explicitly chose them.
-    """
-    if not url:
-        return url
-    cleaned = url.strip().rstrip("/")
-    if not cleaned:
-        return cleaned
-    try:
-        from urllib.parse import urlparse
-
-        parsed = urlparse(cleaned)
-        if not parsed.scheme or not parsed.netloc:
-            return cleaned  # not a parseable URL; do not mangle
-        path = parsed.path or ""
-        if path in ("", "/"):
-            return cleaned + "/v1"
-        return cleaned
-    except Exception:
-        return cleaned
 
 
 def _build_config(overrides: Optional[Dict[str, Any]] = None) -> VLMConfig:
@@ -404,10 +301,6 @@ async def get_providers():
     return {"providers": list_providers()}
 
 
-class DetectProviderRequest(BaseModel):
-    endpoint: str
-
-
 @router.post("/detect-provider")
 async def detect_provider_endpoint(request: DetectProviderRequest):
     """Auto-detect provider from endpoint URL pattern."""
@@ -430,33 +323,6 @@ async def get_settings():
         settings["service_account_json_display"] = "*** (configured)"
         del settings["service_account_json"]
     return settings
-
-
-class SaveSettingsRequest(BaseModel):
-    provider: Optional[str] = None
-    endpoint: Optional[str] = None
-    api_key: Optional[str] = None
-    model: Optional[str] = None
-    max_retries: Optional[int] = Field(default=None, ge=0, le=10)
-    retry_delay_seconds: Optional[float] = Field(default=None, ge=0, le=60)
-    timeout_seconds: Optional[float] = Field(default=None, ge=1, le=600)
-    concurrent_requests: Optional[int] = Field(default=None, ge=1, le=16)
-    system_prompt: Optional[str] = None
-    user_prompt: Optional[str] = None
-    user_prompt_with_tags: Optional[str] = None
-    include_tags_as_context: Optional[bool] = None
-    max_image_size: Optional[int] = Field(default=None, ge=128, le=4096)
-    nsfw_retry_prompt: Optional[str] = None
-    output_format: Optional[str] = None
-    caption_max_tokens: Optional[int] = Field(default=None, ge=64, le=8192)
-    caption_temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
-    http_proxy: Optional[str] = None
-    https_proxy: Optional[str] = None
-    socks_proxy: Optional[str] = None
-    use_vertex: Optional[bool] = None
-    vertex_project: Optional[str] = None
-    vertex_location: Optional[str] = None
-    service_account_json: Optional[str] = None
 
 
 @router.post("/settings")
@@ -486,11 +352,6 @@ async def fetch_models():
     provider = get_provider(config)
     models = await provider.list_models()
     return {"models": models}
-
-
-class CaptionSingleRequest(BaseModel):
-    image_id: int
-    tags: Optional[List[str]] = None
 
 
 @router.post("/caption")
@@ -541,232 +402,6 @@ async def caption_single(request: CaptionSingleRequest):
         "output_format": config.output_format,
         "dropped_tags": dropped_tags,
     }
-
-
-def _persist_vlm_result(
-    db: _VLMPersistenceStore,
-    image_id: int,
-    caption: str,
-    vlm_tags: List[str],
-) -> int:
-    """Atomically persist a VLM caption and gated tags for one image.
-
-    VLM tags pass through the vocabulary gate (services.vlm_tag_gate) first:
-    hallucinated non-vocabulary tags and rating words are dropped so they never
-    become permanent library tags. Surviving tags (normalized) are appended to
-    the existing tags; existing tags keep their confidence, new VLM tags use
-    confidence=0.85 (a manual-tier marker). Returns the number of tags the gate
-    dropped so callers can surface "N invalid tags dropped".
-    """
-    from services.vlm_tag_gate import filter_vlm_tags
-
-    try:
-        accepted, dropped = filter_vlm_tags(vlm_tags) if vlm_tags else ([], 0)
-        if dropped:
-            logger.info(
-                "VLM tag gate dropped invalid tags",
-                extra={"dropped_count": dropped, "image_id": image_id},
-            )
-        if not caption and not accepted:
-            return dropped
-        existing = db.get_image_tags(image_id) or []
-        existing_lower = {
-            tag_row["tag"].lower()
-            for tag_row in existing
-            if tag_row["tag"]
-        }
-        # ``accepted`` is already lowercase_with_underscores, so a direct
-        # membership test against the lowercased existing set is correct.
-        new_tags = [tag for tag in accepted if tag not in existing_lower]
-        if not caption and not new_tags:
-            return dropped
-        # Full-list merge (replace_scope stays "all"): existing rows keep
-        # their provenance columns; VLM additions are marked source='vlm' so
-        # a later pipeline re-tag may replace them but never the user's rows.
-        merged: List[_PersistedVLMTagRow] = [
-            {
-                "tag": tag_row["tag"],
-                "confidence": (
-                    float(tag_row["confidence"])
-                    if tag_row["confidence"] is not None
-                    else 1.0
-                ),
-                "source": tag_row["source"],
-                "category": tag_row["category"],
-            }
-            for tag_row in existing
-            if tag_row["tag"]
-        ] + [
-            {
-                "tag": tag,
-                "confidence": 0.85,
-                "source": "vlm",
-                "category": None,
-            }
-            for tag in new_tags
-        ]
-        db.add_tags_batch(
-            [{
-                "image_id": image_id,
-                "tags": merged,
-                "ai_caption": caption or None,
-                "nl_caption": caption or None,
-            }],
-            default_source=None,
-            replace_scope="all",
-        )
-    except Exception as exc:
-        raise VLMResultPersistenceError(
-            f"VLM result persistence failed for image_id={image_id}: {exc}"
-        ) from exc
-    return dropped
-
-
-def _persist_tags(
-    db: _VLMPersistenceStore,
-    image_id: int,
-    vlm_tags: List[str],
-) -> int:
-    """Persist gated VLM tags without suppressing database failures."""
-    if not vlm_tags:
-        return 0
-    return _persist_vlm_result(db, image_id, "", vlm_tags)
-
-
-_BATCH_ID_CHUNK_SIZE = 500
-
-
-@dataclass(frozen=True)
-class _BatchImageSource:
-    source_type: str
-    total: int
-    iter_chunks: Callable[[], Iterator[List[int]]]
-
-
-def _iter_image_id_chunks(image_ids: List[int], chunk_size: int = _BATCH_ID_CHUNK_SIZE) -> Iterator[List[int]]:
-    normalized_chunk_size = max(1, int(chunk_size or _BATCH_ID_CHUNK_SIZE))
-    for index in range(0, len(image_ids), normalized_chunk_size):
-        yield image_ids[index:index + normalized_chunk_size]
-
-
-def _filters_to_selection_kwargs(filters: Dict[str, Any]) -> Dict[str, Any]:
-    def pick(camel: str, snake: Optional[str] = None, default: Any = None) -> Any:
-        if camel in filters:
-            return filters.get(camel)
-        if snake and snake in filters:
-            return filters.get(snake)
-        return default
-
-    return {
-        "generators": pick("generators"),
-        "tags": pick("tags"),
-        "tag_mode": pick("tagMode", "tag_mode", "and"),
-        "ratings": pick("ratings"),
-        "checkpoints": pick("checkpoints"),
-        "loras": pick("loras"),
-        "prompts": pick("prompts"),
-        "prompt_match_mode": pick("promptMatchMode", "prompt_match_mode", "exact"),
-        "artist": pick("artist"),
-        "search": pick("search"),
-        "sort_by": pick("sortBy", "sort_by", "newest"),
-        "min_width": pick("minWidth", "min_width"),
-        "max_width": pick("maxWidth", "max_width"),
-        "min_height": pick("minHeight", "min_height"),
-        "max_height": pick("maxHeight", "max_height"),
-        "aspect_ratio": pick("aspectRatio", "aspect_ratio"),
-        "min_aesthetic": pick("minAesthetic", "min_aesthetic"),
-        "max_aesthetic": pick("maxAesthetic", "max_aesthetic"),
-        "min_user_rating": pick("minUserRating", "min_user_rating"),
-        "brightness_min": pick("brightnessMin", "brightness_min"),
-        "brightness_max": pick("brightnessMax", "brightness_max"),
-        "color_temperature": pick("colorTemperature", "color_temperature"),
-        "brightness_distribution": pick("brightnessDistribution", "brightness_distribution"),
-        "excluded_image_ids": pick("excludedImageIds", "excluded_image_ids"),
-        "exclude_tags": pick("excludeTags", "exclude_tags"),
-        "exclude_generators": pick("excludeGenerators", "exclude_generators"),
-        "exclude_ratings": pick("excludeRatings", "exclude_ratings"),
-        "exclude_checkpoints": pick("excludeCheckpoints", "exclude_checkpoints"),
-        "exclude_loras": pick("excludeLoras", "exclude_loras"),
-        "exclude_prompts": pick("excludePrompts", "exclude_prompts"),
-        "exclude_colors": pick("excludeColors", "exclude_colors"),
-        "color_hues": pick("colorHues", "color_hues"),
-        "exclude_color_hues": pick("excludeColorHues", "exclude_color_hues"),
-        "collection_id": pick("collectionId", "collection_id"),
-        "folder": pick("folder"),
-        "has_metadata": pick("hasMetadata", "has_metadata"),
-    }
-
-
-def _create_selection_token_from_filters(filters: Dict[str, Any]) -> Dict[str, Any]:
-    if not isinstance(filters, dict):
-        raise HTTPException(status_code=400, detail="filters must be an object")
-
-    from services.image_service import ImageService
-
-    return ImageService().create_selection_token(
-        **_filters_to_selection_kwargs(filters),
-        chunk_size=_BATCH_ID_CHUNK_SIZE,
-    )
-
-
-def _build_batch_image_source(request: "BatchCaptionRequest") -> _BatchImageSource:
-    if request.image_ids is not None:
-        image_ids = list(request.image_ids or [])
-        return _BatchImageSource(
-            source_type="image_ids",
-            total=len(image_ids),
-            iter_chunks=lambda: _iter_image_id_chunks(image_ids),
-        )
-
-    if request.selection_token:
-        from services.tag_export_service import count_selection_token_ids, iter_selection_token_id_chunks
-
-        selection_token = request.selection_token
-        total = count_selection_token_ids(selection_token)
-        # snapshot=True: workers persist captions AND merged VLM tags while
-        # the producer is still iterating. A token filtering on tags/excludeTags
-        # the batch rewrites would otherwise skip images mid-run.
-        return _BatchImageSource(
-            source_type="selection_token",
-            total=total,
-            iter_chunks=lambda: iter_selection_token_id_chunks(
-                selection_token, chunk_size=_BATCH_ID_CHUNK_SIZE, snapshot=True
-            ),
-        )
-
-    token_payload = _create_selection_token_from_filters(request.filters or {})
-    selection_token = token_payload["selection_token"]
-    total = int(token_payload.get("total_estimate") or 0)
-
-    from services.tag_export_service import iter_selection_token_id_chunks
-
-    return _BatchImageSource(
-        source_type="filters",
-        total=total,
-        # snapshot=True for the same self-mutation reason as the token branch.
-        iter_chunks=lambda: iter_selection_token_id_chunks(
-            selection_token, chunk_size=_BATCH_ID_CHUNK_SIZE, snapshot=True
-        ),
-    )
-
-
-class BatchCaptionRequest(BaseModel):
-    image_ids: Optional[List[int]] = Field(default=None, max_length=1_000_000)
-    selection_token: Optional[str] = Field(default=None, min_length=1)
-    filters: Optional[Dict[str, Any]] = None
-
-    @model_validator(mode="after")
-    def require_one_image_source(self):
-        source_count = sum([
-            self.image_ids is not None,
-            bool(self.selection_token),
-            self.filters is not None,
-        ])
-        if source_count == 0:
-            raise ValueError("Either image_ids, selection_token, or filters is required")
-        if source_count > 1:
-            raise ValueError("Provide only one of image_ids, selection_token, or filters")
-        return self
 
 
 async def _start_claimed_caption_batch(
@@ -1151,97 +786,10 @@ def _record_error(image_id: Optional[int], message: str, error_type: str) -> Non
             })
 
 
-# === Local Model Management (Ollama) ===
-
-
-_pull_state: Dict[str, Any] = {"pulling": False, "model": "", "percent": 0, "status": ""}
-
-
-@router.get("/local-models/recommended")
-async def get_recommended_models():
-    from vlm_providers.local_models import RECOMMENDED_MODELS, OllamaManager
-    mgr = OllamaManager()
-    installed = await mgr.is_running()
-    local = await mgr.list_local_models() if installed else []
-    local_ids = {m["id"] for m in local}
-
-    models = []
-    for m in RECOMMENDED_MODELS:
-        entry = dict(m)
-        entry["installed"] = m["id"] in local_ids
-        models.append(entry)
-
-    return {
-        "ollama_installed": OllamaManager.is_ollama_installed(),
-        "ollama_running": installed,
-        "install_instructions": OllamaManager.get_install_instructions() if not OllamaManager.is_ollama_installed() else None,
-        "models": models,
-        "local_models": local,
-    }
-
-
-class PullModelRequest(BaseModel):
-    model: str
-
-
-@router.post("/local-models/pull")
-async def pull_model(request: PullModelRequest):
-    """Start pulling a model. Poll /local-models/pull/progress for status."""
-    from vlm_providers.local_models import OllamaManager
-
-    if _pull_state["pulling"]:
-        raise HTTPException(409, f"Already pulling: {_pull_state['model']}")
-
-    mgr = OllamaManager()
-    if not await mgr.is_running():
-        start_result = await OllamaManager.start_ollama()
-        if start_result.get("status") != "ok":
-            raise HTTPException(503, start_result.get("error", "Cannot start Ollama"))
-
-    _pull_state.update({"pulling": True, "model": request.model, "percent": 0, "status": "starting"})
-    _set_pull_task(asyncio.create_task(_do_pull(request.model)))
-    return {"status": "started", "model": request.model}
-
-
-@router.get("/local-models/pull/progress")
-async def pull_progress():
-    return dict(_pull_state)
-
-
-async def _do_pull(model_name: str) -> None:
-    from vlm_providers.local_models import OllamaManager
-    mgr = OllamaManager()
-    try:
-        async for progress in mgr.pull_model(model_name):
-            _pull_state["percent"] = progress.get("percent", 0)
-            _pull_state["status"] = progress.get("status", "")
-            if progress.get("status") == "error":
-                _pull_state["status"] = f"error: {progress.get('error', '')}"
-                break
-    except Exception as e:
-        _pull_state["status"] = f"error: {e}"
-    finally:
-        _pull_state["pulling"] = False
-
-
-class DeleteModelRequest(BaseModel):
-    model: str
-
-
-@router.post("/local-models/delete")
-async def delete_model(request: DeleteModelRequest):
-    from vlm_providers.local_models import OllamaManager
-    mgr = OllamaManager()
-    success = await mgr.delete_model(request.model)
-    if not success:
-        raise HTTPException(500, "Failed to delete model")
-    return {"status": "ok"}
-
-
-@router.post("/local-models/start-ollama")
-async def start_ollama():
-    from vlm_providers.local_models import OllamaManager
-    result = await OllamaManager.start_ollama()
-    if result.get("status") != "ok":
-        raise HTTPException(503, result.get("error", "Cannot start Ollama"))
-    return result
+# Ollama local-model endpoints -- imported LAST so route positions 13-17
+# register after the 12 endpoints above (registration order == route table;
+# the sha256 pin in tests/test_vlm_router_pins.py flips on any reorder).
+from routers.vlm_ollama import (
+    _do_pull, _pull_state, delete_model, get_recommended_models, pull_model,
+    pull_progress, start_ollama,
+)
