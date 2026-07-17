@@ -250,6 +250,7 @@
         const keepBest = document.createElement('button');
         keepBest.type = 'button';
         keepBest.className = 'btn btn-ghost btn-small';
+        keepBest.dataset.testid = 'dup-keep-best';
         keepBest.textContent = t('dup.keepBest', 'Keep best, trash rest');
         keepBest.addEventListener('click', () => {
             card.querySelectorAll('input[type="checkbox"]').forEach((cb) => {

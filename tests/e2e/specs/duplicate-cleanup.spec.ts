@@ -55,7 +55,7 @@ function runBackendScript(script: string): string {
   }).toString('utf8').trim()
 }
 
-/** 3 near-identical embeddings + 1 unrelated; returns the inserted ids. */
+/** 3 near-identical + 1 unrelated + a 0°/17°/34° chain; returns inserted ids. */
 function resetFixture(): number[] {
   const script = `
 import json
@@ -76,9 +76,16 @@ vecs = []
 base = np.zeros(8, dtype=np.float32); base[0] = 1.0
 n1 = base.copy(); n1[1] = 0.01
 n2 = base.copy(); n2[2] = 0.012
-other = np.zeros(8, dtype=np.float32); other[5] = 1.0
-vecs = [base, n1, n2, other]
-ratings = [5, 0, 0, 0]
+other = np.zeros(8, dtype=np.float32); other[7] = 1.0
+chain = []
+for degrees in (0.0, 17.0, 34.0):
+    radians = np.deg2rad(degrees)
+    vector = np.zeros(8, dtype=np.float32)
+    vector[3] = np.cos(radians)
+    vector[4] = np.sin(radians)
+    chain.append(vector)
+vecs = [base, n1, n2, other, *chain]
+ratings = [5, 0, 0, 0, 5, 0, 0]
 
 ids = []
 with sqlite3.connect(db_path) as conn:
@@ -131,7 +138,7 @@ let fixtureIds: number[] = []
 
 test.beforeAll(() => {
   fixtureIds = resetFixture()
-  expect(fixtureIds.length).toBe(4)
+  expect(fixtureIds.length).toBe(7)
 })
 
 test.afterAll(() => {
@@ -170,6 +177,17 @@ test('scan API clusters the library into groups with a rating-first keeper', asy
   // The 5-star image keeps, despite equal resolutions.
   expect(fixtureGroup.members[0].id).toBe(fixtureIds[0])
   expect(fixtureGroup.members[0].suggested_keep).toBe(true)
+
+  const chainIds = fixtureIds.slice(4, 7)
+  const chainGroup = groups.groups.find((g: any) =>
+    g.members.some((m: any) => m.id === chainIds[0]))
+  expect(chainGroup).toBeTruthy()
+  expect(chainGroup.members.map((m: any) => m.id)).toEqual(chainIds.slice(0, 2))
+  expect(chainGroup.members[0].suggested_keep).toBe(true)
+  expect(chainGroup.members[1].suggested_keep).toBe(false)
+  const suggestedLosers = groups.groups.flatMap((g: any) =>
+    g.members.filter((m: any) => !m.suggested_keep).map((m: any) => m.id))
+  expect(suggestedLosers).not.toContain(chainIds[2])
 })
 
 test('review modal renders groups; keep-best sends exactly the losers to the trash pipeline', async ({ page }) => {
@@ -204,12 +222,48 @@ test('review modal renders groups; keep-best sends exactly the losers to the tra
   })
   page.on('dialog', (dialog) => dialog.accept())
 
-  await group.getByText('Keep best, trash rest').click()
+  await group.getByTestId('dup-keep-best').click()
   await expect.poll(() => deleteBody).not.toBe(null)
   expect(deleteBody.confirm_delete_files).toBe(true)
   expect(deleteBody.image_ids.sort()).toEqual(fixtureIds.slice(1, 3).sort())
   // The reviewed group leaves the list after the (mocked) delete.
   await expect(group).toHaveCount(0)
+})
+
+test('transitive similarity never sends the non-matching endpoint to trash', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('#view-gallery')).toBeVisible()
+  await page.locator('#nav-tools-toggle').click()
+  await page.locator('#nav-tools-dup-cleaner').click()
+  await expect(page.locator('#dup-cleaner-modal.visible')).toBeVisible()
+
+  const chainIds = fixtureIds.slice(4, 7)
+  const group = page.locator('.dup-group', {
+    has: page.locator(`input[data-image-id="${chainIds[0]}"]`),
+  })
+  await expect(group).toBeVisible({ timeout: 10_000 })
+  const memberIds = await group.locator('input.dup-member-check').evaluateAll((inputs) =>
+    inputs.map((input) => Number((input as HTMLInputElement).dataset.imageId)),
+  )
+  expect(memberIds).toEqual(chainIds.slice(0, 2))
+  await expect(group.locator(`input[data-image-id="${chainIds[2]}"]`)).toHaveCount(0)
+  await expect(group.locator('input.dup-member-check:checked')).toHaveCount(1)
+
+  let deleteBody: any = null
+  await page.route('**/api/images/delete-selected', async (route) => {
+    deleteBody = route.request().postDataJSON()
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ deleted: deleteBody.image_ids.length, errors: [] }),
+    })
+  })
+  page.on('dialog', (dialog) => dialog.accept())
+
+  await group.getByTestId('dup-keep-best').click()
+  await expect.poll(() => deleteBody).not.toBe(null)
+  expect(deleteBody.image_ids).toEqual([chainIds[1]])
+  expect(deleteBody.image_ids).not.toContain(chainIds[2])
 })
 
 test('Escape closes the cleanup modal without leaving the gallery', async ({ page }) => {

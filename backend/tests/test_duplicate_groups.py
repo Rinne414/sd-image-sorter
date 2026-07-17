@@ -68,6 +68,172 @@ def _seed_library(db):
         conn.close()
 
 
+def _angle_vector(degrees: float) -> np.ndarray:
+    radians = np.deg2rad(degrees)
+    vector = np.zeros(512, dtype=np.float32)
+    vector[0] = np.cos(radians)
+    vector[1] = np.sin(radians)
+    return vector
+
+
+def _seed_transitive_chain(db) -> None:
+    conn = db.get_connection()
+    try:
+        _insert_image(
+            conn,
+            30,
+            "chain-a.png",
+            _angle_vector(0.0),
+            rating=5,
+            size=100,
+        )
+        _insert_image(
+            conn,
+            31,
+            "chain-b.png",
+            _angle_vector(17.0),
+            rating=0,
+            size=200,
+        )
+        _insert_image(
+            conn,
+            32,
+            "chain-c.png",
+            _angle_vector(34.0),
+            rating=0,
+            size=300,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _assert_transitive_chain_is_safe(data) -> None:
+    assert data is not None
+    assert data["summary"]["group_count"] == 1
+    assert data["summary"]["redundant_count"] == 1
+    assert data["summary"]["reclaimable_bytes"] == 200
+
+    group = data["groups"][0]
+    assert [member["id"] for member in group["members"]] == [30, 31]
+    assert group["members"][0]["suggested_keep"] is True
+    assert group["members"][1]["suggested_keep"] is False
+    assert group["similarity"] == pytest.approx(
+        float(np.cos(np.deg2rad(17.0))), abs=1e-4
+    )
+    assert all(
+        member["id"] != 32
+        for candidate_group in data["groups"]
+        for member in candidate_group["members"]
+        if not member["suggested_keep"]
+    )
+
+
+def _disjoint_pair_graph(
+    node_count: int,
+) -> tuple[
+    list[int],
+    dict[int, dict[int, float]],
+    dict[int, dict[str, int | float]],
+]:
+    ids = list(range(node_count))
+    metadata = {
+        index: {
+            "id": index,
+            "user_rating": 0,
+            "aesthetic_score": 0.0,
+            "width": 512,
+            "height": 512,
+            "file_size": node_count - index,
+        }
+        for index in ids
+    }
+    neighbors = {}
+    for index in range(0, node_count, 2):
+        neighbors[index] = {index + 1: 0.99}
+        neighbors[index + 1] = {index: 0.99}
+    return ids, neighbors, metadata
+
+
+def test_partition_ranks_large_disjoint_pairs_once(monkeypatch):
+    node_count = 1000
+    ids, neighbors, metadata = _disjoint_pair_graph(node_count)
+
+    original_rank_key = dgs._rank_key
+    rank_calls = 0
+
+    def counted_rank_key(member):
+        nonlocal rank_calls
+        rank_calls += 1
+        return original_rank_key(member)
+
+    monkeypatch.setattr(dgs, "_rank_key", counted_rank_key)
+
+    groups = dgs._partition_direct_neighbor_groups(
+        ids,
+        neighbors,
+        metadata,
+        lambda: False,
+    )
+
+    assert groups is not None
+    assert len(groups) == node_count // 2
+    assert rank_calls == node_count
+
+
+def test_partition_stops_when_cancellation_is_requested():
+    node_count = 1024
+    ids, neighbors, metadata = _disjoint_pair_graph(node_count)
+
+    cancellation_checks = 0
+
+    def is_cancelled() -> bool:
+        nonlocal cancellation_checks
+        cancellation_checks += 1
+        return cancellation_checks >= 2
+
+    groups = dgs._partition_direct_neighbor_groups(
+        ids,
+        neighbors,
+        metadata,
+        is_cancelled,
+    )
+
+    assert groups is None
+    assert cancellation_checks == 2
+
+
+def test_cancel_during_grouping_preserves_last_persisted_result(
+    dup_env, monkeypatch
+):
+    monkeypatch.setattr("similarity_ann.hnswlib_available", lambda: False)
+    _seed_library(dup_env)
+    state_path = dgs._state_path()
+    state_path.write_text(
+        '{"version":2,"groups":[],"marker":"previous"}',
+        encoding="utf-8",
+    )
+    handle = FakeHandle()
+
+    def cancel_on_clustering(
+        *, processed: int, total: int, message: str
+    ) -> None:
+        handle.progress.append((processed, message))
+        if message == "Clustering groups":
+            handle.cancel_flag = True
+
+    handle.set_progress = cancel_on_clustering
+
+    dgs.run_duplicate_scan(handle, threshold=0.95)
+
+    assert dgs.load_result() == {
+        "version": 2,
+        "groups": [],
+        "marker": "previous",
+    }
+    assert handle.result is None
+
+
 def test_scan_builds_one_group_with_rating_first_keeper(dup_env, monkeypatch):
     monkeypatch.setattr("similarity_ann.hnswlib_available", lambda: False)
     _seed_library(dup_env)
@@ -77,6 +243,7 @@ def test_scan_builds_one_group_with_rating_first_keeper(dup_env, monkeypatch):
 
     data = dgs.load_result()
     assert data is not None
+    assert data["version"] == 2
     assert data["summary"]["group_count"] == 1
     assert data["summary"]["redundant_count"] == 2
     group = data["groups"][0]
@@ -89,6 +256,53 @@ def test_scan_builds_one_group_with_rating_first_keeper(dup_env, monkeypatch):
     # reclaimable = losers' file sizes (500 + 900)
     assert data["summary"]["reclaimable_bytes"] == 1400
     assert handle.result["summary"]["group_count"] == 1
+
+
+def test_scan_never_suggests_a_transitive_only_duplicate_for_deletion(
+    dup_env, monkeypatch
+):
+    """Every suggested loser must directly meet the threshold against its keeper."""
+    monkeypatch.setattr("similarity_ann.hnswlib_available", lambda: False)
+    _seed_transitive_chain(dup_env)
+
+    dgs.run_duplicate_scan(FakeHandle(), threshold=0.95)
+    _assert_transitive_chain_is_safe(dgs.load_result())
+
+
+def test_scan_splits_a_transitive_path_into_direct_keeper_groups(
+    dup_env, monkeypatch
+):
+    monkeypatch.setattr("similarity_ann.hnswlib_available", lambda: False)
+    conn = dup_env.get_connection()
+    try:
+        for image_id, degrees, rating, size in (
+            (40, 0.0, 5, 100),
+            (41, 17.0, 0, 200),
+            (42, 34.0, 4, 300),
+            (43, 51.0, 0, 400),
+        ):
+            _insert_image(
+                conn,
+                image_id,
+                f"path-{image_id}.png",
+                _angle_vector(degrees),
+                rating=rating,
+                size=size,
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    dgs.run_duplicate_scan(FakeHandle(), threshold=0.95)
+
+    data = dgs.load_result()
+    assert data is not None
+    assert [
+        [member["id"] for member in group["members"]]
+        for group in data["groups"]
+    ] == [[40, 41], [42, 43]]
+    assert data["summary"]["redundant_count"] == 2
+    assert data["summary"]["reclaimable_bytes"] == 600
 
 
 def test_aesthetic_breaks_ties_when_no_ratings(dup_env, monkeypatch):
@@ -129,8 +343,37 @@ def test_unrelated_images_form_no_groups(dup_env, monkeypatch):
 def test_scan_with_too_few_embeddings_persists_empty_result(dup_env):
     dgs.run_duplicate_scan(FakeHandle(), threshold=0.95)
     data = dgs.load_result()
+    assert data["version"] == 2
     assert data["summary"]["embedded_count"] == 0
     assert data["summary"]["group_count"] == 0
+
+
+def test_legacy_v1_group_state_requires_rescan(dup_env):
+    state_path = dgs._state_path()
+    state_path.write_text('{"version":1,"groups":[]}', encoding="utf-8")
+
+    assert dgs.load_result() is None
+    page = dgs.get_groups_page()
+    assert page["available"] is False
+    assert page["groups"] == []
+
+
+def test_scan_surfaces_persistence_failure_instead_of_reporting_success(
+    dup_env, tmp_path, monkeypatch
+):
+    blocking_parent = tmp_path / "not-a-directory"
+    blocking_parent.write_text("block state directory creation", encoding="utf-8")
+    monkeypatch.setattr(
+        dgs,
+        "_state_path",
+        lambda: blocking_parent / "duplicate-groups.json",
+    )
+    handle = FakeHandle()
+
+    with pytest.raises(dgs.DuplicateGroupPersistenceError, match="duplicate groups"):
+        dgs.run_duplicate_scan(handle, threshold=0.95)
+
+    assert handle.result is None
 
 
 def test_groups_page_pagination_and_missing_state(dup_env, monkeypatch):
@@ -171,3 +414,15 @@ def test_ann_path_matches_exact_path(dup_env):
     data = dgs.load_result()
     assert data["summary"]["group_count"] == 1
     assert sorted(m["id"] for m in data["groups"][0]["members"]) == [1, 2, 3]
+
+
+@pytest.mark.skipif(
+    not pytest.importorskip("similarity_ann").hnswlib_available(),
+    reason="hnswlib not installed",
+)
+def test_ann_path_never_suggests_transitive_only_duplicate_for_deletion(dup_env):
+    _seed_transitive_chain(dup_env)
+
+    dgs.run_duplicate_scan(FakeHandle(), threshold=0.95)
+
+    _assert_transitive_chain_is_safe(dgs.load_result())

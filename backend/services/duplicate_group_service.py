@@ -12,7 +12,9 @@ This service runs as a bulk background job (progress + cancel via
 2. Find neighbor pairs >= threshold — via the optional hnswlib ANN when
    available (sub-quadratic), else an exact chunked matmul over the upper
    triangle. Both paths are streamed and cancellable; there is NO size cap.
-3. Union-find the pairs into groups.
+3. Partition exact threshold edges into direct-neighbor groups. Every suggested
+   loser must have a direct edge to the keeper that remains; transitive chains
+   are never destructive suggestions.
 4. Enrich members with metadata and rank each group: highest
    (user_rating, aesthetic_score, resolution, file_size) first — that
    member becomes the suggested keeper.
@@ -30,7 +32,7 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TypeAlias
 
 import numpy as np
 
@@ -41,10 +43,21 @@ MIN_THRESHOLD = 0.80
 MAX_THRESHOLD = 0.999
 _ANN_NEIGHBOR_K = 24          # neighbors fetched per item on the ANN path
 _MATMUL_CHUNK = 512           # rows per chunk on the exact path
+_GROUP_CANCEL_CHECK_INTERVAL = 256
+_RESULT_VERSION = 2
 _STATE_FILENAME = "duplicate-groups.json"
 
 _SCAN_LOCK = threading.Lock()
 _ACTIVE_JOB_ID: Optional[str] = None
+
+SimilarityPair: TypeAlias = tuple[int, int, float]
+NeighborMap: TypeAlias = Dict[int, Dict[int, float]]
+DirectNeighborGroup: TypeAlias = tuple[List[int], float]
+CancellationCheck: TypeAlias = Callable[[], bool]
+
+
+class DuplicateGroupPersistenceError(RuntimeError):
+    """Raised when the completed duplicate scan cannot be stored atomically."""
 
 
 def _state_path() -> Path:
@@ -70,28 +83,6 @@ def set_active_job_id(job_id: Optional[str]) -> bool:
             return False
         _ACTIVE_JOB_ID = job_id
         return True
-
-
-# ---------------------------------------------------------------------------
-# Union-find
-# ---------------------------------------------------------------------------
-
-class _UnionFind:
-    def __init__(self, size: int) -> None:
-        self.parent = list(range(size))
-
-    def find(self, x: int) -> int:
-        root = x
-        while self.parent[root] != root:
-            root = self.parent[root]
-        while self.parent[x] != root:
-            self.parent[x], x = root, self.parent[x]
-        return root
-
-    def union(self, a: int, b: int) -> None:
-        ra, rb = self.find(a), self.find(b)
-        if ra != rb:
-            self.parent[rb] = ra
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +112,9 @@ def _load_embeddings(handle) -> tuple:
     return ids, vectors / norms
 
 
-def _pairs_via_ann(matrix: np.ndarray, threshold: float, handle) -> Optional[List[tuple]]:
+def _pairs_via_ann(
+    matrix: np.ndarray, threshold: float, handle
+) -> Optional[List[SimilarityPair]]:
     """Neighbor pairs via hnswlib. None → caller falls back to exact path."""
     import similarity_ann
 
@@ -132,7 +125,7 @@ def _pairs_via_ann(matrix: np.ndarray, threshold: float, handle) -> Optional[Lis
     if ann is None:
         return None
     k = min(_ANN_NEIGHBOR_K, n)
-    pairs: List[tuple] = []
+    pairs: List[SimilarityPair] = []
     for i in range(n):
         if i % 512 == 0:
             if handle.cancelled:
@@ -151,10 +144,12 @@ def _pairs_via_ann(matrix: np.ndarray, threshold: float, handle) -> Optional[Lis
     return pairs
 
 
-def _pairs_exact(matrix: np.ndarray, threshold: float, handle) -> List[tuple]:
+def _pairs_exact(
+    matrix: np.ndarray, threshold: float, handle
+) -> List[SimilarityPair]:
     """Exact upper-triangle chunked matmul — no size cap, streamed."""
     n = matrix.shape[0]
-    pairs: List[tuple] = []
+    pairs: List[SimilarityPair] = []
     total_chunks = (n + _MATMUL_CHUNK - 1) // _MATMUL_CHUNK
     done_chunks = 0
     for i in range(0, n, _MATMUL_CHUNK):
@@ -185,30 +180,86 @@ def _rank_key(member: Dict[str, Any]) -> tuple:
     )
 
 
-def _build_groups(ids: List[int], pairs: List[tuple], handle) -> List[Dict[str, Any]]:
+def _build_neighbor_map(pairs: List[SimilarityPair]) -> NeighborMap:
+    neighbors: NeighborMap = {}
+    for first, second, similarity in pairs:
+        if first == second:
+            continue
+        first_neighbors = neighbors.setdefault(first, {})
+        second_neighbors = neighbors.setdefault(second, {})
+        first_neighbors[second] = max(first_neighbors.get(second, 0.0), similarity)
+        second_neighbors[first] = max(second_neighbors.get(first, 0.0), similarity)
+    return neighbors
+
+
+def _partition_direct_neighbor_groups(
+    ids: List[int],
+    neighbors: NeighborMap,
+    metadata: Dict[int, Dict[str, Any]],
+    is_cancelled: CancellationCheck,
+) -> Optional[List[DirectNeighborGroup]]:
+    """Return disjoint keeper-first groups backed by direct similarity edges."""
+    remaining = {
+        index
+        for index in neighbors
+        if 0 <= index < len(ids) and ids[index] in metadata
+    }
+    ranked = sorted(
+        remaining,
+        key=lambda index: _rank_key(metadata[ids[index]]),
+        reverse=True,
+    )
+    rank_positions = {index: position for position, index in enumerate(ranked)}
+    groups: List[DirectNeighborGroup] = []
+
+    for position, keeper in enumerate(ranked):
+        if position % _GROUP_CANCEL_CHECK_INTERVAL == 0 and is_cancelled():
+            return None
+        if keeper not in remaining:
+            continue
+        direct_losers = sorted(
+            (
+                neighbor
+                for neighbor in neighbors.get(keeper, {})
+                if neighbor != keeper and neighbor in remaining
+            ),
+            key=rank_positions.__getitem__,
+        )
+        remaining.remove(keeper)
+        if not direct_losers:
+            continue
+
+        remaining.difference_update(direct_losers)
+        minimum_similarity = min(
+            neighbors[keeper][loser] for loser in direct_losers
+        )
+        groups.append(([keeper, *direct_losers], minimum_similarity))
+
+    return None if is_cancelled() else groups
+
+
+def _build_groups(
+    ids: List[int], pairs: List[SimilarityPair], handle
+) -> Optional[List[Dict[str, Any]]]:
     import database as db
 
     handle.set_progress(processed=85, total=100, message="Clustering groups")
-    uf = _UnionFind(len(ids))
-    best_sim: Dict[int, float] = {}
-    for a, b, sim in pairs:
-        uf.union(a, b)
-    for a, b, sim in pairs:
-        root = uf.find(a)
-        best_sim[root] = max(best_sim.get(root, 0.0), sim)
-
-    clusters: Dict[int, List[int]] = {}
-    for idx in range(len(ids)):
-        root = uf.find(idx)
-        clusters.setdefault(root, []).append(idx)
-
-    member_ids = [ids[i] for members in clusters.values() if len(members) > 1 for i in members]
+    if handle.cancelled:
+        return None
+    neighbors = _build_neighbor_map(pairs)
+    member_ids = [
+        ids[index]
+        for index in neighbors
+        if 0 <= index < len(ids)
+    ]
     if not member_ids:
         return []
 
     meta: Dict[int, Dict[str, Any]] = {}
     with db.get_db() as conn:
         for start in range(0, len(member_ids), 900):
+            if handle.cancelled:
+                return None
             batch = member_ids[start:start + 900]
             placeholders = ",".join("?" * len(batch))
             for row in conn.execute(
@@ -230,21 +281,32 @@ def _build_groups(ids: List[int], pairs: List[tuple], handle) -> List[Dict[str, 
                     "user_rating": row[7],
                 }
 
+    def is_cancelled() -> bool:
+        return bool(handle.cancelled)
+
+    partitioned = _partition_direct_neighbor_groups(
+        ids,
+        neighbors,
+        meta,
+        is_cancelled,
+    )
+    if partitioned is None:
+        return None
+
     groups: List[Dict[str, Any]] = []
-    for root, members in clusters.items():
-        if len(members) < 2:
-            continue
-        entries = [meta[ids[i]] for i in members if ids[i] in meta]
-        if len(entries) < 2:
-            continue
-        entries.sort(key=_rank_key, reverse=True)
+    for group_index, (member_indices, minimum_similarity) in enumerate(partitioned):
+        if group_index % _GROUP_CANCEL_CHECK_INTERVAL == 0 and handle.cancelled:
+            return None
+        entries = [dict(meta[ids[index]]) for index in member_indices]
         for pos, entry in enumerate(entries):
             entry["suggested_keep"] = pos == 0
         groups.append({
-            "similarity": round(best_sim.get(root, 0.0), 4),
+            "similarity": round(minimum_similarity, 4),
             "members": entries,
         })
 
+    if handle.cancelled:
+        return None
     groups.sort(key=lambda g: (len(g["members"]), g["similarity"]), reverse=True)
     for gi, group in enumerate(groups):
         group["group_id"] = gi
@@ -257,6 +319,8 @@ def run_duplicate_scan(handle, threshold: float = DEFAULT_THRESHOLD) -> None:
         threshold = max(MIN_THRESHOLD, min(MAX_THRESHOLD, float(threshold)))
         ids, matrix = _load_embeddings(handle)
         if matrix is None:
+            if handle.cancelled:
+                return
             result = _empty_result(threshold, embedded_count=len(ids))
             _persist(result)
             handle.set_result({"summary": result["summary"]})
@@ -272,13 +336,15 @@ def run_duplicate_scan(handle, threshold: float = DEFAULT_THRESHOLD) -> None:
             return
 
         groups = _build_groups(ids, pairs, handle)
+        if groups is None or handle.cancelled:
+            return
         redundant = sum(len(g["members"]) - 1 for g in groups)
         reclaimable = sum(
             m.get("file_size") or 0
             for g in groups for m in g["members"] if not m["suggested_keep"]
         )
         result = {
-            "version": 1,
+            "version": _RESULT_VERSION,
             "scanned_at": time.time(),
             "threshold": threshold,
             "summary": {
@@ -290,6 +356,8 @@ def run_duplicate_scan(handle, threshold: float = DEFAULT_THRESHOLD) -> None:
             },
             "groups": groups,
         }
+        if handle.cancelled:
+            return
         _persist(result)
         handle.set_progress(processed=100, total=100, message="Done")
         handle.set_result({"summary": result["summary"]})
@@ -299,7 +367,7 @@ def run_duplicate_scan(handle, threshold: float = DEFAULT_THRESHOLD) -> None:
 
 def _empty_result(threshold: float, embedded_count: int) -> Dict[str, Any]:
     return {
-        "version": 1,
+        "version": _RESULT_VERSION,
         "scanned_at": time.time(),
         "threshold": threshold,
         "summary": {
@@ -324,8 +392,10 @@ def _persist(result: Dict[str, Any]) -> None:
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(result, separators=(",", ":")), encoding="utf-8")
         os.replace(tmp, path)
-    except Exception as exc:
-        logger.warning("Failed to persist duplicate groups: %s", exc)
+    except OSError as exc:
+        raise DuplicateGroupPersistenceError(
+            f"Failed to persist duplicate groups to {path}: {exc}"
+        ) from exc
 
 
 def load_result() -> Optional[Dict[str, Any]]:
@@ -334,7 +404,11 @@ def load_result() -> Optional[Dict[str, Any]]:
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict) or "groups" not in data:
+        if (
+            not isinstance(data, dict)
+            or data.get("version") != _RESULT_VERSION
+            or not isinstance(data.get("groups"), list)
+        ):
             return None
         return data
     except Exception as exc:
