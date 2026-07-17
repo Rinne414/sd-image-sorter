@@ -5,9 +5,12 @@ EVERY function that reads or rebinds those module globals (get_job /
 get_active_job / cancel_active_job / _prune_finished_jobs_locked /
 _run_pipeline / start_smart_tag_job) - global-statement rebinding of
 _active_job_id means they must share one namespace. Also owns the windowed
-single-tagger pipeline, the two-phase ToriiGate pipeline, the multi-tagger
-consensus orchestration inside _run_pipeline, and the legacy per-image
-_process_one_image.
+single-tagger pipeline, the two-phase ToriiGate pipeline, and the
+multi-tagger consensus orchestration inside _run_pipeline. The two pure
+stage helpers (_terminal_job_outcome and the legacy per-image
+_process_one_image) live in pipeline_stages.py and are re-imported here
+so the facade owner map and the direct-import test path keep resolving
+them on this module.
 
 Monkeypatch seams: the test suites patch collaborator names (e.g.
 _resolve_tagger, _apply_memory_pressure, _request_total,
@@ -30,17 +33,14 @@ from services.smart_tag.caption_phase import _build_caption_phase, _run_caption_
 from services.smart_tag.consensus import compute_consensus_tags
 from services.smart_tag.jobs import (
     SmartTagJobState,
-    _completion_message,
     _fail_missing_source,
 )
-from services.smart_tag.prompts import (
-    _vlm_context_tags_for,
-    build_vlm_prompt,
-    filter_tags_by_training_purpose,
+from services.smart_tag.pipeline_stages import (
+    _process_one_image as _process_one_image,  # re-export: facade + test surface
+    _terminal_job_outcome,
 )
 from services.smart_tag.request import SmartTagRequest, _coerce_request, _request_total
 from services.smart_tag.results import (
-    _assemble_result_dict,
     _booru_partial_from_tag_result,
     _close_caption_results,
 )
@@ -54,8 +54,6 @@ from services.smart_tag.tagging import (
     _resolve_tagger,
     _resolve_tagger_by_model,
     _tag_batch_with_thresholds,
-    _tag_image_with_thresholds,
-    _toriigate_nl_text,
 )
 
 # Shared logger: keep the historical channel name so log capture, filtering,
@@ -120,42 +118,6 @@ def cancel_active_job() -> Optional[SmartTagJobState]:
 _TERMINAL_JOB_STATUSES = {"completed", "warning", "failed", "cancelled"}
 
 
-def _terminal_job_outcome(
-    job: SmartTagJobState,
-    req: SmartTagRequest,
-) -> Tuple[str, str]:
-    """Return the terminal status and user-facing message without mutating state."""
-    if job.cancel_requested:
-        return "cancelled", "Cancelled by user."
-    if job.status != "running":
-        return job.status, job.message
-    if job.succeeded == 0 and job.failed > 0:
-        last_error = ""
-        for error in reversed(job.errors):
-            last_error = error.get("error", "").strip()
-            if last_error:
-                break
-        if req.caption_profile is not None:
-            if not last_error:
-                raise RuntimeError(
-                    "Caption profile job recorded failures without error details: "
-                    f"job_id={job.job_id!r}, failed={job.failed}."
-                )
-            return (
-                "failed",
-                f"Caption profile {req.caption_profile.value!r} failed for all "
-                f"{job.failed} image(s). Provider error: {last_error}",
-            )
-        detail = f" Last error: {last_error}" if last_error else ""
-        return (
-            "failed",
-            f"Smart Tag failed for all {job.failed} image(s).{detail}",
-        )
-    if job.failed > 0:
-        return "warning", f"Completed with warning. {_completion_message(job)}"
-    return "completed", _completion_message(job)
-
-
 def _prune_finished_jobs_locked(keep: int = SMART_TAG_FINISHED_JOBS_KEPT) -> List[str]:
     """Drop all but the newest ``keep`` finished jobs from the registry.
 
@@ -190,113 +152,6 @@ def _delete_caption_result_files(paths: List[str]) -> None:
 # ---------------------------------------------------------------------------
 # Pipeline runner
 # ---------------------------------------------------------------------------
-
-
-def _process_one_image(
-    *,
-    image_path: str,
-    image_id: int,
-    req: SmartTagRequest,
-    tagger,
-    vlm_provider,
-    nl_tagger=None,
-    precomputed_tagger_outputs: Optional[List[Dict[str, Any]]] = None,
-) -> Dict[str, Any]:
-    """Run the full per-image pipeline. Returns a dict with caption + tags.
-
-    When ``precomputed_tagger_outputs`` is provided (multi-tagger mode),
-    the tagging phase is skipped and the pre-collected outputs are fused
-    directly. This avoids reloading models per-image.
-    """
-    # ------- Stage 1: WD14 / OppaiOracle local tagging --------------------
-    if precomputed_tagger_outputs is not None:
-        # Multi-tagger consensus from pre-collected per-tagger results.
-        raw = compute_consensus_tags(
-            precomputed_tagger_outputs,
-            consensus_min=req.consensus_min,
-            skip_categories=req.consensus_skip_categories,
-        )
-        raw["tag_score_sets"] = [
-            {"model": o.get("model"), "scores": o.get("tag_scores")}
-            for o in precomputed_tagger_outputs
-            if o.get("model") and o.get("tag_scores")
-        ]
-    elif req.enable_wd14 and tagger is not None:
-        raw = _tag_image_with_thresholds(
-            tagger,
-            image_path,
-            general_threshold=req.general_threshold,
-            character_threshold=req.character_threshold,
-            copyright_threshold=req.copyright_threshold,
-        )
-    else:
-        raw = {}
-
-    partial = _booru_partial_from_tag_result(
-        raw, req, score_model=getattr(tagger, "model_name", None)
-    )
-    general_names = partial["general_names"]
-    copyright_names = partial["copyright_names"]
-    character_names = partial["character_names"]
-
-    # ------- Stage 2: VLM caption --------------------------------------
-    nl_text = ""
-    if req.enable_vlm and req.natural_language_mode == "toriigate" and nl_tagger is not None:
-        nl_text = _toriigate_nl_text(
-            nl_tagger,
-            image_path,
-            image_id,
-            tags=_vlm_context_tags_for(
-                partial,
-                req.toriigate_grounding,
-                req.training_purpose,
-                req.trigger_word,
-            ),
-        )
-    elif req.enable_vlm and vlm_provider is not None:
-        # Filter tags by training purpose (LoRA training best practices)
-        vlm_context_tags = filter_tags_by_training_purpose(
-            req.training_purpose,
-            general_names,
-            copyright_names,
-            character_names,
-            req.trigger_word,
-        )
-        include_tags_as_context = bool(
-            getattr(getattr(vlm_provider, "config", None), "include_tags_as_context", True)
-        ) and req.vlm_grounding
-        prompt = build_vlm_prompt(
-            req.training_purpose,
-            vlm_context_tags,
-            include_tags=include_tags_as_context,
-            suppressed_traits=req.suppressed_traits,
-        )
-        try:
-            import asyncio
-
-            async def _call() -> str:
-                config = vlm_provider.config
-                original_user_prompt = getattr(config, "user_prompt", "")
-                original_with_tags = getattr(config, "user_prompt_with_tags", "")
-                try:
-                    config.user_prompt = prompt
-                    config.user_prompt_with_tags = prompt
-                    vlm_result = await vlm_provider.caption_image(
-                        image_path,
-                        tags=vlm_context_tags if include_tags_as_context and vlm_context_tags else None,
-                    )
-                    return (vlm_result.caption or "").strip()
-                finally:
-                    config.user_prompt = original_user_prompt
-                    config.user_prompt_with_tags = original_with_tags
-
-            nl_text = asyncio.run(_call())
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("VLM caption failed for image %s: %s", image_id, exc)
-            nl_text = ""
-
-    # ------- Stage 3: Caption assembly ---------------------------------
-    return _assemble_result_dict(partial, nl_text, image_id, req)
 
 
 def _run_windowed_pipeline(
