@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from fastapi import BackgroundTasks, HTTPException
 from PIL import Image
 
@@ -657,6 +658,71 @@ class _FakeCancelEvent:
         self.was_set = True
 
 
+class _SetupProgressQueue:
+    def __init__(
+        self, close_error: Exception | None, join_error: Exception | None
+    ) -> None:
+        self.close_error = close_error
+        self.join_error = join_error
+        self.close_calls = 0
+        self.join_calls = 0
+
+    def close(self) -> None:
+        self.close_calls += 1
+        if self.close_error is not None:
+            raise self.close_error
+
+    def join_thread(self) -> None:
+        self.join_calls += 1
+        if self.join_error is not None:
+            raise self.join_error
+
+
+class _FailingSetupContext:
+    def __init__(
+        self,
+        failure_point: str,
+        failure_message: str,
+        progress_queue: _SetupProgressQueue,
+    ) -> None:
+        self.failure_point = failure_point
+        self.failure_message = failure_message
+        self.progress_queue = progress_queue
+
+    def Queue(self) -> _SetupProgressQueue:
+        if self.failure_point == "queue":
+            raise RuntimeError(self.failure_message)
+        return self.progress_queue
+
+    def Event(self) -> _FakeCancelEvent:
+        if self.failure_point == "event":
+            raise RuntimeError(self.failure_message)
+        return _FakeCancelEvent()
+
+    def Process(
+        self, *, target: object, args: tuple[object, ...], daemon: bool
+    ) -> _DeadWorker:
+        del target, args, daemon
+        if self.failure_point == "process":
+            raise RuntimeError(self.failure_message)
+        return _DeadWorker()
+
+
+def _build_running_setup_service(run_id: int) -> TaggingService:
+    service = TaggingService()
+    service._active_run_id = run_id
+    service._progress = _build_tag_progress_state(
+        "running",
+        current=2,
+        total=5,
+        tagged=1,
+        errors=1,
+        message="Preparing tagger...",
+        run_id=run_id,
+    )
+    return service
+
+
 def test_start_tagging_recovers_from_stale_cancelling_state_when_worker_is_dead():
     service = TaggingService()
     service.set_tagger_getter(lambda **kwargs: object())
@@ -796,22 +862,111 @@ def test_run_tagging_job_aborts_when_run_id_was_invalidated_by_pre_spawn_cancel(
 
     request = TagRequest(model_name="wd-swinv2-tagger-v3", use_gpu=False)
 
-    with patch("hardware_monitor.get_system_info", return_value={}), patch(
-        "hardware_monitor.recommend_tagger_config",
-        return_value={
-            "recommended_batch_size": 16,
-            "recommended_cpu_chunk_size": 12,
-            "recommended_session_refresh_interval": 0,
-        },
-    ):
+    with patch.object(service, "_build_runtime_plan") as build_runtime_plan, patch(
+        "services.tagging_service.multiprocessing.get_context"
+    ) as get_context:
         service._run_tagging_job(request, run_id=pending_run_id)
 
+    build_runtime_plan.assert_not_called()
+    get_context.assert_not_called()
     progress = service.get_progress()
     assert progress["status"] == "cancelled", (
         "abort path must not clobber the cancelled progress"
     )
     assert progress["run_id"] == pending_run_id
     assert service._worker_process is None
+
+
+@pytest.mark.parametrize(
+    ("failure_point", "expected_stage"),
+    [
+        ("runtime_plan", "building the runtime plan"),
+        ("context", "creating the multiprocessing context"),
+        ("queue", "creating the worker progress queue"),
+        ("event", "creating the worker cancellation event"),
+        ("process", "constructing the worker process"),
+    ],
+)
+def test_worker_setup_failure_publishes_stage_specific_terminal_error(
+    failure_point: str, expected_stage: str
+) -> None:
+    run_id = 11
+    failure_message = f"setup boom: {failure_point}"
+    service = _build_running_setup_service(run_id)
+    progress_queue = _SetupProgressQueue(None, None)
+    context = _FailingSetupContext(
+        failure_point, failure_message, progress_queue
+    )
+    request = TagRequest(model_name="wd-swinv2-tagger-v3", use_gpu=False)
+    runtime_plan = {"model_name": "wd-swinv2-tagger-v3"}
+
+    build_side_effect = (
+        RuntimeError(failure_message) if failure_point == "runtime_plan" else None
+    )
+    context_side_effect = (
+        RuntimeError(failure_message) if failure_point == "context" else None
+    )
+    with patch.object(
+        service,
+        "_build_runtime_plan",
+        return_value=runtime_plan,
+        side_effect=build_side_effect,
+    ), patch(
+        "services.tagging_service.multiprocessing.get_context",
+        return_value=context,
+        side_effect=context_side_effect,
+    ):
+        service._run_tagging_job(request, run_id=run_id)
+
+    progress = service.get_progress()
+    assert progress["status"] == "error"
+    assert progress["run_id"] == run_id
+    assert progress["current"] == 2
+    assert progress["total"] == 5
+    assert progress["tagged"] == 1
+    assert progress["errors"] == 1
+    assert progress["message"] == (
+        f"Tagging worker setup failed while {expected_stage}: {failure_message}. "
+        "The run did not start. Check available system resources and the backend "
+        "log, then start tagging again."
+    )
+    expected_cleanup_calls = 1 if failure_point in {"event", "process"} else 0
+    assert progress_queue.close_calls == expected_cleanup_calls
+    assert progress_queue.join_calls == expected_cleanup_calls
+    assert service._worker_process is None
+    assert service._worker_cancel_event is None
+
+
+def test_worker_setup_cleanup_failures_preserve_original_terminal_error() -> None:
+    run_id = 12
+    setup_error = "process constructor unavailable"
+    service = _build_running_setup_service(run_id)
+    progress_queue = _SetupProgressQueue(
+        RuntimeError("queue close failed"),
+        RuntimeError("queue join failed"),
+    )
+    context = _FailingSetupContext("process", setup_error, progress_queue)
+    request = TagRequest(model_name="wd-swinv2-tagger-v3", use_gpu=False)
+
+    with patch.object(
+        service,
+        "_build_runtime_plan",
+        return_value={"model_name": "wd-swinv2-tagger-v3"},
+    ), patch(
+        "services.tagging_service.multiprocessing.get_context",
+        return_value=context,
+    ):
+        service._run_tagging_job(request, run_id=run_id)
+
+    progress = service.get_progress()
+    assert progress["status"] == "error"
+    assert progress["message"] == (
+        "Tagging worker setup failed while constructing the worker process: "
+        f"{setup_error}. The run did not start. Check available system resources "
+        "and the backend log, then start tagging again."
+    )
+    assert progress_queue.close_calls == 1
+    assert progress_queue.join_calls == 1
 
 
 def test_e2e_fake_tagger_completes_without_downloading_real_model(test_db, monkeypatch, tmp_path: Path):

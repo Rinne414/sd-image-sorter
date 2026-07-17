@@ -22,6 +22,26 @@ from services.tagging.worker import _tagging_worker_main
 logger = logging.getLogger("services.tagging_service")
 
 
+def _close_setup_progress_queue(progress_queue: object, run_id: int) -> None:
+    """Close setup-time queue resources without replacing the setup failure."""
+    for operation_name in ("close", "join_thread"):
+        operation = getattr(progress_queue, operation_name, None)
+        if not callable(operation):
+            continue
+        try:
+            operation()
+        except Exception as error:
+            logger.warning(
+                "Tagging worker setup progress-queue cleanup failed.",
+                extra={
+                    "run_id": run_id,
+                    "cleanup_operation": operation_name,
+                    "error_type": type(error).__name__,
+                    "cleanup_error": str(error),
+                },
+            )
+
+
 class JobsMixin:
     """Job-supervision slice of TaggingService (assembled in services.tagging.service)."""
 
@@ -35,15 +55,58 @@ class JobsMixin:
                     self._active_run_id = 1
                 run_id = self._active_run_id
 
-        runtime_plan = self._build_runtime_plan(request)
-        ctx = multiprocessing.get_context("spawn")
-        progress_queue = ctx.Queue()
-        cancel_event = ctx.Event()
-        worker_process = ctx.Process(
-            target=_tagging_worker_main,
-            args=(runtime_plan, progress_queue, cancel_event),
-            daemon=True,
-        )
+        with self._lock:
+            if run_id != self._active_run_id:
+                return
+
+        progress_queue = None
+        setup_stage = "building the runtime plan"
+        try:
+            runtime_plan = self._build_runtime_plan(request)
+            setup_stage = "creating the multiprocessing context"
+            ctx = multiprocessing.get_context("spawn")
+            setup_stage = "creating the worker progress queue"
+            progress_queue = ctx.Queue()
+            setup_stage = "creating the worker cancellation event"
+            cancel_event = ctx.Event()
+            setup_stage = "constructing the worker process"
+            worker_process = ctx.Process(
+                target=_tagging_worker_main,
+                args=(runtime_plan, progress_queue, cancel_event),
+                daemon=True,
+            )
+        except Exception as error:
+            error_detail = str(error).strip() or type(error).__name__
+            current_state = self.get_progress()
+            self._apply_worker_progress(
+                _build_tag_progress_state(
+                    "error",
+                    current=current_state.get("processed", 0),
+                    total=current_state.get("total", 0),
+                    tagged=current_state.get("tagged", 0),
+                    errors=current_state.get("errors", 0),
+                    message=(
+                        f"Tagging worker setup failed while {setup_stage}: {error_detail}. "
+                        "The run did not start. Check available system resources and "
+                        "the backend log, then start tagging again."
+                    ),
+                    run_id=run_id,
+                ),
+                run_id=run_id,
+            )
+            if progress_queue is not None:
+                _close_setup_progress_queue(progress_queue, run_id)
+            logger.error(
+                "Tagging worker setup failed.",
+                extra={
+                    "run_id": run_id,
+                    "setup_stage": setup_stage,
+                    "error_type": type(error).__name__,
+                    "setup_error": error_detail,
+                },
+                exc_info=(type(error), error, error.__traceback__),
+            )
+            return
 
         should_abort = False
         with self._lock:
