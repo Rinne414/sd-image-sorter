@@ -619,6 +619,19 @@ def test_ort_consumers_keep_normal_resolver_without_gpu_or_directml_provider(
     site_packages.mkdir()
     if cpu_provider_name is not None:
         _write_test_distribution(site_packages, cpu_provider_name, "1.21.0", ())
+        # The provider-vs-module version consistency check compares this
+        # fabricated metadata against the IMPORTED onnxruntime module.
+        # Inject a matching fake module (the reject-test pattern below)
+        # instead of leaning on whatever real onnxruntime the machine
+        # has - on core-deps CI the real one is a different version and
+        # this test would fail for the wrong reason.
+        onnxruntime_module = types.ModuleType("onnxruntime")
+        onnxruntime_module.__version__ = "1.21.0"
+        onnxruntime_module.__spec__ = importlib.machinery.ModuleSpec(
+            "onnxruntime",
+            loader=None,
+        )
+        monkeypatch.setitem(sys.modules, "onnxruntime", onnxruntime_module)
     _patch_distribution_metadata(
         monkeypatch,
         _load_test_distributions(site_packages),

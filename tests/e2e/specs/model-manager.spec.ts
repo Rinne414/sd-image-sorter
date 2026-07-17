@@ -400,7 +400,14 @@ test.describe('Model Manager', () => {
     await openModelManager(page)
     const card = page.locator('.model-card[data-model-id="wd14"]')
     await card.locator('.btn-prepare-model').click()
-    await card.locator('[data-action="background-model-prepare"]').click()
+    // The prepare button's progress label re-renders every poll tick and
+    // shifts this sibling's box, so Playwright's stability wait can starve
+    // on slow CI renderers. dispatchEvent runs the same onclick handler
+    // (sepconsole hover-actions precedent); the truthful-continuation
+    // assertions below still verify the real behavior.
+    const backgroundContinue = card.locator('[data-action="background-model-prepare"]')
+    await expect(backgroundContinue).toBeVisible()
+    await backgroundContinue.dispatchEvent('click')
 
     await expect(
       page.locator('#toast-container .toast.warning .toast-message').filter({ hasText: /status checks|状态检查/i }),
