@@ -288,6 +288,23 @@ select = ["F", "E9"]
 # ``build_export_caption`` stays defined in the facade, and it calls a
 # fraction of the re-exported surface.
 "backend/services/export_template_engine.py" = ["F401"]
+# routers/tags_bulk.py is the compatibility FILE facade for the
+# tags_bulk_models / tags_bulk_journal_ops sibling-module split (2026-07).
+# Same rationale as routers/images.py above: the verbatim header import block
+# stays (threading / contextmanager / the pydantic names / PROMPT_MATCH_MODE_*
+# are now called only from the moved model + journal/transaction bodies; the
+# one exception is ``from services import tag_bulk_journal``, which moved to
+# tags_bulk_journal_ops.py because the endpoints' verbatim lazy re-imports
+# would F811-shadow a dead eager copy) and the tags_bulk_models /
+# tags_bulk_journal_ops
+# re-imports exist so every historical module attribute keeps resolving at
+# routers.tags_bulk.<name> -- the patched trio BULK_TAG_ID_CHUNK_SIZE /
+# _preserve_row / _estimate_scope_total plus ALL its callers stay DEFINED
+# here, the _op_lock / _op_run_lock / _op_state singletons and the request
+# models are re-exported BY REFERENCE -- for the suites that patch and read
+# this module object (tests/test_tags_bulk_pins.py,
+# tests/test_routers/test_tags_bulk.py).
+"backend/routers/tags_bulk.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.

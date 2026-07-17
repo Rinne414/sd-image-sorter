@@ -25,7 +25,6 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 import database as db
 from db_tags import _dedupe_tag_rows
-from services import tag_bulk_journal
 from services.tag_export_service import (
     PROMPT_MATCH_MODE_CONTAINS,
     PROMPT_MATCH_MODE_EXACT,
@@ -35,235 +34,74 @@ from services.tag_export_service import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tags/bulk", tags=["tags-bulk"])
-BULK_TAG_MAX_IMAGE_IDS = 1_000_000
 BULK_TAG_ID_CHUNK_SIZE = 500
-VALID_PROMPT_MATCH_MODES = {PROMPT_MATCH_MODE_EXACT, PROMPT_MATCH_MODE_CONTAINS}
 
-BulkWarningCode = Literal[
-    "undo_journal_truncated",
-    "undo_journal_persistence_failed",
-]
-
-
-class BulkOperationWarning(TypedDict):
-    code: BulkWarningCode
-    message: str
-
-
-class JournalApiResult(TypedDict):
-    op_id: Optional[str]
-    undo_available: bool
-    warnings: List[BulkOperationWarning]
-
-
-_op_lock = threading.Lock()
-_op_run_lock = threading.Lock()
-_op_state: Dict[str, Any] = {
-    "running": False,
-    "operation": "",
-    "total": 0,
-    "completed": 0,
-    "errors": [],
-}
-
-
-def _begin_op(name: str, total: int) -> None:
-    """Mark a bulk op as started and reset progress counters.
-
-    The separate run lock rejects overlapping operations before this
-    state is reset. This lock only keeps counter mutations atomic for
-    polling clients.
-    """
-    with _op_lock:
-        _op_state.update({
-            "running": True,
-            "operation": name,
-            "total": int(total),
-            "completed": 0,
-            "errors": [],
-        })
-
-
-def _bump_op_progress(delta: int = 1) -> None:
-    with _op_lock:
-        _op_state["completed"] = int(_op_state.get("completed") or 0) + int(delta)
-
-
-def _record_op_error(image_id: int, message: str) -> None:
-    with _op_lock:
-        errors = _op_state.setdefault("errors", [])
-        if len(errors) < 50:
-            errors.append({"image_id": image_id, "error": message})
-
-
-def _end_op() -> None:
-    with _op_lock:
-        _op_state["running"] = False
-
-
-def _record_scope_estimate_failure(operation: str, detail: str) -> None:
-    """Replace stale progress with the latest pre-mutation scope failure."""
-    with _op_lock:
-        _op_state.update({
-            "running": False,
-            "operation": operation,
-            "total": 0,
-            "completed": 0,
-            "errors": [{"image_id": 0, "error": detail}],
-        })
-
-
-def _run_exclusive(operation: str, handler, request) -> Dict[str, Any]:
-    """Run one bulk operation at a time to avoid read-modify-write tag loss."""
-    if not _op_run_lock.acquire(blocking=False):
-        raise HTTPException(
-            status_code=409,
-            detail="Another bulk tag operation is already running. Wait for it to finish.",
-        )
-    try:
-        return handler(request)
-    finally:
-        _op_run_lock.release()
-
-
-# ====================================================================
-# Request models
-# ====================================================================
-
-class BulkTagFilterContract(BaseModel):
-    generators: List[str] = Field(default_factory=list)
-    tags: List[str] = Field(default_factory=list)
-    tagMode: str = Field(default="and", pattern="^(and|or)$")
-    ratings: List[str] = Field(default_factory=list)
-    checkpoints: List[str] = Field(default_factory=list)
-    loras: List[str] = Field(default_factory=list)
-    prompts: List[str] = Field(default_factory=list)
-    promptMatchMode: str = PROMPT_MATCH_MODE_EXACT
-    artist: Optional[str] = None
-    search: str = ""
-    sortBy: str = "newest"
-    minWidth: Optional[int] = Field(default=None, ge=1, le=100000)
-    maxWidth: Optional[int] = Field(default=None, ge=1, le=100000)
-    minHeight: Optional[int] = Field(default=None, ge=1, le=100000)
-    maxHeight: Optional[int] = Field(default=None, ge=1, le=100000)
-    aspectRatio: Optional[str] = None
-    minAesthetic: Optional[float] = Field(default=None, ge=0, le=10)
-    maxAesthetic: Optional[float] = Field(default=None, ge=0, le=10)
-    minUserRating: Optional[int] = Field(default=None, ge=0, le=5)
-    brightnessMin: Optional[float] = Field(default=None, ge=0, le=255)
-    brightnessMax: Optional[float] = Field(default=None, ge=0, le=255)
-    colorTemperature: Optional[str] = Field(default=None, pattern="^(warm|cool|neutral)$")
-    brightnessDistribution: Optional[str] = Field(
-        default=None,
-        pattern="^(left_heavy|right_heavy|middle_heavy|edge_heavy|balanced)$",
-    )
-    excludedImageIds: List[int] = Field(default_factory=list, max_length=10000)
-    excludeTags: List[str] = Field(default_factory=list)
-    excludeGenerators: List[str] = Field(default_factory=list)
-    excludeRatings: List[str] = Field(default_factory=list)
-    excludeCheckpoints: List[str] = Field(default_factory=list)
-    excludeLoras: List[str] = Field(default_factory=list)
-    excludePrompts: List[str] = Field(default_factory=list)
-    excludeColors: List[str] = Field(default_factory=list)
-    colorHues: List[str] = Field(default_factory=list)  # v3.5.0
-    excludeColorHues: List[str] = Field(default_factory=list)  # v3.5.0
-    collectionId: Optional[int] = Field(default=None, ge=1)
-    folder: Optional[str] = Field(default=None, max_length=4096)
-    hasMetadata: Optional[bool] = None
-
-    @model_validator(mode="after")
-    def normalize_contract(self) -> "BulkTagFilterContract":
-        prompt_mode = str(self.promptMatchMode or PROMPT_MATCH_MODE_EXACT).strip().lower()
-        if prompt_mode not in VALID_PROMPT_MATCH_MODES:
-            raise ValueError("promptMatchMode must be exact or contains")
-        self.promptMatchMode = prompt_mode
-        self.tagMode = "or" if str(self.tagMode or "and").strip().lower() == "or" else "and"
-
-        sort_by = str(self.sortBy or "newest").strip()
-        if sort_by not in db.VALID_SORT_OPTIONS:
-            raise ValueError("Invalid sortBy value")
-        if sort_by == "random":
-            raise ValueError("random sort cannot use bulk tag filter scope")
-        self.sortBy = sort_by
-
-        if self.aspectRatio == "":
-            self.aspectRatio = None
-        return self
-
-
-class BulkTagScopeRequest(BaseModel):
-    image_ids: Optional[List[int]] = Field(default=None, min_length=1, max_length=BULK_TAG_MAX_IMAGE_IDS)
-    selection_token: Optional[str] = Field(default=None, min_length=1)
-    filters: Optional[BulkTagFilterContract] = None
-
-    @field_validator("image_ids")
-    @classmethod
-    def dedupe_explicit_image_ids(cls, image_ids: Optional[List[int]]) -> Optional[List[int]]:
-        if image_ids is None:
-            return None
-        return list(dict.fromkeys(image_ids))
-
-    @model_validator(mode="after")
-    def require_one_scope(self) -> "BulkTagScopeRequest":
-        scope_count = sum([
-            self.image_ids is not None,
-            bool(self.selection_token),
-            self.filters is not None,
-        ])
-        if scope_count == 0:
-            raise ValueError("One of image_ids, selection_token, or filters is required")
-        if scope_count > 1:
-            raise ValueError("Provide only one of image_ids, selection_token, or filters")
-        return self
-
-
-class FindReplaceRequest(BulkTagScopeRequest):
-    find: str
-    replace: str
-    case_sensitive: bool = False
-    # QW-3: opt-in regex mode. ``find`` becomes a whole-tag fullmatch
-    # pattern; ``replace`` may use backrefs (\\1). Literal whole-tag
-    # equality stays the safe default.
-    regex: bool = False
-    dry_run: bool = False
-
-
-class BulkAddRequest(BulkTagScopeRequest):
-    tags: List[str] = Field(min_length=1, max_length=200)
-    confidence: float = 0.85
-    dry_run: bool = False
-
-    @field_validator("tags")
-    @classmethod
-    def normalize_tags(cls, tags: List[str]) -> List[str]:
-        normalized: List[str] = []
-        seen: set[str] = set()
-        for raw_tag in tags:
-            tag = raw_tag.strip()
-            tag_key = tag.lower()
-            if not tag or tag_key in seen:
-                continue
-            seen.add(tag_key)
-            normalized.append(tag)
-        if not normalized:
-            raise ValueError("tags list cannot be empty")
-        return normalized
-
-
-class BulkRemoveRequest(BulkTagScopeRequest):
-    tags: List[str] = Field(min_length=1, max_length=200)
-    case_sensitive: bool = False
-    dry_run: bool = False
-
-
-class CleanupRequest(BulkTagScopeRequest):
-    # v3.2.2: confidence is normalized to [0.0, 1.0]. Out-of-range
-    # values (e.g. 1.5) used to silently mean "remove all tags",
-    # which is destructive when dry_run=False. Negative values were
-    # silent no-ops. Bound them so the caller has to be explicit.
-    min_confidence: float = Field(default=0.20, ge=0.0, le=1.0)
-    dedupe: bool = True
-    dry_run: bool = False
+# ---------------------------------------------------------------------------
+# Decomposition (2026-07): the request models + warning types live in
+# routers/tags_bulk_models.py; the op-state singletons and the journal/
+# transaction helpers live in routers/tags_bulk_journal_ops.py
+# (claude-tagsbulk-pins-REPORT.md split map -- the state core moved WITH the
+# journal/transaction helpers because _commit_tag_updates /
+# _raise_bulk_preparation_error / _bulk_tag_transaction call _record_op_error
+# and _record_journal_if_applied calls _scope_source; one home avoids an
+# import cycle and keeps every moved body verbatim). THIS module remains a
+# real FILE and the single import/monkeypatch surface:
+#   * The patched trio BULK_TAG_ID_CHUNK_SIZE / _preserve_row /
+#     _estimate_scope_total stays DEFINED here together with ALL its callers
+#     (the scope iterators, _estimate_scope_total_or_raise, the four _do_*
+#     implementations) -- tests/test_routers/test_tags_bulk.py patches the
+#     trio BY NAME on this module and the read-sites resolve them as THIS
+#     module's globals; relocating either side would turn those patches into
+#     silent no-ops.
+#   * All 7 @router endpoint decorators stay below IN REGISTRATION ORDER --
+#     decorator order == OpenAPI order, pinned by the route-table sha256
+#     canary in tests/test_tags_bulk_pins.py.
+#   * The re-imports below are BY REFERENCE: _op_lock / _op_run_lock /
+#     _op_state keep exactly ONE copy (tags_bulk_journal_ops owns them; the
+#     overlap-409 reader acquires tags_bulk._op_run_lock and _run_exclusive
+#     gates on the SAME object), and the request models stay the SAME class
+#     objects the endpoint annotations resolve.
+# Imports above are intentionally kept verbatim even where the facade body no
+# longer calls them (seam + re-export surface) -- F401 is ignored for this
+# file in pyproject.toml, same as routers/images.py. ONE header line moved
+# out: ``from services import tag_bulk_journal`` now lives in
+# tags_bulk_journal_ops.py (its only module-level caller); the two endpoints
+# below keep their verbatim lazy re-imports, which would F811-shadow a dead
+# eager import here.
+from routers.tags_bulk_models import (
+    BULK_TAG_MAX_IMAGE_IDS,
+    VALID_PROMPT_MATCH_MODES,
+    BulkAddRequest,
+    BulkOperationWarning,
+    BulkRemoveRequest,
+    BulkTagFilterContract,
+    BulkTagScopeRequest,
+    BulkUndoRequest,
+    BulkWarningCode,
+    CleanupRequest,
+    FindReplaceRequest,
+    JournalApiResult,
+)
+from routers.tags_bulk_journal_ops import (
+    _append_journal_entry,
+    _begin_op,
+    _bulk_tag_transaction,
+    _bump_op_progress,
+    _commit_tag_updates,
+    _confidence_from_row,
+    _create_journal_buffer,
+    _end_op,
+    _op_lock,
+    _op_run_lock,
+    _op_state,
+    _raise_bulk_preparation_error,
+    _record_journal_if_applied,
+    _record_op_error,
+    _record_scope_estimate_failure,
+    _row_from_tuple,
+    _run_exclusive,
+    _scope_source,
+)
 
 
 # ====================================================================
@@ -305,10 +143,6 @@ async def get_state():
     """Get current bulk operation state (for progress display)."""
     with _op_lock:
         return dict(_op_state)
-
-
-class BulkUndoRequest(BaseModel):
-    force: bool = False
 
 
 @router.get("/ops")
@@ -454,35 +288,6 @@ def _estimate_scope_total_or_raise(
         raise HTTPException(status_code=500, detail=detail) from exc
 
 
-def _scope_source(request: BulkTagScopeRequest) -> str:
-    if request.image_ids is not None:
-        return "image_ids"
-    if request.selection_token:
-        return "selection_token"
-    return "filters"
-
-
-def _confidence_from_row(row: Dict[str, Any]) -> float:
-    """Return numeric confidence without treating a valid zero as missing."""
-    raw_confidence: object = row.get("confidence")
-    if raw_confidence is None:
-        return 1.0
-    if isinstance(raw_confidence, bool) or not isinstance(
-        raw_confidence,
-        (int, float, str),
-    ):
-        raise TypeError(
-            "Tag confidence must be numeric; received "
-            f"{type(raw_confidence).__name__}."
-        )
-    try:
-        return float(raw_confidence)
-    except ValueError as exc:
-        raise ValueError(
-            f"Tag confidence must be numeric; received {raw_confidence!r}."
-        ) from exc
-
-
 def _preserve_row(t: Dict[str, Any]) -> Dict[str, Any]:
     """Rebuild a tag row for re-commit, carrying provenance columns.
 
@@ -497,188 +302,6 @@ def _preserve_row(t: Dict[str, Any]) -> Dict[str, Any]:
         "source": t.get("source"),
         "category": t.get("category"),
     }
-
-
-def _row_from_tuple(row) -> Dict[str, Any]:
-    """(tag, confidence, source, category) from _dedupe_tag_rows -> row dict."""
-    tag, confidence, source, category = row
-    return {"tag": tag, "confidence": confidence, "source": source, "category": category}
-
-
-def _create_journal_buffer() -> tag_bulk_journal.JournalBuffer:
-    return tag_bulk_journal.create_journal_buffer(
-        tag_bulk_journal.MAX_JOURNAL_IMAGES,
-        tag_bulk_journal.MAX_JOURNAL_SERIALIZED_BYTES,
-    )
-
-
-def _append_journal_entry(
-    journal: tag_bulk_journal.JournalBuffer,
-    image_id: int,
-    before_rows: List[Dict[str, Any]],
-    after_rows: List[Dict[str, Any]],
-) -> None:
-    tag_bulk_journal.append_journal_entry(
-        journal,
-        image_id,
-        before_rows,
-        after_rows,
-    )
-
-
-def _record_journal_if_applied(
-    request: BulkTagScopeRequest,
-    operation: str,
-    params: Dict[str, Any],
-    journal: tag_bulk_journal.JournalBuffer,
-    images_affected: int,
-) -> JournalApiResult:
-    """Journal a committed operation and expose lost undo as a warning."""
-    if request.dry_run or images_affected <= 0:
-        return {"op_id": None, "undo_available": False, "warnings": []}
-    try:
-        record_result = tag_bulk_journal.record_op(
-            operation=operation,
-            scope_source=_scope_source(request),
-            params=params,
-            journal=journal,
-            images_affected=images_affected,
-        )
-        if record_result.truncated:
-            if record_result.truncation_reason == "serialized_byte_limit":
-                limit_description = (
-                    f"the {journal.max_serialized_bytes}-byte serialized-data limit"
-                )
-            else:
-                limit_description = f"the {journal.max_images}-image limit"
-            warning: BulkOperationWarning = {
-                "code": "undo_journal_truncated",
-                "message": (
-                    "Tags were applied, but undo is unavailable because the journal "
-                    f"exceeded {limit_description}."
-                ),
-            }
-            return {
-                "op_id": record_result.op_id,
-                "undo_available": False,
-                "warnings": [warning],
-            }
-        return {
-            "op_id": record_result.op_id,
-            "undo_available": True,
-            "warnings": [],
-        }
-    except Exception as exc:
-        logger.warning(
-            "bulk undo journal record failed",
-            extra={
-                "operation": operation,
-                "images_affected": images_affected,
-                "error_type": type(exc).__name__,
-            },
-            exc_info=exc,
-        )
-        warning = {
-            "code": "undo_journal_persistence_failed",
-            "message": (
-                "Tags were applied, but undo is unavailable because the journal "
-                f"could not be saved. Cause: {type(exc).__name__}: {exc}"
-            ),
-        }
-        return {"op_id": None, "undo_available": False, "warnings": [warning]}
-
-
-def _commit_tag_updates(
-    write_updates: Callable[[List[Dict[str, Any]]], None],
-    updates: List[Dict[str, Any]],
-) -> None:
-    if not updates:
-        return
-    image_ids = [int(item["image_id"]) for item in updates]
-    first_image_id = image_ids[0]
-    try:
-        write_updates(updates)
-    except Exception as exc:
-        detail = (
-            f"Bulk tag update failed for {len(image_ids)} image(s) beginning with "
-            f"image_id={first_image_id}; all changes were rolled back. Cause: "
-            f"{type(exc).__name__}: {exc}"
-        )
-        _record_op_error(first_image_id, detail)
-        logger.exception(
-            "bulk tag transaction write failed",
-            extra={
-                "image_count": len(image_ids),
-                "first_image_id": first_image_id,
-                "error_type": type(exc).__name__,
-            },
-        )
-        raise HTTPException(status_code=500, detail=detail) from exc
-
-
-def _raise_bulk_preparation_error(
-    operation: str,
-    image_id: int,
-    dry_run: bool,
-    exc: Exception,
-) -> NoReturn:
-    """Abort a logical bulk operation when one image cannot be prepared."""
-    outcome = (
-        "no changes were applied"
-        if dry_run
-        else "all changes were rolled back"
-    )
-    detail = (
-        f"Bulk tag {operation} failed while preparing image_id={image_id}; "
-        f"{outcome}. Cause: {type(exc).__name__}: {exc}"
-    )
-    _record_op_error(image_id, detail)
-    logger.exception(
-        "bulk tag operation preparation failed",
-        extra={
-            "operation": operation,
-            "image_id": image_id,
-            "dry_run": dry_run,
-            "error_type": type(exc).__name__,
-        },
-    )
-    raise HTTPException(status_code=500, detail=detail) from exc
-
-
-@contextmanager
-def _bulk_tag_transaction(
-    operation: str,
-    dry_run: bool,
-) -> Iterator[Callable[[List[Dict[str, Any]]], None]]:
-    """Expose transaction lifecycle failures as actionable API errors."""
-    try:
-        with db.tag_update_transaction(
-            default_source=None,
-            replace_scope="all",
-        ) as write_updates:
-            yield write_updates
-    except HTTPException:
-        raise
-    except Exception as exc:
-        outcome = (
-            "no changes were applied"
-            if dry_run
-            else "all changes were rolled back"
-        )
-        detail = (
-            f"Bulk tag {operation} transaction failed; {outcome}. "
-            f"Cause: {type(exc).__name__}: {exc}"
-        )
-        _record_op_error(0, detail)
-        logger.exception(
-            "bulk tag transaction failed",
-            extra={
-                "operation": operation,
-                "dry_run": dry_run,
-                "error_type": type(exc).__name__,
-            },
-        )
-        raise HTTPException(status_code=500, detail=detail) from exc
 
 
 # ====================================================================
