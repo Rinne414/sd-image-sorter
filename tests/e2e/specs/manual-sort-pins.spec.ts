@@ -107,7 +107,7 @@ test('manual sort start stays in the first viewport and gives actionable feedbac
   const pageFailures: string[] = []
   const failedApiRequests: string[] = []
   const failedApiResponses: string[] = []
-  let documentNavigationActive = false
+  let setupTransitionActive = false
 
   page.on('console', (message) => {
     if (message.type() === 'error' || message.type() === 'warning') {
@@ -121,10 +121,10 @@ test('manual sort start stays in the first viewport and gives actionable feedbac
     // Scope refreshes deliberately cancel the previous count request through
     // AbortController; that cancellation is not an HTTP or runtime failure.
     if (url.pathname === '/api/images/count' && errorText === 'net::ERR_ABORTED') return
-    // Reloading between desktop viewport checks cancels image-element fetches
-    // from the previous document. Keep every other thumbnail failure visible.
+    // Reloading and immediately leaving Gallery for Manual Sort can cancel
+    // image-element fetches. Keep every other thumbnail failure visible.
     if (
-      documentNavigationActive &&
+      setupTransitionActive &&
       request.method() === 'GET' &&
       request.resourceType() === 'image' &&
       url.pathname.startsWith('/api/image-thumbnail/') &&
@@ -153,13 +153,13 @@ test('manual sort start stays in the first viewport and gives actionable feedbac
 
   for (const viewport of MANUAL_SORT_DESKTOP_VIEWPORTS) {
     await page.setViewportSize(viewport)
-    documentNavigationActive = true
+    setupTransitionActive = true
     try {
       await page.goto('/')
+      await openManualSetupAfterNavigation(page)
     } finally {
-      documentNavigationActive = false
+      setupTransitionActive = false
     }
-    await openManualSetupAfterNavigation(page)
 
     const startButton = page.locator('#btn-start-sorting')
     const actionArea = page.locator('#sort-setup-actions')

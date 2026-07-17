@@ -83,7 +83,7 @@ async function seedManualSortFilterState(page: Page, overrides: Partial<typeof D
 }
 
 const MIXED_MASK_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAjUlEQVR4nOXYsQ3AMBDDQJrw/it/VkhjOAGvVqFS0JoZyiRO4iRO4iRO4iRuv8icGAqLj5A4iZM4iZM4iZM4iZM4iZM4iZM4iZM4iZM4iZM4idt/OjBPkDiJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkzhvF7jtAUZuBIJ86O4rAAAAAElFTkSuQmCC'
-const INLINE_MASK_BOTTOM_RIGHT_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAjUlEQVR4nOXbIQ4AIQADwWXD/7/M2UOiCNlxdZU1HWstyiRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRu8r7Tw8P4B4mTOImTOImTOImTOImTOImbvG/b9qckTuK8XeC2D83PBIILHaPJAAAAAElFTkSuQmCC'
+const INLINE_MASK_CROP_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAYAAABWdVznAAAAHElEQVR4nGP8////fwYSABMpikFgVAMxYDiEEgA7PQQU42aXywAAAABJRU5ErkJggg=='
 
 async function getGalleryScrollState(page: Page) {
   return page.evaluate(() => {
@@ -6741,7 +6741,7 @@ test.describe('Smoke Tests', () => {
       await route.fulfill({
         json: {
           status: 'ok',
-          mask: INLINE_MASK_BOTTOM_RIGHT_DATA_URL,
+          mask: INLINE_MASK_CROP_DATA_URL,
           mask_ref: null,
           mask_bounds: [48, 48, 60, 60],
           image_width: 64,
