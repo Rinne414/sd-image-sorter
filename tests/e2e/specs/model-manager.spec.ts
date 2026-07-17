@@ -7,6 +7,11 @@ const defaultPort = process.env.PW_WEB_SERVER_PORT || process.env.SD_IMAGE_SORTE
 const e2eDataDir = process.env.PW_E2E_DATA_ROOT
   ? path.resolve(process.env.PW_E2E_DATA_ROOT)
   : path.join(repoRoot, '.tmp', `e2e-data-${defaultPort}`)
+const MODEL_MANAGER_DESKTOP_VIEWPORTS = [
+  { width: 1366, height: 768 },
+  { width: 1920, height: 1080 },
+  { width: 2560, height: 1440 },
+] as const
 
 async function resetModelFixtures() {
   await fs.rm(path.join(e2eDataDir, 'models'), { recursive: true, force: true })
@@ -229,6 +234,335 @@ test.describe('Model Manager', () => {
       })
       expect(progress.prepare_result?.status).toMatch(/done|warning/)
     }
+  })
+
+  for (const viewport of MODEL_MANAGER_DESKTOP_VIEWPORTS) {
+    test(`model setup continues truthfully in background at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+      const consoleFailures: string[] = []
+      const pageFailures: string[] = []
+      const failedRequests: string[] = []
+      const failedResponses: string[] = []
+      page.on('console', (message) => {
+        if (message.type() === 'error' || message.type() === 'warning') {
+          consoleFailures.push(`${message.type()}: ${message.text()}`)
+        }
+      })
+      page.on('pageerror', (error) => pageFailures.push(error.message))
+      page.on('requestfailed', (request) => {
+        failedRequests.push(`${request.method()} ${new URL(request.url()).pathname}`)
+      })
+      page.on('response', (response) => {
+        if (!response.ok()) {
+          failedResponses.push(`${response.status()} ${response.request().method()} ${new URL(response.url()).pathname}`)
+        }
+      })
+
+      await page.setViewportSize(viewport)
+      await mockMinimalModelStatus(page)
+      await page.route('**/api/disk/cache-status', async (route) => {
+        await route.fulfill({ json: diskUsagePayload() })
+      })
+      await page.route('**/api/models/prepare', async (route) => {
+        await route.fulfill({
+          json: {
+            status: 'downloading',
+            model_id: 'wd14',
+            message: 'Download started in background.',
+          },
+        })
+      })
+
+      let progressCalls = 0
+      await page.route('**/api/models/download-progress', async (route) => {
+        progressCalls += 1
+        const done = progressCalls >= 2
+        await route.fulfill({
+          json: {
+            active: !done,
+            downloaded: done ? 0 : 1024,
+            total: done ? 0 : 4096,
+            filename: done ? '' : 'model.onnx',
+            prepare_result: {
+              active: !done,
+              model_id: 'wd14',
+              status: done ? 'done' : 'downloading',
+              message: done ? 'WD14 ready.' : '',
+              restart_recommended: false,
+              installed_packages: [],
+            },
+          },
+        })
+      })
+
+      await openModelManager(page)
+      const card = page.locator('.model-card[data-model-id="wd14"]')
+      await card.locator('.btn-prepare-model').click()
+      const backgroundButton = card.locator('[data-action="background-model-prepare"]')
+      await expect(backgroundButton).toBeVisible()
+      await expect(backgroundButton).toContainText(/Run in background|后台运行/i)
+
+      const geometry = await page.evaluate(() => {
+        const background = document.querySelector<HTMLElement>('[data-action="background-model-prepare"]')
+        const prepare = document.querySelector<HTMLElement>('.model-card[data-model-id="wd14"] .btn-prepare-model')
+        const cardElement = document.querySelector<HTMLElement>('.model-card[data-model-id="wd14"]')
+        if (!background || !prepare || !cardElement) {
+          throw new Error('Model prepare controls are missing')
+        }
+        const backgroundRect = background.getBoundingClientRect()
+        const prepareRect = prepare.getBoundingClientRect()
+        const cardRect = cardElement.getBoundingClientRect()
+        const overlaps = (
+          backgroundRect.left < prepareRect.right
+          && backgroundRect.right > prepareRect.left
+          && backgroundRect.top < prepareRect.bottom
+          && backgroundRect.bottom > prepareRect.top
+        )
+        return {
+          fullyVisible: (
+            backgroundRect.top >= 0
+            && backgroundRect.left >= 0
+            && backgroundRect.bottom <= window.innerHeight
+            && backgroundRect.right <= window.innerWidth
+          ),
+          insideCard: (
+            backgroundRect.top >= cardRect.top
+            && backgroundRect.left >= cardRect.left
+            && backgroundRect.bottom <= cardRect.bottom
+            && backgroundRect.right <= cardRect.right
+          ),
+          overlaps,
+          horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        }
+      })
+      expect(geometry).toEqual({
+        fullyVisible: true,
+        insideCard: true,
+        overlaps: false,
+        horizontalOverflow: false,
+      })
+
+      await backgroundButton.click()
+      await expect(page.locator('#model-manager-modal.visible')).toHaveCount(0)
+      await expect(
+        page.locator('#toast-container .toast.info .toast-message').filter({ hasText: /continues in background|继续在后台/i }),
+      ).toBeVisible()
+      await expect.poll(() => progressCalls).toBeGreaterThanOrEqual(2)
+      await expect(page.locator('#toast-container .toast.success .toast-message').last()).toContainText('WD14 ready.')
+      expect(consoleFailures).toEqual([])
+      expect(pageFailures).toEqual([])
+      expect(failedRequests).toEqual([])
+      expect(failedResponses).toEqual([])
+    })
+  }
+
+  test('background model setup survives temporary status failures and reports completion', async ({ page }) => {
+    test.setTimeout(45_000)
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await mockMinimalModelStatus(page)
+    await page.route('**/api/disk/cache-status', async (route) => {
+      await route.fulfill({ json: diskUsagePayload() })
+    })
+    await page.route('**/api/models/prepare', async (route) => {
+      await route.fulfill({
+        json: {
+          status: 'downloading',
+          model_id: 'wd14',
+          message: 'Download started in background.',
+        },
+      })
+    })
+
+    let progressCalls = 0
+    await page.route('**/api/models/download-progress', async (route) => {
+      progressCalls += 1
+      if (progressCalls <= 8) {
+        await route.abort('failed')
+        return
+      }
+      await route.fulfill({
+        json: {
+          active: false,
+          downloaded: 0,
+          total: 0,
+          filename: '',
+          prepare_result: {
+            active: false,
+            model_id: 'wd14',
+            status: 'done',
+            message: 'WD14 recovered and ready.',
+            restart_recommended: false,
+            installed_packages: [],
+          },
+        },
+      })
+    })
+
+    await openModelManager(page)
+    const card = page.locator('.model-card[data-model-id="wd14"]')
+    await card.locator('.btn-prepare-model').click()
+    await card.locator('[data-action="background-model-prepare"]').click()
+
+    await expect(
+      page.locator('#toast-container .toast.warning .toast-message').filter({ hasText: /status checks|状态检查/i }),
+    ).toBeVisible({ timeout: 15_000 })
+    await expect.poll(() => progressCalls, { timeout: 30_000 }).toBeGreaterThan(8)
+    await expect(page.locator('#toast-container .toast.success .toast-message').last()).toContainText(
+      'WD14 recovered and ready.',
+    )
+  })
+
+  test('invalid prepare-start response fails explicitly and restores the card', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await mockMinimalModelStatus(page)
+    await page.route('**/api/disk/cache-status', async (route) => {
+      await route.fulfill({ json: diskUsagePayload() })
+    })
+    await page.route('**/api/models/prepare', async (route) => {
+      await route.fulfill({ json: { status: 'downloading' } })
+    })
+    let progressCalls = 0
+    await page.route('**/api/models/download-progress', async (route) => {
+      progressCalls += 1
+      await route.fulfill({ json: { active: false, prepare_result: {} } })
+    })
+
+    await openModelManager(page)
+    const prepareButton = page.locator('.model-card[data-model-id="wd14"] .btn-prepare-model')
+    const originalLabel = (await prepareButton.textContent())?.trim()
+    if (!originalLabel) throw new Error('WD14 prepare button label is empty')
+    await prepareButton.click()
+
+    await expect(page.locator('#toast-container .toast.error .toast-message').last()).toContainText(
+      /invalid response.*non-empty status and model_id/i,
+    )
+    await expect(prepareButton).toBeEnabled()
+    await expect(prepareButton).toHaveText(originalLabel)
+    expect(progressCalls).toBe(0)
+  })
+
+  test('prepare conflict names the active model and restores the requested card', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await mockMinimalModelStatus(page)
+    await page.route('**/api/disk/cache-status', async (route) => {
+      await route.fulfill({ json: diskUsagePayload() })
+    })
+    await page.route('**/api/models/prepare', async (route) => {
+      await route.fulfill({
+        json: {
+          status: 'downloading',
+          model_id: 'artist',
+          message: 'A download is already in progress.',
+        },
+      })
+    })
+    let progressCalls = 0
+    await page.route('**/api/models/download-progress', async (route) => {
+      progressCalls += 1
+      await route.fulfill({
+        json: {
+          active: true,
+          downloaded: 1024,
+          total: 4096,
+          filename: 'best_checkpoint.pth',
+          prepare_result: {
+            active: true,
+            model_id: 'artist',
+            status: 'downloading',
+          },
+        },
+      })
+    })
+
+    await openModelManager(page)
+    const prepareButton = page.locator('.model-card[data-model-id="wd14"] .btn-prepare-model')
+    const originalLabel = (await prepareButton.textContent())?.trim()
+    if (!originalLabel) throw new Error('WD14 prepare button label is empty')
+    await prepareButton.click()
+
+    await expect(
+      page.locator('#toast-container .toast.warning .toast-message').filter({ hasText: /artist/ }),
+    ).toContainText(/already being prepared|正在准备/i)
+    await expect(prepareButton).toBeEnabled()
+    await expect(prepareButton).toHaveText(originalLabel)
+    expect(progressCalls).toBe(0)
+  })
+
+  test('bulk prepare records an active-model conflict without entering the poll loop', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await mockMinimalModelStatus(page)
+    await page.route('**/api/disk/cache-status', async (route) => {
+      await route.fulfill({ json: diskUsagePayload() })
+    })
+    await page.route('**/api/models/bulk-bundle', async (route) => {
+      await route.fulfill({
+        json: {
+          items: [
+            {
+              id: 'wd14',
+              name: 'WD14 Tagger',
+              label: 'WD14 Tagger',
+              group: 'Tagging',
+              size_bytes: 1024,
+              status: 'missing',
+              variant: 'wd-swinv2-tagger-v3',
+            },
+            {
+              id: 'clip',
+              name: 'CLIP',
+              label: 'CLIP',
+              group: 'Similarity',
+              size_bytes: 2048,
+              status: 'missing',
+            },
+          ],
+          pending_total_bytes: 3072,
+          all_total_bytes: 3072,
+          excluded: [],
+        },
+      })
+    })
+    let prepareRequests = 0
+    await page.route('**/api/models/prepare', async (route) => {
+      prepareRequests += 1
+      await route.fulfill({
+        json: {
+          status: 'downloading',
+          model_id: 'artist',
+          message: 'A download is already in progress.',
+        },
+      })
+    })
+    let progressCalls = 0
+    await page.route('**/api/models/download-progress', async (route) => {
+      progressCalls += 1
+      await route.fulfill({
+        json: {
+          active: true,
+          prepare_result: {
+            active: true,
+            model_id: 'artist',
+            status: 'downloading',
+          },
+        },
+      })
+    })
+
+    await openModelManager(page)
+    await page.locator('#btn-bulk-download-models').click()
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    await page.locator('#btn-confirm-ok').click()
+
+    await expect(
+      page.locator('#toast-container .toast.warning .toast-message').filter({ hasText: /artist/ }),
+    ).toContainText(/already being prepared|正在准备/i)
+    await expect(
+      page.locator('#toast-container .toast.warning .toast-message').filter({ hasText: /artist/ }),
+    ).toHaveCount(1)
+    await expect(page.locator('#bulk-download-progress-banner')).toContainText(/Downloaded 0\/2|已下载 0\/2/i)
+    await expect(page.locator('#bulk-download-progress-banner')).toContainText(/wd14.*clip/i)
+    await expect(page.locator('#btn-bulk-download-models')).toBeEnabled()
+    expect(prepareRequests).toBe(1)
+    expect(progressCalls).toBe(0)
   })
 
   test('Kaloscope prepare completes and changes Artist ID from Missing to Ready', async ({ page, request }) => {

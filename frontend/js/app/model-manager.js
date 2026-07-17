@@ -66,6 +66,31 @@ function _formatBulkBytes(bytes) {
     return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
+function _parseModelPrepareStart(payload, requestedModelId) {
+    if (typeof requestedModelId !== 'string' || !requestedModelId.trim()) {
+        throw new TypeError('requestedModelId must be a non-empty string');
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new TypeError(`Model prepare response for '${requestedModelId}' must be an object`);
+    }
+    const status = typeof payload.status === 'string' ? payload.status.trim() : '';
+    const activeModelId = typeof payload.model_id === 'string' ? payload.model_id.trim() : '';
+    if (!status || !activeModelId) {
+        throw new TypeError(
+            `Model prepare response for '${requestedModelId}' must include status and model_id`,
+        );
+    }
+    return { status, activeModelId };
+}
+
+function _modelPrepareConflictMessage(requestedModelId, activeModelId) {
+    return appT(
+        'models.prepareConflict',
+        'Cannot prepare {requested}: {active} is already being prepared. Wait for it to finish, then try again.',
+        { requested: requestedModelId, active: activeModelId },
+    );
+}
+
 async function promptBulkDownloadModels() {
     let bundle;
     try {
@@ -208,7 +233,7 @@ async function runBulkDownload(items) {
     }
     const updateBanner = (text) => { if (banner) banner.textContent = text; };
 
-    for (const item of items) {
+    for (const [itemIndex, item] of items.entries()) {
         updateBanner(appT('models.bulkProgress', 'Downloading {index}/{total}: {name}', { index: completed + 1, total, name: item.name || item.id }));
         if (button) {
             button.innerHTML = `<span aria-hidden="true">⏳</span> <span>${escapeHtml(appT(
@@ -218,13 +243,27 @@ async function runBulkDownload(items) {
             ))}</span>`;
         }
 
+        let prepareStart;
         try {
-            await API.prepareModel(item.id, {
+            const prepareResponse = await API.prepareModel(item.id, {
                 variant: item.variant || null,
             });
+            prepareStart = _parseModelPrepareStart(prepareResponse, item.id);
         } catch (err) {
             failures.push({ id: item.id, message: err?.message || String(err) });
+            completed += 1;
             continue;
+        }
+        if (prepareStart.activeModelId !== item.id) {
+            const message = _modelPrepareConflictMessage(item.id, prepareStart.activeModelId);
+            const blockedItems = items.slice(itemIndex);
+            failures.push(...blockedItems.map((blockedItem) => ({
+                id: blockedItem.id,
+                message,
+            })));
+            completed += blockedItems.length;
+            showToast(message, 'warning');
+            break;
         }
 
         // Poll progress until this model finishes (or another one starts).
@@ -490,10 +529,29 @@ function renderModelManager(models = []) {
             const originalLabel = button.textContent;
             button.disabled = true;
             button.textContent = appT('models.working', 'Working...');
+            let prepareResponse;
             try {
-                await API.prepareModel(modelId, { source, variant });
+                prepareResponse = await API.prepareModel(modelId, { source, variant });
             } catch (error) {
                 showToast(formatUserError(error, appT('models.prepareFailed', 'Model setup failed')), 'error');
+                button.disabled = false;
+                button.textContent = originalLabel;
+                return;
+            }
+            let prepareStart;
+            try {
+                prepareStart = _parseModelPrepareStart(prepareResponse, modelId);
+            } catch (_error) {
+                showToast(appT(
+                    'models.invalidPrepareResponse',
+                    'Model setup returned an invalid response. Expected an object with non-empty status and model_id. Restart the app and try again.',
+                ), 'error');
+                button.disabled = false;
+                button.textContent = originalLabel;
+                return;
+            }
+            if (prepareStart.activeModelId !== modelId) {
+                showToast(_modelPrepareConflictMessage(modelId, prepareStart.activeModelId), 'warning');
                 button.disabled = false;
                 button.textContent = originalLabel;
                 return;
@@ -510,28 +568,39 @@ function renderModelManager(models = []) {
             let lastProgressSignature = null;
             let lastProgressAt = Date.now();
             let stallWarned = false;
+            let runningInBackground = false;
+            let backgroundPollWarningShown = false;
 
-            // Insert a cancel button next to the prepare button
-            let cancelBtn = button.parentElement.querySelector('.btn-cancel-download');
-            if (!cancelBtn) {
-                cancelBtn = document.createElement('button');
-                cancelBtn.className = 'btn btn-ghost btn-small btn-cancel-download';
-                cancelBtn.textContent = appT('models.cancelDownload', 'Cancel');
-                button.parentElement.insertBefore(cancelBtn, button.nextSibling);
+            // Preparation can include non-interruptible pip/HuggingFace work.
+            // Keep polling after the modal closes instead of claiming it stopped.
+            let backgroundButton = button.parentElement.querySelector('[data-action="background-model-prepare"]');
+            if (!backgroundButton) {
+                backgroundButton = document.createElement('button');
+                backgroundButton.type = 'button';
+                backgroundButton.className = 'btn btn-ghost btn-small';
+                backgroundButton.dataset.action = 'background-model-prepare';
+                backgroundButton.textContent = appT('models.continueInBackground', 'Run in background');
+                button.parentElement.insertBefore(backgroundButton, button.nextSibling);
             }
-            cancelBtn.style.display = '';
-            cancelBtn.onclick = () => {
-                finished = true;
-                cancelBtn.style.display = 'none';
-                button.disabled = false;
-                button.textContent = originalLabel;
-                showToast(appT('models.downloadCancelled', 'Download cancelled.'), 'info');
+            backgroundButton.style.display = '';
+            backgroundButton.onclick = () => {
+                runningInBackground = true;
+                backgroundButton.style.display = 'none';
+                hideModal('model-manager-modal');
+                showToast(
+                    appT(
+                        'models.continuingInBackground',
+                        'Model setup continues in background. You will be notified when it finishes.',
+                    ),
+                    'info',
+                );
             };
 
             const pollProgress = async () => {
                 try {
                     const p = await API.get('/api/models/download-progress');
                     pollErrorStreak = 0; // a successful read clears the transient-failure streak
+                    backgroundPollWarningShown = false;
                     const progressSignature = p?.active ? `${p.filename || ''}:${p.downloaded || 0}` : null;
                     if (progressSignature !== lastProgressSignature) {
                         lastProgressSignature = progressSignature;
@@ -555,7 +624,7 @@ function renderModelManager(models = []) {
                     const pr = p?.prepare_result;
                     if (pr && !pr.active && pr.model_id === modelId && pr.status) {
                         finished = true;
-                        cancelBtn.style.display = 'none';
+                        backgroundButton.style.display = 'none';
                         if (pr.status === 'done') {
                             showToast(withRestartReminder(pr.message || appT('models.readyToast', '{model} is ready.', { model: modelId }), pr), pr.restart_recommended ? 'warning' : 'success');
                             const refreshed = await API.getModelStatus();
@@ -593,22 +662,34 @@ function renderModelManager(models = []) {
                         }
                     }
                 } catch (_pollErr) {
-                    // A single poll failure is usually transient (server busy
-                    // mid-download). Re-arm below, but bail out after a streak
-                    // of consecutive failures so the button can't hang forever
-                    // in "Working..." when the backend is truly gone.
+                    // A foreground card must eventually recover its controls.
+                    // Background mode has no blocked control, so slow its checks
+                    // after a failure streak and keep watching for completion.
                     pollErrorStreak++;
                     if (pollErrorStreak >= MAX_POLL_ERROR_STREAK && !finished) {
-                        finished = true;
-                        cancelBtn.style.display = 'none';
-                        showToast(appT('models.downloadStalled', 'Download may have stalled. Check your network connection and try again.'), 'warning');
-                        button.disabled = false;
-                        button.textContent = originalLabel;
-                        return;
+                        if (runningInBackground) {
+                            if (!backgroundPollWarningShown) {
+                                backgroundPollWarningShown = true;
+                                showToast(appT(
+                                    'models.backgroundStatusUnavailable',
+                                    'Model setup is still running, but status checks are failing. We will keep checking in the background.',
+                                ), 'warning');
+                            }
+                        } else {
+                            finished = true;
+                            backgroundButton.style.display = 'none';
+                            showToast(appT('models.downloadStalled', 'Download may have stalled. Check your network connection and try again.'), 'warning');
+                            button.disabled = false;
+                            button.textContent = originalLabel;
+                            return;
+                        }
                     }
                 }
                 if (!finished) {
-                    setTimeout(pollProgress, 800);
+                    const nextPollDelay = runningInBackground && pollErrorStreak >= MAX_POLL_ERROR_STREAK
+                        ? 5000
+                        : 800;
+                    setTimeout(pollProgress, nextPollDelay);
                 }
             };
             pollProgress();
