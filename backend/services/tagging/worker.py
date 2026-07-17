@@ -223,6 +223,10 @@ def _tagging_worker_main(
             send("running", base_message)
 
     try:
+        if cancel_event.is_set():
+            send("cancelled", "Tagging cancelled before processing images")
+            return
+
         if request.model_path:
             send("running", "Loading custom model...")
         elif runtime_backend == "toriigate":

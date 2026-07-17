@@ -109,21 +109,6 @@ class JobsMixin:
             return
 
         should_abort = False
-        with self._lock:
-            if run_id != self._active_run_id:
-                should_abort = True
-            else:
-                self._progress = _build_tag_progress_state(
-                    "running", message="Preparing tagger...", run_id=run_id
-                )
-                self._worker_process = worker_process
-                self._worker_cancel_event = cancel_event
-                self._cancel_requested = False
-
-        if should_abort:
-            self._cleanup_worker_handles(progress_queue, run_id=run_id)
-            return
-
         saw_terminal_state = False
         last_worker_message_at = time.monotonic()
         last_loading_heartbeat_at = last_worker_message_at
@@ -133,7 +118,21 @@ class JobsMixin:
         ).lower()
 
         try:
-            worker_process.start()
+            with self._lock:
+                if run_id != self._active_run_id:
+                    should_abort = True
+                else:
+                    self._progress = _build_tag_progress_state(
+                        "running", message="Preparing tagger...", run_id=run_id
+                    )
+                    self._worker_process = worker_process
+                    self._worker_cancel_event = cancel_event
+                    self._cancel_requested = False
+                    worker_process.start()
+
+            if should_abort:
+                return
+
             while True:
                 if self._cancel_requested:
                     cancel_event.set()

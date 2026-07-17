@@ -5,7 +5,9 @@ Unit tests for tagging service runtime planning.
 import multiprocessing
 import queue
 import sys
+import threading
 from pathlib import Path
+from typing import Callable
 from unittest.mock import patch
 
 import pytest
@@ -708,6 +710,118 @@ class _FailingSetupContext:
         return _DeadWorker()
 
 
+class _LifecycleQueue(queue.Queue[dict[str, object]]):
+    def __init__(self) -> None:
+        super().__init__()
+        self.closed = False
+        self.joined = False
+
+    def close(self) -> None:
+        self.closed = True
+
+    def join_thread(self) -> None:
+        self.joined = True
+
+
+class _BlockingStartProcess:
+    def __init__(
+        self,
+        start_entered: threading.Event,
+        release_start: threading.Event,
+        cancel_event: threading.Event,
+        record_event: Callable[[str], None],
+    ) -> None:
+        self._start_entered = start_entered
+        self._release_start = release_start
+        self._cancel_event = cancel_event
+        self._record_event = record_event
+        self._alive = False
+        self._state_lock = threading.Lock()
+
+    def start(self) -> None:
+        self._record_event("start_entered")
+        self._start_entered.set()
+        if not self._release_start.wait(2.0):
+            raise TimeoutError("Test did not release the worker start gate")
+        with self._state_lock:
+            self._alive = True
+        self._record_event("start_returned")
+
+    def is_alive(self) -> bool:
+        with self._state_lock:
+            if self._cancel_event.is_set():
+                self._alive = False
+            return self._alive
+
+    def join(self, timeout: float) -> None:
+        del timeout
+        self.is_alive()
+
+    def terminate(self) -> None:
+        with self._state_lock:
+            self._alive = False
+
+    def kill(self) -> None:
+        with self._state_lock:
+            self._alive = False
+
+
+class _StartFailureProcess:
+    def start(self) -> None:
+        raise RuntimeError("process start denied")
+
+    def is_alive(self) -> bool:
+        return False
+
+    def join(self, timeout: float) -> None:
+        del timeout
+
+
+class _StartBoundaryContext:
+    def __init__(
+        self,
+        progress_queue: _LifecycleQueue,
+        cancel_event: threading.Event,
+        worker_process: object,
+    ) -> None:
+        self.progress_queue = progress_queue
+        self.cancel_event = cancel_event
+        self.worker_process = worker_process
+
+    def Queue(self) -> _LifecycleQueue:
+        return self.progress_queue
+
+    def Event(self) -> threading.Event:
+        return self.cancel_event
+
+    def Process(
+        self, *, target: object, args: tuple[object, ...], daemon: bool
+    ) -> object:
+        del target, args, daemon
+        return self.worker_process
+
+
+class _ObservedServiceLock:
+    def __init__(self, cancel_thread_name: str) -> None:
+        self._lock = threading.Lock()
+        self._cancel_thread_name = cancel_thread_name
+        self.cancel_attempted = threading.Event()
+        self.cancel_lock_observations: list[bool] = []
+
+    def __enter__(self) -> "_ObservedServiceLock":
+        if threading.current_thread().name == self._cancel_thread_name:
+            self.cancel_lock_observations.append(self._lock.locked())
+            self.cancel_attempted.set()
+        self._lock.acquire()
+        return self
+
+    def __exit__(
+        self, error_type: object, error: object, traceback: object
+    ) -> None:
+        del error_type, error, traceback
+        self._lock.release()
+
+
 def _build_running_setup_service(run_id: int) -> TaggingService:
     service = TaggingService()
     service._active_run_id = run_id
@@ -967,6 +1081,150 @@ def test_worker_setup_cleanup_failures_preserve_original_terminal_error() -> Non
     )
     assert progress_queue.close_calls == 1
     assert progress_queue.join_calls == 1
+
+
+def test_cancel_waits_for_bound_worker_start_boundary() -> None:
+    run_id = 13
+    service = _build_running_setup_service(run_id)
+    progress_queue = _LifecycleQueue()
+    cancel_event = threading.Event()
+    start_entered = threading.Event()
+    release_start = threading.Event()
+    cancel_returned = threading.Event()
+    cancel_thread_name = "tag-cancel-boundary-test"
+    observed_service_lock = _ObservedServiceLock(cancel_thread_name)
+    service._lock = observed_service_lock
+    event_order: list[str] = []
+    event_order_lock = threading.Lock()
+    cancel_results: list[dict[str, object]] = []
+    thread_errors: list[Exception] = []
+
+    def record_event(event_name: str) -> None:
+        with event_order_lock:
+            event_order.append(event_name)
+
+    worker_process = _BlockingStartProcess(
+        start_entered,
+        release_start,
+        cancel_event,
+        record_event,
+    )
+    context = _StartBoundaryContext(
+        progress_queue, cancel_event, worker_process
+    )
+    request = TagRequest(model_name="wd-swinv2-tagger-v3", use_gpu=False)
+
+    def run_supervisor() -> None:
+        try:
+            service._run_tagging_job(request, run_id=run_id)
+        except Exception as error:
+            thread_errors.append(error)
+
+    def cancel_worker() -> None:
+        try:
+            cancel_results.append(service.cancel_tagging())
+        except Exception as error:
+            thread_errors.append(error)
+        finally:
+            record_event("cancel_returned")
+            cancel_returned.set()
+
+    supervisor_thread = threading.Thread(target=run_supervisor)
+    cancel_thread = threading.Thread(
+        target=cancel_worker,
+        name=cancel_thread_name,
+    )
+    cancel_thread_started = False
+
+    with patch.object(
+        service,
+        "_build_runtime_plan",
+        return_value={"model_name": "wd-swinv2-tagger-v3"},
+    ), patch(
+        "services.tagging_service.multiprocessing.get_context",
+        return_value=context,
+    ):
+        try:
+            supervisor_thread.start()
+            assert start_entered.wait(2.0)
+            cancel_thread.start()
+            cancel_thread_started = True
+            assert observed_service_lock.cancel_attempted.wait(2.0)
+            assert observed_service_lock.cancel_lock_observations == [True]
+            assert cancel_returned.is_set() is False
+        finally:
+            release_start.set()
+            if cancel_thread_started:
+                cancel_thread.join(3.0)
+            supervisor_thread.join(3.0)
+
+    assert supervisor_thread.is_alive() is False
+    assert cancel_thread.is_alive() is False
+    assert thread_errors == []
+    assert cancel_results == [{"status": "cancelled", "message": "Tagging cancelled"}]
+    assert event_order.index("start_returned") < event_order.index("cancel_returned")
+    assert service.get_progress()["status"] == "cancelled"
+    assert progress_queue.closed is True
+    assert progress_queue.joined is True
+
+
+def test_process_start_failure_keeps_existing_error_and_cleanup_behavior() -> None:
+    run_id = 14
+    service = _build_running_setup_service(run_id)
+    progress_queue = _LifecycleQueue()
+    context = _StartBoundaryContext(
+        progress_queue,
+        threading.Event(),
+        _StartFailureProcess(),
+    )
+    request = TagRequest(model_name="wd-swinv2-tagger-v3", use_gpu=False)
+
+    with patch.object(
+        service,
+        "_build_runtime_plan",
+        return_value={"model_name": "wd-swinv2-tagger-v3"},
+    ), patch(
+        "services.tagging_service.multiprocessing.get_context",
+        return_value=context,
+    ):
+        service._run_tagging_job(request, run_id=run_id)
+
+    progress = service.get_progress()
+    assert progress["status"] == "error"
+    assert progress["message"] == "Error monitoring tagging worker: process start denied"
+    assert service._worker_process is None
+    assert service._worker_cancel_event is None
+    assert progress_queue.closed is True
+    assert progress_queue.joined is True
+
+
+def test_pre_cancelled_worker_never_constructs_or_loads_tagger(monkeypatch) -> None:
+    monkeypatch.setenv("SD_IMAGE_SORTER_E2E_FAKE_TAGGER", "0")
+    progress_queue: queue.Queue[dict[str, object]] = queue.Queue()
+    cancel_event = threading.Event()
+    cancel_event.set()
+    payload = {
+        "request": {
+            "model_name": "wd-swinv2-tagger-v3",
+            "use_gpu": False,
+        },
+        "model_name": "wd-swinv2-tagger-v3",
+        "effective_use_gpu": False,
+    }
+
+    with patch("tagger.get_tagger") as get_tagger:
+        tagging_service._tagging_worker_main(payload, progress_queue, cancel_event)
+
+    messages: list[dict[str, object]] = []
+    while True:
+        try:
+            messages.append(progress_queue.get_nowait())
+        except queue.Empty:
+            break
+
+    get_tagger.assert_not_called()
+    assert [message["status"] for message in messages] == ["cancelled"]
+    assert messages[0]["message"] == "Tagging cancelled before processing images"
 
 
 def test_e2e_fake_tagger_completes_without_downloading_real_model(test_db, monkeypatch, tmp_path: Path):
