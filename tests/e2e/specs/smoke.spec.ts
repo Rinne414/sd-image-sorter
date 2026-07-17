@@ -2017,6 +2017,188 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#bg-tag-progress')).toBeHidden({ timeout: 10000 })
   })
 
+  test('tag progress monitoring survives a temporary backend disconnect without presenting a false idle state', async ({ page }) => {
+    let started = false
+    let startRequests = 0
+    let progressPollsAfterStart = 0
+    const progressPollTimes: number[] = []
+    let releaseTerminalProgress = (): void => {
+      throw new Error('Terminal progress gate was not initialized')
+    }
+    const terminalProgressGate = new Promise<void>((resolve) => {
+      releaseTerminalProgress = resolve
+    })
+
+    await page.route('**/api/tag/start', async (route) => {
+      started = true
+      startRequests += 1
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'queued',
+          pipeline_queued: true,
+          queue_position: 1,
+        }),
+      })
+    })
+
+    await page.route('**/api/tag/progress', async (route) => {
+      if (!started) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'idle',
+            processed: 0,
+            total: 0,
+            tagged: 0,
+            errors: 0,
+            message: '',
+          }),
+        })
+        return
+      }
+
+      progressPollsAfterStart += 1
+      progressPollTimes.push(performance.now())
+      if (progressPollsAfterStart <= 5) {
+        await route.abort('failed')
+        return
+      }
+
+      await terminalProgressGate
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'done',
+          completed: 6,
+          processed: 6,
+          total: 6,
+          tagged: 6,
+          errors: 0,
+          message: 'Tagging complete',
+        }),
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await page.evaluate(() => {
+      const state = window as typeof window & {
+        __tagProgressWarningCount?: number
+        __taggingCompletedCount?: number
+      }
+      const toastContainer = document.getElementById('toast-container')
+      if (!toastContainer) {
+        throw new Error('Toast container is required for Tag progress monitoring')
+      }
+      state.__tagProgressWarningCount = 0
+      state.__taggingCompletedCount = 0
+      const toastObserver = new MutationObserver((records) => {
+        for (const record of records) {
+          for (const addedNode of record.addedNodes) {
+            if (addedNode instanceof Element && addedNode.matches('.toast.warning')) {
+              state.__tagProgressWarningCount = (state.__tagProgressWarningCount || 0) + 1
+            }
+          }
+        }
+      })
+      toastObserver.observe(toastContainer, { childList: true })
+      document.addEventListener('taggingCompleted', () => {
+        state.__taggingCompletedCount = (state.__taggingCompletedCount || 0) + 1
+      })
+    })
+
+    await page.locator('#btn-tag').click()
+    await page.locator('#btn-start-tag').click()
+
+    await expect.poll(() => progressPollsAfterStart, { timeout: 8000 }).toBe(4)
+    expect(startRequests).toBe(1)
+    await expect(page.locator('#tag-progress-container')).toBeVisible()
+    await expect(page.locator('#btn-start-tag')).toBeDisabled()
+    await expect(page.locator('#btn-start-tag')).toContainText(/Tagging|正在打标/i)
+    await expect(page.locator('#btn-cancel-tag')).toContainText(/Run in Background|后台运行/i)
+    await expect(page.locator('#tag-model-select')).toBeDisabled()
+    await expect(page.locator('#toast-container .toast.warning .toast-message')).toHaveCount(1)
+    await expect(page.locator('#toast-container .toast.warning .toast-message')).toContainText(/queued or running|排队或运行/i)
+    const monitoringState = await page.evaluate<{
+      pollingActive: boolean
+      queuedWaiting: boolean
+    }>(() => window.eval(`({
+      pollingActive: _tagPollingActive,
+      queuedWaiting: _tagQueuedWaiting,
+    })`))
+    expect(monitoringState).toEqual({ pollingActive: true, queuedWaiting: true })
+    const modalLayout = await page.evaluate(() => {
+      const modalRect = document.querySelector('#tag-modal .modal-content')?.getBoundingClientRect()
+      const progressRect = document.querySelector('#tag-progress-container')?.getBoundingClientRect()
+      const controlRects = [
+        document.querySelector('#btn-cancel-tag')?.getBoundingClientRect(),
+        document.querySelector('#btn-start-tag')?.getBoundingClientRect(),
+      ].filter((rect): rect is DOMRect => Boolean(rect))
+      const overlapArea = (left: DOMRect, right: DOMRect): number => (
+        Math.max(0, Math.min(left.right, right.right) - Math.max(left.left, right.left))
+        * Math.max(0, Math.min(left.bottom, right.bottom) - Math.max(left.top, right.top))
+      )
+      return {
+        horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth,
+        progressControlOverlap: progressRect
+          ? Math.max(0, ...controlRects.map((rect) => overlapArea(progressRect, rect)))
+          : null,
+        progressVisibleWithinModal: Boolean(
+          modalRect
+          && progressRect
+          && progressRect.top >= modalRect.top
+          && progressRect.bottom <= modalRect.bottom,
+        ),
+      }
+    })
+    expect(modalLayout).toEqual({
+      horizontalOverflow: false,
+      progressControlOverlap: 0,
+      progressVisibleWithinModal: true,
+    })
+
+    await page.locator('#btn-cancel-tag').click()
+    await expect(page.locator('#tag-modal.visible')).toHaveCount(0)
+    await expect(page.locator('#bg-tag-progress')).toBeVisible()
+    await expect(page.locator('#bg-tag-progress-text')).toContainText(/queued or running|排队或运行/i)
+    await page.locator('#bg-tag-open').click()
+    await expect(page.locator('#tag-modal.visible')).toBeVisible()
+    await expect(page.locator('#tag-progress-text')).toContainText(/queued or running|排队或运行/i)
+
+    await expect.poll(() => progressPollsAfterStart, { timeout: 10000 }).toBe(5)
+    expect(progressPollTimes[4] - progressPollTimes[3]).toBeGreaterThanOrEqual(4000)
+    await expect.poll(() => progressPollsAfterStart, { timeout: 10000 }).toBe(6)
+    expect(progressPollTimes[5] - progressPollTimes[4]).toBeGreaterThanOrEqual(4000)
+    expect(await page.evaluate(() => (
+      (window as typeof window & { __tagProgressWarningCount?: number }).__tagProgressWarningCount || 0
+    ))).toBe(1)
+    releaseTerminalProgress()
+
+    await expect.poll(async () => page.evaluate(() => (
+      (window as typeof window & { __taggingCompletedCount?: number }).__taggingCompletedCount || 0
+    ))).toBe(1)
+    await expect(page.locator('#tag-progress-container')).toBeHidden()
+    await expect(page.locator('#btn-start-tag')).toBeEnabled()
+    expect(startRequests).toBe(1)
+    await page.waitForTimeout(1200)
+    expect(progressPollsAfterStart).toBe(6)
+    expect(await page.evaluate(() => (
+      (window as typeof window & { __taggingCompletedCount?: number }).__taggingCompletedCount || 0
+    ))).toBe(1)
+    const terminalState = await page.evaluate<{
+      pollingActive: boolean
+      timerActive: boolean
+    }>(() => window.eval(`({
+      pollingActive: _tagPollingActive,
+      timerActive: _tagProgressTimer !== null,
+    })`))
+    expect(terminalState).toEqual({ pollingActive: false, timerActive: false })
+  })
+
   test('queued tag cancellation should stop polling and restore the Start action', async ({ page }) => {
     const probe = await mockQueuedGalleryTagCancellation(page, {
       status: 'idle',
@@ -2081,6 +2263,7 @@ test.describe('Smoke Tests', () => {
     await page.waitForLoadState('networkidle')
     await page.locator('#btn-tag').click()
     await page.locator('#btn-start-tag').click()
+    await expect(page.locator('#tag-progress-container')).toBeVisible()
     await page.locator('#btn-cancel-tag').click()
     await expect(page.locator('#bg-tag-progress')).toBeVisible()
     await probe.waitForInFlightProgress()

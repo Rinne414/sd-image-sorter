@@ -2852,7 +2852,6 @@ window.I18nLang_zhCN = {
     'tag.preparingCpu': '正在 CPU 上加载模型...',
     'tag.preparingMaxQuality': '正在用 CPU 加载 Max Quality 模型...',
     'tag.running': '正在打标...',
-    'tag.startTagging': '开始打标',
     'tag.cancelTagging': '取消打标',
     'tag.cancellingAfterCurrent': '将在当前图片完成后取消...',
 
@@ -3302,7 +3301,7 @@ window.I18nLang_zhCN = {
     'tagger.progressCancelling': '正在取消... {current}/{total}',
     'tagger.progressCancelled': '标注已取消',
     'tagger.progressResuming': '正在恢复标注进度...',
-    'tagger.errorCheckingProgress': '检查标注进度时出错',
+    'tagger.progressMonitorUnavailable': '暂时无法获取标注状态。任务仍可能在排队或运行；系统会继续尝试监控。',
     'tagger.cancellingAfterCurrent': '将在当前图片完成后取消...',
     'tagger.minimizedToBackground': '标注在后台继续运行。可以通过顶部进度条停止或查看详情。',
     'tagger.runInBackground': '转到后台运行',

@@ -47,6 +47,10 @@ let _scanLastFolderPath = '';
 const _scanPollersByIdentity = new Map();
 let _reconnectPollTimer = null;
 let _tagProgressTracker = createProgressTracker();
+let _tagProgressMonitorDegraded = false;
+const TAG_PROGRESS_RETRY_LIMIT = 3;
+const TAG_PROGRESS_RETRY_DELAY_MS = 1000;
+const TAG_PROGRESS_DEGRADED_POLL_MS = 5000;
 
 function clearTagProgressTimer() {
     if (_tagProgressTimer) {
@@ -62,6 +66,7 @@ function scheduleTagProgressPoll(delay = 500, retryCount = 0) {
 
 function resetTagUiProgressState() {
     _tagMinimizedToBackground = false;
+    _tagProgressMonitorDegraded = false;
     _tagLastProgressPercent = 0;
     _tagLastProgressText = '';
     _tagLastCurrent = 0;
@@ -163,7 +168,7 @@ async function requestStopTagging() {
     }
 }
 
-function setTaggingUiState(isRunning, options = {}) {
+function setTaggingUiState(isRunning) {
     const startBtn = $('#btn-start-tag');
     const cancelBtn = $('#btn-cancel-tag');
     const modelSelect = $('#tag-model-select');
@@ -178,17 +183,29 @@ function setTaggingUiState(isRunning, options = {}) {
     const importBtn = $('#btn-import-tags');
 
     if (startBtn) {
+        if (isRunning) {
+            startBtn.dataset.i18nLocked = '1';
+        } else {
+            delete startBtn.dataset.i18nLocked;
+        }
+        startBtn.setAttribute('data-i18n', isRunning ? 'tag.running' : 'modal.tagStart');
         startBtn.disabled = isRunning;
         startBtn.textContent = isRunning
             ? appT('tag.running', 'Tagging...')
-            : appT('tag.startTagging', 'Start Tagging');
+            : appT('modal.tagStart', 'Start Tagging');
     }
 
     if (cancelBtn) {
+        if (isRunning) {
+            cancelBtn.dataset.i18nLocked = '1';
+        } else {
+            delete cancelBtn.dataset.i18nLocked;
+        }
+        cancelBtn.setAttribute('data-i18n', isRunning ? 'tagger.runInBackground' : 'modal.tagCancel');
         cancelBtn.disabled = false;
         cancelBtn.textContent = isRunning
             ? appT('tagger.runInBackground', 'Run in Background')
-            : (options.idleLabel || appT('common.close', 'Close'));
+            : appT('modal.tagCancel', 'Cancel');
     }
 
     [modelSelect, thresholdInput, characterThresholdInput, retagAll, useGpu, customProfile, modelPath, tagsPath, exportBtn, importBtn].forEach((element) => {
@@ -457,6 +474,7 @@ async function pollTagProgress(retryCount = 0) {
         // A queue-only cancellation can finish while this request is in flight.
         // Do not let that stale response restore queued state or re-arm a timer.
         if (!_tagPollingActive) return;
+        _tagProgressMonitorDegraded = false;
         window.__liveTagProgress = progress;
         syncTaggerModelUi();
 
@@ -640,24 +658,31 @@ async function pollTagProgress(retryCount = 0) {
         }
     } catch (error) {
         if (!_tagPollingActive) return;
-        // A single transient fetch failure must not tear down the whole
-        // tagging UI — the backend job keeps running regardless. Mirror the
-        // scan poller: retry up to 3 consecutive times, then surface the error.
-        if (retryCount < 3) {
+        // Progress transport failure does not prove that the backend job ended.
+        // Keep the running UI locked and continue observing at a lower cadence.
+        if (retryCount < TAG_PROGRESS_RETRY_LIMIT) {
             Logger.warn('Tag progress poll failed, retrying:', error);
-            scheduleTagProgressPoll(1000, retryCount + 1);
+            scheduleTagProgressPoll(TAG_PROGRESS_RETRY_DELAY_MS, retryCount + 1);
             return;
         }
-        window.__liveTagProgress = null;
-        _tagPollingActive = false;
-        clearTagProgressTimer();
-        _hideBgTagProgress();
-        showToast(appT('tagger.errorCheckingProgress', 'Error checking tag progress'), 'error');
-        $('#tag-progress-container').style.display = 'none';
-        unlockLiveProgressText('#tag-progress-text', 'modal.tagLoadingModel', 'Loading model...');
-        setTaggingUiState(false);
-        resetTagUiProgressState();
-        syncTaggerModelUi();
+
+        Logger.warn('Tag progress monitoring is temporarily unavailable:', error);
+        const monitorText = appT(
+            'tagger.progressMonitorUnavailable',
+            'Tagging status is temporarily unavailable. The task may still be queued or running; monitoring will keep trying.'
+        );
+        if (!_tagProgressMonitorDegraded) {
+            _tagProgressMonitorDegraded = true;
+            showToast(monitorText, 'warning');
+        }
+        $('#tag-progress-text').textContent = monitorText;
+        _tagLastProgressText = monitorText;
+        const lastKnownStatus = window.__liveTagProgress?.status;
+        const monitorStatus = lastKnownStatus === 'cancelling'
+            ? 'cancelling'
+            : (_tagQueuedWaiting ? 'queued' : 'running');
+        _updateBgTagProgress(_tagLastProgressPercent, monitorText, monitorStatus);
+        scheduleTagProgressPoll(TAG_PROGRESS_DEGRADED_POLL_MS, retryCount + 1);
     }
 }
 
@@ -676,7 +701,7 @@ function _updateBgTagProgress(percent, text, status) {
     bar.style.display = shouldShow ? 'flex' : 'none';
     const fill = $('#bg-tag-progress-fill');
     const textEl = $('#bg-tag-progress-text');
-    const isIndeterminate = ['running', 'cancelling'].includes(status) && (!percent || percent === 0);
+    const isIndeterminate = ['running', 'cancelling', 'queued'].includes(status) && (!percent || percent === 0);
     if (fill) {
         fill.classList.toggle('is-indeterminate', isIndeterminate);
         fill.style.width = isIndeterminate ? '' : (percent + '%');
@@ -740,7 +765,7 @@ async function resumeTaggingProgress() {
         _tagLastProgressPercent = 0;
         _tagLastProgressText = progress.message || appT('tagger.progressResuming', 'Resuming tagging progress...');
         $('#tag-progress-text').textContent = _tagLastProgressText;
-        setTaggingUiState(true, { idleLabel: appT('common.close', 'Close') });
+        setTaggingUiState(true);
         // Show background progress bar (tag modal may not be open)
         const current = progress.processed || progress.current || 0;
         const total = progress.total || 0;

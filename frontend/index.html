@@ -5767,13 +5767,13 @@
                     <button id="btn-cancel-aesthetic" type="button"><span data-i18n="gallery.cancelAesthetic">Stop</span></button>
                 </div>
 
-                <div class="progress-container" id="tag-progress-container" style="display: none;">
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="tag-progress-fill"></div>
-                    </div>
-                    <span class="progress-text" id="tag-progress-text" data-i18n="modal.tagLoadingModel">Loading model...</span>
-                </div>
                 <div class="modal-actions" id="tagger-modal-actions" data-tagger-shows="local nl">
+                    <div class="progress-container" id="tag-progress-container" style="display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="tag-progress-fill"></div>
+                        </div>
+                        <span class="progress-text" id="tag-progress-text" data-i18n="modal.tagLoadingModel">Loading model...</span>
+                    </div>
                     <button class="btn btn-ghost tagger-local-action" id="btn-export-tags-json" title="Export all tags to JSON file">📤 <span data-i18n="modal.tagExport">Export Tags</span></button>
                     <button class="btn btn-ghost tagger-local-action" id="btn-import-tags" title="Import tags from JSON file">📥 <span data-i18n="modal.tagImport">Import Tags</span></button>
                     <input type="file" id="import-tags-file" accept=".json" style="display: none;">

@@ -2685,7 +2685,6 @@ window.I18nLang_en = {
     'tag.preparingCpu': 'Preparing model on CPU...',
     'tag.preparingMaxQuality': 'Preparing Max Quality model on CPU...',
     'tag.running': 'Tagging...',
-    'tag.startTagging': 'Start Tagging',
     'tag.cancelTagging': 'Cancel Tagging',
     'tag.cancellingAfterCurrent': 'Cancelling after current image...',
 
@@ -3135,7 +3134,7 @@ window.I18nLang_en = {
     'tagger.progressCancelling': 'Cancelling... {current}/{total}',
     'tagger.progressCancelled': 'Tagging cancelled',
     'tagger.progressResuming': 'Resuming tagging progress...',
-    'tagger.errorCheckingProgress': 'Error checking tag progress',
+    'tagger.progressMonitorUnavailable': 'Tagging status is temporarily unavailable. The task may still be queued or running; monitoring will keep trying.',
     'tagger.cancellingAfterCurrent': 'Cancelling after current image...',
     'tagger.minimizedToBackground': 'Tagging continues in the background. Use the progress bar to stop or check details.',
     'tagger.runInBackground': 'Run in Background',
