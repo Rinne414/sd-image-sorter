@@ -5703,6 +5703,10 @@ test.describe('Smoke Tests', () => {
   test('manual sort start should resume unfinished session instead of starting over', async ({ page }) => {
     await seedManualSortFilterState(page)
     await mockImageAsset(page, 701)
+    await page.addInitScript((setupFolder) => {
+      localStorage.setItem('sort-folder-a', setupFolder)
+      localStorage.setItem('manual_sort_operation_mode_v1', 'copy')
+    }, MOCK_MANUAL_SORT_DESTINATION)
 
     let startRequests = 0
     let setFolderRequests = 0
@@ -5742,6 +5746,8 @@ test.describe('Smoke Tests', () => {
     await openSortingSubView(page, 'manual')
 
     await expect(page.locator('#sort-resume-banner')).toBeVisible()
+    await expect(page.locator('.folder-path-input[data-key="a"]')).toHaveValue(MOCK_MANUAL_SORT_DESTINATION)
+    await expect(page.locator('input[name="manual-sort-operation"][value="copy"]')).toBeChecked()
     await page.locator('.folder-path-input[data-key="a"]').fill(MOCK_MANUAL_SORT_DESTINATION)
 
     await page.locator('#btn-start-sorting').click()
@@ -5759,6 +5765,18 @@ test.describe('Smoke Tests', () => {
 
     await expect(page.locator('#sort-interface')).toBeVisible()
     await expect(page.locator('#sort-progress-text')).toHaveText('1 / 3')
+    await expect(page.locator('.folder-path-input[data-key="a"]')).toHaveValue('C:/sorted/keep')
+    await expect(page.locator('input[name="manual-sort-operation"][value="move"]')).toBeChecked()
+    expect(await page.evaluate(() => {
+      const state = (window as typeof window & {
+        ManualSortState?: { folders: Record<string, string>, operationMode: string }
+      }).ManualSortState
+      if (!state) throw new Error('Manual Sort state is unavailable after resume')
+      return { folders: state.folders, operationMode: state.operationMode }
+    })).toEqual({
+      folders: { a: 'C:/sorted/keep' },
+      operationMode: 'move',
+    })
     await expect.poll(() => startRequests).toBe(0)
     expect(setFolderRequests).toBe(0)
   })

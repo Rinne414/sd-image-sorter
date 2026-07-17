@@ -3412,6 +3412,233 @@ def test_bracket_redo_reapplies_choice(test_db, tmp_path, monkeypatch):
     assert cur["challenger"]["image"]["id"] == order[2]
 
 
+def test_bracket_restart_preserves_mode_progress_and_redo(test_db, tmp_path, monkeypatch):
+    _make_bracket_images(test_db, tmp_path, 4)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="bracket")
+    order = service.get_current_sort_image()["image_ids"]
+
+    service.sort_action("challenger")
+    service.sort_action("champion")
+    service.sort_action("undo")
+
+    restored_service = _bracket_service(tmp_path, monkeypatch)
+    restored_service.load_session_from_disk()
+    restored_state = restored_service.get_sort_session()
+    current = restored_service.get_current_sort_image()
+
+    assert restored_state["mode"] == "bracket"
+    assert restored_state["champion_index"] == 1
+    assert restored_state["current_index"] == 2
+    assert len(restored_state["history"]) == 1
+    assert len(restored_state["redo_stack"]) == 1
+    assert current["mode"] == "bracket"
+    assert current["champion"]["image"]["id"] == order[1]
+    assert current["challenger"]["image"]["id"] == order[2]
+    assert current["redo_available"] is True
+
+    restored_service.sort_action("redo")
+    after_redo = restored_service.get_current_sort_image()
+    assert after_redo["champion"]["image"]["id"] == order[1]
+    assert after_redo["challenger"]["image"]["id"] == order[3]
+
+
+def test_bracket_restart_rebases_actions_after_database_row_disappears(
+    test_db, tmp_path, monkeypatch
+):
+    _make_bracket_images(test_db, tmp_path, 5)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="bracket")
+    order = service.get_current_sort_image()["image_ids"]
+
+    service.sort_action("challenger")
+    service.sort_action("champion")
+    service.sort_action("challenger")
+    service.sort_action("undo")
+
+    with test_db.get_db() as connection:
+        connection.execute("DELETE FROM images WHERE id = ?", (order[2],))
+
+    restored_service = _bracket_service(tmp_path, monkeypatch)
+    restored_service.load_session_from_disk()
+    restored_state = restored_service.get_sort_session()
+    current = restored_service.get_current_sort_image()
+
+    assert restored_state["mode"] == "bracket"
+    assert restored_state["image_ids"] == [order[0], order[1], order[3], order[4]]
+    assert restored_state["champion_index"] == 1
+    assert restored_state["current_index"] == 2
+    assert restored_state["history"] == [
+        {
+            "action": "challenger",
+            "mode": "bracket",
+            "prev_champion_index": 0,
+            "prev_challenger_index": 1,
+        }
+    ]
+    assert restored_state["redo_stack"] == [
+        {
+            "action": "challenger",
+            "mode": "bracket",
+            "prev_champion_index": 1,
+            "prev_challenger_index": 2,
+        }
+    ]
+    assert current["champion"]["image"]["id"] == order[1]
+    assert current["challenger"]["image"]["id"] == order[3]
+
+    restored_service.sort_action("redo")
+    after_redo = restored_service.get_current_sort_image()
+    assert after_redo["champion"]["image"]["id"] == order[3]
+    assert after_redo["challenger"]["image"]["id"] == order[4]
+
+
+def test_bracket_restart_preserves_progress_after_lazy_unreadable_skip(
+    test_db, tmp_path, monkeypatch, caplog
+):
+    _make_bracket_images(test_db, tmp_path, 4)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="bracket")
+    order = service.get_current_sort_image()["image_ids"]
+
+    service.sort_action("champion")
+    unreadable_path = Path(test_db.get_image_by_id(order[2])["path"])
+    unreadable_path.unlink()
+    after_skip = service.get_current_sort_image()
+    assert after_skip["champion"]["image"]["id"] == order[0]
+    assert after_skip["challenger"]["image"]["id"] == order[3]
+
+    restored_service = _bracket_service(tmp_path, monkeypatch)
+    restored_service.load_session_from_disk()
+    restored_state = restored_service.get_sort_session()
+    current = restored_service.get_current_sort_image()
+
+    assert restored_state["mode"] == "bracket"
+    assert restored_state["champion_index"] == 0
+    assert len(restored_state["history"]) == 1
+    assert restored_state["redo_stack"] == []
+    assert current["champion"]["image"]["id"] == order[0]
+    assert current["challenger"]["image"]["id"] == order[3]
+    restart_records = [
+        record for record in caplog.records
+        if record.getMessage() == "Restarting invalid persisted bracket session"
+    ]
+    assert restart_records == []
+
+
+def test_bracket_restart_discards_disconnected_redo_after_database_row_disappears(
+    test_db, tmp_path, monkeypatch, caplog
+):
+    _make_bracket_images(test_db, tmp_path, 6)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="bracket")
+    order = service.get_current_sort_image()["image_ids"]
+
+    service.sort_action("challenger")
+    service.sort_action("challenger")
+    service.sort_action("champion")
+    service.sort_action("undo")
+    service.sort_action("undo")
+    service.sort_action("undo")
+
+    with test_db.get_db() as connection:
+        connection.execute("DELETE FROM images WHERE id = ?", (order[1],))
+
+    restored_service = _bracket_service(tmp_path, monkeypatch)
+    restored_service.load_session_from_disk()
+    restored_state = restored_service.get_sort_session()
+    current = restored_service.get_current_sort_image()
+
+    assert restored_state["mode"] == "bracket"
+    assert restored_state["image_ids"] == [
+        order[0], order[2], order[3], order[4], order[5]
+    ]
+    assert restored_state["champion_index"] == 0
+    assert restored_state["current_index"] == 1
+    assert restored_state["history"] == []
+    assert restored_state["redo_stack"] == []
+    assert current["champion"]["image"]["id"] == order[0]
+    assert current["challenger"]["image"]["id"] == order[2]
+    assert current["redo_available"] is False
+    restart_records = [
+        record for record in caplog.records
+        if record.getMessage() == "Restarting invalid persisted bracket session"
+    ]
+    assert len(restart_records) == 1
+    assert restart_records[0].reason == "disconnected_action_chain"
+
+
+def test_bracket_restart_discards_disconnected_history_when_champion_survives(
+    test_db, tmp_path, monkeypatch, caplog
+):
+    _make_bracket_images(test_db, tmp_path, 6)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="bracket")
+    order = service.get_current_sort_image()["image_ids"]
+
+    service.sort_action("challenger")
+    service.sort_action("challenger")
+    service.sort_action("champion")
+
+    with test_db.get_db() as connection:
+        connection.execute("DELETE FROM images WHERE id = ?", (order[1],))
+
+    restored_service = _bracket_service(tmp_path, monkeypatch)
+    restored_service.load_session_from_disk()
+    restored_state = restored_service.get_sort_session()
+    current = restored_service.get_current_sort_image()
+
+    assert restored_state["mode"] == "bracket"
+    assert restored_state["image_ids"] == [
+        order[0], order[2], order[3], order[4], order[5]
+    ]
+    assert restored_state["champion_index"] == 0
+    assert restored_state["current_index"] == 1
+    assert restored_state["history"] == []
+    assert restored_state["redo_stack"] == []
+    assert current["champion"]["image"]["id"] == order[0]
+    assert current["challenger"]["image"]["id"] == order[2]
+    restart_records = [
+        record for record in caplog.records
+        if record.getMessage() == "Restarting invalid persisted bracket session"
+    ]
+    assert len(restart_records) == 1
+    assert restart_records[0].reason == "disconnected_action_chain"
+
+
+def test_bracket_restart_restarts_explicitly_when_saved_champion_disappears(
+    test_db, tmp_path, monkeypatch, caplog
+):
+    _make_bracket_images(test_db, tmp_path, 4)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="bracket")
+    order = service.get_current_sort_image()["image_ids"]
+
+    service.sort_action("challenger")
+    with test_db.get_db() as connection:
+        connection.execute("DELETE FROM images WHERE id = ?", (order[1],))
+
+    restored_service = _bracket_service(tmp_path, monkeypatch)
+    restored_service.load_session_from_disk()
+    restored_state = restored_service.get_sort_session()
+    current = restored_service.get_current_sort_image()
+
+    assert restored_state["mode"] == "bracket"
+    assert restored_state["image_ids"] == [order[0], order[2], order[3]]
+    assert restored_state["champion_index"] == 0
+    assert restored_state["current_index"] == 1
+    assert restored_state["history"] == []
+    assert restored_state["redo_stack"] == []
+    assert current["champion"]["image"]["id"] == order[0]
+    assert current["challenger"]["image"]["id"] == order[2]
+    restart_records = [
+        record for record in caplog.records
+        if record.getMessage() == "Restarting invalid persisted bracket session"
+    ]
+    assert len(restart_records) == 1
+    assert restart_records[0].reason == "missing_champion_or_invalid_cursor"
+
+
 def test_bracket_rejects_invalid_action(test_db, tmp_path, monkeypatch):
     from fastapi import HTTPException
 
@@ -3555,6 +3782,41 @@ def test_cull_redo_reapplies_decision(test_db, tmp_path, monkeypatch):
     assert cur["index"] == 1
     assert cur["image"]["image"]["id"] == order[1]
     assert cur["kept"] == 1
+
+
+def test_cull_restart_preserves_mode_decisions_and_redo(test_db, tmp_path, monkeypatch):
+    _make_bracket_images(test_db, tmp_path, 3)
+    service = _bracket_service(tmp_path, monkeypatch)
+    service.start_sort_session(mode="cull")
+    order = service.get_current_sort_image()["image_ids"]
+
+    service.sort_action("keep")
+    service.sort_action("reject")
+    service.sort_action("undo")
+
+    restored_service = _bracket_service(tmp_path, monkeypatch)
+    restored_service.load_session_from_disk()
+    restored_state = restored_service.get_sort_session()
+    current = restored_service.get_current_sort_image()
+
+    assert restored_state["mode"] == "cull"
+    assert restored_state["current_index"] == 1
+    assert len(restored_state["history"]) == 1
+    assert len(restored_state["redo_stack"]) == 1
+    assert current["mode"] == "cull"
+    assert current["image"]["image"]["id"] == order[1]
+    assert current["decisions"] == {str(order[0]): "keep"}
+    assert current["kept"] == 1
+    assert current["rejected"] == 0
+    assert current["redo_available"] is True
+
+    restored_service.sort_action("redo")
+    after_redo = restored_service.get_current_sort_image()
+    assert after_redo["image"]["image"]["id"] == order[2]
+    assert after_redo["decisions"] == {
+        str(order[0]): "keep",
+        str(order[1]): "reject",
+    }
 
 
 def test_cull_rejects_invalid_action(test_db, tmp_path, monkeypatch):

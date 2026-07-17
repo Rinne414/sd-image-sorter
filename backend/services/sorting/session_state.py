@@ -9,7 +9,7 @@ module reaches them via ``self``.
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence, TypedDict
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -18,6 +18,7 @@ import database as db
 from services.sorting_models import (
     FOLDER_KEY_MAX_LENGTH,
     FolderConfig,
+    SORT_MODE_BRACKET,
     SORT_MODE_DEFAULT,
     VALID_SORT_MODES,
 )
@@ -31,6 +32,124 @@ from utils.path_validation import normalize_user_path, validate_folder_path
 # handlers / caplog filters to "services.sorting_service" (heartbeat pins),
 # and log routing/output must stay byte-identical after the package split.
 logger = logging.getLogger("services.sorting_service")
+
+_PERSISTED_BRACKET_ACTIONS = frozenset({"champion", "challenger", "skip"})
+
+
+class _RestoredBracketAction(TypedDict):
+    action: str
+    mode: str
+    prev_champion_index: int
+    prev_challenger_index: int
+
+
+def _parse_persisted_index(value: object, item_count: int) -> Optional[int]:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        index = value
+    elif isinstance(value, str):
+        try:
+            index = int(value)
+        except ValueError:
+            return None
+    else:
+        return None
+    if index < 0 or index >= item_count:
+        return None
+    return index
+
+
+def _build_index_rebase(
+    original_image_ids: Sequence[int],
+    valid_image_ids: Sequence[int],
+) -> Dict[int, int]:
+    valid_index_by_id = {
+        image_id: index for index, image_id in enumerate(valid_image_ids)
+    }
+    return {
+        original_index: valid_index_by_id[image_id]
+        for original_index, image_id in enumerate(original_image_ids)
+        if image_id in valid_index_by_id
+    }
+
+
+def _rebase_bracket_actions(
+    actions: object,
+    original_image_ids: Sequence[int],
+    index_rebase: Mapping[int, int],
+) -> Optional[List[_RestoredBracketAction]]:
+    if not isinstance(actions, list):
+        return None
+
+    rebased: List[_RestoredBracketAction] = []
+    for raw_action in actions:
+        if not isinstance(raw_action, dict):
+            return None
+        action = raw_action.get("action")
+        if not isinstance(action, str) or action not in _PERSISTED_BRACKET_ACTIONS:
+            return None
+        previous_champion = _parse_persisted_index(
+            raw_action.get("prev_champion_index"),
+            len(original_image_ids),
+        )
+        previous_challenger = _parse_persisted_index(
+            raw_action.get("prev_challenger_index"),
+            len(original_image_ids),
+        )
+        if previous_champion is None or previous_challenger is None:
+            return None
+        if previous_champion >= previous_challenger:
+            return None
+        rebased_champion = index_rebase.get(previous_champion)
+        rebased_challenger = index_rebase.get(previous_challenger)
+        if rebased_champion is None or rebased_challenger is None:
+            continue
+        rebased.append({
+            "action": action,
+            "mode": SORT_MODE_BRACKET,
+            "prev_champion_index": rebased_champion,
+            "prev_challenger_index": rebased_challenger,
+        })
+    return rebased
+
+
+def _bracket_action_chain_is_continuous(
+    history: Sequence[_RestoredBracketAction],
+    redo_stack: Sequence[_RestoredBracketAction],
+    restored_champion_index: int,
+    restored_challenger_index: int,
+) -> bool:
+    champion_index = 0
+    challenger_index = 1
+
+    for entry in history:
+        if (
+            entry["prev_champion_index"] != champion_index
+            or entry["prev_challenger_index"] != challenger_index
+        ):
+            return False
+        if entry["action"] == "challenger":
+            champion_index = challenger_index
+        challenger_index += 1
+
+    if (
+        champion_index != restored_champion_index
+        or challenger_index != restored_challenger_index
+    ):
+        return False
+
+    for entry in reversed(redo_stack):
+        if (
+            entry["prev_champion_index"] != champion_index
+            or entry["prev_challenger_index"] != challenger_index
+        ):
+            return False
+        if entry["action"] == "challenger":
+            champion_index = challenger_index
+        challenger_index += 1
+
+    return True
 
 
 class SessionStateMixin:
@@ -209,14 +328,32 @@ class SessionStateMixin:
                     if not data.get('active'):
                         return
 
+                    requested_mode = data.get('mode', SORT_MODE_DEFAULT)
+                    restored_mode = (
+                        requested_mode
+                        if requested_mode in VALID_SORT_MODES
+                        else SORT_MODE_DEFAULT
+                    )
+
                     # Batch validate image IDs in a single query (N+1 fix)
                     image_ids = data.get('image_ids', [])
                     if image_ids:
                         with db.get_db() as conn:
                             cursor = conn.cursor()
                             placeholders = ','.join(['?' for _ in image_ids])
-                            cursor.execute(f"SELECT id FROM images WHERE id IN ({placeholders})", image_ids)
-                            valid_set = {row[0] for row in cursor.fetchall()}
+                            cursor.execute(
+                                f"SELECT id, is_readable FROM images WHERE id IN ({placeholders})",
+                                image_ids,
+                            )
+                            rows = cursor.fetchall()
+                            valid_set = {
+                                row[0]
+                                for row in rows
+                                if (
+                                    restored_mode != SORT_MODE_BRACKET
+                                    or row[1] == 1
+                                )
+                            }
                         valid_ids = [iid for iid in image_ids if iid in valid_set]
                     else:
                         valid_ids = []
@@ -235,24 +372,97 @@ class SessionStateMixin:
                         original_index = 0
                     original_index = max(0, min(original_index, len(image_ids)))
 
-                    original_positions = {image_id: index for index, image_id in enumerate(image_ids)}
-                    restored_history = self._filter_sort_actions(data.get('history', []), valid_set)
-                    restored_redo_stack = self._filter_sort_actions(data.get('redo_stack', []), valid_set)
-                    history_image_ids = {entry.get('image_id') for entry in restored_history}
-                    restored_redo_stack = [
-                        entry for entry in restored_redo_stack
-                        if entry.get('image_id') not in history_image_ids
-                    ]
                     restored_index = sum(1 for iid in image_ids[:original_index] if iid in valid_set)
-                    restored_history = [
-                        entry for entry in restored_history
-                        if original_positions.get(entry.get('image_id'), len(image_ids)) < original_index
-                    ]
-                    restored_redo_stack = [
-                        entry for entry in restored_redo_stack
-                        if original_positions.get(entry.get('image_id'), -1) >= original_index
-                    ]
                     restored_index = min(len(valid_ids), restored_index)
+                    restored_champion_index = 0
+
+                    if restored_mode == SORT_MODE_BRACKET:
+                        index_rebase = _build_index_rebase(image_ids, valid_ids)
+                        original_champion_index = _parse_persisted_index(
+                            data.get('champion_index'),
+                            len(image_ids),
+                        )
+                        rebased_champion_index = (
+                            index_rebase.get(original_champion_index)
+                            if original_champion_index is not None
+                            else None
+                        )
+                        restart_reason: Optional[str] = None
+                        if (
+                            rebased_champion_index is None
+                            or restored_index <= rebased_champion_index
+                        ):
+                            restart_reason = "missing_champion_or_invalid_cursor"
+                        else:
+                            rebased_history = _rebase_bracket_actions(
+                                data.get('history', []),
+                                image_ids,
+                                index_rebase,
+                            )
+                            rebased_redo_stack = _rebase_bracket_actions(
+                                data.get('redo_stack', []),
+                                image_ids,
+                                index_rebase,
+                            )
+                            if (
+                                rebased_history is None
+                                or rebased_redo_stack is None
+                                or not _bracket_action_chain_is_continuous(
+                                    rebased_history,
+                                    rebased_redo_stack,
+                                    rebased_champion_index,
+                                    restored_index,
+                                )
+                            ):
+                                restart_reason = "disconnected_action_chain"
+                            else:
+                                restored_champion_index = rebased_champion_index
+                                restored_history = rebased_history
+                                restored_redo_stack = rebased_redo_stack
+
+                        if restart_reason is not None:
+                            logger.warning(
+                                "Restarting invalid persisted bracket session",
+                                extra={
+                                    "session_path": str(session_file),
+                                    "reason": restart_reason,
+                                },
+                            )
+                            restored_champion_index = 0
+                            restored_index = min(len(valid_ids), 1)
+                            restored_history = []
+                            restored_redo_stack = []
+                    else:
+                        original_positions = {
+                            image_id: index for index, image_id in enumerate(image_ids)
+                        }
+                        restored_history = self._filter_sort_actions(
+                            data.get('history', []),
+                            valid_set,
+                        )
+                        restored_redo_stack = self._filter_sort_actions(
+                            data.get('redo_stack', []),
+                            valid_set,
+                        )
+                        history_image_ids = {
+                            entry.get('image_id') for entry in restored_history
+                        }
+                        restored_redo_stack = [
+                            entry for entry in restored_redo_stack
+                            if entry.get('image_id') not in history_image_ids
+                        ]
+                        restored_history = [
+                            entry for entry in restored_history
+                            if original_positions.get(
+                                entry.get('image_id'), len(image_ids)
+                            ) < original_index
+                        ]
+                        restored_redo_stack = [
+                            entry for entry in restored_redo_stack
+                            if original_positions.get(
+                                entry.get('image_id'), -1
+                            ) >= original_index
+                        ]
                     operation_mode = self._validate_file_operation(data.get('operation_mode', 'move'))
 
                     # Validate all folder paths loaded from JSON
@@ -271,8 +481,10 @@ class SessionStateMixin:
                     with self._sort_session_lock:
                         self._sort_session = self._coerce_sort_session_state({
                             'active': True,
+                            'mode': restored_mode,
                             'image_ids': valid_ids,
                             'current_index': restored_index,
+                            'champion_index': restored_champion_index,
                             'folders': validated_folders,
                             # v3.3.1: restore per-slot collection mapping.
                             # Missing in legacy v0 files -> coerces to {}.
