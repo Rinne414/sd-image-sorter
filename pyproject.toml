@@ -323,6 +323,19 @@ select = ["F", "E9"]
 # dataset_translate_cache instead; the facade body calls a fraction of the
 # re-exported surface.
 "backend/services/dataset_translate_service.py" = ["F401"]
+# services/update_service.py is the compatibility facade for the
+# update_service_channel / update_service_delivery mixin split (2026-07).
+# Same rationale as tagger.py above: the verbatim header import block plus
+# the channel/delivery re-imports exist so every historical module attribute
+# — the ~30 test-imported privates (_MAX_UPDATE_ARCHIVE_*, _version_*, the
+# SSRF host-allowlist block, the urllib/sys aliases) and the string-path
+# patched globals (UPDATE_API_URL, CONFIG_DIR, UPDATE_DIR, PACKAGE_ROOT,
+# urllib.request.urlopen) — keeps resolving at services.update_service.<name>
+# for the suites that patch and import them there
+# (tests/test_update_service_pins.py, tests/test_update_service.py,
+# tests/test_update_worker.py, tests/test_update_cli.py,
+# tests/test_update_archive_validation.py).
+"backend/services/update_service.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.
