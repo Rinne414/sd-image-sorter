@@ -13,7 +13,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-import torch
+
+torch = pytest.importorskip("torch", reason="sam3_refiner gating tests need torch; CI installs core deps only")
 from PIL import Image
 
 import sam3_refiner

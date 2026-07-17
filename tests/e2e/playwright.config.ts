@@ -182,6 +182,7 @@ writeStubPackageMetadata('torch', '2.13.0+cu126')
 writeStubPackageMetadata('transformers', '5.6.2')
 writeStubPackageMetadata('timm', '1.0.26')
 writeStubPackageMetadata('safetensors', '0.7.0')
+writeStubPackageMetadata('opencv-python', '4.11.0.86')
 
 // The onboarding tour's auto-start was retired (QA P3-4) so its completion
 // flag no longer needs seeding here — only the entry overlay must be skipped.
