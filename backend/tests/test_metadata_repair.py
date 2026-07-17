@@ -6,12 +6,17 @@ raw-replay / file-fallback / missing-source triage.
 """
 from __future__ import annotations
 
+import asyncio
 import gzip
 import json
+from collections.abc import Generator
 
 import pytest
+from fastapi import BackgroundTasks, HTTPException
 
+from routers.metadata_repair import ReparseRequest, get_reparse_status, start_reparse
 from services import metadata_repair_service as mrs
+from services.bulk_job_service import BulkJobHandle, BulkJobService, set_bulk_job_service
 
 
 # A minimal-but-real ComfyUI graph the current parser CAN crack, stored the
@@ -39,11 +44,134 @@ def _get_row(db, image_id: int) -> dict:
     return dict(row)
 
 
+def _release_active_repair_slot() -> None:
+    job_id = mrs.get_active_job_id()
+    if job_id is not None:
+        assert mrs.release_active_job_id(job_id) is True
+
+
 @pytest.fixture
 def repair_env(test_db):
-    mrs.set_active_job_id(None)
+    _release_active_repair_slot()
     yield test_db
-    mrs.set_active_job_id(None)
+    _release_active_repair_slot()
+
+
+@pytest.fixture
+def repair_jobs(test_db) -> Generator[BulkJobService, None, None]:
+    service = BulkJobService()
+    set_bulk_job_service(service)
+    _release_active_repair_slot()
+    try:
+        yield service
+    finally:
+        _release_active_repair_slot()
+        set_bulk_job_service(None)
+
+
+def _start_reparse(background_tasks: BackgroundTasks) -> dict[str, str]:
+    return start_reparse(
+        ReparseRequest(scope="missing_prompt"),
+        background_tasks,
+    )
+
+
+def _run_background_tasks(background_tasks: BackgroundTasks) -> None:
+    asyncio.run(background_tasks())
+
+
+class TestRepairJobLifecycle:
+    def test_rejected_second_start_leaves_no_nonterminal_job(
+        self,
+        repair_jobs: BulkJobService,
+    ) -> None:
+        first = _start_reparse(BackgroundTasks())
+
+        with pytest.raises(HTTPException) as error:
+            _start_reparse(BackgroundTasks())
+
+        assert error.value.status_code == 409
+        jobs = repair_jobs.list_jobs()
+        assert len(jobs) == 2
+        rejected = next(job for job in jobs if job["id"] != first["job_id"])
+        assert rejected["status"] == "cancelled"
+        assert rejected["finished_at"] is not None
+        assert {
+            job["id"] for job in repair_jobs.list_jobs(active_only=True)
+        } == {first["job_id"]}
+
+    def test_cancelled_queued_job_can_restart_without_stale_release(
+        self,
+        repair_jobs: BulkJobService,
+    ) -> None:
+        first_tasks = BackgroundTasks()
+        first = _start_reparse(first_tasks)
+        cancelled = repair_jobs.cancel_job(first["job_id"])
+        assert cancelled is not None and cancelled["status"] == "cancelled"
+
+        second_tasks = BackgroundTasks()
+        second = _start_reparse(second_tasks)
+        assert mrs.get_active_job_id() == second["job_id"]
+
+        _run_background_tasks(first_tasks)
+        assert mrs.get_active_job_id() == second["job_id"]
+
+        repair_jobs.cancel_job(second["job_id"])
+        _run_background_tasks(second_tasks)
+        assert mrs.get_active_job_id() is None
+
+    def test_reparse_status_suppresses_terminal_owner(
+        self,
+        repair_jobs: BulkJobService,
+    ) -> None:
+        started = _start_reparse(BackgroundTasks())
+        repair_jobs.cancel_job(started["job_id"])
+
+        status = get_reparse_status()
+
+        assert status["active"] is False
+        assert status["job_id"] is None
+        assert status["job"]["status"] == "cancelled"
+
+    def test_completed_job_releases_current_owner(
+        self,
+        repair_jobs: BulkJobService,
+    ) -> None:
+        background_tasks = BackgroundTasks()
+        started = _start_reparse(background_tasks)
+
+        _run_background_tasks(background_tasks)
+
+        assert repair_jobs.get_job(started["job_id"])["status"] == "done"
+        assert mrs.get_active_job_id() is None
+
+    def test_failed_job_releases_current_owner(
+        self,
+        repair_jobs: BulkJobService,
+        monkeypatch,
+    ) -> None:
+        def fail_reparse_job(handle: BulkJobHandle) -> None:
+            raise RuntimeError(f"expected lifecycle failure: {handle.job_id}")
+
+        monkeypatch.setattr(mrs, "run_reparse_job", fail_reparse_job)
+        background_tasks = BackgroundTasks()
+        started = _start_reparse(background_tasks)
+
+        _run_background_tasks(background_tasks)
+
+        assert repair_jobs.get_job(started["job_id"])["status"] == "error"
+        assert mrs.get_active_job_id() is None
+
+    def test_start_reclaims_missing_owner(
+        self,
+        repair_jobs: BulkJobService,
+    ) -> None:
+        assert mrs.claim_active_job_id("missing-job") is True
+
+        started = _start_reparse(BackgroundTasks())
+
+        assert mrs.get_active_job_id() == started["job_id"]
+        assert repair_jobs.get_job(started["job_id"])["status"] == "queued"
 
 
 class TestMigrationAndColumn:
@@ -219,18 +347,17 @@ class TestRepairService:
         assert unreadable_id not in ids
         assert len(ids) == 1
 
-    def test_active_job_slot_single_flight(self, repair_env):
-        from services.bulk_job_service import JOB_KIND_REPARSE_METADATA, get_bulk_job_service
+    def test_active_job_slot_single_flight(self, repair_jobs: BulkJobService):
+        from services.bulk_job_service import JOB_KIND_REPARSE_METADATA
 
-        service = get_bulk_job_service()
+        service = repair_jobs
         first = service.create_job(JOB_KIND_REPARSE_METADATA)
         second = service.create_job(JOB_KIND_REPARSE_METADATA)
-        assert mrs.set_active_job_id(first) is True
+        assert mrs.claim_active_job_id(first) is True
         # first is still queued -> the slot is taken.
-        assert mrs.set_active_job_id(second) is False
+        assert mrs.claim_active_job_id(second) is False
         service.cancel_job(first)
-        service.run_job(first, lambda handle: None)  # settles to cancelled
-        assert mrs.set_active_job_id(second) is True
+        assert mrs.claim_active_job_id(second) is True
 
 
 class TestScanCaptureChain:

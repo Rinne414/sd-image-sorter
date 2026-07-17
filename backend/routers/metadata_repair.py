@@ -9,7 +9,12 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
 from services import metadata_repair_service
-from services.bulk_job_service import JOB_KIND_REPARSE_METADATA, get_bulk_job_service
+from services.bulk_job_service import (
+    BulkJobHandle,
+    JOB_KIND_REPARSE_METADATA,
+    TERMINAL_STATUSES,
+    get_bulk_job_service,
+)
 
 router = APIRouter(prefix="/api", tags=["metadata-repair"])
 
@@ -53,9 +58,24 @@ def start_reparse(request: ReparseRequest, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=422, detail="Unsupported scope")
     service = get_bulk_job_service()
     job_id = service.create_job(JOB_KIND_REPARSE_METADATA, message="Queued")
-    if not metadata_repair_service.set_active_job_id(job_id):
+    if not metadata_repair_service.claim_active_job_id(job_id):
+        rejected_job = service.cancel_job(job_id)
+        if rejected_job is None:
+            raise RuntimeError(
+                f"Metadata re-parse job disappeared before rejection: job_id={job_id}"
+            )
         raise HTTPException(status_code=409, detail="A metadata re-parse is already running")
-    background_tasks.add_task(service.run_job, job_id, metadata_repair_service.run_reparse_job)
+
+    def _worker(handle: BulkJobHandle) -> None:
+        metadata_repair_service.run_reparse_job(handle)
+
+    def _run_job() -> None:
+        try:
+            service.run_job(job_id, _worker)
+        finally:
+            metadata_repair_service.release_active_job_id(job_id)
+
+    background_tasks.add_task(_run_job)
     return {"job_id": job_id}
 
 
@@ -67,5 +87,5 @@ def get_reparse_status():
     """Return the running job's id so a reopened UI can re-attach."""
     job_id = metadata_repair_service.get_active_job_id()
     job = get_bulk_job_service().get_job(job_id) if job_id else None
-    active = bool(job and job.get("status") in ("queued", "running"))
-    return {"active": active, "job_id": job_id, "job": job}
+    active = bool(job is not None and job["status"] not in TERMINAL_STATUSES)
+    return {"active": active, "job_id": job_id if active else None, "job": job}

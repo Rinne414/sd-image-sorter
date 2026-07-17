@@ -39,20 +39,27 @@ _active_lock = threading.Lock()
 _active_job_id: Optional[str] = None
 
 
-def set_active_job_id(job_id: Optional[str]) -> bool:
-    """Claim the single re-parse slot (or reset it with None).
-
-    Returns False when another re-parse job is still queued/running.
-    """
+def claim_active_job_id(job_id: str) -> bool:
+    """Claim the re-parse slot unless its registry owner is inactive."""
     from services.bulk_job_service import TERMINAL_STATUSES, get_bulk_job_service
 
     global _active_job_id
     with _active_lock:
-        if job_id and _active_job_id:
+        if _active_job_id is not None:
             current = get_bulk_job_service().get_job(_active_job_id)
-            if current and current.get("status") not in TERMINAL_STATUSES:
+            if current is not None and current["status"] not in TERMINAL_STATUSES:
                 return False
         _active_job_id = job_id
+        return True
+
+
+def release_active_job_id(job_id: str) -> bool:
+    """Release the re-parse slot only when ``job_id`` still owns it."""
+    global _active_job_id
+    with _active_lock:
+        if _active_job_id != job_id:
+            return False
+        _active_job_id = None
         return True
 
 
