@@ -305,6 +305,24 @@ select = ["F", "E9"]
 # this module object (tests/test_tags_bulk_pins.py,
 # tests/test_routers/test_tags_bulk.py).
 "backend/routers/tags_bulk.py" = ["F401"]
+# services/dataset_translate_service.py is the compatibility facade for the
+# dataset_translate_models / dataset_translate_cache / dataset_translate_parsing
+# / dataset_translate_providers sibling-module split (2026-07). Same rationale
+# as export_template_engine.py above: its import block exists so every
+# historical ``services.dataset_translate_service.<name>`` keeps resolving BY
+# REFERENCE — ``httpx`` is the module singleton the MockTransport harness
+# patches through this namespace (``svc.httpx.AsyncClient``),
+# _TRANSLATION_CACHE_LOCK / _translation_cache_path / _looks_like_tag_list /
+# _translation_lang_code / _translation_source_lang are read and called
+# through this module object by the pin suite — for the suites that patch and
+# read them there (tests/test_dataset_translate_pins.py,
+# tests/test_dataset_translate.py, routers/dataset.py's re-export block). The
+# three cache-STATE seams (_TRANSLATION_CACHE, _TRANSLATION_CACHE_MAX_ITEMS,
+# DEFAULT_CACHE_DIR) are deliberately NOT imported here — the module-class
+# swap at the bottom of the facade live-forwards them to
+# dataset_translate_cache instead; the facade body calls a fraction of the
+# re-exported surface.
+"backend/services/dataset_translate_service.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.
