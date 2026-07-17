@@ -2038,6 +2038,65 @@ class TestExportTagsBatch:
         assert "old_tag" not in text
         assert "standing" not in text
 
+    def test_export_combined_runs_real_service_off_event_loop(
+        self,
+        test_client,
+        test_db,
+        isolated_tagging_service,
+        monkeypatch,
+        tmp_path: Path,
+    ):
+        """The real selection-token export must execute in FastAPI's worker pool."""
+        import asyncio
+
+        import database as db
+        from services.tag_export import sidecars
+
+        image_id = db.add_image(
+            path="/off-loop/combined.png",
+            filename="combined.png",
+            prompt="off loop export contract",
+            metadata_json="{}",
+        )
+        monkeypatch.setattr(sidecars, "_get_combined_export_dir", lambda: tmp_path)
+        original_export = isolated_tagging_service.export_tags_combined
+        observed: dict[str, bool] = {}
+
+        def observed_export(request):
+            try:
+                asyncio.get_running_loop()
+                observed["ran_on_event_loop"] = True
+            except RuntimeError:
+                observed["ran_on_event_loop"] = False
+            return original_export(request)
+
+        monkeypatch.setattr(
+            isolated_tagging_service,
+            "export_tags_combined",
+            observed_export,
+        )
+
+        token_response = test_client.post(
+            "/api/images/selection-token",
+            json={"image_ids": [image_id]},
+        )
+        assert token_response.status_code == 200, token_response.text
+
+        response = test_client.post(
+            "/api/tags/export-combined",
+            json={
+                "selection_token": token_response.json()["selection_token"],
+                "content_mode": "prompt",
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["exported"] == 1
+        assert observed == {"ran_on_event_loop": False}
+
+        download = test_client.get(response.json()["download_url"])
+        assert download.status_code == 200, download.text
+        assert download.text == "off loop export contract"
+
 
 class TestEdgeCases:
     """Edge case tests for tags endpoints."""

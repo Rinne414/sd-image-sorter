@@ -595,7 +595,7 @@ async def reset_export_tags_batch_progress(
 
 
 @router.post("/tags/export-combined")
-async def export_tags_combined(
+def export_tags_combined(
     request: CombinedTagExportRequest,
     service: TaggingService = Depends(get_tagging_service),
 ):
