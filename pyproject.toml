@@ -259,6 +259,21 @@ select = ["F", "E9"]
 # (tests/test_toriigate_pins.py, tests/test_toriigate_tagger.py,
 # tests/test_migration_019_sanitize_nl_captions.py, tests/test_model_service.py).
 "backend/toriigate_tagger.py" = ["F401"]
+# oppai_oracle_tagger.py is the compatibility FILE facade for the
+# oppai_oracle_loader / oppai_oracle_inference sibling-module split (2026-07).
+# Same rationale as tagger.py / toriigate_tagger.py above: the verbatim header
+# import block stays (``csv`` / ``gc`` / ``Path`` / ``config`` /
+# ``exclusive_ai_runtime`` / ``looks_like_cuda_oom`` / ``endpoint_label`` /
+# ``get_hf_endpoint_order`` are now called only from the moved loader/inference
+# bodies) so every historical module attribute keeps resolving at
+# oppai_oracle_tagger.<name> — the ort/hf_hub lazy-import family, the
+# preprocess-executor pair, the free letterbox/preprocess functions, the
+# PAD/UNK/RATING constants and the singleton family stay DEFINED here and the
+# moved methods resolve them back through _svc() at call time — for the suites
+# that patch and read this module object (tests/test_oppai_pins.py,
+# tests/test_oppai_oracle_tagger.py, tests/test_oppai_oracle_alias.py,
+# tests/test_model_service_pins.py).
+"backend/oppai_oracle_tagger.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.
