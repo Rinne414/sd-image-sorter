@@ -7052,6 +7052,14 @@
     <script src="/static/js/lang/zh-CN.js"></script>
     <script src="/static/js/guide-translations.js"></script>
     <script src="/static/js/i18n.js"></script>
+    <!-- guide.js decomposition (contextual-guide family; smart-tag precedent).
+         Classic static tags sharing one global lexical scope: copy (data
+         consts) -> engine (the window.Guide singleton object) -> boot (LAST:
+         readyState dual-branch init + the sole window.Guide publish), then
+         the comment-only servable guide.js shim. Keep this order. -->
+    <script src="/static/js/guide/copy.js"></script>
+    <script src="/static/js/guide/engine.js"></script>
+    <script src="/static/js/guide/boot.js"></script>
     <script src="/static/js/guide.js"></script>
     <script src="/static/js/stores/filter-store.js"></script>
     <script src="/static/js/stores/selection-store.js"></script>
