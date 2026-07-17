@@ -39,6 +39,7 @@ class TaggingService(
         self._worker_process: Optional[Any] = None
         self._worker_cancel_event: Optional[Any] = None
         self._active_run_id = 0
+        self._pending_run_id: Optional[int] = None
         # v3.3.2 Phase-1: background batch tag-export job. The underlying
         # export_tags_batch is monolithic, so this runs it off the request thread
         # to avoid freezing the browser; progress is coarse (running -> done),

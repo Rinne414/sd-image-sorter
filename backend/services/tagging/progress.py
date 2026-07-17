@@ -104,6 +104,9 @@ class ProgressMixin:
                 "done",
                 "cancelled",
             }:
+                if self._pending_run_id == self._active_run_id:
+                    self._active_run_id += 1
+                self._pending_run_id = None
                 self._progress = _build_tag_progress_state(
                     "idle", message="Reset by user"
                 )
@@ -152,6 +155,7 @@ class ProgressMixin:
                     message=f"Tagging cancelled at {current}/{total}.",
                     run_id=run_id,
                 )
+                self._pending_run_id = None
                 self._active_run_id += 1
                 self._cancel_requested = False
                 return {"status": "cancelled", "message": "Tagging cancelled"}
@@ -265,6 +269,8 @@ class ProgressMixin:
     ) -> None:
         """Clear worker references and close IPC handles when possible."""
         with self._lock:
+            if run_id is None or self._pending_run_id == run_id:
+                self._pending_run_id = None
             if run_id is None or run_id == self._active_run_id:
                 self._worker_process = None
                 self._worker_cancel_event = None

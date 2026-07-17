@@ -635,6 +635,14 @@ class _DeadWorker:
         return False
 
 
+class _FailingBackgroundTasks:
+    def add_task(
+        self, func: object, *args: object, **kwargs: object
+    ) -> None:
+        del func, args, kwargs
+        raise RuntimeError("background scheduler unavailable")
+
+
 class _StoppingWorker:
     def __init__(self):
         self._alive = True
@@ -889,6 +897,29 @@ def test_start_tagging_still_rejects_when_worker_is_actually_alive():
         raise AssertionError("Expected start_tagging() to reject a live worker")
 
 
+def test_background_scheduling_failure_releases_pending_claim() -> None:
+    service = TaggingService()
+    service.set_tagger_getter(lambda **kwargs: object())
+    request = TagRequest(model_name="wd-swinv2-tagger-v3", use_gpu=False)
+
+    with pytest.raises(RuntimeError, match="background scheduler unavailable"):
+        service.start_tagging(request, _FailingBackgroundTasks())
+
+    failed_progress = service.get_progress()
+    assert failed_progress["status"] == "error"
+    assert failed_progress["message"] == (
+        "Failed to schedule tagging background task: "
+        "background scheduler unavailable"
+    )
+    assert service._pending_run_id is None
+
+    next_tasks = BackgroundTasks()
+    result = service.start_tagging(request, next_tasks)
+    assert result["status"] == "started"
+    assert service._pending_run_id == service._active_run_id == 2
+    assert len(next_tasks.tasks) == 1
+
+
 def test_cancel_tagging_marks_run_cancelled_once_worker_stops():
     service = TaggingService()
     service._progress = _build_tag_progress_state(
@@ -951,6 +982,56 @@ def test_cancel_tagging_invalidates_pending_run_when_worker_not_yet_spawned():
     )
 
 
+def test_cancelled_accepted_pending_task_cannot_revive() -> None:
+    service = TaggingService()
+    service.set_tagger_getter(lambda **kwargs: object())
+    background_tasks = BackgroundTasks()
+    request = TagRequest(model_name="wd-swinv2-tagger-v3", use_gpu=False)
+
+    service.start_tagging(request, background_tasks)
+    accepted_run_id = service._active_run_id
+    pending_task = background_tasks.tasks[0]
+    result = service.cancel_tagging()
+
+    with patch.object(
+        service,
+        "_build_runtime_plan",
+        side_effect=AssertionError("cancelled pending task reached runtime planning"),
+    ) as build_runtime_plan:
+        pending_task.func(*pending_task.args, **pending_task.kwargs)
+
+    build_runtime_plan.assert_not_called()
+    assert result["status"] == "cancelled"
+    assert service._active_run_id > accepted_run_id
+    assert service._pending_run_id is None
+    assert service.get_progress()["status"] == "cancelled"
+
+
+def test_reset_accepted_pending_task_invalidates_it_before_idle() -> None:
+    service = TaggingService()
+    service.set_tagger_getter(lambda **kwargs: object())
+    background_tasks = BackgroundTasks()
+    request = TagRequest(model_name="wd-swinv2-tagger-v3", use_gpu=False)
+
+    service.start_tagging(request, background_tasks)
+    accepted_run_id = service._active_run_id
+    pending_task = background_tasks.tasks[0]
+    result = service.reset_progress()
+
+    with patch.object(
+        service,
+        "_build_runtime_plan",
+        side_effect=AssertionError("reset pending task reached runtime planning"),
+    ) as build_runtime_plan:
+        pending_task.func(*pending_task.args, **pending_task.kwargs)
+
+    build_runtime_plan.assert_not_called()
+    assert result["status"] == "reset"
+    assert service._active_run_id > accepted_run_id
+    assert service._pending_run_id is None
+    assert service.get_progress()["status"] == "idle"
+
+
 def test_run_tagging_job_aborts_when_run_id_was_invalidated_by_pre_spawn_cancel():
     """Companion regression: when _run_tagging_job finally executes after the
     pre-spawn cancellation, it must take the should_abort path because run_id
@@ -963,6 +1044,7 @@ def test_run_tagging_job_aborts_when_run_id_was_invalidated_by_pre_spawn_cancel(
 
     pending_run_id = 5
     service._active_run_id = pending_run_id + 1
+    service._pending_run_id = pending_run_id
     service._progress = _build_tag_progress_state(
         "cancelled",
         current=0,
@@ -989,6 +1071,7 @@ def test_run_tagging_job_aborts_when_run_id_was_invalidated_by_pre_spawn_cancel(
     )
     assert progress["run_id"] == pending_run_id
     assert service._worker_process is None
+    assert service._pending_run_id is None
 
 
 @pytest.mark.parametrize(
@@ -1007,6 +1090,7 @@ def test_worker_setup_failure_publishes_stage_specific_terminal_error(
     run_id = 11
     failure_message = f"setup boom: {failure_point}"
     service = _build_running_setup_service(run_id)
+    service._pending_run_id = run_id
     progress_queue = _SetupProgressQueue(None, None)
     context = _FailingSetupContext(
         failure_point, failure_message, progress_queue
@@ -1049,12 +1133,14 @@ def test_worker_setup_failure_publishes_stage_specific_terminal_error(
     assert progress_queue.join_calls == expected_cleanup_calls
     assert service._worker_process is None
     assert service._worker_cancel_event is None
+    assert service._pending_run_id is None
 
 
 def test_worker_setup_cleanup_failures_preserve_original_terminal_error() -> None:
     run_id = 12
     setup_error = "process constructor unavailable"
     service = _build_running_setup_service(run_id)
+    service._pending_run_id = run_id
     progress_queue = _SetupProgressQueue(
         RuntimeError("queue close failed"),
         RuntimeError("queue join failed"),
@@ -1081,11 +1167,13 @@ def test_worker_setup_cleanup_failures_preserve_original_terminal_error() -> Non
     )
     assert progress_queue.close_calls == 1
     assert progress_queue.join_calls == 1
+    assert service._pending_run_id is None
 
 
 def test_cancel_waits_for_bound_worker_start_boundary() -> None:
     run_id = 13
     service = _build_running_setup_service(run_id)
+    service._pending_run_id = run_id
     progress_queue = _LifecycleQueue()
     cancel_event = threading.Event()
     start_entered = threading.Event()
@@ -1166,11 +1254,13 @@ def test_cancel_waits_for_bound_worker_start_boundary() -> None:
     assert service.get_progress()["status"] == "cancelled"
     assert progress_queue.closed is True
     assert progress_queue.joined is True
+    assert service._pending_run_id is None
 
 
 def test_process_start_failure_keeps_existing_error_and_cleanup_behavior() -> None:
     run_id = 14
     service = _build_running_setup_service(run_id)
+    service._pending_run_id = run_id
     progress_queue = _LifecycleQueue()
     context = _StartBoundaryContext(
         progress_queue,
@@ -1196,6 +1286,7 @@ def test_process_start_failure_keeps_existing_error_and_cleanup_behavior() -> No
     assert service._worker_cancel_event is None
     assert progress_queue.closed is True
     assert progress_queue.joined is True
+    assert service._pending_run_id is None
 
 
 def test_pre_cancelled_worker_never_constructs_or_loads_tagger(monkeypatch) -> None:

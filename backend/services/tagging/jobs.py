@@ -57,6 +57,8 @@ class JobsMixin:
 
         with self._lock:
             if run_id != self._active_run_id:
+                if self._pending_run_id == run_id:
+                    self._pending_run_id = None
                 return
 
         progress_queue = None
@@ -94,6 +96,7 @@ class JobsMixin:
                 ),
                 run_id=run_id,
             )
+            self._cleanup_worker_handles(run_id=run_id)
             if progress_queue is not None:
                 _close_setup_progress_queue(progress_queue, run_id)
             logger.error(
@@ -129,6 +132,8 @@ class JobsMixin:
                     self._worker_cancel_event = cancel_event
                     self._cancel_requested = False
                     worker_process.start()
+                    if self._pending_run_id == run_id:
+                        self._pending_run_id = None
 
             if should_abort:
                 return
@@ -264,6 +269,10 @@ class JobsMixin:
             raise HTTPException(status_code=500, detail="Tagger not initialized")
 
         with self._lock:
+            if self._pending_run_id == self._active_run_id:
+                raise HTTPException(
+                    status_code=409, detail="Tagging already in progress"
+                )
             if self._progress["status"] in {"running", "cancelling"}:
                 worker_alive = bool(
                     self._worker_process and self._worker_process.is_alive()
@@ -284,8 +293,36 @@ class JobsMixin:
 
             self._active_run_id += 1
             run_id = self._active_run_id
+            self._pending_run_id = run_id
             self._progress = _build_tag_progress_state(
                 "running", message="Preparing tagger...", run_id=run_id
             )
-        background_tasks.add_task(self._run_tagging_job, request, run_id)
+        try:
+            background_tasks.add_task(self._run_tagging_job, request, run_id)
+        except Exception as error:
+            error_detail = str(error).strip() or type(error).__name__
+            with self._lock:
+                if (
+                    run_id == self._active_run_id
+                    and self._pending_run_id == run_id
+                ):
+                    self._pending_run_id = None
+                    self._progress = _build_tag_progress_state(
+                        "error",
+                        message=(
+                            "Failed to schedule tagging background task: "
+                            f"{error_detail}"
+                        ),
+                        run_id=run_id,
+                    )
+            logger.error(
+                "Failed to schedule tagging background task.",
+                extra={
+                    "run_id": run_id,
+                    "error_type": type(error).__name__,
+                    "scheduling_error": error_detail,
+                },
+                exc_info=(type(error), error, error.__traceback__),
+            )
+            raise
         return {"status": "started", "message": "Tagging started in background"}

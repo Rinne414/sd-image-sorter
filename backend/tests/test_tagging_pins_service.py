@@ -383,6 +383,7 @@ def test_quirk_cleanup_preserves_cancel_flag_while_status_is_cancelling() -> Non
 def test_cleanup_worker_handles_skips_state_on_run_mismatch_but_closes_queue() -> None:
     service = TaggingService()
     service._active_run_id = 5
+    service._pending_run_id = 5
     worker = _DeadWorker()
     event = object()
     service._worker_process = worker
@@ -393,6 +394,7 @@ def test_cleanup_worker_handles_skips_state_on_run_mismatch_but_closes_queue() -
 
     assert service._worker_process is worker
     assert service._worker_cancel_event is event
+    assert service._pending_run_id == 5
     assert fake_queue.closed is True
 
 
@@ -464,23 +466,29 @@ def test_start_tagging_bumps_run_id_and_queues_exactly_one_task() -> None:
     assert progress["status"] == "running"
     assert progress["message"] == "Preparing tagger..."
     assert progress["run_id"] == service._active_run_id == 1
+    assert service._pending_run_id == 1
     assert len(background_tasks.tasks) == 1
 
 
-def test_quirk_second_start_with_no_live_worker_recovers_instead_of_409() -> None:
-    """QUIRK: 'running' progress with NO worker process is treated as stale —
-    a second start_tagging succeeds (warn + recover) and bumps the run id,
-    rather than returning the 409 reserved for a genuinely live worker."""
+def test_second_start_rejects_current_pending_run_without_invalidating_it() -> None:
     service = TaggingService()
     service.set_tagger_getter(lambda **kwargs: object())
     request = TagRequest(model_name="wd-swinv2-tagger-v3", use_gpu=False)
+    first_tasks = BackgroundTasks()
+    second_tasks = BackgroundTasks()
 
-    service.start_tagging(request, BackgroundTasks())
-    result = service.start_tagging(request, BackgroundTasks())
+    first_result = service.start_tagging(request, first_tasks)
+    with pytest.raises(HTTPException) as exc_info:
+        service.start_tagging(request, second_tasks)
 
-    assert result["status"] == "started"
-    assert service._active_run_id == 2
-    assert service.get_progress()["run_id"] == 2
+    assert first_result["status"] == "started"
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Tagging already in progress"
+    assert service._active_run_id == 1
+    assert service._pending_run_id == 1
+    assert service.get_progress()["run_id"] == 1
+    assert len(first_tasks.tasks) == 1
+    assert len(second_tasks.tasks) == 0
 
 
 # ===========================================================================

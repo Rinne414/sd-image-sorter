@@ -127,6 +127,38 @@ def test_gallery_self_busy_queues_instead_of_409(monkeypatch):
     assert out["pipeline_queued"] is True
 
 
+def test_second_gallery_start_queues_behind_accepted_pending_run(monkeypatch):
+    from fastapi import BackgroundTasks
+    from services.tagging_service import TagRequest, TaggingService
+
+    service = _make_service()
+    _idle_probes(monkeypatch)
+    legacy = TaggingService()
+    legacy.set_tagger_getter(lambda **kwargs: object())
+    first_tasks = BackgroundTasks()
+    second_tasks = BackgroundTasks()
+
+    first = service.start_gallery_tagging(
+        TagRequest(image_ids=[1]),
+        first_tasks,
+        legacy_service=legacy,
+    )
+    second = service.start_gallery_tagging(
+        TagRequest(image_ids=[2]),
+        second_tasks,
+        legacy_service=legacy,
+    )
+
+    assert first["status"] == "started"
+    assert second["status"] == "queued"
+    assert second["pipeline_queued"] is True
+    assert second["queue_position"] == 1
+    assert legacy._active_run_id == 1
+    assert legacy._pending_run_id == 1
+    assert len(first_tasks.tasks) == 1
+    assert len(second_tasks.tasks) == 0
+
+
 def test_gallery_validation_409_still_propagates(monkeypatch):
     """Non-busy 409s (e.g. hardware floors) must NOT be converted to queued."""
     from services.tagging_service import TagRequest
