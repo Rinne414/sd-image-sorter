@@ -27,8 +27,8 @@ invariants front and center:
     manifest shape).
 
 DORMANT BEHAVIOR PINNED AS-IS (see report §Dormant):
-  * ``_version_is_newer("3.5.0", "3.5.0-beta.1")`` is False: a final release
-    is NOT considered newer than its own pre-release because ``_version_key``
+  * ``_version_is_newer("3.5.0", "3.5.0-beta.1")`` is True: a final release
+    outranks its own pre-release (fixed semver precedence) because ``_version_key``
     yields a shorter tuple that sorts first. This is pinned, not fixed.
   * ``_safe_version_text`` does not strip a literal ``..`` (only path
     separators are collapsed); pinned AS-IS. Harmless because no separator
@@ -81,11 +81,14 @@ def test_normalize_version_strips_v_prefix_and_whitespace_and_none():
     assert us._normalize_version(None) == ""
 
 
-def test_version_key_tokenizes_numeric_and_prerelease_segments():
-    assert us._version_key("3.5.0") == (3, 5, 0)
-    assert us._version_key("3.5.0-beta.1") == (3, 5, 0, "beta", 1)
-    # A letter+digit run splits into separate tokens.
-    assert us._version_key("1a") == (1, "a")
+def test_version_key_orders_versions_semver_style():
+    # Ordering pins (the key's internal shape is deliberately not pinned):
+    # numeric core ordering, prerelease bumps, and type-safety for mixed
+    # numeric/alpha shapes that used to risk int-vs-str TypeError.
+    assert us._version_key("3.5.0") > us._version_key("3.4.9")
+    assert us._version_key("3.5.0-beta.2") > us._version_key("3.5.0-beta.1")
+    assert us._version_key("1a") == us._version_key("1A")
+    assert us._version_is_newer("3.5.0.1", "3.5.0-beta") is True
 
 
 def test_version_is_newer_true_for_patch_and_prerelease_bump():
@@ -94,15 +97,16 @@ def test_version_is_newer_true_for_patch_and_prerelease_bump():
     assert us._version_is_newer("3.5.0", "3.6.0") is False
 
 
-def test_version_is_newer_treats_final_release_as_older_than_own_prerelease():
-    """DORMANT quirk pinned AS-IS.
+def test_version_is_newer_offers_stable_to_its_own_prerelease_users():
+    """Regression pin for the beta-cannot-upgrade-to-stable trap.
 
-    ``_version_key("3.5.0")`` -> ``(3, 5, 0)`` sorts BEFORE
-    ``(3, 5, 0, "beta", 1)`` because it is shorter, so a stable release is not
-    detected as an upgrade over its own beta. This is the known
-    "beta can't auto-upgrade to stable" trap; pinned, not fixed.
+    A final release now outranks its own pre-release (semver precedence),
+    so users on 3.5.0-beta.1 are offered 3.5.0 when it ships. The reverse
+    direction stays false.
     """
-    assert us._version_is_newer("3.5.0", "3.5.0-beta.1") is False
+    assert us._version_is_newer("3.5.0", "3.5.0-beta.1") is True
+    assert us._version_is_newer("3.5.0-beta.1", "3.5.0") is False
+    assert us._version_is_newer("3.5.0", "3.5.0") is False
 
 
 def test_safe_version_text_sanitizes_and_defaults_to_latest():

@@ -57,11 +57,30 @@ def _normalize_version(text: Optional[str]) -> str:
 
 
 def _version_key(version: str) -> tuple[Any, ...]:
+    # Semver-style precedence: a final release outranks its own pre-release
+    # ("3.5.0" > "3.5.0-beta.1"), so beta users are offered the stable build.
+    # Tokens are type-tagged triples so numeric and alpha tokens never reach
+    # a raw int-vs-str comparison (which would raise TypeError for shapes
+    # like "3.5.0.1" vs "3.5.0-beta").
     normalized = _normalize_version(version)
-    parts: list[Any] = []
-    for segment in re.split(r"[.\-+_]", normalized):
-        for token in _VERSION_SEGMENT_RE.findall(segment):
-            parts.append(int(token) if token.isdigit() else token.lower())
+    core_text, prerelease_sep, prerelease_text = normalized.partition("-")
+
+    def _tokens(text: str) -> list[tuple[int, int, str]]:
+        tokens: list[tuple[int, int, str]] = []
+        for segment in re.split(r"[.\-+_]", text):
+            for token in _VERSION_SEGMENT_RE.findall(segment):
+                if token.isdigit():
+                    tokens.append((1, int(token), ""))
+                else:
+                    tokens.append((0, 0, token.lower()))
+        return tokens
+
+    parts = _tokens(core_text)
+    if prerelease_sep:
+        parts.append((0, 0, ""))  # pre-release marker: sorts below the final-release marker
+        parts.extend(_tokens(prerelease_text))
+    else:
+        parts.append((2, 0, ""))  # final-release marker
     return tuple(parts)
 
 
