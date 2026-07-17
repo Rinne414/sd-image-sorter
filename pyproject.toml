@@ -336,6 +336,20 @@ select = ["F", "E9"]
 # tests/test_update_worker.py, tests/test_update_cli.py,
 # tests/test_update_archive_validation.py).
 "backend/services/update_service.py" = ["F401"]
+# censor.py is the compatibility FILE facade for the censor_transforms
+# sibling-module split (2026-07). Same rationale as tagger.py above: the
+# verbatim header import block stays (``ImageFilter`` / ``ImageDraw`` and the
+# CENSOR_DEFAULT_BLOCK_SIZE / CENSOR_DEFAULT_BLUR_RADIUS config constants are
+# now called only from the moved ``Censor`` transform bodies) and the
+# ``from censor_transforms import Censor`` re-import is a pure BY-REFERENCE
+# re-export the facade body itself never calls — it keeps ``censor.Censor``
+# the SAME class object so services/censor/output_io.py's lazy
+# ``from censor import Censor`` and the string patch
+# "censor.Censor.apply_censoring" (tests/test_censor_service_pins.py:1079)
+# keep observing class-attribute patches; the ort / _cv2 / _detector rebind
+# seams stay DEFINED here (tests/test_censor_pins.py TestModuleAnchor,
+# tests/test_routers/test_prompts_censor_similarity_artists.py).
+"backend/censor.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.
