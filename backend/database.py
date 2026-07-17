@@ -308,6 +308,7 @@ db_core.set_connection_provider(get_connection)
 def iter_filtered_image_id_chunks(
     *,
     chunk_size: int = 2000,
+    query_page_size: Optional[int] = None,
     generators: Optional[List[str]] = None,
     tags: Optional[List[str]] = None,
     tag_mode: str = "and",
@@ -357,17 +358,29 @@ def iter_filtered_image_id_chunks(
     max_saturation: Optional[float] = None,
     seed: Optional[int] = None,
 ) -> Iterator[List[int]]:
-    """Yield filtered image IDs in bounded chunks without a giant ID list.
+    """Yield filtered image IDs in bounded consumer chunks.
 
     Kept in the ``database`` facade (not moved to ``db_images_read``) so the
     in-module ``get_filtered_image_ids`` reference resolves to the re-exported,
     monkeypatchable ``database`` global. Tests patch ``database.get_filtered_image_ids``
     and expect this generator to honor that patch.
+
+    ``query_page_size`` can exceed ``chunk_size`` so read-only consumers avoid
+    repeating an expensive filtered query for every small write chunk. Only one
+    query page and one consumer chunk are retained at a time. Every supported
+    deterministic order ends with ``i.id``, so adjacent JOIN duplicates can be
+    removed across page boundaries without retaining a full seen-ID set.
     """
     normalized_chunk_size = max(1, int(chunk_size or 2000))
+    normalized_query_page_size = max(
+        1,
+        int(query_page_size or normalized_chunk_size),
+    )
+    consumer_chunk: List[int] = []
+    last_image_id: Optional[int] = None
     offset = 0
     while True:
-        chunk = get_filtered_image_ids(
+        page = get_filtered_image_ids(
             generators=generators,
             tags=tags,
             tag_mode=tag_mode,
@@ -413,16 +426,26 @@ def iter_filtered_image_id_chunks(
             min_saturation=min_saturation,
             max_saturation=max_saturation,
             seed=seed,
-            fetch_chunk_size=normalized_chunk_size,
+            fetch_chunk_size=normalized_query_page_size,
             offset=offset,
-            limit=normalized_chunk_size,
+            limit=normalized_query_page_size,
         )
-        if not chunk:
+        if not page:
             break
-        yield chunk
-        if len(chunk) < normalized_chunk_size:
+        for raw_image_id in page:
+            image_id = int(raw_image_id)
+            if image_id == last_image_id:
+                continue
+            last_image_id = image_id
+            consumer_chunk.append(image_id)
+            if len(consumer_chunk) >= normalized_chunk_size:
+                yield consumer_chunk
+                consumer_chunk = []
+        if len(page) < normalized_query_page_size:
             break
-        offset += len(chunk)
+        offset += len(page)
+    if consumer_chunk:
+        yield consumer_chunk
 
 
 def iter_id_snapshot_chunks(

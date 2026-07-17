@@ -29,6 +29,7 @@ import database as db
 
 
 EXPORT_DB_CHUNK_SIZE = 500
+EXPORT_FILTER_QUERY_PAGE_SIZE = 10_000
 PROMPT_MATCH_MODE_EXACT = "exact"
 PROMPT_MATCH_MODE_CONTAINS = "contains"
 
@@ -108,6 +109,7 @@ def iter_selection_token_id_chunks(
 def _iter_decoded_filter_id_chunks(filters: Dict[str, Any], chunk_size: int) -> Iterator[List[int]]:
     yield from db.iter_filtered_image_id_chunks(
         chunk_size=chunk_size,
+        query_page_size=EXPORT_FILTER_QUERY_PAGE_SIZE,
         generators=filters.get("generators") or None,
         tags=filters.get("tags") or None,
         tag_mode=filters.get("tagMode") or filters.get("tag_mode") or "and",
