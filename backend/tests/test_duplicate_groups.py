@@ -1,11 +1,21 @@
 """Tests for the duplicate-group scan service (v3.5.0 Tier 1 cleanup workflow)."""
 from __future__ import annotations
 
+import threading
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 from services import duplicate_group_service as dgs
+from services.bulk_job_service import (
+    JOB_KIND_DUPLICATE_SCAN,
+    BulkJobService,
+)
 from similarity import embedding_to_bytes
+
+
+_THREAD_TIMEOUT_SECONDS = 3.0
 
 
 class FakeHandle:
@@ -24,11 +34,48 @@ class FakeHandle:
     def set_result(self, result):
         self.result = result
 
+    def commit_result(
+        self,
+        *,
+        publish_callback,
+        result,
+        processed,
+        total,
+        message,
+    ):
+        if self.cancelled:
+            return False
+        publish_callback()
+        self.progress.append((processed, message))
+        self.result = dict(result)
+        return True
+
 
 def _release_active_scan_slot() -> None:
     job_id = dgs.get_active_job_id()
     if job_id is not None:
         assert dgs.release_active_job_id(job_id) is True
+
+
+def _run_real_scan(threshold: float) -> dict[str, object]:
+    service = BulkJobService()
+    job_id = service.create_job(
+        JOB_KIND_DUPLICATE_SCAN,
+        total=100,
+        message="Queued",
+    )
+    service.run_job(
+        job_id,
+        lambda handle: dgs.run_duplicate_scan(handle, threshold=threshold),
+    )
+    job = service.get_job(job_id)
+    assert job is not None
+    return job
+
+
+def _join_thread(thread: threading.Thread) -> None:
+    thread.join(timeout=_THREAD_TIMEOUT_SECONDS)
+    assert thread.is_alive() is False
 
 
 @pytest.fixture
@@ -244,10 +291,12 @@ def test_scan_builds_one_group_with_rating_first_keeper(dup_env, monkeypatch):
     monkeypatch.setattr("similarity_ann.hnswlib_available", lambda: False)
     _seed_library(dup_env)
 
-    handle = FakeHandle()
-    dgs.run_duplicate_scan(handle, threshold=0.95)
+    job = _run_real_scan(0.95)
 
     data = dgs.load_result()
+    assert job["status"] == "done"
+    assert job["processed"] == 100
+    assert job["message"] == "Done"
     assert data is not None
     assert data["version"] == 2
     assert data["summary"]["group_count"] == 1
@@ -261,7 +310,7 @@ def test_scan_builds_one_group_with_rating_first_keeper(dup_env, monkeypatch):
     assert all(m["suggested_keep"] is False for m in group["members"][1:])
     # reclaimable = losers' file sizes (500 + 900)
     assert data["summary"]["reclaimable_bytes"] == 1400
-    assert handle.result["summary"]["group_count"] == 1
+    assert job["result"]["summary"]["group_count"] == 1
 
 
 def test_scan_never_suggests_a_transitive_only_duplicate_for_deletion(
@@ -347,8 +396,12 @@ def test_unrelated_images_form_no_groups(dup_env, monkeypatch):
 
 
 def test_scan_with_too_few_embeddings_persists_empty_result(dup_env):
-    dgs.run_duplicate_scan(FakeHandle(), threshold=0.95)
+    job = _run_real_scan(0.95)
     data = dgs.load_result()
+    assert job["status"] == "done"
+    assert job["processed"] == 100
+    assert job["message"] == "Done"
+    assert job["result"]["summary"]["embedded_count"] == 0
     assert data["version"] == 2
     assert data["summary"]["embedded_count"] == 0
     assert data["summary"]["group_count"] == 0
@@ -380,6 +433,104 @@ def test_scan_surfaces_persistence_failure_instead_of_reporting_success(
         dgs.run_duplicate_scan(handle, threshold=0.95)
 
     assert handle.result is None
+
+
+def test_cancel_before_result_commit_preserves_old_file_and_cleans_temp(
+    dup_env, monkeypatch
+):
+    monkeypatch.setattr("similarity_ann.hnswlib_available", lambda: False)
+    _seed_library(dup_env)
+    state_path = dgs._state_path()
+    state_path.write_text(
+        '{"version":2,"groups":[],"marker":"previous"}',
+        encoding="utf-8",
+    )
+    temp_path = state_path.with_suffix(".tmp")
+    temp_written = threading.Event()
+    allow_commit = threading.Event()
+    original_write_text = Path.write_text
+
+    def pause_after_temp_write(path: Path, data: str, *, encoding: str) -> int:
+        written = original_write_text(path, data, encoding=encoding)
+        if path == temp_path:
+            temp_written.set()
+            assert allow_commit.wait(timeout=_THREAD_TIMEOUT_SECONDS) is True
+        return written
+
+    monkeypatch.setattr(Path, "write_text", pause_after_temp_write)
+    service = BulkJobService()
+    job_id = service.create_job(
+        JOB_KIND_DUPLICATE_SCAN,
+        total=100,
+        message="Queued",
+    )
+    worker = lambda handle: dgs.run_duplicate_scan(handle, threshold=0.95)
+    worker_thread = threading.Thread(target=service.run_job, args=(job_id, worker))
+    worker_thread.start()
+    try:
+        assert temp_written.wait(timeout=_THREAD_TIMEOUT_SECONDS) is True
+        cancelled = service.cancel_job(job_id)
+        assert cancelled is not None
+        assert cancelled["status"] == "running"
+    finally:
+        allow_commit.set()
+        _join_thread(worker_thread)
+
+    job = service.get_job(job_id)
+    assert job is not None
+    assert job["status"] == "cancelled"
+    assert job["result"] == {}
+    assert dgs.load_result() == {
+        "version": 2,
+        "groups": [],
+        "marker": "previous",
+    }
+    assert temp_path.exists() is False
+
+
+def test_replace_failure_preserves_old_file_marks_error_and_cleans_temp(
+    dup_env, monkeypatch
+):
+    monkeypatch.setattr("similarity_ann.hnswlib_available", lambda: False)
+    _seed_library(dup_env)
+    state_path = dgs._state_path()
+    state_path.write_text(
+        '{"version":2,"groups":[],"marker":"previous"}',
+        encoding="utf-8",
+    )
+    temp_path = state_path.with_suffix(".tmp")
+
+    def fail_replace(source: Path, destination: Path) -> None:
+        raise PermissionError(
+            f"injected replace denial: source={source}, destination={destination}"
+        )
+
+    monkeypatch.setattr(dgs.os, "replace", fail_replace)
+
+    job = _run_real_scan(0.95)
+
+    assert job["status"] == "error"
+    assert job["result"] == {}
+    assert job["error_count"] == 1
+    assert job["message"] == "Result publish failed"
+    assert "injected replace denial" in job["error_samples"][0]
+    assert dgs.load_result() == {
+        "version": 2,
+        "groups": [],
+        "marker": "previous",
+    }
+    assert temp_path.exists() is False
+
+
+def test_temp_cleanup_failure_is_explicit(tmp_path):
+    temp_directory = tmp_path / "orphan.tmp"
+    temp_directory.mkdir()
+
+    with pytest.raises(
+        dgs.DuplicateGroupPersistenceError,
+        match="Failed to clean duplicate-group temp file",
+    ):
+        dgs._cleanup_temp_file(temp_directory, "cancelled result commit")
 
 
 def test_groups_page_pagination_and_missing_state(dup_env, monkeypatch):

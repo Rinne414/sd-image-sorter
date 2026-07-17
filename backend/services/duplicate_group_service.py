@@ -572,8 +572,7 @@ def run_duplicate_scan(handle, threshold: float = DEFAULT_THRESHOLD) -> None:
         if handle.cancelled:
             return
         result = _empty_result(threshold, embedded_count=len(ids))
-        _persist(result)
-        handle.set_result({"summary": result["summary"]})
+        _commit_result(handle, result)
         return
     if handle.cancelled:
         return
@@ -607,9 +606,7 @@ def run_duplicate_scan(handle, threshold: float = DEFAULT_THRESHOLD) -> None:
     }
     if handle.cancelled:
         return
-    _persist(result)
-    handle.set_progress(processed=100, total=100, message="Done")
-    handle.set_result({"summary": result["summary"]})
+    _commit_result(handle, result)
 
 
 def _empty_result(threshold: float, embedded_count: int) -> Dict[str, Any]:
@@ -632,17 +629,75 @@ def _empty_result(threshold: float, embedded_count: int) -> Dict[str, Any]:
 # Persisted results
 # ---------------------------------------------------------------------------
 
-def _persist(result: Dict[str, Any]) -> None:
-    path = _state_path()
+def _cleanup_temp_file(temp_path: Path, context: str) -> None:
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(result, separators=(",", ":")), encoding="utf-8")
-        os.replace(tmp, path)
+        temp_path.unlink(missing_ok=True)
     except OSError as exc:
         raise DuplicateGroupPersistenceError(
-            f"Failed to persist duplicate groups to {path}: {exc}"
+            "Failed to clean duplicate-group temp file "
+            f"{temp_path} after {context}: {exc}"
         ) from exc
+
+
+def _prepare_result_file(result: Dict[str, Any]) -> tuple[Path, Path]:
+    path = _state_path()
+    temp_path = path.with_suffix(".tmp")
+    try:
+        payload = json.dumps(result, separators=(",", ":"))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path.write_text(payload, encoding="utf-8")
+    except (OSError, TypeError, ValueError) as exc:
+        try:
+            _cleanup_temp_file(temp_path, "result preparation failure")
+        except DuplicateGroupPersistenceError as cleanup_exc:
+            raise DuplicateGroupPersistenceError(
+                f"Failed to prepare duplicate groups for {path}: {exc}; "
+                f"cleanup also failed: {cleanup_exc}"
+            ) from cleanup_exc
+        raise DuplicateGroupPersistenceError(
+            f"Failed to prepare duplicate groups for {path}: {exc}"
+        ) from exc
+    return path, temp_path
+
+
+def _commit_result(handle, result: Dict[str, Any]) -> bool:
+    path, temp_path = _prepare_result_file(result)
+
+    def publish() -> None:
+        os.replace(temp_path, path)
+
+    try:
+        committed = handle.commit_result(
+            publish_callback=publish,
+            result={"summary": result["summary"]},
+            processed=100,
+            total=100,
+            message="Done",
+        )
+    except OSError as exc:
+        try:
+            _cleanup_temp_file(temp_path, "result publish failure")
+        except DuplicateGroupPersistenceError as cleanup_exc:
+            raise DuplicateGroupPersistenceError(
+                f"Failed to publish duplicate groups to {path}: {exc}; "
+                f"cleanup also failed: {cleanup_exc}"
+            ) from cleanup_exc
+        raise DuplicateGroupPersistenceError(
+            f"Failed to publish duplicate groups to {path}: {exc}"
+        ) from exc
+    except Exception as exc:
+        try:
+            _cleanup_temp_file(temp_path, "result commit failure")
+        except DuplicateGroupPersistenceError as cleanup_exc:
+            raise DuplicateGroupPersistenceError(
+                f"Failed to commit duplicate groups for {path}: {exc}; "
+                f"cleanup also failed: {cleanup_exc}"
+            ) from cleanup_exc
+        raise
+
+    if not committed:
+        _cleanup_temp_file(temp_path, "cancelled result commit")
+    return committed
 
 
 def load_result() -> Optional[Dict[str, Any]]:

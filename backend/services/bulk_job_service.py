@@ -66,6 +66,7 @@ MAX_RETAINED_TERMINAL_JOBS = 50
 
 
 ProgressCallback = Callable[[Dict[str, Any]], None]
+PublishCallback = Callable[[], None]
 
 
 @dataclass
@@ -150,6 +151,25 @@ class BulkJobHandle:
 
     def set_result(self, result: Dict[str, Any]) -> None:
         self._service._set_result(self._job_id, result)
+
+    def commit_result(
+        self,
+        *,
+        publish_callback: PublishCallback,
+        result: Dict[str, Any],
+        processed: int,
+        total: int,
+        message: str,
+    ) -> bool:
+        """Publish external state and settle this job at one lock boundary."""
+        return self._service._commit_result(
+            self._job_id,
+            publish_callback=publish_callback,
+            result=result,
+            processed=processed,
+            total=total,
+            message=message,
+        )
 
 
 class BulkJobService:
@@ -236,7 +256,7 @@ class BulkJobService:
             logger.exception("Bulk job %s failed", job_id)
             with self._lock:
                 job = self._jobs.get(job_id)
-                if job is not None:
+                if job is not None and job.status not in TERMINAL_STATUSES:
                     job.status = STATUS_ERROR
                     job.finished_at = time.time()
                     job.error_count += 1
@@ -248,6 +268,8 @@ class BulkJobService:
         with self._lock:
             job = self._jobs.get(job_id)
             if job is None:
+                return
+            if job.status in TERMINAL_STATUSES:
                 return
             if job.cancel_event.is_set():
                 job.status = STATUS_CANCELLED
@@ -357,6 +379,57 @@ class BulkJobService:
             if job is None:
                 return
             job.result = dict(result or {})
+
+    def _commit_result(
+        self,
+        job_id: str,
+        *,
+        publish_callback: PublishCallback,
+        result: Dict[str, Any],
+        processed: int,
+        total: int,
+        message: str,
+    ) -> bool:
+        """Linearize cancellation against one short external-state publish.
+
+        ``publish_callback`` runs while ``_lock`` is held and therefore must
+        only perform the already-prepared atomic publish. It must not call a
+        handle or this service because the lock is intentionally non-reentrant.
+        """
+        committed_result = dict(result)
+        committed_processed = int(processed)
+        committed_total = int(total)
+        committed_message = str(message)
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                raise KeyError(
+                    f"Bulk job disappeared before result commit: job_id={job_id}"
+                )
+            if job.cancel_event.is_set() or job.status == STATUS_CANCELLED:
+                return False
+            if job.status != STATUS_RUNNING:
+                raise RuntimeError(
+                    "Bulk job result commit requires running status: "
+                    f"job_id={job_id}, status={job.status}"
+                )
+            try:
+                publish_callback()
+            except Exception as exc:
+                job.status = STATUS_ERROR
+                job.finished_at = time.time()
+                job.error_count += 1
+                if len(job.error_samples) < MAX_ERROR_SAMPLES:
+                    job.error_samples.append(str(exc))
+                job.message = "Result publish failed"
+                raise
+            job.result = committed_result
+            job.processed = committed_processed
+            job.total = committed_total
+            job.message = committed_message
+            job.status = STATUS_DONE
+            job.finished_at = time.time()
+            return True
 
     def _prune_unlocked(self) -> None:
         terminal = [job for job in self._jobs.values() if job.status in TERMINAL_STATUSES]

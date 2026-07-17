@@ -7,6 +7,8 @@ inline, which is exactly how FastAPI's TestClient runs the BackgroundTask.
 """
 from __future__ import annotations
 
+import threading
+
 import pytest
 
 from services.bulk_job_service import (
@@ -19,9 +21,17 @@ from services.bulk_job_service import (
 )
 
 
+_THREAD_TIMEOUT_SECONDS = 3.0
+
+
 @pytest.fixture
 def service() -> BulkJobService:
     return BulkJobService()
+
+
+def _join_thread(thread: threading.Thread) -> None:
+    thread.join(timeout=_THREAD_TIMEOUT_SECONDS)
+    assert thread.is_alive() is False
 
 
 def test_create_job_starts_queued_with_kind_and_total(service):
@@ -121,6 +131,130 @@ def test_cancel_queued_job_is_immediately_terminal_and_never_runs(service):
     assert job is not None
     assert job["status"] == "cancelled"
     assert worker_calls == []
+
+
+def test_result_commit_returns_false_when_running_cancel_wins(service):
+    job_id = service.create_job(JOB_KIND_EXPORT_SIDECARS)
+    worker_ready = threading.Event()
+    allow_commit = threading.Event()
+    publish_calls: list[str] = []
+    commit_results: list[bool] = []
+
+    def worker(handle) -> None:
+        worker_ready.set()
+        assert allow_commit.wait(timeout=_THREAD_TIMEOUT_SECONDS) is True
+        commit_results.append(handle.commit_result(
+            publish_callback=lambda: publish_calls.append("published"),
+            result={"published": True},
+            processed=100,
+            total=100,
+            message="Published",
+        ))
+
+    worker_thread = threading.Thread(target=service.run_job, args=(job_id, worker))
+    worker_thread.start()
+    assert worker_ready.wait(timeout=_THREAD_TIMEOUT_SECONDS) is True
+
+    cancelled = service.cancel_job(job_id)
+    assert cancelled is not None
+    assert cancelled["status"] == "running"
+    allow_commit.set()
+    _join_thread(worker_thread)
+
+    job = service.get_job(job_id)
+    assert commit_results == [False]
+    assert publish_calls == []
+    assert job is not None
+    assert job["status"] == "cancelled"
+    assert job["result"] == {}
+
+
+def test_result_commit_holds_cancel_until_publish_finishes(service, monkeypatch):
+    job_id = service.create_job(JOB_KIND_EXPORT_SIDECARS)
+    timestamps = iter((10.0, 20.0, 30.0))
+    monkeypatch.setattr(
+        "services.bulk_job_service.time.time",
+        lambda: next(timestamps),
+    )
+    publish_entered = threading.Event()
+    allow_publish = threading.Event()
+    cancel_started = threading.Event()
+    cancel_finished = threading.Event()
+    commit_results: list[bool] = []
+    cancel_results: list[dict[str, object]] = []
+
+    def publish() -> None:
+        publish_entered.set()
+        assert allow_publish.wait(timeout=_THREAD_TIMEOUT_SECONDS) is True
+
+    def worker(handle) -> None:
+        commit_results.append(handle.commit_result(
+            publish_callback=publish,
+            result={"published": True},
+            processed=100,
+            total=100,
+            message="Published",
+        ))
+
+    def cancel() -> None:
+        cancel_started.set()
+        snapshot = service.cancel_job(job_id)
+        assert snapshot is not None
+        cancel_results.append(snapshot)
+        cancel_finished.set()
+
+    worker_thread = threading.Thread(target=service.run_job, args=(job_id, worker))
+    cancel_thread = threading.Thread(target=cancel)
+    worker_thread.start()
+    assert publish_entered.wait(timeout=_THREAD_TIMEOUT_SECONDS) is True
+    cancel_thread.start()
+    try:
+        assert cancel_started.wait(timeout=_THREAD_TIMEOUT_SECONDS) is True
+        assert cancel_finished.wait(timeout=0.1) is False
+    finally:
+        allow_publish.set()
+        _join_thread(worker_thread)
+        _join_thread(cancel_thread)
+
+    job = service.get_job(job_id)
+    assert commit_results == [True]
+    assert cancel_results[0]["status"] == "done"
+    assert job is not None
+    assert job["status"] == "done"
+    assert job["processed"] == 100
+    assert job["total"] == 100
+    assert job["message"] == "Published"
+    assert job["result"] == {"published": True}
+    assert job["started_at"] == 10.0
+    assert job["finished_at"] == 20.0
+
+
+def test_result_commit_callback_failure_is_terminal_error(service):
+    job_id = service.create_job(JOB_KIND_EXPORT_SIDECARS)
+
+    def fail_publish() -> None:
+        raise OSError("injected rename failure")
+
+    def worker(handle) -> None:
+        handle.commit_result(
+            publish_callback=fail_publish,
+            result={"published": True},
+            processed=100,
+            total=100,
+            message="Published",
+        )
+
+    service.run_job(job_id, worker)
+
+    job = service.get_job(job_id)
+    assert job is not None
+    assert job["status"] == "error"
+    assert job["result"] == {}
+    assert job["processed"] == 0
+    assert job["error_count"] == 1
+    assert job["message"] == "Result publish failed"
+    assert job["error_samples"] == ["injected rename failure"]
+    assert job["finished_at"] is not None
 
 
 def test_snapshot_is_taken_before_mutation_and_scope_cannot_expand(service):
