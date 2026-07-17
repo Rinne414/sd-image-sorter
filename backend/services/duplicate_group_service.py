@@ -78,13 +78,27 @@ def get_active_job_id() -> Optional[str]:
         return _ACTIVE_JOB_ID
 
 
-def set_active_job_id(job_id: Optional[str]) -> bool:
-    """Claim/release the single scan slot. Returns False if already claimed."""
+def claim_active_job_id(job_id: str) -> bool:
+    """Claim the scan slot unless its current registry owner is inactive."""
+    from services.bulk_job_service import TERMINAL_STATUSES, get_bulk_job_service
+
     global _ACTIVE_JOB_ID
     with _SCAN_LOCK:
-        if job_id is not None and _ACTIVE_JOB_ID is not None:
-            return False
+        if _ACTIVE_JOB_ID is not None:
+            current = get_bulk_job_service().get_job(_ACTIVE_JOB_ID)
+            if current is not None and current["status"] not in TERMINAL_STATUSES:
+                return False
         _ACTIVE_JOB_ID = job_id
+        return True
+
+
+def release_active_job_id(job_id: str) -> bool:
+    """Release the scan slot only when ``job_id`` still owns it."""
+    global _ACTIVE_JOB_ID
+    with _SCAN_LOCK:
+        if _ACTIVE_JOB_ID != job_id:
+            return False
+        _ACTIVE_JOB_ID = None
         return True
 
 
@@ -552,53 +566,50 @@ def _build_groups(
 
 def run_duplicate_scan(handle, threshold: float = DEFAULT_THRESHOLD) -> None:
     """Bulk-job worker: scan the whole library into duplicate groups."""
-    try:
-        threshold = max(MIN_THRESHOLD, min(MAX_THRESHOLD, float(threshold)))
-        ids, matrix = _load_embeddings(handle)
-        if matrix is None:
-            if handle.cancelled:
-                return
-            result = _empty_result(threshold, embedded_count=len(ids))
-            _persist(result)
-            handle.set_result({"summary": result["summary"]})
-            return
+    threshold = max(MIN_THRESHOLD, min(MAX_THRESHOLD, float(threshold)))
+    ids, matrix = _load_embeddings(handle)
+    if matrix is None:
         if handle.cancelled:
             return
-
-        groups = _groups_via_ann(ids, matrix, threshold, handle)
-        if groups is None and not handle.cancelled:
-            handle.set_progress(processed=20, total=100, message="Searching neighbors")
-            pairs = _pairs_exact(matrix, threshold, handle)
-            if handle.cancelled:
-                return
-            groups = _build_groups(ids, pairs, handle)
-        if groups is None or handle.cancelled:
-            return
-        redundant = sum(len(g["members"]) - 1 for g in groups)
-        reclaimable = sum(
-            m.get("file_size") or 0
-            for g in groups for m in g["members"] if not m["suggested_keep"]
-        )
-        result = {
-            "version": _RESULT_VERSION,
-            "scanned_at": time.time(),
-            "threshold": threshold,
-            "summary": {
-                "embedded_count": len(ids),
-                "group_count": len(groups),
-                "redundant_count": redundant,
-                "reclaimable_bytes": int(reclaimable),
-                "threshold": threshold,
-            },
-            "groups": groups,
-        }
-        if handle.cancelled:
-            return
+        result = _empty_result(threshold, embedded_count=len(ids))
         _persist(result)
-        handle.set_progress(processed=100, total=100, message="Done")
         handle.set_result({"summary": result["summary"]})
-    finally:
-        set_active_job_id(None)
+        return
+    if handle.cancelled:
+        return
+
+    groups = _groups_via_ann(ids, matrix, threshold, handle)
+    if groups is None and not handle.cancelled:
+        handle.set_progress(processed=20, total=100, message="Searching neighbors")
+        pairs = _pairs_exact(matrix, threshold, handle)
+        if handle.cancelled:
+            return
+        groups = _build_groups(ids, pairs, handle)
+    if groups is None or handle.cancelled:
+        return
+    redundant = sum(len(g["members"]) - 1 for g in groups)
+    reclaimable = sum(
+        m.get("file_size") or 0
+        for g in groups for m in g["members"] if not m["suggested_keep"]
+    )
+    result = {
+        "version": _RESULT_VERSION,
+        "scanned_at": time.time(),
+        "threshold": threshold,
+        "summary": {
+            "embedded_count": len(ids),
+            "group_count": len(groups),
+            "redundant_count": redundant,
+            "reclaimable_bytes": int(reclaimable),
+            "threshold": threshold,
+        },
+        "groups": groups,
+    }
+    if handle.cancelled:
+        return
+    _persist(result)
+    handle.set_progress(processed=100, total=100, message="Done")
+    handle.set_result({"summary": result["summary"]})
 
 
 def _empty_result(threshold: float, embedded_count: int) -> Dict[str, Any]:

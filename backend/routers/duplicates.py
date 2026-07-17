@@ -11,7 +11,12 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from services import duplicate_group_service
-from services.bulk_job_service import JOB_KIND_DUPLICATE_SCAN, get_bulk_job_service
+from services.bulk_job_service import (
+    BulkJobHandle,
+    JOB_KIND_DUPLICATE_SCAN,
+    TERMINAL_STATUSES,
+    get_bulk_job_service,
+)
 
 router = APIRouter(prefix="/api", tags=["duplicates"])
 
@@ -41,16 +46,25 @@ def start_duplicate_scan(request: DuplicateScanRequest, background_tasks: Backgr
     """Kick off the background duplicate-group scan."""
     service = get_bulk_job_service()
     job_id = service.create_job(JOB_KIND_DUPLICATE_SCAN, total=100, message="Queued")
-    if not duplicate_group_service.set_active_job_id(job_id):
-        # Another scan holds the slot; the just-created job stays queued and
-        # is pruned by the registry's keep-N policy.
+    if not duplicate_group_service.claim_active_job_id(job_id):
+        rejected_job = service.cancel_job(job_id)
+        if rejected_job is None:
+            raise RuntimeError(
+                f"Duplicate scan job disappeared before rejection: job_id={job_id}"
+            )
         raise HTTPException(status_code=409, detail="A duplicate scan is already running")
     threshold = request.threshold
 
-    def _worker(handle):
+    def _worker(handle: BulkJobHandle) -> None:
         duplicate_group_service.run_duplicate_scan(handle, threshold=threshold)
 
-    background_tasks.add_task(service.run_job, job_id, _worker)
+    def _run_job() -> None:
+        try:
+            service.run_job(job_id, _worker)
+        finally:
+            duplicate_group_service.release_active_job_id(job_id)
+
+    background_tasks.add_task(_run_job)
     return {"job_id": job_id, "threshold": threshold}
 
 
@@ -62,7 +76,8 @@ def get_scan_status():
     """Return the running scan's job id so a reopened UI can re-attach."""
     job_id = duplicate_group_service.get_active_job_id()
     job = get_bulk_job_service().get_job(job_id) if job_id else None
-    return {"active": job is not None, "job_id": job_id, "job": job}
+    active = bool(job is not None and job["status"] not in TERMINAL_STATUSES)
+    return {"active": active, "job_id": job_id if active else None, "job": job}
 
 
 @router.get(

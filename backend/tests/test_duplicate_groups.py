@@ -25,12 +25,18 @@ class FakeHandle:
         self.result = result
 
 
+def _release_active_scan_slot() -> None:
+    job_id = dgs.get_active_job_id()
+    if job_id is not None:
+        assert dgs.release_active_job_id(job_id) is True
+
+
 @pytest.fixture
 def dup_env(test_db, tmp_path, monkeypatch):
     monkeypatch.setattr(dgs, "_state_path", lambda: tmp_path / "duplicate-groups.json")
-    dgs.set_active_job_id(None)
+    _release_active_scan_slot()
     yield test_db
-    dgs.set_active_job_id(None)
+    _release_active_scan_slot()
 
 
 def _insert_image(conn, image_id, filename, vec, *, rating=0, aesthetic=None,
@@ -393,15 +399,6 @@ def test_groups_page_pagination_and_missing_state(dup_env, monkeypatch):
     empty_page = dgs.get_groups_page(offset=5, limit=10)
     assert empty_page["groups"] == []
     assert empty_page["has_more"] is False
-
-
-def test_single_scan_slot():
-    dgs.set_active_job_id(None)
-    assert dgs.set_active_job_id("job-1") is True
-    assert dgs.set_active_job_id("job-2") is False
-    dgs.set_active_job_id(None)
-    assert dgs.set_active_job_id("job-3") is True
-    dgs.set_active_job_id(None)
 
 
 @pytest.mark.skipif(

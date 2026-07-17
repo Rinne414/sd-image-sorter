@@ -104,6 +104,25 @@ def test_cancel_before_start_short_circuits(service):
     assert job["processed"] == 0
 
 
+def test_cancel_queued_job_is_immediately_terminal_and_never_runs(service):
+    job_id = service.create_job(JOB_KIND_REMOVE_FROM_GALLERY)
+    worker_calls = []
+
+    cancelled = service.cancel_job(job_id)
+
+    assert cancelled is not None
+    assert cancelled["status"] == "cancelled"
+    assert cancelled["started_at"] is None
+    assert cancelled["finished_at"] is not None
+
+    service.run_job(job_id, lambda handle: worker_calls.append(handle.job_id))
+
+    job = service.get_job(job_id)
+    assert job is not None
+    assert job["status"] == "cancelled"
+    assert worker_calls == []
+
+
 def test_snapshot_is_taken_before_mutation_and_scope_cannot_expand(service):
     """Rows added mid-job must not expand the job's scope.
 

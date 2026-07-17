@@ -193,12 +193,17 @@ class BulkJobService:
         return [job.to_public() for job in jobs]
 
     def cancel_job(self, job_id: str) -> Optional[Dict[str, Any]]:
-        """Request cooperative cancellation. Returns None if the job is unknown."""
+        """Cancel queued work or request running work to stop cooperatively."""
         with self._lock:
             job = self._jobs.get(job_id)
             if job is None:
                 return None
-            if job.status not in TERMINAL_STATUSES:
+            if job.status == STATUS_QUEUED:
+                job.cancel_event.set()
+                job.status = STATUS_CANCELLED
+                job.finished_at = time.time()
+                job.message = "Cancelled before start"
+            elif job.status not in TERMINAL_STATUSES:
                 job.cancel_event.set()
                 job.message = "Cancellation requested"
             return job.to_public()
@@ -208,11 +213,13 @@ class BulkJobService:
 
         Marks the job running, runs the worker with a :class:`BulkJobHandle`,
         and settles the terminal state (``done`` / ``cancelled`` / ``error``).
-        A cancel requested while still queued short-circuits before any work.
+        A queued job cancelled before dispatch is already terminal and cannot run.
         """
         with self._lock:
             job = self._jobs.get(job_id)
             if job is None:
+                return
+            if job.status in TERMINAL_STATUSES:
                 return
             if job.cancel_event.is_set():
                 job.status = STATUS_CANCELLED
