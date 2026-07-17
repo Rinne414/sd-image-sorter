@@ -25,7 +25,7 @@ function initBootListenersShell() {
         const trigger = e.target.closest('[data-action="open-model-guidance"]');
         if (!trigger) return;
         e.preventDefault();
-        document.getElementById('btn-open-model-manager')?.click();
+        openModelManager('models');
     });
 
     // Scan button

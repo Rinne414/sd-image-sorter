@@ -148,6 +148,29 @@ test.describe('Model Manager', () => {
     await resetModelFixtures()
   })
 
+  test('feature setup guidance lands on AI Models while the gear keeps General settings', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto('/')
+    await page.waitForLoadState('domcontentloaded')
+
+    await page.locator('#nav-tab-similar').click()
+    const setupButton = page.locator('#similar-model-health [data-action="open-model-guidance"]')
+    await expect(setupButton).toBeVisible()
+    await setupButton.click()
+
+    await expect(page.locator('#model-manager-modal')).toBeVisible()
+    await expect(page.locator('[data-settings-tab="models"]')).toHaveAttribute('aria-selected', 'true')
+    await expect(page.locator('[data-settings-panel="models"]')).toBeVisible()
+    await expect(page.locator('[data-settings-panel="general"]')).toBeHidden()
+
+    await page.locator('#model-manager-close').click()
+    await expect(page.locator('#model-manager-modal.visible')).toHaveCount(0)
+    await page.locator('#btn-open-model-manager').click()
+
+    await expect(page.locator('[data-settings-tab="general"]')).toHaveAttribute('aria-selected', 'true')
+    await expect(page.locator('[data-settings-panel="general"]')).toBeVisible()
+  })
+
   test('closing model manager keeps the previous page scroll position', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 })
     await mockMinimalModelStatus(page)
