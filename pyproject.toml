@@ -274,6 +274,20 @@ select = ["F", "E9"]
 # tests/test_oppai_oracle_tagger.py, tests/test_oppai_oracle_alias.py,
 # tests/test_model_service_pins.py).
 "backend/oppai_oracle_tagger.py" = ["F401"]
+# services/export_template_engine.py is the compatibility facade for the
+# export_template_presets / export_tag_pipeline / export_rating_quality /
+# export_template_render sibling-module split (2026-07). Same rationale as
+# db_query.py above: its import block exists so every historical
+# ``services.export_template_engine.<name>`` keeps resolving BY REFERENCE —
+# the lazy origin-module seams (routers/tags.py:645 list_presets +
+# TEMPLATE_VARIABLES, tag_export/captions.py:166+536 normalize_lora_tag +
+# build_export_caption, tag_export/preview.py:30, dataset_export/
+# captions.py:125) and the eager ``is_kaomoji_tag`` identity imports
+# (smart_tag/consensus.py:15, smart_tag/results.py:19), locked by
+# tests/test_export_template_pins.py (TestConsumerSeams); only
+# ``build_export_caption`` stays defined in the facade, and it calls a
+# fraction of the re-exported surface.
+"backend/services/export_template_engine.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.

@@ -4,6 +4,25 @@ Supports a flexible {variable} template syntax with tag processing pipeline:
   blacklist -> replace -> max N -> append
 
 Built-in presets target popular base models (Anima, Illustrious/Pony, NoobAI, FLUX, Kohya).
+
+Split (2026-07) into four sibling modules, re-exported here BY REFERENCE so
+every historical ``services.export_template_engine.<name>`` keeps resolving --
+the lazy origin-module seams (routers/tags.py, tag_export/captions.py,
+tag_export/preview.py, dataset_export/captions.py) and the eager
+``is_kaomoji_tag`` identity imports (smart_tag/consensus.py,
+smart_tag/results.py) are locked by tests/test_export_template_pins.py:
+
+* ``export_template_presets`` -- PRESETS, TEMPLATE_VARIABLES, list_presets
+* ``export_tag_pipeline``     -- TagProcessingConfig, process_tags, the
+  kaomoji vocabulary + underscore formatting (is_kaomoji_tag /
+  normalize_lora_tag), and the blacklist / template-value helpers
+* ``export_rating_quality``   -- rating canon/vocab, resolve_canonical_rating,
+  the aesthetic-score quality buckets, flatten_single_line
+* ``export_template_render``  -- TemplateContext, the category-bucket split,
+  render_template, separator cleanup + token dedup
+
+Only ``build_export_caption`` (the high-level orchestrator) stays defined
+in this file.
 """
 from __future__ import annotations
 
@@ -14,700 +33,48 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-
-# ====================================================================
-# Preset definitions
-# ====================================================================
-
-# Each preset specifies:
-#   - template: the format string (uses {variable} placeholders)
-#   - separator: tag separator (", " for danbooru, " " for Anima)
-#   - underscore_to_space: convert tag underscores to spaces (Anima style)
-#   - preserve_underscore_prefixes: tags starting with these keep underscores (e.g., "score_")
-#   - default_append: tags to append by default (can be overridden)
-#   - description: human-readable description for UI
-
-PRESETS: Dict[str, Dict[str, Any]] = {
-    "anima": {
-        "name": "Anima (Tags + NL)",
-        "description": "Anima base model: quality/safety prefix, danbooru tags (spaces not underscores), then NL caption separated by period. Official model-card order: quality → safety → count → trigger → characters → copyright → @artists → general tags → NL.",
-        # P3-11: official Anima caption order with dedicated category sections
-        # (characters / copyright / @-prefixed artists ahead of general tags).
-        "template": "{quality}, {safety}, {count}, {trigger}, {characters}, {copyright}, {artists:@}, {general}. {nl_caption}",
-        "separator": ", ",
-        "underscore_to_space": True,
-        "preserve_underscore_prefixes": ["score_"],
-        "default_quality": "masterpiece, best quality",
-        "default_safety": "",
-        "default_append": "",
-        "single_line": True,
-        # Anima model-card safety vocabulary: safe / sensitive / nsfw / explicit.
-        "safety_vocab": {
-            "general": "safe",
-            "sensitive": "sensitive",
-            "questionable": "nsfw",
-            "explicit": "explicit",
-        },
-    },
-    "anima_tags_only": {
-        "name": "Anima (Tags only)",
-        "description": "Anima format without NL caption — pure danbooru tags with quality/safety prefix.",
-        "template": "{quality}, {safety}, {count}, {trigger}, {characters}, {copyright}, {artists:@}, {general}",
-        "separator": ", ",
-        "underscore_to_space": True,
-        "preserve_underscore_prefixes": ["score_"],
-        # P3-14: match the tags+NL preset — "newest, highres, normal quality"
-        # was a time/meta mix, not a quality default any trainer documents.
-        "default_quality": "masterpiece, best quality",
-        "default_safety": "",
-        "default_append": "",
-        "single_line": True,
-        "safety_vocab": {
-            "general": "safe",
-            "sensitive": "sensitive",
-            "questionable": "nsfw",
-            "explicit": "explicit",
-        },
-    },
-    "illustrious_pony": {
-        "name": "Illustrious / Pony",
-        "description": "Standard danbooru tag format for Illustrious, Pony XL, NoobAI XL etc.",
-        "template": "{trigger}, {tags:filtered}, {append}",
-        "separator": ", ",
-        "underscore_to_space": False,
-        "preserve_underscore_prefixes": [],
-        "default_quality": "",
-        "default_safety": "",
-        "default_append": "masterpiece, best_quality",
-        "single_line": True,
-    },
-    "noobai": {
-        "name": "NoobAI",
-        "description": "NoobAI requires rating tag at front, otherwise standard danbooru format.",
-        "template": "{trigger}, {rating}, {tags:filtered}, {append}",
-        "separator": ", ",
-        "underscore_to_space": False,
-        "preserve_underscore_prefixes": [],
-        "default_quality": "",
-        "default_safety": "",
-        "default_append": "masterpiece, best_quality",
-        "single_line": True,
-    },
-    "flux": {
-        "name": "FLUX (NL only)",
-        "description": "FLUX uses T5 encoder — pure natural language description with trigger word as period-separated prefix.",
-        "template": "{trigger}. {nl_caption}",
-        "separator": ", ",
-        "underscore_to_space": False,
-        "preserve_underscore_prefixes": [],
-        "default_quality": "",
-        "default_safety": "",
-        "default_append": "",
-        "single_line": True,
-    },
-    "kohya_sd15": {
-        "name": "Kohya SD 1.5",
-        "description": "Classic Kohya format for SD 1.5 LoRAs — no quality tags, just trigger + tags.",
-        "template": "{trigger}, {tags:filtered}",
-        "separator": ", ",
-        "underscore_to_space": False,
-        "preserve_underscore_prefixes": [],
-        "default_quality": "",
-        "default_safety": "",
-        "default_append": "",
-        "single_line": True,
-    },
-    "custom": {
-        "name": "Custom Template",
-        "description": "Build your own template with full control.",
-        "template": "{tags:filtered}",
-        "separator": ", ",
-        "underscore_to_space": False,
-        "preserve_underscore_prefixes": [],
-        "default_quality": "",
-        "default_safety": "",
-        "default_append": "",
-        # Custom templates may deliberately span multiple lines (v3.4.3);
-        # never flatten them behind the author's back.
-        "single_line": False,
-    },
-}
-
-# Variable reference for documentation
-TEMPLATE_VARIABLES: List[Dict[str, str]] = [
-    {"name": "{trigger}", "description": "Trigger word(s) for the LoRA"},
-    {"name": "{tags}", "description": "All tags from the local tagger, comma-separated"},
-    {"name": "{tags:filtered}", "description": "Tags after blacklist + replace + max-N processing"},
-    {"name": "{tags:N}", "description": "Top N tags by confidence (e.g., {tags:20})"},
-    {"name": "{nl_caption}", "description": "VLM-generated natural language caption (ai_caption field)"},
-    {"name": "{prompt}", "description": "Original generation prompt"},
-    {"name": "{negative}", "description": "Original negative prompt"},
-    {"name": "{rating}", "description": "Per-image rating resolved from the tagger's rating tag (safe/sensitive/questionable/explicit); empty when the image was never rated"},
-    {"name": "{characters}", "description": "Character tags only (tagger-recorded category, heuristic fallback)"},
-    {"name": "{copyright}", "description": "Copyright/series tags only (tagger-recorded category)"},
-    {"name": "{artists}", "description": "Artist tags only (tagger-recorded category)"},
-    {"name": "{artists:@}", "description": "Artist tags with the Anima-style @ prefix (@artist_name)"},
-    {"name": "{general}", "description": "Tags not in the character/copyright/artist buckets"},
-    {"name": "{quality}", "description": "Quality tags: user override > aesthetic-score bucket > preset default"},
-    {"name": "{safety}", "description": "Per-image rating in the preset's model-card vocabulary (Anima: questionable→nsfw); preset default only when unrated"},
-    {"name": "{count}", "description": "Subject-count tag (1girl/1boy/2girls/etc.) extracted from tags"},
-    {"name": "{append}", "description": "User-supplied or preset-default append text"},
-]
-
-
-# ====================================================================
-# Tag processing pipeline
-# ====================================================================
-
-@dataclass
-class TagProcessingConfig:
-    """Configuration for the tag processing pipeline."""
-    blacklist: List[str] = field(default_factory=list)
-    replace_rules: Dict[str, str] = field(default_factory=dict)  # find -> replace
-    max_tags: int = 0  # 0 = unlimited
-    append: List[str] = field(default_factory=list)
-    underscore_to_space: bool = False
-    preserve_underscore_prefixes: List[str] = field(default_factory=list)
-
-
-def process_tags(
-    tags: List[Dict[str, Any]],
-    config: TagProcessingConfig,
-) -> List[str]:
-    """Apply the tag processing pipeline: blacklist -> replace -> max N -> append."""
-    blacklist_lower = _blacklist_tokens(config)
-    if not tags:
-        return [
-            tag
-            for tag in list(config.append)
-            if _normalize_blacklist_item(tag, config) not in blacklist_lower
-        ] if config.append else []
-
-    # Step 1: filter blacklist + extract tag strings (sorted by confidence desc)
-    sorted_tags = sorted(
-        tags,
-        key=lambda t: -float(t.get("confidence") or 1.0),
-    )
-    processed: List[str] = []
-    for tag_data in sorted_tags:
-        tag_str = str(tag_data.get("tag") or "").strip()
-        if not tag_str or _normalize_blacklist_item(tag_str, config) in blacklist_lower:
-            continue
-        processed.append(tag_str)
-
-    # Step 2: replace
-    if config.replace_rules:
-        # Normalize replacement keys consistently with blacklist
-        replace_normalized = {}
-        for find_key, replace_value in config.replace_rules.items():
-            norm_key = _normalize_blacklist_item(find_key, config)
-            if norm_key:
-                replace_normalized[norm_key] = replace_value
-
-        new_processed: List[str] = []
-        for tag in processed:
-            norm_tag = _normalize_blacklist_item(tag, config)
-            replaced = replace_normalized.get(norm_tag)
-            new_processed.append(replaced if replaced is not None else tag)
-        processed = new_processed
-
-        # Re-apply blacklist after replacement (Bug 1 fix)
-        processed = [
-            tag for tag in processed
-            if _normalize_blacklist_item(tag, config) not in blacklist_lower
-        ]
-
-    # Step 3: max N
-    if config.max_tags and config.max_tags > 0:
-        processed = processed[:config.max_tags]
-
-    # Step 4: format (underscore handling) + append
-    if config.underscore_to_space:
-        processed = [_format_tag_underscore(t, config.preserve_underscore_prefixes) for t in processed]
-
-    if config.append:
-        appended = list(config.append)
-        if config.underscore_to_space:
-            appended = [_format_tag_underscore(t, config.preserve_underscore_prefixes) for t in appended]
-        # Dedupe append against existing
-        existing_lower = {_normalize_blacklist_item(t, config) for t in processed}
-        for ap in appended:
-            normalized_append = _normalize_blacklist_item(ap, config)
-            if normalized_append and normalized_append not in blacklist_lower and normalized_append not in existing_lower:
-                processed.append(ap)
-                existing_lower.add(normalized_append)
-
-    return processed
-
-
-# Danbooru emoticon ("kaomoji") vocabulary. These are REAL general tags that
-# WD-family taggers emit (they live in the SmilingWolf v3 selected_tags.csv),
-# so they must survive underscore→space formatting — ``^_^`` would corrupt to
-# ``^ ^`` — and must never be stripped as "symbolic noise". Curated from the
-# WD14 v3 vocab plus common danbooru emoticon aliases that arrive via
-# prompt-imported tags.
-KAOMOJI_TAGS: frozenset = frozenset({
-    "0_0", "(o)_(o)", "+_+", "+_-", "._.", "3_3", "6_9", "<o>_<o>",
-    "<|>_<|>", "=_=", ">_<", ">_o", "@_@", "^_^", "^o^", "|_|", "||_||",
-    "o_o", "u_u", "x_x", "n_n", "t_t", ";_;", "<_<", ">_>", "-_-",
-    ":3", ":d", ":i", ":o", ":p", ":q", ":t", ":x", ":|", ":>", ":<",
-    ":c", ":/", ";3", ";d", ";o", ";p", ";q", ";)", ";(", ">:(", ">:)",
-    "!", "!!", "!?", "?", "??", "+++", "...", "^^^", "\\m/", "\\o/",
-    "\\||/", "o3o", "0w0", "uwu", ">o<", "d:",
-})
-
-
-def is_kaomoji_tag(tag: str) -> bool:
-    """True when ``tag`` is a danbooru emoticon that must keep its exact glyphs.
-
-    Curated-set membership first, then a shape heuristic: an underscore tag
-    whose every ``_``-separated segment is at most one character (``o_o``,
-    ``=_=``, ``0_0``, ``v_v``) is an emoticon face, never words joined by
-    underscores, so spacing its underscores would corrupt it.
-    """
-    lowered = (tag or "").strip().lower()
-    if not lowered:
-        return False
-    if lowered in KAOMOJI_TAGS:
-        return True
-    if "_" in lowered:
-        segments = lowered.split("_")
-        if all(len(seg) <= 1 for seg in segments) and any(segments):
-            return True
-    return False
-
-
-def _format_tag_underscore(tag: str, preserve_prefixes: List[str]) -> str:
-    """Convert underscores to spaces unless tag starts with a preserved prefix."""
-    if is_kaomoji_tag(tag):
-        return tag
-    for prefix in preserve_prefixes:
-        if tag.startswith(prefix):
-            return tag
-    return tag.replace("_", " ")
-
-
-# Public re-export so other modules (notably ``tag_export_service.build_sidecar_content``)
-# can reuse the exact same LoRA-trainer underscore convention.
-def normalize_lora_tag(tag: str, preserve_prefixes: Optional[List[str]] = None) -> str:
-    """Convert tag underscores to spaces while preserving the LoRA-quality
-    prefixes (``score_*`` by default) that Pony / NoobAI base models depend on.
-
-    Used by the same-name ``.txt`` export pipeline so danbooru-tag content
-    modes (``tags``, ``caption_tags``, ``caption_merged``, ``tags_nl``) emit
-    LoRA-friendly captions like ``multiple girls`` instead of
-    ``multiple_girls`` while still keeping ``score_5`` / ``score_9_up``.
-
-    Pass ``preserve_prefixes=[]`` to convert every underscore (rarely needed
-    in real LoRA workflows). Pass extra prefixes (e.g. ``["score_", "rating_"]``)
-    to keep additional Booru-style metadata tokens intact.
-    """
-    if not tag:
-        return tag
-    return _format_tag_underscore(str(tag), list(preserve_prefixes) if preserve_prefixes is not None else DEFAULT_LORA_PRESERVE_PREFIXES)
-
-
-# Default underscore-preservation prefixes used by every LoRA preset that
-# enables ``underscore_to_space``. Keeping it as a module constant makes the
-# convention discoverable and lets the same-name ``.txt`` exporter reuse it
-# without re-declaring the list.
-DEFAULT_LORA_PRESERVE_PREFIXES: List[str] = ["score_"]
-
-
-# ====================================================================
-# Per-image rating / quality resolution
-# ====================================================================
-
-# Rating markers as they appear in stored tag rows: WD14-family taggers write
-# the bare category-9 word (general/sensitive/questionable/explicit),
-# OppaiOracle writes "rating:x" markers, and manual edits may use the
-# single-letter danbooru shorthand. All map to the canonical danbooru word.
-RATING_TAG_CANON: Dict[str, str] = {
-    "general": "general", "g": "general", "safe": "general",
-    "rating:general": "general", "rating:safe": "general",
-    "sensitive": "sensitive", "s": "sensitive", "rating:sensitive": "sensitive",
-    "questionable": "questionable", "q": "questionable",
-    "rating:questionable": "questionable",
-    "explicit": "explicit", "e": "explicit", "rating:explicit": "explicit",
-}
-
-# Vocabulary the generic ``{rating}`` slot renders (matches the pre-v3.5.0
-# word choice: danbooru words with ``general`` shown as ``safe``). Presets
-# with a stricter model-card vocabulary override via ``safety_vocab``.
-DEFAULT_RATING_VOCAB: Dict[str, str] = {
-    "general": "safe",
-    "sensitive": "sensitive",
-    "questionable": "questionable",
-    "explicit": "explicit",
-}
-
-_RATING_SLOT_PATTERN = re.compile(r"\{(?:rating|safety)\}")
-
-
-def canonical_rating_word(tag: str) -> Optional[str]:
-    """Map a stored tag to its canonical danbooru rating word, or None."""
-    return RATING_TAG_CANON.get(str(tag or "").strip().lower())
-
-
-def resolve_canonical_rating(
-    image: Dict[str, Any],
-    tags: List[Dict[str, Any]],
-    override: Optional[str] = None,
-) -> str:
-    """Resolve the image's rating: override > image field > tag rows > "".
-
-    Ratings live only as tag rows today (the tagger pipelines store the
-    winning rating category as a normal tag/confidence row); the ``rating``
-    dict field is honored first so a future column keeps working unchanged.
-    Returns the canonical danbooru word or "" when the image was never rated.
-    """
-    if override is not None and str(override).strip():
-        text = str(override).strip().lower()
-        return RATING_TAG_CANON.get(text, text)
-    field_value = str(image.get("rating") or "").strip().lower()
-    if field_value:
-        return RATING_TAG_CANON.get(field_value, field_value)
-    best, best_conf = "", -1.0
-    for row in tags or []:
-        canon = canonical_rating_word(str(row.get("tag") or ""))
-        if canon is None:
-            continue
-        try:
-            conf = float(row.get("confidence") or 0.0)
-        except (TypeError, ValueError):
-            conf = 0.0
-        if conf > best_conf:
-            best, best_conf = canon, conf
-    return best
-
-
-# Aesthetic-score buckets → danbooru-style quality ladder (the vocabulary the
-# Anima card trains with). ``predict_score`` returns ~1-10; thresholds are a
-# judgment call documented here rather than hidden: most anime renders land
-# in the 4-7 band, so 7+ is genuinely rare-good and <3 is genuinely broken.
-_QUALITY_BUCKETS: List[tuple] = [
-    (7.0, "masterpiece, best quality"),
-    (6.0, "best quality"),
-    (5.0, "good quality"),
-    (4.0, ""),  # normal band — no token beats a meaningless one
-    (3.0, "low quality"),
-]
-
-
-def quality_from_aesthetic_score(score: Any) -> Optional[str]:
-    """Map an aesthetic score (~1-10) to quality tags; None when unscored."""
-    if score is None:
-        return None
-    try:
-        value = float(score)
-    except (TypeError, ValueError):
-        return None
-    for threshold, label in _QUALITY_BUCKETS:
-        if value >= threshold:
-            return label
-    return "worst quality"
-
-
-def flatten_single_line(text: str) -> str:
-    """Collapse all whitespace (incl. newlines) to single spaces.
-
-    kohya-style trainers read only the first line of a caption file (or one
-    random line with ``enable_wildcard``); multi-paragraph NL captions must
-    be flattened before they hit a single-caption ``.txt``.
-    """
-    return " ".join(str(text or "").split())
-
-
-def _normalize_blacklist_item(value: str, config: TagProcessingConfig) -> str:
-    normalized = str(value or "").strip()
-    if config.underscore_to_space:
-        normalized = _format_tag_underscore(normalized, config.preserve_underscore_prefixes)
-    return " ".join(normalized.split()).lower()
-
-
-def _blacklist_tokens(config: TagProcessingConfig) -> set[str]:
-    return {
-        token
-        for token in (_normalize_blacklist_item(item, config) for item in config.blacklist)
-        if token
-    }
-
-
-def _split_template_value(value: str, separator: str) -> List[str]:
-    text = str(value or "").strip()
-    if not text:
-        return []
-    sep = separator.strip()
-    if sep:
-        parts = [part.strip() for part in text.split(sep)]
-    else:
-        parts = [text]
-    return [part for part in parts if part]
-
-
-def _filter_template_value(value: str, config: TagProcessingConfig, separator: str) -> str:
-    blocked = _blacklist_tokens(config)
-    if not blocked:
-        return str(value or "").strip()
-    kept = [
-        part
-        for part in _split_template_value(value, separator)
-        if _normalize_blacklist_item(part, config) not in blocked
-    ]
-    return separator.join(kept)
-
-
-# ====================================================================
-# Variable resolution
-# ====================================================================
-
-# Heuristic character tag patterns (anime character names usually contain underscores
-# or are multi-word names with parentheses indicating series)
-_CHARACTER_TAG_HINTS = re.compile(r"\([^)]+\)$")  # tags ending in (series_name)
-# P3-14: danbooru also uses the open-ended forms ``6+girls`` / ``6+boys``.
-_COUNT_TAG_PATTERN = re.compile(r"^\d+\+?(girl|boy|girls|boys|other|others|female|male)s?$", re.IGNORECASE)
-
-# tags.category (migration 024) → template bucket. Categories outside this
-# map (general/meta/rating/trigger/None) fall through to the heuristic.
-_TAG_CATEGORY_BUCKETS: Dict[str, str] = {
-    "character": "characters",
-    "copyright": "copyright",
-    "artist": "artists",
-}
-
-
-def _is_character_tag(tag: str) -> bool:
-    """Heuristic: tag has parenthesized suffix or comes from a known list of character tags."""
-    return bool(_CHARACTER_TAG_HINTS.search(tag))
-
-
-def _extract_count_tag(tags: List[str]) -> str:
-    """Find subject-count tag (1girl, 2boys, 6+girls, etc.) in the tag list."""
-    for tag in tags:
-        if _COUNT_TAG_PATTERN.match(tag):
-            return tag
-    return ""
-
-
-def _category_norm(tag: str) -> str:
-    """Category-lookup key: case-insensitive with ``_``/space folded."""
-    return " ".join(str(tag or "").replace("_", " ").lower().split())
-
-
-def _split_tags_by_type(
-    filtered_tags: List[str],
-    category_by_norm: Optional[Dict[str, str]] = None,
-) -> Dict[str, List[str]]:
-    """Split tags into characters / copyright / artists / general.
-
-    The tagger-recorded ``tags.category`` decides when present (P3-11); tags
-    without one — legacy rows, replace-rule renames — fall back to the
-    parenthesized-suffix character heuristic, everything else is general.
-    """
-    buckets: Dict[str, List[str]] = {"characters": [], "copyright": [], "artists": [], "general": []}
-    lookup = category_by_norm or {}
-    for tag in filtered_tags:
-        bucket = _TAG_CATEGORY_BUCKETS.get(str(lookup.get(_category_norm(tag)) or ""))
-        if bucket is None:
-            bucket = "characters" if _is_character_tag(tag) else "general"
-        buckets[bucket].append(tag)
-    return buckets
-
-
-@dataclass
-class TemplateContext:
-    """All variables available to a template."""
-    trigger: str = ""
-    tags_all: List[str] = field(default_factory=list)
-    tags_filtered: List[str] = field(default_factory=list)
-    tags_top_n: Dict[int, List[str]] = field(default_factory=dict)
-    nl_caption: str = ""
-    prompt: str = ""
-    negative: str = ""
-    rating: str = ""
-    quality: str = ""
-    safety: str = ""
-    append: str = ""
-    separator: str = ", "
-    # P3-11: normalized tag → tags.category, so the category sections render
-    # from tagger provenance instead of guessing.
-    category_by_norm: Dict[str, str] = field(default_factory=dict)
-
-    def resolve(self) -> Dict[str, str]:
-        """Build dict of variable name -> resolved string."""
-        split = _split_tags_by_type(self.tags_filtered, self.category_by_norm)
-        count = _extract_count_tag(self.tags_filtered)
-        sep = self.separator
-
-        return {
-            "trigger": self.trigger,
-            "tags": sep.join(self.tags_all),
-            "tags:filtered": sep.join(self.tags_filtered),
-            "nl_caption": self.nl_caption,
-            "prompt": self.prompt,
-            "negative": self.negative,
-            "rating": self.rating,
-            "characters": sep.join(split["characters"]),
-            "copyright": sep.join(split["copyright"]),
-            "artists": sep.join(split["artists"]),
-            # Anima model-card convention: artists carry an @ prefix.
-            "artists:@": sep.join(f"@{a}" for a in split["artists"]),
-            "general": sep.join(split["general"]),
-            "quality": self.quality,
-            "safety": self.safety,
-            "count": count,
-            "append": self.append,
-        }
-
-
-# ====================================================================
-# Template rendering
-# ====================================================================
-
-# Match {variable}, {tags:N} (digit N), or modifier forms like {artists:@}
-_TEMPLATE_VAR_PATTERN = re.compile(r"\{([a-zA-Z_]+(?::[\w@]+)?)\}")
-
-
-def render_template(template: str, context: TemplateContext) -> str:
-    """Render a template by substituting variables.
-
-    Empty variables are replaced with empty strings; consecutive separators
-    and trailing/leading separators are cleaned up.
-    """
-    resolved = context.resolve()
-
-    def substitute(match: re.Match) -> str:
-        var = match.group(1)
-        # Handle {tags:N}
-        if var.startswith("tags:"):
-            suffix = var.split(":", 1)[1]
-            if suffix == "filtered":
-                return resolved["tags:filtered"]
-            try:
-                n = int(suffix)
-                top_n = context.tags_top_n.get(n) or context.tags_filtered[:n]
-                return context.separator.join(top_n)
-            except ValueError:
-                return ""
-        return resolved.get(var, "")
-
-    # Render line by line so literal prose and author-written line breaks
-    # survive (v3.4.3: custom templates may freely mix free text, blank
-    # lines and {variables}). Blank lines written in the template are
-    # preserved; lines that only became empty because every variable on
-    # them resolved empty are dropped. Separator cleanup and token dedup
-    # stay per-line, so single-line templates behave exactly as before.
-    out_lines: List[str] = []
-    for line in str(template or "").split("\n"):
-        if not line.strip():
-            out_lines.append("")
-            continue
-        rendered = _TEMPLATE_VAR_PATTERN.sub(substitute, line)
-        cleaned = _cleanup_separators(rendered, context.separator)
-        deduped = _dedup_tokens(cleaned, context.separator)
-        if deduped:
-            out_lines.append(deduped)
-    while out_lines and not out_lines[0]:
-        out_lines.pop(0)
-    while out_lines and not out_lines[-1]:
-        out_lines.pop()
-    return "\n".join(out_lines)
-
-
-def _dedup_tokens(text: str, separator: str) -> str:
-    """Drop duplicate tokens while preserving first-occurrence order.
-
-    Two tokens are duplicates when their normalised forms match — case
-    is ignored, leading/trailing whitespace is stripped, and
-    underscores are folded with spaces. This is the same equivalence
-    the rest of the engine uses (``_normalize_blacklist_item``).
-
-    Concretely it fixes the LoRA-training regression where ``{trigger}``
-    and an item in ``{append}`` could both produce the trigger word
-    once with an underscore (``my_oc``) and once after underscore
-    normalisation (``my oc``); a real trainer would treat those as
-    two distinct BPE tokens.
-
-    P3-14: the first ``". "`` marks the tag→sentence boundary (anima-style
-    ``{general}. {nl_caption}``). The sentence is prose, so it is no longer
-    token-deduped (which could delete commas mid-sentence) — but a leading
-    run of already-seen tag tokens is stripped, because an ``ai_caption``
-    fallback (fused tags+sentence) echoes the whole tag list there.
-    """
-    if not text:
-        return ""
-    sep = separator if separator else ", "
-
-    boundary = text.find(". ")
-    sentence = ""
-    tag_zone = text
-    if boundary != -1:
-        tag_zone = text[:boundary]
-        sentence = text[boundary + 2:]
-
-    parts = [p.strip() for p in tag_zone.split(sep)]
-    seen: set = set()
-    kept: list = []
-    for p in parts:
-        if not p:
-            continue
-        # Treat ``_`` and `` `` as equivalent so ``my_oc`` and ``my oc``
-        # collapse to one entry. Case-insensitive.
-        norm = " ".join(p.replace("_", " ").lower().split())
-        if norm in seen:
-            continue
-        seen.add(norm)
-        kept.append(p)
-    result = sep.join(kept)
-
-    if sentence:
-        stokens = [s.strip() for s in sentence.split(sep)]
-        index = 0
-        while index < len(stokens):
-            norm = " ".join(stokens[index].replace("_", " ").lower().split())
-            if norm and norm in seen:
-                index += 1
-            else:
-                break
-        sentence_clean = sep.join(s for s in stokens[index:] if s).strip()
-        if sentence_clean:
-            result = f"{result}. {sentence_clean}" if result else sentence_clean
-    return result
-
-
-def _cleanup_separators(text: str, separator: str) -> str:
-    """Remove duplicate separators and leading/trailing separator artifacts.
-
-    Examples (sep=', '):
-      ', , tag1, tag2, ' -> 'tag1, tag2'
-      'tag1, , , tag2'   -> 'tag1, tag2'
-    """
-    if not text:
-        return ""
-    # Split on separator, strip, drop empties
-    sep_stripped = separator.strip()
-    if not sep_stripped:
-        return text.strip()
-    parts = [p.strip() for p in text.split(sep_stripped)]
-    parts = [p for p in parts if p]
-    result = separator.join(parts).strip()
-    # Remove trailing ". " or "." left when template variables after a period
-    # separator (e.g., "{tags}. {nl_caption}") resolve to empty.
-    while result.endswith('.') or result.endswith('. '):
-        candidate = result.rstrip('. ').rstrip('.')
-        if candidate == result:
-            break
-        # Only strip if what remains looks like it ended with a comma-separated
-        # tag (not a proper NL sentence that naturally ends with a period).
-        # Heuristic: if the last character before the period is a letter and
-        # the segment after the last comma has spaces, it's a sentence — keep it.
-        last_comma = candidate.rfind(sep_stripped)
-        tail = candidate[last_comma + len(sep_stripped):].strip() if last_comma >= 0 else candidate
-        if ' ' in tail and len(tail) > 20:
-            # Looks like a sentence — don't strip
-            break
-        result = candidate
-    return result
+from services.export_template_presets import (
+    PRESETS,
+    TEMPLATE_VARIABLES,
+    list_presets,
+)
+from services.export_tag_pipeline import (
+    TagProcessingConfig,
+    process_tags,
+    KAOMOJI_TAGS,
+    is_kaomoji_tag,
+    _format_tag_underscore,
+    normalize_lora_tag,
+    DEFAULT_LORA_PRESERVE_PREFIXES,
+    _normalize_blacklist_item,
+    _blacklist_tokens,
+    _split_template_value,
+    _filter_template_value,
+)
+from services.export_rating_quality import (
+    RATING_TAG_CANON,
+    DEFAULT_RATING_VOCAB,
+    _RATING_SLOT_PATTERN,
+    canonical_rating_word,
+    resolve_canonical_rating,
+    _QUALITY_BUCKETS,
+    quality_from_aesthetic_score,
+    flatten_single_line,
+)
+from services.export_template_render import (
+    _CHARACTER_TAG_HINTS,
+    _COUNT_TAG_PATTERN,
+    _TAG_CATEGORY_BUCKETS,
+    _is_character_tag,
+    _extract_count_tag,
+    _category_norm,
+    _split_tags_by_type,
+    TemplateContext,
+    _TEMPLATE_VAR_PATTERN,
+    render_template,
+    _dedup_tokens,
+    _cleanup_separators,
+)
 
 
 # ====================================================================
@@ -877,11 +244,3 @@ def build_export_caption(
         rendered = flatten_single_line(rendered)
 
     return rendered
-
-
-def list_presets() -> List[Dict[str, Any]]:
-    """Return preset metadata for UI."""
-    return [
-        {"id": pid, **{k: v for k, v in p.items() if k != "template"}, "template": p["template"]}
-        for pid, p in PRESETS.items()
-    ]
