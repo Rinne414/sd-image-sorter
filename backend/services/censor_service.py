@@ -189,7 +189,8 @@ class RemoveBackgroundRequest(BaseModel):
 # in pyproject.toml, same as database.py / sorting_service.py /
 # image_service.py / tag_rules.py.
 from services.censor.detection import _DetectionMixin
-from services.censor.edit_ops import _EditOpsMixin
+from services.censor.edit_mask_geometry import _EditMaskGeometryMixin
+from services.censor.edit_ops import _EditApplyMixin
 from services.censor.mask_cache import _MaskCacheMixin
 from services.censor.output_io import _OutputMixin, _paths_match_runtime_case
 from services.censor.sam3_ops import _Sam3Mixin
@@ -206,7 +207,8 @@ class CensorService(
     _MaskCacheMixin,
     _DetectionMixin,
     _OutputMixin,
-    _EditOpsMixin,
+    _EditApplyMixin,
+    _EditMaskGeometryMixin,
     _Sam3Mixin,
 ):
     """Service for NSFW detection and image censoring."""
