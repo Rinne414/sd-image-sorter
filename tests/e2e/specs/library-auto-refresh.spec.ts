@@ -1432,10 +1432,17 @@ test.describe('Idle library auto-refresh completion', () => {
     })
 
     expect(invalidIdentityError).toContain('invalid scan identity')
-    const source = await fs.readFile(
-      path.join(REPO_ROOT, 'frontend/js/app/scan-diagnostics.js'),
-      'utf8',
-    )
+    // The former scan-diagnostics.js monolith is now a verbatim 3-slice family
+    // (card + lifecycle + poller); the regression pin covers the concatenation
+    // so a _scanPollGeneration resurrection in any slice is still caught.
+    const sliceFiles = [
+      'frontend/js/app/scan-diagnostics.js',
+      'frontend/js/app/scan-progress-lifecycle.js',
+      'frontend/js/app/scan-progress-poller.js',
+    ]
+    const source = (await Promise.all(
+      sliceFiles.map((slice) => fs.readFile(path.join(REPO_ROOT, slice), 'utf8')),
+    )).join('\n')
 
     expect(source).not.toContain('_scanPollGeneration')
     expect(source).toContain('_scanPollersByIdentity')
