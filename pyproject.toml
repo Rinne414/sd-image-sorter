@@ -246,6 +246,19 @@ select = ["F", "E9"]
 # called only from the moved config_settings bodies) so ``config.json`` keeps
 # resolving; the facade body itself calls none of them.
 "backend/config.py" = ["F401"]
+# toriigate_tagger.py is the compatibility FILE facade for the
+# toriigate_caption_parsing sibling-module split (2026-07). Same rationale as
+# tagger.py above: the verbatim header import block stays (``json`` / ``re``
+# are now called only from the moved parsing bodies) and the RATING_TAGS /
+# EXPLICIT_HINT_TAGS / CAPTION_COUNT/ATTRIBUTE/PHRASE_PATTERNS re-imports
+# exist so every historical module attribute keeps resolving at
+# toriigate_tagger.<name> — the quartet / singleton / TORIIGATE_* constant /
+# ToriiGateImageGeometryError seams stay DEFINED here and the moved
+# _resize_for_inference resolves the geometry family back through _svc() at
+# call time — for the suites that patch and read this module object
+# (tests/test_toriigate_pins.py, tests/test_toriigate_tagger.py,
+# tests/test_migration_019_sanitize_nl_captions.py, tests/test_model_service.py).
+"backend/toriigate_tagger.py" = ["F401"]
 # Test bodies routinely bind a call result for readability/debugging even when
 # the value is not asserted on; F841 stays enforced for production code (where
 # a dead binding is a real smell) but is relaxed inside the test suite.
