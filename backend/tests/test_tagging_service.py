@@ -897,6 +897,35 @@ def test_start_tagging_still_rejects_when_worker_is_actually_alive():
         raise AssertionError("Expected start_tagging() to reject a live worker")
 
 
+def test_start_tagging_rejects_terminal_progress_while_child_is_alive() -> None:
+    service = TaggingService()
+    service.set_tagger_getter(lambda **kwargs: object())
+    service._active_run_id = 4
+    service._progress = _build_tag_progress_state(
+        "done",
+        current=6,
+        total=6,
+        tagged=6,
+        message="Completed",
+        run_id=4,
+    )
+    service._worker_process = _StoppingWorker()
+    background_tasks = BackgroundTasks()
+
+    assert service.is_worker_active() is True
+    with pytest.raises(HTTPException) as exc_info:
+        service.start_tagging(
+            TagRequest(model_name="wd-swinv2-tagger-v3", use_gpu=False),
+            background_tasks,
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Tagging already in progress"
+    assert service._active_run_id == 4
+    assert service.get_progress()["status"] == "done"
+    assert len(background_tasks.tasks) == 0
+
+
 def test_background_scheduling_failure_releases_pending_claim() -> None:
     service = TaggingService()
     service.set_tagger_getter(lambda **kwargs: object())

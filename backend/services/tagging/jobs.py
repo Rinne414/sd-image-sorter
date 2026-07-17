@@ -269,20 +269,14 @@ class JobsMixin:
             raise HTTPException(status_code=500, detail="Tagger not initialized")
 
         with self._lock:
-            if self._pending_run_id == self._active_run_id:
+            worker_alive = bool(
+                self._worker_process and self._worker_process.is_alive()
+            )
+            if self._pending_run_id == self._active_run_id or worker_alive:
                 raise HTTPException(
                     status_code=409, detail="Tagging already in progress"
                 )
             if self._progress["status"] in {"running", "cancelling"}:
-                worker_alive = bool(
-                    self._worker_process and self._worker_process.is_alive()
-                )
-                if worker_alive:
-                    # 409 Conflict, matching the smart-tag and VLM-batch busy
-                    # responses (400 stays reserved for invalid requests).
-                    raise HTTPException(
-                        status_code=409, detail="Tagging already in progress"
-                    )
                 logger.warning(
                     "Recovering from stale tagging state %r with no live worker; allowing a fresh start.",
                     self._progress["status"],

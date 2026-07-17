@@ -23,9 +23,13 @@ class _FakeLegacyTaggingService:
         self.started = False
         self.start_count = 0
         self.cancelled = False
+        self.worker_active = False
 
     def get_progress(self):
         return dict(self.progress)
+
+    def is_worker_active(self) -> bool:
+        return self.worker_active
 
     def start_tagging(self, request, background_tasks):
         self.started = True
@@ -178,6 +182,53 @@ def test_gallery_validation_409_still_propagates(monkeypatch):
     assert exc.value.status_code == 409
     assert "ToriiGate" in str(exc.value.detail)
     assert service.queue_snapshot()["total_queued"] == 0
+
+
+def test_terminal_gallery_live_child_queues_smart_until_child_exits(monkeypatch):
+    from services import tagging_pipeline_service
+
+    service = _make_service()
+    _idle_probes(monkeypatch)
+    legacy = _FakeLegacyTaggingService(progress={"status": "done"})
+    legacy.worker_active = True
+    started_payloads: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        tagging_pipeline_service.smart_tag_service,
+        "start_smart_tag_job",
+        lambda payload: started_payloads.append(dict(payload))
+        or {"status": "started"},
+    )
+
+    queued = service.start_smart_tagging(
+        {"image_ids": [7]},
+        legacy_service=legacy,
+    )
+
+    assert queued["status"] == "queued"
+    assert service.dispatch_pending_once() is False
+    assert started_payloads == []
+
+    legacy.worker_active = False
+    assert service.dispatch_pending_once() is True
+    assert started_payloads == [{"image_ids": [7]}]
+
+
+def test_terminal_gallery_live_child_queues_vlm_without_claiming(monkeypatch):
+    service = _make_service()
+    _idle_probes(monkeypatch)
+    legacy = _FakeLegacyTaggingService(progress={"status": "done"})
+    legacy.worker_active = True
+    claim_calls: list[str] = []
+
+    queued = service.start_vlm_caption_batch(
+        lambda: claim_calls.append("claimed"),
+        payload={"image_ids": [8]},
+        legacy_service=legacy,
+    )
+
+    assert queued is not None
+    assert queued["status"] == "queued"
+    assert claim_calls == []
 
 
 def test_vlm_start_queues_while_smart_tag_is_active(monkeypatch):

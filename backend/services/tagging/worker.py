@@ -658,6 +658,9 @@ def _tagging_worker_main(
             )
             return
 
+        entry_stats_service.record_activity(
+            entry_stats_service.KIND_TAGGED, total_processed
+        )
         send(
             "done",
             f"Completed! Processed {total_processed} images: {total_tagged} tagged"
@@ -669,9 +672,6 @@ def _tagging_worker_main(
                 total_errors,
                 top_tags_counter,
             ),
-        )
-        entry_stats_service.record_activity(
-            entry_stats_service.KIND_TAGGED, total_processed
         )
     except Exception as error:
         send("error", f"Error: {error}")

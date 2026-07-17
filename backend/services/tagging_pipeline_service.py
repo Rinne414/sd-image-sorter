@@ -116,6 +116,7 @@ def _probe_legacy(legacy_service: Optional["TaggingService"], *, target: str) ->
     if legacy_service is None:
         return (_PROBE_IDLE, "")
     try:
+        worker_active = bool(legacy_service.is_worker_active())
         status = str((legacy_service.get_progress() or {}).get("status") or "idle").lower()
     except Exception:
         logger.exception("Could not determine AI Tag status; refusing to start %s", target)
@@ -125,7 +126,7 @@ def _probe_legacy(legacy_service: Optional["TaggingService"], *, target: str) ->
             "to avoid running two tagging jobs at once. "
             "无法确认 AI 打标状态，已拒绝启动以避免同时运行两个打标任务。",
         )
-    if status in LEGACY_ACTIVE_STATUSES:
+    if worker_active or status in LEGACY_ACTIVE_STATUSES:
         return (_PROBE_BUSY, f"AI Tag is already running; {target} was queued behind it.")
     return (_PROBE_IDLE, "")
 

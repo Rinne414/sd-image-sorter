@@ -56,6 +56,17 @@ class _RecorderQueue:
         self.messages.append(item)
 
 
+class _OrderingQueue(_RecorderQueue):
+    def __init__(self, events: list[object]) -> None:
+        super().__init__()
+        self.events = events
+
+    def put(self, item: dict[str, object]) -> None:
+        if item.get("status") in {"done", "error", "cancelled"}:
+            self.events.append(item["status"])
+        super().put(item)
+
+
 class _StaticEvent:
     def __init__(self, is_set: bool = False) -> None:
         self._is_set = is_set
@@ -128,6 +139,24 @@ def test_worker_cancel_before_processing_writes_nothing(
     # snapshot only rides cancellations that reached the tagging loop).
     assert "last_run_stats" not in terminal
     assert db.get_image_tags(image_id) == []
+
+
+def test_worker_records_activity_before_success_terminal(
+    fake_tagger_env, monkeypatch, tmp_path: Path
+) -> None:
+    image_id = _add_image(tmp_path, "activity_before_done.png")
+    events: list[object] = []
+    recorder = _OrderingQueue(events)
+    monkeypatch.setattr(
+        tsvc.entry_stats_service,
+        "record_activity",
+        lambda kind, count: events.append((kind, count)),
+    )
+
+    tsvc._tagging_worker_main(_payload([image_id]), recorder, _StaticEvent(False))
+
+    assert events == [(tsvc.entry_stats_service.KIND_TAGGED, 1), "done"]
+    assert recorder.messages[-1]["status"] == "done"
 
 
 def test_worker_missing_file_marks_unreadable_and_counts_error(

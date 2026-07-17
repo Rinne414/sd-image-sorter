@@ -80,6 +80,13 @@ class ProgressMixin:
         with self._lock:
             return self._progress.copy()
 
+    def is_worker_active(self) -> bool:
+        """Return whether the owned tagging child process is still alive."""
+        with self._lock:
+            return bool(
+                self._worker_process and self._worker_process.is_alive()
+            )
+
     def get_progress_proxy(self) -> MutableStateProxy:
         """Expose the legacy dict-style progress handle without moving ownership out of the service."""
         return self._progress_proxy
