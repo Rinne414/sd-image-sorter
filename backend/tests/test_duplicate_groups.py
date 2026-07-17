@@ -420,6 +420,121 @@ def test_ann_path_matches_exact_path(dup_env):
     not pytest.importorskip("similarity_ann").hnswlib_available(),
     reason="hnswlib not installed",
 )
+def test_ann_path_keeps_complete_dense_cluster_beyond_neighbor_window(dup_env):
+    node_count = 64
+    first_image_id = 1000
+    vector = np.zeros(512, dtype=np.float32)
+    vector[0] = 1.0
+    conn = dup_env.get_connection()
+    try:
+        for offset in range(node_count):
+            image_id = first_image_id + offset
+            _insert_image(
+                conn,
+                image_id,
+                f"dense-{offset}.png",
+                vector,
+                rating=5 if offset == node_count - 1 else 0,
+                size=1000,
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    dgs.run_duplicate_scan(FakeHandle(), threshold=0.95)
+
+    data = dgs.load_result()
+    assert data is not None
+    assert data["summary"]["group_count"] == 1
+    assert data["summary"]["redundant_count"] == node_count - 1
+    group = data["groups"][0]
+    assert len(group["members"]) == node_count
+    assert group["members"][0]["id"] == first_image_id + node_count - 1
+    assert {member["id"] for member in group["members"]} == {
+        first_image_id + offset for offset in range(node_count)
+    }
+
+
+def test_identical_candidates_verify_forced_fingerprint_collisions(monkeypatch):
+    matrix = np.asarray(
+        [
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 0.0],
+            [-1.0, 0.0],
+        ],
+        dtype=np.float32,
+    )
+    monkeypatch.setattr(
+        dgs,
+        "_embedding_fingerprint",
+        lambda vector: b"forced-collision",
+    )
+
+    candidates = dgs._find_identical_candidate_indices(
+        matrix,
+        dgs._embedding_fingerprint,
+        lambda: False,
+    )
+
+    assert candidates == {0, 2}
+
+
+def test_identical_candidate_scan_stops_after_cancellation():
+    node_count = dgs._GROUP_CANCEL_CHECK_INTERVAL + 1
+    matrix = np.arange(node_count * 2, dtype=np.float32).reshape(node_count, 2)
+    cancellation_checks = 0
+    fingerprint_calls = 0
+
+    def is_cancelled() -> bool:
+        nonlocal cancellation_checks
+        cancellation_checks += 1
+        return cancellation_checks >= 2
+
+    def fingerprint(vector: np.ndarray) -> bytes:
+        nonlocal fingerprint_calls
+        fingerprint_calls += 1
+        return vector.tobytes()
+
+    candidates = dgs._find_identical_candidate_indices(
+        matrix,
+        fingerprint,
+        is_cancelled,
+    )
+
+    assert candidates is None
+    assert cancellation_checks == 2
+    assert fingerprint_calls == dgs._GROUP_CANCEL_CHECK_INTERVAL
+
+
+def test_exact_candidate_rescoring_stops_after_cancellation(monkeypatch):
+    matrix = np.zeros((8, 512), dtype=np.float32)
+    matrix[:, 0] = 1.0
+    cancellation_checks = 0
+
+    def is_cancelled() -> bool:
+        nonlocal cancellation_checks
+        cancellation_checks += 1
+        return cancellation_checks >= 2
+
+    monkeypatch.setattr(dgs, "_MATMUL_CHUNK", 2)
+    matches = dgs._find_exact_direct_matches(
+        0,
+        matrix,
+        list(range(matrix.shape[0])),
+        set(range(matrix.shape[0])),
+        0.95,
+        is_cancelled,
+    )
+
+    assert matches is None
+    assert cancellation_checks == 2
+
+
+@pytest.mark.skipif(
+    not pytest.importorskip("similarity_ann").hnswlib_available(),
+    reason="hnswlib not installed",
+)
 def test_ann_path_never_suggests_transitive_only_duplicate_for_deletion(dup_env):
     _seed_transitive_chain(dup_env)
 

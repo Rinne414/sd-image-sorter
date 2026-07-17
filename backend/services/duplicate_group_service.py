@@ -9,12 +9,11 @@ This service runs as a bulk background job (progress + cancel via
 ``bulk_job_service``):
 
 1. Load every CLIP embedding (id + vector) and L2-normalize.
-2. Find neighbor pairs >= threshold — via the optional hnswlib ANN when
-   available (sub-quadratic), else an exact chunked matmul over the upper
-   triangle. Both paths are streamed and cancellable; there is NO size cap.
-3. Partition exact threshold edges into direct-neighbor groups. Every suggested
-   loser must have a direct edge to the keeper that remains; transitive chains
-   are never destructive suggestions.
+2. Discover candidates via the optional hnswlib ANN and collision-checked
+   fingerprints for identical embeddings, or use an exact chunked fallback.
+3. Re-score ANN candidates exactly in bounded blocks, then partition them into
+   direct-neighbor groups. Every suggested loser must have a direct edge to the
+   keeper that remains; transitive chains are never destructive suggestions.
 4. Enrich members with metadata and rank each group: highest
    (user_rating, aesthetic_score, resolution, file_size) first — that
    member becomes the suggested keeper.
@@ -26,6 +25,7 @@ checked ids to the existing trash-backed delete pipeline.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -43,6 +43,7 @@ MIN_THRESHOLD = 0.80
 MAX_THRESHOLD = 0.999
 _ANN_NEIGHBOR_K = 24          # neighbors fetched per item on the ANN path
 _MATMUL_CHUNK = 512           # rows per chunk on the exact path
+_EMBEDDING_FINGERPRINT_BYTES = 16
 _GROUP_CANCEL_CHECK_INTERVAL = 256
 _RESULT_VERSION = 2
 _STATE_FILENAME = "duplicate-groups.json"
@@ -53,7 +54,9 @@ _ACTIVE_JOB_ID: Optional[str] = None
 SimilarityPair: TypeAlias = tuple[int, int, float]
 NeighborMap: TypeAlias = Dict[int, Dict[int, float]]
 DirectNeighborGroup: TypeAlias = tuple[List[int], float]
+ExactDirectMatches: TypeAlias = tuple[List[int], Optional[float]]
 CancellationCheck: TypeAlias = Callable[[], bool]
+FingerprintFunction: TypeAlias = Callable[[np.ndarray], bytes]
 
 
 class DuplicateGroupPersistenceError(RuntimeError):
@@ -112,36 +115,88 @@ def _load_embeddings(handle) -> tuple:
     return ids, vectors / norms
 
 
-def _pairs_via_ann(
-    matrix: np.ndarray, threshold: float, handle
-) -> Optional[List[SimilarityPair]]:
-    """Neighbor pairs via hnswlib. None → caller falls back to exact path."""
-    import similarity_ann
+def _embedding_fingerprint(vector: np.ndarray) -> bytes:
+    contiguous = np.ascontiguousarray(vector)
+    payload = memoryview(contiguous).cast("B")
+    return hashlib.blake2b(
+        payload,
+        digest_size=_EMBEDDING_FINGERPRINT_BYTES,
+    ).digest()
 
-    if not similarity_ann.hnswlib_available():
-        return None
-    n = matrix.shape[0]
-    ann = similarity_ann.build_index(matrix, (n, n), None, persist=False)
-    if ann is None:
-        return None
-    k = min(_ANN_NEIGHBOR_K, n)
-    pairs: List[SimilarityPair] = []
-    for i in range(n):
-        if i % 512 == 0:
+
+def _find_identical_candidate_indices(
+    matrix: np.ndarray,
+    fingerprint: FingerprintFunction,
+    is_cancelled: CancellationCheck,
+) -> Optional[set[int]]:
+    """Find repeated rows while verifying every fingerprint hit exactly."""
+    primary_representatives: Dict[bytes, int] = {}
+    alternate_representatives: Dict[bytes, List[int]] = {}
+    candidate_indices: set[int] = set()
+
+    for index in range(matrix.shape[0]):
+        if (
+            index % _GROUP_CANCEL_CHECK_INTERVAL == 0
+            and is_cancelled()
+        ):
+            return None
+        digest = fingerprint(matrix[index])
+        primary = primary_representatives.get(digest)
+        if primary is None:
+            primary_representatives[digest] = index
+            continue
+        if np.array_equal(matrix[index], matrix[primary]):
+            candidate_indices.add(primary)
+            candidate_indices.add(index)
+            continue
+
+        alternates = alternate_representatives.get(digest)
+        matched_alternate: Optional[int] = None
+        if alternates is not None:
+            for alternate in alternates:
+                if np.array_equal(matrix[index], matrix[alternate]):
+                    matched_alternate = alternate
+                    break
+        if matched_alternate is not None:
+            candidate_indices.add(matched_alternate)
+            candidate_indices.add(index)
+        elif alternates is None:
+            alternate_representatives[digest] = [index]
+        else:
+            alternates.append(index)
+
+    return None if is_cancelled() else candidate_indices
+
+
+def _find_ann_candidate_indices(
+    matrix: np.ndarray,
+    threshold: float,
+    ann,
+    handle,
+) -> Optional[List[int]]:
+    """Return image indices whose initial ANN window contains a direct match."""
+    node_count = matrix.shape[0]
+    query_size = min(_ANN_NEIGHBOR_K, node_count)
+    candidate_indices: set[int] = set()
+    for index in range(node_count):
+        if index % 512 == 0:
             if handle.cancelled:
-                return pairs
+                return None
             handle.set_progress(
-                processed=20 + int(60 * i / max(1, n)), total=100,
-                message=f"Searching neighbors {i}/{n}",
+                processed=20 + int(50 * index / max(1, node_count)),
+                total=100,
+                message=f"Searching neighbors {index}/{node_count}",
             )
-        labels = ann.query(matrix[i], k)
+        labels = ann.query(matrix[index], query_size)
         if labels is None:
-            return None  # index unhealthy — redo exactly
-        sims = matrix[labels] @ matrix[i]
-        for j, sim in zip(labels.tolist(), sims.tolist()):
-            if j > i and sim >= threshold:
-                pairs.append((i, j, float(sim)))
-    return pairs
+            return None
+        similarities = matrix[labels] @ matrix[index]
+        for neighbor, similarity in zip(labels.tolist(), similarities.tolist()):
+            if neighbor == index or similarity < threshold:
+                continue
+            candidate_indices.add(index)
+            candidate_indices.add(int(neighbor))
+    return None if handle.cancelled else sorted(candidate_indices)
 
 
 def _pairs_exact(
@@ -178,6 +233,40 @@ def _rank_key(member: Dict[str, Any]) -> tuple:
         member.get("file_size") or 0,
         -(member.get("id") or 0),  # stable: older image wins final ties
     )
+
+
+def _load_metadata(
+    member_ids: List[int],
+    handle,
+) -> Optional[Dict[int, Dict[str, Any]]]:
+    import database as db
+
+    metadata: Dict[int, Dict[str, Any]] = {}
+    with db.get_db() as conn:
+        for start in range(0, len(member_ids), 900):
+            if handle.cancelled:
+                return None
+            batch = member_ids[start:start + 900]
+            placeholders = ",".join("?" * len(batch))
+            for row in conn.execute(
+                f"""
+                SELECT id, path, filename, width, height, file_size,
+                       aesthetic_score, user_rating
+                FROM images WHERE id IN ({placeholders})
+                """,
+                batch,
+            ).fetchall():
+                metadata[int(row[0])] = {
+                    "id": int(row[0]),
+                    "path": row[1],
+                    "filename": row[2],
+                    "width": row[3],
+                    "height": row[4],
+                    "file_size": row[5],
+                    "aesthetic_score": row[6],
+                    "user_rating": row[7],
+                }
+    return metadata
 
 
 def _build_neighbor_map(pairs: List[SimilarityPair]) -> NeighborMap:
@@ -238,11 +327,200 @@ def _partition_direct_neighbor_groups(
     return None if is_cancelled() else groups
 
 
+def _find_exact_direct_matches(
+    keeper: int,
+    matrix: np.ndarray,
+    ranked_candidates: List[int],
+    remaining: set[int],
+    threshold: float,
+    is_cancelled: CancellationCheck,
+) -> Optional[ExactDirectMatches]:
+    """Exactly score one keeper against current candidates in bounded blocks."""
+    current_candidates = [
+        candidate
+        for candidate in ranked_candidates
+        if candidate != keeper and candidate in remaining
+    ]
+    direct_matches: List[int] = []
+    minimum_similarity: Optional[float] = None
+
+    for start in range(0, len(current_candidates), _MATMUL_CHUNK):
+        if is_cancelled():
+            return None
+        candidate_block = current_candidates[start:start + _MATMUL_CHUNK]
+        block_indices = np.asarray(candidate_block, dtype=np.intp)
+        similarities = matrix[block_indices] @ matrix[keeper]
+        matching_offsets = np.flatnonzero(similarities >= threshold)
+        for offset in matching_offsets.tolist():
+            direct_matches.append(candidate_block[offset])
+            similarity = float(similarities[offset])
+            minimum_similarity = (
+                similarity
+                if minimum_similarity is None
+                else min(minimum_similarity, similarity)
+            )
+
+    if is_cancelled():
+        return None
+    return direct_matches, minimum_similarity
+
+
+def _partition_ann_direct_neighbor_groups(
+    ids: List[int],
+    matrix: np.ndarray,
+    candidate_indices: List[int],
+    metadata: Dict[int, Dict[str, Any]],
+    threshold: float,
+    handle,
+) -> Optional[List[DirectNeighborGroup]]:
+    """Build keeper-first groups from exact scores without dense pair state."""
+    remaining = {
+        index
+        for index in candidate_indices
+        if 0 <= index < len(ids) and ids[index] in metadata
+    }
+    ranked = sorted(
+        remaining,
+        key=lambda index: _rank_key(metadata[ids[index]]),
+        reverse=True,
+    )
+    groups: List[DirectNeighborGroup] = []
+
+    def is_cancelled() -> bool:
+        return bool(handle.cancelled)
+
+    for position, keeper in enumerate(ranked):
+        if position % _GROUP_CANCEL_CHECK_INTERVAL == 0:
+            if handle.cancelled:
+                return None
+            handle.set_progress(
+                processed=70 + int(15 * position / max(1, len(ranked))),
+                total=100,
+                message=f"Grouping matches {position}/{len(ranked)}",
+            )
+        if keeper not in remaining:
+            continue
+        exact_matches = _find_exact_direct_matches(
+            keeper,
+            matrix,
+            ranked,
+            remaining,
+            threshold,
+            is_cancelled,
+        )
+        if exact_matches is None:
+            return None
+        direct_losers, minimum_similarity = exact_matches
+        remaining.remove(keeper)
+        if not direct_losers:
+            continue
+        remaining.difference_update(direct_losers)
+        if minimum_similarity is None:
+            raise RuntimeError(
+                "Duplicate candidate scoring returned matches without similarity"
+            )
+        groups.append((
+            [keeper, *direct_losers],
+            minimum_similarity,
+        ))
+
+    return None if handle.cancelled else groups
+
+
+def _format_groups(
+    ids: List[int],
+    partitioned: List[DirectNeighborGroup],
+    metadata: Dict[int, Dict[str, Any]],
+    handle,
+) -> Optional[List[Dict[str, Any]]]:
+    groups: List[Dict[str, Any]] = []
+    for group_index, (member_indices, minimum_similarity) in enumerate(partitioned):
+        if group_index % _GROUP_CANCEL_CHECK_INTERVAL == 0 and handle.cancelled:
+            return None
+        entries = [dict(metadata[ids[index]]) for index in member_indices]
+        for position, entry in enumerate(entries):
+            entry["suggested_keep"] = position == 0
+        groups.append({
+            "similarity": round(minimum_similarity, 4),
+            "members": entries,
+        })
+
+    if handle.cancelled:
+        return None
+    groups.sort(key=lambda group: (
+        len(group["members"]),
+        group["similarity"],
+    ), reverse=True)
+    for group_index, group in enumerate(groups):
+        group["group_id"] = group_index
+    return groups
+
+
+def _groups_via_ann(
+    ids: List[int],
+    matrix: np.ndarray,
+    threshold: float,
+    handle,
+) -> Optional[List[Dict[str, Any]]]:
+    """Group ANN candidates using collision-safe dense-cluster recovery."""
+    import similarity_ann
+
+    if not similarity_ann.hnswlib_available():
+        return None
+    node_count = matrix.shape[0]
+    handle.set_progress(processed=20, total=100, message="Building neighbor index")
+    ann = similarity_ann.build_index(
+        matrix,
+        (node_count, node_count),
+        None,
+        persist=False,
+    )
+    if ann is None or handle.cancelled:
+        return None
+
+    def is_cancelled() -> bool:
+        return bool(handle.cancelled)
+
+    identical_candidate_indices = _find_identical_candidate_indices(
+        matrix,
+        _embedding_fingerprint,
+        is_cancelled,
+    )
+    if identical_candidate_indices is None:
+        return None
+    ann_candidate_indices = _find_ann_candidate_indices(
+        matrix,
+        threshold,
+        ann,
+        handle,
+    )
+    if ann_candidate_indices is None:
+        return None
+    candidate_indices = sorted(
+        identical_candidate_indices.union(ann_candidate_indices)
+    )
+    if not candidate_indices:
+        return []
+    member_ids = [ids[index] for index in candidate_indices]
+    metadata = _load_metadata(member_ids, handle)
+    if metadata is None:
+        return None
+    partitioned = _partition_ann_direct_neighbor_groups(
+        ids,
+        matrix,
+        candidate_indices,
+        metadata,
+        threshold,
+        handle,
+    )
+    if partitioned is None:
+        return None
+    return _format_groups(ids, partitioned, metadata, handle)
+
+
 def _build_groups(
     ids: List[int], pairs: List[SimilarityPair], handle
 ) -> Optional[List[Dict[str, Any]]]:
-    import database as db
-
     handle.set_progress(processed=85, total=100, message="Clustering groups")
     if handle.cancelled:
         return None
@@ -254,32 +532,9 @@ def _build_groups(
     ]
     if not member_ids:
         return []
-
-    meta: Dict[int, Dict[str, Any]] = {}
-    with db.get_db() as conn:
-        for start in range(0, len(member_ids), 900):
-            if handle.cancelled:
-                return None
-            batch = member_ids[start:start + 900]
-            placeholders = ",".join("?" * len(batch))
-            for row in conn.execute(
-                f"""
-                SELECT id, path, filename, width, height, file_size,
-                       aesthetic_score, user_rating
-                FROM images WHERE id IN ({placeholders})
-                """,
-                batch,
-            ).fetchall():
-                meta[int(row[0])] = {
-                    "id": int(row[0]),
-                    "path": row[1],
-                    "filename": row[2],
-                    "width": row[3],
-                    "height": row[4],
-                    "file_size": row[5],
-                    "aesthetic_score": row[6],
-                    "user_rating": row[7],
-                }
+    metadata = _load_metadata(member_ids, handle)
+    if metadata is None:
+        return None
 
     def is_cancelled() -> bool:
         return bool(handle.cancelled)
@@ -287,30 +542,12 @@ def _build_groups(
     partitioned = _partition_direct_neighbor_groups(
         ids,
         neighbors,
-        meta,
+        metadata,
         is_cancelled,
     )
     if partitioned is None:
         return None
-
-    groups: List[Dict[str, Any]] = []
-    for group_index, (member_indices, minimum_similarity) in enumerate(partitioned):
-        if group_index % _GROUP_CANCEL_CHECK_INTERVAL == 0 and handle.cancelled:
-            return None
-        entries = [dict(meta[ids[index]]) for index in member_indices]
-        for pos, entry in enumerate(entries):
-            entry["suggested_keep"] = pos == 0
-        groups.append({
-            "similarity": round(minimum_similarity, 4),
-            "members": entries,
-        })
-
-    if handle.cancelled:
-        return None
-    groups.sort(key=lambda g: (len(g["members"]), g["similarity"]), reverse=True)
-    for gi, group in enumerate(groups):
-        group["group_id"] = gi
-    return groups
+    return _format_groups(ids, partitioned, metadata, handle)
 
 
 def run_duplicate_scan(handle, threshold: float = DEFAULT_THRESHOLD) -> None:
@@ -328,14 +565,13 @@ def run_duplicate_scan(handle, threshold: float = DEFAULT_THRESHOLD) -> None:
         if handle.cancelled:
             return
 
-        handle.set_progress(processed=20, total=100, message="Searching neighbors")
-        pairs = _pairs_via_ann(matrix, threshold, handle)
-        if pairs is None:
+        groups = _groups_via_ann(ids, matrix, threshold, handle)
+        if groups is None and not handle.cancelled:
+            handle.set_progress(processed=20, total=100, message="Searching neighbors")
             pairs = _pairs_exact(matrix, threshold, handle)
-        if handle.cancelled:
-            return
-
-        groups = _build_groups(ids, pairs, handle)
+            if handle.cancelled:
+                return
+            groups = _build_groups(ids, pairs, handle)
         if groups is None or handle.cancelled:
             return
         redundant = sum(len(g["members"]) - 1 for g in groups)
