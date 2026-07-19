@@ -5,11 +5,11 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.5.0] - 2026-07-07
+## [3.5.0] - 2026-07-19
 
-v3.5.0 落地 v4.0「清爽极光」重设计：全局配色收束到全新的 `frontend/css/tokens.css`（蓝=下一步、粉=用户决定、紫=AI 产物），新增任务入口页（顶部导航栏保持经典布局，品牌区可一键回入口页），图库/排序/打码/打标四大工作流同步升级——工具栏搜索与底部批量操作条、可视缩图大小控制、排序专注模式与命名预设、打码审核流水线、「智能一趟」打标入口。技术债清扫同批落地：超大库批量删除/移除/导出升级为可取消的后台任务、AI 任务队列跨重启持久化、Linux NVIDIA 用户修复 GPU 打标，并完成 main.py/sorting/image_service 的模块拆分收尾与依赖安全清理。
+v3.5.0 stable 落地 v4.0「清爽极光」重设计：新增任务入口页与可定制导航，图库/排序/打码/打标四大工作流同步升级，并重做 LoRA/Dataset 导出、完整搜索语法、查重清理、颜色搜索和大图库后台任务。beta 到 stable 的收口补齐 Krea 2 自然语言优先 Smart Tag、Qwen3-VL Instruct 推荐路径、AI/Mass Tag 生命周期竞态、扫描与元数据边界、打码输出完整性、模型运行时诊断，以及 Model Manager 等高风险模块拆分与桌面回归覆盖。
 
-v3.5.0 ships the v4.0 "Fresh Aurora" redesign: the global palette moves to the new `frontend/css/tokens.css` (blue = next action, pink = user decisions, purple = AI output), a mission entry page lands (the top navigation bar keeps its classic layout, with the brand block returning to the entry page), and the Gallery / Sort / Censor / Tagging workflows get their Aurora upgrades — toolbar search + a bottom batch action bar, a visible thumbnail-size control, sort focus mode & named presets, a censor review conveyor, and a one-pass Smart Tag entry. A debt sweep ships in the same batch: huge-library bulk delete/remove/export become cancellable background jobs, the AI job queue survives restarts, Linux NVIDIA users get GPU tagging, and the main.py / sorting / image_service module extraction plus dependency security cleanup are completed.
+v3.5.0 stable ships the v4.0 "Fresh Aurora" redesign with a mission entry page and customizable navigation, coordinated Gallery / Sort / Censor / Tagging upgrades, rebuilt LoRA/Dataset export, a complete search language, Duplicate Cleanup, color search, and durable large-library jobs. Beta-to-stable closure adds Krea 2 natural-language-first Smart Tag guidance, an explicit Qwen3-VL Instruct recommendation, AI/Mass Tag lifecycle race fixes, scan and metadata edge-case hardening, censor output integrity, model-runtime diagnostics, and desktop regression coverage around the final high-risk module splits.
 
 ### Changed / 变更 (function entrances rework, owner feedback 2026-07-07)
 - **Mission-scoped smart nav bar / 任务智能导航栏**: clicking a mission tile on the entry page now scopes the top bar to only that pipeline's tabs, in order and with step numbers (LoRA → ①Library ②Dataset; Pixiv → ①Library ②Censor; Organize → ①Library ②Sort), plus a mission chip whose ✕ restores your full bar. The choice persists across restarts.

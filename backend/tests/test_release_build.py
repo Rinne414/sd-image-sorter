@@ -357,6 +357,44 @@ def test_release_packages_use_version_specific_release_notes(tmp_path):
     assert f"v{app_version}" in copied_text
 
 
+def test_stable_release_notes_follow_in_app_summary_sop():
+    app_version = _read_app_version()
+    stable_version = _stable_base_version(app_version)
+
+    notes_path = ROOT / "docs" / f"RELEASE_NOTES_v{stable_version}.md"
+    notes = notes_path.read_text(encoding="utf-8")
+    lines = notes.splitlines()
+
+    assert lines[0].startswith(f"## v{stable_version} — ")
+    assert len(lines[0]) <= 80
+
+    first_200 = notes[:200]
+    assert "http://" not in first_200
+    assert "https://" not in first_200
+    assert ".zip" not in first_200
+    assert ".tar.gz" not in first_200
+
+    summary = notes.split("\n---", maxsplit=1)[0]
+    assert notes.index("\n---") < 200
+    assert re.search(r"[\u4e00-\u9fff]", summary)
+    assert re.search(r"[A-Za-z]{4,}", summary)
+
+    headings = [
+        "## Fixed / 修复",
+        "## Upgrading / 升级注意",
+        "## Validation / 验证",
+        "## ⬇️ Which file should I download? / 我该下载哪一个？",
+        "## Checksums",
+    ]
+    assert [line for line in lines if line.startswith("## ")] == [lines[0], *headings]
+    positions = [notes.index(heading) for heading in headings]
+    assert positions == sorted(positions)
+    assert notes.count("## Checksums") == 1
+
+    root_notes = (ROOT / "release-notes.md").read_text(encoding="utf-8")
+    assert root_notes == notes
+
+
 def test_release_bootstrap_downloads_are_pinned_to_immutable_sources():
     release_builder = load_release_builder()
 
