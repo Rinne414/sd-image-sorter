@@ -170,6 +170,14 @@ def test_release_skip_rules_drop_hidden_and_docs_files():
     assert release_builder.should_skip_path(Path("README.md")) is False
 
 
+def test_release_skip_rules_drop_root_internal_reports():
+    release_builder = load_release_builder()
+
+    assert release_builder.should_skip_path(Path("HANDOFF-qa-followup.md")) is True
+    assert release_builder.should_skip_path(Path("qa-sweep-v3.5.0-stable-REPORT.md")) is True
+    assert release_builder.should_skip_path(Path("frontend") / "USER-REPORT.md") is False
+
+
 def test_release_skip_rules_drop_loose_root_level_images():
     """Regression test: stray test screenshots at the repo root must not ship.
 
@@ -1555,6 +1563,24 @@ def test_lazy_release_qa_accepts_windows_portable_archive_with_batch_launchers_a
     }
 
     module.assert_archive_contents(names, package_kind="windows-portable")
+
+
+@pytest.mark.parametrize(
+    "internal_name",
+    ["HANDOFF-qa-followup.md", "qa-sweep-v3.5.0-stable-REPORT.md"],
+)
+def test_lazy_release_qa_rejects_root_internal_reports(internal_name):
+    module = _load_lazy_release_qa_module(f"lazy_release_qa_internal_{internal_name}")
+    names = _lazy_release_common_archive_names() | {
+        "run.bat",
+        "run.sh",
+        "run-portable.bat",
+        "python/python.exe",
+        internal_name,
+    }
+
+    with pytest.raises(module.LazyQaError, match="internal release-work file"):
+        module.assert_archive_contents(names, package_kind="windows-portable")
 
 
 def test_lazy_release_qa_rejects_app_patch_archive_with_bundled_python():

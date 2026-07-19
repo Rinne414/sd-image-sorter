@@ -330,6 +330,13 @@ def should_prune_directory(relative_path: Path) -> bool:
     return False
 
 
+def is_root_internal_report(relative_path: Path) -> bool:
+    if len(relative_path.parts) != 1:
+        return False
+    name = relative_path.name
+    return name.startswith("HANDOFF-") or name.endswith("-REPORT.md")
+
+
 def should_skip_path(relative_path: Path) -> bool:
     rel = relative_path.as_posix()
     if any(part.startswith(".") for part in relative_path.parts) and rel not in ALLOWED_HIDDEN_FILES:
@@ -346,6 +353,8 @@ def should_skip_path(relative_path: Path) -> bool:
     if any(part in EXCLUDED_NAMES for part in relative_path.parts):
         return True
     if relative_path.suffix.lower() in EXCLUDED_SUFFIXES:
+        return True
+    if is_root_internal_report(relative_path):
         return True
     if relative_path.parts and relative_path.parts[0] == "models" and rel not in DOC_FILES:
         return True

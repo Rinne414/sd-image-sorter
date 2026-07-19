@@ -18,7 +18,6 @@ import socket
 import subprocess
 import sys
 import tarfile
-import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -196,6 +195,13 @@ def normalize_archive_name(name: str) -> str:
     return normalized
 
 
+def is_root_internal_report(name: str) -> bool:
+    path = Path(name)
+    if len(path.parts) != 1:
+        return False
+    return path.name.startswith("HANDOFF-") or path.name.endswith("-REPORT.md")
+
+
 def assert_archive_contents(names: Iterable[str], *, package_kind: str) -> None:
     normalized_names = {normalize_archive_name(name) for name in names if normalize_archive_name(name)}
     required_for_kind = PACKAGE_REQUIRED_FILES_BY_KIND.get(package_kind)
@@ -214,6 +220,11 @@ def assert_archive_contents(names: Iterable[str], *, package_kind: str) -> None:
     if forbidden_hits:
         preview = ", ".join(forbidden_hits[:10])
         raise LazyQaError(f"{package_kind} archive contains forbidden runtime/dev paths: {preview}")
+
+    internal_reports = [name for name in sorted(normalized_names) if is_root_internal_report(name)]
+    if internal_reports:
+        preview = ", ".join(internal_reports[:10])
+        raise LazyQaError(f"{package_kind} archive contains internal release-work file: {preview}")
 
     has_python = any(name.startswith("python/") for name in normalized_names)
     if package_kind == "windows-portable" and not has_python:
