@@ -83,12 +83,17 @@ async function loadImages(appendMode = false, options = {}) {
     const loadSequence = ++_imageLoadSequence;
     _activeImageLoadSequence = loadSequence;
     const galleryGrid = $('#gallery-grid');
+    const replacesGallery = !appendMode && !preserveExisting;
+    const settledGalleryState = replacesGallery
+        ? {
+            images: AppState.images,
+            pagination: { ...AppState.pagination },
+        }
+        : null;
 
-    if (!appendMode && !preserveExisting) {
-        AppState.pagination.cursor = null;
-        AppState.pagination.offset = 0;
-        AppState.pagination.hasMore = true;
-        AppState.images = [];
+    if (replacesGallery) {
+        const emptyState = $('#gallery-empty-state');
+        if (emptyState) emptyState.style.display = 'none';
 
         if (galleryGrid) {
             galleryGrid.innerHTML = '';
@@ -102,6 +107,7 @@ async function loadImages(appendMode = false, options = {}) {
     const imageCount = $('#image-count');
     if (imageCount && !appendMode && !silent) imageCount.textContent = appT('gallery.loading', 'Loading images...');
     let controller = null;
+    let loadSucceeded = false;
 
     try {
         controller = RequestManager.createAbortController(IMAGE_LOAD_KEY);
@@ -208,6 +214,7 @@ async function loadImages(appendMode = false, options = {}) {
                 _applyGalleryEmptyStateVariant(emptyState);
             }
         }
+        loadSucceeded = true;
     } catch (error) {
         if (error.name === 'AbortError' || error.cancelled) {
             return;
@@ -230,6 +237,26 @@ async function loadImages(appendMode = false, options = {}) {
 
         if (!isLatestLoad) {
             return;
+        }
+
+        if (!loadSucceeded && settledGalleryState && AppState.currentView === 'gallery') {
+            AppState.images = settledGalleryState.images;
+            Object.assign(AppState.pagination, settledGalleryState.pagination);
+            if (window.Gallery) {
+                Gallery.setImages(AppState.images);
+            }
+            if (imageCount) {
+                imageCount.textContent = appT('gallery.imageCount', '{count} images')
+                    .replace('{count}', _galleryCountText());
+            }
+            const emptyState = $('#gallery-empty-state');
+            if (emptyState) {
+                const shouldShow = AppState.images.length === 0;
+                emptyState.style.display = shouldShow ? 'flex' : 'none';
+                if (shouldShow) {
+                    _applyGalleryEmptyStateVariant(emptyState);
+                }
+            }
         }
 
         // Show/hide "Load More" button based on pagination state

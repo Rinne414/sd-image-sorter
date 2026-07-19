@@ -32,6 +32,14 @@ import { expect, test, type Page } from '../fixtures/click-ledger'
 
 test.describe.configure({ mode: 'serial' })
 
+function createDeferred(): { promise: Promise<void>, resolve: () => void } {
+  let resolvePromise!: () => void
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve
+  })
+  return { promise, resolve: resolvePromise }
+}
+
 async function gotoGallery(page: Page): Promise<void> {
   await page.goto('/')
   await page.waitForLoadState('domcontentloaded')
@@ -191,6 +199,245 @@ test('setImages renders non-virtual gallery cards with id, favorite button and g
   await expect(first.locator('.gallery-item-fav[aria-pressed="false"]')).toHaveCount(1)
   await expect(first.locator('.gallery-item-generator')).toHaveAttribute('data-generator-value', 'webui')
   expect(await page.evaluate(() => window.Gallery.useVirtualScroll)).toBe(false)
+})
+
+test('refresh replaces the settled empty state with skeletons until the image request completes', async ({ page }) => {
+  const consoleProblems: string[] = []
+  const pageErrors: string[] = []
+  const requestFailures: string[] = []
+  const serverErrors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning') {
+      consoleProblems.push(`${message.type()}: ${message.text()}`)
+    }
+  })
+  page.on('pageerror', (error) => {
+    pageErrors.push(error.message)
+  })
+  page.on('requestfailed', (request) => {
+    requestFailures.push(`${request.method()} ${request.url()}`)
+  })
+  page.on('response', (response) => {
+    if (response.status() >= 500) serverErrors.push(`${response.status()} ${response.url()}`)
+  })
+
+  let pendingResponse: { started: () => void, released: Promise<void> } | null = null
+  await page.route('**/api/images?**', async (route) => {
+    if (pendingResponse) {
+      const response = pendingResponse
+      pendingResponse = null
+      response.started()
+      await response.released
+    }
+    await route.fulfill({
+      json: {
+        images: [],
+        total: 0,
+        has_more: false,
+        next_cursor: null,
+        next_offset: 0,
+      },
+    })
+  })
+
+  await page.evaluate(() => window.App.loadImages())
+  await expect(page.locator('#gallery-empty-state')).toBeVisible()
+
+  for (const viewport of [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+  ]) {
+    await page.setViewportSize(viewport)
+    const requestStarted = createDeferred()
+    const responseReleased = createDeferred()
+    pendingResponse = {
+      started: requestStarted.resolve,
+      released: responseReleased.promise,
+    }
+
+    const refresh = page.evaluate(() => window.App.loadImages())
+    await requestStarted.promise
+    try {
+      await expect(page.locator('#gallery-grid .skeleton-gallery-item')).not.toHaveCount(0)
+      await expect(page.locator('#gallery-empty-state')).toBeHidden()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1)
+    } finally {
+      responseReleased.resolve()
+    }
+    await refresh
+    await expect(page.locator('#gallery-grid .skeleton-gallery-item')).toHaveCount(0)
+    await expect(page.locator('#gallery-empty-state')).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1)
+  }
+
+  expect(consoleProblems).toEqual([])
+  expect(pageErrors).toEqual([])
+  expect(requestFailures).toEqual([])
+  expect(serverErrors).toEqual([])
+})
+
+test('failed refresh removes skeletons and restores the settled Gallery state', async ({ page }) => {
+  const consoleProblems: string[] = []
+  const pageErrors: string[] = []
+  const requestFailures: string[] = []
+  const serverErrors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning') {
+      consoleProblems.push(`${message.type()}: ${message.text()}`)
+    }
+  })
+  page.on('pageerror', (error) => {
+    pageErrors.push(error.message)
+  })
+  page.on('requestfailed', (request) => {
+    requestFailures.push(`${request.method()} ${request.url()}`)
+  })
+  page.on('response', (response) => {
+    if (response.status() >= 500) serverErrors.push(`${response.status()} ${response.url()}`)
+  })
+
+  let failNextRequest = false
+  await page.route('**/api/images?**', async (route) => {
+    if (failNextRequest) {
+      failNextRequest = false
+      await route.fulfill({ status: 503, json: { detail: 'Gallery refresh unavailable' } })
+      return
+    }
+    await route.fulfill({
+      json: {
+        images: [],
+        total: 0,
+        has_more: false,
+        next_cursor: null,
+        next_offset: 0,
+      },
+    })
+  })
+
+  await page.evaluate(() => window.App.loadImages())
+  await expect(page.locator('#gallery-empty-state')).toBeVisible()
+  const settledState = await page.evaluate(() => ({
+    imageCount: document.querySelector('#image-count')?.textContent,
+    pagination: { ...window.App.AppState.pagination },
+  }))
+
+  for (const viewport of [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+  ]) {
+    await page.setViewportSize(viewport)
+    failNextRequest = true
+    await page.evaluate(() => window.App.loadImages())
+
+    await expect(page.locator('#gallery-grid .skeleton-gallery-item')).toHaveCount(0)
+    await expect(page.locator('#gallery-empty-state')).toBeVisible()
+    expect(await page.locator('#image-count').textContent()).toBe(settledState.imageCount)
+    expect(await page.evaluate(() => ({ ...window.App.AppState.pagination }))).toEqual(settledState.pagination)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1)
+  }
+
+  await page.route('**/api/image-thumbnail/900*', async (route) => {
+    await route.fulfill({
+      contentType: 'image/png',
+      body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64'),
+    })
+  })
+  const imageIds = await seedGrid(page, 6)
+  const populatedState = await page.evaluate(() => {
+    window.App.AppState.pagination = {
+      ...window.App.AppState.pagination,
+      cursor: 'settled-cursor',
+      offset: 6,
+      hasMore: false,
+      total: 6,
+    }
+    const imageCount = document.querySelector('#image-count')
+    if (imageCount) imageCount.textContent = '6 images'
+    const emptyState = document.querySelector<HTMLElement>('#gallery-empty-state')
+    if (emptyState) emptyState.style.display = 'none'
+    return {
+      imageCount: imageCount?.textContent,
+      pagination: { ...window.App.AppState.pagination },
+    }
+  })
+  failNextRequest = true
+  await page.evaluate(() => window.App.loadImages(false, { suppressAutoLoadMore: true }))
+
+  await expect(page.locator('#gallery-grid .skeleton-gallery-item')).toHaveCount(0)
+  await expect(page.locator('#gallery-empty-state')).toBeHidden()
+  await expect(page.locator('#gallery-grid .gallery-item[data-id]')).toHaveCount(6)
+  expect(await page.locator('#gallery-grid .gallery-item[data-id]').evaluateAll((items) =>
+    items.map((item) => Number((item as HTMLElement).dataset.id)))).toEqual(imageIds)
+  expect(await page.evaluate(() => window.App.AppState.images.map((image: { id: number }) => image.id))).toEqual(imageIds)
+  expect(await page.locator('#image-count').textContent()).toBe(populatedState.imageCount)
+  expect(await page.evaluate(() => ({ ...window.App.AppState.pagination }))).toEqual(populatedState.pagination)
+
+  const expectedServerConsoleErrors = consoleProblems.filter((entry) =>
+    entry.includes('Failed to load resource: the server responded with a status of 503'))
+  expect(consoleProblems).toEqual(expectedServerConsoleErrors)
+  expect(expectedServerConsoleErrors).toHaveLength(4)
+  expect(pageErrors).toEqual([])
+  expect(requestFailures).toEqual([])
+  expect(serverErrors).toHaveLength(4)
+  expect(serverErrors.every((entry) => entry.startsWith('503 '))).toBe(true)
+})
+
+test('returning after a cancelled refresh redraws cached cards before the replacement request completes', async ({ page }) => {
+  await page.route('**/api/image-thumbnail/900*', async (route) => {
+    await route.fulfill({
+      contentType: 'image/png',
+      body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64'),
+    })
+  })
+  const imageIds = await seedGrid(page, 6)
+  const firstRequestStarted = createDeferred()
+  const firstResponseReleased = createDeferred()
+  const replacementRequestStarted = createDeferred()
+  const replacementResponseReleased = createDeferred()
+  let requestNumber = 0
+
+  await page.route('**/api/images?**', async (route) => {
+    requestNumber += 1
+    const isCancelledRequest = requestNumber === 1
+    const requestStarted = isCancelledRequest ? firstRequestStarted : replacementRequestStarted
+    const responseReleased = isCancelledRequest ? firstResponseReleased : replacementResponseReleased
+    requestStarted.resolve()
+    await responseReleased.promise
+    try {
+      await route.fulfill({
+        json: {
+          images: [],
+          total: 0,
+          has_more: false,
+          next_cursor: null,
+          next_offset: 0,
+        },
+      })
+    } catch (error) {
+      if (!isCancelledRequest) throw error
+    }
+  })
+
+  const cancelledRefresh = page.evaluate(() => window.App.loadImages())
+  await firstRequestStarted.promise
+  await expect(page.locator('#gallery-grid .skeleton-gallery-item')).not.toHaveCount(0)
+
+  await page.evaluate(() => window.App.switchView('reader'))
+  firstResponseReleased.resolve()
+  await cancelledRefresh
+  await page.evaluate(() => window.App.switchView('gallery'))
+  await replacementRequestStarted.promise
+  try {
+    await expect(page.locator('#gallery-grid .skeleton-gallery-item')).toHaveCount(0)
+    await expect(page.locator('#gallery-grid .gallery-item[data-id]')).toHaveCount(6)
+    expect(await page.locator('#gallery-grid .gallery-item[data-id]').evaluateAll((items) =>
+      items.map((item) => Number((item as HTMLElement).dataset.id)))).toEqual(imageIds)
+  } finally {
+    replacementResponseReleased.resolve()
+  }
+  await page.waitForFunction(() => window.App.AppState.isLoading === false)
 })
 
 // ---------------------------------------------------------------------------
