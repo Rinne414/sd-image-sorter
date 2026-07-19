@@ -64,7 +64,7 @@ Fresh Aurora upgrades search, export, Smart Tag, sorting, censoring, and scale.
 
 ## Validation / 验证
 
-Pending final gate: full CI, six-asset package build, archive QA, checksums, and portable startup smoke have not yet run. / 等待最终门禁：完整 CI、六项资产构建、归档 QA、校验和与 portable 启动冒烟尚未执行。
+Full CI passed: 4,869 backend tests with 90% coverage (7 skipped); 539 desktop Playwright tests with 0 failures or flaky results (3 skipped); click coverage 46.92% (198/422). All six assets passed archive, manifest, checksum, permission, architecture, and internal-file checks. Fresh Windows and Linux x86_64 portable launches served `/`, `/docs`, and diagnostics as v3.5.0; aarch64 was archive- and ELF-validated on the x86_64 host. / 完整 CI 已通过：后端 4,869 项、覆盖率 90%（7 项跳过）；桌面 Playwright 539 项通过、0 失败、0 flaky（3 项跳过）；点击覆盖率 46.92%（198/422）。六项资产通过归档、manifest、校验和、权限、架构与内部文件检查；Windows 与 Linux x86_64 portable 全新首启均以 v3.5.0 提供首页、文档和诊断，aarch64 已在 x86_64 主机完成归档与 ELF 验证。
 
 ---
 
@@ -86,4 +86,13 @@ Pending final gate: full CI, six-asset package build, archive QA, checksums, and
 
 ## Checksums
 
-Pending package build. SHA-256 values will be copied from the verified release manifest after all six assets are built. / 等待发布包构建；六项资产完成并验证后，将从 release manifest 写入真实 SHA-256。
+| Asset | SHA-256 |
+|---|---|
+| `sd-image-sorter-v3.5.0-windows-portable.zip` | `9944bd4e59abd677b16c610e1516a6b1ceeaa2854d35ff7e860c15cbfd48ac90` |
+| `sd-image-sorter-v3.5.0-app-patch.zip` | `a0939d8781c380c3cc69b869031ff1bce972ca33e53f682349b860551fb0cd07` |
+| `sd-image-sorter-v3.5.0-linux.tar.gz` | `741af6e7957f35d5100cb844dc7b3aa308ae1ccae288470acdbd590dc888e1c6` |
+| `sd-image-sorter-v3.5.0-linux-portable-x86_64.tar.gz` | `511a1f58857309a8429233faf4a8b224dceec88073ad4d5d02ad9951cb69a8fe` |
+| `sd-image-sorter-v3.5.0-linux-portable-aarch64.tar.gz` | `8d9711a1997a7e7a4cf3dc42d774136afc248152893d6467c2b708d4fe09b83b` |
+| `sd-image-sorter-v3.5.0-release-manifest.json` | `28210ba1a8eef70b3f610ac8c1ab657f354edf828af31560affc1baca5978303` |
+
+The manifest contains the five archive checksums; its own checksum is recorded above. / manifest 内含五个归档校验和，其自身校验和记录于上表。
