@@ -5,6 +5,7 @@ import json
 import re
 import hashlib
 import sys
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -358,11 +359,105 @@ def test_release_packages_use_version_specific_release_notes(tmp_path):
     assert notes_path.exists()
 
     copied_path = release_builder.write_release_notes(tmp_path, app_version)
-    copied_text = copied_path.read_text(encoding="utf-8")
+    copied_bytes = copied_path.read_bytes()
+    source_bytes = notes_path.read_bytes()
 
     assert copied_path.name == "release-notes.md"
-    assert copied_text == notes_path.read_text(encoding="utf-8")
-    assert f"v{app_version}" in copied_text
+    assert copied_bytes == release_builder.render_packaged_release_notes(source_bytes)
+    assert f"v{app_version}".encode() in copied_bytes
+    assert b"release-manifest.json" in copied_bytes
+
+
+def test_packaged_release_notes_remove_self_referential_checksums():
+    release_builder = load_release_builder()
+    source_bytes = (
+        "## v9.9.9 — Test\r\n"
+        "\r\n"
+        "Summary.\r\n"
+        "\r\n"
+        "---\r\n"
+        "\r\n"
+        "## Checksums\r\n"
+        "\r\n"
+        "| Asset | SHA-256 |\r\n"
+        "|---|---|\r\n"
+        "| `archive.zip` | `deadbeef` |\r\n"
+    ).encode("utf-8")
+
+    packaged_bytes = release_builder.render_packaged_release_notes(source_bytes)
+    checksum_heading = b"## Checksums\r\n"
+    prefix = source_bytes[: source_bytes.index(checksum_heading) + len(checksum_heading)]
+
+    assert packaged_bytes.startswith(prefix)
+    assert packaged_bytes == prefix + (
+        "\r\nVerified machine-readable SHA-256 values are in the release manifest. / "
+        "已验证的机器可读 SHA-256 校验和见 release manifest。\r\n"
+    ).encode("utf-8")
+    assert b"deadbeef" not in packaged_bytes
+
+
+@pytest.mark.parametrize(
+    "source_bytes",
+    [
+        b"## v9.9.9 -- Missing checksums\n",
+        b"Details mention ## Checksums but have no heading.\n",
+        b"## Checksums appendix\n",
+        b"### Checksums\n",
+        b"## Checksums\n\nFirst.\n\n## Checksums\n\nSecond.\n",
+    ],
+)
+def test_packaged_release_notes_require_one_checksums_section(source_bytes):
+    release_builder = load_release_builder()
+
+    with pytest.raises(ValueError, match="exactly one Checksums section"):
+        release_builder.render_packaged_release_notes(source_bytes)
+
+
+def test_all_five_release_archives_use_packaged_release_notes(monkeypatch, tmp_path):
+    release_builder = load_release_builder()
+    fake_root = tmp_path / "repo"
+    artifact_root = tmp_path / "artifacts"
+    staging_root = artifact_root / "staging"
+    version = "9.9.9"
+    source_bytes = b"## v9.9.9 -- Test\n\nSummary.\n\n## Checksums\n\n| asset | deadbeef |\n"
+    notes_path = fake_root / "docs" / f"RELEASE_NOTES_v{version}.md"
+    notes_path.parent.mkdir(parents=True)
+    notes_path.write_bytes(source_bytes)
+    expected = release_builder.render_packaged_release_notes(source_bytes)
+
+    def copy_minimal_project(stage_dir):
+        (stage_dir / "backend").mkdir(parents=True, exist_ok=True)
+        (stage_dir / "backend" / "main.py").write_text("pass\n", encoding="utf-8")
+
+    monkeypatch.setattr(release_builder, "ROOT", fake_root)
+    monkeypatch.setattr(release_builder, "ARTIFACT_ROOT", artifact_root)
+    monkeypatch.setattr(release_builder, "STAGING_ROOT", staging_root)
+    monkeypatch.setattr(release_builder, "BOOTSTRAP_DOWNLOAD_ROOT", staging_root / "_downloads")
+    monkeypatch.setattr(release_builder, "find_seven_zip", lambda: None)
+    monkeypatch.setattr(release_builder, "copy_project", copy_minimal_project)
+    monkeypatch.setattr(release_builder, "prepare_embedded_python", lambda stage_dir: None)
+    monkeypatch.setattr(
+        release_builder,
+        "prepare_bundled_linux_python",
+        lambda stage_dir, arch: None,
+    )
+
+    assets = release_builder.build_release_assets(version, 1900)
+    archive_paths = [path for path in assets if path.suffix == ".zip" or path.name.endswith(".tar.gz")]
+    packaged_notes = []
+    for archive_path in archive_paths:
+        if archive_path.suffix == ".zip":
+            with release_builder.ZipFile(archive_path) as archive:
+                packaged_notes.append(archive.read("release-notes.md"))
+            continue
+        with tarfile.open(archive_path, "r:gz") as archive:
+            notes_file = archive.extractfile("sd-image-sorter/release-notes.md")
+            assert notes_file is not None
+            packaged_notes.append(notes_file.read())
+
+    assert len(packaged_notes) == 5
+    assert packaged_notes == [expected] * 5
+    assert all(b"deadbeef" not in notes for notes in packaged_notes)
 
 
 def test_stable_release_notes_follow_in_app_summary_sop():

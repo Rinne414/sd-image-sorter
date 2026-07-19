@@ -423,14 +423,31 @@ def _remove_windows_only_files(stage_dir: Path) -> None:
         bat.unlink()
 
 
+def render_packaged_release_notes(source_bytes: bytes) -> bytes:
+    matches = list(re.finditer(br"(?m)^## Checksums(?P<newline>\r\n|\n|$)", source_bytes))
+    if len(matches) != 1:
+        raise ValueError("Release notes must contain exactly one Checksums section")
+    match = matches[0]
+    newline = match.group("newline") or b"\n"
+    prefix = source_bytes[: match.end()]
+    if not match.group("newline"):
+        prefix += newline
+    message = (
+        "Verified machine-readable SHA-256 values are in the release manifest. / "
+        "已验证的机器可读 SHA-256 校验和见 release manifest。\n"
+    ).encode("utf-8")
+    return prefix + newline + message.replace(b"\n", newline)
+
+
 def write_release_notes(stage_dir: Path, version: str) -> Path:
-    """Copy the version-specific release notes into the package root."""
+    """Write package-safe release notes without self-referential archive hashes."""
     source = ROOT / "docs" / f"RELEASE_NOTES_v{version}.md"
     if not source.exists():
         raise FileNotFoundError(f"Release notes are missing for v{version}: {source}")
     destination = stage_dir / "release-notes.md"
     destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, destination)
+    source_bytes = source.read_bytes()
+    destination.write_bytes(render_packaged_release_notes(source_bytes))
     return destination
 
 
