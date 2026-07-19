@@ -8,6 +8,9 @@
  */
 function updateSelectionUI() {
     const panel = $('#selection-actions');
+    const panelWasVisible = Boolean(panel?.getClientRects().length);
+    const panelHeightBefore = panelWasVisible ? panel.getBoundingClientRect().height : 0;
+    const preserveVisibleActiveFolder = window.FolderTreeUI?._isActiveVisible?.() === true;
     const countEl = $('#selection-count');
     const scopeEl = $('#selection-scope-summary');
     const grid = $('#gallery-grid');
@@ -49,9 +52,8 @@ function updateSelectionUI() {
         });
     }
 
-    // In gallery selection mode, keep the browse/filter sections visible so users
-    // can select images across different filters; the batch-action panel is pinned
-    // to the sidebar bottom (see .filter-sidebar.selection-mode in ui-refresh.css).
+    // Keep browse/filter controls available above the selection footer so users
+    // can select images across different filters in one pass.
     const filterSidebar = $('.filter-sidebar');
     if (filterSidebar) {
         filterSidebar.classList.toggle('selection-mode', selectionPanelVisible);
@@ -96,7 +98,10 @@ function updateSelectionUI() {
         if (!hasSelection) {
             collapseSelectionMoreActions();
         }
-        requestAnimationFrame(() => ensureSelectionPanelVisible(panel));
+        const panelGrew = panel.getBoundingClientRect().height > panelHeightBefore + 0.5;
+        if ((!panelWasVisible || panelGrew) && preserveVisibleActiveFolder) {
+            window.FolderTreeUI?._scheduleActiveVisibility?.();
+        }
     } else if (panel) {
         panel.style.display = 'none';
         collapseSelectionMoreActions();

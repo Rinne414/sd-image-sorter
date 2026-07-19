@@ -83,6 +83,8 @@ const scanBrowserRoot = path.join(manualRoot, 'scan-browser-root')
 const scanBrowserPicked = path.join(scanBrowserRoot, 'picked-folder')
 const tagIoRoot = path.join(manualRoot, 'tag-io')
 const tagLiveRoot = path.join(manualRoot, 'tag-live-inbox')
+const sidebarLayoutRoot = path.join(manualRoot, 'sidebar-layout')
+const sidebarLayoutFilenamePrefix = 'manual-sidebar-layout-'
 const repoDetectableFixture = path.join(repoRoot, 'backend', 'favorites', '131592481_p26.webp')
 
 function runBackendScript(script: string) {
@@ -662,6 +664,76 @@ print("ok")
   runBackendScript(script)
 }
 
+function prepareSidebarLayoutFixture(): { finalFolder: string } {
+  return runBackendJson<{ finalFolder: string }>(`
+import json
+import sqlite3
+from pathlib import Path
+from PIL import Image
+
+fixture_root = Path(${JSON.stringify(sidebarLayoutRoot)})
+filename_prefix = ${JSON.stringify(sidebarLayoutFilenamePrefix)}
+fixture_root.mkdir(parents=True, exist_ok=True)
+db_path = Path(${JSON.stringify(runtimeDatabasePath)})
+
+with sqlite3.connect(db_path) as conn:
+    conn.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename LIKE ?)", (filename_prefix + "%",))
+    conn.execute("DELETE FROM images WHERE filename LIKE ?", (filename_prefix + "%",))
+    for index in range(1, 41):
+        folder = fixture_root / f"folder-{index:02d}"
+        folder.mkdir(parents=True, exist_ok=True)
+        filename = f"{filename_prefix}{index:02d}.png"
+        image_path = folder / filename
+        Image.new("RGB", (48, 48), color=(index * 5 % 255, 96, 160)).save(image_path)
+        conn.execute(
+            """
+            INSERT INTO images (
+                path, filename, generator, metadata_json, width, height,
+                file_size, is_readable, metadata_status, created_at
+            ) VALUES (?, ?, 'unknown', '{}', 48, 48, ?, 1, 'complete', CURRENT_TIMESTAMP)
+            """,
+            (str(image_path.resolve()), filename, image_path.stat().st_size),
+        )
+    branch_folder = fixture_root / "branch-other" / "child"
+    branch_folder.mkdir(parents=True, exist_ok=True)
+    branch_filename = filename_prefix + "branch.png"
+    branch_path = branch_folder / branch_filename
+    Image.new("RGB", (48, 48), color=(64, 160, 96)).save(branch_path)
+    conn.execute(
+        """
+        INSERT INTO images (
+            path, filename, generator, metadata_json, width, height,
+            file_size, is_readable, metadata_status, created_at
+        ) VALUES (?, ?, 'unknown', '{}', 48, 48, ?, 1, 'complete', CURRENT_TIMESTAMP)
+        """,
+        (str(branch_path.resolve()), branch_filename, branch_path.stat().st_size),
+    )
+
+print(json.dumps({"finalFolder": str((fixture_root / "folder-40").resolve()).replace("\\\\", "/")}))
+`)
+}
+
+function cleanupSidebarLayoutFixture() {
+  runBackendScript(`
+import shutil
+import sqlite3
+from pathlib import Path
+
+fixture_root = Path(${JSON.stringify(sidebarLayoutRoot)})
+filename_prefix = ${JSON.stringify(sidebarLayoutFilenamePrefix)}
+db_path = Path(${JSON.stringify(runtimeDatabasePath)})
+
+with sqlite3.connect(db_path) as conn:
+    conn.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename LIKE ?)", (filename_prefix + "%",))
+    conn.execute("DELETE FROM images WHERE filename LIKE ?", (filename_prefix + "%",))
+
+if fixture_root.exists():
+    shutil.rmtree(fixture_root)
+
+print("ok")
+`)
+}
+
 function restoreManualFixtureDbPaths() {
   const script = `
 import sqlite3
@@ -976,6 +1048,7 @@ test.beforeEach(async ({ page }) => {
 
 test.afterAll(async () => {
   cleanupExtendedFixtureRows()
+  cleanupSidebarLayoutFixture()
   cleanupAutoSeparateCopyPartialFixtureRows()
   await fs.rm(autoSepCopySource, { recursive: true, force: true })
   await fs.rm(autoSepCopyOut, { recursive: true, force: true })
@@ -1007,6 +1080,7 @@ test('gallery sidebar selection controls should remain reachable under UI scale'
   await openMainPage(page)
 
   const sidebar = page.locator('.filter-sidebar')
+  const sidebarScroll = page.locator('.filter-sidebar-scroll')
   const selectButton = page.locator('#btn-toggle-select')
   const selectionPanel = page.locator('.filter-sidebar #selection-actions')
 
@@ -1028,11 +1102,12 @@ test('gallery sidebar selection controls should remain reachable under UI scale'
   await expect.poll(async () => {
     return await sidebar.evaluate((node: HTMLElement) => {
       const panel = node.querySelector('#selection-actions')
-      if (!(panel instanceof HTMLElement)) return { visible: false }
+      const scroll = node.querySelector('.filter-sidebar-scroll')
+      if (!(panel instanceof HTMLElement) || !(scroll instanceof HTMLElement)) return { visible: false }
       const rect = panel.getBoundingClientRect()
       return {
         visible: rect.top >= 0 && rect.bottom <= window.innerHeight,
-        canScroll: node.scrollHeight > node.clientHeight,
+        canScroll: scroll.scrollHeight > scroll.clientHeight,
       }
     })
   }).toEqual({ visible: true, canScroll: true })
@@ -1505,6 +1580,232 @@ test('auto-separate should honor search and move the matching files', async ({ p
   expect(movedPayload.images).toHaveLength(2)
   for (const movedImage of movedPayload.images) {
     expect(String(movedImage.path)).toContain('autosep-out')
+  }
+})
+
+test('gallery folder tree stays usable above the selection footer on supported desktops', async ({ page }) => {
+  const { finalFolder } = prepareSidebarLayoutFixture()
+  const consoleErrors: string[] = []
+  const requestFailures: string[] = []
+  const serverErrors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+  page.on('requestfailed', (request) => {
+    requestFailures.push(`${request.method()} ${request.url()}`)
+  })
+  page.on('response', (response) => {
+    if (response.status() >= 500) serverErrors.push(`${response.status()} ${response.url()}`)
+  })
+
+  try {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await openMainPage(page)
+    const folderTreeResponsePromise = page.waitForResponse((response) => response.url().includes('/api/folders'))
+    await page.locator('#btn-refresh-folders').click()
+    const folderTreeResponse = await folderTreeResponsePromise
+    expect(folderTreeResponse.ok()).toBeTruthy()
+
+    const parentPath = finalFolder.slice(0, finalFolder.lastIndexOf('/'))
+    const parentSegments = parentPath.split('/')
+    const ancestorPaths = parentSegments.map((_, index) => parentSegments.slice(0, index + 1).join('/'))
+    for (const ancestorPath of ancestorPaths) {
+      const ancestorToggle = page.locator(`#folder-tree [data-action="toggle"][data-path="${ancestorPath}"]`)
+      const toggleCount = await ancestorToggle.count()
+      if (toggleCount === 1 && await ancestorToggle.getAttribute('aria-expanded') !== 'true') {
+        await ancestorToggle.click()
+      }
+    }
+    const parentToggle = page.locator(`#folder-tree [data-action="toggle"][data-path="${parentPath}"]`)
+    await expect(parentToggle).toHaveCount(1)
+    await expect(parentToggle).toHaveAttribute('aria-expanded', 'true')
+
+    const sidebar = page.locator('.filter-sidebar')
+    const sidebarScroll = page.locator('.filter-sidebar-scroll')
+    const sidebarFooter = page.locator('.filter-sidebar-footer')
+    const folderTree = page.locator('#folder-tree')
+    const lastFolder = page.locator(`#folder-tree .folder-row-open[data-path="${finalFolder}"]`)
+
+    await expect(sidebarScroll).toBeVisible()
+    await expect(sidebarFooter).toBeVisible()
+    await expect(lastFolder).toHaveCount(1)
+
+    for (const viewport of [
+      { width: 1920, height: 1080 },
+      { width: 2560, height: 1440 },
+      { width: 1366, height: 768 },
+    ]) {
+      await page.setViewportSize(viewport)
+      await page.evaluate(() => new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve))
+      }))
+      await folderTree.evaluate((tree: HTMLElement) => {
+        tree.scrollTop = tree.scrollHeight
+      })
+      await sidebarScroll.evaluate((scroll: HTMLElement) => {
+        const folderSection = scroll.querySelector('[data-sidebar-section="folders"]')
+        if (!(folderSection instanceof HTMLElement)) {
+          throw new Error('Folder sidebar section is unavailable')
+        }
+        scroll.scrollTop = folderSection.offsetTop
+      })
+      await lastFolder.evaluate((row: HTMLElement) => {
+        row.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+      })
+
+      const readLayout = async () => page.evaluate((folderPath) => {
+        const sidebarElement = document.querySelector('.filter-sidebar')
+        const row = document.querySelector(`#folder-tree .folder-row-open[data-path="${folderPath}"]`)
+        const footer = document.querySelector('.filter-sidebar-footer')
+        if (!(sidebarElement instanceof HTMLElement) || !(row instanceof HTMLElement) || !(footer instanceof HTMLElement)) {
+          throw new Error('Gallery sidebar layout controls are unavailable')
+        }
+        const sidebarBox = sidebarElement.getBoundingClientRect()
+        const rowBox = row.getBoundingClientRect()
+        const footerBox = footer.getBoundingClientRect()
+        const hit = document.elementFromPoint(rowBox.left + rowBox.width / 2, rowBox.bottom - 2)
+        return {
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          sidebarTop: sidebarBox.top,
+          sidebarBottom: sidebarBox.bottom,
+          rowTop: rowBox.top,
+          rowBottom: rowBox.bottom,
+          footerTop: footerBox.top,
+          footerBottom: footerBox.bottom,
+          hitBelongsToRow: hit instanceof Node && row.contains(hit),
+        }
+      }, finalFolder)
+
+      await expect.poll(async () => {
+        const layout = await readLayout()
+        return {
+          noOverlap: layout.rowBottom <= layout.footerTop,
+          hitBelongsToRow: layout.hitBelongsToRow,
+        }
+      }).toEqual({ noOverlap: true, hitBelongsToRow: true })
+      const layout = await readLayout()
+
+      expect(layout.viewportWidth).toBe(viewport.width)
+      expect(layout.viewportHeight).toBe(viewport.height)
+      expect(layout.horizontalOverflow).toBeLessThanOrEqual(1)
+      expect(layout.rowTop).toBeGreaterThanOrEqual(layout.sidebarTop)
+      expect(layout.footerBottom).toBeLessThanOrEqual(layout.sidebarBottom + 1)
+    }
+
+    const scopedImagesResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return url.pathname === '/api/images' && url.searchParams.get('folder') === finalFolder
+    })
+    await page.setViewportSize({ width: 2560, height: 1440 })
+    await lastFolder.evaluate((row: HTMLElement) => {
+      row.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    })
+    await lastFolder.click()
+    expect((await scopedImagesResponse).ok()).toBeTruthy()
+    await expect(lastFolder).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.locator('#folder-tree-browsing')).toContainText(finalFolder)
+    await page.locator('#btn-toggle-select').click()
+    await expect(sidebar.locator('#selection-actions')).toBeVisible()
+    await expect.poll(async () => lastFolder.evaluate((row: HTMLElement) => {
+      const footer = document.querySelector('.filter-sidebar-footer')
+      if (!(footer instanceof HTMLElement)) {
+        throw new Error('Gallery sidebar footer is unavailable')
+      }
+      const rowBox = row.getBoundingClientRect()
+      const footerBox = footer.getBoundingClientRect()
+      const hit = document.elementFromPoint(rowBox.left + rowBox.width / 2, rowBox.bottom - 2)
+      return {
+        noOverlap: rowBox.bottom <= footerBox.top,
+        insideViewport: rowBox.top >= 0 && rowBox.bottom <= window.innerHeight,
+        hitBelongsToRow: hit instanceof Node && row.contains(hit),
+      }
+    })).toEqual({ noOverlap: true, insideViewport: true, hitBelongsToRow: true })
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await expect.poll(async () => lastFolder.evaluate((row: HTMLElement) => {
+      const footer = document.querySelector('.filter-sidebar-footer')
+      if (!(footer instanceof HTMLElement)) {
+        throw new Error('Gallery sidebar footer is unavailable after resize')
+      }
+      const rowBox = row.getBoundingClientRect()
+      const footerBox = footer.getBoundingClientRect()
+      return rowBox.top >= 0 && rowBox.bottom <= footerBox.top
+    })).toBe(true)
+    await page.evaluate(() => new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve))
+    }))
+    const otherBranchPath = `${parentPath}/branch-other`
+    const otherBranchToggle = page.locator(`#folder-tree [data-action="toggle"][data-path="${otherBranchPath}"]`)
+    await expect(otherBranchToggle).toHaveCount(1)
+    if (await otherBranchToggle.getAttribute('aria-expanded') === 'true') {
+      await otherBranchToggle.click()
+    }
+    await otherBranchToggle.evaluate((toggle: HTMLElement) => {
+      toggle.scrollIntoView({ block: 'center', inline: 'nearest' })
+    })
+    const scrollBeforeToggle = await folderTree.evaluate((tree: HTMLElement) => tree.scrollTop)
+    await otherBranchToggle.click()
+    await expect(otherBranchToggle).toHaveAttribute('aria-expanded', 'true')
+    const scrollAfterToggle = await folderTree.evaluate((tree: HTMLElement) => tree.scrollTop)
+    expect(Math.abs(scrollAfterToggle - scrollBeforeToggle)).toBeLessThanOrEqual(1)
+
+    const scrollBeforeImageSelection = await page.evaluate(() => {
+      const tree = document.querySelector('#folder-tree')
+      const browseScroll = document.querySelector('.filter-sidebar-scroll')
+      if (!(tree instanceof HTMLElement) || !(browseScroll instanceof HTMLElement)) {
+        throw new Error('Gallery sidebar scroll containers are unavailable')
+      }
+      tree.scrollTop = 0
+      browseScroll.scrollTop = 0
+      return {
+        tree: tree.scrollTop,
+        browse: browseScroll.scrollTop,
+        treeRange: tree.scrollHeight - tree.clientHeight,
+        browseRange: browseScroll.scrollHeight - browseScroll.clientHeight,
+      }
+    })
+    expect(scrollBeforeImageSelection.treeRange).toBeGreaterThan(0)
+    expect(scrollBeforeImageSelection.browseRange).toBeGreaterThan(0)
+    await page.locator('#gallery-grid .gallery-item').first().click()
+    await page.evaluate(() => new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    }))
+    const scrollAfterImageSelection = await page.evaluate(() => {
+      const tree = document.querySelector('#folder-tree')
+      const browseScroll = document.querySelector('.filter-sidebar-scroll')
+      if (!(tree instanceof HTMLElement) || !(browseScroll instanceof HTMLElement)) {
+        throw new Error('Gallery sidebar scroll containers are unavailable after image selection')
+      }
+      return {
+        tree: tree.scrollTop,
+        browse: browseScroll.scrollTop,
+      }
+    })
+    expect(Math.abs(scrollAfterImageSelection.tree - scrollBeforeImageSelection.tree)).toBeLessThanOrEqual(1)
+    expect(Math.abs(scrollAfterImageSelection.browse - scrollBeforeImageSelection.browse)).toBeLessThanOrEqual(1)
+    await page.locator('#gallery-grid .gallery-item').first().click()
+    await page.evaluate(() => new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    }))
+    const scrollAfterImageDeselection = await page.evaluate(() => {
+      const tree = document.querySelector('#folder-tree')
+      const browseScroll = document.querySelector('.filter-sidebar-scroll')
+      if (!(tree instanceof HTMLElement) || !(browseScroll instanceof HTMLElement)) {
+        throw new Error('Gallery sidebar scroll containers are unavailable after image deselection')
+      }
+      return {
+        tree: tree.scrollTop,
+        browse: browseScroll.scrollTop,
+      }
+    })
+    expect(Math.abs(scrollAfterImageDeselection.tree - scrollBeforeImageSelection.tree)).toBeLessThanOrEqual(1)
+    expect(Math.abs(scrollAfterImageDeselection.browse - scrollBeforeImageSelection.browse)).toBeLessThanOrEqual(1)
+    expect(consoleErrors).toEqual([])
+    expect(requestFailures).toEqual([])
+    expect(serverErrors).toEqual([])
+  } finally {
+    cleanupSidebarLayoutFixture()
   }
 })
 

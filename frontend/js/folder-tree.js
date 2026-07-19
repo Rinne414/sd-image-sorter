@@ -77,6 +77,7 @@
                 // Event delegation so we never re-bind per row on re-render.
                 container.addEventListener('click', (event) => this._onClick(event));
             }
+            window.addEventListener('resize', () => this._scheduleActiveVisibility());
             await this.refresh();
         },
 
@@ -96,6 +97,7 @@
                 }
                 if (this._active) this._expandAncestors(this._active);
                 this._renderTree();
+                this._scheduleActiveVisibility();
             } catch (error) {
                 log('warn', 'Failed to load library folders', error);
             }
@@ -160,6 +162,51 @@
             this._renderBrowsingIndicator();
         },
 
+        _scheduleActiveVisibility() {
+            if (!this._active) return;
+            const activePath = this._active;
+            requestAnimationFrame(() => {
+                if (this._active !== activePath) return;
+                const container = document.getElementById('folder-tree');
+                const activeRow = [...(container?.querySelectorAll('.folder-row-open') || [])]
+                    .find((row) => normalizePath(row.dataset.path) === activePath);
+                if (!activeRow || !container) return;
+
+                const revealWithin = (scroller) => {
+                    const rowBox = activeRow.getBoundingClientRect();
+                    const scrollerBox = scroller.getBoundingClientRect();
+                    const margin = 1;
+                    if (rowBox.top < scrollerBox.top + margin) {
+                        scroller.scrollTop -= scrollerBox.top + margin - rowBox.top;
+                    } else if (rowBox.bottom > scrollerBox.bottom - margin) {
+                        scroller.scrollTop += rowBox.bottom - scrollerBox.bottom + margin;
+                    }
+                };
+
+                revealWithin(container);
+                requestAnimationFrame(() => {
+                    if (this._active !== activePath) return;
+                    const sidebarScroll = container.closest('.filter-sidebar-scroll');
+                    if (sidebarScroll) revealWithin(sidebarScroll);
+                });
+            });
+        },
+
+        _isActiveVisible() {
+            if (!this._active) return false;
+            const container = document.getElementById('folder-tree');
+            const activeRow = [...(container?.querySelectorAll('.folder-row-open') || [])]
+                .find((row) => normalizePath(row.dataset.path) === this._active);
+            const sidebarScroll = container?.closest('.filter-sidebar-scroll');
+            if (!activeRow || !container || !sidebarScroll) return false;
+
+            const rowBox = activeRow.getBoundingClientRect();
+            return [container, sidebarScroll].every((scroller) => {
+                const scrollerBox = scroller.getBoundingClientRect();
+                return rowBox.top >= scrollerBox.top && rowBox.bottom <= scrollerBox.bottom;
+            });
+        },
+
         _nodeHtml(node, depth) {
             const hasKids = node.children.size > 0;
             const isExpanded = this._expanded.has(node.path);
@@ -219,12 +266,18 @@
             if (!path) return;
 
             if (action === 'toggle') {
+                const container = document.getElementById('folder-tree');
+                const scrollTop = container?.scrollTop || 0;
                 if (this._expanded.has(path)) {
                     this._expanded.delete(path);
                 } else {
                     this._expanded.add(path);
                 }
                 this._renderTree();
+                const refreshedToggle = [...(container?.querySelectorAll('[data-action="toggle"]') || [])]
+                    .find((toggle) => normalizePath(toggle.dataset.path) === normalizePath(path));
+                refreshedToggle?.focus({ preventScroll: true });
+                if (container) container.scrollTop = scrollTop;
             } else if (action === 'browse') {
                 this.browse(path);
             }
@@ -244,6 +297,7 @@
             app.updateFilterSummary?.();
             app.loadImages?.();
             this._renderTree();
+            this._scheduleActiveVisibility();
         },
 
         clearBrowse() {

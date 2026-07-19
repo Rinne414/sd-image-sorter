@@ -921,15 +921,35 @@ textarea:focus,
 }
 
 .filter-sidebar {
-    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
     width: var(--sidebar-width);
     box-sizing: border-box;
     height: var(--ui-viewport-below-nav);
     max-height: var(--ui-viewport-below-nav);
+    overflow: hidden;
+    overscroll-behavior: contain;
+    scrollbar-gutter: auto;
+}
+
+.filter-sidebar.compact {
+    padding: 0;
+}
+
+.filter-sidebar-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding-bottom: 32px;
+    padding: 16px 16px 12px;
     scrollbar-gutter: stable;
+}
+
+.filter-sidebar-footer {
+    flex: 0 0 auto;
+    padding: 0 16px 16px;
 }
 
 .filter-header,
@@ -4532,29 +4552,10 @@ textarea:focus,
     background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
 }
 
-/* In gallery selection mode KEEP the browse sections (filters / folders /
-   collections) visible so users can select images across DIFFERENT filters in
-   a single pass — hiding them (the previous behaviour) made cross-filter
-   selection impossible. The sidebar already scrolls (`overflow-y:auto`), so the
-   batch-action panel sits below the controls in normal flow and is reached by
-   scrolling.
-   Do NOT position:sticky this panel: it is the DOM sibling immediately AFTER
-   #btn-toggle-select, so a bottom-pinned sticky overlaps that button and steals
-   its clicks (exit-selection-mode becomes unclickable). */
+/* Keep browse controls scrollable above a footer that participates in layout.
+   Sticky positioning here covered folder rows at intermediate scroll offsets. */
 .filter-sidebar #btn-toggle-select {
-    position: sticky;
-    /* Pin flush with the sidebar's bottom edge (-18px cancels the sidebar's
-       own padding) — with bottom:0 the folder-tree rows kept peeking through
-       the padding strip under the pinned button (QA P3-8, 1366×768). */
-    bottom: -18px;
-    z-index: 18;
-    /* Separation shadow so rows sliding underneath read as "under a docked
-       action bar" instead of an overlap glitch. */
-    box-shadow: 0 -12px 16px -10px rgba(0, 0, 0, 0.55);
-}
-
-.filter-sidebar.selection-mode {
-    padding-bottom: 96px;
+    position: static;
 }
 
 .filter-sidebar.selection-mode .selection-panel {

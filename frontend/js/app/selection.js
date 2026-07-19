@@ -406,24 +406,6 @@ async function invertAllFilteredResults() {
     }
 }
 
-function ensureSelectionPanelVisible(panel) {
-    const sidebar = document.querySelector('.filter-sidebar');
-    if (!panel || !sidebar) return;
-
-    const panelRect = panel.getBoundingClientRect();
-    const sidebarRect = sidebar.getBoundingClientRect();
-    const padding = 10;
-    const viewportBottom = window.innerHeight || document.documentElement.clientHeight || sidebarRect.bottom;
-    const visibleBottom = Math.min(sidebarRect.bottom, viewportBottom);
-    const visibleTop = Math.max(sidebarRect.top, 0);
-
-    if (panelRect.bottom > visibleBottom - padding) {
-        sidebar.scrollTop += panelRect.bottom - visibleBottom + padding;
-    } else if (panelRect.top < visibleTop + padding) {
-        sidebar.scrollTop -= visibleTop + padding - panelRect.top;
-    }
-}
-
 function setSelectionMode(enabled, options = {}) {
     const { clearSelectionWhenDisabled = true } = options;
     const nextMode = Boolean(enabled);

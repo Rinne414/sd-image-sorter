@@ -661,6 +661,7 @@
             <!-- Gallery View -->
             <section id="view-gallery" class="view active" role="tabpanel" aria-labelledby="nav-tab-gallery">
                 <aside class="filter-sidebar compact" aria-label="Image filters">
+                    <div class="filter-sidebar-scroll">
                     <div class="sidebar-section" data-sidebar-section="filters">
                         <div class="sidebar-section-head">
                             <button id="btn-collapse-desktop-sidebar" class="btn btn-ghost btn-small btn-icon-only" title="Collapse Sidebar" aria-label="Collapse sidebar">
@@ -786,34 +787,37 @@
                             <div id="smart-folders-list" class="smart-folders-list"></div>
                         </div>
                     </div>
+                    </div>
 
-                    <div class="divider-h" aria-hidden="true"></div>
+                    <div class="filter-sidebar-footer">
+                        <div class="divider-h" aria-hidden="true"></div>
 
-                    <button id="btn-toggle-select" class="btn btn-primary btn-large full-width" aria-pressed="false" aria-label="Toggle image selection mode">
-                        <span aria-hidden="true">✔</span>
-                        <span data-i18n="gallery.selectImages">Select Images</span>
-                    </button>
+                        <button id="btn-toggle-select" class="btn btn-primary btn-large full-width" aria-pressed="false" aria-label="Toggle image selection mode">
+                            <span aria-hidden="true">✔</span>
+                            <span data-i18n="gallery.selectImages">Select Images</span>
+                        </button>
 
-                    <div id="selection-actions" class="selection-panel" style="display: none;" aria-live="polite">
-                        <div class="selection-panel-header">
-                            <div class="selection-panel-copy">
-                                <span class="selection-panel-title" data-i18n="selection.panelTitle">Batch</span>
-                                <span id="selection-count" class="selection-panel-count">0 items selected</span>
-                                <span id="selection-scope-summary" class="selection-panel-scope"></span>
+                        <div id="selection-actions" class="selection-panel" style="display: none;" aria-live="polite">
+                            <div class="selection-panel-header">
+                                <div class="selection-panel-copy">
+                                    <span class="selection-panel-title" data-i18n="selection.panelTitle">Batch</span>
+                                    <span id="selection-count" class="selection-panel-count">0 items selected</span>
+                                    <span id="selection-scope-summary" class="selection-panel-scope"></span>
+                                </div>
+                                <button id="btn-clear-selection" class="btn btn-ghost btn-small selection-panel-clear" data-i18n="selection.deselectAll">Clear</button>
                             </div>
-                            <button id="btn-clear-selection" class="btn btn-ghost btn-small selection-panel-clear" data-i18n="selection.deselectAll">Clear</button>
-                        </div>
-                        <div class="selection-panel-section selection-panel-section-scope">
-                            <span class="selection-panel-section-title" data-i18n="selection.scopeSection">Choose images</span>
-                            <div class="selection-panel-actions selection-panel-pick-actions" aria-label="Selection tools">
-                                <button id="btn-select-all" class="btn btn-primary full-width" title="Select all images matching current filters"><span>✓✓</span> <span data-i18n="selection.selectAllFiltered">Select all matching</span></button>
-                                <button id="btn-invert-selection-filtered" class="btn btn-secondary full-width" title="Invert selection among filtered images"><span>⇄</span> <span data-i18n="selection.invertAllFiltered">Invert matching</span></button>
+                            <div class="selection-panel-section selection-panel-section-scope">
+                                <span class="selection-panel-section-title" data-i18n="selection.scopeSection">Choose images</span>
+                                <div class="selection-panel-actions selection-panel-pick-actions" aria-label="Selection tools">
+                                    <button id="btn-select-all" class="btn btn-primary full-width" title="Select all images matching current filters"><span>✓✓</span> <span data-i18n="selection.selectAllFiltered">Select all matching</span></button>
+                                    <button id="btn-invert-selection-filtered" class="btn btn-secondary full-width" title="Invert selection among filtered images"><span>⇄</span> <span data-i18n="selection.invertAllFiltered">Invert matching</span></button>
+                                </div>
+                                <span class="selection-panel-helper" data-i18n="selection.selectAllFilteredHelp">Uses the current Gallery filters, including images not scrolled into view.</span>
                             </div>
-                            <span class="selection-panel-helper" data-i18n="selection.selectAllFilteredHelp">Uses the current Gallery filters, including images not scrolled into view.</span>
+                            <!-- Aurora Phase 3 (#25a): batch ACTION buttons moved to the
+                                 bottom action bar (#gallery-action-bar); this panel keeps
+                                 the selection SCOPE tools only, per the 24a checklist. -->
                         </div>
-                        <!-- Aurora Phase 3 (#25a): batch ACTION buttons moved to the
-                             bottom action bar (#gallery-action-bar); this panel keeps
-                             the selection SCOPE tools only, per the 24a checklist. -->
                     </div>
                 </aside>
 
