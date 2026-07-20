@@ -94,6 +94,33 @@ def test_preview_skips_reversed_solid_region(
             assert preview.tobytes() == source.tobytes()
 
 
+def test_preview_skips_reversed_sticker_region(
+    test_client: TestClient,
+    test_db: ModuleType,
+    tmp_path: Path,
+) -> None:
+    source_path = tmp_path / "preview-reversed-sticker.png"
+    _create_rgba_image(source_path, "PNG")
+    image_id = _add_image(test_db, source_path)
+
+    response = test_client.post(
+        "/api/censor/preview",
+        json={
+            "image_id": image_id,
+            "regions": [[12, 12, 4, 4]],
+            "style": "sticker",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    _, payload = response.json()["preview"].split(",", 1)
+    with Image.open(BytesIO(base64.b64decode(payload))) as preview:
+        preview.load()
+        with Image.open(source_path) as source:
+            source.load()
+            assert preview.tobytes() == source.tobytes()
+
+
 @pytest.mark.parametrize(
     ("extension", "format_name"),
     [("png", "PNG"), ("webp", "WEBP")],

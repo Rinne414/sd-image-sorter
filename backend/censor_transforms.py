@@ -118,6 +118,8 @@ class Censor:
         try:
             for x1, y1, x2, y2 in regions:
                 w, h = x2 - x1, y2 - y1
+                if w <= 0 or h <= 0:
+                    continue
 
                 if sticker is not None:
                     # Resize sticker to fit region

@@ -789,15 +789,47 @@ class TestCensorSticker:
         finally:
             opened_sources[0].close()
 
-    def test_custom_sticker_closes_source_when_resize_fails(self, tmp_path, monkeypatch):
+    @pytest.mark.parametrize(
+        "region",
+        [
+            (12, 12, 4, 4),
+            (8, 8, 8, 8),
+            (4, 12, 12, 4),
+        ],
+    )
+    def test_invalid_region_is_skipped_without_custom_sticker(self, region):
+        image = Image.new("RGB", (16, 16), (255, 0, 0))
+
+        out = Censor.apply_sticker(image, [region])
+
+        assert out.tobytes() == image.tobytes()
+
+    @pytest.mark.parametrize(
+        "region",
+        [
+            (12, 12, 4, 4),
+            (8, 8, 8, 8),
+            (4, 12, 12, 4),
+        ],
+    )
+    def test_invalid_region_is_skipped_with_custom_sticker(self, tmp_path, region):
+        sticker_path = tmp_path / "sticker.png"
+        Image.new("RGBA", (8, 8), (0, 0, 255, 255)).save(sticker_path)
+        image = Image.new("RGB", (16, 16), (255, 0, 0))
+
+        out = Censor.apply_sticker(image, [region], str(sticker_path))
+
+        assert out.tobytes() == image.tobytes()
+
+    def test_custom_sticker_closes_source_when_region_is_malformed(self, tmp_path, monkeypatch):
         sticker_path = tmp_path / "animated.gif"
         self._animated_sticker(sticker_path)
         opened_sources, opened_handles = self._track_sticker_source(monkeypatch)
 
-        with pytest.raises(ValueError, match="height and width must be > 0"):
+        with pytest.raises(ValueError, match="not enough values to unpack"):
             Censor.apply_sticker(
                 Image.new("RGB", (16, 16), (0, 0, 0)),
-                [(8, 8, 4, 4)],
+                [(8, 8, 4)],
                 str(sticker_path),
             )
 
