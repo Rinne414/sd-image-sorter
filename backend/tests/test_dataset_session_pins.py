@@ -179,6 +179,26 @@ class TestDsIdAlgorithm:
         assert dss._session_item_for_path(Path(resolved))["ds_id"] == gold
         assert dss.virtual_image_record_for_path(resolved)["ds_id"] == gold
 
+    def test_hydrated_item_keeps_manifest_path_identity(self, tmp_path, monkeypatch):
+        image_path = _make_image(tmp_path / "manifest-path.png")
+        manifest_path = os.path.abspath(image_path)
+        original_resolve = Path.resolve
+
+        def resolve_to_different_identity(path, *args, **kwargs):
+            if os.path.abspath(path) == manifest_path:
+                return tmp_path / "physical-target" / image_path.name
+            return original_resolve(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "resolve", resolve_to_different_identity)
+        manifest_item = dss._manifest_item_for_path(manifest_path, 0)
+        session_item = dss._session_item_for_path(Path(manifest_path))
+
+        assert session_item is not None
+        assert (session_item["abs_path"], session_item["ds_id"]) == (
+            manifest_item["abs_path"],
+            manifest_item["ds_id"],
+        )
+
     def test_is_image_path_uses_allowed_extension_set(self, tmp_path):
         assert dss._is_image_path(Path("x.PNG")) is True
         assert dss._is_image_path(Path("x.jpg")) is True

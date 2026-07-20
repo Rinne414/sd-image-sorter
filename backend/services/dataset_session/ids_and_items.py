@@ -8,11 +8,7 @@ name and the facade re-exports them.
 
 The ds_id producers are coupling-pinned (tests/test_dataset_session_pins.py
 TestDsIdAlgorithm): _ds_id_for_path / _manifest_item_for_path /
-_session_item_for_path must stamp the same id for the same resolved path.
-NOTE the pinned asymmetry (report §7-c): _manifest_item_for_path derives
-ds_id from the RAW manifest path string while _session_item_for_path uses
-str(path.resolve()) — do not "unify" one side (ds_id keys frontend
-localStorage captions).
+_session_item_for_path must stamp the same id for the same manifest path.
 """
 from __future__ import annotations
 
@@ -122,7 +118,7 @@ def _session_item_for_path(path: Path, scan_index: Optional[int] = None) -> Opti
         return None
 
     width, height, thumb_b64 = meta
-    abs_path = str(path.resolve())
+    abs_path = os.path.abspath(path)
     return {
         "ds_id": _ds_id_for_path(abs_path),
         "abs_path": abs_path,
