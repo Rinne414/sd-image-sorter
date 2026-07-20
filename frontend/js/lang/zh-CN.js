@@ -1348,6 +1348,7 @@ window.I18nLang_zhCN = {
     'similar.duplicatesEmpty': '点击「查找重复」扫描重复图片。',
     'similar.dupBridgeHint': '这里是快速的成对查重。要整库分组审查、一键清理，请用「查重清理」。',
     'similar.needMoreEmbeddings': '至少需要 {count} 张已建立 embedding 的图片，查重才有意义。',
+    'similar.tooManyEmbeddingsForSyncDuplicates': '快速查重最多支持 {max} 张已建立索引的图片；当前图库有 {count} 张。请打开「查重清理」，在后台扫描整个图库。',
     'similar.startIndexing': '建立相似索引',
     'similar.indexingNow': '建立索引中...',
     'similar.statusNeedsIndex': '相似搜索需要先建立索引',

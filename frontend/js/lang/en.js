@@ -1337,6 +1337,7 @@ window.I18nLang_en = {
     'similar.duplicatesEmpty': 'Click "Find Duplicates" to scan for duplicate images.',
     'similar.dupBridgeHint': 'This is a quick pair check. For whole-library group review with one-click cleanup, use Duplicate Cleanup.',
     'similar.needMoreEmbeddings': 'Need at least {count} embedded images before duplicate search is meaningful.',
+    'similar.tooManyEmbeddingsForSyncDuplicates': 'Quick duplicate checking supports up to {max} indexed images; this library has {count}. Open Duplicate Cleanup to scan the full library in the background.',
     'similar.startIndexing': 'Build Similarity Index',
     'similar.indexingNow': 'Indexing...',
     'similar.statusNeedsIndex': 'Similarity search needs indexing first',

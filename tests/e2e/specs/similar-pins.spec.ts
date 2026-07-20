@@ -451,9 +451,24 @@ test('findDuplicates issues the threshold/paged URL and renders both {image_a,im
 // ---------------------------------------------------------------------------
 
 test('findDuplicates renders the reason-specific empty message for insufficient_embeddings vs too_many_embeddings', async ({ page }) => {
+  const consoleProblems: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning') {
+      consoleProblems.push(`${message.type()}: ${message.text()}`)
+    }
+  })
+
   let dupResponse: unknown = {}
   await page.route('**/api/similarity/duplicates**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(dupResponse) }))
+  await initSimilarView(page)
+  const duplicatesTab = page.locator('.similar-tab[data-target="panel-similar-duplicates"]')
+  const duplicatesButton = page.locator('#btn-similar-duplicates')
+  const duplicatesPanel = page.locator('#panel-similar-duplicates')
+  await duplicatesTab.click()
+  await expect(duplicatesPanel).toBeVisible()
+  await expect(duplicatesButton).toBeVisible()
+  await expect(duplicatesButton).toBeEnabled()
 
   dupResponse = { duplicates: [], reason: 'insufficient_embeddings', minimum_required: 2, has_more: false, total: 0 }
   const insufficient = await page.evaluate(async () => {
@@ -467,23 +482,74 @@ test('findDuplicates renders the reason-specific empty message for insufficient_
     }
   })
 
-  dupResponse = { duplicates: [], reason: 'too_many_embeddings', max_embeddings: 5000, embedded_count: 99999, has_more: false, total: 0 }
-  const tooMany = await page.evaluate(async () => {
-    const S = (window as any).SimilarImages
-    await S.findDuplicates()
-    return {
-      rendered: document.querySelector('#similar-duplicates .empty-state')?.textContent ?? null,
-      state: S.duplicateEmptyMessage,
+  const tooManyResponse = {
+    duplicates: [],
+    reason: 'too_many_embeddings',
+    max_embeddings: 5000,
+    embedded_count: 99999,
+    has_more: false,
+    total: 0,
+  }
+  dupResponse = tooManyResponse
+  const viewports = [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+  ]
+  const expected = {
+    en: 'Quick duplicate checking supports up to 5000 indexed images; this library has 99999. Open Duplicate Cleanup to scan the full library in the background.',
+    'zh-CN': '快速查重最多支持 5000 张已建立索引的图片；当前图库有 99999 张。请打开「查重清理」，在后台扫描整个图库。',
+  }
+  const tooManyResults: Array<{
+    lang: keyof typeof expected
+    viewport: { width: number; height: number }
+    rendered: string | null
+    state: string
+    visible: boolean
+    rect: { left: number; top: number; right: number; bottom: number }
+    overflow: number
+  }> = []
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport)
+    for (const lang of ['en', 'zh-CN'] as const) {
+      await page.evaluate((language) => (window as any).I18n.setLang(language), lang)
+      await duplicatesButton.click()
+      const emptyState = page.locator('#similar-duplicates .empty-state')
+      await expect(emptyState).toHaveText(expected[lang])
+      await emptyState.scrollIntoViewIfNeeded()
+      const result = await page.evaluate(() => {
+        const S = (window as any).SimilarImages
+        const emptyState = document.querySelector<HTMLElement>('#similar-duplicates .empty-state')
+        if (!emptyState) throw new Error('Duplicate empty state is missing')
+        const rect = emptyState.getBoundingClientRect()
+        return {
+          rendered: emptyState.textContent,
+          state: S.duplicateEmptyMessage,
+          visible: rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < window.innerHeight,
+          rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom },
+          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        }
+      })
+      tooManyResults.push({ lang, viewport, ...result })
     }
-  })
+  }
 
   // The rendered empty-state text IS the reason-derived message (not the plain default).
   expect(insufficient.rendered).toBe(insufficient.state)
-  expect(tooMany.rendered).toBe(tooMany.state)
-  // The two reasons yield distinct, non-empty copy.
   expect(insufficient.state).toBeTruthy()
-  expect(tooMany.state).toBeTruthy()
-  expect(insufficient.state).not.toBe(tooMany.state)
+  for (const result of tooManyResults) {
+    expect(result.rendered).toBe(result.state)
+    expect(result.state).toBe(expected[result.lang])
+    expect(result.state).not.toBe(insufficient.state)
+    expect(result.visible).toBe(true)
+    expect(result.rect.left, JSON.stringify(result)).toBeGreaterThanOrEqual(-1)
+    expect(result.rect.right, JSON.stringify(result)).toBeLessThanOrEqual(result.viewport.width + 1)
+    expect(result.rect.top, JSON.stringify(result)).toBeGreaterThanOrEqual(-1)
+    expect(result.rect.bottom, JSON.stringify(result)).toBeLessThanOrEqual(result.viewport.height + 1)
+    expect(result.overflow).toBe(0)
+  }
+  expect(consoleProblems).toEqual([])
 })
 
 // ---------------------------------------------------------------------------
