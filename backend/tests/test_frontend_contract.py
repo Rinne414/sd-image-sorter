@@ -35,6 +35,36 @@ def _iter_frontend_js_files(frontend_root: Path):
                 yield root_path / filename
 
 
+def test_language_packs_have_unique_matching_keys():
+    repo_root = Path(__file__).resolve().parents[2]
+    language_sources = {
+        "en": (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8"),
+        "zh-CN": (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8"),
+    }
+    keys_by_language = {}
+    duplicates_by_language = {}
+
+    for language, source in language_sources.items():
+        keys = [
+            match.group("key")
+            for match in re.finditer(
+                r'''^\s*(?P<quote>['"])(?P<key>[^'"]+)(?P=quote)\s*:''',
+                source,
+                flags=re.MULTILINE,
+            )
+        ]
+        counts = {}
+        for key in keys:
+            counts[key] = counts.get(key, 0) + 1
+        duplicates = sorted(key for key, count in counts.items() if count > 1)
+        keys_by_language[language] = set(keys)
+        if duplicates:
+            duplicates_by_language[language] = duplicates
+
+    assert not duplicates_by_language
+    assert keys_by_language["en"] == keys_by_language["zh-CN"]
+
+
 def _dataset_family_source(repo_root: Path) -> str:
     # The dataset-maker JS god-file family (dataset-maker.js + part2/part3/
     # pipeline/local-import/cleanups) was decomposed VERBATIM into the
