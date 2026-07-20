@@ -27,7 +27,9 @@ Object.assign(window.PromptLab, {
         const generated = this.generatedPromptCore || this.generatedPrompt || document.getElementById('promptlab-output')?.value || '';
         const singleTag = document.getElementById('promptlab-recat-tag')?.value || '';
         const source = [buildPrompt, generated, singleTag].find((value) => String(value || '').trim());
-        return window.TagCategoryCopy?.parsePromptTags?.(source) || this._parsePromptTags(source);
+        const copy = window.TagCategoryCopy;
+        const parsed = copy?.parsePromptTags?.(source) || this._parsePromptTags(source);
+        return copy?.getPromptCategoryTags?.(parsed) || parsed;
     },
 
     _dedupeCategoryBoardTags(tags) {

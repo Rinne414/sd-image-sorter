@@ -255,6 +255,60 @@ test('_getLoras prefers the loras field, falls back to <lora:name:weight> prompt
   expect(probe.empty).toEqual([])
 })
 
+test('raw LoRA prompt directives stay in the LoRA section and out of category chips', async ({ page }) => {
+  const categorizeRequests: string[][] = []
+  await page.route('**/api/prompts/categorize', async (route) => {
+    const tags = route.request().postDataJSON() as string[]
+    categorizeRequests.push(tags)
+    await route.fulfill({
+      json: {
+        results: tags.map((tag) => ({
+          tag,
+          category: tag.includes('<lora:') || tag === 'standing' ? 'pose' : 'background',
+        })),
+      },
+    })
+  })
+
+  await loadMockParse(page, {
+    generator: 'webui',
+    prompt: 'standing, <lora:very_long_style:0.85>, sunset',
+    negative_prompt: '',
+    checkpoint: '',
+    width: 512,
+    height: 768,
+    loras: [],
+    metadata: { _parsed: { generation_params: {} } },
+  })
+
+  await expect.poll(() => categorizeRequests.length).toBeGreaterThan(0)
+  expect(categorizeRequests).toEqual([['standing', 'sunset']])
+  await expect(page.locator('#reader-loras')).toContainText('very_long_style')
+  await expect(page.locator('#reader-category-tags')).not.toContainText('<lora:')
+  await expect(page.locator('.reader-category-group[data-group="pose"] .reader-category-chip')).toHaveText('standing')
+  expect(await page.evaluate(() => (window as any).TagCategoryCopy.parsePromptTags(
+    'portrait <lora:inline_style:0.7>, <camera:low>, <LORA:upper_case_style:1>',
+  ))).toEqual(['portrait <lora:inline_style:0.7>', '<camera:low>', '<LORA:upper_case_style:1>'])
+
+  await page.evaluate(async () => {
+    const copy = (window as any).TagCategoryCopy
+    const promptTags = copy.parsePromptTags(
+      'portrait <lora:inline_style:0.7>, <camera:low>, <LORA:upper_case_style:1>',
+    )
+    await copy.classifyTags(copy.getPromptCategoryTags(promptTags))
+    const directTags = await copy.getTagsFromSource({
+      tags: ['<lora:database_label:1>'],
+      prompt: '<lora:prompt_style:1>',
+    })
+    await copy.classifyTags(directTags)
+  })
+  expect(categorizeRequests).toEqual([
+    ['standing', 'sunset'],
+    ['portrait', '<camera:low>'],
+    ['<lora:database_label:1>'],
+  ])
+})
+
 // ---------------------------------------------------------------------------
 // 6. _getAllHashes — model_hash + lora_hashes/ti_hashes -> keyed map.
 // ---------------------------------------------------------------------------

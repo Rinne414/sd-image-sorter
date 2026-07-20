@@ -66,13 +66,33 @@
             .replace(/\s+/g, ' ');
     }
 
+    function normalizePromptTagPreservingLoraDirectives(value) {
+        const text = String(value ?? '')
+            .trim()
+            .replace(/^["']|["']$/g, '');
+        const parts = [];
+        const pattern = /<lora:[^<>]+>/gi;
+        let cursor = 0;
+        let match = pattern.exec(text);
+
+        while (match) {
+            parts.push(text.slice(cursor, match.index).replace(/\s+/g, ' '));
+            parts.push(match[0]);
+            cursor = match.index + match[0].length;
+            match = pattern.exec(text);
+        }
+
+        parts.push(text.slice(cursor).replace(/\s+/g, ' '));
+        return parts.join('');
+    }
+
     function normalizeCategoryName(value) {
         const clean = normalizeTagValue(value || 'unknown').toLowerCase() || 'unknown';
         if (KNOWN_CATEGORIES.has(clean)) return clean;
         return CATEGORY_ALIASES[clean] || 'unknown';
     }
 
-    function parsePromptTags(value) {
+    function splitPromptTags(value) {
         const text = String(value || '');
         if (!text.trim()) return [];
         const parts = [];
@@ -93,7 +113,7 @@
             else if (char === '>' && angleDepth > 0) angleDepth -= 1;
 
             if (char === ',' && roundDepth === 0 && squareDepth === 0 && curlyDepth === 0 && angleDepth === 0) {
-                const token = normalizeTagValue(current);
+                const token = normalizePromptTagPreservingLoraDirectives(current);
                 if (token) parts.push(token);
                 current = '';
                 continue;
@@ -101,9 +121,29 @@
             current += char;
         }
 
-        const last = normalizeTagValue(current);
+        const last = normalizePromptTagPreservingLoraDirectives(current);
         if (last) parts.push(last);
-        return dedupeTags(parts);
+        return parts;
+    }
+
+    function parsePromptTags(value) {
+        return dedupeTags(splitPromptTags(value));
+    }
+
+    function getLoraDirectives(value) {
+        return String(value || '').match(/<lora:[^<>]+>/gi) || [];
+    }
+
+    function stripLoraDirectives(tag) {
+        return normalizeTagValue(String(tag).replace(/<lora:[^<>]+>/gi, ' '));
+    }
+
+    function getPromptCategoryTags(tags) {
+        return dedupeTags(dedupeTags(tags).map(stripLoraDirectives).filter(Boolean));
+    }
+
+    function replaceUnderscoresOutsideLoraDirectives(tag) {
+        return String(tag).replace(/<lora:[^<>]+>|_/gi, (match) => match === '_' ? ' ' : match);
     }
 
     function dedupeTags(tags) {
@@ -120,6 +160,28 @@
         return result;
     }
 
+    function dedupePromptTagsPreservingLoraDirectives(tags) {
+        const seen = new Set();
+        const result = [];
+        (tags || []).forEach((tag) => {
+            const value = normalizePromptTagPreservingLoraDirectives(tag);
+            if (!value) return;
+            if (/<lora:[^<>]+>/i.test(value)) {
+                result.push(value);
+                return;
+            }
+            const key = value.toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+            result.push(value);
+        });
+        return result;
+    }
+
+    function parsePromptTagsPreservingLoraDirectives(value) {
+        return dedupePromptTagsPreservingLoraDirectives(splitPromptTags(value));
+    }
+
     async function getTagsFromSource(source = {}) {
         const directTags = dedupeTags(source.tags || []);
         if (directTags.length > 0) return directTags;
@@ -130,14 +192,14 @@
                 const result = await window.App.API.getImage(imageId);
                 const fetchedTags = dedupeTags(result?.tags || result?.image?.tags || []);
                 if (fetchedTags.length > 0) return fetchedTags;
-                const promptTags = parsePromptTags(result?.image?.prompt || source.image?.prompt || source.prompt || '');
+                const promptTags = getPromptCategoryTags(parsePromptTags(result?.image?.prompt || source.image?.prompt || source.prompt || ''));
                 if (promptTags.length > 0) return promptTags;
             } catch (_error) {
                 // Fall through to prompt parsing.
             }
         }
 
-        return parsePromptTags(source.prompt || source.image?.prompt || '');
+        return getPromptCategoryTags(parsePromptTags(source.prompt || source.image?.prompt || ''));
     }
 
     async function classifyTags(tags) {
@@ -209,9 +271,17 @@
     function cleanPromptTags(tags, options = {}) {
         const cleaned = dedupeTags(tags).map((tag) => {
             const value = normalizeTagValue(tag);
-            return options.spaces ? value.replace(/_/g, ' ') : value;
+            return options.spaces ? replaceUnderscoresOutsideLoraDirectives(value) : value;
         });
         return dedupeTags(cleaned);
+    }
+
+    function cleanPromptTagsPreservingLoraDirectives(tags, options = {}) {
+        const cleaned = dedupePromptTagsPreservingLoraDirectives(tags).map((tag) => {
+            const value = normalizePromptTagPreservingLoraDirectives(tag);
+            return options.spaces ? replaceUnderscoresOutsideLoraDirectives(value) : value;
+        });
+        return dedupePromptTagsPreservingLoraDirectives(cleaned);
     }
 
     function groupForCategory(category) {
@@ -457,11 +527,16 @@
         buildPurposePrompt,
         classifyTags,
         cleanPromptTags,
+        cleanPromptTagsPreservingLoraDirectives,
         copyTags,
         findGalleryByTags,
+        getPromptCategoryTags,
         getTagsFromSource,
+        getLoraDirectives,
         groupForCategory,
         parsePromptTags,
+        parsePromptTagsPreservingLoraDirectives,
+        replaceUnderscoresOutsideLoraDirectives,
         showMenu,
         tagsForGroup,
         tagsForGroupIds,

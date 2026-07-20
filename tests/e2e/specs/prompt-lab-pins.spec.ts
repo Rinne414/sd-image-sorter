@@ -262,6 +262,98 @@ test('_normalizePromptTag folds space/underscore/case; _mergePromptTags keeps fi
   expect(result.merged).toEqual(['best quality', '1girl', 'solo'])
 })
 
+test('Build prompt cleanup preserves LoRA directives across every cleanup action', async ({ page }) => {
+  const categorizeRequests: string[][] = []
+  const consoleIssues: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'warning' || message.type() === 'error') {
+      consoleIssues.push(`${message.type()}: ${message.text()}`)
+    }
+  })
+  await page.route('**/api/images/987654321', async (route) => {
+    await route.fulfill({
+      json: {
+        image: {
+          id: 987654321,
+          prompt: '',
+          negative_prompt: '',
+          checkpoint: '',
+          width: 512,
+          height: 512,
+          aesthetic_score: null,
+        },
+        tags: [],
+      },
+    })
+  })
+  await page.route('**/api/prompts/categorize', async (route) => {
+    const tags = route.request().postDataJSON() as string[]
+    categorizeRequests.push(tags)
+    await route.fulfill({
+      json: {
+        results: tags.map((tag) => ({
+          tag,
+          category: tag === 'best_quality' ? 'quality' : 'unknown',
+        })),
+      },
+    })
+  })
+  await openPromptLab(page)
+  await page.locator('.promptlab-tab[data-mode="build"]').click()
+  await expect(page.locator('#promptlab-mode-build')).toHaveClass(/active/)
+  await page.evaluate(() => window.PromptLab.ensureBuildSourceOption(987654321, 'LoRA cleanup fixture'))
+  await page.locator('#pl-build-source').selectOption('987654321')
+  await expect(page.locator('#pl-build-editor')).toBeVisible()
+
+  const lora = '<LORA:My_Model  Name:0.75>'
+  const promptArea = page.locator('#pl-build-prompt')
+  const clean = async (value: string, buttonId: string, expected: string) => {
+    await promptArea.fill(value)
+    await page.locator(buttonId).click()
+    await expect(promptArea).toHaveValue(expected)
+  }
+  const viewports = [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+  ]
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport)
+    await clean(
+      `portrait, ${lora}, ${lora}, sunset`,
+      '#pl-build-clean-prompt',
+      `portrait, ${lora}, ${lora}, sunset`,
+    )
+    await clean(
+      `portrait_tag ${lora}, ${lora}, sunset_glow`,
+      '#pl-build-space-tags',
+      `portrait tag ${lora}, ${lora}, sunset glow`,
+    )
+    await clean(
+      `sunset ${lora}, portrait ${lora}, ${lora}, ${lora}`,
+      '#pl-build-reorder',
+      `sunset, portrait, ${lora}, ${lora}, ${lora}, ${lora}`,
+    )
+    await clean(
+      `best_quality, portrait ${lora}${lora}`,
+      '#pl-build-drop-quality',
+      `portrait, ${lora}, ${lora}`,
+    )
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
+  }
+
+  expect(categorizeRequests).toEqual([
+    ['sunset', 'portrait'],
+    ['best_quality', 'portrait'],
+    ['sunset', 'portrait'],
+    ['best_quality', 'portrait'],
+    ['sunset', 'portrait'],
+    ['best_quality', 'portrait'],
+  ])
+  expect(consoleIssues).toEqual([])
+})
+
 // (5) _applyPrependAppend / _stripAffixesFromPrompt — the affix round-trip.
 // apply merges prepend + core + append (deduped); strip is its inverse, pulling
 // the affix tokens back out to recover the core. Smoke pins the forward path

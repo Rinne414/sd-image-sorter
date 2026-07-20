@@ -239,28 +239,35 @@ Object.assign(window.PromptLab, {
         const promptArea = document.getElementById('pl-build-prompt');
         if (!promptArea) return;
         const copy = window.TagCategoryCopy;
-        const rawTags = copy?.parsePromptTags?.(promptArea.value) || this._parsePromptTags(promptArea.value);
+        const loraDirectives = copy?.getLoraDirectives?.(promptArea.value) || [];
+        const rawTags = copy?.parsePromptTagsPreservingLoraDirectives?.(promptArea.value) || this._parsePromptTags(promptArea.value);
         if (!rawTags.length) {
             window.App?.showToast?.(this._t('promptlab.addTagBeforeGenerate', 'Add at least one tag or apply a tag set before generating'), 'warning');
             return;
         }
 
-        let nextTags = copy?.cleanPromptTags?.(rawTags, { spaces: Boolean(options.spaces) }) || this._mergePromptTags(rawTags);
+        let nextTags = copy?.cleanPromptTagsPreservingLoraDirectives?.(
+            rawTags,
+            { spaces: Boolean(options.spaces) },
+        ) || this._mergePromptTags(rawTags);
         if ((options.dropQuality || options.reorder) && copy?.classifyTags && copy?.tagsForGroupIds) {
-            const classified = await copy.classifyTags(nextTags);
+            const promptCategoryTags = copy.getPromptCategoryTags?.(nextTags) || nextTags;
+            const classified = await copy.classifyTags(promptCategoryTags);
             const orderedGroups = options.dropQuality
                 ? [...this._defaultBuildGroupIds(), 'unclassified']
                 : [...this._defaultBuildGroupIds(), 'qualityMeta', 'unclassified'];
             const orderedTags = copy.tagsForGroupIds(classified, orderedGroups);
             const orderedKeys = new Set(orderedTags.map((tag) => String(tag).toLowerCase()));
-            const leftovers = options.dropQuality ? [] : nextTags.filter((tag) => !orderedKeys.has(String(tag).toLowerCase()));
-            nextTags = [...orderedTags, ...leftovers];
+            const leftovers = options.dropQuality
+                ? []
+                : classified.tags.filter((tag) => !orderedKeys.has(String(tag).toLowerCase()));
+            nextTags = [...orderedTags, ...leftovers, ...loraDirectives];
         }
         if (options.spaces) {
-            nextTags = nextTags.map((tag) => String(tag).replace(/_/g, ' '));
+            nextTags = nextTags.map(copy.replaceUnderscoresOutsideLoraDirectives);
         }
 
-        promptArea.value = this._mergePromptTags(nextTags).join(', ');
+        promptArea.value = nextTags.join(', ');
         window.App?.showToast?.(this._t('promptlab.promptCleaned', 'Prompt cleaned'), 'success');
     },
 
