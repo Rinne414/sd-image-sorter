@@ -66,6 +66,12 @@ class Censor:
         draw = ImageDraw.Draw(result)
 
         for x1, y1, x2, y2 in regions:
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(image.width, x2), min(image.height, y2)
+
+            if x2 <= x1 or y2 <= y1:
+                continue
+
             draw.rectangle([x1, y1, x2, y2], fill=color)
 
         return result

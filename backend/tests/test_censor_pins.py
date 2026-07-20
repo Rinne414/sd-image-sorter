@@ -700,6 +700,29 @@ class TestCensorBar:
         assert out is not img
         assert img.getpixel((8, 8)) == (255, 0, 0)
 
+    @pytest.mark.parametrize(
+        "region",
+        [
+            (12, 12, 4, 4),
+            (8, 8, 8, 8),
+            (20, 20, 30, 30),
+        ],
+    )
+    def test_invalid_region_is_skipped(self, region):
+        img = Image.new("RGB", (16, 16), (255, 0, 0))
+
+        out = Censor.apply_bar(img, [region], color=(0, 0, 0))
+
+        assert out.tobytes() == img.tobytes()
+
+    def test_partially_visible_region_is_clamped(self):
+        img = Image.new("RGB", (16, 16), (255, 0, 0))
+
+        out = Censor.apply_bar(img, [(-4, 4, 4, 12)], color=(0, 0, 0))
+
+        assert out.getpixel((0, 8)) == (0, 0, 0)
+        assert out.getpixel((5, 8)) == (255, 0, 0)
+
 
 class TestCensorBlur:
     def test_blur_changes_region_but_preserves_original(self):
