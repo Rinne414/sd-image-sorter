@@ -124,6 +124,8 @@ function updateCollapsibleFilterUI(type, items) {
 
 // ============== Tags & Prompts Library ==============
 
+const LIBRARY_DISPLAY_LIMIT = 500;
+
 const libraryData = {
     currentTab: 'tags',
     tags: [],
@@ -197,29 +199,41 @@ async function fetchLibraryFacet(tab, { sortBy = 'frequency', query = '', option
     const normalizedQuery = String(query || '').trim();
     if (optionData && !normalizedQuery) {
         if (tab === 'tags' && optionData.tags?.length) {
-            return { items: optionData.tags, total: optionData.tags.length };
+            return { items: optionData.tags.slice(0, LIBRARY_DISPLAY_LIMIT), total: optionData.tags.length };
         }
         if (tab === 'loras' && optionData.loras?.length) {
-            return { items: optionData.loras, total: optionData.loras.length };
+            return { items: optionData.loras.slice(0, LIBRARY_DISPLAY_LIMIT), total: optionData.loras.length };
         }
         if (tab === 'prompts' && optionData.prompts?.length) {
-            return { items: optionData.prompts, total: optionData.prompts.length };
+            return { items: optionData.prompts.slice(0, LIBRARY_DISPLAY_LIMIT), total: optionData.prompts.length };
         }
     }
 
     if (tab === 'tags') {
-        const result = await API.getTagsLibrary(sortBy, { query: normalizedQuery || null });
+        const result = await API.getTagsLibrary(sortBy, {
+            limit: LIBRARY_DISPLAY_LIMIT,
+            query: normalizedQuery || null,
+        });
         return { items: result.tags || [], total: result.total || 0 };
     }
     if (tab === 'loras') {
-        const result = await API.getLorasLibrary({ query: normalizedQuery || null });
+        const result = await API.getLorasLibrary({
+            limit: LIBRARY_DISPLAY_LIMIT,
+            query: normalizedQuery || null,
+        });
         return { items: result.loras || [], total: result.total || 0 };
     }
     if (tab === 'checkpoints') {
-        const result = await API.getCheckpointsLibrary({ query: normalizedQuery || null });
+        const result = await API.getCheckpointsLibrary({
+            limit: LIBRARY_DISPLAY_LIMIT,
+            query: normalizedQuery || null,
+        });
         return { items: result.checkpoints || [], total: result.total || 0 };
     }
-    const result = await API.getPromptsLibrary({ query: normalizedQuery || null });
+    const result = await API.getPromptsLibrary({
+        limit: LIBRARY_DISPLAY_LIMIT,
+        query: normalizedQuery || null,
+    });
     return { items: result.prompts || [], total: result.total || 0 };
 }
 
@@ -239,7 +253,7 @@ function renderLibraryFacet(tab, items) {
     }
 }
 
-function setLibraryStatsText(tab, count) {
+function setLibraryStatsText(tab, shownCount, totalCount) {
     const statsText = $('#library-stats-text');
     if (!statsText) return;
     // Defensive: this field is JS-owned; make sure no stray data-i18n can let a
@@ -249,14 +263,46 @@ function setLibraryStatsText(tab, count) {
         const translated = window.I18n?.t?.(key, params);
         return translated && translated !== key ? translated : (fallback || key);
     };
+    const isLimited = shownCount < totalCount;
+    const params = { shown: shownCount, total: totalCount, count: totalCount };
     if (tab === 'tags') {
-        statsText.textContent = t('library.tagsFound', { count }, `${count} unique tags found`);
+        statsText.textContent = isLimited
+            ? t('library.tagsShown', params, `Showing ${shownCount} of ${totalCount} unique tags`)
+            : t('library.tagsFound', params, `${totalCount} unique tags found`);
     } else if (tab === 'loras') {
-        statsText.textContent = t('library.lorasFound', { count }, `${count} unique LoRAs found`);
+        statsText.textContent = isLimited
+            ? t('library.lorasShown', params, `Showing ${shownCount} of ${totalCount} unique LoRAs`)
+            : t('library.lorasFound', params, `${totalCount} unique LoRAs found`);
     } else if (tab === 'checkpoints') {
-        statsText.textContent = t('library.checkpointsFound', { count }, `${count} unique checkpoints found`);
+        statsText.textContent = isLimited
+            ? t('library.checkpointsShown', params, `Showing ${shownCount} of ${totalCount} unique checkpoints`)
+            : t('library.checkpointsFound', params, `${totalCount} unique checkpoints found`);
     } else {
-        statsText.textContent = t('library.promptsFound', { count }, `${count} unique prompts found`);
+        statsText.textContent = isLimited
+            ? t('library.promptsShown', params, `Showing ${shownCount} of ${totalCount} unique prompts`)
+            : t('library.promptsFound', params, `${totalCount} unique prompts found`);
+    }
+}
+
+function renderLibraryLoadError(tab, error) {
+    const content = $('#library-content');
+    const statsText = $('#library-stats-text');
+    const fallbackMessages = {
+        tags: appT('library.loadTagsFailed', 'Failed to load tag library'),
+        prompts: appT('library.loadPromptsFailed', 'Failed to load prompt library'),
+        loras: appT('library.loadLorasFailed', 'Failed to load LoRA library'),
+        checkpoints: appT('library.loadCheckpointsFailed', 'Failed to load checkpoint library'),
+    };
+    const fallbackMessage = fallbackMessages[tab] || fallbackMessages.tags;
+    const message = formatUserError(error, fallbackMessage);
+    content.innerHTML = `
+        <div class="library-status library-status-error">
+            <strong>${escapeHtml(fallbackMessage)}</strong>
+            <p>${escapeHtml(message)}</p>
+        </div>
+    `;
+    if (statsText) {
+        statsText.textContent = message;
     }
 }
 
@@ -265,6 +311,7 @@ async function loadLibraryContent() {
     const statsText = $('#library-stats-text');
     const sortBy = $('#library-sort')?.value || 'frequency';
     const currentTab = libraryData.currentTab;
+    const requestId = ++libraryData.searchRequestId;
     const t = (key, params, fallback) => {
         const translated = window.I18n?.t?.(key, params);
         return translated && translated !== key ? translated : (fallback || key);
@@ -292,26 +339,12 @@ async function loadLibraryContent() {
             sortBy,
             optionData: libraryData.optionData,
         });
+        if (requestId !== libraryData.searchRequestId || currentTab !== libraryData.currentTab) return;
         renderLibraryFacet(currentTab, result.items);
-        setLibraryStatsText(currentTab, result.total);
+        setLibraryStatsText(currentTab, result.items.length, result.total);
     } catch (error) {
-        const fallbackMessages = {
-            tags: t('library.loadTagsFailed', null, 'Failed to load tag library'),
-            prompts: t('library.loadPromptsFailed', null, 'Failed to load prompt library'),
-            loras: t('library.loadLorasFailed', null, 'Failed to load LoRA library'),
-            checkpoints: t('library.loadCheckpointsFailed', null, 'Failed to load checkpoint library')
-        };
-        const fallbackMessage = fallbackMessages[currentTab] || fallbackMessages.tags;
-        const message = escapeHtml(formatUserError(error, fallbackMessage));
-        content.innerHTML = `
-            <div class="library-status library-status-error">
-                <strong>${fallbackMessage}</strong>
-                <p>${message}</p>
-            </div>
-        `;
-        if (statsText) {
-            statsText.textContent = message;
-        }
+        if (requestId !== libraryData.searchRequestId || currentTab !== libraryData.currentTab) return;
+        renderLibraryLoadError(currentTab, error);
         Logger.error('Library load error:', error);
     }
 }
@@ -452,24 +485,42 @@ function renderLibraryCheckpoints(checkpoints) {
     });
 }
 
-const filterLibraryContent = debounce(async () => {
-    const query = $('#library-search')?.value || '';
-    const tab = libraryData.currentTab;
-    const requestId = ++libraryData.searchRequestId;
+function isLibrarySearchContextCurrent(context) {
+    return context.requestId === libraryData.searchRequestId
+        && context.tab === libraryData.currentTab
+        && context.query === ($('#library-search')?.value || '')
+        && context.sortBy === ($('#library-sort')?.value || 'frequency')
+        && context.optionData === libraryData.optionData;
+}
+
+const runLibrarySearch = debounce(async (context) => {
+    if (!isLibrarySearchContextCurrent(context)) return;
 
     try {
-        const result = await fetchLibraryFacet(tab, {
-            sortBy: $('#library-sort')?.value || 'frequency',
-            query,
-            optionData: libraryData.optionData,
+        const result = await fetchLibraryFacet(context.tab, {
+            sortBy: context.sortBy,
+            query: context.query,
+            optionData: context.optionData,
         });
-        if (requestId !== libraryData.searchRequestId || tab !== libraryData.currentTab) return;
-        renderLibraryFacet(tab, result.items);
-        setLibraryStatsText(tab, result.total);
+        if (!isLibrarySearchContextCurrent(context)) return;
+        renderLibraryFacet(context.tab, result.items);
+        setLibraryStatsText(context.tab, result.items.length, result.total);
     } catch (error) {
+        if (!isLibrarySearchContextCurrent(context)) return;
+        renderLibraryLoadError(context.tab, error);
         Logger.error('Library search error:', error);
     }
 }, 200);
+
+function filterLibraryContent() {
+    runLibrarySearch({
+        requestId: ++libraryData.searchRequestId,
+        query: $('#library-search')?.value || '',
+        tab: libraryData.currentTab,
+        sortBy: $('#library-sort')?.value || 'frequency',
+        optionData: libraryData.optionData,
+    });
+}
 
 // ============== Modal Tag/Prompt Autocomplete ==============
 
