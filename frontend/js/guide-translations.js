@@ -135,7 +135,6 @@
         'guide.artist.feat.filterGallery': 'Push the chosen artist back into Gallery filtering for follow-up work.',
         'guide.artist.tip1': 'If too many results are undefined, lower the threshold slightly before re-running the model.',
 
-        'lang.switchLabel': 'Switch language',
         'lang.switchTitle': 'Switch language',
 
         'summary.generators': 'Generators',
@@ -148,11 +147,6 @@
         'summary.search': 'Search',
         'summary.artist': 'Artist',
         'summary.dimensions': 'Dimensions',
-
-        'filter.widthMin': 'W min',
-        'filter.widthMax': 'W max',
-        'filter.heightMin': 'H min',
-        'filter.heightMax': 'H max',
 
         'shortcuts.title': 'Keyboard Shortcuts',
         'shortcuts.hint': 'Press ? any time to open this panel.',
@@ -178,8 +172,6 @@
         'common.questionable': 'Questionable',
         'common.explicit': 'Explicit',
 
-        'modal.viewAsNAI': 'View as NAI',
-        'modal.noPrompt': 'No prompt',
         'modal.promptSD': 'Prompt (SD)',
         'modal.promptNAI': 'Prompt (NAI)',
         'modal.character': 'Character',
@@ -198,12 +190,6 @@
         'modal.tagsCopied': 'Tags copied',
         'modal.paramsCopied': 'Image settings copied',
         'modal.allCopied': 'All image info copied',
-
-        'censor.regionBreasts': 'Breasts',
-        'censor.regionPussy': 'Pussy',
-        'censor.regionDick': 'Dick',
-        'censor.regionAnus': 'Anus',
-        'censor.regionCum': 'Cum'
     };
 
     var zhCN = {
@@ -340,7 +326,6 @@
         'guide.artist.feat.filterGallery': '把所选画师回传到图库筛选，方便继续细分处理。',
         'guide.artist.tip1': '如果未定义结果太多，可适当降低阈值后再重新运行一次。',
 
-        'lang.switchLabel': '切换语言',
         'lang.switchTitle': '切换语言',
 
         'summary.generators': '生成器',
@@ -353,11 +338,6 @@
         'summary.search': '搜索',
         'summary.artist': '画师',
         'summary.dimensions': '尺寸',
-
-        'filter.widthMin': '宽度最小',
-        'filter.widthMax': '宽度最大',
-        'filter.heightMin': '高度最小',
-        'filter.heightMax': '高度最大',
 
         'shortcuts.title': '键盘快捷键',
         'shortcuts.hint': '随时按 ? 可打开此面板。',
@@ -383,8 +363,6 @@
         'common.questionable': '可疑',
         'common.explicit': '露骨',
 
-        'modal.viewAsNAI': '查看 NAI 格式',
-        'modal.noPrompt': '无提示词',
         'modal.promptSD': '提示词（SD）',
         'modal.promptNAI': '提示词（NAI）',
         'modal.character': '角色',
@@ -403,12 +381,6 @@
         'modal.tagsCopied': '标签已复制',
         'modal.paramsCopied': '出图参数已复制',
         'modal.allCopied': '这张图的信息已全部复制',
-
-        'censor.regionBreasts': '胸部',
-        'censor.regionPussy': '阴部',
-        'censor.regionDick': '阴茎',
-        'censor.regionAnus': '肛门',
-        'censor.regionCum': '精液'
     };
 
     window.I18nLang_en = Object.assign(window.I18nLang_en || {}, en);

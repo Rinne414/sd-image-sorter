@@ -40,6 +40,78 @@ test('search help rows re-render in English after switching language', async ({ 
     .toContainText('Plain words')
 })
 
+test('Guide supplements preserve the main language dimension labels in Filter Images', async ({ page }) => {
+  const consoleProblems: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning') {
+      consoleProblems.push(`${message.type()}: ${message.text()}`)
+    }
+  })
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('#view-gallery')).toBeVisible()
+
+  const fields = [
+    { id: 'filter-min-width', zh: '最小宽度', en: 'Min width' },
+    { id: 'filter-max-width', zh: '最大宽度', en: 'Max width' },
+    { id: 'filter-min-height', zh: '最小高度', en: 'Min height' },
+    { id: 'filter-max-height', zh: '最大高度', en: 'Max height' },
+  ]
+  const viewports = [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+  ]
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport)
+    await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
+    await page.locator('#btn-toolbar-filters').click()
+    await expect(page.locator('#filter-modal.visible')).toBeVisible()
+    await page.locator('#filter-min-width').scrollIntoViewIfNeeded()
+
+    for (const field of fields) {
+      const input = page.locator(`#${field.id}`)
+      const label = page.locator('.dimension-field').filter({ has: input }).locator('.dimension-label')
+      await expect(label).toHaveText(field.zh)
+      await expect(input).toHaveAttribute('placeholder', field.zh)
+      await expect(input).toBeInViewport()
+    }
+
+    await page.evaluate(() => (window as any).I18n.setLang('en'))
+    for (const field of fields) {
+      const input = page.locator(`#${field.id}`)
+      const label = page.locator('.dimension-field').filter({ has: input }).locator('.dimension-label')
+      await expect(label).toHaveText(field.en)
+      await expect(input).toHaveAttribute('placeholder', field.en)
+    }
+
+    const geometry = await page.evaluate((fieldIds) => {
+      const shell = document.querySelector<HTMLElement>('#filter-modal .filter-modal-shell')
+      if (!shell) throw new Error('Filter modal shell is missing')
+      const shellRect = shell.getBoundingClientRect()
+      return {
+        horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        clippedFields: fieldIds.filter((fieldId) => {
+          const field = document.getElementById(fieldId)?.closest<HTMLElement>('.dimension-field')
+          if (!field) throw new Error(`Dimension field ${fieldId} is missing`)
+          const rect = field.getBoundingClientRect()
+          return rect.left < Math.max(0, shellRect.left) - 1
+            || rect.right > Math.min(window.innerWidth, shellRect.right) + 1
+            || rect.top < Math.max(0, shellRect.top) - 1
+            || rect.bottom > Math.min(window.innerHeight, shellRect.bottom) + 1
+        }),
+      }
+    }, fields.map((field) => field.id))
+    expect(geometry).toEqual({ horizontalOverflow: 0, clippedFields: [] })
+
+    await page.locator('#btn-close-filter-modal').click()
+    await expect(page.locator('#filter-modal')).toBeHidden()
+  }
+
+  expect(consoleProblems).toEqual([])
+})
+
 test('settings toggle rows flip on whole-row click, not just the button', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('#view-gallery')).toBeVisible()

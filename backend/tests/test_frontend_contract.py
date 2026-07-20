@@ -24,6 +24,10 @@ FORBIDDEN_WINDOW_APP_ASSIGN_RE = re.compile(
 
 ALLOWED_DIRECT_WRITER_FILES = {"app.js", "gallery.js"}
 SKIPPED_DIRS = {"__pycache__", "node_modules"}
+LANGUAGE_KEY_RE = re.compile(
+    r'''^\s*(?P<quote>['"])(?P<key>[^'"]+)(?P=quote)\s*:''',
+    re.MULTILINE,
+)
 
 
 def _iter_frontend_js_files(frontend_root: Path):
@@ -33,6 +37,20 @@ def _iter_frontend_js_files(frontend_root: Path):
         for filename in files:
             if filename.endswith(".js"):
                 yield root_path / filename
+
+
+def _language_pack_keys(source: str) -> list[str]:
+    return [match.group("key") for match in LANGUAGE_KEY_RE.finditer(source)]
+
+
+def _javascript_object_body(source: str, variable_name: str) -> str:
+    match = re.search(
+        rf"\bvar {re.escape(variable_name)} = \{{(?P<body>.*?)^\s*\}};",
+        source,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    assert match is not None, f"JavaScript object {variable_name!r} is missing"
+    return match.group("body")
 
 
 def test_language_packs_have_unique_matching_keys():
@@ -45,14 +63,7 @@ def test_language_packs_have_unique_matching_keys():
     duplicates_by_language = {}
 
     for language, source in language_sources.items():
-        keys = [
-            match.group("key")
-            for match in re.finditer(
-                r'''^\s*(?P<quote>['"])(?P<key>[^'"]+)(?P=quote)\s*:''',
-                source,
-                flags=re.MULTILINE,
-            )
-        ]
+        keys = _language_pack_keys(source)
         counts = {}
         for key in keys:
             counts[key] = counts.get(key, 0) + 1
@@ -63,6 +74,30 @@ def test_language_packs_have_unique_matching_keys():
 
     assert not duplicates_by_language
     assert keys_by_language["en"] == keys_by_language["zh-CN"]
+
+
+def test_guide_translation_supplements_do_not_override_main_language_packs():
+    repo_root = Path(__file__).resolve().parents[2]
+    main_sources = {
+        "en": (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8"),
+        "zh-CN": (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8"),
+    }
+    guide_source = (repo_root / "frontend" / "js" / "guide-translations.js").read_text(encoding="utf-8")
+    guide_bodies = {
+        "en": _javascript_object_body(guide_source, "en"),
+        "zh-CN": _javascript_object_body(guide_source, "zhCN"),
+    }
+    guide_keys = {
+        language: set(_language_pack_keys(source))
+        for language, source in guide_bodies.items()
+    }
+    overlaps = {
+        language: sorted(set(_language_pack_keys(main_sources[language])) & keys)
+        for language, keys in guide_keys.items()
+    }
+
+    assert guide_keys["en"] == guide_keys["zh-CN"]
+    assert not any(overlaps.values()), overlaps
 
 
 def _dataset_family_source(repo_root: Path) -> str:
