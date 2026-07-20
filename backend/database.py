@@ -246,6 +246,7 @@ from db_facets import (
     get_library_health_report,
     _build_library_health_recommendations,
     get_all_checkpoints,
+    count_checkpoints,
 )
 from db_images_read import (
     get_images_in_folder_scope,

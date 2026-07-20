@@ -415,6 +415,30 @@ class TestCheckpointsLibrary:
         assert "pony" in names
         assert "animagine" not in names
 
+    def test_limit_preserves_matching_total(self, test_client, test_db):
+        import database as db
+
+        db.add_image(path="/t/model_a.png", filename="model_a.png", checkpoint="alphaModel.safetensors")
+        db.add_image(path="/t/model_b.png", filename="model_b.png", checkpoint="betaModel.safetensors")
+        db.add_image(path="/t/model_c.png", filename="model_c.png", checkpoint="gammaModel.safetensors")
+
+        response = test_client.get("/api/checkpoints/library?q=model&limit=1")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["checkpoints"]) == 1
+        assert data["total"] == 3
+
+        unbounded = test_client.get("/api/checkpoints/library?q=model")
+        assert unbounded.status_code == 200
+        assert len(unbounded.json()["checkpoints"]) == 3
+        assert unbounded.json()["total"] == 3
+
+        no_match = test_client.get("/api/checkpoints/library?q=missing&limit=1")
+        assert no_match.status_code == 200
+        assert no_match.json()["checkpoints"] == []
+        assert no_match.json()["total"] == 0
+
 
 class TestTagImportExport:
     """Tests for tag import/export endpoints."""

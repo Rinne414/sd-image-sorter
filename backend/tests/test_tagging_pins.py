@@ -653,3 +653,18 @@ def test_get_checkpoints_library_wraps_list_in_envelope(monkeypatch) -> None:
         "checkpoints": rows,
         "total": 1,
     }
+
+
+def test_get_checkpoints_library_preserves_total_before_limit(monkeypatch) -> None:
+    rows = [{"name": "ckptA", "count": 3}]
+    monkeypatch.setattr(
+        tsvc.db, "get_all_checkpoints", lambda limit=None, search_query=None: rows
+    )
+    monkeypatch.setattr(
+        tsvc.db, "count_checkpoints", lambda search_query: 4
+    )
+
+    assert TaggingService().get_checkpoints_library(limit=1, search_query="ckpt") == {
+        "checkpoints": rows,
+        "total": 4,
+    }

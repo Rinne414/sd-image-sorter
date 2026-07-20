@@ -18,6 +18,21 @@ from db_tags import (
 from utils.model_names import checkpoint_identity_key
 
 
+def _checkpoint_facet_filter(
+    search_query: Optional[str],
+) -> tuple[str, str, List[Any]]:
+    normalized_query = checkpoint_identity_key(search_query or "") or normalize_prompt_token(search_query or "")
+    value_expr = "LOWER(checkpoint_normalized)"
+    conditions = ["checkpoint_normalized IS NOT NULL", "TRIM(checkpoint_normalized) != ''"]
+    where_params: List[Any] = []
+
+    if normalized_query:
+        conditions.append(f"{value_expr} LIKE ? ESCAPE '\\'")
+        where_params.append(f"%{escape_like_pattern(normalized_query)}%")
+
+    return normalized_query, " AND ".join(conditions), where_params
+
+
 def get_metadata_status_counts() -> Dict[str, int]:
     """Get image counts grouped by metadata parsing status."""
     with get_db() as conn:
@@ -292,20 +307,14 @@ def get_all_checkpoints(
     search_query: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Get normalized checkpoint facets with counts for filtering and analytics."""
-    normalized_query = checkpoint_identity_key(search_query or "") or normalize_prompt_token(search_query or "")
+    normalized_query, where_clause, where_params = _checkpoint_facet_filter(search_query)
     value_expr = "LOWER(checkpoint_normalized)"
-    conditions = ["checkpoint_normalized IS NOT NULL", "TRIM(checkpoint_normalized) != ''"]
-    where_params: List[Any] = []
     rank_select = ""
     rank_order = ""
 
     if normalized_query:
-        conditions.append(f"{value_expr} LIKE ? ESCAPE '\\'")
-        where_params.append(f"%{escape_like_pattern(normalized_query)}%")
         rank_select = f", {_facet_search_rank_sql(value_expr)} AS relevance"
         rank_order = "relevance ASC, "
-
-    where_clause = " AND ".join(conditions)
 
     with get_db() as conn:
         cursor = conn.cursor()
@@ -330,3 +339,22 @@ def get_all_checkpoints(
             }
             for row in cursor.fetchall()
         ]
+
+
+def count_checkpoints(*, search_query: Optional[str]) -> int:
+    """Count unique normalized checkpoints matching the library query."""
+    _normalized_query, where_clause, where_params = _checkpoint_facet_filter(search_query)
+    with get_db() as conn:
+        row = conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM (
+                SELECT checkpoint_normalized
+                FROM images
+                WHERE {where_clause}
+                GROUP BY checkpoint_normalized
+            )
+            """,
+            where_params,
+        ).fetchone()
+    return int(row[0] or 0) if row else 0

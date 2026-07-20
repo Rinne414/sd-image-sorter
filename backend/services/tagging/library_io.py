@@ -62,7 +62,8 @@ class LibraryIOMixin:
         list, so wrap it in the {items, total} envelope the frontend expects.
         """
         checkpoints = db.get_all_checkpoints(limit=limit, search_query=search_query)
-        return {"checkpoints": checkpoints, "total": len(checkpoints)}
+        total = len(checkpoints) if limit is None else db.count_checkpoints(search_query=search_query)
+        return {"checkpoints": checkpoints, "total": total}
 
     def export_tags(self) -> Dict[str, Any]:
         """Export all image tags as JSON for backup/transfer."""
