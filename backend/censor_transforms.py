@@ -109,31 +109,36 @@ class Censor:
         result = image.copy()
         
         if sticker_path and os.path.exists(sticker_path):
-            sticker = Image.open(sticker_path).convert('RGBA')
+            with Image.open(sticker_path) as sticker_source:
+                sticker = sticker_source.convert('RGBA')
         else:
             # Create simple emoji-style sticker
             sticker = None
-        
-        for x1, y1, x2, y2 in regions:
-            w, h = x2 - x1, y2 - y1
-            
-            if sticker:
-                # Resize sticker to fit region
-                resized = sticker.resize((w, h), Image.Resampling.LANCZOS)
-                result.paste(resized, (x1, y1), resized)
-            else:
-                # Draw simple star/circle overlay
-                draw = ImageDraw.Draw(result)
-                center_x = (x1 + x2) // 2
-                center_y = (y1 + y2) // 2
-                radius = min(w, h) // 2
-                draw.ellipse(
-                    [center_x - radius, center_y - radius, 
-                     center_x + radius, center_y + radius],
-                    fill=(255, 215, 0)  # Gold color
-                )
-        
-        return result
+
+        try:
+            for x1, y1, x2, y2 in regions:
+                w, h = x2 - x1, y2 - y1
+
+                if sticker is not None:
+                    # Resize sticker to fit region
+                    with sticker.resize((w, h), Image.Resampling.LANCZOS) as resized:
+                        result.paste(resized, (x1, y1), resized)
+                else:
+                    # Draw simple star/circle overlay
+                    draw = ImageDraw.Draw(result)
+                    center_x = (x1 + x2) // 2
+                    center_y = (y1 + y2) // 2
+                    radius = min(w, h) // 2
+                    draw.ellipse(
+                        [center_x - radius, center_y - radius,
+                         center_x + radius, center_y + radius],
+                        fill=(255, 215, 0)  # Gold color
+                    )
+
+            return result
+        finally:
+            if sticker is not None:
+                sticker.close()
     
     @staticmethod
     def apply_censoring(

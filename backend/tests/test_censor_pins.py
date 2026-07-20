@@ -40,6 +40,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import censor  # noqa: E402
+import censor_transforms  # noqa: E402
 from censor import Censor, CensorDetector, canonicalize_class_name  # noqa: E402
 
 
@@ -748,6 +749,63 @@ class TestCensorSticker:
         assert out.getpixel((8, 8)) == (255, 215, 0)  # gold center
         assert out is not img
         assert img.getpixel((8, 8)) == (0, 0, 0)  # original untouched
+
+    @staticmethod
+    def _animated_sticker(path: Path) -> None:
+        first = Image.new("RGBA", (8, 8), (255, 0, 0, 255))
+        second = Image.new("RGBA", (8, 8), (0, 255, 0, 255))
+        first.save(path, format="GIF", save_all=True, append_images=[second])
+
+    @staticmethod
+    def _track_sticker_source(monkeypatch):
+        opened_sources = []
+        opened_handles = []
+        real_open = censor_transforms.Image.open
+
+        def tracking_open(*args, **kwargs):
+            source = real_open(*args, **kwargs)
+            opened_sources.append(source)
+            opened_handles.append(source._fp)
+            return source
+
+        monkeypatch.setattr(censor_transforms.Image, "open", tracking_open)
+        return opened_sources, opened_handles
+
+    def test_custom_sticker_closes_source_file(self, tmp_path, monkeypatch):
+        sticker_path = tmp_path / "animated.gif"
+        self._animated_sticker(sticker_path)
+        opened_sources, opened_handles = self._track_sticker_source(monkeypatch)
+
+        out = Censor.apply_sticker(
+            Image.new("RGB", (16, 16), (0, 0, 0)),
+            [(0, 0, 16, 16)],
+            str(sticker_path),
+        )
+
+        assert out.getpixel((8, 8)) == (255, 0, 0)
+        assert len(opened_sources) == 1
+        try:
+            assert opened_handles[0].closed is True
+        finally:
+            opened_sources[0].close()
+
+    def test_custom_sticker_closes_source_when_resize_fails(self, tmp_path, monkeypatch):
+        sticker_path = tmp_path / "animated.gif"
+        self._animated_sticker(sticker_path)
+        opened_sources, opened_handles = self._track_sticker_source(monkeypatch)
+
+        with pytest.raises(ValueError, match="height and width must be > 0"):
+            Censor.apply_sticker(
+                Image.new("RGB", (16, 16), (0, 0, 0)),
+                [(8, 8, 4, 4)],
+                str(sticker_path),
+            )
+
+        assert len(opened_sources) == 1
+        try:
+            assert opened_handles[0].closed is True
+        finally:
+            opened_sources[0].close()
 
 
 class TestApplyCensoringDispatch:
