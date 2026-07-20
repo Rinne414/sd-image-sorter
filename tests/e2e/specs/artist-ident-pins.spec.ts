@@ -120,7 +120,7 @@ test('window.ArtistIdent is an unsealed object literal exposing the load-bearing
     const requiredProps = [
       'isIdentifying', 'selectedArtist', 'selectedArtistPageSize',
       'selectedArtistOffset', 'selectedArtistHasMore', 'selectedArtistImages',
-      'artistRequestToken', 'viewMode', 'stats', 'diagnostics', 'eventsBound',
+      'artistRequestToken', 'statsRequestToken', 'viewMode', 'stats', 'diagnostics', 'eventsBound',
       'progressTracker', 'thresholdDefaults',
     ]
     return {
@@ -135,6 +135,7 @@ test('window.ArtistIdent is an unsealed object literal exposing the load-bearing
       offset: A.selectedArtistOffset,
       hasMore: A.selectedArtistHasMore,
       token: A.artistRequestToken,
+      statsToken: A.statsRequestToken,
       selectedArtist: A.selectedArtist,
       diagnostics: A.diagnostics,
       thresholdDefaults: A.thresholdDefaults,
@@ -154,6 +155,7 @@ test('window.ArtistIdent is an unsealed object literal exposing the load-bearing
   expect(probe.offset).toBe(0)
   expect(probe.hasMore).toBe(false)
   expect(probe.token).toBe(0)
+  expect(probe.statsToken).toBe(0)
   expect(probe.selectedArtist).toBeNull()
   expect(probe.diagnostics).toBeNull()
   expect(probe.thresholdDefaults).toEqual({ value: 0.03, suggestedLow: 0.02, suggestedHigh: 0.08 })
@@ -413,6 +415,122 @@ test('renderArtistGrid sorts by count desc, toggles list-mode, and shows distinc
   expect(emptyProbe.allUndefTitle).not.toBe('')
   expect(emptyProbe.noneTitle).not.toBe(emptyProbe.allUndefTitle)
   expect(emptyProbe.hasHint).toBe(true)
+})
+
+test('loadStats clears stale artist cards after a failed refresh', async ({ page }) => {
+  await page.waitForFunction(() => document.documentElement.dataset.appReady === '1')
+  await page.evaluate(() => (window as any).I18n.setLang('en'))
+  let statsCalls = 0
+  await page.route('**/api/artists/stats', async (route) => {
+    statsCalls += 1
+    if (statsCalls <= 2) {
+      if (statsCalls === 2) {
+        await new Promise((resolve) => setTimeout(resolve, 300))
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          total_images: 4,
+          identified_images: 4,
+          undefined_count: 0,
+          artist_counts: { stale_artist: 4 },
+          artist_stats: {
+            stale_artist: { count: 4, avg_confidence: 0.9, max_confidence: 0.95 },
+          },
+        }),
+      })
+    }
+    return route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({ detail: 'stats unavailable' }),
+    })
+  })
+
+  await page.evaluate(() => {
+    localStorage.setItem('artist-guide-seen', 'true')
+    document.querySelectorAll<HTMLElement>('.view').forEach((view) => {
+      view.style.removeProperty('display')
+    })
+    ;(window as any).App.switchView('artist')
+  })
+  await expect(page.locator('#view-artist')).toHaveClass(/\bactive\b/)
+  await expect(page.locator('#view-gallery')).toBeHidden()
+  await expect(page.locator('#artist-results-grid .artist-card')).toHaveCount(1)
+
+  await page.evaluate(() => {
+    const artist = (window as any).ArtistIdent
+    return Promise.all([artist.loadStats(), artist.loadStats()])
+  })
+
+  const failure = await page.evaluate(() => {
+    const artist = (window as any).ArtistIdent
+    const statsText = document.getElementById('artist-stats')?.textContent?.trim() || ''
+    const grid = document.getElementById('artist-results-grid')
+    return {
+      stats: artist.stats,
+      cardCount: grid?.querySelectorAll('.artist-card').length ?? -1,
+      statsHasFailure: statsText.includes('Failed to load stats'),
+      gridHasFailure: (grid?.textContent || '').includes('Failed to load stats'),
+    }
+  })
+
+  expect(failure.stats).toEqual({})
+  expect(failure.cardCount).toBe(0)
+  expect(failure.statsHasFailure).toBe(true)
+  expect(failure.gridHasFailure).toBe(true)
+
+  for (const viewport of [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+  ]) {
+    await page.setViewportSize(viewport)
+    const layout = await page.evaluate(() => {
+      const view = document.getElementById('view-artist')
+      const gallery = document.getElementById('view-gallery')
+      const stats = document.getElementById('artist-stats')
+      const grid = document.getElementById('artist-results-grid')
+      const failureLabel = grid?.querySelector('.empty-state p')
+      const statsRect = stats?.getBoundingClientRect()
+      const gridRect = grid?.getBoundingClientRect()
+      const failureRect = failureLabel?.getBoundingClientRect()
+      const overlapWidth = statsRect && gridRect
+        ? Math.max(0, Math.min(statsRect.right, gridRect.right) - Math.max(statsRect.left, gridRect.left))
+        : 0
+      const overlapHeight = statsRect && gridRect
+        ? Math.max(0, Math.min(statsRect.bottom, gridRect.bottom) - Math.max(statsRect.top, gridRect.top))
+        : 0
+      return {
+        artistActive: Boolean(view?.classList.contains('active')),
+        galleryHidden: gallery ? getComputedStyle(gallery).display === 'none' : false,
+        pageOverflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        viewOverflowX: view ? view.scrollWidth - view.clientWidth : -1,
+        gridVisible: Boolean(gridRect && gridRect.width > 0 && gridRect.height > 0),
+        failureVisible: Boolean(grid?.textContent?.includes('Failed to load stats')),
+        failureInViewport: Boolean(
+          failureRect
+          && failureRect.top >= 0
+          && failureRect.bottom <= window.innerHeight
+          && failureRect.left >= 0
+          && failureRect.right <= window.innerWidth
+        ),
+        overlapArea: overlapWidth * overlapHeight,
+      }
+    })
+
+    expect(layout, `${viewport.width}x${viewport.height}`).toEqual({
+      artistActive: true,
+      galleryHidden: true,
+      pageOverflowX: 0,
+      viewOverflowX: 0,
+      gridVisible: true,
+      failureVisible: true,
+      failureInViewport: true,
+      overlapArea: 0,
+    })
+  }
 })
 
 // ---------------------------------------------------------------------------

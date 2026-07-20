@@ -42,6 +42,7 @@
         _setTextAll: function (selector, keys) {
             var nodes = document.querySelectorAll(selector);
             for (var i = 0; i < nodes.length && i < keys.length; i++) {
+                if (nodes[i].dataset && nodes[i].dataset.i18nLocked === '1') continue;
                 nodes[i].textContent = this._t(keys[i]);
             }
         },

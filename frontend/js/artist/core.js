@@ -27,6 +27,7 @@ const ArtistIdent = {
     selectedArtistHasMore: false,
     selectedArtistImages: [],
     artistRequestToken: 0,
+    statsRequestToken: 0,
     viewMode: 'grid',
     stats: {},
     diagnostics: null,

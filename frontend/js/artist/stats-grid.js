@@ -15,9 +15,11 @@ Object.assign(window.ArtistIdent, {
     async loadStats() {
         const statsEl = document.getElementById('artist-stats');
         if (!statsEl) return;
+        const requestToken = ++this.statsRequestToken;
 
         try {
             const result = await window.App.API.get('/api/artists/stats');
+            if (requestToken !== this.statsRequestToken) return;
             this.stats = result;
 
             const cards = [
@@ -46,15 +48,28 @@ Object.assign(window.ArtistIdent, {
             // Render artist grid
             this.renderArtistGrid(result.artist_counts || {}, this.viewMode);
         } catch (e) {
-            const fallback = document.createElement('div');
-            fallback.className = 'stat-card';
+            if (requestToken !== this.statsRequestToken) return;
+            this.stats = {};
+            const failureMessage = this.tKey(
+                'artist.loadStatsFailed',
+                'Failed to load stats',
+                '加载统计失败'
+            );
+            const createFailureState = (containerClass, labelTag, labelClass) => {
+                const container = document.createElement('div');
+                container.className = containerClass;
+                const label = document.createElement(labelTag);
+                label.className = labelClass;
+                label.textContent = failureMessage;
+                label.dataset.i18nLocked = '1';
+                container.appendChild(label);
+                return container;
+            };
 
-            const label = document.createElement('span');
-            label.className = 'stat-label';
-            label.textContent = this.tText('Failed to load stats', '加载统计失败');
-
-            fallback.appendChild(label);
-            statsEl.replaceChildren(fallback);
+            statsEl.replaceChildren(createFailureState('stat-card', 'span', 'stat-label'));
+            document.getElementById('artist-results-grid')?.replaceChildren(
+                createFailureState('empty-state', 'p', '')
+            );
         }
     },
 
