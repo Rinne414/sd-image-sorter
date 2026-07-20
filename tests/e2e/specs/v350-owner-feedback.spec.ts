@@ -40,6 +40,111 @@ test('search help rows re-render in English after switching language', async ({ 
     .toContainText('Plain words')
 })
 
+test('Gallery folder empty state re-renders after switching language', async ({ page }) => {
+  const consoleProblems: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning') {
+      consoleProblems.push(`${message.type()}: ${message.text()}`)
+    }
+  })
+  await page.route('**/api/folders', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ folders: [] }),
+    })
+  })
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('#view-gallery')).toBeVisible()
+  const emptyState = page.locator('#folder-tree .folder-tree-empty')
+  await expect(emptyState).toHaveText('暂无文件夹——扫描一个文件夹后即可在此筛选。')
+
+  await page.evaluate(() => (window as any).I18n.setLang('en'))
+  await expect(emptyState).toHaveText('No folders yet — scan a folder to populate the gallery.')
+
+  await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
+  await expect(emptyState).toHaveText('暂无文件夹——扫描一个文件夹后即可在此筛选。')
+  expect(consoleProblems).toEqual([])
+})
+
+test('Gallery folder relocalization preserves the active tree state', async ({ page }) => {
+  const folders = Array.from(
+    { length: 48 },
+    (_, index) => `C:/library/branch-${String(index).padStart(2, '0')}`,
+  )
+  let folderRequests = 0
+  await page.route('**/api/folders', async (route) => {
+    folderRequests += 1
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ folders }),
+    })
+  })
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('#view-gallery')).toBeVisible()
+  const branchToggle = page.locator('#folder-tree [data-action="toggle"][data-path="C:/library"]')
+  await expect(branchToggle).toHaveCount(1)
+  await branchToggle.click()
+  await expect(branchToggle).toHaveAttribute('aria-expanded', 'true')
+  const targetPath = folders[folders.length - 1]
+  const target = page.locator(`#folder-tree [data-action="browse"][data-path="${targetPath}"]`)
+  await expect(target).toHaveCount(1)
+  await target.scrollIntoViewIfNeeded()
+  await target.click()
+  await expect(target).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('#folder-tree-browsing')).toContainText(`文件夹：${targetPath}`)
+
+  const before = await page.evaluate(() => {
+    const tree = document.getElementById('folder-tree')
+    const sidebar = tree?.closest('.filter-sidebar-scroll')
+    const expanded = [...document.querySelectorAll<HTMLElement>('#folder-tree [aria-expanded="true"]')]
+      .map((element) => element.dataset.path)
+    return {
+      treeScrollTop: tree?.scrollTop ?? -1,
+      treeScrollMax: tree ? tree.scrollHeight - tree.clientHeight : -1,
+      sidebarScrollTop: sidebar?.scrollTop ?? -1,
+      expanded,
+      activeFolder: (window as any).FolderTreeUI?._active ?? null,
+    }
+  })
+  expect(before.treeScrollTop).toBeGreaterThan(0)
+
+  await page.evaluate(() => (window as any).I18n.setLang('en'))
+  await expect(page.locator('#folder-tree-browsing')).toContainText(`Folder: ${targetPath}`)
+  await expect(target).toHaveAttribute('aria-pressed', 'true')
+  const after = await page.evaluate(() => {
+    const tree = document.getElementById('folder-tree')
+    const sidebar = tree?.closest('.filter-sidebar-scroll')
+    const expanded = [...document.querySelectorAll<HTMLElement>('#folder-tree [aria-expanded="true"]')]
+      .map((element) => element.dataset.path)
+    return {
+      treeScrollTop: tree?.scrollTop ?? -1,
+      treeScrollMax: tree ? tree.scrollHeight - tree.clientHeight : -1,
+      sidebarScrollTop: sidebar?.scrollTop ?? -1,
+      expanded,
+      activeFolder: (window as any).FolderTreeUI?._active ?? null,
+      activeVisible: (() => {
+        const active = tree?.querySelector<HTMLElement>('[data-action="browse"][aria-pressed="true"]')
+        if (!tree || !active) return false
+        const treeBox = tree.getBoundingClientRect()
+        const activeBox = active.getBoundingClientRect()
+        return activeBox.top >= treeBox.top && activeBox.bottom <= treeBox.bottom
+      })(),
+    }
+  })
+
+  expect(after.activeFolder).toBe(before.activeFolder)
+  expect(after.expanded).toEqual(before.expanded)
+  expect(after.sidebarScrollTop).toBe(before.sidebarScrollTop)
+  expect(before.treeScrollTop).toBe(before.treeScrollMax)
+  expect(after.treeScrollTop).toBe(after.treeScrollMax)
+  expect(after.activeVisible).toBe(true)
+  expect(folderRequests).toBe(1)
+})
+
 test('Guide supplements preserve the main language dimension labels in Filter Images', async ({ page }) => {
   const consoleProblems: string[] = []
   page.on('console', (message) => {

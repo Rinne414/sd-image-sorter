@@ -77,6 +77,7 @@
                 // Event delegation so we never re-bind per row on re-render.
                 container.addEventListener('click', (event) => this._onClick(event));
             }
+            document.addEventListener('languageChanged', () => this._relocalize());
             window.addEventListener('resize', () => this._scheduleActiveVisibility());
             await this.refresh();
         },
@@ -160,6 +161,17 @@
             }
             container.innerHTML = top.map((node) => this._nodeHtml(node, 0)).join('');
             this._renderBrowsingIndicator();
+        },
+
+        _relocalize() {
+            const container = document.getElementById('folder-tree');
+            if (!container) return;
+            const sidebarScroll = container.closest('.filter-sidebar-scroll');
+            const treeScrollTop = container.scrollTop;
+            const sidebarScrollTop = sidebarScroll?.scrollTop || 0;
+            this._renderTree();
+            container.scrollTop = treeScrollTop;
+            if (sidebarScroll) sidebarScroll.scrollTop = sidebarScrollTop;
         },
 
         _scheduleActiveVisibility() {
