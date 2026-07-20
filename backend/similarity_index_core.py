@@ -153,13 +153,21 @@ class _IndexCoreMixin:
         image ids (e.g. a collection or Favorites). ``None`` searches the whole
         library — the long-standing default behavior.
         """
-        try:
-            pil_image = Image.open(io.BytesIO(image_data))
-            pil_image.load()
-        except (UnidentifiedImageError, OSError) as exc:
-            raise SimilarityInvalidImageError() from exc
+        with io.BytesIO(image_data) as image_buffer:
+            try:
+                pil_image = Image.open(image_buffer)
+            except (UnidentifiedImageError, OSError) as exc:
+                raise SimilarityInvalidImageError() from exc
 
-        query_emb = _svc().embed_image_pil(pil_image)  # decomposition: patched on similarity
+            try:
+                try:
+                    pil_image.load()
+                except (UnidentifiedImageError, OSError) as exc:
+                    raise SimilarityInvalidImageError() from exc
+                query_emb = _svc().embed_image_pil(pil_image)  # decomposition: patched on similarity
+            finally:
+                pil_image.close()
+
         if query_emb is None:
             page_limit = max(1, int(limit))
             page_offset = max(0, int(offset))

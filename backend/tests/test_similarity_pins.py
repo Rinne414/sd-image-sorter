@@ -22,6 +22,7 @@ Hard rules honored here (machine-state isolation, commit 0edbb81 precedent):
 from __future__ import annotations
 
 import contextlib
+import io
 import os
 import sqlite3
 import threading
@@ -31,6 +32,7 @@ from typing import Sequence
 import numpy as np
 import pytest
 from fastapi import BackgroundTasks
+from PIL import Image
 
 import similarity as similarity_module
 import similarity_ann
@@ -682,6 +684,48 @@ def test_search_by_upload_invalid_image_raises(tmp_path):
 
     with pytest.raises(similarity_module.SimilarityInvalidImageError):
         index.search_by_upload(b"definitely not an image")
+
+
+def _png_upload_bytes() -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", (16, 16), (255, 0, 0)).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def test_search_by_upload_closes_decoded_image_after_empty_embedding(tmp_path, monkeypatch):
+    received_images = []
+
+    def empty_embedding(image):
+        received_images.append(image)
+        return None
+
+    monkeypatch.setattr(similarity_module, "embed_image_pil", empty_embedding)
+    index = similarity_module.SimilarityIndex(_make_db(tmp_path, []))
+
+    result = index.search_by_upload(_png_upload_bytes())
+
+    assert result["results"] == []
+    assert len(received_images) == 1
+    with pytest.raises(ValueError, match="closed image"):
+        received_images[0].getpixel((0, 0))
+
+
+def test_search_by_upload_closes_decoded_image_when_embedding_raises(tmp_path, monkeypatch):
+    received_images = []
+
+    def failing_embedding(image):
+        received_images.append(image)
+        raise RuntimeError("embedding failed")
+
+    monkeypatch.setattr(similarity_module, "embed_image_pil", failing_embedding)
+    index = similarity_module.SimilarityIndex(_make_db(tmp_path, []))
+
+    with pytest.raises(RuntimeError, match="embedding failed"):
+        index.search_by_upload(_png_upload_bytes())
+
+    assert len(received_images) == 1
+    with pytest.raises(ValueError, match="closed image"):
+        received_images[0].getpixel((0, 0))
 
 
 def test_search_by_text_empty_when_embedder_returns_none(tmp_path, monkeypatch):
