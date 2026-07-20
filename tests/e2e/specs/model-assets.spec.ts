@@ -140,4 +140,65 @@ test.describe('Model Asset Details UI', () => {
     await expect(page.locator('#modal-model-assets-grid')).toContainText('model.safetensors')
     await expect(page.locator('#modal-model-assets-grid')).toContainText('style_a.safetensors')
   })
+
+  test('Gallery image modal hides optional sections after hydrating empty metadata', async ({ page }) => {
+    await openMainPage(page)
+
+    await page.evaluate(() => {
+      ;(window as any).showModal?.('image-modal')
+      ;(window as any).Gallery._hydratePreview({
+        id: 1,
+        filename: 'rich-details.png',
+        path: 'C:/tmp/rich-details.png',
+        generator: 'comfyui',
+        prompt: 'rich prompt',
+        negative_prompt: 'rich negative',
+        width: 512,
+        height: 512,
+        file_size: 12345,
+        checkpoint: 'model.safetensors',
+        loras: JSON.stringify(['style_a.safetensors']),
+        metadata_json: JSON.stringify({
+          _parsed: {
+            generation_params: { steps: 30, cfg_scale: 7 },
+            model_assets: { primary_model_name: 'model.safetensors' },
+          },
+        }),
+      }, [])
+    })
+
+    const sections = [
+      '#modal-negative-section',
+      '#modal-loras-section',
+      '#modal-params-section',
+      '#modal-model-assets-section',
+    ]
+    for (const selector of sections) {
+      await expect(page.locator(selector)).toBeVisible()
+    }
+
+    await page.evaluate(() => {
+      ;(window as any).Gallery._hydratePreview({
+        id: 2,
+        filename: 'empty-details.png',
+        path: 'C:/tmp/empty-details.png',
+        generator: 'unknown',
+        prompt: '',
+        negative_prompt: '',
+        width: 1,
+        height: 1,
+        file_size: 70,
+        checkpoint: '',
+        loras: '',
+        metadata_json: JSON.stringify({ _parsed: {} }),
+      }, [])
+    })
+
+    for (const selector of sections) {
+      await expect(page.locator(selector)).toBeHidden()
+    }
+    await expect(page.locator('#modal-loras-list')).toBeEmpty()
+    await expect(page.locator('#modal-params-grid')).toBeEmpty()
+    await expect(page.locator('#modal-model-assets-grid')).toBeEmpty()
+  })
 })
