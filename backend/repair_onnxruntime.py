@@ -72,6 +72,10 @@ class GpuDetection(TypedDict):
     devices: List[GpuDevice]
 
 
+class ConstraintCleanupError(RuntimeError):
+    """Raised when an app-owned temporary pip constraint cannot be removed."""
+
+
 def _empty_gpu_detection() -> GpuDetection:
     return {"vendors": [], "primary": None, "devices": []}
 
@@ -414,6 +418,50 @@ def _run_pip(args: List[str], *, stream: bool = False) -> subprocess.CompletedPr
         raise
 
 
+def _run_pip_with_core_constraints(
+    install_spec: str,
+    *,
+    stream: bool,
+) -> subprocess.CompletedProcess[str]:
+    constraint_args = _core_requirements_constraint_args()
+    constraint_path = Path(constraint_args[1]) if constraint_args else None
+
+    try:
+        return _run_pip(
+            [
+                "install",
+                "--no-warn-script-location",
+                *constraint_args,
+                install_spec,
+            ],
+            stream=stream,
+        )
+    finally:
+        pip_error = sys.exception()
+        if constraint_path is not None:
+            try:
+                constraint_path.unlink()
+            except OSError as cleanup_error:
+                message = (
+                    "Failed to remove the temporary ONNX Runtime pip constraint "
+                    f"file at {constraint_path}: {cleanup_error}"
+                )
+                if pip_error is not None:
+                    pip_error.add_note(message)
+                    logger.error(
+                        "Failed to remove a temporary ONNX Runtime pip constraint after pip failed.",
+                        extra={
+                            "event": "onnx_constraint_cleanup_failed",
+                            "constraint_path": str(constraint_path),
+                            "error_type": type(cleanup_error).__name__,
+                            "error": str(cleanup_error),
+                        },
+                        exc_info=True,
+                    )
+                else:
+                    raise ConstraintCleanupError(message) from cleanup_error
+
+
 def _record_action(actions: List[str], message: str, *, stream_pip: bool) -> None:
     actions.append(message)
     if stream_pip:
@@ -488,15 +536,7 @@ def repair_windows_onnxruntime(*, stream_pip: bool = False) -> Dict[str, Any]:
             f"(detected vendor: {primary_vendor or 'none'}).",
             stream_pip=stream_pip,
         )
-        _run_pip(
-            [
-                "install",
-                "--no-warn-script-location",
-                *_core_requirements_constraint_args(),
-                chosen_spec,
-            ],
-            stream=stream_pip,
-        )
+        _run_pip_with_core_constraints(chosen_spec, stream=stream_pip)
         did_repair = True
         if chosen_runtime == "onnxruntime":
             cpu_version = _version("onnxruntime")
@@ -728,13 +768,12 @@ def repair_windows_onnxruntime(*, stream_pip: bool = False) -> Dict[str, Any]:
             f"{final_gpu_version} can use CUDAExecutionProvider",
             stream_pip=stream_pip,
         )
-        _run_pip(
-            [
-                "install",
-                "--no-warn-script-location",
-                *_core_requirements_constraint_args(),
-                _runtime_install_spec("onnxruntime-gpu", extras="cuda,cudnn", installed_version=final_gpu_version),
-            ],
+        _run_pip_with_core_constraints(
+            _runtime_install_spec(
+                "onnxruntime-gpu",
+                extras="cuda,cudnn",
+                installed_version=final_gpu_version,
+            ),
             stream=stream_pip,
         )
         did_repair = True
@@ -821,15 +860,7 @@ def repair_linux_onnxruntime(*, stream_pip: bool = False) -> Dict[str, Any]:
             f"Installing {install_spec} (~1.4 GB with CUDA runtime wheels) for GPU tagging.",
             stream_pip=stream_pip,
         )
-        _run_pip(
-            [
-                "install",
-                "--no-warn-script-location",
-                *_core_requirements_constraint_args(),
-                install_spec,
-            ],
-            stream=stream_pip,
-        )
+        _run_pip_with_core_constraints(install_spec, stream=stream_pip)
         did_repair = True
     else:
         if cpu_version:
@@ -857,15 +888,7 @@ def repair_linux_onnxruntime(*, stream_pip: bool = False) -> Dict[str, Any]:
                 f"{gpu_version} can use CUDAExecutionProvider",
                 stream_pip=stream_pip,
             )
-            _run_pip(
-                [
-                    "install",
-                    "--no-warn-script-location",
-                    *_core_requirements_constraint_args(),
-                    install_spec,
-                ],
-                stream=stream_pip,
-            )
+            _run_pip_with_core_constraints(install_spec, stream=stream_pip)
             did_repair = True
 
     if not actions:

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
+
 import pytest
 
 
@@ -53,13 +55,112 @@ def test_core_constraints_file_is_pip26_safe(tmp_path):
     constraints_path = repair_onnxruntime._write_sanitized_constraints(requirements_path)
 
     assert constraints_path is not None
-    constraints_text = constraints_path.read_text(encoding="utf-8")
-    assert "numpy==1.26.4" in constraints_text
-    assert "uvicorn==0.46.0" in constraints_text
-    assert "uvicorn[standard]" not in constraints_text
-    assert 'cffi==2.0.0 ; sys_platform == "win32"' in constraints_text
-    assert "-r requirements-other.txt" not in constraints_text
-    assert "example @" not in constraints_text
+    try:
+        constraints_text = constraints_path.read_text(encoding="utf-8")
+        assert "numpy==1.26.4" in constraints_text
+        assert "uvicorn==0.46.0" in constraints_text
+        assert "uvicorn[standard]" not in constraints_text
+        assert 'cffi==2.0.0 ; sys_platform == "win32"' in constraints_text
+        assert "-r requirements-other.txt" not in constraints_text
+        assert "example @" not in constraints_text
+    finally:
+        constraints_path.unlink(missing_ok=True)
+
+
+def test_constrained_pip_removes_temp_file_after_success(tmp_path, monkeypatch):
+    constraints_path = tmp_path / "constraints.txt"
+    constraints_path.write_text("numpy==1.26.4\n", encoding="utf-8")
+
+    def fake_run_pip(args, *, stream):
+        assert Path(args[3]) == constraints_path
+        assert constraints_path.read_text(encoding="utf-8") == "numpy==1.26.4\n"
+        return subprocess.CompletedProcess(args, 0)
+
+    monkeypatch.setattr(
+        repair_onnxruntime,
+        "_core_requirements_constraint_args",
+        lambda: ["--constraint", str(constraints_path)],
+    )
+    monkeypatch.setattr(repair_onnxruntime, "_run_pip", fake_run_pip)
+
+    result = repair_onnxruntime._run_pip_with_core_constraints(
+        "onnxruntime-gpu==1.21.0",
+        stream=True,
+    )
+
+    assert result.returncode == 0
+    assert not constraints_path.exists()
+
+
+def test_constrained_pip_removes_temp_file_and_preserves_pip_error(tmp_path, monkeypatch):
+    constraints_path = tmp_path / "constraints.txt"
+    constraints_path.write_text("numpy==1.26.4\n", encoding="utf-8")
+    pip_error = subprocess.CalledProcessError(1, ["pip", "install"])
+
+    def fake_run_pip(args, *, stream):
+        assert Path(args[3]) == constraints_path
+        assert constraints_path.exists()
+        raise pip_error
+
+    monkeypatch.setattr(
+        repair_onnxruntime,
+        "_core_requirements_constraint_args",
+        lambda: ["--constraint", str(constraints_path)],
+    )
+    monkeypatch.setattr(repair_onnxruntime, "_run_pip", fake_run_pip)
+
+    with pytest.raises(subprocess.CalledProcessError) as raised:
+        repair_onnxruntime._run_pip_with_core_constraints(
+            "onnxruntime-gpu==1.21.0",
+            stream=False,
+        )
+
+    assert raised.value is pip_error
+    assert not constraints_path.exists()
+
+
+def test_constrained_pip_raises_explicit_cleanup_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        repair_onnxruntime,
+        "_core_requirements_constraint_args",
+        lambda: ["--constraint", str(tmp_path)],
+    )
+    monkeypatch.setattr(
+        repair_onnxruntime,
+        "_run_pip",
+        lambda args, *, stream: subprocess.CompletedProcess(args, 0),
+    )
+
+    with pytest.raises(repair_onnxruntime.ConstraintCleanupError) as raised:
+        repair_onnxruntime._run_pip_with_core_constraints(
+            "onnxruntime-gpu==1.21.0",
+            stream=False,
+        )
+
+    assert str(tmp_path) in str(raised.value)
+
+
+def test_constrained_pip_keeps_pip_error_when_cleanup_also_fails(tmp_path, monkeypatch):
+    pip_error = subprocess.CalledProcessError(1, ["pip", "install"])
+
+    def fail_pip(args, *, stream):
+        raise pip_error
+
+    monkeypatch.setattr(
+        repair_onnxruntime,
+        "_core_requirements_constraint_args",
+        lambda: ["--constraint", str(tmp_path)],
+    )
+    monkeypatch.setattr(repair_onnxruntime, "_run_pip", fail_pip)
+
+    with pytest.raises(subprocess.CalledProcessError) as raised:
+        repair_onnxruntime._run_pip_with_core_constraints(
+            "onnxruntime-gpu==1.21.0",
+            stream=False,
+        )
+
+    assert raised.value is pip_error
+    assert any(str(tmp_path) in note for note in pip_error.__notes__)
 
 
 def test_repair_installs_release_pinned_gpu_runtime_from_cpu_only_windows(monkeypatch):
