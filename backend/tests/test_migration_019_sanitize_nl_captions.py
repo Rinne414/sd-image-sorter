@@ -46,6 +46,18 @@ def _make_db() -> sqlite3.Connection:
     return conn
 
 
+def _create_pre_019_favorite_paths_table(conn: sqlite3.Connection) -> None:
+    """Keep the synthetic version-18 database aligned with migration 017."""
+    conn.execute(
+        """
+        CREATE TABLE favorite_paths (
+            path_key TEXT PRIMARY KEY,
+            added_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+
+
 def test_migration_019_is_registered():
     versions = [m.version for m in migrations.get_migrations()]
     assert 19 in versions
@@ -261,6 +273,7 @@ def test_init_db_upgrade_019_sanitizes_json_caption_without_touching_clean_rows(
     raw = sqlite3.connect(str(db_path))
     try:
         create_full_schema(raw)
+        _create_pre_019_favorite_paths_table(raw)
         raw.execute(
             "CREATE TABLE schema_version ("
             "id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL)"

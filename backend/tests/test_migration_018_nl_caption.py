@@ -26,6 +26,18 @@ def _get_migration_018():
     return next(m for m in migrations.get_migrations() if m.version == 18)
 
 
+def _create_pre_018_favorite_paths_table(conn: sqlite3.Connection) -> None:
+    """Keep the synthetic version-17 database aligned with migration 017."""
+    conn.execute(
+        """
+        CREATE TABLE favorite_paths (
+            path_key TEXT PRIMARY KEY,
+            added_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+
+
 def test_migration_018_is_registered_as_latest():
     """The loader must discover 018 and treat it as the newest migration."""
     all_migrations = migrations.get_migrations()
@@ -103,6 +115,7 @@ def test_init_db_upgrade_backfills_missing_nl_caption(tmp_path, monkeypatch):
     try:
         create_full_schema(raw)  # current schema (includes nl_caption + indexes)
         raw.execute("ALTER TABLE images DROP COLUMN nl_caption")  # simulate the gap
+        _create_pre_018_favorite_paths_table(raw)
         raw.execute(
             "CREATE TABLE schema_version ("
             "id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL)"
