@@ -245,7 +245,122 @@ def test_folder_unique_collision_first_wins_second_errors(test_client, test_db, 
     assert "dup.txt" in message
     assert "dup.png" in message  # first owner's source path
     assert "already taken" in message
-    assert "overwrite/skip" in message
+    assert "same stem" in message
+
+
+def test_folder_overwrite_collision_first_wins_second_errors(
+    test_client, test_db, tmp_path: Path
+):
+    """Overwrite may replace a pre-existing sidecar, but it must not invent a
+    numeric sidecar name for a second image with the same stem in one batch."""
+    id_a, _ = _stage_image(tmp_path, "a", "dup.png", "alpha_tag")
+    id_b, _ = _stage_image(tmp_path, "b", "dup.jpg", "beta_tag")
+
+    out = tmp_path / "out"
+    out.mkdir()
+    resp = test_client.post("/api/tags/export-batch", json={
+        "image_ids": [id_a, id_b],
+        "output_folder": str(out),
+        "output_mode": "folder",
+        "content_mode": "tags",
+        "overwrite_policy": "overwrite",
+        "normalize_tag_underscores": False,
+    })
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    assert data["exported"] == 1
+    assert data["error_count"] == 1
+    assert data["skipped"] == 0
+    assert data["status"] == "partial"
+    assert (out / "dup.txt").read_text(encoding="utf-8") == "alpha_tag"
+    assert not (out / "dup_1.txt").exists()
+    assert [path.name for path in out.glob("*.txt")] == ["dup.txt"]
+
+    message = " ".join(data["error_messages"])
+    assert "dup.txt" in message
+    assert "dup.png" in message
+    assert "already taken" in message
+    assert "same stem" in message
+
+
+def test_folder_overwrite_respects_host_path_case_rules(
+    test_client, test_db, tmp_path: Path
+):
+    """Case-equivalent output names collide on Windows but remain distinct on
+    case-sensitive hosts."""
+    id_upper, _ = _stage_image(tmp_path, "upper", "Dup.png", "upper_tag")
+    id_lower, _ = _stage_image(tmp_path, "lower", "dup.jpg", "lower_tag")
+
+    out = tmp_path / "out"
+    out.mkdir()
+    probe_upper = out / "CaseSensitivityProbe"
+    probe_lower = out / "casesensitivityprobe"
+    probe_upper.write_text("probe", encoding="utf-8")
+    case_insensitive = probe_lower.exists() and os.path.samefile(
+        probe_upper, probe_lower
+    )
+    probe_upper.unlink()
+
+    resp = test_client.post("/api/tags/export-batch", json={
+        "image_ids": [id_upper, id_lower],
+        "output_folder": str(out),
+        "output_mode": "folder",
+        "content_mode": "tags",
+        "overwrite_policy": "overwrite",
+        "normalize_tag_underscores": False,
+    })
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    upper_path = out / "Dup.txt"
+    lower_path = out / "dup.txt"
+    if case_insensitive:
+        assert data["exported"] == 1
+        assert data["error_count"] == 1
+        assert upper_path.read_text(encoding="utf-8") == "upper_tag"
+        assert "same stem" in " ".join(data["error_messages"])
+    else:
+        assert data["exported"] == 2
+        assert data["error_count"] == 0
+        assert upper_path.read_text(encoding="utf-8") == "upper_tag"
+        assert lower_path.read_text(encoding="utf-8") == "lower_tag"
+
+
+def test_beside_image_overwrite_rejects_hardlinked_sidecar_aliases(
+    test_client, test_db, tmp_path: Path
+):
+    """Two distinct sidecar paths that identify the same file cannot both be
+    overwritten in one batch because the second write would alter the first."""
+    id_a, path_a = _stage_image(tmp_path, "a", "dup.png", "alpha_tag")
+    id_b, path_b = _stage_image(tmp_path, "b", "dup.jpg", "beta_tag")
+    sidecar_a = path_a.with_suffix(".txt")
+    sidecar_b = path_b.with_suffix(".txt")
+    sidecar_a.write_text("preexisting caption", encoding="utf-8")
+    os.link(sidecar_a, sidecar_b)
+    assert os.path.samefile(sidecar_a, sidecar_b)
+
+    resp = test_client.post("/api/tags/export-batch", json={
+        "image_ids": [id_a, id_b],
+        "output_folder": "",
+        "output_mode": "beside_image",
+        "content_mode": "tags",
+        "overwrite_policy": "overwrite",
+        "normalize_tag_underscores": False,
+    })
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+
+    assert data["exported"] == 1
+    assert data["error_count"] == 1
+    assert data["skipped"] == 0
+    assert data["status"] == "partial"
+    assert sidecar_a.read_text(encoding="utf-8") == "alpha_tag"
+    assert sidecar_b.read_text(encoding="utf-8") == "alpha_tag"
+    message = " ".join(data["error_messages"])
+    assert "dup.txt" in message
+    assert "dup.png" in message
+    assert "already taken" in message
 
 
 def test_beside_image_unique_preexisting_sidecar_is_skipped(test_client, test_db, tmp_path: Path):

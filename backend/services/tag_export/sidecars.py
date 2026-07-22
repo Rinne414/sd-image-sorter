@@ -101,6 +101,58 @@ def _unique_collision_message(sidecar_name: str, taken_by: str) -> str:
     )
 
 
+def _in_run_collision_message(sidecar_name: str, taken_by: str) -> str:
+    """Per-image error text when two batch rows resolve to one sidecar."""
+    return (
+        f"Sidecar name '{sidecar_name}' already taken (by {taken_by}); "
+        "two source images use the same stem, so rename one source image."
+    )
+
+
+def _output_path_key(path: str) -> str:
+    """Return the canonical path key for one sidecar destination."""
+    return os.path.realpath(os.path.abspath(path))
+
+
+def _output_path_keys(path: str) -> tuple[str, ...]:
+    """Return path and existing-file identity keys for one destination."""
+    path_key = _output_path_key(path)
+    try:
+        stat_result = os.stat(path)
+    except FileNotFoundError:
+        return (path_key,)
+    file_key = f"file:{stat_result.st_dev}:{stat_result.st_ino}"
+    return (path_key, file_key)
+
+
+def _find_output_owner(
+    path: str, used_output_paths: Dict[str, str]
+) -> tuple[bool, str]:
+    """Find the first batch owner of any equivalent output destination."""
+    for key in _output_path_keys(path):
+        if key in used_output_paths:
+            return True, used_output_paths[key]
+    return False, ""
+
+
+def _output_path_claims(path: str, owner: str) -> Dict[str, str]:
+    """Build the occupancy entries for one written sidecar."""
+    return {key: owner for key in _output_path_keys(path)}
+
+
+def _output_paths_overlap(first_path: str, second_path: str) -> bool:
+    """Return whether two destinations resolve to one path or existing file."""
+    return bool(set(_output_path_keys(first_path)) & set(_output_path_keys(second_path)))
+
+
+def _in_run_nl_collision_message(sidecar_name: str, taken_by: str) -> str:
+    """Per-image error text when an NL twin targets an earlier output."""
+    return (
+        f"NL sidecar name '{sidecar_name}' is already used by another image's "
+        f"sidecar (first owner: {taken_by}); rename one source image."
+    )
+
+
 def _allocate_output_path(
     output_folder: str,
     image: Dict[str, Any],
@@ -119,16 +171,18 @@ def _allocate_output_path(
     - ``skip``: write nothing, keeping an existing sidecar — ``skip`` policy
       with the name already present, or ``unique`` policy in ``beside_image``
       mode where a caption already sits next to the image ("already exported").
-    - ``error`` + ``message``: a ``unique``-policy name clash that must not be
-      worked around. Renaming to ``{stem}_1{ext}`` would produce a caption that
-      pairs with no image, so the clash is reported instead. Raised when the
-      name is already claimed by an earlier image in this run (folder mode: two
-      sources share a stem), or by a pre-existing file in ``folder`` mode.
+    - ``error`` + ``message``: a name clash that must not be worked around.
+      Renaming to ``{stem}_1{ext}`` would produce a caption that pairs with no
+      image, so the clash is reported instead. This applies whenever an earlier
+      image in the same run already claimed the name, and to pre-existing files
+      under ``unique`` policy in ``folder`` mode.
 
-    ``overwrite`` and ``skip`` policies keep their prior behavior; only
-    ``unique`` collisions changed (they used to rename to ``{stem}_N``).
-    ``used_output_paths`` maps each already-allocated sidecar path to the source
-    image path that claimed it, so an in-run clash can name the first owner.
+    ``overwrite`` replaces files that existed before this export, but it does
+    not let a later row overwrite or rename an earlier row's sidecar.
+    ``used_output_paths`` maps canonical path and existing-file identity keys
+    to the source image path that claimed them. This catches case-equivalent
+    paths on case-insensitive volumes plus symlink, junction, and hard-link
+    aliases without collapsing distinct names on case-sensitive volumes.
     """
     extension = _sidecar_extension(content_mode)
     # v3.2.2: derive the sidecar stem from the actual on-disk image
@@ -164,27 +218,23 @@ def _allocate_output_path(
 
     sidecar_name = f"{basename}{extension}"
     primary_path = os.path.join(output_folder, sidecar_name)
+    in_run_taken, taken_by = _find_output_owner(primary_path, used_output_paths)
 
     if overwrite_policy == "overwrite":
-        # Overwrite replaces any pre-existing sidecar on disk. The one clash we
-        # still resolve is two images in the SAME run mapping onto one name —
-        # the second write would clobber the first image's caption, so both get
-        # kept via a numeric suffix. (This path never fires in the default
-        # ``unique`` policy below.)
-        if primary_path not in used_output_paths:
+        # A file that predates this batch may be replaced in place. An earlier
+        # row in the same batch owns its sidecar name, though: adding a numeric
+        # suffix would leave that caption without a matching image.
+        if not in_run_taken:
             return _SidecarAllocation("write", path=primary_path)
-        counter = 1
-        while counter <= 10000:
-            candidate = os.path.join(output_folder, f"{basename}_{counter}{extension}")
-            if candidate not in used_output_paths and not os.path.exists(candidate):
-                return _SidecarAllocation("write", path=candidate)
-            counter += 1
-        return _SidecarAllocation("skip")
+        taken_by = taken_by or "an earlier image in this export"
+        return _SidecarAllocation(
+            "error", message=_in_run_collision_message(sidecar_name, taken_by)
+        )
 
     if overwrite_policy == "skip":
         # Leave any existing sidecar untouched — one on disk before the run, or
         # one written earlier in it. Only a free name is written.
-        if os.path.exists(primary_path) or primary_path in used_output_paths:
+        if os.path.exists(primary_path) or in_run_taken:
             return _SidecarAllocation("skip")
         return _SidecarAllocation("write", path=primary_path)
 
@@ -194,13 +244,15 @@ def _allocate_output_path(
     # (LoRA trainers match by exact basename), i.e. a silently broken training
     # sample. A taken name is reported so the user can rename the offending
     # image or switch to overwrite/skip.
-    if primary_path in used_output_paths:
+    if in_run_taken:
         # An earlier image THIS run already claimed the name. In folder mode
         # that means two sources share a stem; in beside_image it can only mean
         # two DB rows point at one file. Either way two images want one caption
         # name — a real data-loss risk → error.
-        taken_by = used_output_paths[primary_path] or "an earlier image in this export"
-        return _SidecarAllocation("error", message=_unique_collision_message(sidecar_name, taken_by))
+        taken_by = taken_by or "an earlier image in this export"
+        return _SidecarAllocation(
+            "error", message=_in_run_collision_message(sidecar_name, taken_by)
+        )
     if os.path.exists(primary_path):
         # The name is taken by a file already on disk. In beside_image mode a
         # caption already sitting next to the image is the "already exported"
@@ -312,7 +364,7 @@ def export_tags_batch_request(
     nl_sidecars_written = 0
     error_messages: List[str] = []
     # Maps each allocated sidecar path -> the source image path that claimed it,
-    # so a unique-policy in-run name clash can point at the first owner.
+    # so an in-run name clash can point at the first owner.
     used_output_paths: Dict[str, str] = {}
     validator = ExportValidator(
         content_mode=content_mode, template_options=template_options
@@ -429,8 +481,34 @@ def export_tags_batch_request(
                     if nl_twin_content:
                         stem_no_ext, sidecar_ext = os.path.splitext(output_path)
                         candidate = f"{stem_no_ext}{nl_sidecar_suffix}{sidecar_ext}"
-                        twin_taken = candidate in used_output_paths or os.path.exists(candidate)
-                        if overwrite_policy == "unique" and twin_taken:
+                        in_run_taken, taken_by = _find_output_owner(
+                            candidate, used_output_paths
+                        )
+                        overlaps_main = _output_paths_overlap(output_path, candidate)
+                        if overlaps_main:
+                            error_count += 1
+                            if len(error_messages) < 20:
+                                error_messages.append(
+                                    f"Image {image_id}: main sidecar "
+                                    f"'{os.path.basename(output_path)}' and NL sidecar "
+                                    f"'{os.path.basename(candidate)}' resolve to the same file."
+                                )
+                            elif len(error_messages) == 20:
+                                error_messages.append("... and more errors (total: showing first 20)")
+                            continue
+                        if in_run_taken and overwrite_policy != "skip":
+                            taken_by = taken_by or "an earlier image in this export"
+                            error_count += 1
+                            if len(error_messages) < 20:
+                                error_messages.append(
+                                    f"Image {image_id}: "
+                                    f"{_in_run_nl_collision_message(os.path.basename(candidate), taken_by)}"
+                                )
+                            elif len(error_messages) == 20:
+                                error_messages.append("... and more errors (total: showing first 20)")
+                            continue
+                        twin_exists = os.path.exists(candidate)
+                        if overwrite_policy == "unique" and twin_exists:
                             error_count += 1
                             if len(error_messages) < 20:
                                 error_messages.append(
@@ -441,7 +519,7 @@ def export_tags_batch_request(
                             elif len(error_messages) == 20:
                                 error_messages.append("... and more errors (total: showing first 20)")
                             continue
-                        if overwrite_policy == "skip" and twin_taken:
+                        if overwrite_policy == "skip" and (in_run_taken or twin_exists):
                             nl_twin_path = None  # leave the existing twin in place
                         else:
                             nl_twin_path = candidate
@@ -458,7 +536,10 @@ def export_tags_batch_request(
                 with open(output_path, "w", encoding="utf-8", newline="\n") as handle:
                     handle.write(file_content)
 
-                used_output_paths[output_path] = str(image.get("path") or image.get("filename") or "")
+                output_owner = str(image.get("path") or image.get("filename") or "")
+                used_output_paths.update(
+                    _output_path_claims(output_path, output_owner)
+                )
                 exported += 1
                 validator.add(
                     output_path=output_path,
@@ -469,7 +550,9 @@ def export_tags_batch_request(
                 if nl_twin_path:
                     with open(nl_twin_path, "w", encoding="utf-8", newline="\n") as handle:
                         handle.write(nl_twin_content)
-                    used_output_paths[nl_twin_path] = str(image.get("path") or image.get("filename") or "")
+                    used_output_paths.update(
+                        _output_path_claims(nl_twin_path, output_owner)
+                    )
                     nl_sidecars_written += 1
                     validator.add(
                         output_path=nl_twin_path,

@@ -1052,6 +1052,91 @@ class TestExportTagsBatch:
         assert not (output_dir / "atomic.txt").exists()
         assert (output_dir / "atomic_nl.txt").read_text(encoding="utf-8") == "stale twin"
 
+    def test_export_batch_nl_sidecar_overwrite_rejects_in_run_main_collision(
+        self, test_client, test_db, tmp_path: Path
+    ):
+        """An NL twin must not overwrite another row's main sidecar in the
+        same overwrite batch; the conflicting row fails before either write."""
+        import database as db
+        from PIL import Image
+
+        first_path = tmp_path / "foo_nl.png"
+        second_path = tmp_path / "foo.png"
+        Image.new("RGB", (32, 32), color="white").save(first_path)
+        Image.new("RGB", (32, 32), color="black").save(second_path)
+        first_id = db.add_image(path=str(first_path), filename=first_path.name)
+        second_id = db.add_image(path=str(second_path), filename=second_path.name)
+        db.add_tags(first_id, [{"tag": "first_main", "confidence": 0.9}])
+        db.add_tags(second_id, [{"tag": "second_main", "confidence": 0.9}])
+
+        output_dir = tmp_path / "overwrite_collision_out"
+        output_dir.mkdir()
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [first_id, second_id],
+                "output_folder": str(output_dir),
+                "content_mode": "tags",
+                "overwrite_policy": "overwrite",
+                "normalize_tag_underscores": False,
+                "nl_sidecar": True,
+                "image_nl_overrides": {str(second_id): "Second NL caption."},
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["exported"] == 1
+        assert data["error_count"] == 1
+        assert data["nl_sidecars_written"] == 0
+        assert data["status"] == "partial"
+        assert (output_dir / "foo_nl.txt").read_text(encoding="utf-8") == "first_main"
+        assert not (output_dir / "foo.txt").exists()
+        message = " ".join(data["error_messages"])
+        assert "foo_nl.txt" in message
+        assert "foo_nl.png" in message
+        assert "another image's sidecar" in message
+
+    def test_export_batch_nl_sidecar_skip_keeps_in_run_main_collision(
+        self, test_client, test_db, tmp_path: Path
+    ):
+        """Skip policy keeps an earlier row's main sidecar and still exports
+        the later row's main caption without replacing that file with an NL twin."""
+        import database as db
+        from PIL import Image
+
+        first_path = tmp_path / "foo_nl.png"
+        second_path = tmp_path / "foo.png"
+        Image.new("RGB", (32, 32), color="white").save(first_path)
+        Image.new("RGB", (32, 32), color="black").save(second_path)
+        first_id = db.add_image(path=str(first_path), filename=first_path.name)
+        second_id = db.add_image(path=str(second_path), filename=second_path.name)
+        db.add_tags(first_id, [{"tag": "first_main", "confidence": 0.9}])
+        db.add_tags(second_id, [{"tag": "second_main", "confidence": 0.9}])
+
+        output_dir = tmp_path / "skip_collision_out"
+        output_dir.mkdir()
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [first_id, second_id],
+                "output_folder": str(output_dir),
+                "content_mode": "tags",
+                "overwrite_policy": "skip",
+                "normalize_tag_underscores": False,
+                "nl_sidecar": True,
+                "image_nl_overrides": {str(second_id): "Second NL caption."},
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["exported"] == 2
+        assert data["error_count"] == 0
+        assert data["nl_sidecars_written"] == 0
+        assert (output_dir / "foo_nl.txt").read_text(encoding="utf-8") == "first_main"
+        assert (output_dir / "foo.txt").read_text(encoding="utf-8") == "second_main"
+
     def test_export_batch_nl_sidecar_rejects_nl_content_modes(self, test_client, test_db, tmp_path: Path):
         """Modes that already embed the NL caption cannot double it into a twin."""
         response = test_client.post(
@@ -1285,13 +1370,13 @@ class TestExportTagsBatch:
         assert "sample.txt" in message
         assert "sample.jpg" in message  # the first owner's source path
         assert "already taken" in message
-        assert "overwrite/skip" in message
+        assert "same stem" in message
 
-    def test_export_batch_same_basename_overwrite_dedupes_with_suffix(self, test_client, test_db, tmp_path: Path):
-        """``overwrite`` policy is unchanged by P1-6: two images sharing a stem
-        in one run both land, the second via a ``sample_1.txt`` numeric suffix,
-        so neither caption is lost. Dual-extension sidecars stay banned.
-        """
+    def test_export_batch_same_basename_overwrite_surfaces_collision(
+        self, test_client, test_db, tmp_path: Path
+    ):
+        """Overwrite replaces pre-existing files but rejects a second image
+        with the same stem in one batch instead of creating an unpaired suffix."""
         import database as db
         from PIL import Image
 
@@ -1319,13 +1404,19 @@ class TestExportTagsBatch:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["exported"] == 2
-        assert data["error_count"] == 0
-        assert (output_dir / "sample.txt").exists()
-        assert (output_dir / "sample_1.txt").exists()
-        assert len(list(output_dir.glob("sample*.txt"))) == 2
+        assert data["exported"] == 1
+        assert data["error_count"] == 1
+        assert data["skipped"] == 0
+        assert data["status"] == "partial"
+        assert (output_dir / "sample.txt").read_text(encoding="utf-8") == "jpg tag"
+        assert not (output_dir / "sample_1.txt").exists()
+        assert len(list(output_dir.glob("sample*.txt"))) == 1
         assert not (output_dir / "sample.jpg.txt").exists()
         assert not (output_dir / "sample.gif.txt").exists()
+        message = " ".join(data["error_messages"])
+        assert "sample.txt" in message
+        assert "sample.jpg" in message
+        assert "same stem" in message
 
     def test_export_batch_keeps_lora_friendly_sidecar_for_dotted_filenames(self, test_client, test_db, tmp_path: Path):
         """Source images with extra dots in their stored filename (e.g. ``123.json``,

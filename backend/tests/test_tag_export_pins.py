@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -559,6 +560,16 @@ class TestUnderscoreResolution:
 
 
 class TestAllocateOutputPath:
+    def test_output_path_key_preserves_case_for_nonexistent_targets(self, tmp_path):
+        from services.tag_export.sidecars import _output_path_key
+
+        upper = tmp_path / "Dup.txt"
+        lower = tmp_path / "dup.txt"
+
+        assert not upper.exists()
+        assert not lower.exists()
+        assert _output_path_key(str(upper)) != _output_path_key(str(lower))
+
     def test_stem_derives_from_on_disk_path_without_sanitizing(self, tmp_path):
         img = {
             "id": 1,
@@ -584,21 +595,31 @@ class TestAllocateOutputPath:
 
     def test_unique_in_run_collision_is_error_not_rename(self, tmp_path):
         img = {"id": 1, "path": str(tmp_path / "dup.png")}
-        used = {str(tmp_path / "dup.txt"): "/other.png"}
+        used = {
+            os.path.realpath(os.path.abspath(tmp_path / "dup.txt")): "/other.png"
+        }
         alloc = tes._allocate_output_path(
             str(tmp_path), dict(img), "tags", "unique", used
         )
         assert alloc.outcome == "error"
         assert "already taken" in alloc.message
+        assert "same stem" in alloc.message
+        assert "overwrite/skip" not in alloc.message
 
-    def test_overwrite_in_run_collision_gets_numeric_suffix(self, tmp_path):
+    def test_overwrite_in_run_collision_is_error_not_rename(self, tmp_path):
         img = {"id": 1, "path": str(tmp_path / "dup.png")}
-        used = {str(tmp_path / "dup.txt"): "/other.png"}
+        used = {
+            os.path.realpath(os.path.abspath(tmp_path / "dup.txt")): "/other.png"
+        }
         alloc = tes._allocate_output_path(
             str(tmp_path), dict(img), "tags", "overwrite", used
         )
-        assert alloc.outcome == "write"
-        assert Path(alloc.path).name == "dup_1.txt"
+        assert alloc.outcome == "error"
+        assert alloc.path is None
+        assert "dup.txt" in alloc.message
+        assert "/other.png" in alloc.message
+        assert "already taken" in alloc.message
+        assert "same stem" in alloc.message
 
     def test_skip_leaves_existing_disk_file(self, tmp_path):
         (tmp_path / "s.txt").write_text("existing", encoding="utf-8")
