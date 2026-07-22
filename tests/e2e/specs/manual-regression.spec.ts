@@ -737,12 +737,15 @@ print("ok")
 function restoreManualFixtureDbPaths() {
   const script = `
 import sqlite3
+import sys
 from PIL import Image
 from pathlib import Path
 
 repo_root = Path(${JSON.stringify(repoRoot)})
 db_path = Path(${JSON.stringify(runtimeDatabasePath)})
 manual_root = repo_root / ".tmp" / "manual-test"
+sys.path.insert(0, str(repo_root / "backend"))
+from utils.source_paths import indexed_image_path_casefold, normalize_indexed_image_path
 
 fixture_rows = {
     "manual-autosep-1.png": {
@@ -826,6 +829,12 @@ with sqlite3.connect(db_path) as conn:
         row = cur.fetchone()
         if row:
             image_id = row[0]
+            path_key = indexed_image_path_casefold(normalize_indexed_image_path(str(target_path)))
+            cur.execute(
+                "INSERT INTO image_path_identities (image_id, path_key) VALUES (?, ?) "
+                "ON CONFLICT(image_id) DO UPDATE SET path_key = excluded.path_key",
+                (image_id, path_key),
+            )
             cur.execute("DELETE FROM image_prompt_tokens WHERE image_id = ?", (image_id,))
             cur.execute(
                 "INSERT OR IGNORE INTO image_prompt_tokens (image_id, token) VALUES (?, ?)",
@@ -2017,6 +2026,169 @@ test('starting a different mode over a paused session asks before discarding, ne
   expect(current.mode).toBe('bracket')
 
   // Leave no saved session behind for the next spec.
+  await request.delete('/api/sort/session').catch(() => {})
+})
+
+test('paused bracket keeps the server session authoritative across reload', async ({ page, request }) => {
+  const consoleErrors: string[] = []
+  const serverErrors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+  page.on('response', (response) => {
+    if (response.status() >= 500) serverErrors.push(`${response.status()} ${response.url()}`)
+  })
+
+  await resetManualSortFixture()
+  await request.delete('/api/sort/session').catch(() => {})
+  await page.addInitScript((search) => {
+    localStorage.setItem('manual_sort_filter_state_v1', JSON.stringify({
+      generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
+      ratings: ['general', 'sensitive', 'questionable', 'explicit'],
+      tags: [], checkpoints: [], loras: [], prompts: [], artist: null,
+      search, sortBy: 'newest', limit: 0,
+      minWidth: null, maxWidth: null, minHeight: null, maxHeight: null,
+      aspectRatio: '', minAesthetic: null, maxAesthetic: null,
+    }))
+    localStorage.setItem('manual_sort_mode_v1', 'bracket')
+    localStorage.setItem('manual_sort_operation_mode_v1', 'move')
+  }, 'manual_test_sort_token_20260405')
+
+  await openMainPage(page)
+  await setGallerySearch(page, 'manual_test_sort_token_20260405')
+  await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(3)
+  await openSortingSubView(page, 'manual')
+
+  await page.locator('#btn-start-sorting').click()
+  await expect(page.locator('#sort-bracket-interface')).toBeVisible()
+  await expect(page.locator('#bracket-progress-text')).toHaveText('0 / 2')
+
+  await page.keyboard.press('ArrowRight')
+  await expect(page.locator('#bracket-progress-text')).toHaveText('1 / 2')
+  await page.locator('#bracket-btn-exit').click()
+
+  await expect(page.locator('#sort-setup')).toBeVisible()
+  await expect(page.locator('#sort-resume-banner')).toBeVisible()
+  await expect(page.locator('#sort-resume-banner .resume-operation')).toBeHidden()
+  await expect(page.locator('#sort-resume-banner .resume-folders')).toBeHidden()
+
+  for (const viewport of [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+  ]) {
+    await page.setViewportSize(viewport)
+    await page.evaluate(() => new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve))
+    }))
+    const layout = await page.evaluate(() => {
+      const banner = document.getElementById('sort-resume-banner')
+      const resumeButton = document.getElementById('btn-resume-sorting')
+      const operation = banner?.querySelector('.resume-operation')
+      const folders = banner?.querySelector('.resume-folders')
+      if (!(banner instanceof HTMLElement) || !(resumeButton instanceof HTMLElement)
+        || !(operation instanceof HTMLElement) || !(folders instanceof HTMLElement)) {
+        throw new Error('Manual Sort resume controls are unavailable')
+      }
+      const bannerBox = banner.getBoundingClientRect()
+      const buttonBox = resumeButton.getBoundingClientRect()
+      return {
+        horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        bannerInsideViewport: bannerBox.left >= 0
+          && bannerBox.right <= window.innerWidth + 1
+          && bannerBox.top >= 0
+          && bannerBox.bottom <= window.innerHeight + 1,
+        buttonInsideBanner: buttonBox.left >= bannerBox.left
+          && buttonBox.right <= bannerBox.right + 1
+          && buttonBox.top >= bannerBox.top
+          && buttonBox.bottom <= bannerBox.bottom + 1,
+        operationDisplay: getComputedStyle(operation).display,
+        foldersDisplay: getComputedStyle(folders).display,
+      }
+    })
+    expect(layout).toEqual({
+      horizontalOverflow: 0,
+      bannerInsideViewport: true,
+      buttonInsideBanner: true,
+      operationDisplay: 'none',
+      foldersDisplay: 'none',
+    })
+  }
+
+  await page.evaluate(({ conflictingFolder }) => {
+    localStorage.setItem('manual_sort_mode_v1', 'cull')
+    localStorage.setItem('manual_sort_operation_mode_v1', 'move')
+    localStorage.setItem('sort-folder-w', conflictingFolder)
+    localStorage.setItem('manual_sort_slot_collections_v1', JSON.stringify({ w: 999999 }))
+  }, { conflictingFolder: manualSortLeft })
+
+  await openMainPage(page)
+  await openSortingSubView(page, 'manual')
+  await expect(page.locator('#sort-resume-banner')).toBeVisible()
+  await expect(page.locator('#sort-resume-banner .resume-operation')).toBeHidden()
+  await expect(page.locator('#sort-resume-banner .resume-folders')).toBeHidden()
+
+  let failNextResumeRequest = true
+  await page.route('**/api/sort/current', async (route) => {
+    if (failNextResumeRequest && route.request().method() === 'GET') {
+      failNextResumeRequest = false
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'Injected resume failure' }),
+      })
+      return
+    }
+    await route.continue()
+  })
+
+  await page.locator('#btn-resume-sorting').click()
+  await expect(page.locator('#sort-setup')).toBeVisible()
+  await expect(page.locator('#sort-resume-banner')).toBeVisible()
+  await expect(page.locator('#sort-resume-banner .resume-count')).toContainText('1')
+  await expect(page.locator('#sort-resume-banner .resume-operation')).toBeHidden()
+  await expect(page.locator('#sort-resume-banner .resume-folders')).toBeHidden()
+  await expect.poll(() => serverErrors).toEqual([
+    expect.stringMatching(/^503 .*\/api\/sort\/current$/),
+  ])
+  expect(consoleErrors).toHaveLength(2)
+  expect(consoleErrors[0]).toContain('503 (Service Unavailable)')
+  expect(consoleErrors[1]).toContain('Failed to resume saved session: Error: Injected resume failure')
+  consoleErrors.length = 0
+  serverErrors.length = 0
+
+  await page.locator('#btn-resume-sorting').click()
+  await expect(page.locator('#sort-bracket-interface')).toBeVisible()
+  await expect(page.locator('#bracket-progress-text')).toHaveText('1 / 2')
+
+  const resumedState = await page.evaluate(() => ({
+    mode: (window as any).ManualSortState.mode,
+    operationMode: (window as any).ManualSortState.operationMode,
+    folders: (window as any).ManualSortState.folders,
+    collectionSlots: (window as any).ManualSortState.collectionSlots,
+  }))
+  expect(resumedState).toEqual({
+    mode: 'bracket',
+    // Bracket never moves files, so the hidden operation mode remains a setup
+    // preference for the next slot session rather than active-session state.
+    operationMode: 'move',
+    folders: {},
+    collectionSlots: { w: null, a: null, s: null, d: null },
+  })
+
+  await page.keyboard.press('Z')
+  await expect(page.locator('#bracket-progress-text')).toHaveText('0 / 2')
+  await page.keyboard.press('Y')
+  await expect(page.locator('#bracket-progress-text')).toHaveText('1 / 2')
+
+  const current = await (await request.get('/api/sort/current')).json()
+  expect(current.mode).toBe('bracket')
+  expect(current.index).toBe(2)
+  expect(current.undo_available).toBe(true)
+  expect(current.redo_available).toBe(false)
+  expect(consoleErrors).toEqual([])
+  expect(serverErrors).toEqual([])
+
   await request.delete('/api/sort/session').catch(() => {})
 })
 

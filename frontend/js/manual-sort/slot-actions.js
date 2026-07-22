@@ -11,6 +11,7 @@ async function resumeSavedSession(prefetchedSession = null) {
     const { $, API, showToast } = window.App;
     const previousResumeSnapshot = ManualSortState.resumeBannerSessionSnapshot
         ? {
+            mode: ManualSortState.resumeBannerSessionSnapshot.mode,
             remaining: ManualSortState.resumeBannerSessionSnapshot.remaining,
             operation_mode: ManualSortState.resumeBannerSessionSnapshot.operation_mode,
             folders: { ...(ManualSortState.resumeBannerSessionSnapshot.folders || {}) },
@@ -499,6 +500,7 @@ function exitSorting() {
     if (remaining > 0) {
         renderManualSortResumeBanner(
             {
+                mode: ManualSortState.mode,
                 remaining,
                 operation_mode: getManualSortOperationMode(),
                 folders: ManualSortState.folders || {},
