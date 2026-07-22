@@ -114,6 +114,18 @@ def indexed_image_path_casefold(path: Optional[str]) -> str:
     return canonical.casefold()
 
 
+def indexed_image_path_casefold_prefix(path_prefix: Optional[str]) -> str:
+    """Return a canonical case-folded folder prefix with its separator intact."""
+    raw_prefix = str(path_prefix or "")
+    separator = "\\" if is_case_insensitive_indexed_path(raw_prefix) else "/"
+    trimmed = raw_prefix.rstrip("\\/")
+    path_key = indexed_image_path_casefold(trimmed)
+    if not path_key:
+        return separator
+    trimmed_key = path_key.rstrip("\\/")
+    return f"{trimmed_key}{separator}"
+
+
 def indexed_image_path_sqlite_lower(path: Optional[str]) -> str:
     """Return the key produced by SQLite's built-in ASCII-only lower()."""
     return str(path or "").translate(SQLITE_ASCII_LOWER_TABLE)
@@ -234,14 +246,23 @@ def is_indexed_image_path_in_folder_scope(
         return False
 
     for exact_folder, folder_prefix in build_indexed_folder_scope_query_patterns(folder_path):
-        if normalized_image == exact_folder:
+        if is_case_insensitive_indexed_path(exact_folder):
+            image_key = indexed_image_path_casefold(normalized_image)
+            exact_key = indexed_image_path_casefold(exact_folder)
+            prefix_key = indexed_image_path_casefold_prefix(folder_prefix)
+        else:
+            image_key = normalized_image
+            exact_key = exact_folder
+            prefix_key = folder_prefix
+
+        if image_key == exact_key:
             return True
-        if not normalized_image.startswith(folder_prefix):
+        if not image_key.startswith(prefix_key):
             continue
         if recursive:
             return True
 
-        remainder = normalized_image[len(folder_prefix):]
+        remainder = image_key[len(prefix_key):]
         if remainder and "\\" not in remainder and "/" not in remainder:
             return True
 

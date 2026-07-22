@@ -19,6 +19,7 @@ from utils.source_paths import (
     build_indexed_folder_scope_query_patterns,
     build_indexed_image_lookup_candidates,
     indexed_image_path_casefold,
+    indexed_image_path_casefold_prefix,
     indexed_image_path_needs_unicode_casefold,
     indexed_image_path_sqlite_lower,
     is_case_insensitive_indexed_path,
@@ -58,6 +59,27 @@ def _favorite_image_ids_query() -> str:
           AND p.path_key = f.path_key
           AND i.id = p.image_id
     """
+
+
+def _prefix_range_end(prefix: str) -> str:
+    """Return the exclusive B-tree upper bound for a path prefix."""
+    if not prefix:
+        raise ValueError("Cannot build a range for an empty path prefix")
+    return f"{prefix[:-1]}{chr(ord(prefix[-1]) + 1)}"
+
+
+def _prefix_range_clause(
+    column: str,
+    prefixes: List[str],
+) -> Tuple[str, List[str]]:
+    """Build indexed half-open ranges for literal path prefixes."""
+    clauses = [f"({column} >= ? AND {column} < ?)" for _ in prefixes]
+    params = [
+        bound
+        for prefix in prefixes
+        for bound in (prefix, _prefix_range_end(prefix))
+    ]
+    return " OR ".join(clauses), params
 
 
 def _path_query_match_clause(paths: List[str]) -> Tuple[str, List[str]]:
@@ -146,7 +168,7 @@ def _folder_scope_query_match_clause(
             exact_candidates.append(exact)
         if prefix not in seen_prefix:
             seen_prefix.add(prefix)
-            prefix_candidates.append(f"{prefix}%")
+            prefix_candidates.append(prefix)
 
         if is_case_insensitive_indexed_path(exact):
             exact_lower_key = indexed_image_path_sqlite_lower(exact)
@@ -162,12 +184,12 @@ def _folder_scope_query_match_clause(
             prefix_lower_key = indexed_image_path_sqlite_lower(prefix)
             if prefix_lower_key not in seen_prefix_lower:
                 seen_prefix_lower.add(prefix_lower_key)
-                prefix_lower_candidates.append(f"{prefix_lower_key}%")
+                prefix_lower_candidates.append(prefix_lower_key)
             if indexed_image_path_needs_unicode_casefold(prefix):
-                prefix_casefold_key = indexed_image_path_casefold(prefix)
+                prefix_casefold_key = indexed_image_path_casefold_prefix(prefix)
                 if prefix_casefold_key not in seen_prefix_casefold:
                     seen_prefix_casefold.add(prefix_casefold_key)
-                    prefix_casefold_candidates.append(f"{prefix_casefold_key}%")
+                    prefix_casefold_candidates.append(prefix_casefold_key)
 
     clauses: List[str] = []
     params: List[str] = []
@@ -176,30 +198,44 @@ def _folder_scope_query_match_clause(
         clauses.append(f"{column} IN ({placeholders})")
         params.extend(exact_candidates)
     if prefix_candidates:
-        like_clause = " OR ".join(f"{column} LIKE ?" for _ in prefix_candidates)
-        clauses.append(f"({like_clause})")
-        params.extend(prefix_candidates)
+        range_clause, range_params = _prefix_range_clause(column, prefix_candidates)
+        clauses.append(f"({range_clause})")
+        params.extend(range_params)
     if exact_lower_candidates:
         placeholders = ",".join("?" * len(exact_lower_candidates))
         clauses.append(f"LOWER({column}) IN ({placeholders})")
         params.extend(exact_lower_candidates)
     if prefix_lower_candidates:
-        like_clause = " OR ".join(
-            f"LOWER({column}) LIKE ?" for _ in prefix_lower_candidates
+        range_clause, range_params = _prefix_range_clause(
+            f"LOWER({column})",
+            prefix_lower_candidates,
         )
-        clauses.append(f"({like_clause})")
-        params.extend(prefix_lower_candidates)
+        clauses.append(f"({range_clause})")
+        params.extend(range_params)
+    identity_clauses: List[str] = []
+    identity_params: List[str] = []
     if exact_casefold_candidates:
         placeholders = ",".join("?" * len(exact_casefold_candidates))
-        clauses.append(f"indexed_path_casefold({column}) IN ({placeholders})")
-        params.extend(exact_casefold_candidates)
+        identity_clauses.append(f"p.path_key IN ({placeholders})")
+        identity_params.extend(exact_casefold_candidates)
     if prefix_casefold_candidates:
-        like_clause = " OR ".join(
-            f"indexed_path_casefold({column}) LIKE ?"
-            for _ in prefix_casefold_candidates
+        range_clause, range_params = _prefix_range_clause(
+            "p.path_key",
+            prefix_casefold_candidates,
         )
-        clauses.append(f"({like_clause})")
-        params.extend(prefix_casefold_candidates)
+        identity_clauses.append(f"({range_clause})")
+        identity_params.extend(range_params)
+    if identity_clauses:
+        clauses.append(
+            f"{column} IN ("
+            "SELECT identity_images.path "
+            "FROM image_path_identities p "
+            "INDEXED BY idx_image_path_identities_path_key "
+            "JOIN images identity_images ON identity_images.id = p.image_id "
+            f"WHERE {' OR '.join(identity_clauses)}"
+            ")"
+        )
+        params.extend(identity_params)
 
     if not clauses:
         return "", []

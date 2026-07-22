@@ -22,7 +22,6 @@ from contextlib import contextmanager
 from typing import Callable, Optional
 
 from config import DATABASE_PATH
-from utils.source_paths import indexed_image_path_casefold
 
 
 logger = logging.getLogger(__name__)
@@ -87,20 +86,9 @@ def set_connection_provider(provider: Optional[Callable[[], sqlite3.Connection]]
     _connection_provider = provider
 
 
-def register_sqlite_functions(conn: sqlite3.Connection) -> None:
-    """Register deterministic functions used by canonical path fallback queries."""
-    conn.create_function(
-        "indexed_path_casefold",
-        1,
-        indexed_image_path_casefold,
-        deterministic=True,
-    )
-
-
 def _default_get_connection() -> sqlite3.Connection:
     """Self-contained connection factory used when no provider is injected."""
     conn = sqlite3.connect(DATABASE_PATH)
-    register_sqlite_functions(conn)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout=30000")  # v3.3.2: wait up to 30s on lock (large-library scan/tag vs browse contention)
