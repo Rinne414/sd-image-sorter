@@ -11,6 +11,10 @@ from utils.path_validation import normalize_user_path, translate_windows_drive_p
 
 WINDOWS_DRIVE_PATH_RE = re.compile(r"^[A-Za-z]:(?:[\\/]|$)")
 POSIX_MNT_DRIVE_PATH_RE = re.compile(r"^/mnt/([A-Za-z])(?:/(.*))?$")
+SQLITE_ASCII_LOWER_TABLE = str.maketrans(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    "abcdefghijklmnopqrstuvwxyz",
+)
 
 
 class IndexedPathAccessError(OSError):
@@ -26,7 +30,11 @@ class IndexedPathAccessError(OSError):
 
 def _looks_windows_style_path(raw_path: str) -> bool:
     text = str(raw_path or "").strip()
-    return bool(WINDOWS_DRIVE_PATH_RE.match(text) or text.startswith("\\\\"))
+    return bool(
+        WINDOWS_DRIVE_PATH_RE.match(text)
+        or text.startswith("\\\\")
+        or text.startswith("//")
+    )
 
 
 def _is_indexed_absolute_path(raw_path: str) -> bool:
@@ -92,7 +100,59 @@ def indexed_image_path_match_key(path: Optional[str]) -> str:
     if not normalized:
         return normalized
     if is_case_insensitive_indexed_path(normalized):
-        return normalized.lower()
+        return indexed_image_path_casefold(normalized)
+    return normalized
+
+
+def indexed_image_path_casefold(path: Optional[str]) -> str:
+    """Return the canonical Unicode case-folded key used by SQLite path joins."""
+    normalized = normalize_indexed_image_path(path)
+    if not normalized:
+        return normalized
+    windows_drive_path = translate_posix_mnt_path_to_windows_drive(normalized)
+    canonical = windows_drive_path or normalized
+    return canonical.casefold()
+
+
+def indexed_image_path_sqlite_lower(path: Optional[str]) -> str:
+    """Return the key produced by SQLite's built-in ASCII-only lower()."""
+    return str(path or "").translate(SQLITE_ASCII_LOWER_TABLE)
+
+
+def indexed_image_path_needs_unicode_casefold(path: Optional[str]) -> bool:
+    """Return whether case-insensitive matching needs more than SQLite lower()."""
+    text = str(path or "")
+    return any(
+        ord(character) > 127 and character.lower() != character.upper()
+        for character in text
+    )
+
+
+def indexed_image_path_legacy_keys(path: Optional[str]) -> List[str]:
+    """Return path keys written by the pre-canonical Python and SQLite writers."""
+    raw = str(path or "").strip()
+    normalized = normalize_indexed_image_path(raw)
+    keys: List[str] = []
+    for candidate in (raw, normalized):
+        if not candidate:
+            continue
+        for key in (
+            candidate.lower(),
+            indexed_image_path_sqlite_lower(candidate),
+            indexed_image_path_casefold(candidate),
+        ):
+            if key not in keys:
+                keys.append(key)
+    return keys
+
+
+def _indexed_path_representation_key(path: Optional[str]) -> str:
+    """Deduplicate equivalent spellings without merging runtime path forms."""
+    normalized = normalize_indexed_image_path(path)
+    if not normalized:
+        return normalized
+    if is_case_insensitive_indexed_path(normalized):
+        return normalized.casefold()
     return normalized
 
 
@@ -107,7 +167,7 @@ def build_indexed_image_lookup_candidates(primary_path: str) -> List[str]:
 
     def add(candidate: Optional[str]) -> None:
         normalized_candidate = normalize_indexed_image_path(candidate)
-        match_key = indexed_image_path_match_key(normalized_candidate)
+        match_key = _indexed_path_representation_key(normalized_candidate)
         if not normalized_candidate or match_key in seen:
             return
         seen.add(match_key)
@@ -201,7 +261,7 @@ def build_indexed_image_path_candidates(primary_path: str, *, backend_file: str)
         text = str(candidate or "").strip()
         if not text:
             return
-        key = indexed_image_path_match_key(text)
+        key = _indexed_path_representation_key(text)
         if key in seen:
             return
         seen.add(key)

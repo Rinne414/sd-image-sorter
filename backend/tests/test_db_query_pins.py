@@ -85,6 +85,7 @@ from db_query import (
     _IMAGE_COLUMNS_BARE,
 )
 from db_core import PROMPT_MATCH_MODE_EXACT, PROMPT_MATCH_MODE_CONTAINS
+from db_helpers import _favorite_image_ids_query
 
 
 # ===========================================================================
@@ -649,8 +650,7 @@ class TestCollectionAndIdFilters:
             "i.id IN ("
             "SELECT ci.source_image_id FROM collection_items ci WHERE ci.collection_id = ? "
             "UNION "
-            "SELECT i2.id FROM images i2 "
-            "JOIN favorite_paths f ON lower(i2.path) = f.path_key "
+            f"SELECT favorite_images.id FROM ({_favorite_image_ids_query()}) favorite_images "
             "JOIN collections c ON c.id = ? AND c.slug = 'favorites'"
             ")"
         ]

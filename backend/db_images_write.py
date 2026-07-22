@@ -34,6 +34,7 @@ from typing import Optional, List, Dict, Any, Tuple, Union
 
 from utils.source_paths import (
     build_indexed_image_lookup_candidates,
+    indexed_image_path_casefold,
     indexed_image_path_match_key,
 )
 from metadata_storage import compact_existing_metadata_json, compact_metadata_json
@@ -113,6 +114,27 @@ def _compact_persisted_metadata_json(metadata_json: Any) -> str:
     if compacted is not None:
         return compacted
     return compact_metadata_json({})
+
+
+def _sync_image_path_identity(
+    cursor: sqlite3.Cursor,
+    image_id: int,
+    path: str,
+) -> None:
+    """Refresh the materialized canonical path identity for an image."""
+    path_key = indexed_image_path_casefold(_normalize_indexed_image_path(path))
+    if not path_key:
+        cursor.execute(
+            "DELETE FROM image_path_identities WHERE image_id = ?",
+            (image_id,),
+        )
+        return
+    cursor.execute(
+        "INSERT INTO image_path_identities (image_id, path_key) VALUES (?, ?) "
+        "ON CONFLICT(image_id) DO UPDATE SET path_key = excluded.path_key",
+        (image_id, path_key),
+    )
+
 
 def _upsert_image_record(
     cursor: sqlite3.Cursor,
@@ -288,6 +310,8 @@ def _upsert_image_record(
         )
         image_id = cursor.lastrowid
 
+    stored_path = str(existing_row["path"]) if existing_row is not None else path
+    _sync_image_path_identity(cursor, image_id, stored_path)
     _sync_image_loras(cursor, image_id, record.get("loras"), record.get("prompt"))
     _sync_image_prompt_tokens(cursor, image_id, record.get("prompt"))
     return image_id, write_status

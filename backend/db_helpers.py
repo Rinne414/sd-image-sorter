@@ -18,7 +18,9 @@ from typing import Optional, List, Dict, Any, Tuple
 from utils.source_paths import (
     build_indexed_folder_scope_query_patterns,
     build_indexed_image_lookup_candidates,
-    indexed_image_path_match_key,
+    indexed_image_path_casefold,
+    indexed_image_path_needs_unicode_casefold,
+    indexed_image_path_sqlite_lower,
     is_case_insensitive_indexed_path,
     normalize_indexed_image_path,
 )
@@ -39,6 +41,25 @@ def _normalize_indexed_image_path(path: Optional[str]) -> str:
     return normalize_indexed_image_path(path)
 
 
+def _favorite_image_ids_query() -> str:
+    """Build indexed exact and canonical Favorites joins."""
+    return """
+        SELECT i.id, f.added_at
+        FROM favorite_paths f
+        CROSS JOIN images i
+        WHERE f.match_case = 1 AND i.path = f.path_key
+        UNION ALL
+        SELECT i.id, f.added_at
+        FROM favorite_paths f
+        CROSS JOIN image_path_identities p
+            INDEXED BY idx_image_path_identities_path_key
+        CROSS JOIN images i
+        WHERE f.match_case = 0
+          AND p.path_key = f.path_key
+          AND i.id = p.image_id
+    """
+
+
 def _path_query_match_clause(paths: List[str]) -> Tuple[str, List[str]]:
     """Build a SQL clause plus candidate list for equivalent indexed paths."""
     normalized_paths = [_normalize_indexed_image_path(path) for path in paths if path]
@@ -47,18 +68,27 @@ def _path_query_match_clause(paths: List[str]) -> Tuple[str, List[str]]:
 
     candidates: List[str] = []
     seen: set[str] = set()
+    lower_candidates: List[str] = []
+    seen_lower: set[str] = set()
     casefold_candidates: List[str] = []
     seen_casefold: set[str] = set()
     for path in normalized_paths:
         for candidate in build_indexed_image_lookup_candidates(path):
-            match_key = indexed_image_path_match_key(candidate)
-            if match_key in seen:
+            if candidate not in seen:
+                seen.add(candidate)
+                candidates.append(candidate)
+            if not is_case_insensitive_indexed_path(candidate):
                 continue
-            seen.add(match_key)
-            candidates.append(candidate)
-            if is_case_insensitive_indexed_path(candidate) and match_key not in seen_casefold:
-                seen_casefold.add(match_key)
-                casefold_candidates.append(match_key)
+            lower_key = indexed_image_path_sqlite_lower(candidate)
+            if lower_key not in seen_lower:
+                seen_lower.add(lower_key)
+                lower_candidates.append(lower_key)
+            if not indexed_image_path_needs_unicode_casefold(candidate):
+                continue
+            casefold_key = indexed_image_path_casefold(candidate)
+            if casefold_key not in seen_casefold:
+                seen_casefold.add(casefold_key)
+                casefold_candidates.append(casefold_key)
 
     clauses: List[str] = []
     params: List[str] = []
@@ -66,9 +96,16 @@ def _path_query_match_clause(paths: List[str]) -> Tuple[str, List[str]]:
         placeholders = ",".join("?" * len(candidates))
         clauses.append(f"path IN ({placeholders})")
         params.extend(candidates)
+    if lower_candidates:
+        placeholders = ",".join("?" * len(lower_candidates))
+        clauses.append(f"LOWER(path) IN ({placeholders})")
+        params.extend(lower_candidates)
     if casefold_candidates:
         placeholders = ",".join("?" * len(casefold_candidates))
-        clauses.append(f"LOWER(path) IN ({placeholders})")
+        clauses.append(
+            "id IN (SELECT image_id FROM image_path_identities "
+            f"WHERE path_key IN ({placeholders}))"
+        )
         params.extend(casefold_candidates)
 
     if not clauses:
@@ -91,31 +128,46 @@ def _folder_scope_query_match_clause(
         return "", []
 
     exact_candidates: List[str] = []
-    exact_casefold_candidates: List[str] = []
+    exact_lower_candidates: List[str] = []
     prefix_candidates: List[str] = []
+    prefix_lower_candidates: List[str] = []
+    exact_casefold_candidates: List[str] = []
     prefix_casefold_candidates: List[str] = []
     seen_exact: set[str] = set()
     seen_prefix: set[str] = set()
+    seen_exact_lower: set[str] = set()
+    seen_prefix_lower: set[str] = set()
     seen_exact_casefold: set[str] = set()
     seen_prefix_casefold: set[str] = set()
 
     for exact, prefix in patterns:
-        exact_match_key = indexed_image_path_match_key(exact)
-        prefix_match_key = indexed_image_path_match_key(prefix)
-
-        if exact_match_key not in seen_exact:
-            seen_exact.add(exact_match_key)
+        if exact not in seen_exact:
+            seen_exact.add(exact)
             exact_candidates.append(exact)
-        if prefix_match_key not in seen_prefix:
-            seen_prefix.add(prefix_match_key)
+        if prefix not in seen_prefix:
+            seen_prefix.add(prefix)
             prefix_candidates.append(f"{prefix}%")
 
-        if is_case_insensitive_indexed_path(exact) and exact_match_key not in seen_exact_casefold:
-            seen_exact_casefold.add(exact_match_key)
-            exact_casefold_candidates.append(exact_match_key)
-        if is_case_insensitive_indexed_path(prefix) and prefix_match_key not in seen_prefix_casefold:
-            seen_prefix_casefold.add(prefix_match_key)
-            prefix_casefold_candidates.append(f"{prefix_match_key}%")
+        if is_case_insensitive_indexed_path(exact):
+            exact_lower_key = indexed_image_path_sqlite_lower(exact)
+            if exact_lower_key not in seen_exact_lower:
+                seen_exact_lower.add(exact_lower_key)
+                exact_lower_candidates.append(exact_lower_key)
+            if indexed_image_path_needs_unicode_casefold(exact):
+                exact_casefold_key = indexed_image_path_casefold(exact)
+                if exact_casefold_key not in seen_exact_casefold:
+                    seen_exact_casefold.add(exact_casefold_key)
+                    exact_casefold_candidates.append(exact_casefold_key)
+        if is_case_insensitive_indexed_path(prefix):
+            prefix_lower_key = indexed_image_path_sqlite_lower(prefix)
+            if prefix_lower_key not in seen_prefix_lower:
+                seen_prefix_lower.add(prefix_lower_key)
+                prefix_lower_candidates.append(f"{prefix_lower_key}%")
+            if indexed_image_path_needs_unicode_casefold(prefix):
+                prefix_casefold_key = indexed_image_path_casefold(prefix)
+                if prefix_casefold_key not in seen_prefix_casefold:
+                    seen_prefix_casefold.add(prefix_casefold_key)
+                    prefix_casefold_candidates.append(f"{prefix_casefold_key}%")
 
     clauses: List[str] = []
     params: List[str] = []
@@ -127,12 +179,25 @@ def _folder_scope_query_match_clause(
         like_clause = " OR ".join(f"{column} LIKE ?" for _ in prefix_candidates)
         clauses.append(f"({like_clause})")
         params.extend(prefix_candidates)
+    if exact_lower_candidates:
+        placeholders = ",".join("?" * len(exact_lower_candidates))
+        clauses.append(f"LOWER({column}) IN ({placeholders})")
+        params.extend(exact_lower_candidates)
+    if prefix_lower_candidates:
+        like_clause = " OR ".join(
+            f"LOWER({column}) LIKE ?" for _ in prefix_lower_candidates
+        )
+        clauses.append(f"({like_clause})")
+        params.extend(prefix_lower_candidates)
     if exact_casefold_candidates:
         placeholders = ",".join("?" * len(exact_casefold_candidates))
-        clauses.append(f"LOWER({column}) IN ({placeholders})")
+        clauses.append(f"indexed_path_casefold({column}) IN ({placeholders})")
         params.extend(exact_casefold_candidates)
     if prefix_casefold_candidates:
-        like_clause = " OR ".join(f"LOWER({column}) LIKE ?" for _ in prefix_casefold_candidates)
+        like_clause = " OR ".join(
+            f"indexed_path_casefold({column}) LIKE ?"
+            for _ in prefix_casefold_candidates
+        )
         clauses.append(f"({like_clause})")
         params.extend(prefix_casefold_candidates)
 

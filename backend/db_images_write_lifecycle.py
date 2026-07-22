@@ -33,7 +33,7 @@ from db_helpers import (
     _normalize_indexed_image_path,
     _path_query_match_clause,
 )
-from db_images_write import _clear_image_derived_state
+from db_images_write import _clear_image_derived_state, _sync_image_path_identity
 
 
 def reconnect_image_source_path(
@@ -90,6 +90,8 @@ def reconnect_image_source_path(
                 image_id,
             ),
         )
+        if cursor.rowcount:
+            _sync_image_path_identity(cursor, image_id, normalized_path)
     _invalidate_tags_cache()
 
 def delete_images_by_ids(image_ids: List[int]) -> int:
@@ -209,6 +211,8 @@ def update_image_path(image_id: int, new_path: str):
             """,
             (normalized_path, new_filename, image_id)
         )
+        if cursor.rowcount:
+            _sync_image_path_identity(cursor, image_id, normalized_path)
 
 def mark_image_unreadable(image_id: int, read_error: Optional[str]) -> None:
     """Mark an indexed image as unreadable so normal workflows exclude it."""

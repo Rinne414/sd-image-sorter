@@ -14,6 +14,7 @@ from utils.source_paths import (  # noqa: E402
     build_indexed_folder_scope_query_patterns,
     build_indexed_image_lookup_candidates,
     build_indexed_image_path_candidates,
+    indexed_image_path_match_key,
     is_indexed_image_path_in_folder_scope,
     normalize_indexed_image_path,
     resolve_existing_indexed_image_path,
@@ -44,6 +45,27 @@ def test_normalize_indexed_image_path_normalizes_windows_drive_case_and_separato
     normalized = normalize_indexed_image_path(r"l:/Tencent Files\foo/bar.png")
 
     assert normalized == r"L:\Tencent Files\foo\bar.png"
+
+
+def test_indexed_image_path_match_key_normalizes_unicode_windows_case():
+    upper_key = indexed_image_path_match_key(r"C:\Library\Ä.png")
+    lower_key = indexed_image_path_match_key(r"c:/library/ä.png")
+
+    assert upper_key == lower_key == r"c:\library\ä.png"
+
+
+def test_indexed_image_path_match_key_unifies_windows_and_wsl_drives():
+    windows_key = indexed_image_path_match_key(r"C:\Library\Ä.png")
+    wsl_key = indexed_image_path_match_key("/mnt/c/Library/ä.png")
+
+    assert windows_key == wsl_key == r"c:\library\ä.png"
+
+
+def test_normalize_indexed_image_path_unifies_unc_separators():
+    forward_slash = normalize_indexed_image_path("//Server/Share/A.png")
+    backslash = normalize_indexed_image_path(r"\\Server\Share\A.png")
+
+    assert forward_slash == backslash == r"\\Server\Share\A.png"
 
 
 def test_build_indexed_image_lookup_candidates_include_windows_path_variants():

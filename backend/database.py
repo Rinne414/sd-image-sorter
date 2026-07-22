@@ -288,6 +288,7 @@ _pragmas_lock = threading.Lock()
 def get_connection() -> sqlite3.Connection:
     """Get a database connection with row factory and performance optimizations."""
     conn = sqlite3.connect(DATABASE_PATH)
+    db_core.register_sqlite_functions(conn)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout=30000")  # v3.3.2: wait up to 30s on lock (large-library scan/tag vs browse contention)

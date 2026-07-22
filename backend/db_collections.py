@@ -6,13 +6,96 @@ holds collection lookups, snapshot item upsert/remove, and favorites helpers.
 Imports only from db_core / db_helpers / db_images_write / config / stdlib to
 avoid an import cycle with the ``database`` facade.
 """
+import sqlite3
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
 from config import FAVORITES_COLLECTION_SLUG
 from db_core import get_db
-from db_helpers import _row_to_dict
+from db_helpers import _favorite_image_ids_query, _row_to_dict
 from db_images_write import _compact_persisted_metadata_json
+from utils.source_paths import (
+    indexed_image_path_casefold,
+    indexed_image_path_legacy_keys,
+    is_case_insensitive_indexed_path,
+    normalize_indexed_image_path,
+)
+
+
+def _favorite_path_identity(path: str) -> tuple[str, int]:
+    """Return the canonical Favorites key and match mode."""
+    normalized = normalize_indexed_image_path(path)
+    if not normalized:
+        raise ValueError("Cannot favorite an image with an empty path")
+    if is_case_insensitive_indexed_path(normalized):
+        return indexed_image_path_casefold(normalized), 0
+    return normalized, 1
+
+
+def _promote_legacy_favorite_identities(
+    cursor: sqlite3.Cursor,
+    legacy_path_keys: List[str],
+) -> None:
+    """Replace resolvable legacy casefold anchors with exact POSIX identities."""
+    keys = list(dict.fromkeys(legacy_path_keys))
+    if not keys:
+        return
+
+    placeholders = ",".join("?" * len(keys))
+    legacy_rows = cursor.execute(
+        "SELECT path_key, added_at FROM favorite_paths "
+        f"WHERE match_case = 0 AND path_key IN ({placeholders})",
+        keys,
+    ).fetchall()
+    added_at_by_key = {str(row[0]): str(row[1]) for row in legacy_rows}
+    if not added_at_by_key:
+        return
+
+    anchors_by_casefold: Dict[str, List[str]] = {}
+    for legacy_key in added_at_by_key:
+        canonical_key = indexed_image_path_casefold(legacy_key)
+        anchors_by_casefold.setdefault(canonical_key, []).append(legacy_key)
+
+    canonical_keys = list(anchors_by_casefold)
+    canonical_placeholders = ",".join("?" * len(canonical_keys))
+    image_paths = cursor.execute(
+        "SELECT DISTINCT i.path "
+        "FROM image_path_identities p "
+        "INDEXED BY idx_image_path_identities_path_key "
+        "JOIN images i ON i.id = p.image_id "
+        f"WHERE p.path_key IN ({canonical_placeholders})",
+        canonical_keys,
+    ).fetchall()
+    exact_identities: List[tuple[str, int, str]] = []
+    materialized_anchors: set[str] = set()
+    for row in image_paths:
+        image_path = str(row[0] or "")
+        path_key, match_case = _favorite_path_identity(image_path)
+        if match_case == 1:
+            canonical_key = indexed_image_path_casefold(image_path)
+            for legacy_key in anchors_by_casefold.get(canonical_key, []):
+                exact_identities.append(
+                    (
+                        path_key,
+                        match_case,
+                        added_at_by_key[legacy_key],
+                    )
+                )
+                materialized_anchors.add(legacy_key)
+    if exact_identities:
+        cursor.executemany(
+            "INSERT OR IGNORE INTO favorite_paths "
+            "(path_key, match_case, added_at) VALUES (?, ?, ?)",
+            exact_identities,
+        )
+    if materialized_anchors:
+        materialized = list(materialized_anchors)
+        materialized_placeholders = ",".join("?" * len(materialized))
+        cursor.execute(
+            "DELETE FROM favorite_paths WHERE match_case = 0 "
+            f"AND path_key IN ({materialized_placeholders})",
+            materialized,
+        )
 
 
 def get_collection_by_slug(slug: str) -> Optional[Dict[str, Any]]:
@@ -112,11 +195,11 @@ def get_favorite_source_ids() -> List[int]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            """
-            SELECT i.id
-            FROM images i
-            INNER JOIN favorite_paths f ON lower(i.path) = f.path_key
-            ORDER BY f.added_at DESC, i.id DESC
+            f"""
+            SELECT id
+            FROM ({_favorite_image_ids_query()}) favorite_images
+            GROUP BY id
+            ORDER BY MAX(added_at) DESC, id DESC
             """
         )
         return [row[0] for row in cursor.fetchall()]
@@ -127,10 +210,9 @@ def get_favorites_count() -> int:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            """
-            SELECT COUNT(*)
-            FROM images i
-            INNER JOIN favorite_paths f ON lower(i.path) = f.path_key
+            f"""
+            SELECT COUNT(DISTINCT id)
+            FROM ({_favorite_image_ids_query()}) favorite_images
             """
         )
         return cursor.fetchone()[0]
@@ -160,8 +242,20 @@ def is_favorited(source_image_id: int) -> bool:
             """
             SELECT 1
             FROM images i
-            INNER JOIN favorite_paths f ON lower(i.path) = f.path_key
             WHERE i.id = ?
+              AND (
+                  EXISTS (
+                      SELECT 1 FROM favorite_paths f
+                      WHERE f.match_case = 1 AND f.path_key = i.path
+                  )
+                  OR EXISTS (
+                      SELECT 1
+                      FROM image_path_identities p
+                      JOIN favorite_paths f
+                        ON f.match_case = 0 AND f.path_key = p.path_key
+                      WHERE p.image_id = i.id
+                  )
+              )
             """,
             (source_image_id,),
         )
@@ -182,13 +276,29 @@ def set_favorite(source_image_id: int, favorited: bool) -> bool:
         row = cursor.fetchone()
         if row is None:
             raise ValueError(f"Image {source_image_id} not found")
-        path_key = (row[0] or "").lower()
+        path_key, match_case = _favorite_path_identity(row[0] or "")
+        if match_case == 1:
+            _promote_legacy_favorite_identities(
+                cursor,
+                indexed_image_path_legacy_keys(path_key),
+            )
         if favorited:
             cursor.execute(
-                "INSERT OR IGNORE INTO favorite_paths (path_key) VALUES (?)", (path_key,)
+                "INSERT OR IGNORE INTO favorite_paths (path_key, match_case) "
+                "VALUES (?, ?)",
+                (path_key, match_case),
             )
         else:
-            cursor.execute("DELETE FROM favorite_paths WHERE path_key = ?", (path_key,))
+            cursor.execute(
+                "DELETE FROM favorite_paths "
+                "WHERE (path_key = ? AND match_case = ?) "
+                "OR (path_key = ? AND match_case = 0)",
+                (
+                    path_key,
+                    match_case,
+                    indexed_image_path_casefold(path_key),
+                ),
+            )
 
     if not favorited:
         # Clean up any pre-migration collection_items favorite row (now vestigial,
@@ -447,20 +557,61 @@ def _set_favorites_membership_bulk(ids: List[int], fav_id: int, member: bool) ->
             cursor.execute(
                 f"SELECT path FROM images WHERE id IN ({placeholders})", chunk
             )
-            path_keys = [(row[0] or "").lower() for row in cursor.fetchall()]
+            identities = [
+                _favorite_path_identity(row[0] or "") for row in cursor.fetchall()
+            ]
             if member:
-                if path_keys:
+                exact_legacy_keys = [
+                    legacy_key
+                    for path_key, match_case in identities
+                    if match_case == 1
+                    for legacy_key in indexed_image_path_legacy_keys(path_key)
+                ]
+                _promote_legacy_favorite_identities(cursor, exact_legacy_keys)
+                if identities:
                     cursor.executemany(
-                        "INSERT OR IGNORE INTO favorite_paths (path_key) VALUES (?)",
-                        [(key,) for key in path_keys],
+                        "INSERT OR IGNORE INTO favorite_paths "
+                        "(path_key, match_case) VALUES (?, ?)",
+                        identities,
                     )
-                    changed += len(path_keys)
+                    changed += len(identities)
                 continue
-            if path_keys:
-                key_placeholders = ",".join("?" * len(path_keys))
+            if identities:
+                _promote_legacy_favorite_identities(
+                    cursor,
+                    [
+                        legacy_key
+                        for path_key, match_case in identities
+                        if match_case == 1
+                        for legacy_key in indexed_image_path_legacy_keys(path_key)
+                    ],
+                )
+                exact_keys = [
+                    path_key
+                    for path_key, match_case in identities
+                    if match_case == 1
+                ]
+                folded_keys = [
+                    indexed_image_path_casefold(path_key)
+                    for path_key, _ in identities
+                ]
+                delete_clauses = []
+                delete_params: List[str] = []
+                if exact_keys:
+                    key_placeholders = ",".join("?" * len(exact_keys))
+                    delete_clauses.append(
+                        f"(match_case = 1 AND path_key IN ({key_placeholders}))"
+                    )
+                    delete_params.extend(exact_keys)
+                if folded_keys:
+                    key_placeholders = ",".join("?" * len(folded_keys))
+                    delete_clauses.append(
+                        f"(match_case = 0 AND path_key IN ({key_placeholders}))"
+                    )
+                    delete_params.extend(folded_keys)
                 cursor.execute(
-                    f"DELETE FROM favorite_paths WHERE path_key IN ({key_placeholders})",
-                    path_keys,
+                    f"DELETE FROM favorite_paths WHERE {' OR '.join(delete_clauses)}",
+                    delete_params,
                 )
                 changed += cursor.rowcount
             # Clean up vestigial pre-migration collection_items favorite rows
@@ -493,4 +644,3 @@ def get_collection_image_ids(collection_id: int) -> List[int]:
             (collection_id,),
         )
         return [row[0] for row in cursor.fetchall()]
-

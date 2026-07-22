@@ -32,6 +32,7 @@ from db_helpers import (
     normalize_lora_name,
     normalize_checkpoint_name,
     extract_prompt_tokens,
+    _favorite_image_ids_query,
     _folder_scope_query_match_clause,
 )
 
@@ -664,8 +665,7 @@ def _apply_collection_filter(conditions: List[str], params: List[Any],
         "i.id IN ("
         "SELECT ci.source_image_id FROM collection_items ci WHERE ci.collection_id = ? "
         "UNION "
-        "SELECT i2.id FROM images i2 "
-        "JOIN favorite_paths f ON lower(i2.path) = f.path_key "
+        f"SELECT favorite_images.id FROM ({_favorite_image_ids_query()}) favorite_images "
         "JOIN collections c ON c.id = ? AND c.slug = 'favorites'"
         ")"
     )

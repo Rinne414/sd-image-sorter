@@ -174,3 +174,24 @@ def test_bulk_favorites_routes_to_path_anchored_storage(test_client, test_db, tm
     assert removed.json()["removed"] == 3
     remaining = set(test_client.get("/api/collections/favorites/ids").json()["image_ids"])
     assert not (set(ids) & remaining)
+
+
+def test_bulk_favorites_preserve_case_sensitive_path_identity(test_client, test_db):
+    import database as db
+
+    fav_id = db.get_favorites_collection_id()
+    upper_id = db.add_image(path="/bulk/A.png", filename="A.png")
+    lower_id = db.add_image(path="/bulk/a.png", filename="a.png")
+
+    added = test_client.post(
+        f"/api/collections/{fav_id}/items/bulk",
+        json={"image_ids": [upper_id, lower_id], "member": True},
+    )
+    removed = test_client.post(
+        f"/api/collections/{fav_id}/items/bulk",
+        json={"image_ids": [upper_id], "member": False},
+    )
+
+    assert added.json()["added"] == 2
+    assert removed.json()["removed"] == 1
+    assert db.get_favorite_source_ids() == [lower_id]

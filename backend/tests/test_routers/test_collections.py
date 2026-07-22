@@ -137,3 +137,16 @@ def test_images_filter_by_favorites_collection(test_client, test_db, tmp_path: P
     assert liked in filtered_ids
     assert plain not in filtered_ids
 
+
+def test_favorites_gallery_query_distinguishes_case_sensitive_paths(test_db):
+    import database as db
+
+    fav_id = db.get_favorites_collection_id()
+    upper_id = db.add_image(path="/library/A.png", filename="A.png")
+    lower_id = db.add_image(path="/library/a.png", filename="a.png")
+    db.set_favorite(upper_id, True)
+
+    filtered = db.get_images(collection_id=fav_id, limit=100)
+
+    assert {image["id"] for image in filtered} == {upper_id}
+    assert lower_id not in {image["id"] for image in filtered}
