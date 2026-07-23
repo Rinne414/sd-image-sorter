@@ -3212,6 +3212,234 @@ class TestDerivedWriterPathResolution:
         assert result["aesthetic_score"] == 7.25
         assert captured["path"] == str(resolved_path)
 
+    def test_aesthetic_single_rejects_pixels_changed_during_inference(
+        self,
+        test_db,
+        tmp_path,
+    ):
+        from exceptions import ServiceError
+        from image_fingerprint import compute_image_content_fingerprint
+        from services.aesthetic_service import AestheticService
+
+        image_path = tmp_path / "aesthetic-single-changed-during-inference.png"
+        with Image.new("RGB", (64, 64), color="white") as original:
+            original.save(image_path)
+        original_fingerprint = compute_image_content_fingerprint(str(image_path))
+        image_id = test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+            content_fingerprint=original_fingerprint,
+        )
+
+        def replace_source(_image_path: str) -> float:
+            with Image.new("RGB", (64, 64), color="black") as replacement:
+                replacement.save(image_path)
+            return 9.75
+
+        service = AestheticService()
+        with pytest.raises(
+            ServiceError,
+            match="Image pixels changed while Aesthetic Scoring was running; rescan and retry",
+        ):
+            service.score_single_image(
+                image_id=image_id,
+                predict_score=replace_source,
+            )
+
+        with test_db.get_db() as conn:
+            row = conn.execute(
+                "SELECT aesthetic_score, content_fingerprint FROM images WHERE id = ?",
+                (image_id,),
+            ).fetchone()
+        assert row["aesthetic_score"] is None
+        assert row["content_fingerprint"] == original_fingerprint
+
+    def test_aesthetic_rejects_known_database_fingerprint_mismatch_before_inference(
+        self,
+        test_db,
+        tmp_path,
+    ):
+        from exceptions import ServiceError
+        from services.aesthetic_service import AestheticService
+
+        image_path = tmp_path / "aesthetic-index-stale.png"
+        with Image.new("RGB", (64, 64), color="white") as image:
+            image.save(image_path)
+        image_id = test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+            content_fingerprint="outdated-fingerprint",
+        )
+        inference_called = False
+
+        def unexpected_inference(_image_path: str) -> float:
+            nonlocal inference_called
+            inference_called = True
+            return 9.75
+
+        service = AestheticService()
+        with pytest.raises(
+            ServiceError,
+            match="Image pixels changed since the library index was updated; rescan and retry",
+        ):
+            service.score_single_image(
+                image_id=image_id,
+                predict_score=unexpected_inference,
+            )
+
+        assert inference_called is False
+
+    def test_aesthetic_single_preserves_newer_score_when_database_changes_before_publish(
+        self,
+        test_db,
+        tmp_path,
+    ):
+        from exceptions import ServiceError
+        from image_fingerprint import compute_image_content_fingerprint
+        from services.aesthetic_service import AestheticService
+
+        image_path = tmp_path / "aesthetic-single-publish-conflict.png"
+        with Image.new("RGB", (64, 64), color="white") as image:
+            image.save(image_path)
+        original_fingerprint = compute_image_content_fingerprint(str(image_path))
+        image_id = test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+            content_fingerprint=original_fingerprint,
+        )
+
+        def replace_database_state(_image_path: str) -> float:
+            with test_db.get_db() as conn:
+                conn.execute(
+                    """
+                    UPDATE images
+                    SET content_fingerprint = ?, aesthetic_score = ?
+                    WHERE id = ?
+                    """,
+                    ("newer-fingerprint", 9.5, image_id),
+                )
+            return 2.0
+
+        service = AestheticService()
+        with pytest.raises(
+            ServiceError,
+            match="Image changed before its Aesthetic score could be saved; rescan and retry",
+        ):
+            service.score_single_image(
+                image_id=image_id,
+                predict_score=replace_database_state,
+            )
+
+        with test_db.get_db() as conn:
+            row = conn.execute(
+                "SELECT aesthetic_score, content_fingerprint FROM images WHERE id = ?",
+                (image_id,),
+            ).fetchone()
+        assert row["aesthetic_score"] == 9.5
+        assert row["content_fingerprint"] == "newer-fingerprint"
+
+    def test_aesthetic_batch_counts_pixels_changed_during_inference_only_as_an_error(
+        self,
+        test_db,
+        tmp_path,
+        caplog,
+        monkeypatch,
+    ):
+        from image_fingerprint import compute_image_content_fingerprint
+        from services.aesthetic_service import AestheticService
+
+        image_path = tmp_path / "aesthetic-batch-changed-during-inference.png"
+        with Image.new("RGB", (64, 64), color="white") as original:
+            original.save(image_path)
+        original_fingerprint = compute_image_content_fingerprint(str(image_path))
+        image_id = test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+            content_fingerprint=original_fingerprint,
+        )
+
+        def replace_source(_image_path: str) -> float:
+            with Image.new("RGB", (64, 64), color="black") as replacement:
+                replacement.save(image_path)
+            return 9.75
+
+        progress_updates = []
+        service = AestheticService()
+        monkeypatch.setattr(service, "_gpu_cleanup", lambda: None)
+        service.score_batch(
+            force=False,
+            predict_score=replace_source,
+            progress_callback=progress_updates.append,
+        )
+
+        with test_db.get_db() as conn:
+            row = conn.execute(
+                "SELECT aesthetic_score, content_fingerprint FROM images WHERE id = ?",
+                (image_id,),
+            ).fetchone()
+        assert row["aesthetic_score"] is None
+        assert row["content_fingerprint"] == original_fingerprint
+        assert [update["errors"] for update in progress_updates if "errors" in update] == [0, 1]
+        assert max(int(update.get("completed", 0)) for update in progress_updates) == 1
+        assert "Image pixels changed while Aesthetic Scoring was running; rescan and retry" in caplog.text
+
+    def test_aesthetic_batch_counts_database_publish_conflict_once_and_preserves_newer_score(
+        self,
+        test_db,
+        tmp_path,
+        caplog,
+        monkeypatch,
+    ):
+        from image_fingerprint import compute_image_content_fingerprint
+        from services.aesthetic_service import AestheticService
+
+        image_path = tmp_path / "aesthetic-batch-publish-conflict.png"
+        with Image.new("RGB", (64, 64), color="white") as image:
+            image.save(image_path)
+        original_fingerprint = compute_image_content_fingerprint(str(image_path))
+        image_id = test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+            content_fingerprint=original_fingerprint,
+        )
+
+        def replace_database_state(_image_path: str) -> float:
+            with test_db.get_db() as conn:
+                conn.execute(
+                    """
+                    UPDATE images
+                    SET content_fingerprint = ?, aesthetic_score = ?
+                    WHERE id = ?
+                    """,
+                    ("newer-fingerprint", 9.5, image_id),
+                )
+            return 2.0
+
+        progress_updates = []
+        service = AestheticService()
+        monkeypatch.setattr(service, "_gpu_cleanup", lambda: None)
+        service.score_batch(
+            force=False,
+            predict_score=replace_database_state,
+            progress_callback=progress_updates.append,
+        )
+
+        with test_db.get_db() as conn:
+            row = conn.execute(
+                "SELECT aesthetic_score, content_fingerprint FROM images WHERE id = ?",
+                (image_id,),
+            ).fetchone()
+        assert row["aesthetic_score"] == 9.5
+        assert row["content_fingerprint"] == "newer-fingerprint"
+        assert [update["errors"] for update in progress_updates if "errors" in update] == [0, 1]
+        assert max(int(update.get("completed", 0)) for update in progress_updates) == 1
+        assert "Image changed before its Aesthetic score could be saved; rescan and retry" in caplog.text
+
     def test_artist_service_batch_resolves_windows_indexed_path_before_identify(self, test_db, tmp_path, monkeypatch):
         from services import artist_service as artist_service_module
         from PIL import Image

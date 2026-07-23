@@ -70,18 +70,23 @@ def write_image_aesthetic_score(
     *,
     image_id: int,
     aesthetic_score: float,
-    content_fingerprint: Optional[str],
-) -> None:
-    """Store an aesthetic score and advance the source fingerprint when known."""
+    content_fingerprint: str,
+) -> bool:
+    """Store an aesthetic score only while its source fingerprint is current."""
+    fingerprint = str(content_fingerprint or "").strip()
+    if not fingerprint:
+        raise ValueError("content_fingerprint must be non-empty for an Aesthetic score")
+
     cursor.execute(
         """
         UPDATE images
         SET aesthetic_score = ?,
-            content_fingerprint = COALESCE(?, content_fingerprint)
-        WHERE id = ?
+            content_fingerprint = ?
+        WHERE id = ? AND content_fingerprint = ?
         """,
-        (aesthetic_score, content_fingerprint, image_id),
+        (aesthetic_score, fingerprint, image_id, fingerprint),
     )
+    return cursor.rowcount == 1
 
 
 def write_image_content_fingerprint(

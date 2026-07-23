@@ -21,7 +21,7 @@ def test_score_batch_uses_stable_snapshot_when_filtering_unscored_rows(test_db, 
         )
 
     service = AestheticService()
-    monkeypatch.setattr(service, "_compute_content_fingerprint", lambda _path: None)
+    monkeypatch.setattr(service, "_compute_content_fingerprint", lambda _path: "fixture-fingerprint")
     monkeypatch.setattr(service, "_gpu_cleanup", lambda: None)
 
     scored_paths = []
@@ -46,7 +46,7 @@ def test_score_batch_streams_target_rows_without_fetchall(test_db, tmp_path, mon
     test_db.add_image(path=str(image_path), filename=image_path.name, metadata_json="{}")
 
     service = AestheticService()
-    monkeypatch.setattr(service, "_compute_content_fingerprint", lambda _path: None)
+    monkeypatch.setattr(service, "_compute_content_fingerprint", lambda _path: "fixture-fingerprint")
     monkeypatch.setattr(service, "_gpu_cleanup", lambda: None)
 
     original_get_db = test_db.get_db

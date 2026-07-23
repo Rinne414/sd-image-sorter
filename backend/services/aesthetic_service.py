@@ -5,19 +5,36 @@ from __future__ import annotations
 
 import gc
 import logging
+import sqlite3
 import threading
 from typing import Any, Callable, Dict, Optional
 
 import database as db
 from exceptions import ImageFileNotFoundError, ImageNotFoundError, ServiceError
 from image_fingerprint import compute_image_content_fingerprint
-from services.derived_state_service import write_image_aesthetic_score
+from services.derived_state_service import (
+    initialize_image_content_fingerprint,
+    write_image_aesthetic_score,
+)
 from utils.source_paths import resolve_existing_indexed_image_path
 
 
 logger = logging.getLogger(__name__)
 
 ProgressCallback = Callable[[Dict[str, Any]], None]
+
+AESTHETIC_FINGERPRINT_ERROR = (
+    "Image pixels could not be fingerprinted for Aesthetic Scoring; rescan and retry"
+)
+AESTHETIC_INDEX_STALE_ERROR = (
+    "Image pixels changed since the library index was updated; rescan and retry"
+)
+AESTHETIC_INFERENCE_STALE_ERROR = (
+    "Image pixels changed while Aesthetic Scoring was running; rescan and retry"
+)
+AESTHETIC_PUBLISH_STALE_ERROR = (
+    "Image changed before its Aesthetic score could be saved; rescan and retry"
+)
 
 
 class AestheticService:
@@ -109,6 +126,56 @@ class AestheticService:
             logger.warning("Could not compute content fingerprint for %s: %s", image_path, exc)
             return None
 
+    def _require_content_fingerprint(self, image_path: str) -> str:
+        fingerprint = str(self._compute_content_fingerprint(image_path) or "").strip()
+        if not fingerprint:
+            raise ServiceError(AESTHETIC_FINGERPRINT_ERROR)
+        return fingerprint
+
+    def _claim_source_fingerprint(
+        self,
+        *,
+        cursor: sqlite3.Cursor,
+        image_id: int,
+        image_path: str,
+    ) -> str:
+        fingerprint = self._require_content_fingerprint(image_path)
+        initialized = initialize_image_content_fingerprint(
+            cursor,
+            image_id=image_id,
+            content_fingerprint=fingerprint,
+        )
+        if not initialized:
+            raise ServiceError(AESTHETIC_INDEX_STALE_ERROR)
+        return fingerprint
+
+    def _prepare_source_fingerprint(self, *, image_id: int, image_path: str) -> str:
+        with db.get_db() as conn:
+            return self._claim_source_fingerprint(
+                cursor=conn.cursor(),
+                image_id=image_id,
+                image_path=image_path,
+            )
+
+    def _verify_source_fingerprint(self, *, image_path: str, expected_fingerprint: str) -> None:
+        if self._require_content_fingerprint(image_path) != expected_fingerprint:
+            raise ServiceError(AESTHETIC_INFERENCE_STALE_ERROR)
+
+    def _store_score(
+        self,
+        *,
+        image_id: int,
+        aesthetic_score: float,
+        content_fingerprint: str,
+    ) -> bool:
+        with db.get_db() as conn:
+            return write_image_aesthetic_score(
+                conn.cursor(),
+                image_id=image_id,
+                aesthetic_score=aesthetic_score,
+                content_fingerprint=content_fingerprint,
+            )
+
     def _scored_count(self) -> int:
         try:
             with db.get_db() as conn:
@@ -135,25 +202,33 @@ class AestheticService:
     ) -> Dict[str, Any]:
         with db.get_db() as conn:
             row = conn.execute("SELECT path FROM images WHERE id = ?", (image_id,)).fetchone()
-            if not row:
-                raise ImageNotFoundError(image_id=image_id)
+        if not row:
+            raise ImageNotFoundError(image_id=image_id)
 
-            indexed_path = str(row["path"] or "")
-            image_path = self._resolve_image_path(image_id=image_id, indexed_path=indexed_path)
-            if not image_path:
-                raise ImageFileNotFoundError(image_id=image_id)
+        indexed_path = str(row["path"] or "")
+        image_path = self._resolve_image_path(image_id=image_id, indexed_path=indexed_path)
+        if not image_path:
+            raise ImageFileNotFoundError(image_id=image_id)
 
-            score = predict_score(image_path)
-            if score is None:
-                raise ServiceError("Scoring failed")
-
-            write_image_aesthetic_score(
-                conn,
-                image_id=image_id,
-                aesthetic_score=score,
-                content_fingerprint=self._compute_content_fingerprint(image_path),
-            )
-            return {"image_id": image_id, "aesthetic_score": score}
+        content_fingerprint = self._prepare_source_fingerprint(
+            image_id=image_id,
+            image_path=image_path,
+        )
+        score = predict_score(image_path)
+        if score is None:
+            raise ServiceError("Scoring failed")
+        self._verify_source_fingerprint(
+            image_path=image_path,
+            expected_fingerprint=content_fingerprint,
+        )
+        written = self._store_score(
+            image_id=image_id,
+            aesthetic_score=score,
+            content_fingerprint=content_fingerprint,
+        )
+        if not written:
+            raise ServiceError(AESTHETIC_PUBLISH_STALE_ERROR)
+        return {"image_id": image_id, "aesthetic_score": score}
 
     def count_images_to_score(self, *, force: bool) -> int:
         with db.get_db() as conn:
@@ -190,7 +265,6 @@ class AestheticService:
 
         emit({"running": True, "completed": 0, "errors": 0, "current": ""})
 
-        commit_interval = 20
         # gc_interval was 8 in an earlier draft; that ran gc.collect() + cuda.empty_cache()
         # so often it dropped throughput 5-10x. 50 strikes a safer balance: enough to
         # avoid VRAM pressure from CLIP/aesthetic models, rare enough to amortize the
@@ -198,18 +272,18 @@ class AestheticService:
         gc_interval = 50
         fetch_chunk = 500
 
-        with db.get_db() as conn:
+        with db.get_db() as conn, db.get_db() as publication_conn:
             query = "SELECT id, path FROM images" if force else "SELECT id, path FROM images WHERE aesthetic_score IS NULL"
             count_query = "SELECT COUNT(*) FROM images" if force else "SELECT COUNT(*) FROM images WHERE aesthetic_score IS NULL"
             count_row = conn.execute(count_query).fetchone()
             total = int(count_row[0] or 0) if count_row else 0
             emit({"total": total})
 
-            pending_commits = 0
             errors = 0
             completed = 0
 
             cursor = conn.execute(f"{query} ORDER BY id")
+            publication_cursor = publication_conn.cursor()
             while True:
                 if self._cancel_requested:
                     logger.info("Aesthetic scoring cancelled at %d/%d", completed, total)
@@ -233,19 +307,30 @@ class AestheticService:
                         emit({"errors": errors, "completed": completed})
                         continue
                     try:
+                        content_fingerprint = self._claim_source_fingerprint(
+                            cursor=publication_cursor,
+                            image_id=image_id,
+                            image_path=image_path,
+                        )
+                        publication_conn.commit()
                         score = predict_score(image_path)
-                        if score is not None:
-                            write_image_aesthetic_score(
-                                conn,
-                                image_id=image_id,
-                                aesthetic_score=score,
-                                content_fingerprint=self._compute_content_fingerprint(image_path),
-                            )
-                            pending_commits += 1
-                        else:
-                            errors += 1
-                            emit({"errors": errors})
+                        if score is None:
+                            raise ServiceError("Scoring failed")
+                        self._verify_source_fingerprint(
+                            image_path=image_path,
+                            expected_fingerprint=content_fingerprint,
+                        )
+                        written = write_image_aesthetic_score(
+                            publication_cursor,
+                            image_id=image_id,
+                            aesthetic_score=score,
+                            content_fingerprint=content_fingerprint,
+                        )
+                        if not written:
+                            raise ServiceError(AESTHETIC_PUBLISH_STALE_ERROR)
+                        publication_conn.commit()
                     except Exception as exc:
+                        publication_conn.rollback()
                         logger.error("Error scoring %s: %s", image_path, exc)
                         errors += 1
                         emit({"errors": errors})
@@ -253,16 +338,8 @@ class AestheticService:
                     completed += 1
                     emit({"completed": completed})
 
-                    if pending_commits >= commit_interval:
-                        conn.commit()
-                        pending_commits = 0
-
                     if completed % gc_interval == 0:
                         self._gpu_cleanup()
-
-                if pending_commits > 0:
-                    conn.commit()
-                    pending_commits = 0
 
         emit({"running": False, "current": ""})
         self._gpu_cleanup()

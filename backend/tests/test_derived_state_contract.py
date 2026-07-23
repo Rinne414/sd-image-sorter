@@ -16,6 +16,8 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+import pytest
+
 # Add parent directory to path for imports when this file is run directly.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -111,8 +113,8 @@ EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
     ): 1,
     (
         "services/derived_state_service.py",
-        "UPDATE images SET aesthetic_score = ?, content_fingerprint = COALESCE(?, content_fingerprint) "
-        "WHERE id = ?",
+        "UPDATE images SET aesthetic_score = ?, content_fingerprint = ? "
+        "WHERE id = ? AND content_fingerprint = ?",
     ): 1,
     (
         "services/derived_state_service.py",
@@ -284,12 +286,6 @@ def test_derived_writer_helpers_preserve_existing_fingerprint_when_unknown(test_
 
     with db.get_db() as conn:
         cursor = conn.cursor()
-        write_image_aesthetic_score(
-            cursor,
-            image_id=image_id,
-            aesthetic_score=7.25,
-            content_fingerprint=None,
-        )
         write_image_embeddings(cursor, [(b"embedding-bytes", "fingerprint-1", image_id)])
         write_image_content_fingerprint(
             cursor,
@@ -298,7 +294,7 @@ def test_derived_writer_helpers_preserve_existing_fingerprint_when_unknown(test_
         )
 
     row = _derived_row(image_id)
-    assert row["aesthetic_score"] == 7.25
+    assert row["aesthetic_score"] is None
     assert row["embedding"] == b"embedding-bytes"
     assert row["content_fingerprint"] == "fingerprint-1"
 
@@ -312,13 +308,7 @@ def test_derived_writer_helpers_advance_fingerprint_when_known(test_db):
 
     with db.get_db() as conn:
         cursor = conn.cursor()
-        write_image_aesthetic_score(
-            cursor,
-            image_id=image_id,
-            aesthetic_score=8.0,
-            content_fingerprint="fingerprint-2",
-        )
-        write_image_embeddings(cursor, [(b"embedding-v2", "fingerprint-2", image_id)])
+        write_image_embeddings(cursor, [(b"embedding-v2", "fingerprint-1", image_id)])
         write_image_content_fingerprint(
             cursor,
             image_id=image_id,
@@ -326,9 +316,78 @@ def test_derived_writer_helpers_advance_fingerprint_when_known(test_db):
         )
 
     row = _derived_row(image_id)
-    assert row["aesthetic_score"] == 8.0
+    assert row["aesthetic_score"] is None
     assert row["embedding"] == b"embedding-v2"
     assert row["content_fingerprint"] == "fingerprint-4"
+
+
+def test_aesthetic_writer_publishes_after_legacy_fingerprint_initialization(test_db):
+    image_id = db.add_image(
+        path="/test/helper-aesthetic-legacy.png",
+        filename="helper-aesthetic-legacy.png",
+    )
+
+    with db.get_db() as conn:
+        cursor = conn.cursor()
+        initialized = derived_state_service.initialize_image_content_fingerprint(
+            cursor,
+            image_id=image_id,
+            content_fingerprint="fingerprint-1",
+        )
+        written = write_image_aesthetic_score(
+            cursor,
+            image_id=image_id,
+            aesthetic_score=8.0,
+            content_fingerprint="fingerprint-1",
+        )
+
+    row = _derived_row(image_id)
+    assert initialized is True
+    assert written is True
+    assert row["aesthetic_score"] == 8.0
+    assert row["content_fingerprint"] == "fingerprint-1"
+
+
+def test_aesthetic_writer_rejects_stale_score_and_preserves_newer_state(test_db):
+    image_id = db.add_image(
+        path="/test/helper-stale-aesthetic.png",
+        filename="helper-stale-aesthetic.png",
+        content_fingerprint="fingerprint-2",
+    )
+    with db.get_db() as conn:
+        conn.execute(
+            "UPDATE images SET aesthetic_score = ? WHERE id = ?",
+            (9.5, image_id),
+        )
+
+    with db.get_db() as conn:
+        written = write_image_aesthetic_score(
+            conn.cursor(),
+            image_id=image_id,
+            aesthetic_score=2.0,
+            content_fingerprint="fingerprint-1",
+        )
+
+    row = _derived_row(image_id)
+    assert written is False
+    assert row["aesthetic_score"] == 9.5
+    assert row["content_fingerprint"] == "fingerprint-2"
+
+
+def test_aesthetic_writer_requires_a_non_empty_fingerprint(test_db):
+    image_id = db.add_image(
+        path="/test/helper-empty-aesthetic-fingerprint.png",
+        filename="helper-empty-aesthetic-fingerprint.png",
+    )
+
+    with db.get_db() as conn:
+        with pytest.raises(ValueError, match="content_fingerprint must be non-empty"):
+            write_image_aesthetic_score(
+                conn.cursor(),
+                image_id=image_id,
+                aesthetic_score=8.0,
+                content_fingerprint="",
+            )
 
 
 def test_embedding_writer_rejects_result_for_a_newer_content_fingerprint(test_db):
