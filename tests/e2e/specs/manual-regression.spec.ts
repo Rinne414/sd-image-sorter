@@ -736,6 +736,7 @@ print("ok")
 
 function restoreManualFixtureDbPaths() {
   const script = `
+import json
 import sqlite3
 import sys
 from PIL import Image
@@ -775,6 +776,18 @@ with sqlite3.connect(db_path) as conn:
     for filename, config in fixture_rows.items():
         target_path = config["path"].resolve()
         prompt = config["prompt"]
+        is_manual_sort_fixture = filename.startswith("manual-sort-")
+        metadata_json = json.dumps({
+            "_parsed": {
+                "generation_params": {
+                    "sampler": "Euler a",
+                    "cfg_scale": 7,
+                    "steps": 30,
+                    "seed": 1485390780,
+                },
+            },
+        }) if is_manual_sort_fixture else None
+        checkpoint = "models/checkpoints/p3-5-fixture.safetensors" if is_manual_sort_fixture else None
         file_size = target_path.stat().st_size if target_path.exists() else 0
         source_mtime_ns = target_path.stat().st_mtime_ns if target_path.exists() else None
         width = None
@@ -794,12 +807,17 @@ with sqlite3.connect(db_path) as conn:
                 height = ?,
                 source_size = ?,
                 source_mtime_ns = ?,
+                metadata_json = ?,
+                checkpoint = ?,
                 is_readable = 1,
                 read_error = NULL,
                 metadata_status = 'complete'
             WHERE filename = ?
             """,
-            (str(target_path), prompt, file_size, width, height, file_size, source_mtime_ns, filename),
+            (
+                str(target_path), prompt, file_size, width, height, file_size,
+                source_mtime_ns, metadata_json, checkpoint, filename,
+            ),
         )
         if cur.rowcount == 0:
             cur.execute(
@@ -816,13 +834,17 @@ with sqlite3.connect(db_path) as conn:
                     file_size,
                     source_size,
                     source_mtime_ns,
+                    checkpoint,
                     is_readable,
                     read_error,
                     metadata_status,
                     created_at
-                ) VALUES (?, ?, 'unknown', ?, '', NULL, ?, ?, ?, ?, ?, 1, NULL, 'complete', CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, 'unknown', ?, '', ?, ?, ?, ?, ?, ?, ?, 1, NULL, 'complete', CURRENT_TIMESTAMP)
                 """,
-                (str(target_path), filename, prompt, width, height, file_size, file_size, source_mtime_ns),
+                (
+                    str(target_path), filename, prompt, metadata_json, width,
+                    height, file_size, file_size, source_mtime_ns, checkpoint,
+                ),
             )
 
         cur.execute("SELECT id FROM images WHERE filename = ?", (filename,))
@@ -2269,6 +2291,22 @@ test('Keep/Reject cull should switch modes, keep/reject/skip, and route kept ima
   // v3.3.2 FF-1: 留/汰 Keep-Reject cull flow. Reuses the manual-sort fixture
   // (3 images) and drives the mode switch itself so the slot WASD path (covered
   // above) stays the default. Non-destructive: kept images route to Favorites.
+  const consoleProblems: string[] = []
+  const requestProblems: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'warning' || message.type() === 'error') {
+      consoleProblems.push(`${message.type()}: ${message.text()}`)
+    }
+  })
+  page.on('requestfailed', (failedRequest) => {
+    requestProblems.push(`${failedRequest.method()} ${failedRequest.url()} ${failedRequest.failure()?.errorText || ''}`.trim())
+  })
+  page.on('response', (response) => {
+    if (response.status() >= 400) {
+      requestProblems.push(`${response.status()} ${response.request().method()} ${response.url()}`)
+    }
+  })
+
   await resetManualSortFixture()
   await page.addInitScript((search) => {
     localStorage.setItem('manual_sort_filter_state_v1', JSON.stringify({
@@ -2320,15 +2358,108 @@ test('Keep/Reject cull should switch modes, keep/reject/skip, and route kept ima
   await expect(page.locator('#cull-progress-text')).toHaveText('1 / 3')
   expect(await page.locator('#cull-image').getAttribute('src')).toBeTruthy()
 
+  const expectedChipTexts = [
+    'Euler a',
+    'CFG 7',
+    'Steps 30',
+    'Seed 1485390780',
+    'p3-5-fixture',
+    '96×96',
+  ]
+  const metadataChips = page.locator('#cull-meta .bchip')
+  await expect(metadataChips).toHaveCount(expectedChipTexts.length)
+  await expect(metadataChips).toHaveText(expectedChipTexts)
+
+  const firstCullImageId = await page.evaluate(() => Number((window as any).ManualSortState?.currentImage?.id))
+  expect(firstCullImageId).toBeGreaterThan(0)
+
+  for (const viewport of [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+  ]) {
+    await page.setViewportSize(viewport)
+    await page.evaluate(() => new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve))
+    }))
+
+    const layout = await page.locator('#cull-card').evaluate((card) => {
+      const metadata = card.querySelector('#cull-meta')
+      const chips = Array.from(card.querySelectorAll<HTMLElement>('#cull-meta .bchip'))
+      const actionButtons = Array.from(document.querySelectorAll<HTMLElement>('.cull-actions button'))
+      if (!(metadata instanceof HTMLElement) || chips.length === 0 || actionButtons.length !== 3) {
+        throw new Error('Keep/Reject metadata or action controls are unavailable')
+      }
+
+      const cardBox = card.getBoundingClientRect()
+      const metadataBox = metadata.getBoundingClientRect()
+      const chipBoxes = chips.map((chip) => chip.getBoundingClientRect())
+      const chipStyles = chips.map((chip) => getComputedStyle(chip))
+      const overlaps = chipBoxes.some((left, leftIndex) => chipBoxes.some((right, rightIndex) => {
+        if (rightIndex <= leftIndex) return false
+        return left.left < right.right && left.right > right.left
+          && left.top < right.bottom && left.bottom > right.top
+      }))
+      const sameRowGaps = chipBoxes.flatMap((left, leftIndex) => chipBoxes
+        .slice(leftIndex + 1)
+        .filter((right) => Math.abs(left.top - right.top) < 1)
+        .map((right) => Math.max(left.left, right.left) - Math.min(left.right, right.right)))
+
+      return {
+        horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        cardInsideViewport: cardBox.left >= 0 && cardBox.right <= window.innerWidth + 1
+          && cardBox.top >= 0 && cardBox.bottom <= window.innerHeight + 1,
+        chipsInsideMetadata: chipBoxes.every((box) => box.left >= metadataBox.left - 1
+          && box.right <= metadataBox.right + 1
+          && box.top >= metadataBox.top - 1
+          && box.bottom <= metadataBox.bottom + 1),
+        chipsInsideCard: chipBoxes.every((box) => box.left >= cardBox.left - 1
+          && box.right <= cardBox.right + 1
+          && box.top >= cardBox.top - 1
+          && box.bottom <= cardBox.bottom + 1),
+        styledChips: chipStyles.every((style) => style.display !== 'none'
+          && style.backgroundColor !== 'rgba(0, 0, 0, 0)'
+          && parseFloat(style.paddingLeft) > 0
+          && parseFloat(style.borderTopWidth) > 0),
+        overlaps,
+        positiveSameRowGaps: sameRowGaps.length > 0 && sameRowGaps.every((gap) => gap >= 4),
+        actionsInsideViewport: actionButtons.every((button) => {
+          const box = button.getBoundingClientRect()
+          return box.width > 0 && box.height > 0 && box.left >= 0
+            && box.right <= window.innerWidth + 1 && box.top >= 0
+            && box.bottom <= window.innerHeight + 1
+        }),
+      }
+    })
+
+    expect(layout).toEqual({
+      horizontalOverflow: 0,
+      cardInsideViewport: true,
+      chipsInsideMetadata: true,
+      chipsInsideCard: true,
+      styledChips: true,
+      overlaps: false,
+      positiveSameRowGaps: true,
+      actionsInsideViewport: true,
+    })
+  }
+
   // Keep (→) the first image → advances; tally increments.
   await page.keyboard.press('ArrowRight')
   await expect(page.locator('#cull-progress-text')).toHaveText('2 / 3')
   await expect(page.locator('#cull-tally-keep')).toHaveText('♥ 1')
+  const secondCullImageId = await page.evaluate(() => Number((window as any).ManualSortState?.currentImage?.id))
+  expect(secondCullImageId).toBeGreaterThan(0)
+  expect(secondCullImageId).not.toBe(firstCullImageId)
 
   // Reject (←) the second → advances; reject tally increments.
   await page.keyboard.press('ArrowLeft')
   await expect(page.locator('#cull-progress-text')).toHaveText('3 / 3')
   await expect(page.locator('#cull-tally-reject')).toHaveText('✕ 1')
+  const thirdCullImageId = await page.evaluate(() => Number((window as any).ManualSortState?.currentImage?.id))
+  expect(thirdCullImageId).toBeGreaterThan(0)
+  expect(thirdCullImageId).not.toBe(firstCullImageId)
+  expect(thirdCullImageId).not.toBe(secondCullImageId)
 
   // Keep (→) the last → finishes the cull and returns to setup.
   await page.keyboard.press('ArrowRight')
@@ -2339,8 +2470,14 @@ test('Keep/Reject cull should switch modes, keep/reject/skip, and route kept ima
   // The two kept images were saved to Favorites by reference.
   await expect.poll(async () => {
     const payload = await (await request.get('/api/collections/favorites/ids')).json()
-    return Number(payload.count ?? (payload.image_ids || []).length)
-  }, { timeout: 10000 }).toBe(baselineFavorites + 2)
+    return (payload.image_ids || []).map(Number).sort((left: number, right: number) => left - right)
+  }, { timeout: 10000 }).toEqual([firstCullImageId, thirdCullImageId].sort((left, right) => left - right))
+  const finalFavorites = await (await request.get('/api/collections/favorites/ids')).json()
+  const finalFavoriteIds = (finalFavorites.image_ids || []).map(Number)
+  expect(finalFavoriteIds).toHaveLength(baselineFavorites + 2)
+  expect(finalFavoriteIds).not.toContain(secondCullImageId)
+  expect(consoleProblems).toEqual([])
+  expect(requestProblems).toEqual([])
 })
 
 test('manual censor JPEG save should flatten transparent pixels onto white and preserve the pen edit', async ({ page }) => {
