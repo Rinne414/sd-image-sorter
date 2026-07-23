@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import net from 'node:net'
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
+import type { Request, Response } from '@playwright/test'
 
 import { expect, test } from '../fixtures/click-ledger'
 
@@ -285,6 +286,8 @@ test.describe('Entry page (opted in)', () => {
     const consoleProblems: string[] = []
     const requestProblems: string[] = []
     const pageProblems: string[] = []
+    const summaryRequests: Request[] = []
+    const summaryResponses: Response[] = []
     page.on('console', (message) => {
       if (
         ['warning', 'error'].includes(message.type())
@@ -294,13 +297,20 @@ test.describe('Entry page (opted in)', () => {
       }
     })
     page.on('pageerror', (error) => pageProblems.push(error.message))
+    page.on('request', (request) => {
+      if (!request.url().startsWith(backend.baseURL)) return
+      if (new URL(request.url()).pathname === '/api/entry/summary') summaryRequests.push(request)
+    })
     page.on('requestfailed', (request) => {
       if (request.url().startsWith(backend.baseURL)) {
         requestProblems.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText || 'failed'}`)
       }
     })
     page.on('response', (response) => {
-      if (response.url().startsWith(backend.baseURL) && response.status() >= 400) {
+      if (!response.url().startsWith(backend.baseURL)) return
+      const url = new URL(response.url())
+      if (url.pathname === '/api/entry/summary') summaryResponses.push(response)
+      if (response.status() >= 400) {
         requestProblems.push(`${response.request().method()} ${response.url()}: HTTP ${response.status()}`)
       }
     })
@@ -311,12 +321,12 @@ test.describe('Entry page (opted in)', () => {
         window.localStorage.setItem('sd-image-sorter-lang', 'en')
       })
       await page.setViewportSize({ width: 1366, height: 768 })
-      const summaryResponsePromise = page.waitForResponse((response) => {
-        const url = new URL(response.url())
-        return url.origin === backend.baseURL && url.pathname === '/api/entry/summary'
-      })
       await page.goto(backend.baseURL, { waitUntil: 'domcontentloaded' })
-      const summaryResponse = await summaryResponsePromise
+      await expect.poll(() => summaryRequests.length).toBeGreaterThan(0)
+      await expect.poll(() => summaryResponses.length).toBeGreaterThan(0)
+      expect(summaryRequests).toHaveLength(1)
+      expect(summaryResponses).toHaveLength(1)
+      const summaryResponse = summaryResponses[0]
       expect(summaryResponse.status()).toBe(200)
       expect(await summaryResponse.json()).toMatchObject({
         library_total: 0,
@@ -493,8 +503,17 @@ test.describe('Entry page (opted in)', () => {
 
 test.describe('Entry page (suite default)', () => {
   test('stays hidden when the skip flag is set', async ({ page }) => {
+    const entrySummaryRequests: Request[] = []
+    const currentSortRequests: Request[] = []
+    page.on('request', (request) => {
+      const pathname = new URL(request.url()).pathname
+      if (pathname === '/api/entry/summary') entrySummaryRequests.push(request)
+      if (pathname === '/api/sort/current') currentSortRequests.push(request)
+    })
     await page.goto('/')
     await expect(page.locator('#entry-page')).toBeHidden()
     await expect(page.locator('#view-gallery')).toBeVisible()
+    expect(entrySummaryRequests).toEqual([])
+    expect(currentSortRequests).toHaveLength(1)
   })
 })

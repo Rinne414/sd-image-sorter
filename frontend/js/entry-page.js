@@ -100,6 +100,20 @@
         try { return Math.max(0, parseInt(localStorage.getItem(HERO_SEED_KEY), 10) || 0); } catch (e) { return 0; }
     }
 
+    function createRenderRequests() {
+        let lastSeen = null;
+        try { lastSeen = localStorage.getItem(LAST_SEEN_KEY); } catch (e) { /* ignore */ }
+        const query = new URLSearchParams();
+        if (lastSeen) query.set('last_seen', lastSeen);
+        query.set('hero_seed', String(heroSeed()));
+        return [
+            api(`/api/entry/summary?${query.toString()}`),
+            api('/api/sort/current'),
+        ];
+    }
+
+    let initialRenderRequests = isSkipped() ? null : createRenderRequests();
+
     // ------------------------------------------------------------------
     // Rendering
     // ------------------------------------------------------------------
@@ -490,16 +504,9 @@
         renderSystemLine();
         renderModelCenter();
 
-        let lastSeen = null;
-        try { lastSeen = localStorage.getItem(LAST_SEEN_KEY); } catch (e) { /* ignore */ }
-        const query = new URLSearchParams();
-        if (lastSeen) query.set('last_seen', lastSeen);
-        query.set('hero_seed', String(heroSeed()));
-
-        const [summary, session] = await Promise.all([
-            api(`/api/entry/summary?${query.toString()}`),
-            api('/api/sort/current'),
-        ]);
+        const requests = initialRenderRequests || createRenderRequests();
+        initialRenderRequests = null;
+        const [summary, session] = await Promise.all(requests);
         renderSummary(summary);
         renderSortSession(session);
     }
