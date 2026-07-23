@@ -23,6 +23,20 @@
         cleanup:      "/api/tags/bulk/cleanup",
     };
 
+    const RESULT_OPERATIONS = {
+        find_replace: "find_replace",
+        add:          "bulk_add",
+        remove:       "bulk_remove",
+        cleanup:      "cleanup",
+    };
+
+    const RESULT_COUNT_FIELDS = {
+        find_replace: ["affected_tags"],
+        add:          ["total_tags_added"],
+        remove:       ["total_tags_removed"],
+        cleanup:      ["total_low_conf_removed", "total_duplicates_removed"],
+    };
+
     const TAB_TITLES_EN = {
         find_replace: "Find & Replace",
         add:          "Bulk Add",
@@ -86,12 +100,61 @@
         return messages.join(" ");
     }
 
+    function isNonNegativeInteger(value) {
+        return Number.isInteger(value) && value >= 0;
+    }
+
+    function isPositiveInteger(value) {
+        return Number.isInteger(value) && value > 0;
+    }
+
+    function isTagArray(value) {
+        return Array.isArray(value)
+            && value.every(tag => typeof tag === "string" && tag.trim().length > 0);
+    }
+
+    function isValidSampleChange(sample, operationTab) {
+        if (!sample || typeof sample !== "object" || Array.isArray(sample)) return false;
+        if (!isPositiveInteger(sample.image_id)) return false;
+        if (operationTab === "find_replace") {
+            return isTagArray(sample.before)
+                && sample.before.length > 0
+                && isTagArray(sample.after);
+        }
+        if (operationTab === "add") {
+            return isTagArray(sample.added)
+                && sample.added.length > 0
+                && isNonNegativeInteger(sample.before_count)
+                && isNonNegativeInteger(sample.after_count)
+                && sample.after_count === sample.before_count + sample.added.length;
+        }
+        if (operationTab === "remove") {
+            return isTagArray(sample.removed)
+                && sample.removed.length > 0
+                && isNonNegativeInteger(sample.remaining_count);
+        }
+        if (operationTab === "cleanup") {
+            const removedCount = sample.removed_low_conf + sample.removed_dupes;
+            return isNonNegativeInteger(sample.before_count)
+                && isNonNegativeInteger(sample.after_count)
+                && isNonNegativeInteger(sample.removed_low_conf)
+                && isNonNegativeInteger(sample.removed_dupes)
+                && removedCount > 0
+                && sample.after_count <= sample.before_count
+                && sample.before_count - sample.after_count === removedCount;
+        }
+        return false;
+    }
+
     const MassTagEditor = {
         activeTab: "find_replace",
         scopeLabel: "",
         confirmTimer: null,
         lastDryRunResult: null,
+        previewEpoch: 0,
         _pendingApplyBody: null,
+        _pendingApplySignature: null,
+        _pendingApplyTab: null,
 
         t(en, zh) {
             return window.I18n?.getLang?.() === "zh-CN" ? zh : en;
@@ -120,8 +183,17 @@
                 tab.addEventListener("click", () => this.switchTab(tab.dataset.massTagTab));
             });
             document.querySelectorAll('input[name="mass-tag-scope"]').forEach(radio => {
-                radio.addEventListener("change", () => this.refreshScopeLabels());
+                radio.addEventListener("change", () => {
+                    this._invalidateOpenPreview();
+                    this.refreshScopeLabels();
+                });
             });
+            document.getElementById("mass-tag-modal")?.addEventListener("input", () => {
+                this._resetResult();
+                this._setStatus("");
+            });
+            document.addEventListener("selection-state-changed", () => this._invalidateOpenPreview());
+            document.addEventListener("gallery-filters-changed", () => this._invalidateOpenPreview());
             document.getElementById("btn-mass-tag-dry-run")?.addEventListener("click", () => this.runDryRun());
             document.getElementById("btn-mass-tag-apply")?.addEventListener("click", () => this.tryApply());
 
@@ -197,6 +269,7 @@
                 panel.hidden = panel.dataset.panel !== tabId;
             });
             this._resetResult();
+            this._setStatus("");
         },
 
         // ---- Scope --------------------------------------------------------
@@ -234,6 +307,14 @@
             return checked?.value || "selection";
         },
 
+        _getExplicitSelectionIds() {
+            const rawIds = window.AppFilterAccess?.getSelectedImageIds?.() || [];
+            return rawIds
+                .map(id => Number(id))
+                .filter(id => Number.isFinite(id) && id > 0)
+                .slice(0, BACKEND_MAX_IDS);
+        },
+
         /** Resolve the current scope choice to backend scope fields. */
         async resolveScopePayload() {
             if (this._getSelectionBoundary().pending) {
@@ -260,10 +341,7 @@
                 }
 
                 const rawIds = window.AppFilterAccess?.getSelectedImageIds?.() || [];
-                const ids = rawIds
-                    .map(id => Number(id))
-                    .filter(id => Number.isFinite(id) && id > 0)
-                    .slice(0, BACKEND_MAX_IDS);
+                const ids = this._getExplicitSelectionIds();
                 this.scopeLabel = this.t(
                     `${ids.length.toLocaleString()} selected images`,
                     `已选 ${ids.length.toLocaleString()} 张`,
@@ -417,6 +495,74 @@
             }
         },
 
+        _buildPreviewSignature() {
+            const scope = this.getScopeValue();
+            let scopeContract;
+            if (scope === "selection") {
+                const selectionToken = window.AppFilterAccess?.getActiveSelectionToken?.();
+                scopeContract = selectionToken
+                    ? { selection_token: selectionToken }
+                    : { image_ids: [...this._getExplicitSelectionIds()].sort((left, right) => left - right) };
+            } else {
+                scopeContract = { filter: this._buildSelectionTokenBody() };
+            }
+            const { dry_run: _dryRun, ...operation } = this._collectBody({}, /*dryRun=*/ true);
+            return JSON.stringify({
+                active_tab: this.activeTab,
+                scope,
+                scope_contract: scopeContract,
+                operation,
+            });
+        },
+
+        _setApplyEnabled(enabled) {
+            const button = document.getElementById("btn-mass-tag-apply");
+            if (button) button.disabled = !enabled;
+        },
+
+        _invalidateOpenPreview() {
+            if (!document.getElementById("mass-tag-modal")?.classList.contains("visible")) return;
+            this._resetResult();
+            this._setStatus("");
+        },
+
+        _rejectStalePreview() {
+            this._resetResult();
+            this._setStatus(
+                this.t(
+                    "Operation or scope changed — run the dry-run preview again.",
+                    "操作或范围已改变 — 请重新试算预览。",
+                ),
+                "warning",
+            );
+        },
+
+        _validateResult(data, operationTab, expectedDryRun) {
+            const expectedOperation = RESULT_OPERATIONS[operationTab];
+            const countFields = RESULT_COUNT_FIELDS[operationTab] || [];
+            const valid = data
+                && typeof data === "object"
+                && data.operation === expectedOperation
+                && data.dry_run === expectedDryRun
+                && isNonNegativeInteger(data.total_images_checked)
+                && isNonNegativeInteger(data.affected_images)
+                && data.affected_images <= data.total_images_checked
+                && Array.isArray(data.sample_changes)
+                && data.sample_changes.length <= 5
+                && data.sample_changes.every(sample => isValidSampleChange(sample, operationTab))
+                && countFields.every(field => isNonNegativeInteger(data[field]));
+            if (valid) return null;
+            return expectedDryRun
+                ? this.t(
+                    "The server returned invalid preview data for the Mass Tag operation.",
+                    "服务器返回了无效的批量标签预览数据。",
+                )
+                : this.t(
+                    "The operation may have been applied, but the server returned invalid result data. Reload Gallery before deciding whether to retry.",
+                    "操作可能已经应用，但服务器返回了无效结果数据。请先重新加载图库，再决定是否重试。",
+                );
+        },
+
         // ---- Validation ---------------------------------------------------
 
         /** Returns string error or null if valid. */
@@ -452,8 +598,11 @@
 
         async runDryRun() {
             this._resetResult();
+            const previewEpoch = this.previewEpoch;
+            const operationTab = this.activeTab;
             this._setStatus(this.t("Resolving scope…", "正在计算范围..."), "info");
             const scope = await this.resolveScopePayload();
+            if (previewEpoch !== this.previewEpoch) return;
             if (!scope || scope.scopeSize === 0) {
                 this._setStatus(
                     this.t(
@@ -466,6 +615,7 @@
             }
 
             const body = this._collectBody(scope.scopeFields, /*dryRun=*/ true);
+            const previewSignature = this._buildPreviewSignature();
             const validation = this._validate(body);
             if (validation) {
                 this._setStatus(validation, "error");
@@ -474,20 +624,36 @@
 
             this._setStatus(this.t("Running dry-run…", "正在试算..."), "info");
             try {
-                const resp = await fetch(ENDPOINTS[this.activeTab], {
+                const resp = await fetch(ENDPOINTS[operationTab], {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(body),
                 });
                 const data = await resp.json().catch(() => ({}));
+                if (previewEpoch !== this.previewEpoch) return;
                 if (!resp.ok) {
                     this._setStatus(responseErrorMessage(data, resp), "error");
                     return;
                 }
-                this.lastDryRunResult = { ...data, _scope: scope };
+                const resultValidation = this._validateResult(data, operationTab, /*expectedDryRun=*/ true);
+                if (resultValidation) {
+                    this._setStatus(resultValidation, "error");
+                    return;
+                }
+                if (previewSignature !== this._buildPreviewSignature()) {
+                    this._rejectStalePreview();
+                    return;
+                }
+                this.lastDryRunResult = {
+                    ...data,
+                    _scope: scope,
+                    _previewSignature: previewSignature,
+                };
                 this._renderResult(data);
+                this._setApplyEnabled(true);
                 this._setStatus(this.t("Dry-run complete — review the summary, then click Apply.", "试算完成 — 请检查摘要后再点 Apply。"), "success");
             } catch (e) {
+                if (previewEpoch !== this.previewEpoch) return;
                 this._setStatus(String(e.message || e), "error");
             }
         },
@@ -495,10 +661,26 @@
         // ---- Apply path ---------------------------------------------------
 
         async tryApply() {
+            const operationTab = this.activeTab;
+            const previewSignature = this._buildPreviewSignature();
+            const previewEpoch = this.previewEpoch;
+            if (this.lastDryRunResult?._previewSignature !== previewSignature) {
+                this._rejectStalePreview();
+                return;
+            }
+            this._setApplyEnabled(false);
             // Always force a fresh resolve so we capture the *current* selection,
             // not whatever the user previewed five minutes ago.
             this._setStatus(this.t("Resolving scope…", "正在计算范围..."), "info");
             const scope = await this.resolveScopePayload();
+            if (
+                previewEpoch !== this.previewEpoch
+                || this.lastDryRunResult?._previewSignature !== previewSignature
+                || previewSignature !== this._buildPreviewSignature()
+            ) {
+                this._rejectStalePreview();
+                return;
+            }
             if (!scope || scope.scopeSize === 0) {
                 this._setStatus(
                     this.t(
@@ -519,19 +701,21 @@
 
             const scopeSize = scope.scopeSize;
             if (scopeSize > MAX_NOCONFIRM) {
-                this._openConfirm(body, scopeSize);
+                this._openConfirm(body, scopeSize, previewSignature, operationTab);
                 return;
             }
             // Small scope — just run it.
-            await this._performApply(body);
+            await this._performApply(body, operationTab);
         },
 
         /**
          * Open the secondary confirm dialog with a 2-second delayed primary button.
          * Stores `body` on the editor so the confirm-button handler can read it back.
          */
-        _openConfirm(body, scopeSize) {
+        _openConfirm(body, scopeSize, previewSignature, operationTab) {
             this._pendingApplyBody = body;
+            this._pendingApplySignature = previewSignature;
+            this._pendingApplyTab = operationTab;
             const dl = document.getElementById("mass-tag-confirm-summary");
             if (dl) {
                 const lang = window.I18n?.getLang?.();
@@ -600,19 +784,35 @@
                 this.confirmTimer = null;
             }
             this._pendingApplyBody = null;
+            this._pendingApplySignature = null;
+            this._pendingApplyTab = null;
+            this._setApplyEnabled(
+                this.lastDryRunResult?._previewSignature === this._buildPreviewSignature(),
+            );
         },
 
         async runApply() {
             const body = this._pendingApplyBody;
+            const previewSignature = this._pendingApplySignature;
+            const operationTab = this._pendingApplyTab;
             this.closeConfirm();
-            if (!body) return;
-            await this._performApply(body);
+            if (!body || !operationTab) return;
+            if (
+                !previewSignature
+                || this.lastDryRunResult?._previewSignature !== previewSignature
+                || this._buildPreviewSignature() !== previewSignature
+            ) {
+                this._rejectStalePreview();
+                return;
+            }
+            this._setApplyEnabled(false);
+            await this._performApply(body, operationTab);
         },
 
-        async _performApply(body) {
+        async _performApply(body, operationTab) {
             this._setStatus(this.t("Applying…", "正在应用..."), "info");
             try {
-                const resp = await fetch(ENDPOINTS[this.activeTab], {
+                const resp = await fetch(ENDPOINTS[operationTab], {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(body),
@@ -623,6 +823,13 @@
                     this._setStatus(responseErrorMessage(data, resp), "error");
                     return;
                 }
+                const resultValidation = this._validateResult(data, operationTab, /*expectedDryRun=*/ false);
+                if (resultValidation) {
+                    this._resetResult();
+                    this._setStatus(resultValidation, "error");
+                    return;
+                }
+                this._resetResult();
                 this._renderResult(data, /*applied=*/ true);
                 const warning = responseWarningMessage(data);
                 if (warning) {
@@ -731,6 +938,8 @@
             const box = document.getElementById("mass-tag-result");
             if (box) box.hidden = true;
             this.lastDryRunResult = null;
+            this.previewEpoch += 1;
+            this._setApplyEnabled(false);
         },
 
         // ---- Status banner -----------------------------------------------
