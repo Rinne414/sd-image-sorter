@@ -303,20 +303,21 @@
     // registration order after the base item is fully assembled (event
     // listeners included), exactly like the old wrapper chain.
     DM._queueItemDecorators = [];
-    // Load the rest of the module in deterministic order. Browsers honor
-    // ``async = false`` for dynamically-inserted scripts as a way to
-    // request "execute these in DOM-insertion order, not parallel race"
-    // (see HTML spec §"prepare a script", classic-script branch). This
-    // matters because dataset-maker-local-import.js registers hooks and
-    // decorators on registries defined in part2.js (_activeChangedHooks,
-    // _queueItemDecorators) — without ordering, the registration can run
-    // BEFORE the registry exists.
+    // Load the rest of the module in deterministic order. Each request starts
+    // only after the previous script has loaded, so module readiness and
+    // execution order share one explicit promise instead of relying on a
+    // burst of dynamically-inserted requests.
     function _appendOrderedScript(src) {
-        const s = document.createElement('script');
-        s.src = src;
-        s.async = false;
-        document.head.appendChild(s);
-        return s;
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.async = false;
+            script.addEventListener('load', resolve, { once: true });
+            script.addEventListener('error', () => {
+                reject(new Error(`Dataset Maker module failed to load: ${src}`));
+            }, { once: true });
+            document.head.appendChild(script);
+        });
     }
     // Split note: the modules below are the by-feature decomposition of the
     // old part2/part3/cleanups/local-import/pipeline god-files. ORDER IS
@@ -333,44 +334,87 @@
     //   * audit BEFORE audit-run (AUDIT_STATE + renderResults bridges);
     //   * audit -> audit-run -> vocab -> defaults-pairchip -> export-preview
     //     preserves the old pipeline init() binder order.
-    _appendOrderedScript('/static/js/dataset/gallery-import.js');
-    _appendOrderedScript('/static/js/dataset/events.js');
-    _appendOrderedScript('/static/js/dataset/queue-render.js');
-    _appendOrderedScript('/static/js/dataset/active-editor.js');
-    _appendOrderedScript('/static/js/dataset/multiselect.js');
-    _appendOrderedScript('/static/js/dataset/split-view.js');
-    _appendOrderedScript('/static/js/dataset/tags.js');
-    _appendOrderedScript('/static/js/dataset/caption-fetch.js');
-    _appendOrderedScript('/static/js/dataset/output-naming.js');
-    _appendOrderedScript('/static/js/dataset/tag-all.js');
-    _appendOrderedScript('/static/js/dataset/export-run.js');
-    _appendOrderedScript('/static/js/dataset/tag-autocomplete.js');
-    _appendOrderedScript('/static/js/dataset/local-import.js');
-    _appendOrderedScript('/static/js/dataset/folder-import-ui.js');
-    _appendOrderedScript('/static/js/dataset/lora-prune.js');
-    _appendOrderedScript('/static/js/dataset/audit.js');
-    _appendOrderedScript('/static/js/dataset/audit-run.js');
-    _appendOrderedScript('/static/js/dataset/vocab.js');
-    _appendOrderedScript('/static/js/dataset/defaults-pairchip.js');
-    _appendOrderedScript('/static/js/dataset/export-preview.js');
-    _appendOrderedScript('/static/js/dataset/custom-dropdown.js');
-    // v3.2.2 T-power-PR2 (C): tag confidence pills inside the caption editor.
-    _appendOrderedScript('/static/js/dataset-confidence-pills.js');
-    // point 2/3: two-box caption editor (booru + natural-language) with a
-    // per-image type toggle + bulk/auto helpers. Loaded last so its hooks /
-    // decorators / _renderEmptyEditor wrappers compose over part2 + the
-    // local-import + pipeline patches.
-    _appendOrderedScript('/static/js/dataset-maker-caption-split.js');
+    const datasetModuleSources = [
+        '/static/js/dataset/gallery-import.js',
+        '/static/js/dataset/events.js',
+        '/static/js/dataset/queue-render.js',
+        '/static/js/dataset/active-editor.js',
+        '/static/js/dataset/multiselect.js',
+        '/static/js/dataset/split-view.js',
+        '/static/js/dataset/tags.js',
+        '/static/js/dataset/caption-fetch.js',
+        '/static/js/dataset/output-naming.js',
+        '/static/js/dataset/tag-all.js',
+        '/static/js/dataset/export-run.js',
+        '/static/js/dataset/tag-autocomplete.js',
+        '/static/js/dataset/local-import.js',
+        '/static/js/dataset/folder-import-ui.js',
+        '/static/js/dataset/lora-prune.js',
+        '/static/js/dataset/audit.js',
+        '/static/js/dataset/audit-run.js',
+        '/static/js/dataset/vocab.js',
+        '/static/js/dataset/defaults-pairchip.js',
+        '/static/js/dataset/export-preview.js',
+        '/static/js/dataset/custom-dropdown.js',
+        // v3.2.2 T-power-PR2 (C): tag confidence pills inside the caption editor.
+        '/static/js/dataset-confidence-pills.js',
+        // point 2/3: two-box caption editor (booru + natural-language) with a
+        // per-image type toggle + bulk/auto helpers. Loaded last so its hooks /
+        // decorators / _renderEmptyEditor wrappers compose over part2 + the
+        // local-import + pipeline patches.
+        '/static/js/dataset-maker-caption-split.js',
+    ];
+
+    let datasetModulesReady = Promise.resolve();
+    let datasetModuleLoadError = null;
+    let datasetModuleLoadErrorLogged = false;
+    let datasetInitPending = false;
+    for (const source of datasetModuleSources) {
+        datasetModulesReady = datasetModulesReady.then(() => _appendOrderedScript(source));
+    }
+
+    function recordDatasetModuleLoadError(error) {
+        if (!datasetModuleLoadError) {
+            datasetModuleLoadError = error instanceof Error ? error : new Error(String(error));
+        }
+        if (!datasetModuleLoadErrorLogged) {
+            datasetModuleLoadErrorLogged = true;
+            const details = { message: datasetModuleLoadError.message };
+            window.Logger?.error?.('dataset_module_load_failed', details);
+        }
+        return datasetModuleLoadError;
+    }
+
+    function showDatasetModuleLoadError(error) {
+        DM._toast(recordDatasetModuleLoadError(error).message, 'error');
+    }
+
+    datasetModulesReady.catch(recordDatasetModuleLoadError);
 
     // Hook into view activation
     function initWhenViewActivates() {
         const view = document.getElementById('view-dataset');
         if (!view) return;
+        const initActiveView = () => {
+            if (!view.classList.contains('active') || DM.boundOnce || datasetInitPending) return;
+            if (datasetModuleLoadError) {
+                showDatasetModuleLoadError(datasetModuleLoadError);
+                return;
+            }
+            datasetInitPending = true;
+            datasetModulesReady.then(() => {
+                datasetInitPending = false;
+                if (view.classList.contains('active') && !DM.boundOnce) DM.init();
+            }, (error) => {
+                datasetInitPending = false;
+                showDatasetModuleLoadError(error);
+            });
+        };
         const observer = new MutationObserver(() => {
-            if (view.classList.contains('active')) DM.init();
+            initActiveView();
         });
         observer.observe(view, { attributes: true, attributeFilter: ['hidden', 'class'] });
-        if (view.classList.contains('active')) DM.init();
+        initActiveView();
     }
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initWhenViewActivates);

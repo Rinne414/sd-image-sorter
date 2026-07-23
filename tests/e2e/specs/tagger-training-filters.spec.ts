@@ -331,3 +331,124 @@ test('P1-17: Dataset Maker workbench exposes the same trait-pruner button', asyn
     })
   }).toBe(true)
 })
+
+test('Dataset Maker waits for delayed modules before first activation', async ({ page }) => {
+  type TraitPrunerOptions = {
+    button: HTMLElement
+    textarea: HTMLTextAreaElement
+    getImageIds?: () => number[]
+    getSelectionToken?: () => string | null
+    separator?: string
+  }
+  type TraitPrunerApi = {
+    attach: (options: TraitPrunerOptions) => void
+  }
+  type DatasetMakerRuntime = {
+    boundOnce: boolean
+  }
+  let releaseEventsModule = (): void => {
+    throw new Error('Dataset events module gate was not initialized')
+  }
+  let markEventsRequested = (): void => {
+    throw new Error('Dataset events request marker was not initialized')
+  }
+  const eventsModuleGate = new Promise<void>((resolve) => {
+    releaseEventsModule = resolve
+  })
+  const eventsRequested = new Promise<void>((resolve) => {
+    markEventsRequested = resolve
+  })
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+
+  await page.route('**/static/js/dataset/events.js', async (route) => {
+    markEventsRequested()
+    await eventsModuleGate
+    await route.continue()
+  })
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await eventsRequested
+  await page.evaluate(() => {
+    const testWindow = window as typeof window & {
+      TraitPruner?: TraitPrunerApi
+      DatasetMaker: DatasetMakerRuntime
+      datasetTraitAttachCount?: number
+    }
+    const traitPruner = testWindow.TraitPruner
+    if (!traitPruner || typeof traitPruner.attach !== 'function') {
+      throw new Error('TraitPruner.attach is unavailable')
+    }
+    const originalAttach = traitPruner.attach.bind(traitPruner)
+    testWindow.datasetTraitAttachCount = 0
+    traitPruner.attach = (options: TraitPrunerOptions) => {
+      testWindow.datasetTraitAttachCount = (testWindow.datasetTraitAttachCount || 0) + 1
+      originalAttach(options)
+    }
+    window.App.switchView('dataset')
+  })
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
+
+  const boundBeforeModulesReady = await page.evaluate(() => {
+    const testWindow = window as typeof window & { DatasetMaker: DatasetMakerRuntime }
+    return testWindow.DatasetMaker.boundOnce
+  })
+  releaseEventsModule()
+  expect(boundBeforeModulesReady).toBe(false)
+
+  await expect(page.locator('#btn-dataset-trait-pruner')).toHaveAttribute('aria-expanded', 'false')
+  await expect.poll(() => page.evaluate(() => {
+    const testWindow = window as typeof window & { datasetTraitAttachCount?: number }
+    return testWindow.datasetTraitAttachCount || 0
+  })).toBe(1)
+
+  await page.evaluate(() => {
+    window.App.switchView('gallery')
+    window.App.switchView('dataset')
+  })
+  await expect.poll(() => page.evaluate(() => {
+    const testWindow = window as typeof window & { datasetTraitAttachCount?: number }
+    return testWindow.datasetTraitAttachCount || 0
+  })).toBe(1)
+  for (const viewport of [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+  ]) {
+    await page.setViewportSize(viewport)
+    const geometry = await page.locator('#btn-dataset-trait-pruner').evaluate((button) => {
+      const rect = button.getBoundingClientRect()
+      return {
+        horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        insideViewport: rect.left >= 0 && rect.right <= window.innerWidth
+          && rect.top >= 0 && rect.bottom <= window.innerHeight,
+      }
+    })
+    expect(geometry).toEqual({ horizontalOverflow: 0, insideViewport: true })
+  }
+  expect(pageErrors).toEqual([])
+})
+
+test('Dataset Maker module load failure is explicit and never publishes initialization', async ({ page }) => {
+  const consoleErrors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+  await page.route('**/static/js/dataset/events.js', async (route) => {
+    await route.abort('failed')
+  })
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.evaluate(() => window.App.switchView('dataset'))
+
+  const moduleError = page.locator('#toast-container .toast.error .toast-message')
+  await expect(moduleError).toContainText(
+    'Dataset Maker module failed to load: /static/js/dataset/events.js',
+  )
+  const boundAfterFailure = await page.evaluate(() => {
+    const testWindow = window as typeof window & { DatasetMaker: { boundOnce: boolean } }
+    return testWindow.DatasetMaker.boundOnce
+  })
+  expect(boundAfterFailure).toBe(false)
+  expect(consoleErrors.some((message) => message.includes('dataset_module_load_failed'))).toBe(true)
+})
