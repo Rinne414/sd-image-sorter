@@ -25,6 +25,7 @@ from artist_identifier import (
 )
 from image_fingerprint import compute_image_content_fingerprint
 from services.derived_state_service import (
+    initialize_image_content_fingerprint,
     write_artist_prediction,
     write_artist_predictions,
 )
@@ -35,6 +36,18 @@ logger = logging.getLogger(__name__)
 
 ProgressCallback = Callable[[Dict[str, Any]], None]
 ARTIST_IMAGE_LOOKUP_CHUNK_SIZE = 500
+ARTIST_FINGERPRINT_ERROR = (
+    "Image pixels could not be fingerprinted for Artist Identification; rescan and retry"
+)
+ARTIST_INDEX_STALE_ERROR = (
+    "Image pixels changed since the library index was updated; rescan and retry"
+)
+ARTIST_INFERENCE_STALE_ERROR = (
+    "Image pixels changed while Artist Identification was running; rescan and retry"
+)
+ARTIST_PUBLISH_STALE_ERROR = (
+    "Image changed before its Artist prediction could be saved; rescan and retry"
+)
 
 
 class _E2EArtistIdentifierStub:
@@ -237,6 +250,29 @@ class ArtistService:
             logger.warning("Could not compute content fingerprint for %s: %s", image_path, exc)
             return None
 
+    def _require_content_fingerprint(self, image_path: str) -> str:
+        fingerprint = self._compute_content_fingerprint(image_path)
+        normalized = str(fingerprint or "").strip()
+        if not normalized:
+            raise ServiceError(ARTIST_FINGERPRINT_ERROR)
+        return normalized
+
+    def _prepare_source_fingerprint(self, *, image_id: int, image_path: str) -> str:
+        fingerprint = self._require_content_fingerprint(image_path)
+        with db.get_db() as conn:
+            initialized = initialize_image_content_fingerprint(
+                conn.cursor(),
+                image_id=image_id,
+                content_fingerprint=fingerprint,
+            )
+        if not initialized:
+            raise ServiceError(ARTIST_INDEX_STALE_ERROR)
+        return fingerprint
+
+    def _verify_source_fingerprint(self, *, image_path: str, expected_fingerprint: str) -> None:
+        if self._require_content_fingerprint(image_path) != expected_fingerprint:
+            raise ServiceError(ARTIST_INFERENCE_STALE_ERROR)
+
     def _store_prediction(
         self,
         *,
@@ -244,11 +280,11 @@ class ArtistService:
         artist: str,
         confidence: float,
         top_predictions: List[dict],
-        content_fingerprint: Optional[str],
-    ) -> None:
+        content_fingerprint: str,
+    ) -> bool:
         with db.get_db() as conn:
             cursor = conn.cursor()
-            write_artist_prediction(
+            return write_artist_prediction(
                 cursor,
                 image_id=image_id,
                 artist=artist,
@@ -268,6 +304,10 @@ class ArtistService:
         use_gpu: Optional[bool] = None,
     ) -> Dict[str, Any]:
         image_path = self._get_image_path(image_id)
+        content_fingerprint = self._prepare_source_fingerprint(
+            image_id=image_id,
+            image_path=image_path,
+        )
 
         identifier = self._identifier(
             model_path=model_path,
@@ -277,14 +317,20 @@ class ArtistService:
         result = identifier.identify_with_threshold(image_path, top_k, threshold)
         if result.get("error"):
             raise ServiceError(result["error"])
+        self._verify_source_fingerprint(
+            image_path=image_path,
+            expected_fingerprint=content_fingerprint,
+        )
 
-        self._store_prediction(
+        written = self._store_prediction(
             image_id=image_id,
             artist=result["artist"],
             confidence=float(result["confidence"]),
             top_predictions=list(result["top_predictions"]),
-            content_fingerprint=self._compute_content_fingerprint(image_path),
+            content_fingerprint=content_fingerprint,
         )
+        if not written:
+            raise ServiceError(ARTIST_PUBLISH_STALE_ERROR)
 
         return {
             "image_id": image_id,
@@ -340,14 +386,14 @@ class ArtistService:
             "message": f"Identifying {len(image_ids)} image(s)...",
         })
 
-        predictions_to_insert: List[Dict[str, Any]] = []
         results: List[Dict[str, Any]] = []
         processed = 0
+        attempted = 0
         errors = 0
 
         for image_id in image_ids:
             if self._cancel_requested:
-                logger.info("Artist batch cancelled at %d/%d", processed, len(image_ids))
+                logger.info("Artist batch cancelled at %d/%d", attempted, len(image_ids))
                 break
             try:
                 if image_id not in image_map:
@@ -368,18 +414,29 @@ class ArtistService:
                         logger.debug("Failed to mark image %s unreadable in batch identification", image_id)
                     raise FileNotFoundError(f"Image file not found for image {image_id}")
 
+                content_fingerprint = self._prepare_source_fingerprint(
+                    image_id=image_id,
+                    image_path=image_path,
+                )
                 result = identifier.identify_with_threshold(image_path, top_k, threshold)
                 if result.get("error"):
                     raise RuntimeError(result["error"])
+                self._verify_source_fingerprint(
+                    image_path=image_path,
+                    expected_fingerprint=content_fingerprint,
+                )
 
                 prediction = {
                     "image_id": image_id,
                     "artist": result["artist"],
                     "confidence": float(result["confidence"]),
-                    "top_predictions": str(result["top_predictions"]),
-                    "content_fingerprint": self._compute_content_fingerprint(image_path),
+                    "top_predictions": list(result["top_predictions"]),
+                    "content_fingerprint": content_fingerprint,
                 }
-                predictions_to_insert.append(prediction)
+                with db.get_db() as conn:
+                    written_image_ids = write_artist_predictions(conn.cursor(), [prediction])
+                if written_image_ids != [image_id]:
+                    raise ServiceError(ARTIST_PUBLISH_STALE_ERROR)
 
                 public_result = {
                     "image_id": image_id,
@@ -388,14 +445,15 @@ class ArtistService:
                 }
                 results.append(public_result)
                 emit({"result": public_result})
+                processed += 1
+                emit({"processed_delta": 1})
             except Exception as exc:
                 logger.error("Error processing image %s: %s", image_id, exc)
                 errors += 1
                 emit({"errors_delta": 1})
             finally:
-                processed += 1
-                emit({"processed_delta": 1})
-                if processed % 8 == 0:
+                attempted += 1
+                if attempted % 8 == 0:
                     gc.collect()
                     try:
                         import torch
@@ -403,11 +461,6 @@ class ArtistService:
                             torch.cuda.empty_cache()
                     except Exception:
                         pass
-
-        if predictions_to_insert:
-            with db.get_db() as conn:
-                cursor = conn.cursor()
-                write_artist_predictions(cursor, predictions_to_insert)
 
         return {
             "total": len(image_ids),

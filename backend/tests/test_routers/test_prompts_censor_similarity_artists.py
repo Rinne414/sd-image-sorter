@@ -2761,7 +2761,12 @@ class TestArtistsRouterValidation:
 
             with test_client.test_db.get_db() as conn:
                 row = conn.execute(
-                    "SELECT artist, confidence, top_predictions FROM artist_predictions WHERE image_id = ?",
+                    """
+                    SELECT ap.artist, ap.confidence, ap.top_predictions, i.content_fingerprint
+                    FROM artist_predictions ap
+                    JOIN images i ON i.id = ap.image_id
+                    WHERE ap.image_id = ?
+                    """,
                     (image_id,),
                 ).fetchone()
 
@@ -2769,8 +2774,148 @@ class TestArtistsRouterValidation:
             assert row["artist"] == "fixture_artist"
             assert row["confidence"] == pytest.approx(0.97)
             assert "fixture_artist" in row["top_predictions"]
+            assert str(row["content_fingerprint"] or "").strip()
         finally:
             artists_router.set_artist_service(None)
+
+    def test_identify_rejects_pixels_changed_during_model_inference(self, test_client, monkeypatch, tmp_path):
+        from image_fingerprint import compute_image_content_fingerprint
+        from routers import artists as artists_router
+
+        image_path = tmp_path / "artist-changed-during-inference.png"
+        with Image.new("RGB", (64, 64), color="white") as original:
+            original.save(image_path)
+        original_fingerprint = compute_image_content_fingerprint(str(image_path))
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+            content_fingerprint=original_fingerprint,
+        )
+
+        class ReplacingIdentifier:
+            def identify_with_threshold(self, _image_path, _top_k, _threshold):
+                with Image.new("RGB", (64, 64), color="black") as replacement:
+                    replacement.save(image_path)
+                return {
+                    "artist": "stale_artist",
+                    "confidence": 0.92,
+                    "top_predictions": [{"artist": "stale_artist", "confidence": 0.92}],
+                    "model_loaded": True,
+                }
+
+        monkeypatch.setattr(artists_router, "get_artist_identifier", lambda **_kwargs: ReplacingIdentifier())
+
+        response = test_client.post("/api/artists/identify", json={"image_id": image_id})
+
+        assert response.status_code == 503
+        assert response.json()["error"] == (
+            "Image pixels changed while Artist Identification was running; rescan and retry"
+        )
+        with test_client.test_db.get_db() as conn:
+            prediction = conn.execute(
+                "SELECT artist FROM artist_predictions WHERE image_id = ?",
+                (image_id,),
+            ).fetchone()
+            stored_fingerprint = conn.execute(
+                "SELECT content_fingerprint FROM images WHERE id = ?",
+                (image_id,),
+            ).fetchone()[0]
+        assert prediction is None
+        assert stored_fingerprint == original_fingerprint
+
+    def test_identify_rejects_known_stale_index_before_model_inference(self, test_client, monkeypatch, tmp_path):
+        from routers import artists as artists_router
+
+        image_path = tmp_path / "artist-stale-index.png"
+        with Image.new("RGB", (64, 64), color="green") as image:
+            image.save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+            content_fingerprint="outdated-fingerprint",
+        )
+        identify_calls = []
+
+        class UnexpectedIdentifier:
+            def identify_with_threshold(self, *_args):
+                identify_calls.append(True)
+                raise AssertionError("Artist inference must not run for a stale library row")
+
+        monkeypatch.setattr(artists_router, "get_artist_identifier", lambda **_kwargs: UnexpectedIdentifier())
+
+        response = test_client.post("/api/artists/identify", json={"image_id": image_id})
+
+        assert response.status_code == 503
+        assert response.json()["error"] == (
+            "Image pixels changed since the library index was updated; rescan and retry"
+        )
+        assert identify_calls == []
+
+    def test_identify_preserves_newer_prediction_when_database_fingerprint_changes_before_save(
+        self,
+        test_client,
+        monkeypatch,
+        tmp_path,
+    ):
+        from image_fingerprint import compute_image_content_fingerprint
+        from routers import artists as artists_router
+
+        image_path = tmp_path / "artist-database-changed-before-save.png"
+        with Image.new("RGB", (64, 64), color="purple") as image:
+            image.save(image_path)
+        original_fingerprint = compute_image_content_fingerprint(str(image_path))
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+            content_fingerprint=original_fingerprint,
+        )
+
+        class RacingIdentifier:
+            def identify_with_threshold(self, _image_path, _top_k, _threshold):
+                with test_client.test_db.get_db() as conn:
+                    conn.execute(
+                        "UPDATE images SET content_fingerprint = ? WHERE id = ?",
+                        ("newer-fingerprint", image_id),
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO artist_predictions
+                            (image_id, artist, confidence, top_predictions)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (image_id, "newer_artist", 0.99, "[{'artist': 'newer_artist'}]"),
+                    )
+                return {
+                    "artist": "stale_artist",
+                    "confidence": 0.45,
+                    "top_predictions": [{"artist": "stale_artist", "confidence": 0.45}],
+                    "model_loaded": True,
+                }
+
+        monkeypatch.setattr(artists_router, "get_artist_identifier", lambda **_kwargs: RacingIdentifier())
+
+        response = test_client.post("/api/artists/identify", json={"image_id": image_id})
+
+        assert response.status_code == 503
+        assert response.json()["error"] == (
+            "Image changed before its Artist prediction could be saved; rescan and retry"
+        )
+        with test_client.test_db.get_db() as conn:
+            row = conn.execute(
+                """
+                SELECT i.content_fingerprint, ap.artist, ap.confidence
+                FROM images i
+                JOIN artist_predictions ap ON ap.image_id = i.id
+                WHERE i.id = ?
+                """,
+                (image_id,),
+            ).fetchone()
+        assert row["content_fingerprint"] == "newer-fingerprint"
+        assert row["artist"] == "newer_artist"
+        assert row["confidence"] == 0.99
 
     def test_identify_batch_passes_model_configuration_to_background_task(self, test_client, monkeypatch, tmp_path):
         from routers import artists as artists_router
@@ -3118,6 +3263,65 @@ class TestDerivedWriterPathResolution:
         assert result["processed"] == 2
         assert captured_paths == [str(resolved_a), str(resolved_b)]
 
+    def test_artist_batch_counts_pixels_changed_during_inference_only_as_an_error(
+        self,
+        test_db,
+        tmp_path,
+        caplog,
+    ):
+        from image_fingerprint import compute_image_content_fingerprint
+        from services import artist_service as artist_service_module
+
+        image_path = tmp_path / "artist-batch-changed-during-inference.png"
+        with Image.new("RGB", (64, 64), color="white") as original:
+            original.save(image_path)
+        original_fingerprint = compute_image_content_fingerprint(str(image_path))
+        image_id = test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+            content_fingerprint=original_fingerprint,
+        )
+
+        class ReplacingIdentifier:
+            def identify_with_threshold(self, _image_path, _top_k, _threshold):
+                with Image.new("RGB", (64, 64), color="black") as replacement:
+                    replacement.save(image_path)
+                return {
+                    "artist": "stale_artist",
+                    "confidence": 0.91,
+                    "top_predictions": [{"artist": "stale_artist", "confidence": 0.91}],
+                    "model_loaded": True,
+                }
+
+        progress_updates = []
+        service = artist_service_module.ArtistService(
+            identifier_getter=lambda **_kwargs: ReplacingIdentifier()
+        )
+
+        result = service.run_batch_identification(
+            image_ids=[image_id],
+            threshold=0.1,
+            top_k=3,
+            progress_callback=progress_updates.append,
+        )
+
+        with test_db.get_db() as conn:
+            prediction = conn.execute(
+                "SELECT artist FROM artist_predictions WHERE image_id = ?",
+                (image_id,),
+            ).fetchone()
+        assert result == {
+            "total": 1,
+            "processed": 0,
+            "errors": 1,
+            "results": [],
+        }
+        assert sum(int(update.get("processed_delta", 0)) for update in progress_updates) == 0
+        assert sum(int(update.get("errors_delta", 0)) for update in progress_updates) == 1
+        assert prediction is None
+        assert "Image pixels changed while Artist Identification was running; rescan and retry" in caplog.text
+
 
 class TestArtistServiceConcurrency:
     def test_concurrent_identify_requests_keep_threshold_request_local(
@@ -3168,8 +3372,13 @@ class TestArtistServiceConcurrency:
 
         service = ArtistService(identifier_getter=get_identifier)
         monkeypatch.setattr(service, "_get_image_path", lambda image_id: image_paths[image_id])
-        monkeypatch.setattr(service, "_compute_content_fingerprint", lambda _path: None)
-        monkeypatch.setattr(service, "_store_prediction", lambda **_kwargs: None)
+        monkeypatch.setattr(
+            service,
+            "_prepare_source_fingerprint",
+            lambda **_kwargs: "fixture-fingerprint",
+        )
+        monkeypatch.setattr(service, "_verify_source_fingerprint", lambda **_kwargs: None)
+        monkeypatch.setattr(service, "_store_prediction", lambda **_kwargs: True)
 
         with ThreadPoolExecutor(max_workers=2) as executor:
             low_future = executor.submit(

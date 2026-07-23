@@ -101,21 +101,6 @@ def write_image_content_fingerprint(
     )
 
 
-def write_image_content_fingerprints(
-    cursor: sqlite3.Cursor,
-    updates: Iterable[tuple[Optional[str], int]],
-) -> None:
-    """Advance image content fingerprints for a batch of derived writes."""
-    cursor.executemany(
-        """
-        UPDATE images
-        SET content_fingerprint = COALESCE(?, content_fingerprint)
-        WHERE id = ?
-        """,
-        updates,
-    )
-
-
 def write_artist_prediction(
     cursor: sqlite3.Cursor,
     *,
@@ -123,54 +108,56 @@ def write_artist_prediction(
     artist: str,
     confidence: float,
     top_predictions: Sequence[dict[str, Any]],
-    content_fingerprint: Optional[str],
-) -> None:
-    """Store artist prediction state and its associated source fingerprint."""
-    write_image_content_fingerprint(
-        cursor,
-        image_id=image_id,
-        content_fingerprint=content_fingerprint,
-    )
+    content_fingerprint: str,
+) -> bool:
+    """Store an Artist prediction only while its source fingerprint is current."""
+    fingerprint = str(content_fingerprint).strip()
+    if not fingerprint:
+        raise ValueError("content_fingerprint must be non-empty for an Artist prediction")
     cursor.execute(
-        """INSERT OR REPLACE INTO artist_predictions
-           (image_id, artist, confidence, top_predictions)
-           VALUES (?, ?, ?, ?)""",
-        (image_id, artist, confidence, str(list(top_predictions))),
+        """
+        INSERT OR REPLACE INTO artist_predictions
+            (image_id, artist, confidence, top_predictions)
+        SELECT ?, ?, ?, ?
+        WHERE EXISTS (
+            SELECT 1
+            FROM images
+            WHERE id = ? AND content_fingerprint = ?
+        )
+        """,
+        (
+            image_id,
+            artist,
+            confidence,
+            str(list(top_predictions)),
+            image_id,
+            fingerprint,
+        ),
     )
+    return cursor.rowcount == 1
 
 
 def write_artist_predictions(
     cursor: sqlite3.Cursor,
     predictions: Iterable[dict[str, Any]],
-) -> None:
-    """Store a batch of artist predictions and associated source fingerprints."""
-    rows: list[tuple[int, str, float, str]] = []
-    fingerprint_updates: list[tuple[Optional[str], int]] = []
-
+) -> list[int]:
+    """Store and return Artist predictions whose source fingerprints remain current."""
+    written_image_ids: list[int] = []
     for item in predictions:
         image_id = int(item["image_id"])
         top_predictions = item.get("top_predictions")
         if isinstance(top_predictions, str):
-            serialized_top_predictions = top_predictions
+            raise TypeError("top_predictions must be a sequence of prediction objects")
         else:
-            serialized_top_predictions = str(list(top_predictions or []))
-        rows.append(
-            (
-                image_id,
-                str(item.get("artist") or "undefined"),
-                float(item.get("confidence") or 0.0),
-                serialized_top_predictions,
-            )
-        )
-        fingerprint_updates.append((item.get("content_fingerprint"), image_id))
-
-    if not rows:
-        return
-
-    write_image_content_fingerprints(cursor, fingerprint_updates)
-    cursor.executemany(
-        """INSERT OR REPLACE INTO artist_predictions
-           (image_id, artist, confidence, top_predictions)
-           VALUES (?, ?, ?, ?)""",
-        rows,
-    )
+            normalized_top_predictions = list(top_predictions or [])
+        fingerprint = str(item.get("content_fingerprint") or "").strip()
+        if write_artist_prediction(
+            cursor,
+            image_id=image_id,
+            artist=str(item.get("artist") or "undefined"),
+            confidence=float(item.get("confidence") or 0.0),
+            top_predictions=normalized_top_predictions,
+            content_fingerprint=fingerprint,
+        ):
+            written_image_ids.append(image_id)
+    return written_image_ids

@@ -23,6 +23,7 @@ import database as db
 import services.derived_state_service as derived_state_service
 from services.derived_state_service import (
     write_image_aesthetic_score,
+    write_artist_prediction,
     write_artist_predictions,
     write_image_content_fingerprint,
     write_image_embeddings,
@@ -116,7 +117,7 @@ EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
     (
         "services/derived_state_service.py",
         "UPDATE images SET content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
-    ): 2,
+    ): 1,
 })
 
 
@@ -374,16 +375,16 @@ def test_initialize_image_fingerprint_only_claims_an_empty_row(test_db):
     assert row["content_fingerprint"] == "fingerprint-1"
 
 
-def test_artist_prediction_batch_helper_updates_predictions_and_fingerprint(test_db):
+def test_artist_prediction_batch_helper_writes_predictions_for_current_fingerprint(test_db):
     image_id = db.add_image(
         path="/test/artist-helper-batch.png",
         filename="artist-helper-batch.png",
-        content_fingerprint="fingerprint-1",
+        content_fingerprint="fingerprint-2",
     )
 
     with db.get_db() as conn:
         cursor = conn.cursor()
-        write_artist_predictions(
+        written_image_ids = write_artist_predictions(
             cursor,
             [
                 {
@@ -397,6 +398,7 @@ def test_artist_prediction_batch_helper_updates_predictions_and_fingerprint(test
         )
 
     row = _derived_row(image_id)
+    assert written_image_ids == [image_id]
     assert row["content_fingerprint"] == "fingerprint-2"
     with db.get_db() as conn:
         artist_row = conn.execute(
@@ -405,3 +407,83 @@ def test_artist_prediction_batch_helper_updates_predictions_and_fingerprint(test
         ).fetchone()
     assert artist_row["artist"] == "artist_new"
     assert artist_row["confidence"] == 0.88
+
+
+def test_artist_prediction_writer_rejects_result_for_a_newer_fingerprint_and_prediction(test_db):
+    image_id = db.add_image(
+        path="/test/helper-stale-artist.png",
+        filename="helper-stale-artist.png",
+        content_fingerprint="fingerprint-2",
+    )
+    with db.get_db() as conn:
+        conn.execute(
+            """
+            INSERT INTO artist_predictions (image_id, artist, confidence, top_predictions)
+            VALUES (?, ?, ?, ?)
+            """,
+            (image_id, "current_artist", 0.95, "[{'artist': 'current_artist'}]"),
+        )
+
+    with db.get_db() as conn:
+        written = write_artist_prediction(
+            conn.cursor(),
+            image_id=image_id,
+            artist="stale_artist",
+            confidence=0.25,
+            top_predictions=[{"artist": "stale_artist", "confidence": 0.25}],
+            content_fingerprint="fingerprint-1",
+        )
+
+    row = _derived_row(image_id)
+    with db.get_db() as conn:
+        artist_row = conn.execute(
+            "SELECT artist, confidence FROM artist_predictions WHERE image_id = ?",
+            (image_id,),
+        ).fetchone()
+    assert written is False
+    assert row["content_fingerprint"] == "fingerprint-2"
+    assert artist_row["artist"] == "current_artist"
+    assert artist_row["confidence"] == 0.95
+
+
+def test_artist_prediction_batch_writer_returns_only_current_fingerprint_rows(test_db):
+    current_id = db.add_image(
+        path="/test/helper-current-artist-batch.png",
+        filename="helper-current-artist-batch.png",
+        content_fingerprint="fingerprint-1",
+    )
+    stale_id = db.add_image(
+        path="/test/helper-stale-artist-batch.png",
+        filename="helper-stale-artist-batch.png",
+        content_fingerprint="fingerprint-2",
+    )
+
+    with db.get_db() as conn:
+        written_image_ids = write_artist_predictions(
+            conn.cursor(),
+            [
+                {
+                    "image_id": current_id,
+                    "artist": "current_artist",
+                    "confidence": 0.88,
+                    "top_predictions": [{"artist": "current_artist", "confidence": 0.88}],
+                    "content_fingerprint": "fingerprint-1",
+                },
+                {
+                    "image_id": stale_id,
+                    "artist": "stale_artist",
+                    "confidence": 0.77,
+                    "top_predictions": [{"artist": "stale_artist", "confidence": 0.77}],
+                    "content_fingerprint": "fingerprint-1",
+                },
+            ],
+        )
+
+    with db.get_db() as conn:
+        rows = conn.execute(
+            "SELECT image_id, artist FROM artist_predictions ORDER BY image_id"
+        ).fetchall()
+    assert written_image_ids == [current_id]
+    assert [(row["image_id"], row["artist"]) for row in rows] == [
+        (current_id, "current_artist")
+    ]
