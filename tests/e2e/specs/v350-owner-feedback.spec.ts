@@ -96,6 +96,9 @@ test('Gallery folder relocalization preserves the active tree state', async ({ p
   await target.click()
   await expect(target).toHaveAttribute('aria-pressed', 'true')
   await expect(page.locator('#folder-tree-browsing')).toContainText(`文件夹：${targetPath}`)
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  }))
 
   const before = await page.evaluate(() => {
     const tree = document.getElementById('folder-tree')
