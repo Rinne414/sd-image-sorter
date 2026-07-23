@@ -14,18 +14,55 @@ from typing import Any, Iterable, Optional, Sequence
 
 def write_image_embeddings(
     cursor: sqlite3.Cursor,
-    updates: Iterable[tuple[bytes, Optional[str], int]],
-) -> None:
-    """Store multiple CLIP embeddings in one DB round-trip."""
-    cursor.executemany(
+    updates: Iterable[tuple[bytes, str, int]],
+) -> list[int]:
+    """Store only embeddings that still match their source fingerprint."""
+    written_image_ids: list[int] = []
+    for embedding, content_fingerprint, image_id in updates:
+        fingerprint = str(content_fingerprint).strip()
+        if not fingerprint:
+            raise ValueError("content_fingerprint must be non-empty for an embedding")
+        cursor.execute(
+            """
+            UPDATE images
+            SET embedding = ?,
+                content_fingerprint = ?
+            WHERE id = ? AND content_fingerprint = ?
+            """,
+            (embedding, fingerprint, image_id, fingerprint),
+        )
+        if cursor.rowcount == 1:
+            written_image_ids.append(image_id)
+    return written_image_ids
+
+
+def initialize_image_content_fingerprint(
+    cursor: sqlite3.Cursor,
+    *,
+    image_id: int,
+    content_fingerprint: str,
+) -> bool:
+    """Claim a missing image fingerprint without overwriting a known value."""
+    fingerprint = str(content_fingerprint).strip()
+    if not fingerprint:
+        raise ValueError("content_fingerprint must be non-empty")
+
+    cursor.execute(
         """
         UPDATE images
-        SET embedding = ?,
-            content_fingerprint = COALESCE(?, content_fingerprint)
-        WHERE id = ?
+        SET content_fingerprint = ?
+        WHERE id = ? AND content_fingerprint IS NULL
         """,
-        updates,
+        (fingerprint, image_id),
     )
+    if cursor.rowcount == 1:
+        return True
+
+    row = cursor.execute(
+        "SELECT content_fingerprint FROM images WHERE id = ?",
+        (image_id,),
+    ).fetchone()
+    return bool(row and row["content_fingerprint"] == fingerprint)
 
 
 def write_image_aesthetic_score(

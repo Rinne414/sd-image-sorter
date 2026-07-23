@@ -2286,6 +2286,114 @@ class TestSimilarityRouterValidation:
         assert result["errors"] == 0
         assert captured["path"] == str(resolved_path)
 
+    def test_embed_batch_rejects_pixels_changed_during_model_inference(self, test_db, tmp_path, monkeypatch):
+        import similarity as similarity_module
+        from image_fingerprint import compute_image_content_fingerprint
+        from PIL import Image
+
+        image_path = tmp_path / "changed-during-embedding.png"
+        with Image.new("RGB", (64, 64), color="white") as original:
+            original.save(image_path)
+        original_fingerprint = compute_image_content_fingerprint(str(image_path))
+        image_id = test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+            content_fingerprint=original_fingerprint,
+        )
+
+        monkeypatch.setattr(similarity_module, "_get_embed_model", lambda: object())
+
+        def replace_source_after_embedding(_path, model=None):
+            with Image.new("RGB", (64, 64), color="black") as replacement:
+                replacement.save(image_path)
+            return np.ones(4, dtype=np.float32)
+
+        monkeypatch.setattr(similarity_module, "embed_image_file", replace_source_after_embedding)
+
+        result = similarity_module.SimilarityIndex(test_db).embed_batch([image_id])
+
+        with test_db.get_db() as conn:
+            row = conn.execute(
+                "SELECT embedding, content_fingerprint FROM images WHERE id = ?",
+                (image_id,),
+            ).fetchone()
+        assert result["embedded"] == 0
+        assert result["errors"] == 1
+        assert result["skipped"] == 1
+        assert result["failed"] == 0
+        assert result["recent_issues"] == [
+            {
+                "kind": "skipped",
+                "image_id": image_id,
+                "filename": image_path.name,
+                "path": str(image_path),
+                "reason": "Image pixels changed while its embedding was being computed; rescan and retry",
+            }
+        ]
+        assert row["embedding"] is None
+        assert row["content_fingerprint"] == original_fingerprint
+
+    def test_embed_batch_counts_only_embeddings_published_for_the_current_fingerprint(
+        self,
+        test_db,
+        tmp_path,
+        monkeypatch,
+    ):
+        import similarity as similarity_module
+        from PIL import Image
+
+        image_path = tmp_path / "changed-before-embedding-save.png"
+        with Image.new("RGB", (64, 64), color="white") as image:
+            image.save(image_path)
+        image_id = test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+            content_fingerprint="fingerprint-1",
+        )
+
+        monkeypatch.setattr(similarity_module, "_get_embed_model", lambda: object())
+        monkeypatch.setattr(
+            similarity_module,
+            "compute_image_content_fingerprint",
+            lambda _path: "fingerprint-1",
+        )
+
+        def change_database_fingerprint_before_save(_path, model=None):
+            with test_db.get_db() as conn:
+                conn.execute(
+                    "UPDATE images SET content_fingerprint = ? WHERE id = ?",
+                    ("fingerprint-2", image_id),
+                )
+            return np.ones(4, dtype=np.float32)
+
+        monkeypatch.setattr(
+            similarity_module,
+            "embed_image_file",
+            change_database_fingerprint_before_save,
+        )
+        index = similarity_module.SimilarityIndex(test_db)
+        invalidation_calls = []
+        monkeypatch.setattr(index, "invalidate_vector_cache", lambda: invalidation_calls.append(True))
+
+        result = index.embed_batch([image_id])
+
+        with test_db.get_db() as conn:
+            row = conn.execute(
+                "SELECT embedding, content_fingerprint FROM images WHERE id = ?",
+                (image_id,),
+            ).fetchone()
+        assert result["embedded"] == 0
+        assert result["errors"] == 1
+        assert result["skipped"] == 1
+        assert result["recent_issues"][0]["reason"] == (
+            "Image changed before its embedding could be saved; rescan and retry"
+        )
+        assert invalidation_calls == []
+        assert row["embedding"] is None
+        assert row["content_fingerprint"] == "fingerprint-2"
+
     def test_prepare_censor_legacy_returns_structured_conflict_for_civitai_login_wall(self, test_client, monkeypatch):
         import time
         from routers import models as models_router

@@ -43,6 +43,16 @@ import similarity_ann
 logger = logging.getLogger(__name__)
 
 
+def _compute_embedding_content_fingerprint(image_path: str) -> Optional[str]:
+    """Compute the source fingerprint used to publish an embedding."""
+    try:
+        fingerprint = compute_image_content_fingerprint(image_path)
+    except Exception as exc:  # noqa: BLE001 - the job must report the source failure
+        logger.warning("Could not fingerprint image for embedding path=%s: %s", image_path, exc)
+        return None
+    return fingerprint.strip() if fingerprint else None
+
+
 # Decomposition (2026-07): the exception hierarchy moved byte-verbatim to
 # similarity_errors (claude-similarity-pins-REPORT.md section 5). Re-imported so
 # every ``similarity.<Error>`` reference -- services.similarity_service's
@@ -374,12 +384,12 @@ class SimilarityIndex(_IndexCoreMixin, _VectorCacheMixin, _TopKMixin):
                 if image_ids:
                     placeholders = ",".join("?" * len(image_ids))
                     cursor.execute(
-                        f"SELECT id, path FROM images WHERE id IN ({placeholders}) AND embedding IS NULL AND COALESCE(is_readable, 1) = 1",
+                        f"SELECT id, path, content_fingerprint FROM images WHERE id IN ({placeholders}) AND embedding IS NULL AND COALESCE(is_readable, 1) = 1",
                         image_ids,
                     )
                 else:
                     cursor.execute(
-                        "SELECT id, path FROM images WHERE embedding IS NULL AND COALESCE(is_readable, 1) = 1"
+                        "SELECT id, path, content_fingerprint FROM images WHERE embedding IS NULL AND COALESCE(is_readable, 1) = 1"
                     )
 
                 rows = cursor.fetchall()
@@ -431,8 +441,8 @@ class SimilarityIndex(_IndexCoreMixin, _VectorCacheMixin, _TopKMixin):
                 self._progress["updated_at"] = time.time()
 
                 # Batch update embeddings - collect all updates first
-                updates = []
-                for img_id, img_path in batch:
+                updates: List[Tuple[bytes, str, int, str]] = []
+                for img_id, img_path, stored_content_fingerprint in batch:
                     resolved_path = resolve_existing_indexed_image_path(img_path, backend_file=__file__)
                     self._progress["current_item"] = os.path.basename(resolved_path or img_path)
                     self._progress["updated_at"] = time.time()
@@ -456,16 +466,68 @@ class SimilarityIndex(_IndexCoreMixin, _VectorCacheMixin, _TopKMixin):
                             self.db.mark_image_unreadable(img_id, read_error or "Unreadable image")
                         continue
 
+                    before_fingerprint = _compute_embedding_content_fingerprint(resolved_path)
+                    if before_fingerprint is None:
+                        self._progress["processed"] += 1
+                        self._progress["errors"] += 1
+                        self._progress["skipped"] += 1
+                        self._record_issue(
+                            "skipped",
+                            img_id,
+                            img_path,
+                            "Image pixels could not be fingerprinted before embedding; rescan and retry",
+                        )
+                        continue
+
+                    if stored_content_fingerprint is not None:
+                        stored_fingerprint = str(stored_content_fingerprint).strip()
+                        if stored_fingerprint != before_fingerprint:
+                            self._progress["processed"] += 1
+                            self._progress["errors"] += 1
+                            self._progress["skipped"] += 1
+                            self._record_issue(
+                                "skipped",
+                                img_id,
+                                img_path,
+                                "Image pixels changed since the library index was updated; rescan and retry",
+                            )
+                            continue
+                    else:
+                        from services.derived_state_service import initialize_image_content_fingerprint
+
+                        with self.db.get_db() as conn:
+                            initialized = initialize_image_content_fingerprint(
+                                conn.cursor(),
+                                image_id=img_id,
+                                content_fingerprint=before_fingerprint,
+                            )
+                        if not initialized:
+                            self._progress["processed"] += 1
+                            self._progress["errors"] += 1
+                            self._progress["skipped"] += 1
+                            self._record_issue(
+                                "skipped",
+                                img_id,
+                                img_path,
+                                "Image fingerprint changed before embedding started; rescan and retry",
+                            )
+                            continue
+
                     embedding = embed_image_file(resolved_path, model=model)
                     self._progress["processed"] += 1
                     if embedding is not None:
-                        content_fingerprint = None
-                        try:
-                            content_fingerprint = compute_image_content_fingerprint(resolved_path)
-                        except Exception as exc:
-                            logger.warning("Could not compute content fingerprint for %s: %s", resolved_path, exc)
-                        updates.append((embedding_to_bytes(embedding), content_fingerprint, img_id))
-                        self._progress["embedded"] += 1
+                        after_fingerprint = _compute_embedding_content_fingerprint(resolved_path)
+                        if after_fingerprint != before_fingerprint:
+                            self._progress["errors"] += 1
+                            self._progress["skipped"] += 1
+                            self._record_issue(
+                                "skipped",
+                                img_id,
+                                img_path,
+                                "Image pixels changed while its embedding was being computed; rescan and retry",
+                            )
+                            continue
+                        updates.append((embedding_to_bytes(embedding), before_fingerprint, img_id, img_path))
                     else:
                         self._progress["errors"] += 1
                         self._progress["failed"] += 1
@@ -477,11 +539,30 @@ class SimilarityIndex(_IndexCoreMixin, _VectorCacheMixin, _TopKMixin):
 
                     with self.db.get_db() as conn:
                         cursor = conn.cursor()
-                        write_image_embeddings(cursor, updates)
+                        written_image_ids = set(
+                            write_image_embeddings(
+                                cursor,
+                                [(embedding, fingerprint, image_id) for embedding, fingerprint, image_id, _path in updates],
+                            )
+                        )
+
+                    for _embedding, _fingerprint, image_id, image_path in updates:
+                        if image_id in written_image_ids:
+                            self._progress["embedded"] += 1
+                            continue
+                        self._progress["errors"] += 1
+                        self._progress["skipped"] += 1
+                        self._record_issue(
+                            "skipped",
+                            image_id,
+                            image_path,
+                            "Image changed before its embedding could be saved; rescan and retry",
+                        )
 
                     # Embeddings changed → the vectorized search cache is stale.
                     # Drop it so the next search rebuilds from fresh vectors.
-                    self.invalidate_vector_cache()
+                    if written_image_ids:
+                        self.invalidate_vector_cache()
 
                 gc.collect()
 

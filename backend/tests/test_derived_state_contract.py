@@ -20,6 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import database as db
+import services.derived_state_service as derived_state_service
 from services.derived_state_service import (
     write_image_aesthetic_score,
     write_artist_predictions,
@@ -29,7 +30,8 @@ from services.derived_state_service import (
 
 
 DERIVED_IMAGE_UPDATE_RE = re.compile(
-    r"UPDATE\s+images\s+SET[\s\S]{0,900}?content_fingerprint[\s\S]{0,500}?WHERE\s+id\s*=\s*\?",
+    r"UPDATE\s+images\s+SET[\s\S]{0,900}?content_fingerprint[\s\S]{0,500}?"
+    r"WHERE\s+id\s*=\s*\?(?:\s+AND\s+content_fingerprint\s*(?:=\s*\?|IS\s+NULL))?",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -99,8 +101,12 @@ EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
     ): 1,
     (
         "services/derived_state_service.py",
-        "UPDATE images SET embedding = ?, content_fingerprint = COALESCE(?, content_fingerprint) "
-        "WHERE id = ?",
+        "UPDATE images SET embedding = ?, content_fingerprint = ? "
+        "WHERE id = ? AND content_fingerprint = ?",
+    ): 1,
+    (
+        "services/derived_state_service.py",
+        "UPDATE images SET content_fingerprint = ? WHERE id = ? AND content_fingerprint IS NULL",
     ): 1,
     (
         "services/derived_state_service.py",
@@ -283,7 +289,7 @@ def test_derived_writer_helpers_preserve_existing_fingerprint_when_unknown(test_
             aesthetic_score=7.25,
             content_fingerprint=None,
         )
-        write_image_embeddings(cursor, [(b"embedding-bytes", None, image_id)])
+        write_image_embeddings(cursor, [(b"embedding-bytes", "fingerprint-1", image_id)])
         write_image_content_fingerprint(
             cursor,
             image_id=image_id,
@@ -311,7 +317,7 @@ def test_derived_writer_helpers_advance_fingerprint_when_known(test_db):
             aesthetic_score=8.0,
             content_fingerprint="fingerprint-2",
         )
-        write_image_embeddings(cursor, [(b"embedding-v2", "fingerprint-3", image_id)])
+        write_image_embeddings(cursor, [(b"embedding-v2", "fingerprint-2", image_id)])
         write_image_content_fingerprint(
             cursor,
             image_id=image_id,
@@ -322,6 +328,50 @@ def test_derived_writer_helpers_advance_fingerprint_when_known(test_db):
     assert row["aesthetic_score"] == 8.0
     assert row["embedding"] == b"embedding-v2"
     assert row["content_fingerprint"] == "fingerprint-4"
+
+
+def test_embedding_writer_rejects_result_for_a_newer_content_fingerprint(test_db):
+    image_id = db.add_image(
+        path="/test/helper-stale-embedding.png",
+        filename="helper-stale-embedding.png",
+        content_fingerprint="fingerprint-2",
+    )
+
+    with db.get_db() as conn:
+        written_image_ids = write_image_embeddings(
+            conn.cursor(),
+            [(b"stale-embedding", "fingerprint-1", image_id)],
+        )
+
+    row = _derived_row(image_id)
+    assert written_image_ids == []
+    assert row["embedding"] is None
+    assert row["content_fingerprint"] == "fingerprint-2"
+
+
+def test_initialize_image_fingerprint_only_claims_an_empty_row(test_db):
+    image_id = db.add_image(
+        path="/test/helper-initialize-fingerprint.png",
+        filename="helper-initialize-fingerprint.png",
+    )
+
+    with db.get_db() as conn:
+        initialized = derived_state_service.initialize_image_content_fingerprint(
+            conn.cursor(),
+            image_id=image_id,
+            content_fingerprint="fingerprint-1",
+        )
+    with db.get_db() as conn:
+        rejected = derived_state_service.initialize_image_content_fingerprint(
+            conn.cursor(),
+            image_id=image_id,
+            content_fingerprint="fingerprint-2",
+        )
+
+    row = _derived_row(image_id)
+    assert initialized is True
+    assert rejected is False
+    assert row["content_fingerprint"] == "fingerprint-1"
 
 
 def test_artist_prediction_batch_helper_updates_predictions_and_fingerprint(test_db):
