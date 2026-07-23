@@ -156,7 +156,7 @@ function refreshLocalizedDynamicUi() {
         }
         renderModelSelectList();
     }
-    updateAestheticUi();
+    refreshAestheticUi();
     syncTaggerModelUi({ applyModelDefaults: false });
     window.Gallery?.refreshLocalizedContent?.();
 }

@@ -46,6 +46,16 @@ Object.assign(window.V321Integration, {
         });
         observer.observe(select, { childList: true });
 
+        const tagModal = document.getElementById('tag-modal');
+        if (tagModal) {
+            const modalObserver = new MutationObserver(() => {
+                if (tagModal.classList.contains('visible') && this.activeTaggerTab === 'aesthetic') {
+                    void this._refreshAestheticTab();
+                }
+            });
+            modalObserver.observe(tagModal, { attributes: true, attributeFilter: ['class'] });
+        }
+
         select.addEventListener('change', () => {
             if (this.activeTaggerTab === 'local') {
                 this.localModelPickerOpen = false;
@@ -103,10 +113,11 @@ Object.assign(window.V321Integration, {
             this._openTaggerSetup('aesthetic', 'tagger.routedFromTagger');
         });
 
-        // Aesthetic tab Start / Cancel — proxy to the legacy global buttons that
-        // the rest of app.js already wires up. We mirror their disabled / hidden
-        // state via a small observer.
-        document.getElementById('btn-tagger-aesthetic-start')?.addEventListener('click', () => {
+        // Aesthetic tab Start / Cancel proxy to the legacy global buttons while
+        // the shared task state keeps both control surfaces synchronized.
+        document.getElementById('btn-tagger-aesthetic-start')?.addEventListener('click', (event) => {
+            const startButton = event.currentTarget;
+            if (startButton.disabled) return;
             document.getElementById('btn-score-aesthetic')?.click();
         });
         document.getElementById('btn-tagger-aesthetic-cancel')?.addEventListener('click', () => {

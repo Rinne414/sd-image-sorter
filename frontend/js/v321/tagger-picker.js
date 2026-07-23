@@ -257,7 +257,7 @@ Object.assign(window.V321Integration, {
     },
 
 
-    /** Read aesthetic readiness from the live backend status endpoint. */
+    /** Read aesthetic readiness and active-task state from the shared publisher. */
     async _refreshAestheticTab() {
         const titleEl = document.getElementById('tagger-aesthetic-status-title');
         const setupBtn = document.getElementById('btn-tagger-aesthetic-setup');
@@ -275,18 +275,12 @@ Object.assign(window.V321Integration, {
         let isReady = false;
         let message = '';
         try {
-            const r = await fetch('/api/aesthetic/status', { cache: 'no-store' });
-            if (r.ok) {
-                const data = await r.json();
-                isReady = Boolean(data?.available);
-                message = data?.message || '';
-            }
+            const taskState = await refreshAestheticTaskState();
+            isReady = Boolean(taskState?.status?.available);
+            message = taskState?.status?.message || '';
         } catch (_e) {
             isReady = false;
         }
-
-        // Cache for other modules (e.g. gallery quick-score button).
-        try { window._aestheticStatus = { available: isReady, message }; } catch (_e) {}
 
         if (titleEl) {
             const key = isReady ? 'tagger.aestheticReady' : 'tagger.aestheticMissing';
@@ -297,7 +291,7 @@ Object.assign(window.V321Integration, {
             titleEl.textContent = (message && !isReady) ? message : i18n(key, fallback);
         }
         if (setupBtn) setupBtn.style.display = isReady ? 'none' : '';
-        if (startBtn) startBtn.disabled = !isReady;
+        if (startBtn && !isReady) startBtn.disabled = true;
     },
 
     /** v3.2.1 task #26: Color analysis tab — show counts and wire start/cancel. */

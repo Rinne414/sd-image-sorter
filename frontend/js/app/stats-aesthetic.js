@@ -123,54 +123,92 @@ async function loadStats() {
 }
 
 let _aestheticStatus = { available: false, message: '' };
+let _aestheticStatusGeneration = 0;
 let _aestheticProgressTimer = null;
+let _aestheticProgressGeneration = 0;
+let _aestheticStartRequestPending = false;
+let _aestheticUiState = {
+    running: false,
+    starting: false,
+    completed: 0,
+    total: 0,
+};
 
 function clearAestheticProgressTimer() {
+    _aestheticProgressGeneration += 1;
     if (_aestheticProgressTimer) {
         clearTimeout(_aestheticProgressTimer);
         _aestheticProgressTimer = null;
     }
 }
 
-function updateAestheticUi({ running = false, completed = 0, total = 0 } = {}) {
-    const button = $('#btn-score-aesthetic');
-    const cancelBtn = $('#btn-cancel-aesthetic');
+function normalizeAestheticUiState(state) {
+    return {
+        running: Boolean(state?.running),
+        starting: Boolean(state?.starting),
+        completed: Number(state?.completed || 0),
+        total: Number(state?.total || 0),
+    };
+}
+
+function renderAestheticUi(state) {
+    const startButtons = [
+        $('#btn-score-aesthetic'),
+        $('#btn-tagger-aesthetic-start'),
+    ].filter(Boolean);
+    const cancelButtons = [
+        $('#btn-cancel-aesthetic'),
+        $('#btn-tagger-aesthetic-cancel'),
+    ].filter(Boolean);
     const chip = $('#aesthetic-status-chip');
-    if (!button) return;
+    if (startButtons.length === 0) return;
 
     const t = (key, fallback, params) => {
         const translated = window.I18n?.t?.(key, params);
         return translated && translated !== key ? translated : (fallback || key);
     };
+    const busy = state.starting || state.running;
 
-    if (cancelBtn) cancelBtn.style.display = running ? '' : 'none';
+    for (const cancelButton of cancelButtons) {
+        cancelButton.style.display = state.running ? '' : 'none';
+        cancelButton.disabled = !state.running;
+    }
 
     if (!_aestheticStatus.available) {
-        button.disabled = true;
-        button.title = _aestheticStatus.message || t('gallery.aestheticUnavailable', 'Aesthetic scoring is unavailable');
-        button.setAttribute('aria-label', button.title);
-        if (cancelBtn) cancelBtn.style.display = 'none';
+        const unavailableTitle = _aestheticStatus.message || t('gallery.aestheticUnavailable', 'Aesthetic scoring is unavailable');
+        for (const startButton of startButtons) {
+            startButton.disabled = true;
+            startButton.title = unavailableTitle;
+            startButton.setAttribute('aria-label', unavailableTitle);
+        }
+        for (const cancelButton of cancelButtons) {
+            cancelButton.style.display = 'none';
+            cancelButton.disabled = true;
+        }
         if (chip) {
             chip.style.display = 'inline-flex';
             chip.className = 'tagger-aesthetic-status is-warning';
             chip.textContent = t('gallery.aestheticUnavailableShort', 'Aesthetic unavailable');
-            chip.title = button.title;
+            chip.title = unavailableTitle;
         }
         return;
     }
 
-    button.disabled = running;
-    button.title = running
+    const startTitle = busy
         ? t('gallery.aestheticRunning', 'Scoring aesthetics...')
         : t('gallery.scoreAesthetic', 'Score Aesthetic');
-    button.setAttribute('aria-label', button.title);
+    for (const startButton of startButtons) {
+        startButton.disabled = busy;
+        startButton.title = startTitle;
+        startButton.setAttribute('aria-label', startTitle);
+    }
 
-    if (running && chip) {
+    if (busy && chip) {
         chip.style.display = 'inline-flex';
         chip.className = 'tagger-aesthetic-status is-info';
         chip.textContent = t('gallery.aestheticProgress', '{completed}/{total} scored', {
-            completed,
-            total: Math.max(total, completed),
+            completed: state.completed,
+            total: Math.max(state.total, state.completed),
         });
         chip.title = chip.textContent;
     } else if (chip) {
@@ -181,23 +219,35 @@ function updateAestheticUi({ running = false, completed = 0, total = 0 } = {}) {
     }
 }
 
-async function refreshAestheticStatus() {
+function updateAestheticUi(nextState) {
+    _aestheticUiState = normalizeAestheticUiState(nextState);
+    renderAestheticUi(_aestheticUiState);
+}
+
+function refreshAestheticUi() {
+    renderAestheticUi(_aestheticUiState);
+}
+
+async function readAestheticStatus() {
     try {
         const status = await API.getAestheticStatus();
-        _aestheticStatus = {
+        return {
             available: Boolean(status?.available),
             message: status?.message || '',
             scored_count: Number(status?.scored_count || 0),
         };
     } catch (error) {
-        _aestheticStatus = {
+        return {
             available: false,
             message: formatUserError(error, appT('gallery.aestheticStatusFailed', 'Could not check aesthetic scoring status')),
             scored_count: 0,
         };
     }
+}
 
-    updateAestheticUi();
+function publishAestheticStatus(status) {
+    _aestheticStatus = { ...status };
+    refreshAestheticUi();
 
     // Update sort dropdown option availability
     const sortDropdown = $('#gallery-sort');
@@ -217,17 +267,78 @@ async function refreshAestheticStatus() {
             }
         }
     }
+    return { ..._aestheticStatus };
+}
+
+async function refreshAestheticStatus() {
+    _aestheticStatusGeneration += 1;
+    const requestGeneration = _aestheticStatusGeneration;
+    const status = await readAestheticStatus();
+    if (requestGeneration !== _aestheticStatusGeneration) {
+        return { ..._aestheticStatus };
+    }
+    return publishAestheticStatus(status);
+}
+
+async function refreshAestheticTaskState() {
+    clearAestheticProgressTimer();
+    const progressGeneration = _aestheticProgressGeneration;
+    _aestheticStatusGeneration += 1;
+    const statusGeneration = _aestheticStatusGeneration;
+    const nextStatus = await readAestheticStatus();
+    if (
+        progressGeneration !== _aestheticProgressGeneration
+        || statusGeneration !== _aestheticStatusGeneration
+    ) {
+        return { status: { ..._aestheticStatus }, progress: null };
+    }
+    const status = publishAestheticStatus(nextStatus);
+    if (!status.available) {
+        return { status, progress: null };
+    }
+
+    try {
+        const rawProgress = await API.getAestheticProgress();
+        if (progressGeneration !== _aestheticProgressGeneration) {
+            return { status, progress: null };
+        }
+        const running = Boolean(rawProgress?.running);
+        const progress = {
+            running,
+            starting: !running && _aestheticUiState.starting,
+            completed: Number(rawProgress?.completed || 0),
+            total: Number(rawProgress?.total || 0),
+        };
+        updateAestheticUi(progress);
+        if (progress.running) {
+            _aestheticProgressTimer = setTimeout(pollAestheticProgress, 1200);
+        }
+        return { status, progress };
+    } catch (error) {
+        if (progressGeneration !== _aestheticProgressGeneration) {
+            return { status, progress: null };
+        }
+        _aestheticStatus = {
+            available: false,
+            message: formatUserError(error, appT('gallery.aestheticProgressFailed', 'Failed to read aesthetic progress')),
+            scored_count: status.scored_count,
+        };
+        updateAestheticUi({ running: false, starting: false, completed: 0, total: 0 });
+        return { status: { ..._aestheticStatus }, progress: null };
+    }
 }
 
 async function pollAestheticProgress() {
     clearAestheticProgressTimer();
+    const requestGeneration = _aestheticProgressGeneration;
     try {
         const progress = await API.getAestheticProgress();
+        if (requestGeneration !== _aestheticProgressGeneration) return;
         const running = Boolean(progress?.running);
         const completed = Number(progress?.completed || 0);
         const total = Number(progress?.total || 0);
 
-        updateAestheticUi({ running, completed, total });
+        updateAestheticUi({ running, starting: false, completed, total });
 
         if (running) {
             _aestheticProgressTimer = setTimeout(pollAestheticProgress, 1200);
@@ -263,35 +374,46 @@ async function pollAestheticProgress() {
             await loadStats();
         }
     } catch (error) {
-        updateAestheticUi({ running: false });
+        if (requestGeneration !== _aestheticProgressGeneration) return;
+        updateAestheticUi({ running: false, starting: false, completed: 0, total: 0 });
         showToast(formatUserError(error, appT('gallery.aestheticProgressFailed', 'Failed to read aesthetic progress')), 'error');
     }
 }
 
 async function startAestheticScoring(force = false) {
+    if (_aestheticStartRequestPending) return;
     if (!_aestheticStatus.available) {
+        updateAestheticUi({ running: false, starting: false, completed: 0, total: 0 });
         showToast(_aestheticStatus.message || appT('gallery.aestheticUnavailable', 'Aesthetic scoring is unavailable'), 'warning');
         return;
     }
 
+    _aestheticStartRequestPending = true;
+    updateAestheticUi({ running: false, starting: true, completed: 0, total: 0 });
+    let result;
     try {
-        const result = await API.startAestheticScoring(force);
-        const status = String(result?.status || 'started');
-        const total = Number(result?.total || 0);
-        if (status === 'started' && total === 0) {
-            updateAestheticUi({ running: false, completed: 0, total: 0 });
-            showToast(appT('gallery.aestheticNothingToScore', 'All current images already have aesthetic scores.'), 'info');
-            return;
-        }
-        if (status === 'started' || status === 'already_running') {
-            updateAestheticUi({ running: true, completed: 0, total });
-            if (status === 'started') {
-                showToast(appT('gallery.aestheticStarted', 'Aesthetic scoring started in the background.'), 'info');
-            }
-            await pollAestheticProgress();
-        }
+        result = await API.startAestheticScoring(force);
     } catch (error) {
+        updateAestheticUi({ running: false, starting: false, completed: 0, total: 0 });
         showToast(formatUserError(error, appT('gallery.aestheticStartFailed', 'Failed to start aesthetic scoring')), 'error');
+        return;
+    } finally {
+        _aestheticStartRequestPending = false;
+    }
+
+    const status = String(result?.status || 'started');
+    const total = Number(result?.total || 0);
+    if (status === 'started' && total === 0) {
+        updateAestheticUi({ running: false, starting: false, completed: 0, total: 0 });
+        showToast(appT('gallery.aestheticNothingToScore', 'All current images already have aesthetic scores.'), 'info');
+        return;
+    }
+    if (status === 'started' || status === 'already_running') {
+        updateAestheticUi({ running: true, starting: false, completed: 0, total });
+        if (status === 'started') {
+            showToast(appT('gallery.aestheticStarted', 'Aesthetic scoring started in the background.'), 'info');
+        }
+        await pollAestheticProgress();
     }
 }
 

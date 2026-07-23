@@ -48,6 +48,7 @@ function initBootListenersShell() {
     // Tag button
     $('#btn-tag').addEventListener('click', () => showModal('tag-modal'));
     $('#btn-score-aesthetic')?.addEventListener('click', async () => {
+        updateAestheticUi({ running: false, starting: true, completed: 0, total: 0 });
         await refreshAestheticStatus();
         await startAestheticScoring(false);
     });

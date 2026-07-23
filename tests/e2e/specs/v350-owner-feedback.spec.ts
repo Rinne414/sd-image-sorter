@@ -19,6 +19,536 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
+test('visible Aesthetic controls follow the active task across start, cancel, and reopen', async ({ page }) => {
+  let aestheticAvailable = true
+  let failNextAestheticStart = false
+  let aestheticRunning = false
+  let startRequests = 0
+  let cancelRequests = 0
+  let progressRequests = 0
+  let holdNextStatus = false
+  let holdNextStatusRaceProgress = false
+  let holdNextRunningProgress = false
+  let holdNextProgress = false
+  let releaseStartResponse!: () => void
+  let releaseHeldProgress!: () => void
+  let signalHeldProgressStarted!: () => void
+  let releaseHeldStatus!: () => void
+  let signalHeldStatusStarted!: () => void
+  let releaseStatusRaceProgress!: () => void
+  let signalStatusRaceProgressStarted!: () => void
+  let releaseReorderedProgress!: () => void
+  let signalReorderedProgressStarted!: () => void
+  const startResponseGate = new Promise<void>((resolve) => {
+    releaseStartResponse = resolve
+  })
+  const heldProgressGate = new Promise<void>((resolve) => {
+    releaseHeldProgress = resolve
+  })
+  const heldProgressStarted = new Promise<void>((resolve) => {
+    signalHeldProgressStarted = resolve
+  })
+  const heldStatusGate = new Promise<void>((resolve) => {
+    releaseHeldStatus = resolve
+  })
+  const heldStatusStarted = new Promise<void>((resolve) => {
+    signalHeldStatusStarted = resolve
+  })
+  const statusRaceProgressGate = new Promise<void>((resolve) => {
+    releaseStatusRaceProgress = resolve
+  })
+  const statusRaceProgressStarted = new Promise<void>((resolve) => {
+    signalStatusRaceProgressStarted = resolve
+  })
+  const reorderedProgressGate = new Promise<void>((resolve) => {
+    releaseReorderedProgress = resolve
+  })
+  const reorderedProgressStarted = new Promise<void>((resolve) => {
+    signalReorderedProgressStarted = resolve
+  })
+  const consoleProblems: string[] = []
+  const requestProblems: string[] = []
+
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning') {
+      consoleProblems.push(`${message.type()}: ${message.text()}`)
+    }
+  })
+  page.on('requestfailed', (request) => {
+    requestProblems.push(`${request.method()} ${request.url()} ${request.failure()?.errorText || ''}`.trim())
+  })
+  page.on('response', (response) => {
+    if (response.status() >= 400) {
+      requestProblems.push(`${response.status()} ${response.request().method()} ${response.url()}`)
+    }
+  })
+
+  await page.route('**/api/aesthetic/status', async (route) => {
+    const available = aestheticAvailable
+    if (holdNextStatus) {
+      holdNextStatus = false
+      signalHeldStatusStarted()
+      await heldStatusGate
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        available,
+        message: available ? null : 'Aesthetic runtime unavailable',
+        scored_count: 0,
+      }),
+    })
+  })
+  await page.route('**/api/aesthetic/progress', async (route) => {
+    progressRequests += 1
+    const running = aestheticRunning
+    if (holdNextRunningProgress && running) {
+      holdNextRunningProgress = false
+      signalHeldProgressStarted()
+      await heldProgressGate
+    }
+    if (holdNextProgress) {
+      holdNextProgress = false
+      signalReorderedProgressStarted()
+      await reorderedProgressGate
+    }
+    if (holdNextStatusRaceProgress) {
+      holdNextStatusRaceProgress = false
+      signalStatusRaceProgressStarted()
+      await statusRaceProgressGate
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        running,
+        total: running ? 8 : 0,
+        completed: running ? 2 : 0,
+        errors: 0,
+        error: null,
+      }),
+    })
+  })
+  await page.route('**/api/aesthetic/score-all**', async (route) => {
+    startRequests += 1
+    if (failNextAestheticStart) {
+      failNextAestheticStart = false
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'Aesthetic runtime failed to start' }),
+      })
+      return
+    }
+    await startResponseGate
+    aestheticRunning = true
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ status: 'started', total: 8 }),
+    })
+  })
+  await page.route('**/api/aesthetic/cancel', async (route) => {
+    cancelRequests += 1
+    aestheticRunning = false
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ status: 'cancelled' }),
+    })
+  })
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('#view-gallery')).toBeVisible()
+  await page.locator('#btn-tag').click()
+  await expect(page.locator('#tag-modal.visible')).toBeVisible()
+  await page.locator('#tag-modal .tagger-tab[data-tagger-tab="aesthetic"]').click()
+
+  const visibleStart = page.locator('#btn-tagger-aesthetic-start')
+  const visibleStop = page.locator('#btn-tagger-aesthetic-cancel')
+  await expect(visibleStart).toBeEnabled()
+  await expect(visibleStop).toBeHidden()
+
+  const firstStartResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'POST'
+      && url.pathname === '/api/aesthetic/score-all'
+      && response.status() === 200
+  })
+  await visibleStart.click()
+  await expect.poll(() => startRequests).toBe(1)
+  await expect.poll(async () => await visibleStart.getAttribute('class')).not.toContain('is-busy')
+  const inFlightControls = await page.evaluate(() => {
+    const start = document.getElementById('btn-tagger-aesthetic-start') as HTMLButtonElement | null
+    const stop = document.getElementById('btn-tagger-aesthetic-cancel') as HTMLButtonElement | null
+    if (!start || !stop) throw new Error('Visible Aesthetic controls are missing')
+    return {
+      startDisabled: start.disabled,
+      stopDisabled: stop.disabled,
+      stopVisible: stop.getClientRects().length > 0,
+    }
+  })
+  expect.soft(inFlightControls).toEqual({
+    startDisabled: true,
+    stopDisabled: true,
+    stopVisible: false,
+  })
+
+  const pendingTabProgressResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'GET'
+      && url.pathname === '/api/aesthetic/progress'
+      && response.status() === 200
+  })
+  await page.locator('#tag-modal .tagger-tab[data-tagger-tab="local"]').click()
+  await page.locator('#tag-modal .tagger-tab[data-tagger-tab="aesthetic"]').click()
+  await pendingTabProgressResponse
+  const pendingAfterTabSwitch = await page.evaluate(() => {
+    const start = document.getElementById('btn-tagger-aesthetic-start') as HTMLButtonElement
+    const stop = document.getElementById('btn-tagger-aesthetic-cancel') as HTMLButtonElement
+    return {
+      startDisabled: start.disabled,
+      stopDisabled: stop.disabled,
+      stopVisible: stop.getClientRects().length > 0,
+    }
+  })
+  expect.soft(pendingAfterTabSwitch).toEqual({
+    startDisabled: true,
+    stopDisabled: true,
+    stopVisible: false,
+  })
+
+  await page.locator('#btn-cancel-aesthetic-tab').click()
+  await expect(page.locator('#tag-modal.visible')).toHaveCount(0)
+  const pendingReopenProgressResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'GET'
+      && url.pathname === '/api/aesthetic/progress'
+      && response.status() === 200
+  })
+  await page.locator('#btn-tag').click()
+  await pendingReopenProgressResponse
+  await expect(page.locator('#tag-modal.visible')).toBeVisible()
+  const pendingAfterReopen = await page.evaluate(() => {
+    const start = document.getElementById('btn-tagger-aesthetic-start') as HTMLButtonElement
+    const stop = document.getElementById('btn-tagger-aesthetic-cancel') as HTMLButtonElement
+    return {
+      startDisabled: start.disabled,
+      stopDisabled: stop.disabled,
+      stopVisible: stop.getClientRects().length > 0,
+    }
+  })
+  expect.soft(pendingAfterReopen).toEqual({
+    startDisabled: true,
+    stopDisabled: true,
+    stopVisible: false,
+  })
+
+  await page.evaluate(() => {
+    document.getElementById('btn-tagger-aesthetic-start')?.click()
+    return new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    })
+  })
+  const inFlightStartRequests = startRequests
+  holdNextRunningProgress = true
+  releaseStartResponse()
+  await firstStartResponse
+  await heldProgressStarted
+  expect(inFlightStartRequests).toBe(1)
+  expect(startRequests).toBe(1)
+  await expect(visibleStart).toBeDisabled()
+  await expect(visibleStop).toBeVisible()
+
+  const afterLanguageRefresh = await page.evaluate(() => {
+    ;(window as any).I18n.setLang('en')
+    const start = document.getElementById('btn-tagger-aesthetic-start') as HTMLButtonElement
+    const stop = document.getElementById('btn-tagger-aesthetic-cancel') as HTMLButtonElement
+    return { startDisabled: start.disabled, stopVisible: stop.getClientRects().length > 0 }
+  })
+  expect(afterLanguageRefresh).toEqual({ startDisabled: true, stopVisible: true })
+
+  const afterReadinessRefresh = await page.evaluate(async () => {
+    await (window as any).App.refreshAestheticStatus()
+    const start = document.getElementById('btn-tagger-aesthetic-start') as HTMLButtonElement
+    const stop = document.getElementById('btn-tagger-aesthetic-cancel') as HTMLButtonElement
+    return { startDisabled: start.disabled, stopVisible: stop.getClientRects().length > 0 }
+  })
+  expect(afterReadinessRefresh).toEqual({ startDisabled: true, stopVisible: true })
+
+  const cancelResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'POST'
+      && url.pathname === '/api/aesthetic/cancel'
+      && response.status() === 200
+  })
+  await page.evaluate(() => document.getElementById('btn-tagger-aesthetic-cancel')?.click())
+  await cancelResponse
+  expect(cancelRequests).toBe(1)
+  await expect(visibleStart).toBeEnabled()
+  await expect(visibleStop).toBeHidden()
+
+  const restartResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'POST'
+      && url.pathname === '/api/aesthetic/score-all'
+      && response.status() === 200
+  })
+  await visibleStart.click()
+  await restartResponse
+  expect(startRequests).toBe(2)
+  await expect(visibleStart).toBeDisabled()
+  await expect(visibleStop).toBeVisible()
+
+  const restartCancelResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'POST'
+      && url.pathname === '/api/aesthetic/cancel'
+      && response.status() === 200
+  })
+  await visibleStop.click()
+  await restartCancelResponse
+  expect(cancelRequests).toBe(2)
+  await expect(visibleStart).toBeEnabled()
+  await expect(visibleStop).toBeHidden()
+
+  const staleProgressResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'GET'
+      && url.pathname === '/api/aesthetic/progress'
+      && response.status() === 200
+  })
+  releaseHeldProgress()
+  await staleProgressResponse
+  const afterStaleProgress = await page.evaluate(() => new Promise<{
+    startDisabled: boolean
+    stopDisabled: boolean
+    stopVisible: boolean
+  }>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const start = document.getElementById('btn-tagger-aesthetic-start') as HTMLButtonElement
+      const stop = document.getElementById('btn-tagger-aesthetic-cancel') as HTMLButtonElement
+      resolve({
+        startDisabled: start.disabled,
+        stopDisabled: stop.disabled,
+        stopVisible: stop.getClientRects().length > 0,
+      })
+    }))
+  }))
+  expect.soft(afterStaleProgress).toEqual({
+    startDisabled: false,
+    stopDisabled: true,
+    stopVisible: false,
+  })
+
+  aestheticRunning = true
+  holdNextStatusRaceProgress = true
+  await page.locator('#tag-modal .tagger-tab[data-tagger-tab="local"]').click()
+  await page.locator('#tag-modal .tagger-tab[data-tagger-tab="aesthetic"]').click()
+  await statusRaceProgressStarted
+  await page.evaluate(async () => {
+    await (window as any).App.refreshAestheticStatus()
+  })
+  const statusRaceProgressResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'GET'
+      && url.pathname === '/api/aesthetic/progress'
+      && response.status() === 200
+  })
+  releaseStatusRaceProgress()
+  await statusRaceProgressResponse
+  await expect(visibleStart).toBeDisabled()
+  await expect(visibleStop).toBeVisible()
+
+  const statusRaceCancelResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'POST'
+      && url.pathname === '/api/aesthetic/cancel'
+      && response.status() === 200
+  })
+  await visibleStop.click()
+  await statusRaceCancelResponse
+  await expect(visibleStart).toBeEnabled()
+  await expect(visibleStop).toBeHidden()
+
+  aestheticRunning = false
+  holdNextProgress = true
+  const staleFalseProgressStarted = reorderedProgressStarted
+  await page.locator('#tag-modal .tagger-tab[data-tagger-tab="local"]').click()
+  await page.locator('#tag-modal .tagger-tab[data-tagger-tab="aesthetic"]').click()
+  await staleFalseProgressStarted
+  aestheticRunning = true
+  const freshRunningProgressResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'GET'
+      && url.pathname === '/api/aesthetic/progress'
+      && response.status() === 200
+  })
+  await page.locator('#tag-modal .tagger-tab[data-tagger-tab="local"]').click()
+  await page.locator('#tag-modal .tagger-tab[data-tagger-tab="aesthetic"]').click()
+  await freshRunningProgressResponse
+
+  aestheticAvailable = false
+  holdNextStatus = true
+  const staleStatusRequest = page.evaluate(async () => {
+    await (window as any).App.refreshAestheticStatus()
+  })
+  await heldStatusStarted
+  aestheticAvailable = true
+  const freshStatusProgressResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'GET'
+      && url.pathname === '/api/aesthetic/progress'
+      && response.status() === 200
+  })
+  await page.locator('#tag-modal .tagger-tab[data-tagger-tab="local"]').click()
+  await page.locator('#tag-modal .tagger-tab[data-tagger-tab="aesthetic"]').click()
+  await freshStatusProgressResponse
+  releaseHeldStatus()
+  await staleStatusRequest
+  const afterStaleStatus = await page.evaluate(() => {
+    const start = document.getElementById('btn-tagger-aesthetic-start') as HTMLButtonElement
+    const stop = document.getElementById('btn-tagger-aesthetic-cancel') as HTMLButtonElement
+    return { startDisabled: start.disabled, stopVisible: stop.getClientRects().length > 0 }
+  })
+  expect.soft(afterStaleStatus).toEqual({ startDisabled: true, stopVisible: true })
+  await page.evaluate(async () => {
+    await (window as any).App.refreshAestheticStatus()
+  })
+
+  const staleFalseResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'GET'
+      && url.pathname === '/api/aesthetic/progress'
+      && response.status() === 200
+  })
+  releaseReorderedProgress()
+  await staleFalseResponse
+  await expect(visibleStart).toBeDisabled()
+  await expect(visibleStop).toBeVisible()
+
+  const reorderCancelResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'POST'
+      && url.pathname === '/api/aesthetic/cancel'
+      && response.status() === 200
+  })
+  await visibleStop.click()
+  await reorderCancelResponse
+  await expect(visibleStart).toBeEnabled()
+  await expect(visibleStop).toBeHidden()
+
+  aestheticAvailable = false
+  const unavailableStatusResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'GET'
+      && url.pathname === '/api/aesthetic/status'
+      && response.status() === 200
+  })
+  await visibleStart.click()
+  await unavailableStatusResponse
+  await expect(visibleStart).toBeDisabled()
+  aestheticAvailable = true
+  await page.evaluate(async () => {
+    await (window as any).App.refreshAestheticStatus()
+  })
+  await expect(visibleStart).toBeEnabled()
+  await expect(visibleStop).toBeHidden()
+
+  failNextAestheticStart = true
+  const failedStartResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'POST'
+      && url.pathname === '/api/aesthetic/score-all'
+      && response.status() === 503
+  })
+  await visibleStart.click()
+  await failedStartResponse
+  await expect(visibleStart).toBeEnabled()
+  await expect(visibleStop).toBeHidden()
+  await expect(page.locator('#toast-container .toast.error .toast-message').last())
+    .toContainText('Aesthetic runtime failed to start')
+  expect(startRequests).toBe(3)
+
+  await page.locator('#btn-cancel-aesthetic-tab').click()
+  await expect(page.locator('#tag-modal.visible')).toHaveCount(0)
+  aestheticRunning = true
+  const reopenProgressResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'GET'
+      && url.pathname === '/api/aesthetic/progress'
+      && response.status() === 200
+  })
+  await page.locator('#btn-tag').click()
+  await reopenProgressResponse
+  await expect(page.locator('#tag-modal.visible')).toBeVisible()
+  await expect(visibleStart).toBeDisabled()
+  await expect(visibleStop).toBeVisible()
+  expect(startRequests).toBe(3)
+
+  await page.locator('#tag-modal .tagger-tab[data-tagger-tab="local"]').click()
+  const returnProgressRequests = progressRequests
+  const returnProgressResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'GET'
+      && url.pathname === '/api/aesthetic/progress'
+      && response.status() === 200
+  })
+  await page.locator('#tag-modal .tagger-tab[data-tagger-tab="aesthetic"]').click()
+  await returnProgressResponse
+  expect(progressRequests).toBeGreaterThan(returnProgressRequests)
+  await expect(visibleStart).toBeDisabled()
+  await expect(visibleStop).toBeVisible()
+
+  for (const viewport of [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+  ]) {
+    await page.setViewportSize(viewport)
+    const geometry = await page.locator('#tagger-aesthetic-panel').evaluate((panel) => {
+      const panelBox = panel.getBoundingClientRect()
+      const modal = panel.closest<HTMLElement>('.modal-content')
+      const start = document.getElementById('btn-tagger-aesthetic-start')
+      const stop = document.getElementById('btn-tagger-aesthetic-cancel')
+      if (!modal || !start || !stop) throw new Error('Visible Aesthetic controls are missing')
+      const modalBox = modal.getBoundingClientRect()
+      const startBox = start.getBoundingClientRect()
+      const stopBox = stop.getBoundingClientRect()
+      return {
+        horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        panelInsideModal: panelBox.left >= modalBox.left - 1 && panelBox.right <= modalBox.right + 1,
+        startInsidePanel: startBox.left >= panelBox.left - 1 && startBox.right <= panelBox.right + 1,
+        stopInsidePanel: stopBox.left >= panelBox.left - 1 && stopBox.right <= panelBox.right + 1,
+        controlsDoNotOverlap: startBox.right <= stopBox.left || stopBox.right <= startBox.left,
+      }
+    })
+    expect(geometry).toEqual({
+      horizontalOverflow: 0,
+      panelInsideModal: true,
+      startInsidePanel: true,
+      stopInsidePanel: true,
+      controlsDoNotOverlap: true,
+    })
+  }
+
+  aestheticAvailable = false
+  aestheticRunning = false
+  await page.locator('#tag-modal .tagger-tab[data-tagger-tab="local"]').click()
+  await page.locator('#tag-modal .tagger-tab[data-tagger-tab="aesthetic"]').click()
+  await expect(visibleStart).toBeDisabled()
+  await expect(visibleStop).toBeHidden()
+  expect(startRequests).toBe(3)
+  expect(cancelRequests).toBe(4)
+  expect(consoleProblems.filter((problem) => problem !==
+    'error: Failed to load resource: the server responded with a status of 503 (Service Unavailable)'
+  )).toEqual([])
+  expect(requestProblems.filter((problem) => !(
+    problem.includes('503 POST') && problem.includes('/api/aesthetic/score-all')
+  ))).toEqual([])
+})
+
 test('search help rows re-render in English after switching language', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('#view-gallery')).toBeVisible()
