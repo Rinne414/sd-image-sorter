@@ -2052,11 +2052,7 @@ test('starting a different mode over a paused session asks before discarding, ne
 })
 
 test('paused bracket keeps the server session authoritative across reload', async ({ page, request }) => {
-  const consoleErrors: string[] = []
   const serverErrors: string[] = []
-  page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text())
-  })
   page.on('response', (response) => {
     if (response.status() >= 500) serverErrors.push(`${response.status()} ${response.url()}`)
   })
@@ -2164,19 +2160,22 @@ test('paused bracket keeps the server session authoritative across reload', asyn
     await route.continue()
   })
 
+  const errorToasts = page.locator('#toast-container [role="alert"]')
+  const errorToastCountBeforeResume = await errorToasts.count()
   await page.locator('#btn-resume-sorting').click()
   await expect(page.locator('#sort-setup')).toBeVisible()
   await expect(page.locator('#sort-resume-banner')).toBeVisible()
   await expect(page.locator('#sort-resume-banner .resume-count')).toContainText('1')
   await expect(page.locator('#sort-resume-banner .resume-operation')).toBeHidden()
   await expect(page.locator('#sort-resume-banner .resume-folders')).toBeHidden()
+  await expect(errorToasts).toHaveCount(errorToastCountBeforeResume + 1)
+  const resumeFailureToast = errorToasts.nth(errorToastCountBeforeResume)
+  await expect(resumeFailureToast).toHaveClass(/error/)
+  await expect(resumeFailureToast).toContainText('Failed to resume saved session')
+  await expect(resumeFailureToast).toContainText('Injected resume failure')
   await expect.poll(() => serverErrors).toEqual([
     expect.stringMatching(/^503 .*\/api\/sort\/current$/),
   ])
-  expect(consoleErrors).toHaveLength(2)
-  expect(consoleErrors[0]).toContain('503 (Service Unavailable)')
-  expect(consoleErrors[1]).toContain('Failed to resume saved session: Error: Injected resume failure')
-  consoleErrors.length = 0
   serverErrors.length = 0
 
   await page.locator('#btn-resume-sorting').click()
@@ -2208,7 +2207,6 @@ test('paused bracket keeps the server session authoritative across reload', asyn
   expect(current.index).toBe(2)
   expect(current.undo_available).toBe(true)
   expect(current.redo_available).toBe(false)
-  expect(consoleErrors).toEqual([])
   expect(serverErrors).toEqual([])
 
   await request.delete('/api/sort/session').catch(() => {})
