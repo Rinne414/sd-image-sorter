@@ -407,6 +407,52 @@ class TestReadabilityAndDerivedState:
         assert row["content_fingerprint"] is None
         assert _tag_count(image_id) == 0
 
+    def test_mark_image_unreadable_by_path_clears_every_equivalent_row(self, test_db):
+        stored_paths = (
+            r"C:\Library\Bad.png",
+            "/mnt/c/Library/Bad.png",
+        )
+        unrelated_path = "/mnt/c/Library/Other.png"
+        with db.get_db() as conn:
+            conn.executemany(
+                "INSERT INTO images (path, filename) VALUES (?, ?)",
+                [
+                    *[(path, "Bad.png") for path in stored_paths],
+                    (unrelated_path, "Other.png"),
+                ],
+            )
+            image_ids_by_path = {
+                str(row["path"]): int(row["id"])
+                for row in conn.execute(
+                    "SELECT id, path FROM images ORDER BY id"
+                ).fetchall()
+            }
+
+        for image_id in image_ids_by_path.values():
+            self._seed_derived(image_id)
+
+        db.mark_image_unreadable_by_path(
+            r"c:\library\BAD.png",
+            "File not found on disk",
+        )
+
+        for path in stored_paths:
+            image_id = image_ids_by_path[path]
+            row = _row(image_id)
+            assert row["is_readable"] == 0
+            assert row["read_error"] == "File not found on disk"
+            assert row["metadata_status"] == "error"
+            assert row["tagged_at"] is None
+            assert row["content_fingerprint"] is None
+            assert _tag_count(image_id) == 0
+
+        unrelated_id = image_ids_by_path[unrelated_path]
+        unrelated_row = _row(unrelated_id)
+        assert unrelated_row["is_readable"] == 1
+        assert unrelated_row["tagged_at"] is not None
+        assert unrelated_row["content_fingerprint"] == "fp-1"
+        assert _tag_count(unrelated_id) == 1
+
     def test_mark_image_readable_restores_complete_flags(self, test_db):
         _add("/w/heal.png")
         image_id = db.get_image_by_path("/w/heal.png")["id"]

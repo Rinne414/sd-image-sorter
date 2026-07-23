@@ -70,18 +70,21 @@ def test_normalize_indexed_image_path_unifies_unc_separators():
 
 def test_build_indexed_image_lookup_candidates_include_windows_path_variants():
     candidates = build_indexed_image_lookup_candidates(r"l:/Tencent Files\foo/bar.png")
+    reverse_candidates = build_indexed_image_lookup_candidates(
+        "/mnt/l/Tencent Files/foo/bar.png"
+    )
 
     assert r"L:\Tencent Files\foo\bar.png" in candidates
-    if os.name != "nt":
-        assert "/mnt/l/Tencent Files/foo/bar.png" in candidates
+    assert "/mnt/l/Tencent Files/foo/bar.png" in candidates
+    assert r"L:\Tencent Files\foo\bar.png" in reverse_candidates
+    assert "/mnt/l/Tencent Files/foo/bar.png" in reverse_candidates
 
 
 def test_build_indexed_folder_scope_query_patterns_include_cross_runtime_prefixes():
     patterns = build_indexed_folder_scope_query_patterns(r"l:/Tencent Files\foo")
 
     assert (r"L:\Tencent Files\foo", "L:\\Tencent Files\\foo\\") in patterns
-    if os.name != "nt":
-        assert ("/mnt/l/Tencent Files/foo", "/mnt/l/Tencent Files/foo/") in patterns
+    assert ("/mnt/l/Tencent Files/foo", "/mnt/l/Tencent Files/foo/") in patterns
 
 
 def test_is_indexed_image_path_in_folder_scope_distinguishes_recursive_and_direct_children():

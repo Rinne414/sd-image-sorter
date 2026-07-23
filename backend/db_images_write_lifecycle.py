@@ -241,12 +241,24 @@ def mark_image_unreadable_by_path(path: str, read_error: Optional[str]) -> None:
     with get_db() as conn:
         cursor = conn.cursor()
         clause, params = _path_query_match_clause(candidates)
-        row = cursor.execute(
-            f"SELECT id FROM images WHERE {clause} LIMIT 1",
-            params,
-        ).fetchone()
-        if row:
-            _clear_image_derived_state(cursor, row["id"])
+        last_image_id = 0
+        batch_size = 500
+        while True:
+            rows = cursor.execute(
+                f"""
+                SELECT id
+                FROM images
+                WHERE ({clause}) AND id > ?
+                ORDER BY id
+                LIMIT ?
+                """,
+                [*params, last_image_id, batch_size],
+            ).fetchall()
+            if not rows:
+                break
+            for row in rows:
+                _clear_image_derived_state(cursor, row["id"])
+            last_image_id = int(rows[-1]["id"])
         cursor.execute(
             f"""
             UPDATE images

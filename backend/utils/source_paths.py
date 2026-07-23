@@ -6,7 +6,7 @@ import re
 from pathlib import PurePosixPath, PureWindowsPath
 from typing import List, Optional, Tuple
 
-from utils.path_validation import normalize_user_path, translate_windows_drive_path_to_posix
+from utils.path_validation import normalize_user_path
 
 
 WINDOWS_DRIVE_PATH_RE = re.compile(r"^[A-Za-z]:(?:[\\/]|$)")
@@ -71,6 +71,20 @@ def translate_posix_mnt_path_to_windows_drive(raw_path: str) -> Optional[str]:
     remainder = match.group(2) or ""
     parts = [part for part in remainder.split("/") if part]
     return str(PureWindowsPath(f"{drive}:\\", *parts))
+
+
+def _translate_windows_drive_path_to_posix_indexed(raw_path: str) -> Optional[str]:
+    """Translate an indexed Windows drive path without consulting the host OS."""
+    text = str(raw_path or "").strip()
+    if not WINDOWS_DRIVE_PATH_RE.match(text):
+        return None
+
+    windows_path = PureWindowsPath(text)
+    drive = windows_path.drive.rstrip(":")
+    if len(drive) != 1 or not drive.isalpha():
+        return None
+
+    return str(PurePosixPath("/mnt", drive.lower(), *windows_path.parts[1:]))
 
 
 def normalize_indexed_image_path(path: Optional[str]) -> str:
@@ -187,7 +201,7 @@ def build_indexed_image_lookup_candidates(primary_path: str) -> List[str]:
 
     add(normalized_primary)
 
-    translated_posix = translate_windows_drive_path_to_posix(normalized_primary)
+    translated_posix = _translate_windows_drive_path_to_posix_indexed(normalized_primary)
     if translated_posix:
         add(translated_posix)
 
