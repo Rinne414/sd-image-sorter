@@ -676,7 +676,16 @@ test('loadDiagnostics renders a plain ready banner when available and a warning 
 // 11. refreshAvailabilityState / syncSelectionActionState — button gating machine.
 // ---------------------------------------------------------------------------
 
-test('the run buttons are gated on availability, in-flight state, and (for Identify Selected) the gallery selection', async ({ page }) => {
+test('run and clear buttons are gated on availability, in-flight state, and gallery selection', async ({ page }) => {
+  const consoleErrors: string[] = []
+  const failedResponses: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+  page.on('response', (response) => {
+    if (response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`)
+  })
+
   const probe = await page.evaluate(() => {
     const A = (window as any).ArtistIdent
     const w = window as any
@@ -687,6 +696,10 @@ test('the run buttons are gated on availability, in-flight state, and (for Ident
     w.AppFilterAccess.getSelectedImageIds = () => [...explicitSelectionIds]
     const identifyAll = () => (document.getElementById('btn-identify-all') as HTMLButtonElement).disabled
     const identifySel = () => (document.getElementById('btn-identify-selected') as HTMLButtonElement).disabled
+    const clearData = () => {
+      const button = document.getElementById('btn-clear-artist-data') as HTMLButtonElement
+      return { disabled: button.disabled, ariaDisabled: button.getAttribute('aria-disabled') }
+    }
 
     // Unavailable runtime -> Identify All disabled regardless of selection.
     A.isIdentifying = false
@@ -699,6 +712,7 @@ test('the run buttons are gated on availability, in-flight state, and (for Ident
     A.refreshAvailabilityState()
     const availableAll = identifyAll()
     const availableSelWithPick = identifySel()
+    const idleClear = clearData()
 
     // Available but NO selection -> Identify Selected disabled, Identify All still enabled.
     explicitSelectionIds = []
@@ -716,7 +730,10 @@ test('the run buttons are gated on availability, in-flight state, and (for Ident
     A.isIdentifying = true
     A.refreshAvailabilityState()
     const runningAll = identifyAll()
+    const runningClear = clearData()
     A.isIdentifying = false
+    A.refreshAvailabilityState()
+    const restoredClear = clearData()
     return {
       unavailableAll,
       availableAll,
@@ -725,6 +742,9 @@ test('the run buttons are gated on availability, in-flight state, and (for Ident
       availableAllNoPick,
       availableSelWithFilteredExclusion,
       runningAll,
+      idleClear,
+      runningClear,
+      restoredClear,
     }
   })
 
@@ -735,6 +755,65 @@ test('the run buttons are gated on availability, in-flight state, and (for Ident
   expect(probe.availableAllNoPick).toBe(false)
   expect(probe.availableSelWithFilteredExclusion).toBe(true)
   expect(probe.runningAll).toBe(true)
+  expect(probe.idleClear).toEqual({ disabled: false, ariaDisabled: 'false' })
+  expect(probe.runningClear).toEqual({ disabled: true, ariaDisabled: 'true' })
+  expect(probe.restoredClear).toEqual({ disabled: false, ariaDisabled: 'false' })
+
+  for (const viewport of [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+  ]) {
+    await page.setViewportSize(viewport)
+    await page.evaluate(() => {
+      const A = (window as any).ArtistIdent
+      A.isIdentifying = true
+      A.refreshAvailabilityState()
+    })
+
+    const clearButton = page.locator('#btn-clear-artist-data')
+    await expect(clearButton).toBeVisible()
+    await expect(clearButton).toBeDisabled()
+    await expect(clearButton).toHaveAttribute('aria-disabled', 'true')
+    await clearButton.scrollIntoViewIfNeeded()
+    const geometry = await clearButton.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      const artistView = element.closest('#view-artist')
+      const overlappingButtons = [...(artistView?.querySelectorAll('button') || [])]
+        .filter((candidate) => candidate !== element)
+        .filter((candidate) => {
+          const other = candidate.getBoundingClientRect()
+          return other.width > 0
+            && other.height > 0
+            && rect.left < other.right
+            && rect.right > other.left
+            && rect.top < other.bottom
+            && rect.bottom > other.top
+        })
+        .map((candidate) => candidate.id || candidate.textContent?.trim() || candidate.tagName)
+      return {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+        overlappingButtons,
+        pageOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      }
+    })
+    expect(geometry.left).toBeGreaterThanOrEqual(0)
+    expect(geometry.top).toBeGreaterThanOrEqual(0)
+    expect(geometry.right).toBeLessThanOrEqual(viewport.width)
+    expect(geometry.bottom).toBeLessThanOrEqual(viewport.height)
+    expect(geometry.width).toBeGreaterThan(0)
+    expect(geometry.height).toBeGreaterThan(0)
+    expect(geometry.overlappingButtons).toEqual([])
+    expect(geometry.pageOverflow).toBe(false)
+  }
+
+  expect(consoleErrors).toEqual([])
+  expect(failedResponses).toEqual([])
 })
 
 // ---------------------------------------------------------------------------
@@ -831,6 +910,116 @@ test('identifyAll collects image ids, posts the identify-batch payload, polls to
   expect(unavailableToast.level).toBe('warning')
 })
 
+test('existing batch handoff reaches terminal state and restores controls for all and selected starts', async ({ page }) => {
+  let progressCalls = 0
+  let batchCalls = 0
+
+  await page.route(/\/api\/images\?/, (route) => {
+    const url = new URL(route.request().url())
+    if (url.searchParams.get('limit') !== '1000') return route.continue()
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ images: [{ id: 11, filename: 'handoff.png' }], has_more: false }),
+    })
+  })
+  await page.route(/\/api\/artists\/identify-batch/, (route) => {
+    batchCalls += 1
+    return route.fulfill({
+      status: 409,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'Artist identification is already in progress' }),
+    })
+  })
+  await page.route(/\/api\/artists\/batch-progress/, (route) => {
+    progressCalls += 1
+    const running = progressCalls % 2 === 1
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        running,
+        total: 1,
+        processed: running ? 0 : 1,
+        errors: 0,
+        results: running ? [] : [{ image_id: 11, artist: 'fixture_artist', confidence: 0.97 }],
+        step: running ? 'identifying' : 'done',
+        message: running ? 'Identifying handoff.png' : 'Completed artist identification',
+      }),
+    })
+  })
+  await page.route(/\/api\/artists\/stats/, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      total_images: 1,
+      identified_images: 1,
+      undefined_count: 0,
+      artist_counts: { fixture_artist: 1 },
+      artist_stats: { fixture_artist: { count: 1, avg_confidence: 0.97, max_confidence: 0.97 } },
+    }),
+  }))
+
+  const runAll = await page.evaluate(async () => {
+    const A = (window as any).ArtistIdent
+    A.diagnostics = { available: true }
+    A.isIdentifying = false
+    await A.identifyAll()
+    return {
+      identifying: A.isIdentifying,
+      identifyAllDisabled: (document.getElementById('btn-identify-all') as HTMLButtonElement).disabled,
+      clearDisabled: (document.getElementById('btn-clear-artist-data') as HTMLButtonElement).disabled,
+      clearAriaDisabled: document.getElementById('btn-clear-artist-data')?.getAttribute('aria-disabled'),
+    }
+  })
+
+  await gotoArtist(page)
+  const runSelected = await page.evaluate(async () => {
+    const w = window as any
+    const A = w.ArtistIdent
+    w.AppFilterAccess = w.AppFilterAccess || {}
+    w.AppFilterAccess.getSelectedImageIds = () => [11]
+    A.diagnostics = { available: true }
+    A.isIdentifying = false
+    await A.identifySelected()
+    return {
+      identifying: A.isIdentifying,
+      identifyAllDisabled: (document.getElementById('btn-identify-all') as HTMLButtonElement).disabled,
+      clearDisabled: (document.getElementById('btn-clear-artist-data') as HTMLButtonElement).disabled,
+      clearAriaDisabled: document.getElementById('btn-clear-artist-data')?.getAttribute('aria-disabled'),
+    }
+  })
+
+  const restored = {
+    identifying: false,
+    identifyAllDisabled: false,
+    clearDisabled: false,
+    clearAriaDisabled: 'false',
+  }
+  expect(runAll).toEqual(restored)
+  expect(runSelected).toEqual(restored)
+  expect(batchCalls).toBe(2)
+  expect(progressCalls).toBe(4)
+})
+
+test('clear conflict surfaces the actionable server reason after confirmation', async ({ page }) => {
+  await initArtistView(page)
+  const reason = 'Artist identification is already in progress; wait for it to finish before clearing predictions'
+  await page.route('**/api/artists/clear', (route) => route.fulfill({
+    status: 409,
+    contentType: 'application/json',
+    body: JSON.stringify({ error: reason }),
+  }))
+
+  const clearButton = page.locator('#btn-clear-artist-data')
+  await expect(clearButton).toBeEnabled()
+  await clearButton.click()
+  await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+  await page.locator('#confirm-modal #btn-confirm-ok').click()
+
+  await expect(page.locator('#toast-container .toast').last()).toContainText(reason)
+})
+
 // ---------------------------------------------------------------------------
 // 13. filterGalleryByArtist / clearArtistFilter — the Artist -> Gallery handoff.
 // ---------------------------------------------------------------------------
@@ -881,8 +1070,10 @@ test('after init the delegated click handlers route the action buttons exactly o
 
     let identifyAllCalls = 0
     let loadStatsCalls = 0
+    let clearAllDataCalls = 0
     A.identifyAll = () => { identifyAllCalls += 1 }
     A.loadStats = () => { loadStatsCalls += 1 }
+    A.clearAllData = () => { clearAllDataCalls += 1 }
     // Ensure the run button is enabled so the click event actually dispatches.
     A.diagnostics = { available: true }
     A.isIdentifying = false
@@ -891,6 +1082,7 @@ test('after init the delegated click handlers route the action buttons exactly o
 
     document.getElementById('btn-identify-all')?.click()
     document.getElementById('btn-refresh-artist-stats')?.click()
+    document.getElementById('btn-clear-artist-data')?.click()
     ;(document.querySelector('.view-toggle .toggle-btn[data-view="list"]') as HTMLElement)?.click()
 
     const grid = document.getElementById('artist-results-grid') as HTMLElement
@@ -898,6 +1090,7 @@ test('after init the delegated click handlers route the action buttons exactly o
       eventsBound: A.eventsBound,
       identifyAllCalls,
       loadStatsCalls,
+      clearAllDataCalls,
       listMode: grid.classList.contains('list-mode'),
     }
   })
@@ -905,5 +1098,6 @@ test('after init the delegated click handlers route the action buttons exactly o
   expect(probe.eventsBound).toBe(true)
   expect(probe.identifyAllCalls).toBe(1)
   expect(probe.loadStatsCalls).toBe(1)
+  expect(probe.clearAllDataCalls).toBe(1)
   expect(probe.listMode).toBe(true)
 })

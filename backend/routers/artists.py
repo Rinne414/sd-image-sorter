@@ -17,7 +17,7 @@ from artist_identifier import (
     ARTIST_THRESHOLD_DEFAULT,
 )
 from config import ARTIST_HF_MODEL_ID, ARTIST_MODELSCOPE_MODEL_ID
-from exceptions import ImageNotFoundError, ServiceError, ValidationError
+from exceptions import ImageNotFoundError, OperationInProgressError, ServiceError, ValidationError
 from model_health import get_model_health
 from services.artist_service import ArtistService
 from services.service_provider import ServiceProvider
@@ -490,4 +490,12 @@ async def clear_predictions(
     service: ArtistService = Depends(get_artist_service),
 ):
     """Clear all artist predictions."""
-    return service.clear_predictions()
+    try:
+        return service.clear_predictions()
+    except OperationInProgressError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"{exc.message}; wait for it to finish before clearing predictions"
+            ),
+        ) from exc

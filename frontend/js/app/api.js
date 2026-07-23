@@ -84,7 +84,11 @@ const API = {
             });
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.detail || `API Error: ${response.status}`);
+                const message = formatApiError(response.status, errorData);
+                const error = new Error(message);
+                error.apiStatus = response.status;
+                error.apiData = errorData;
+                throw error;
             }
             return response.json();
         } catch (error) {

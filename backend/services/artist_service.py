@@ -10,7 +10,13 @@ import threading
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-from exceptions import ImageFileNotFoundError, ImageNotFoundError, ServiceError, ValidationError
+from exceptions import (
+    ImageFileNotFoundError,
+    ImageNotFoundError,
+    OperationInProgressError,
+    ServiceError,
+    ValidationError,
+)
 
 import database as db
 from artist_identifier import (
@@ -516,8 +522,12 @@ class ArtistService:
         return {"artists": identifier.get_artists_list()}
 
     def clear_predictions(self) -> Dict[str, str]:
-        with db.get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM artist_predictions")
+        with self._batch_lock:
+            if self._batch_progress["running"]:
+                raise OperationInProgressError("Artist identification")
+
+            with db.get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM artist_predictions")
 
         return {"message": "All artist predictions cleared"}

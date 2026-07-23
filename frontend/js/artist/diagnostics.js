@@ -47,6 +47,7 @@ Object.assign(window.ArtistIdent, {
     refreshAvailabilityState() {
         const isAvailable = this.diagnostics ? this.diagnostics.available !== false : true;
         const identifyAllBtn = document.getElementById('btn-identify-all');
+        const clearDataBtn = document.getElementById('btn-clear-artist-data');
         const controls = document.querySelector('#view-artist .artist-controls');
 
         controls?.classList.toggle('is-disabled', !isAvailable);
@@ -64,6 +65,21 @@ Object.assign(window.ArtistIdent, {
             } else if (!this.isIdentifying) {
                 delete identifyAllBtn.dataset.dynamicTitle;
                 identifyAllBtn.removeAttribute('title');
+            }
+        }
+
+        if (clearDataBtn) {
+            clearDataBtn.disabled = this.isIdentifying;
+            clearDataBtn.setAttribute('aria-disabled', String(this.isIdentifying));
+            if (this.isIdentifying) {
+                clearDataBtn.dataset.dynamicTitle = 'true';
+                clearDataBtn.title = this.tText(
+                    'Wait for identification to finish before clearing predictions.',
+                    '请等待识别任务结束，再清空预测结果。'
+                );
+            } else if (clearDataBtn.dataset.dynamicTitle === 'true') {
+                delete clearDataBtn.dataset.dynamicTitle;
+                clearDataBtn.removeAttribute('title');
             }
         }
 

@@ -243,6 +243,7 @@ Object.assign(window.ArtistIdent, {
                     'Artist identification is already running in the background',
                     '画师识别已经在后台运行中'
                 ), 'info');
+                this.isIdentifying = false;
                 await this.resumeBatchProgress();
             } else {
                 showToast(formatUserError(e, this.tKey('artist.identificationFailed', 'Artist identification failed', '画师识别失败')), "error");
@@ -375,6 +376,7 @@ Object.assign(window.ArtistIdent, {
                     'Artist identification is already running in the background',
                     '画师识别已经在后台运行中'
                 ), 'info');
+                this.isIdentifying = false;
                 await this.resumeBatchProgress();
             } else {
                 showToast(formatUserError(e, this.tKey('artist.identificationFailed', 'Artist identification failed', '画师识别失败')), "error");

@@ -2817,6 +2817,44 @@ class TestArtistsRouterValidation:
         assert data["artist_stats"]["sample_artist"]["avg_confidence"] == 0.42
         assert data["artist_stats"]["sample_artist"]["max_confidence"] == 0.42
 
+    def test_artist_clear_rejects_running_batch_and_preserves_predictions(self, test_client, test_db):
+        from routers import artists as artists_router
+
+        image_id = test_db.add_image(
+            path="/tmp/artist-clear-conflict.png",
+            filename="artist-clear-conflict.png",
+            metadata_json="{}",
+        )
+        with test_db.get_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO artist_predictions (image_id, artist, confidence, top_predictions)
+                VALUES (?, ?, ?, ?)
+                """,
+                (image_id, "sample_artist", 0.92, "[]"),
+            )
+
+        service = artists_router.get_artist_service()
+        service.start_batch_progress(total=1)
+        try:
+            conflict = test_client.delete("/api/artists/clear")
+
+            assert conflict.status_code == 409
+            assert conflict.json()["error"] == (
+                "Artist identification is already in progress; "
+                "wait for it to finish before clearing predictions"
+            )
+            with test_db.get_db() as conn:
+                assert conn.execute("SELECT COUNT(*) FROM artist_predictions").fetchone()[0] == 1
+        finally:
+            service.finish_batch_progress_done({"processed": 0, "total": 1, "errors": 0})
+
+        cleared = test_client.delete("/api/artists/clear")
+
+        assert cleared.status_code == 200
+        with test_db.get_db() as conn:
+            assert conn.execute("SELECT COUNT(*) FROM artist_predictions").fetchone()[0] == 0
+
     def test_artist_images_support_offset_pagination(self, test_client, test_db):
         image_ids = [
             test_db.add_image(path=f"/tmp/artist-page-{index}.png", filename=f"artist-page-{index}.png", metadata_json="{}")
