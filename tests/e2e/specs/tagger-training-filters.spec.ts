@@ -352,6 +352,7 @@ test('Dataset Maker waits for delayed modules before first activation', async ({
   let markEventsRequested = (): void => {
     throw new Error('Dataset events request marker was not initialized')
   }
+  let lastModuleRequested = false
   const eventsModuleGate = new Promise<void>((resolve) => {
     releaseEventsModule = resolve
   })
@@ -366,9 +367,14 @@ test('Dataset Maker waits for delayed modules before first activation', async ({
     await eventsModuleGate
     await route.continue()
   })
+  await page.route('**/static/js/dataset-maker-caption-split.js', async (route) => {
+    lastModuleRequested = true
+    await route.continue()
+  })
 
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await eventsRequested
+  await expect.poll(() => lastModuleRequested, { timeout: 1000 }).toBe(true)
   await page.evaluate(() => {
     const testWindow = window as typeof window & {
       TraitPruner?: TraitPrunerApi

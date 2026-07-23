@@ -303,10 +303,9 @@
     // registration order after the base item is fully assembled (event
     // listeners included), exactly like the old wrapper chain.
     DM._queueItemDecorators = [];
-    // Load the rest of the module in deterministic order. Each request starts
-    // only after the previous script has loaded, so module readiness and
-    // execution order share one explicit promise instead of relying on a
-    // burst of dynamically-inserted requests.
+    // Append every module in declaration order before awaiting readiness.
+    // Dynamic classic scripts with async=false fetch in parallel while the
+    // browser preserves their insertion order for execution.
     function _appendOrderedScript(src) {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
@@ -365,13 +364,12 @@
         '/static/js/dataset-maker-caption-split.js',
     ];
 
-    let datasetModulesReady = Promise.resolve();
+    const datasetModulesReady = Promise.all(
+        datasetModuleSources.map((source) => _appendOrderedScript(source)),
+    );
     let datasetModuleLoadError = null;
     let datasetModuleLoadErrorLogged = false;
     let datasetInitPending = false;
-    for (const source of datasetModuleSources) {
-        datasetModulesReady = datasetModulesReady.then(() => _appendOrderedScript(source));
-    }
 
     function recordDatasetModuleLoadError(error) {
         if (!datasetModuleLoadError) {
