@@ -145,6 +145,135 @@ test('Gallery folder relocalization preserves the active tree state', async ({ p
   expect(folderRequests).toBe(1)
 })
 
+test('CLIP, OppaiOracle, and Favorites use the active language instead of backend text', async ({ page }) => {
+  const consoleProblems: string[] = []
+  const requestProblems: string[] = []
+  let collectionRequests = 0
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning') {
+      consoleProblems.push(`${message.type()}: ${message.text()}`)
+    }
+  })
+  page.on('request', (request) => {
+    const url = new URL(request.url())
+    if (request.method() === 'GET' && url.pathname === '/api/collections') {
+      collectionRequests += 1
+    }
+  })
+  page.on('requestfailed', (request) => {
+    requestProblems.push(`${request.method()} ${request.url()} ${request.failure()?.errorText || ''}`.trim())
+  })
+  page.on('response', (response) => {
+    if (response.status() >= 400) {
+      requestProblems.push(`${response.status()} ${response.request().method()} ${response.url()}`)
+    }
+  })
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('#view-gallery')).toBeVisible()
+  const favoriteName = page.locator('#collections-list .collection-row.is-favorites .collection-row-name')
+  await expect(favoriteName).toHaveText('收藏')
+  const initialCollectionRequests = collectionRequests
+  expect(initialCollectionRequests).toBeGreaterThan(0)
+
+  await page.evaluate(() => (window as any).I18n.setLang('en'))
+  await expect(favoriteName).toHaveText('Favorites')
+  await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
+  await expect(favoriteName).toHaveText('收藏')
+  expect(collectionRequests).toBe(initialCollectionRequests)
+
+  const similarityStatusResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'GET'
+      && url.pathname === '/api/similarity/model-status'
+      && response.status() === 200
+  })
+  await page.locator('#nav-tab-similar').click()
+  await expect(page.locator('#view-similar.active')).toBeVisible()
+  const similarityStatus = await (await similarityStatusResponse).json()
+  expect(typeof similarityStatus.message_key).toBe('string')
+  expect(similarityStatus.message_key).not.toBe('')
+  const expectedChineseClipStatus = await page.evaluate((key) => {
+    return (window as any).I18n.t(key)
+  }, similarityStatus.message_key)
+  expect(expectedChineseClipStatus).not.toBe(similarityStatus.message_key)
+  const similarityDetails = page.locator('#similar-model-health .model-health-details')
+  await expect(similarityDetails.locator('li').first()).toHaveText(expectedChineseClipStatus)
+  if (similarityStatus.message && similarityStatus.message !== expectedChineseClipStatus) {
+    await expect(similarityDetails.locator('li').first()).not.toHaveText(similarityStatus.message)
+  }
+  await similarityDetails.evaluate((details: HTMLDetailsElement) => { details.open = true })
+
+  for (const viewport of [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+  ]) {
+    await page.setViewportSize(viewport)
+    await similarityDetails.scrollIntoViewIfNeeded()
+    const geometry = await page.locator('#similar-model-health').evaluate((banner) => {
+      const box = banner.getBoundingClientRect()
+      return {
+        horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        visible: box.width > 0 && box.height > 0,
+        insideViewportX: box.left >= 0 && box.right <= window.innerWidth + 1,
+      }
+    })
+    expect(geometry).toEqual({ horizontalOverflow: 0, visible: true, insideViewportX: true })
+  }
+
+  const modelStatusResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'GET'
+      && url.pathname === '/api/models/status'
+      && response.status() === 200
+  })
+  await page.locator('#btn-open-model-manager').click()
+  await expect(page.locator('#model-manager-modal.visible')).toBeVisible()
+  await page.locator('[data-settings-tab="models"]').click()
+  const modelStatus = await (await modelStatusResponse).json()
+  const oppaiModel = modelStatus.models.find((model: { id: string }) => model.id === 'oppai-oracle')
+  expect(oppaiModel).toBeTruthy()
+  expect(typeof oppaiModel.message_key).toBe('string')
+  const expectedChineseOppaiStatus = await page.evaluate((key) => {
+    return (window as any).I18n.t(key)
+  }, oppaiModel.message_key)
+  expect(expectedChineseOppaiStatus).not.toBe(oppaiModel.message_key)
+  const oppaiMessage = page.locator('[data-model-id="oppai-oracle"] .model-card-message')
+  await expect(oppaiMessage).toHaveText(expectedChineseOppaiStatus)
+
+  for (const viewport of [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+  ]) {
+    await page.setViewportSize(viewport)
+    await oppaiMessage.scrollIntoViewIfNeeded()
+    const geometry = await page.locator('article.model-card[data-model-id="oppai-oracle"]').evaluate((card) => {
+      const cardBox = card.getBoundingClientRect()
+      const modal = document.querySelector<HTMLElement>('#model-manager-modal .modal-content')
+      if (!modal) throw new Error('Model Manager modal content is unavailable')
+      const modalBox = modal.getBoundingClientRect()
+      return {
+        horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        insideModalX: cardBox.left >= modalBox.left - 1 && cardBox.right <= modalBox.right + 1,
+        messageInsideCard: (() => {
+          const message = card.querySelector<HTMLElement>('.model-card-message')
+          if (!message) return false
+          const messageBox = message.getBoundingClientRect()
+          return messageBox.left >= cardBox.left - 1 && messageBox.right <= cardBox.right + 1
+        })(),
+      }
+    })
+    expect(geometry).toEqual({ horizontalOverflow: 0, insideModalX: true, messageInsideCard: true })
+  }
+
+  await page.locator('#model-manager-close').click()
+  await expect(page.locator('#model-manager-modal.visible')).toHaveCount(0)
+  expect(consoleProblems).toEqual([])
+  expect(requestProblems).toEqual([])
+})
+
 test('Guide supplements preserve the main language dimension labels in Filter Images', async ({ page }) => {
   const consoleProblems: string[] = []
   page.on('console', (message) => {
