@@ -299,3 +299,114 @@ test('WASD slot folder buttons stay inside their cards', async ({ page }) => {
   })
   expect(overflow).toEqual([])
 })
+
+test('Gallery folder tree keeps its last folder clear of the fixed selection control', async ({ page }) => {
+  const folders = Array.from(
+    { length: 72 },
+    (_, index) => `C:/library/folder-${String(index).padStart(2, '0')}`,
+  )
+  const targetPath = folders[folders.length - 1]
+  const consoleProblems: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning') {
+      consoleProblems.push(`${message.type()}: ${message.text()}`)
+    }
+  })
+  await page.route('**/api/folders', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ folders }),
+    })
+  })
+
+  for (const viewport of [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+  ]) {
+    await page.setViewportSize(viewport)
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('#view-gallery')).toBeVisible()
+
+    const tree = page.locator('#folder-tree')
+    const branchToggle = page.locator('#folder-tree [data-action="toggle"][data-path="C:/library"]')
+    const lastFolder = page.locator(`#folder-tree [data-action="browse"][data-path="${targetPath}"]`)
+    await expect(branchToggle).toHaveCount(1)
+    if (await branchToggle.getAttribute('aria-expanded') !== 'true') {
+      await branchToggle.click()
+    }
+    await expect(branchToggle).toHaveAttribute('aria-expanded', 'true')
+    await expect(lastFolder).toHaveCount(1)
+    const clearScope = page.locator('#folder-tree-clear')
+    if (await clearScope.count() === 1) {
+      await clearScope.click()
+      await expect(lastFolder).toHaveAttribute('aria-pressed', 'false')
+    }
+    await page.evaluate(() => {
+      const scroll = document.querySelector<HTMLElement>('.filter-sidebar-scroll')
+      const treeElement = document.getElementById('folder-tree')
+      if (!scroll || !treeElement) throw new Error('Gallery sidebar folder controls are missing')
+      scroll.scrollTop = Math.min(
+        scroll.scrollHeight - scroll.clientHeight,
+        treeElement.offsetTop + treeElement.offsetHeight - scroll.clientHeight,
+      )
+      treeElement.scrollTop = treeElement.scrollHeight
+    })
+    await expect(lastFolder).toBeInViewport()
+
+    const geometry = await page.evaluate((path) => {
+      const scroll = document.querySelector<HTMLElement>('.filter-sidebar-scroll')
+      const footer = document.querySelector<HTMLElement>('.filter-sidebar-footer')
+      const treeElement = document.getElementById('folder-tree')
+      const last = document.querySelector<HTMLElement>(`#folder-tree [data-action="browse"][data-path="${path}"]`)
+      if (!scroll || !footer || !treeElement || !last) {
+        throw new Error('Gallery sidebar geometry controls are missing')
+      }
+      const scrollBox = scroll.getBoundingClientRect()
+      const footerBox = footer.getBoundingClientRect()
+      const treeBox = treeElement.getBoundingClientRect()
+      const lastBox = last.getBoundingClientRect()
+      const hitTargets = document.elementsFromPoint(
+        lastBox.left + (lastBox.width / 2),
+        lastBox.top + (lastBox.height / 2),
+      )
+      return {
+        horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        lastFolderInsideTree: lastBox.top >= treeBox.top - 1 && lastBox.bottom <= treeBox.bottom + 1,
+        lastFolderInsideScroll: lastBox.top >= scrollBox.top - 1 && lastBox.bottom <= scrollBox.bottom + 1,
+        scrollClearOfFooter: scrollBox.bottom <= footerBox.top + 1,
+        footerDoesNotCoverLastFolder: !hitTargets.some((element) => footer.contains(element)),
+      }
+    }, targetPath)
+    expect(geometry).toEqual({
+      horizontalOverflow: 0,
+      lastFolderInsideTree: true,
+      lastFolderInsideScroll: true,
+      scrollClearOfFooter: true,
+      footerDoesNotCoverLastFolder: true,
+    })
+
+    const filteredImageRequest = page.waitForRequest((request) => {
+      const requestUrl = new URL(request.url())
+      return request.method() === 'GET'
+        && requestUrl.pathname === '/api/images'
+        && requestUrl.searchParams.get('folder') === targetPath
+    })
+    const filteredImageResponse = page.waitForResponse((response) => {
+      const responseUrl = new URL(response.url())
+      return response.request().method() === 'GET'
+        && responseUrl.pathname === '/api/images'
+        && responseUrl.searchParams.get('folder') === targetPath
+        && response.status() === 200
+    })
+    await lastFolder.click()
+    await Promise.all([filteredImageRequest, filteredImageResponse])
+    await expect.poll(() => page.evaluate(() => (window as any).App?.AppState?.filters?.folder))
+      .toBe(targetPath)
+    await expect(lastFolder).toHaveAttribute('aria-pressed', 'true')
+    await expect(tree).toBeVisible()
+  }
+
+  expect(consoleProblems).toEqual([])
+})
