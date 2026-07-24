@@ -9,6 +9,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
 from exceptions import ImageNotFoundError, ServiceError
 from services.aesthetic_service import AestheticService
+from services.gallery_job_gate import gallery_job_activity, gallery_job_transition
 from services.service_provider import ServiceProvider
 
 logger = logging.getLogger(__name__)
@@ -71,21 +72,22 @@ def score_single_image(
     service: AestheticService = Depends(get_aesthetic_service),
 ):
     """Score a single image by database ID."""
-    try:
-        from aesthetic import predict_score
-    except (ImportError, OSError) as exc:
-        _log_router_warning_once("score", "Aesthetic predictor torch import failed", exc)
-        raise HTTPException(status_code=503, detail="Aesthetic predictor dependencies not installed or runtime is broken")
+    with gallery_job_activity("aesthetic"):
+        try:
+            from aesthetic import predict_score
+        except (ImportError, OSError) as exc:
+            _log_router_warning_once("score", "Aesthetic predictor torch import failed", exc)
+            raise HTTPException(status_code=503, detail="Aesthetic predictor dependencies not installed or runtime is broken")
 
-    try:
-        return service.score_single_image(
-            image_id=image_id,
-            predict_score=predict_score,
-        )
-    except ImageNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=exc.message)
-    except ServiceError as exc:
-        raise HTTPException(status_code=500, detail=exc.message)
+        try:
+            return service.score_single_image(
+                image_id=image_id,
+                predict_score=predict_score,
+            )
+        except ImageNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=exc.message)
+        except ServiceError as exc:
+            raise HTTPException(status_code=500, detail=exc.message)
 
 
 # Held across the is-running check and start_scoring_progress so two
@@ -101,7 +103,7 @@ def score_all_images(
     service: AestheticService = Depends(get_aesthetic_service),
 ):
     """Score all unscored images in background. Use force=true to rescore all."""
-    with _scoring_start_lock:
+    with gallery_job_transition(), _scoring_start_lock:
         if service.is_scoring_running():
             return {"status": "already_running", **service.get_scoring_progress()}
 

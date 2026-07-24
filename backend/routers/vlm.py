@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
 from config import CONFIG_DIR
+from services.gallery_job_gate import gallery_job_activity
 from utils.source_paths import resolve_existing_indexed_image_path
 from vlm_providers import (
     PROMPT_PRESETS,
@@ -107,7 +108,10 @@ def is_caption_batch_active() -> bool:
     router's internal batch state.
     """
     with _batch_state_lock:
-        return bool(_batch_state.get("running"))
+        running = _batch_state.get("running")
+        if not isinstance(running, bool):
+            raise TypeError("VLM caption batch state must include boolean running")
+        return running
 
 
 def claim_caption_batch_slot() -> None:
@@ -357,51 +361,52 @@ async def fetch_models():
 @router.post("/caption")
 async def caption_single(request: CaptionSingleRequest):
     """Caption a single image by ID."""
-    import database as db
+    with gallery_job_activity("vlm_caption"):
+        import database as db
 
-    image = db.get_image_by_id(request.image_id)
-    if not image:
-        raise HTTPException(404, "Image not found")
+        image = db.get_image_by_id(request.image_id)
+        if not image:
+            raise HTTPException(404, "Image not found")
 
-    image_path = _resolve_image_path(image)
+        image_path = _resolve_image_path(image)
 
-    tags = request.tags
-    if tags is None:
-        tag_rows = db.get_image_tags(request.image_id)
-        tags = [t["tag"] for t in tag_rows] if tag_rows else []
+        tags = request.tags
+        if tags is None:
+            tag_rows = db.get_image_tags(request.image_id)
+            tags = [t["tag"] for t in tag_rows] if tag_rows else []
 
-    config = _build_config()
-    if not config.endpoint and not config.use_vertex:
-        raise HTTPException(400, "No VLM endpoint configured")
+        config = _build_config()
+        if not config.endpoint and not config.use_vertex:
+            raise HTTPException(400, "No VLM endpoint configured")
 
-    provider = get_provider(config)
-    result = await provider.caption_image(image_path, tags=tags)
+        provider = get_provider(config)
+        result = await provider.caption_image(image_path, tags=tags)
 
-    # Persist results based on output format
-    dropped_tags = 0
-    if not result.error and (result.caption or result.tags):
-        try:
-            dropped_tags = _persist_vlm_result(
-                db, request.image_id, result.caption, result.tags
-            )
-        except VLMResultPersistenceError as exc:
-            logger.exception(
-                "VLM single-image result persistence failed",
-                extra={"image_id": request.image_id, "error_type": "persistence"},
-            )
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        # Persist results based on output format
+        dropped_tags = 0
+        if not result.error and (result.caption or result.tags):
+            try:
+                dropped_tags = _persist_vlm_result(
+                    db, request.image_id, result.caption, result.tags
+                )
+            except VLMResultPersistenceError as exc:
+                logger.exception(
+                    "VLM single-image result persistence failed",
+                    extra={"image_id": request.image_id, "error_type": "persistence"},
+                )
+                raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    return {
-        "caption": result.caption,
-        "tags": result.tags,
-        "tokens_used": result.tokens_used,
-        "retries_used": result.retries_used,
-        "error": result.error,
-        "error_type": result.error_type,
-        "model": result.model,
-        "output_format": config.output_format,
-        "dropped_tags": dropped_tags,
-    }
+        return {
+            "caption": result.caption,
+            "tags": result.tags,
+            "tokens_used": result.tokens_used,
+            "retries_used": result.retries_used,
+            "error": result.error,
+            "error_type": result.error_type,
+            "model": result.model,
+            "output_format": config.output_format,
+            "dropped_tags": dropped_tags,
+        }
 
 
 async def _start_claimed_caption_batch(

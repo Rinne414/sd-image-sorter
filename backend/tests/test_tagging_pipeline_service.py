@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import time
 from types import SimpleNamespace
+from typing import NoReturn
 
 import pytest
 from fastapi import HTTPException
+from pytest import MonkeyPatch
 
 
 class _FakeLegacyTaggingService:
@@ -380,6 +382,101 @@ def test_gallery_start_refuses_when_vlm_probe_raises(monkeypatch):
 
     assert exc.value.status_code == 409
     assert legacy.started is False
+    assert service.queue_snapshot()["total_queued"] == 0
+
+
+def test_gallery_start_refuses_when_smart_probe_raises(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    import routers.vlm as vlm_router
+    from services import tagging_pipeline_service
+    from services.tagging_service import TagRequest
+
+    service = _make_service()
+    legacy = _FakeLegacyTaggingService()
+
+    def _boom() -> NoReturn:
+        raise RuntimeError("Smart Tag probe exploded")
+
+    monkeypatch.setattr(
+        tagging_pipeline_service.smart_tag_service,
+        "get_active_job",
+        _boom,
+    )
+    monkeypatch.setattr(vlm_router, "is_caption_batch_active", lambda: False)
+
+    with pytest.raises(HTTPException) as exc:
+        service.start_gallery_tagging(
+            TagRequest(image_ids=[1]),
+            background_tasks=None,
+            legacy_service=legacy,
+        )
+
+    assert exc.value.status_code == 409
+    assert "Smart Tag" in str(exc.value.detail)
+    assert legacy.started is False
+    assert service.queue_snapshot()["total_queued"] == 0
+
+
+def test_smart_start_refuses_when_smart_probe_raises(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    import routers.vlm as vlm_router
+    from services import tagging_pipeline_service
+
+    service = _make_service()
+    legacy = _FakeLegacyTaggingService()
+
+    def _boom() -> NoReturn:
+        raise RuntimeError("Smart Tag probe exploded")
+
+    monkeypatch.setattr(
+        tagging_pipeline_service.smart_tag_service,
+        "get_active_job",
+        _boom,
+    )
+    monkeypatch.setattr(vlm_router, "is_caption_batch_active", lambda: False)
+    monkeypatch.setattr(
+        tagging_pipeline_service.smart_tag_service,
+        "start_smart_tag_job",
+        lambda _payload: pytest.fail("must not start when Smart Tag status is unknown"),
+    )
+
+    with pytest.raises(RuntimeError, match="Smart Tag"):
+        service.start_smart_tagging({"image_ids": [1]}, legacy_service=legacy)
+
+    assert service.queue_snapshot()["total_queued"] == 0
+
+
+def test_vlm_start_refuses_when_smart_probe_raises(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    import routers.vlm as vlm_router
+    from services import tagging_pipeline_service
+
+    service = _make_service()
+    legacy = _FakeLegacyTaggingService()
+
+    def _boom() -> NoReturn:
+        raise RuntimeError("Smart Tag probe exploded")
+
+    monkeypatch.setattr(
+        tagging_pipeline_service.smart_tag_service,
+        "get_active_job",
+        _boom,
+    )
+    monkeypatch.setattr(vlm_router, "is_caption_batch_active", lambda: False)
+
+    with pytest.raises(HTTPException) as exc:
+        service.start_vlm_caption_batch(
+            lambda: pytest.fail("must not claim VLM while Smart Tag status is unknown"),
+            payload={"image_ids": [1]},
+            loop=None,
+            legacy_service=legacy,
+        )
+
+    assert exc.value.status_code == 409
+    assert "Smart Tag" in str(exc.value.detail)
     assert service.queue_snapshot()["total_queued"] == 0
 
 

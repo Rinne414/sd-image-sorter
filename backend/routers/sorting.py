@@ -6,8 +6,13 @@ Refactored to use Service Layer pattern with dependency injection.
 """
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter, Body, Depends, BackgroundTasks, File, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, BackgroundTasks, File, HTTPException, Query, UploadFile
 
+from services.aesthetic_service import AestheticService
+from services.gallery_job_gate import (
+    gallery_job_transition,
+    get_gallery_job_activity,
+)
 from services.service_provider import ServiceProvider
 from services.state_compat import MutableStateProxy
 from services.sorting_models import (
@@ -17,7 +22,9 @@ from services.sorting_models import (
     LibraryAutoRefreshResponse,
     ManualSortStartRequest,
     MoveRequest,
+    SCAN_ACTIVE_STATUSES,
     SCAN_SOURCE_MANUAL,
+    SCAN_TERMINAL_STATUSES,
     ScanAcknowledgeRequest,
     ScanAcknowledgeResponse,
     ScanCancelRequest,
@@ -28,6 +35,12 @@ from services.sorting_models import (
     ValidatePathRequest,
 )
 from services.sorting_service import SortingService
+from services.tagging_pipeline_service import (
+    GalleryMutationActivity,
+    TaggingPipelineService,
+    get_tagging_pipeline_service,
+)
+from services.tagging_service import TaggingService
 
 
 router = APIRouter(prefix="/api", tags=["sorting"])
@@ -62,6 +75,130 @@ _sorting_service_provider = ServiceProvider(SortingService, on_set=_bind_sorting
 def get_sorting_service() -> SortingService:
     """Dependency injection for SortingService."""
     return _sorting_service_provider.get()
+
+
+def _get_tagging_service_for_clear() -> TaggingService:
+    """Resolve the router-owned Gallery tagging service without an import cycle."""
+    from routers.tags import get_tagging_service
+
+    return get_tagging_service()
+
+
+def _get_aesthetic_service_for_clear() -> AestheticService:
+    """Resolve the router-owned Aesthetic service without an import cycle."""
+    from routers.aesthetic import get_aesthetic_service
+
+    return get_aesthetic_service()
+
+
+def _status_probe_http_error(job: str, error: Exception) -> HTTPException:
+    error_message = str(error).strip() or error.__class__.__name__
+    return HTTPException(
+        status_code=503,
+        detail={
+            "code": "gallery_clear_status_unknown",
+            "message": (
+                f"Could not verify {job} state, so Gallery was not cleared: "
+                f"{error_message}"
+            ),
+            "job": job,
+            "error_type": error.__class__.__name__,
+        },
+    )
+
+
+def _require_clear_gallery_jobs_idle(
+    sorting_service: SortingService,
+    tagging_service: TaggingService,
+    pipeline_service: TaggingPipelineService,
+    aesthetic_service: AestheticService,
+) -> None:
+    active_jobs: list[str] = []
+
+    try:
+        scan_progress = sorting_service.get_scan_progress()
+        scan_status = scan_progress.get("status")
+        valid_scan_statuses = {"idle", *SCAN_ACTIVE_STATUSES, *SCAN_TERMINAL_STATUSES}
+        if not isinstance(scan_status, str) or scan_status not in valid_scan_statuses:
+            raise ValueError(f"unexpected scan status {scan_status!r}")
+        scan_worker_active = sorting_service.is_scan_worker_active()
+        if not isinstance(scan_worker_active, bool):
+            raise TypeError("scan worker activity must be a boolean")
+        if scan_status in SCAN_ACTIVE_STATUSES or scan_worker_active:
+            active_jobs.append("scan")
+    except Exception as exc:
+        raise _status_probe_http_error("scan", exc) from exc
+
+    try:
+        activity = pipeline_service.get_gallery_mutation_activity(
+            legacy_service=tagging_service,
+        )
+        if not isinstance(activity, GalleryMutationActivity):
+            raise TypeError("AI tagging activity must be GalleryMutationActivity")
+        if activity.state not in {"idle", "busy", "unknown"}:
+            raise ValueError(f"unexpected AI tagging activity {activity.state!r}")
+        if not isinstance(activity.jobs, tuple) or not all(
+            isinstance(job, str) and job for job in activity.jobs
+        ):
+            raise TypeError("AI tagging activity jobs must be non-empty strings")
+        if not isinstance(activity.detail, str):
+            raise TypeError("AI tagging activity detail must be a string")
+        if activity.state == "idle" and activity.jobs:
+            raise ValueError("idle AI tagging activity must not include jobs")
+        if activity.state in {"busy", "unknown"} and not activity.jobs:
+            raise ValueError(
+                f"{activity.state} AI tagging activity must include jobs"
+            )
+    except Exception as exc:
+        raise _status_probe_http_error("ai_tagging", exc) from exc
+    if activity.state == "unknown":
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "gallery_clear_status_unknown",
+                "message": (
+                    "Could not verify AI tagging/caption state, so Gallery "
+                    f"was not cleared: {activity.detail}"
+                ),
+                "job": "ai_tagging",
+                "jobs": list(activity.jobs),
+            },
+        )
+    if activity.state == "busy":
+        active_jobs.extend(activity.jobs)
+
+    try:
+        route_activity = get_gallery_job_activity()
+        if not isinstance(route_activity, tuple) or not all(
+            isinstance(job, str) and job for job in route_activity
+        ):
+            raise TypeError("Gallery route activity jobs must be non-empty strings")
+        active_jobs.extend(route_activity)
+    except Exception as exc:
+        raise _status_probe_http_error("gallery_route_activity", exc) from exc
+
+    try:
+        aesthetic_progress = aesthetic_service.get_scoring_progress()
+        aesthetic_running = aesthetic_progress.get("running")
+        if not isinstance(aesthetic_running, bool):
+            raise TypeError("aesthetic progress must include boolean running")
+        if aesthetic_running:
+            active_jobs.append("aesthetic")
+    except Exception as exc:
+        raise _status_probe_http_error("aesthetic", exc) from exc
+
+    if active_jobs:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "gallery_clear_jobs_active",
+                "message": (
+                    "Cannot clear Gallery while background image jobs are "
+                    "active or queued. Stop or cancel them first."
+                ),
+                "jobs": list(dict.fromkeys(active_jobs)),
+            },
+        )
 
 
 def set_sorting_service(service: Optional[SortingService]) -> None:
@@ -577,9 +714,19 @@ async def clear_sort_session(
 @router.delete("/clear-gallery")
 def clear_gallery(
     service: SortingService = Depends(get_sorting_service),
-):
+    tagging_service: TaggingService = Depends(_get_tagging_service_for_clear),
+    pipeline_service: TaggingPipelineService = Depends(get_tagging_pipeline_service),
+    aesthetic_service: AestheticService = Depends(_get_aesthetic_service_for_clear),
+) -> Dict[str, str]:
     """Clear all image records from the database."""
-    return service.clear_gallery()
+    with gallery_job_transition():
+        _require_clear_gallery_jobs_idle(
+            service,
+            tagging_service,
+            pipeline_service,
+            aesthetic_service,
+        )
+        return service.clear_gallery()
 
 
 @router.get("/analytics")

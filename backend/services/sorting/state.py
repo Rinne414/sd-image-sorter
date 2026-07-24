@@ -146,6 +146,14 @@ class SortingStateMixin:
         with self._scan_lock:
             return self._with_scan_attention_fields(self._scan_progress.copy())
 
+    def is_scan_worker_active(self) -> bool:
+        """Return whether the service-owned scan worker is still alive."""
+        with self._scan_lock:
+            return bool(
+                self._scan_worker_thread
+                and self._scan_worker_thread.is_alive()
+            )
+
     def get_scan_progress_proxy(self) -> MutableStateProxy:
         """Expose the legacy dict-style scan-progress handle from the service."""
         return self._scan_progress_proxy

@@ -36,11 +36,12 @@ import logging
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TYPE_CHECKING
 
 from fastapi import HTTPException
 
 from services import ai_job_queue_store, smart_tag_service
+from services.gallery_job_gate import gallery_job_transition
 from services.service_provider import ServiceProvider
 
 # Facade split (2026-07): the write-through persistence/restore surface lives
@@ -60,7 +61,20 @@ logger = logging.getLogger(__name__)
 
 PIPELINE_OWNER = "unified-tagging"
 LEGACY_ACTIVE_STATUSES = {"running", "cancelling"}
+LEGACY_VALID_STATUSES = {"idle", "running", "cancelling", "done", "error", "cancelled"}
 SMART_ACTIVE_STATUSES = {"queued", "running"}
+SMART_VALID_STATUSES = {
+    "queued",
+    "running",
+    # Compatibility terminal aliases returned by older Smart Tag backends.
+    "idle",
+    "done",
+    "error",
+    "completed",
+    "warning",
+    "failed",
+    "cancelled",
+}
 
 # Queue job kinds (also used as the ``pipeline_mode`` value in responses).
 KIND_GALLERY = "gallery-tag"
@@ -78,6 +92,15 @@ LEGACY_SELF_BUSY_DETAIL = "Tagging already in progress"
 _PROBE_IDLE = "idle"
 _PROBE_BUSY = "busy"
 _PROBE_UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class GalleryMutationActivity:
+    """Strict aggregate state for jobs that read or update Gallery rows."""
+
+    state: Literal["idle", "busy", "unknown"]
+    jobs: Tuple[str, ...]
+    detail: str
 
 QUEUED_MESSAGE = (
     "Queued — starts automatically after the current AI job finishes. "
@@ -123,10 +146,20 @@ def _probe_legacy(legacy_service: Optional["TaggingService"], *, target: str) ->
     if legacy_service is None:
         return (_PROBE_IDLE, "")
     try:
-        worker_active = bool(legacy_service.is_worker_active())
-        status = str((legacy_service.get_progress() or {}).get("status") or "idle").lower()
+        worker_active = legacy_service.is_worker_active()
+        if not isinstance(worker_active, bool):
+            raise TypeError("AI Tag worker activity must be a boolean")
+        progress = legacy_service.get_progress()
+        if not isinstance(progress, dict):
+            raise TypeError("AI Tag progress must be an object")
+        status = progress.get("status")
+        if not isinstance(status, str) or status not in LEGACY_VALID_STATUSES:
+            raise ValueError(f"unexpected AI Tag status {status!r}")
     except Exception:
-        logger.exception("Could not determine AI Tag status; refusing to start %s", target)
+        logger.exception(
+            "Could not determine AI Tag status; refusing to start",
+            extra={"target": target},
+        )
         return (
             _PROBE_UNKNOWN,
             f"Could not determine AI Tag status, so {target} was not started "
@@ -138,20 +171,32 @@ def _probe_legacy(legacy_service: Optional["TaggingService"], *, target: str) ->
     return (_PROBE_IDLE, "")
 
 
-def _active_smart_job():
-    try:
-        job = smart_tag_service.get_active_job()
-    except Exception:
-        return None
-    if job is None:
-        return None
-    status = str(getattr(job, "status", "") or "").lower()
-    return job if status in SMART_ACTIVE_STATUSES else None
-
-
 def _probe_smart(target: str) -> Tuple[str, str]:
-    """Probe the Smart Tag job. Returns (state, message)."""
-    active_smart = _active_smart_job()
+    """Probe the Smart Tag job without treating lookup failure as idle."""
+    try:
+        smart_job = smart_tag_service.get_active_job()
+    except Exception:
+        logger.exception(
+            "Could not determine Smart Tag status; refusing to start",
+            extra={"target": target},
+        )
+        return (
+            _PROBE_UNKNOWN,
+            f"Could not determine Smart Tag status, so {target} was not started "
+            "to avoid running jobs against an uncertain Gallery state. "
+            "无法确认 Smart Tag 状态，已拒绝启动以避免在图库状态不明时运行任务。",
+        )
+    if smart_job is None:
+        return (_PROBE_IDLE, "")
+    status = getattr(smart_job, "status", None)
+    if not isinstance(status, str) or status not in SMART_VALID_STATUSES:
+        return (
+            _PROBE_UNKNOWN,
+            f"Could not determine Smart Tag status, so {target} was not started: "
+            f"unexpected status {status!r}. "
+            "无法确认 Smart Tag 状态，已拒绝启动。",
+        )
+    active_smart = smart_job if status in SMART_ACTIVE_STATUSES else None
     if active_smart is None:
         return (_PROBE_IDLE, "")
     job_id = str(getattr(active_smart, "job_id", "") or "").strip()
@@ -169,7 +214,9 @@ def _probe_vlm() -> Tuple[str, str]:
     try:
         from routers.vlm import is_caption_batch_active
 
-        active = bool(is_caption_batch_active())
+        active = is_caption_batch_active()
+        if not isinstance(active, bool):
+            raise TypeError("VLM caption batch activity must be a boolean")
     except Exception:
         logger.exception("Could not determine VLM caption batch status; refusing to start")
         return (
@@ -317,8 +364,10 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
         *,
         legacy_service: "TaggingService",
     ) -> Dict[str, Any]:
-        with _start_lock:
-            smart_state, _smart_msg = _probe_smart("AI Tag")
+        with gallery_job_transition(), _start_lock:
+            smart_state, smart_msg = _probe_smart("AI Tag")
+            if smart_state == _PROBE_UNKNOWN:
+                raise HTTPException(status_code=409, detail=smart_msg)
             vlm_state, vlm_msg = _probe_vlm()
             if vlm_state == _PROBE_UNKNOWN:
                 # Fail closed: an unknowable sibling status refuses the
@@ -352,14 +401,16 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
         *,
         legacy_service: Optional["TaggingService"] = None,
     ) -> Dict[str, Any]:
-        with _start_lock:
+        with gallery_job_transition(), _start_lock:
             legacy_state, legacy_msg = _probe_legacy(legacy_service, target="Smart Tag")
             if legacy_state == _PROBE_UNKNOWN:
                 raise RuntimeError(legacy_msg)
             vlm_state, vlm_msg = _probe_vlm()
             if vlm_state == _PROBE_UNKNOWN:
                 raise RuntimeError(vlm_msg)
-            smart_state, _ = _probe_smart("Smart Tag")
+            smart_state, smart_msg = _probe_smart("Smart Tag")
+            if smart_state == _PROBE_UNKNOWN:
+                raise RuntimeError(smart_msg)
             if _PROBE_BUSY in (legacy_state, vlm_state, smart_state):
                 return self._enqueue_locked(
                     kind=KIND_SMART,
@@ -392,8 +443,10 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
         server event loop captured by the route handler; the queued start
         is scheduled onto it at dispatch time.
         """
-        with _start_lock:
-            smart_state, _smart_msg = _probe_smart("VLM captioning")
+        with gallery_job_transition(), _start_lock:
+            smart_state, smart_msg = _probe_smart("VLM captioning")
+            if smart_state == _PROBE_UNKNOWN:
+                raise HTTPException(status_code=409, detail=smart_msg)
             legacy_state, legacy_msg = _probe_legacy(legacy_service, target="VLM captioning")
             if legacy_state == _PROBE_UNKNOWN:
                 raise HTTPException(status_code=409, detail=legacy_msg)
@@ -430,6 +483,49 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
         out = _with_owner(legacy_service.cancel_tagging(), KIND_GALLERY)
         out["removed_queued"] = removed
         return out
+
+    def get_gallery_mutation_activity(
+        self,
+        *,
+        legacy_service: "TaggingService",
+    ) -> GalleryMutationActivity:
+        """Return one lock-consistent state for all unified AI mutation jobs."""
+        with _start_lock:
+            probes = (
+                ("gallery_tag", _probe_legacy(legacy_service, target="Clear Gallery")),
+                ("smart_tag", _probe_smart("Clear Gallery")),
+                ("vlm_caption", _probe_vlm()),
+            )
+            unknown_jobs = tuple(
+                label for label, (state, _message) in probes
+                if state == _PROBE_UNKNOWN
+            )
+            if unknown_jobs:
+                details = tuple(
+                    message for _label, (state, message) in probes
+                    if state == _PROBE_UNKNOWN and message
+                )
+                return GalleryMutationActivity(
+                    state="unknown",
+                    jobs=unknown_jobs,
+                    detail="; ".join(details),
+                )
+
+            busy_jobs = [
+                label for label, (state, _message) in probes
+                if state == _PROBE_BUSY
+            ]
+            if self._queue:
+                busy_jobs.append("ai_queue")
+            if self._running_entry is not None:
+                busy_jobs.append("ai_dispatch")
+            if busy_jobs:
+                return GalleryMutationActivity(
+                    state="busy",
+                    jobs=tuple(dict.fromkeys(busy_jobs)),
+                    detail="AI tagging or caption work is active or queued.",
+                )
+            return GalleryMutationActivity(state="idle", jobs=(), detail="")
 
     def get_smart_tag_progress(self, job_id: Optional[str] = None) -> Dict[str, Any]:
         queue_info = self.queue_snapshot(KIND_SMART)  # before status; see get_gallery_progress
@@ -528,7 +624,7 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
         calls this in a poll loop; tests call it directly for
         deterministic lifecycle coverage.
         """
-        with _start_lock:
+        with gallery_job_transition(), _start_lock:
             if not self._queue:
                 return False
             head = self._queue[0]

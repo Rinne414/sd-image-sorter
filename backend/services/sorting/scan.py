@@ -15,6 +15,7 @@ import database as db
 import image_manager as image_manager_module
 from exceptions import ScanCancelledError, ScanError
 from services import entry_stats_service
+from services.gallery_job_gate import gallery_job_transition
 from services.sorting_models import (
     BACKGROUND_SCAN_SOURCES,
     SCAN_ACTIVE_STATUSES,
@@ -80,7 +81,7 @@ class ScanMixin:
                 ),
             )
 
-        with self._scan_lock:
+        with gallery_job_transition(), self._scan_lock:
             current_status = self._scan_progress["status"]
             current_source = self._scan_progress.get("source")
             worker_alive = bool(self._scan_worker_thread and self._scan_worker_thread.is_alive())
