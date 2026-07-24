@@ -28,9 +28,6 @@ const LOCKED_IDS = [
     'btn-autosep-filters',
     'autosep-scope-note',
     'autosep-scope-status',
-    'autosep-scope-badge',
-    'autosep-scope-meta',
-    'autosep-scope-detail',
     'btn-autosep-use-gallery-scope',
     'btn-autosep-resync-scope',
     'btn-autosep-keep-scope',
@@ -75,6 +72,9 @@ async function main() {
 
     const browser = await chromium.launch({ headless: true });
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await ctx.addInitScript(() => {
+        localStorage.setItem('aurora-entry-skip', '1');
+    });
     const page = await ctx.newPage();
 
     const pageErrors = [];
@@ -108,21 +108,21 @@ async function main() {
     });
     console.log('Screenshot 02 (workbench @ 1366x768) saved');
 
-    await page.setViewportSize({ width: 1080, height: 720 });
+    await page.setViewportSize({ width: 1920, height: 1080 });
     await page.waitForTimeout(150);
     await page.screenshot({
-        path: path.join(OUT_DIR, '03-workbench-1080.png'),
+        path: path.join(OUT_DIR, '03-workbench-1920.png'),
         fullPage: false,
     });
-    console.log('Screenshot 03 (workbench @ 1080x720) saved');
+    console.log('Screenshot 03 (workbench @ 1920x1080) saved');
 
-    await page.setViewportSize({ width: 720, height: 900 });
+    await page.setViewportSize({ width: 2560, height: 1440 });
     await page.waitForTimeout(150);
     await page.screenshot({
-        path: path.join(OUT_DIR, '04-workbench-720.png'),
-        fullPage: true,
+        path: path.join(OUT_DIR, '04-workbench-2560.png'),
+        fullPage: false,
     });
-    console.log('Screenshot 04 (workbench @ 720x900 single column, full page) saved');
+    console.log('Screenshot 04 (workbench @ 2560x1440) saved');
 
     // Re-set to wide viewport for assertion phase
     await page.setViewportSize({ width: 1440, height: 900 });

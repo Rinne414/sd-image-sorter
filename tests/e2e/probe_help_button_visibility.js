@@ -4,18 +4,20 @@ const { chromium } = require('playwright');
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:8488';
 
 const VIEWPORTS = [
+    { width: 2560, height: 1440, label: '2560x1440' },
     { width: 1920, height: 1080, label: '1920x1080' },
     { width: 1440, height: 900,  label: '1440x900'  },
     { width: 1366, height: 768,  label: '1366x768'  },
     { width: 1280, height: 720,  label: '1280x720'  },
-    { width: 1100, height: 720,  label: '1100x720'  },
-    { width: 1024, height: 768,  label: '1024x768'  },
 ];
 
 (async () => {
     const browser = await chromium.launch({ headless: true });
     for (const v of VIEWPORTS) {
         const ctx = await browser.newContext({ viewport: { width: v.width, height: v.height } });
+        await ctx.addInitScript(() => {
+            localStorage.setItem('aurora-entry-skip', '1');
+        });
         const page = await ctx.newPage();
         await page.goto(BASE, { waitUntil: 'domcontentloaded' });
         await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});

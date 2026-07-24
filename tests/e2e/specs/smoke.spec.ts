@@ -2569,7 +2569,8 @@ test.describe('Smoke Tests', () => {
   })
 
   test('gallery context menu should stay visible at the right and bottom viewport edges', async ({ page }) => {
-    await page.setViewportSize({ width: 900, height: 500 })
+    const viewport = { width: 1366, height: 768 }
+    await page.setViewportSize(viewport)
     await mockGalleryImages(page, [
       { id: 153, filename: 'context-edge.png', checkpoint: 'context-model.safetensors' },
     ])
@@ -2609,10 +2610,10 @@ test.describe('Smoke Tests', () => {
     expect(box).toBeTruthy()
     expect(box!.x).toBeGreaterThanOrEqual(7)
     expect(box!.y).toBeGreaterThanOrEqual(7)
-    expect(box!.x + box!.width).toBeLessThanOrEqual(893)
-    expect(box!.y + box!.height).toBeLessThanOrEqual(493)
+    expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width - 7)
+    expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height - 7)
     // P3-6: the 420px cap is gone — the menu may use the viewport height.
-    expect(box!.height).toBeLessThanOrEqual(486)
+    expect(box!.height).toBeLessThanOrEqual(viewport.height - 14)
     expect(box!.x + box!.width).toBeLessThanOrEqual(imageBox!.x - 4)
     expect(clickY).toBeGreaterThanOrEqual(box!.y)
     expect(clickY).toBeLessThanOrEqual(box!.y + box!.height)
@@ -7493,20 +7494,20 @@ test.describe('Smoke Tests', () => {
     expect(after!.boxRegion).not.toEqual(before!.boxRegion)
   })
 
-  test('should keep the filter modal readable across responsive widths', async ({ page }) => {
+  test('should keep the filter modal readable across supported desktop widths', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
     await page.locator('#btn-open-filters').click()
     await expect(page.locator('#filter-modal.visible')).toBeVisible()
 
-    const widths = [
-      { width: 1440, height: 1100, stacked: false },
-      { width: 960, height: 1000, stacked: true },
-      { width: 768, height: 920, stacked: true },
+    const viewports = [
+      { width: 1366, height: 768 },
+      { width: 1920, height: 1080 },
+      { width: 2560, height: 1440 },
     ]
 
-    for (const viewport of widths) {
+    for (const viewport of viewports) {
       await page.setViewportSize({ width: viewport.width, height: viewport.height })
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
 
@@ -7529,16 +7530,17 @@ test.describe('Smoke Tests', () => {
         expect(gridMetrics.scrollHeight).toBeGreaterThanOrEqual(gridMetrics.clientHeight)
       }
 
-      if (viewport.stacked) {
-        expect(Math.abs(layout.primary.left - layout.secondary.left)).toBeLessThanOrEqual(4)
-        expect(Math.abs(layout.primary.width - layout.secondary.width)).toBeLessThanOrEqual(4)
-      } else {
-        expect(layout.primary.right).toBeLessThanOrEqual(layout.secondary.left + 8)
-      }
+      expect(layout.modal.left).toBeGreaterThanOrEqual(0)
+      expect(layout.modal.right).toBeLessThanOrEqual(viewport.width)
+      expect(layout.modal.top).toBeGreaterThanOrEqual(0)
+      expect(layout.modal.bottom).toBeLessThanOrEqual(viewport.height)
+      expect(layout.primary.right).toBeLessThanOrEqual(layout.secondary.left + 8)
+      expect(layout.actions.left).toBeGreaterThanOrEqual(layout.modal.left)
+      expect(layout.actions.right).toBeLessThanOrEqual(layout.modal.right)
+      expect(layout.actions.bottom).toBeLessThanOrEqual(viewport.height)
+      await expect(page.locator('#btn-apply-modal-filters')).toBeVisible()
+      await expect(page.locator('#btn-reset-filters')).toBeVisible()
     }
-
-    await expect(page.locator('#btn-apply-modal-filters')).toBeVisible()
-    await expect(page.locator('#btn-reset-filters')).toBeVisible()
   })
 
   test('top navigation and generator rail should stay reachable in English and Chinese', async ({ page }) => {

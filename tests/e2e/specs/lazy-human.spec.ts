@@ -257,12 +257,6 @@ test.describe('lazy human frontend QA', () => {
     await page.locator('#btn-language-toggle').click()
     await expect(page.locator('#view-gallery')).toBeVisible()
 
-    // Mobile nav sanity: act like a phone user and switch views from the mobile bar.
-    await page.setViewportSize({ width: 390, height: 844 })
-    await expectNoHorizontalOverflow(page, 48)
-    await openView(page, 'reader')
-    await openView(page, 'gallery')
-
     expect(pageErrors).toEqual([])
     expect(consoleErrors).toEqual([])
   })
