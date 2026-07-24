@@ -6,6 +6,146 @@
  * a machine-verified boundary no function-local crosses. Registration
  * order is load-bearing: this binder runs before the gallery binder.
  */
+const CLEAR_GALLERY_ACTIVE_STATUSES = new Set(['starting', 'running', 'cancelling']);
+const CLEAR_GALLERY_INACTIVE_STATUSES = new Set(['idle', 'done', 'error', 'cancelled']);
+
+function isClearGalleryProgressBusy(label, payload) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new TypeError(`${label} progress must be an object`);
+    }
+
+    if (label === 'aesthetic') {
+        if (typeof payload.running !== 'boolean') {
+            throw new TypeError('aesthetic progress must include boolean running');
+        }
+        return payload.running;
+    }
+
+    if (label !== 'scan' && label !== 'tag') {
+        throw new TypeError(`Unknown Clear Gallery progress source: ${label}`);
+    }
+    if (typeof payload.status !== 'string') {
+        throw new TypeError(`${label} progress must include string status`);
+    }
+    let busy;
+    if (CLEAR_GALLERY_ACTIVE_STATUSES.has(payload.status)) {
+        busy = true;
+    } else if (CLEAR_GALLERY_INACTIVE_STATUSES.has(payload.status)) {
+        busy = false;
+    } else {
+        throw new TypeError(`${label} progress returned unexpected status "${payload.status}"`);
+    }
+
+    if (label === 'tag') {
+        const queue = payload.pipeline_queue;
+        if (!queue || typeof queue !== 'object' || Array.isArray(queue)) {
+            throw new TypeError('tag progress must include pipeline_queue object');
+        }
+        if (!Number.isInteger(queue.total_queued) || queue.total_queued < 0) {
+            throw new TypeError('tag pipeline_queue must include non-negative integer total_queued');
+        }
+        if (!Array.isArray(queue.queued)) {
+            throw new TypeError('tag pipeline_queue must include queued array');
+        }
+        if (queue.queued.length > queue.total_queued) {
+            throw new TypeError('tag pipeline_queue queued count exceeds total_queued');
+        }
+        busy = busy || queue.queued.length > 0;
+    }
+
+    return busy;
+}
+
+async function probeClearGalleryJobState(maxAttempts) {
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+        throw new RangeError('Clear Gallery progress maxAttempts must be a positive integer');
+    }
+
+    let finalError = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const results = await Promise.allSettled([
+            API.getScanProgress(),
+            API.getTagProgress(),
+            API.getAestheticProgress(),
+        ]);
+        const labels = ['scan', 'tag', 'aesthetic'];
+        const failures = [];
+        let busy = false;
+
+        for (let index = 0; index < results.length; index += 1) {
+            const result = results[index];
+            const label = labels[index];
+            if (result.status === 'rejected') {
+                const reason = result.reason instanceof Error
+                    ? result.reason.message
+                    : String(result.reason || 'request failed');
+                failures.push(`${label}: ${reason}`);
+                continue;
+            }
+            try {
+                busy = isClearGalleryProgressBusy(label, result.value) || busy;
+            } catch (error) {
+                failures.push(error instanceof Error ? error.message : String(error));
+            }
+        }
+
+        if (busy) return true;
+        if (failures.length === 0) return false;
+
+        finalError = new Error(failures.join('; '));
+        if (attempt < maxAttempts) {
+            Logger.warn('Clear Gallery progress probe failed; retrying', {
+                attempt,
+                maxAttempts,
+                failures,
+            });
+        }
+    }
+
+    throw finalError;
+}
+
+async function verifyClearGalleryJobsIdle() {
+    const localState = {
+        aestheticTimer: Boolean(_aestheticProgressTimer),
+        scanTracker: Boolean(_scanProgressTracker?.startedAt),
+        tagTimer: Boolean(_tagProgressTimer),
+    };
+
+    let busy;
+    try {
+        busy = await probeClearGalleryJobState(2);
+    } catch (error) {
+        Logger.warn('Clear Gallery blocked because background job state is unknown', {
+            error,
+            localState,
+        });
+        const detail = error instanceof Error ? error.message : String(error);
+        showToast(
+            `${appT(
+                'gallery.clearStatusUnknown',
+                'Could not verify background job status, so Gallery was not cleared. Check the local backend connection and try again.'
+            )} ${detail}`,
+            'error'
+        );
+        return false;
+    }
+
+    if (!busy) return true;
+
+    Logger.warn('Clear Gallery blocked: a background job is still active', {
+        localState,
+    });
+    showToast(
+        appT(
+            'gallery.clearBlocked',
+            'Cannot clear gallery while scanning, tagging, or scoring is active or queued. Stop or cancel the operation first.'
+        ),
+        'warning'
+    );
+    return false;
+}
+
 function initBootListenersShell() {
     // Nav tabs. Tools-menu entries that open modals (Duplicate Cleanup,
     // Publish Set) are .nav-tab for styling but carry no data-view —
@@ -397,60 +537,15 @@ function initBootListenersShell() {
 
     // Clear DB button
     $('#btn-clear-db').addEventListener('click', async () => {
-        // Belt-and-braces: check local poll-state first, then verify
-        // against ALL THREE backend progress endpoints. Local state can
-        // lag (e.g. if a poll callback never runs after cancel), so the
-        // server is the source of truth.
-        //
-        // Note: scan polling does NOT use a stored timer handle — it uses
-        // a `_scanProgressTracker` object plus bare `setTimeout` calls.
-        // Earlier revisions of this guard referenced a `_scanProgressTimer`
-        // that was never declared, so any path through this branch threw
-        // `ReferenceError: _scanProgressTimer is not defined` and broke
-        // the Clear DB button entirely. The local check now uses the
-        // tracker's `startedAt` instead.
-        const BUSY_STATUSES = new Set(['running', 'cancelling', 'starting']);
-        const isProgressBusy = (value) => {
-            if (!value) return false;
-            if (BUSY_STATUSES.has(value.status)) return true;
-            if (value.running) return true;
-            return false;
-        };
-        let busy = Boolean(_aestheticProgressTimer || _tagProgressTimer || _scanProgressTracker?.startedAt);
-        if (!busy) {
-            const [scanResult, tagResult, aestheticResult] = await Promise.allSettled([
-                API.getScanProgress(),
-                API.getTagProgress(),
-                API.getAestheticProgress(),
-            ]);
-            const probes = [
-                ['scan', scanResult],
-                ['tag', tagResult],
-                ['aesthetic', aestheticResult],
-            ];
-            for (const [label, result] of probes) {
-                if (result.status === 'fulfilled') {
-                    if (isProgressBusy(result.value)) {
-                        busy = true;
-                    }
-                } else {
-                    Logger.warn(`Clear gallery: ${label} progress probe failed, assuming idle:`, result.reason);
-                }
-            }
-        }
-        if (busy) {
-            Logger.warn('Clear gallery blocked: a background job is still active', {
-                aestheticTimer: !!_aestheticProgressTimer,
-                scanTracker: Boolean(_scanProgressTracker?.startedAt),
-                tagTimer: !!_tagProgressTimer,
-            });
-            showToast(appT('gallery.clearBlocked', 'Cannot clear gallery while scanning, tagging, or scoring is running. Stop the operation first.'), 'warning');
-            return;
-        }
+        // Local timers can outlive their backend jobs, so they are diagnostic
+        // only. The server endpoints are re-checked both before the modal opens
+        // and immediately before the destructive request is sent.
+        if (!await verifyClearGalleryJobsIdle()) return;
         showConfirm(
             appT('gallery.clearTitle', 'Clear Gallery'),
             appT('gallery.clearMessage', 'Are you sure you want to clear all images from the database? This will NOT delete your physical files.'),
             async () => {
+                if (!await verifyClearGalleryJobsIdle()) return;
                 try {
                     await API.clearGallery();
                     showToast(appT('gallery.clearSuccess', 'Gallery cleared successfully'));

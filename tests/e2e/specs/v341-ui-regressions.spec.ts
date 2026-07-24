@@ -59,6 +59,11 @@ const comboRoot = path.join(repoRoot, '.tmp', 'v341-combo')
 const comboOut = path.join(comboRoot, 'out')
 const COMBO_SEARCH_TOKEN = 'v341_combo_token_20260612'
 const COMBO_IMAGE_COUNT = 4
+const CLEAR_GALLERY_VIEWPORTS = [
+  { width: 1366, height: 768 },
+  { width: 1920, height: 1080 },
+  { width: 2560, height: 1440 },
+]
 
 function runBackendScript(script: string) {
   return execFileSync(backendPython, ['-X', 'utf8', '-c', script], {
@@ -220,6 +225,286 @@ test('clear gallery button should be visible on the gallery page, not buried in 
   await expect(page.locator('#scan-modal #btn-clear-db')).toHaveCount(0)
   await page.locator('#btn-cancel-scan').click()
   await expect(page.locator('#scan-modal.visible')).toHaveCount(0)
+})
+
+for (const viewport of CLEAR_GALLERY_VIEWPORTS) {
+  test(`clear gallery fails closed when job state is unknown at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport)
+
+    const consoleErrors: string[] = []
+    const expectedProbeConsoleErrors: string[] = []
+    const pageErrors: string[] = []
+    const unexpectedHttpFailures: string[] = []
+    let rejectScanProbe = false
+    let scanProbeFailures = 0
+    let clearRequests = 0
+
+    page.on('console', (message) => {
+      if (message.type() !== 'error') return
+      if (rejectScanProbe && message.text() === 'Failed to load resource: the server responded with a status of 503 (Service Unavailable)') {
+        expectedProbeConsoleErrors.push(message.text())
+        return
+      }
+      consoleErrors.push(message.text())
+    })
+    page.on('pageerror', (error) => pageErrors.push(error.message))
+    page.on('response', (response) => {
+      if (response.status() < 400) return
+      const url = new URL(response.url())
+      if (rejectScanProbe && url.pathname === '/api/scan/progress' && response.status() === 503) return
+      unexpectedHttpFailures.push(`${response.status()} ${url.pathname}`)
+    })
+
+    await page.route('**/api/scan/progress', async (route) => {
+      if (!rejectScanProbe) {
+        await route.continue()
+        return
+      }
+      scanProbeFailures += 1
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'injected clear-gallery progress failure' }),
+      })
+    })
+    await page.route('**/api/clear-gallery', async (route) => {
+      clearRequests += 1
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'ok', message: 'Gallery cleared' }),
+      })
+    })
+
+    await openMainPage(page)
+    rejectScanProbe = true
+    await page.locator('#btn-clear-db').click()
+
+    const errorToast = page.locator('#toast-container [role="alert"]')
+      .filter({ hasText: 'Could not verify background job status' })
+      .last()
+    await expect(errorToast).toBeVisible()
+    await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
+    expect(scanProbeFailures).toBe(2)
+    expect(clearRequests).toBe(0)
+
+    const layout = await page.evaluate(() => {
+      const button = document.getElementById('btn-clear-db')?.getBoundingClientRect()
+      const toast = Array.from(document.querySelectorAll<HTMLElement>('#toast-container [role="alert"]'))
+        .find((element) => element.textContent?.includes('Could not verify background job status'))
+        ?.getBoundingClientRect()
+      const toastMessage = Array.from(document.querySelectorAll<HTMLElement>('#toast-container [role="alert"]'))
+        .find((element) => element.textContent?.includes('Could not verify background job status'))
+        ?.querySelector<HTMLElement>('.toast-message')
+        ?.getBoundingClientRect()
+      return {
+        horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        button: button ? { left: button.left, top: button.top, right: button.right, bottom: button.bottom } : null,
+        toast: toast ? { left: toast.left, top: toast.top, right: toast.right, bottom: toast.bottom } : null,
+        toastMessage: toastMessage
+          ? { left: toastMessage.left, top: toastMessage.top, right: toastMessage.right, bottom: toastMessage.bottom }
+          : null,
+      }
+    })
+    expect(layout.horizontalOverflow).toBeLessThanOrEqual(0)
+    expect(layout.button).not.toBeNull()
+    expect(layout.button!.left).toBeGreaterThanOrEqual(0)
+    expect(layout.button!.top).toBeGreaterThanOrEqual(0)
+    expect(layout.button!.right).toBeLessThanOrEqual(viewport.width)
+    expect(layout.button!.bottom).toBeLessThanOrEqual(viewport.height)
+    expect(layout.toast).not.toBeNull()
+    expect(layout.toast!.left).toBeGreaterThanOrEqual(0)
+    expect(layout.toast!.top).toBeGreaterThanOrEqual(0)
+    expect(layout.toast!.right).toBeLessThanOrEqual(viewport.width)
+    expect(layout.toast!.bottom).toBeLessThanOrEqual(viewport.height)
+    expect(layout.toastMessage).not.toBeNull()
+    expect(layout.toastMessage!.left).toBeGreaterThanOrEqual(layout.toast!.left)
+    expect(layout.toastMessage!.top).toBeGreaterThanOrEqual(layout.toast!.top)
+    expect(layout.toastMessage!.right).toBeLessThanOrEqual(layout.toast!.right)
+    expect(layout.toastMessage!.bottom).toBeLessThanOrEqual(layout.toast!.bottom)
+
+    rejectScanProbe = false
+    await page.locator('#btn-clear-db').click()
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    await expect(page.locator('#confirm-modal')).toContainText('Clear Gallery')
+    expect(clearRequests).toBe(0)
+    await page.locator('#btn-confirm-cancel').click()
+    await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
+
+    expect(consoleErrors).toEqual([])
+    expect(expectedProbeConsoleErrors).toHaveLength(2)
+    expect(pageErrors).toEqual([])
+    expect(unexpectedHttpFailures).toEqual([])
+  })
+}
+
+test('clear gallery validates active, malformed tag, and malformed aesthetic progress', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+
+  const consoleErrors: string[] = []
+  const pageErrors: string[] = []
+  const unexpectedHttpFailures: string[] = []
+  let tagMode: 'idle' | 'queued' | 'running' | 'done' | 'malformed' = 'queued'
+  let malformedAesthetic = false
+  let tagProbeCalls = 0
+  let aestheticProbeCalls = 0
+  let clearRequests = 0
+
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  page.on('response', (response) => {
+    if (response.status() < 400) return
+    const url = new URL(response.url())
+    unexpectedHttpFailures.push(`${response.status()} ${url.pathname}`)
+  })
+
+  await page.route('**/api/tag/progress', async (route) => {
+    tagProbeCalls += 1
+    const status = tagMode === 'malformed'
+      ? 'mystery'
+      : tagMode === 'queued'
+        ? 'idle'
+        : tagMode
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status,
+        current: 0,
+        total: 0,
+        pipeline_queue: {
+          total_queued: tagMode === 'queued' ? 1 : 0,
+          queued: tagMode === 'queued'
+            ? [{ queue_id: 'q1', kind: 'gallery', position: 1, enqueued_at: 1 }]
+            : [],
+          last_start_error: null,
+        },
+      }),
+    })
+  })
+  await page.route('**/api/aesthetic/progress', async (route) => {
+    aestheticProbeCalls += 1
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(malformedAesthetic
+        ? { total: 0, completed: 0 }
+        : { running: false, total: 0, completed: 0, errors: 0, error: null }),
+    })
+  })
+  await page.route('**/api/clear-gallery', async (route) => {
+    clearRequests += 1
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ status: 'ok', message: 'Gallery cleared' }),
+    })
+  })
+
+  await openMainPage(page)
+  await expect.poll(() => tagProbeCalls).toBeGreaterThan(0)
+  await expect(page.locator('#bg-tag-progress')).toBeVisible()
+
+  tagMode = 'idle'
+  tagProbeCalls = 0
+  aestheticProbeCalls = 0
+  await page.locator('#btn-clear-db').click()
+  await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+  await page.locator('#btn-confirm-cancel').click()
+  await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
+
+  tagMode = 'done'
+  const queuedProbeCalls = tagProbeCalls
+  await expect.poll(() => tagProbeCalls).toBeGreaterThan(queuedProbeCalls)
+  await expect(page.locator('#bg-tag-progress')).toBeHidden()
+
+  tagMode = 'running'
+  tagProbeCalls = 0
+  aestheticProbeCalls = 0
+  await page.locator('#btn-clear-db').click()
+  await expect(page.locator('#toast-container [role="alert"]')
+    .filter({ hasText: 'Cannot clear gallery while scanning, tagging, or scoring is active or queued' })
+    .last()).toBeVisible()
+  await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
+  expect(tagProbeCalls).toBe(1)
+  expect(aestheticProbeCalls).toBe(1)
+
+  tagMode = 'queued'
+  tagProbeCalls = 0
+  aestheticProbeCalls = 0
+  await page.locator('#btn-clear-db').click()
+  await expect(page.locator('#toast-container [role="alert"]')
+    .filter({ hasText: 'Cannot clear gallery while scanning, tagging, or scoring is active or queued' })
+    .last()).toBeVisible()
+  await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
+  expect(tagProbeCalls).toBe(1)
+  expect(aestheticProbeCalls).toBe(1)
+
+  tagMode = 'malformed'
+  tagProbeCalls = 0
+  aestheticProbeCalls = 0
+  await page.locator('#btn-clear-db').click()
+  await expect(page.locator('#toast-container [role="alert"]')
+    .filter({ hasText: 'tag progress returned unexpected status "mystery"' })
+    .last()).toBeVisible()
+  await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
+  expect(tagProbeCalls).toBe(2)
+  expect(aestheticProbeCalls).toBe(2)
+
+  tagMode = 'idle'
+  malformedAesthetic = true
+  tagProbeCalls = 0
+  aestheticProbeCalls = 0
+  await page.locator('#btn-clear-db').click()
+  await expect(page.locator('#toast-container [role="alert"]')
+    .filter({ hasText: 'aesthetic progress must include boolean running' })
+    .last()).toBeVisible()
+  await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
+  expect(tagProbeCalls).toBe(2)
+  expect(aestheticProbeCalls).toBe(2)
+
+  malformedAesthetic = false
+  await page.locator('#btn-clear-db').click()
+  await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+  await expect(page.locator('#confirm-modal')).toContainText('Clear Gallery')
+
+  tagMode = 'running'
+  tagProbeCalls = 0
+  aestheticProbeCalls = 0
+  await page.locator('#btn-confirm-ok').click()
+  await expect.poll(() => tagProbeCalls).toBe(1)
+  await expect(page.locator('#toast-container [role="alert"]')
+    .filter({ hasText: 'Cannot clear gallery while scanning, tagging, or scoring is active or queued' })
+    .last()).toBeVisible()
+  await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
+  expect(clearRequests).toBe(0)
+
+  tagMode = 'idle'
+  await page.locator('#btn-clear-db').click()
+  await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+  malformedAesthetic = true
+  tagProbeCalls = 0
+  aestheticProbeCalls = 0
+  await page.locator('#btn-confirm-ok').click()
+  await expect.poll(() => aestheticProbeCalls).toBe(2)
+  await expect(page.locator('#toast-container [role="alert"]')
+    .filter({ hasText: 'aesthetic progress must include boolean running' })
+    .last()).toBeVisible()
+  await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
+  expect(clearRequests).toBe(0)
+
+  malformedAesthetic = false
+  await page.locator('#btn-clear-db').click()
+  await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+  await page.locator('#btn-confirm-ok').click()
+  await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
+  await expect.poll(() => clearRequests).toBe(1)
+
+  expect(consoleErrors).toEqual([])
+  expect(pageErrors).toEqual([])
+  expect(unexpectedHttpFailures).toEqual([])
 })
 
 test('filter presets should save, list, load, and delete through the filter modal', async ({ page }) => {
