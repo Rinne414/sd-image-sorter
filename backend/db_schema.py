@@ -19,6 +19,21 @@ from db_core import (
 logger = logging.getLogger(__name__)
 
 
+class UnsupportedDatabaseSchemaVersionError(RuntimeError):
+    """Raised when this application cannot safely open a newer database schema."""
+
+    def __init__(self, current_version: int, latest_supported_version: int):
+        self.current_version = int(current_version)
+        self.latest_supported_version = int(latest_supported_version)
+        super().__init__(
+            f"Database schema version {self.current_version} is newer than this "
+            f"application supports; latest supported version "
+            f"{self.latest_supported_version}. Automatic downgrade is not supported. "
+            "Install the newer SD Image Sorter version that created this database, "
+            "or restore a compatible database backup before starting this version."
+        )
+
+
 def _ensure_schema_version_table(conn: sqlite3.Connection) -> None:
     """Create the schema-version ledger when it does not exist yet."""
     conn.execute(
@@ -43,6 +58,26 @@ def _get_schema_version(conn: sqlite3.Connection) -> int:
     if not row:
         return 0
     return int(row[0] or 0)
+
+
+def validate_database_schema_version(conn: sqlite3.Connection) -> None:
+    """Reject newer schemas before persistent connection PRAGMAs can run."""
+    schema_table = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_version'"
+    ).fetchone()
+    if schema_table is None:
+        return
+
+    from migrations import get_migrations
+
+    migration_list = get_migrations()
+    latest_supported_version = migration_list[-1].version if migration_list else 0
+    current_version = _get_schema_version(conn)
+    if current_version > latest_supported_version:
+        raise UnsupportedDatabaseSchemaVersionError(
+            current_version,
+            latest_supported_version,
+        )
 
 
 def _set_schema_version(conn: sqlite3.Connection, version: int) -> None:
@@ -104,13 +139,20 @@ def init_db() -> None:
     """Initialize or migrate the database schema to the latest known version."""
     from migrations import get_migrations
 
+    migration_list = get_migrations()
+    latest_supported_version = migration_list[-1].version if migration_list else 0
     conn = get_connection()
     vacuum_after_commit = False
     try:
         _ensure_schema_version_table(conn)
         current_version = _get_schema_version(conn)
+        if current_version > latest_supported_version:
+            raise UnsupportedDatabaseSchemaVersionError(
+                current_version,
+                latest_supported_version,
+            )
 
-        for migration in get_migrations():
+        for migration in migration_list:
             if migration.version <= current_version:
                 continue
             savepoint_name = f"migration_{migration.version}"

@@ -89,19 +89,26 @@ def set_connection_provider(provider: Optional[Callable[[], sqlite3.Connection]]
 def _default_get_connection() -> sqlite3.Connection:
     """Self-contained connection factory used when no provider is injected."""
     conn = sqlite3.connect(DATABASE_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA busy_timeout=30000")  # v3.3.2: wait up to 30s on lock (large-library scan/tag vs browse contention)
-    # WAL mode and other persistent PRAGMAs only need to be set once per database path
-    db_path = os.path.abspath(DATABASE_PATH)
-    if db_path not in _pragmas_initialized:
-        with _pragmas_lock:
-            if db_path not in _pragmas_initialized:
-                conn.execute("PRAGMA journal_mode=WAL")
-                conn.execute("PRAGMA synchronous=NORMAL")
-                conn.execute("PRAGMA cache_size=-64000")  # 64MB cache
-                _pragmas_initialized.add(db_path)
-    return conn
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA busy_timeout=30000")  # v3.3.2: wait up to 30s on lock (large-library scan/tag vs browse contention)
+        # WAL mode and other persistent PRAGMAs only need to be set once per database path
+        db_path = os.path.abspath(DATABASE_PATH)
+        if db_path not in _pragmas_initialized:
+            with _pragmas_lock:
+                if db_path not in _pragmas_initialized:
+                    from db_schema import validate_database_schema_version
+
+                    validate_database_schema_version(conn)
+                    conn.execute("PRAGMA journal_mode=WAL")
+                    conn.execute("PRAGMA synchronous=NORMAL")
+                    conn.execute("PRAGMA cache_size=-64000")  # 64MB cache
+                    _pragmas_initialized.add(db_path)
+        return conn
+    except Exception:
+        conn.close()
+        raise
 
 
 def get_connection() -> sqlite3.Connection:

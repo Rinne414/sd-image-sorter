@@ -15,11 +15,12 @@ This project now treats SQLite schema changes as versioned application code, not
 - `database.init_db()` ensures the `schema_version` ledger exists, then applies pending migrations in version order.
 - Each migration runs inside its own SQLite `SAVEPOINT`.
 - If one migration fails, that migration is rolled back without advancing `schema_version`, and startup fails loudly.
+- If the database schema is newer than the latest bundled migration, startup fails before persistent connection PRAGMAs, migrations, or recovery writes run.
 
 ## Current Scope
 
 - The migration runner is forward-only.
-- There is no automated downgrade path today.
+- There is no automated downgrade path today. Reopen a newer database with the application version that created it, or restore a compatible backup.
 - If a future change needs downgrade support or destructive schema replacement, document that rollout explicitly before shipping it.
 
 ## Testing Expectations

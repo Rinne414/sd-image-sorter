@@ -210,6 +210,68 @@ class TestDatabaseInit:
         assert cursor.fetchone()[0] == 1
         conn.close()
 
+    def test_init_rejects_newer_schema_without_mutating_database(self, test_db):
+        """An older app must not write to a database created by a newer schema."""
+        import sqlite3
+
+        import migrations
+
+        latest_supported_version = migrations.get_migrations()[-1].version
+        newer_version = latest_supported_version + 1
+        image_id = db.add_image(
+            path="/future/pending.png",
+            filename="pending.png",
+            metadata_json="{}",
+            is_readable=True,
+            metadata_status="pending",
+        )
+        with db.get_db() as conn:
+            conn.execute(
+                "UPDATE schema_version SET version = ? WHERE id = ?",
+                (newer_version, db.SCHEMA_VERSION_ROW_ID),
+            )
+
+        conn = sqlite3.connect(db.DATABASE_PATH)
+        journal_mode = conn.execute("PRAGMA journal_mode=DELETE").fetchone()[0]
+        conn.close()
+        assert journal_mode == "delete"
+        db._pragmas_initialized = set()
+
+        with pytest.raises(
+            db.UnsupportedDatabaseSchemaVersionError,
+            match=(
+                rf"schema version {newer_version}.*newer than.*"
+                rf"supported version {latest_supported_version}.*Automatic downgrade"
+            ),
+        ):
+            db.init_db()
+
+        assert db._pragmas_initialized == set()
+        conn = sqlite3.connect(db.DATABASE_PATH)
+        try:
+            journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+            version = conn.execute(
+                "SELECT version FROM schema_version WHERE id = ?",
+                (db.SCHEMA_VERSION_ROW_ID,),
+            ).fetchone()[0]
+            image = conn.execute(
+                """
+                SELECT is_readable, metadata_status, read_error
+                FROM images
+                WHERE id = ?
+                """,
+                (image_id,),
+            ).fetchone()
+        finally:
+            conn.close()
+
+        assert journal_mode == "delete"
+        assert int(version) == newer_version
+        assert image is not None
+        assert int(image[0]) == 1
+        assert image[1] == "pending"
+        assert image[2] is None
+
     def test_init_quarantines_stale_pending_rows_without_erasing_recoverable_derived_state(self, test_db):
         import sqlite3
 
