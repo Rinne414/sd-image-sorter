@@ -1,5 +1,23 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
 
+type DatasetImageMeta = {
+  filename: string
+  width: number
+  height: number
+}
+
+type DatasetMakerTestRuntime = {
+  boundOnce: boolean
+  captions: Map<number, string>
+  imageIds: number[]
+  meta: Map<number, DatasetImageMeta>
+  _setActive?: (imageId: number) => void
+}
+
+type DatasetTestWindow = typeof window & {
+  DatasetMaker: DatasetMakerTestRuntime
+}
+
 /**
  * TIPO tag-upsampling assist (roadmap #8, v1) — Separation Console wiring.
  *
@@ -24,17 +42,39 @@ async function seedDatasetQueue(page: Page) {
       json: { enabled: true, floor: 0.15, total_rows: 0, images_with_scores: 0, models: [], estimated_bytes: 0 },
     })
   })
-  await page.goto('/')
-  await page.waitForLoadState('networkidle')
-  await page.waitForFunction(() => typeof (window as any).DatasetMaker?._setActive === 'function')
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.waitForFunction(() => {
+    const testWindow = window as DatasetTestWindow
+    return typeof testWindow.App?.switchView === 'function' && testWindow.DatasetMaker !== undefined
+  })
   await page.evaluate(() => {
-    const dm = (window as any).DatasetMaker
+    const testWindow = window as DatasetTestWindow
+    const dm = testWindow.DatasetMaker
+    if (!dm || !testWindow.App) {
+      throw new Error('Dataset Maker core is unavailable after application boot')
+    }
     dm.imageIds = [701, 702]
     dm.meta.set(701, { filename: 'tipo-a.png', width: 1024, height: 1024 })
     dm.meta.set(702, { filename: 'tipo-b.png', width: 1024, height: 1024 })
     dm.captions.set(701, '1girl, smile')
     dm.captions.set(702, '1girl, frown')
-    ;(window as any).App.switchView('dataset')
+    testWindow.App.switchView('dataset')
+  })
+  await page.waitForFunction(() => {
+    const testWindow = window as DatasetTestWindow
+    const moduleError = document.querySelector<HTMLElement>(
+      '#toast-container .toast.error .toast-message',
+    )?.textContent?.trim()
+    if (moduleError?.includes('Dataset Maker module failed to load:')) {
+      throw new Error(moduleError)
+    }
+    return testWindow.DatasetMaker?.boundOnce === true
+  })
+  await page.evaluate(() => {
+    const dm = (window as DatasetTestWindow).DatasetMaker
+    if (typeof dm?._setActive !== 'function') {
+      throw new TypeError('Dataset Maker _setActive is unavailable after module initialization')
+    }
     dm._setActive(701)
   })
 }
