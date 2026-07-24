@@ -2176,6 +2176,38 @@ class TestLibraryRootsEndpoint:
         assert resp.status_code == 200
         assert resp.json()["roots"] == []
 
+    def test_count_database_failure_is_not_reported_as_zero(
+        self,
+        test_client,
+        test_db,
+    ):
+        import database as db
+
+        root = db.add_library_root("/library/failing-root", label="Failing")
+        assert root is not None
+        with db.get_db() as conn:
+            conn.execute("ALTER TABLE images RENAME TO images_count_failure")
+
+        try:
+            response = test_client.get("/api/library-roots")
+        finally:
+            with db.get_db() as conn:
+                conn.execute("ALTER TABLE images_count_failure RENAME TO images")
+
+        assert response.status_code == 500
+        payload = response.json()
+        assert payload["code"] == "library_root_count_failed"
+        assert payload["root_path"] == "/library/failing-root"
+        assert payload["status_code"] == 500
+        assert payload["type"] == "HTTPException"
+        assert payload["error"] == payload["message"]
+        assert "OperationalError: no such table: images" in payload["database_error"]
+        assert "/library/failing-root" in payload["message"]
+        assert "Restart SD Image Sorter" in payload["message"]
+        assert "Support Diagnostics" in payload["message"]
+        assert "compatible database backup" in payload["message"]
+        assert "roots" not in payload
+
 
 class TestSelectionFolderScope:
     """v3.3.2 Library Navigation: selection tokens (select-all) must respect the folder scope."""

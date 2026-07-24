@@ -12,6 +12,7 @@ the facade because the pin suite patches it there.
 """
 
 import os
+import sqlite3
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
@@ -604,16 +605,32 @@ class GalleryMixin:
         """List registered library roots, each with a live indexed-image count (v3.3.2).
 
         Counts reuse the recursive folder filter so a root reports every image in
-        its subtree. Count failures degrade to 0 rather than failing the list.
+        its subtree. Database failures abort the list instead of reporting a false
+        zero count.
         """
         roots = db.list_library_roots()
         enriched = []
         for root in roots:
+            path = str(root.get("path") or "")
             try:
-                count = db.get_filtered_image_count(folder=root.get("path"))
-            except Exception:
-                count = 0
-            path = root.get("path") or ""
+                count = db.get_filtered_image_count(folder=path)
+            except sqlite3.Error as exc:
+                database_error = f"{type(exc).__name__}: {exc}"
+                message = (
+                    f"Could not count indexed images for Library Root '{path}': "
+                    f"{database_error}. Restart SD Image Sorter and try again. "
+                    "If this continues, open Support Diagnostics and restore a "
+                    "compatible database backup before retrying."
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail={
+                        "code": "library_root_count_failed",
+                        "message": message,
+                        "root_path": path,
+                        "database_error": database_error,
+                    },
+                ) from exc
             exists = bool(path) and os.path.isdir(path)
             enriched.append({**root, "image_count": count, "exists": exists})
         return {"roots": enriched}
