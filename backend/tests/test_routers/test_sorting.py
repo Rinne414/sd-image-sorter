@@ -3022,12 +3022,15 @@ class TestResolveDropSecurity:
         assert isolated_sorting_service.resolve_drop("C:\\Windows", [], None) == {"folder_path": ""}
 
     def test_like_wildcards_are_escaped(self, isolated_sorting_service, test_db):
-        # ``%`` is a SQL LIKE wildcard. The fix must escape it before binding,
-        # so submitting ``%`` does not match every row.
+        import database as db
+
+        # ``%`` is a SQL LIKE wildcard. Folder-segment matching must treat it
+        # literally so submitting ``%`` does not match every row.
         # Depends on ``test_db`` so the SQL query has a real ``images`` table to
         # run against — earlier traversal/separator tests short-circuit before
         # the query, but ``%`` is a normal character that passes path
         # validation and reaches the SQL layer.
+        db.add_image(path="/library/ordinary/image.png", filename="image.png")
         result = isolated_sorting_service.resolve_drop("%", [], None)
         assert result["folder_path"] == ""
 
@@ -3035,6 +3038,104 @@ class TestResolveDropSecurity:
 class TestResolveDropMatching:
     """resolve_drop maps dropped filenames back to their indexed folder so a
     folder drag fills the scan path instead of failing with a bare folder name."""
+
+    @pytest.mark.parametrize(
+        (
+            "stored_path",
+            "folder_name",
+            "windows_folder",
+            "posix_folder",
+        ),
+        [
+            (
+                r"C:\Library\Drop\image.png",
+                "Drop",
+                r"C:\Library\Drop",
+                "/mnt/c/Library/Drop",
+            ),
+            (
+                "/mnt/c/Library/Ä/image.png",
+                "ä",
+                r"C:\Library\Ä",
+                "/mnt/c/Library/Ä",
+            ),
+            (
+                r"\\Server\Share\Drop\image.png",
+                "Drop",
+                r"\\Server\Share\Drop",
+                r"\\Server\Share\Drop",
+            ),
+            (
+                r"\\Server\Share\image.png",
+                "Share",
+                "\\\\Server\\Share\\",
+                "\\\\Server\\Share\\",
+            ),
+        ],
+    )
+    def test_matches_indexed_folder_name_across_path_representations(
+        self,
+        isolated_sorting_service,
+        test_db,
+        monkeypatch,
+        stored_path,
+        folder_name,
+        windows_folder,
+        posix_folder,
+    ):
+        import database as db
+
+        monkeypatch.setattr(isolated_sorting_service, "_common_image_roots", lambda: [])
+        db.add_image(path=stored_path, filename="image.png")
+
+        result = isolated_sorting_service.resolve_drop(folder_name, [], dropped_files=[])
+
+        expected = windows_folder if os.name == "nt" else posix_folder
+        assert result == {"folder_path": expected}
+
+    def test_filename_match_returns_cross_runtime_parent(
+        self,
+        isolated_sorting_service,
+        test_db,
+    ):
+        import database as db
+
+        if os.name == "nt":
+            stored_path = "/mnt/c/Library/Drop/image.png"
+            expected_parent = r"C:\Library\Drop"
+        else:
+            stored_path = r"C:\Library\Drop\image.png"
+            expected_parent = "/mnt/c/Library/Drop"
+
+        db.add_image(
+            path=stored_path,
+            filename="image.png",
+            file_size=1234,
+            metadata_json="{}",
+        )
+
+        result = isolated_sorting_service.resolve_drop(
+            "Drop",
+            [],
+            dropped_files=[{"name": "image.png", "size": 1234}],
+        )
+
+        assert result == {"folder_path": expected_parent}
+
+    def test_posix_folder_name_match_remains_case_sensitive(
+        self,
+        isolated_sorting_service,
+        test_db,
+        monkeypatch,
+    ):
+        import database as db
+
+        monkeypatch.setattr(isolated_sorting_service, "_common_image_roots", lambda: [])
+        db.add_image(path="/library/drop/image.png", filename="image.png")
+
+        result = isolated_sorting_service.resolve_drop("Drop", [], dropped_files=[])
+
+        assert result == {"folder_path": ""}
 
     def test_matches_indexed_folder_by_filename_and_size(self, isolated_sorting_service, test_db):
         import database as db

@@ -11,7 +11,7 @@ import logging
 import os
 import platform
 import string
-from pathlib import Path
+from pathlib import Path, PurePath, PureWindowsPath
 from typing import Any, Dict, List, Optional
 
 from fastapi import BackgroundTasks, HTTPException
@@ -29,6 +29,11 @@ from services.sorting_models import (
     ValidatePathRequest,
 )
 from utils.path_validation import normalize_user_path, validate_folder_path
+from utils.source_paths import (
+    is_case_insensitive_indexed_path,
+    normalize_indexed_image_path,
+    translate_posix_mnt_path_to_windows_drive,
+)
 
 # NOTE(decomposition): keep the historical logger channel — tests attach
 # handlers / caplog filters to "services.sorting_service" (heartbeat pins),
@@ -52,6 +57,52 @@ def _svc():
     import services.sorting_service as sorting_service
 
     return sorting_service
+
+
+def _indexed_path_for_runtime(indexed_path: Optional[str]) -> str:
+    """Translate a stored drive path to the current runtime representation."""
+    normalized = normalize_indexed_image_path(indexed_path)
+    if os.name == "nt":
+        return translate_posix_mnt_path_to_windows_drive(normalized) or normalized
+    return normalize_user_path(normalized)
+
+
+def _indexed_path_object_for_runtime(indexed_path: Optional[str]) -> PurePath:
+    """Build a path object without host-misparsing an unmounted UNC path."""
+    runtime_path = _indexed_path_for_runtime(indexed_path)
+    if os.name != "nt" and runtime_path.startswith("\\\\"):
+        return PureWindowsPath(runtime_path)
+    return Path(runtime_path)
+
+
+def _indexed_parent_folder_for_runtime(indexed_path: Optional[str]) -> Optional[str]:
+    """Return a usable parent folder for a stored image path."""
+    parent = str(_indexed_path_object_for_runtime(indexed_path).parent)
+    if parent in {"", "."}:
+        return None
+    return parent
+
+
+def _indexed_ancestor_folder_for_runtime(
+    indexed_path: Optional[str],
+    folder_name: str,
+) -> Optional[str]:
+    """Return the nearest indexed ancestor whose complete segment matches."""
+    case_insensitive = is_case_insensitive_indexed_path(indexed_path)
+    expected_name = folder_name.casefold() if case_insensitive else folder_name
+    path_object = _indexed_path_object_for_runtime(indexed_path)
+
+    for parent in path_object.parents:
+        candidate_name = parent.name.casefold() if case_insensitive else parent.name
+        if candidate_name == expected_name:
+            return str(parent)
+
+    if isinstance(path_object, PureWindowsPath) and path_object.drive.startswith("\\\\"):
+        share_name = path_object.drive.rsplit("\\", 1)[-1]
+        candidate_name = share_name.casefold() if case_insensitive else share_name
+        if candidate_name == expected_name:
+            return path_object.anchor
+    return None
 
 
 def parse_metadata_job(*args, **kwargs):
@@ -238,7 +289,9 @@ class LibraryMixin:
                     rpath = row[0] if isinstance(row, (tuple, list)) else row["path"]
                     rname = row[1] if isinstance(row, (tuple, list)) else row["filename"]
                     rsize = row[2] if isinstance(row, (tuple, list)) else row["file_size"]
-                    parent = str(Path(rpath).parent)
+                    parent = _indexed_parent_folder_for_runtime(rpath)
+                    if parent is None:
+                        continue
                     expected_size = size_by_name.get(rname)
                     if expected_size and rsize and abs(int(rsize) - expected_size) < 2:
                         folder_scores[parent] = folder_scores.get(parent, 0) + 10
@@ -250,19 +303,25 @@ class LibraryMixin:
                     return {"folder_path": best}
 
         if folder_name and self._is_safe_folder_segment(folder_name):
-            like_segment = self._escape_like(folder_name)
+            posix_segment = f"/{folder_name}/"
+            windows_identity_segment = f"\\{folder_name.casefold()}\\"
             cursor.execute(
-                "SELECT path FROM images WHERE path LIKE ? ESCAPE '\\' LIMIT 1",
-                [f"%{os.sep}{like_segment}{os.sep}%"],
+                """
+                SELECT i.path
+                FROM images AS i
+                LEFT JOIN image_path_identities AS identity
+                    ON identity.image_id = i.id
+                WHERE INSTR(REPLACE(i.path, '\\', '/'), ?) > 0
+                   OR INSTR(identity.path_key, ?) > 0
+                ORDER BY i.id
+                """,
+                (posix_segment, windows_identity_segment),
             )
-            row = cursor.fetchone()
-            if row:
+            for row in cursor:
                 raw = row[0] if isinstance(row, (tuple, list)) else row["path"]
-                raw = str(raw)
-                sep = os.sep
-                idx = raw.lower().find(sep + folder_name.lower() + sep)
-                if idx >= 0:
-                    return {"folder_path": raw[: idx + len(sep) + len(folder_name)]}
+                resolved_folder = _indexed_ancestor_folder_for_runtime(raw, folder_name)
+                if resolved_folder is not None:
+                    return {"folder_path": resolved_folder}
 
             for base in self._common_image_roots():
                 candidate = (Path(base) / folder_name).resolve()
