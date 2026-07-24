@@ -17,16 +17,35 @@ This project now treats SQLite schema changes as versioned application code, not
 - If one migration fails, that migration is rolled back without advancing `schema_version`, and startup fails loudly.
 - If the database schema is newer than the latest bundled migration, startup fails before persistent connection PRAGMAs, migrations, or recovery writes run.
 
-## Current Scope
+## Downgrade Policy
 
-- The migration runner is forward-only.
-- There is no automated downgrade path today. Reopen a newer database with the application version that created it, or restore a compatible backup.
-- If a future change needs downgrade support or destructive schema replacement, document that rollout explicitly before shipping it.
+The migration runner is intentionally forward-only. An older application must
+never open a database whose `schema_version` is newer than the latest migration
+bundled by that application. There is no automatic or in-place downgrade path.
+
+When startup reports an unsupported newer schema:
+
+1. Stop using the older application with that database. Do not edit
+   `schema_version`, delete tables, or run ad hoc `ALTER TABLE` statements to
+   force startup.
+2. Reopen the database with the newer SD Image Sorter version that created it,
+   or restore a backup made by a version compatible with the older application.
+3. If work must move to an older version, make and verify a separate compatible
+   backup first. Use a supported export/import workflow when one exists; never
+   overwrite the newer database in place.
+
+The newer-schema guard fails before persistent PRAGMAs, migration writes, or
+stale-row recovery, so the refused database remains unchanged. Any future
+downgrade feature must be a separately designed, opt-in rollout with an
+explicit backup and data-loss policy; it must not be inferred from the
+forward migration list.
 
 ## Testing Expectations
 
 - Add or update tests for:
   - fresh DB creation
-  - representative legacy DB upgrade paths
+  - every shipped historical schema boundary (v0 and each numbered boundary
+    before the current version)
   - failed migration rollback behavior
   - version monotonicity / duplicate-version guardrails
+  - newer-schema rejection without PRAGMA, migration, or recovery writes
