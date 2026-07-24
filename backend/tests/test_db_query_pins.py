@@ -28,6 +28,7 @@ end-to-end; those use the shared temp-file ``test_db`` fixture. No real
 pins deliberately target the construction helpers and the export surface.
 """
 
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -358,11 +359,46 @@ class TestBaseQueryShapes:
         assert "LEFT JOIN tags _agg_tag ON _agg_tag.image_id = i.id" in q
         assert "COUNT(DISTINCT _agg_tag.id) as tag_count" in q
 
-    def test_character_count_uses_case_left_join(self):
+    def test_character_count_uses_category_case_left_join(self):
         q = _build_base_query("character_count", "COLS")
         assert "LEFT JOIN tags _agg_char ON _agg_char.image_id = i.id" in q
-        assert "%character%" in q
+        assert "LOWER(TRIM(COALESCE(_agg_char.category, ''))) = 'character'" in q
+        assert "_agg_char.category IS NULL" in q
+        assert "_agg_char.tag LIKE '%(%)'" in q
+        assert "_agg_char.tag NOT LIKE '%()'" in q
         assert "as char_count" in q
+
+    def test_character_count_uses_category_and_legacy_suffix_semantics(self):
+        conn = sqlite3.connect(":memory:")
+        conn.executescript(
+            """
+            CREATE TABLE images (id INTEGER PRIMARY KEY);
+            CREATE TABLE tags (
+                id INTEGER PRIMARY KEY,
+                image_id INTEGER NOT NULL,
+                tag TEXT NOT NULL,
+                category TEXT
+            );
+            INSERT INTO images (id) VALUES (1), (2), (3);
+            INSERT INTO tags (id, image_id, tag, category) VALUES
+                (1, 1, 'alice', ' Character '),
+                (2, 1, 'character_counter_request', 'general'),
+                (3, 2, 'hatsune_miku_(vocaloid)', NULL),
+                (4, 2, 'character_counter_request', NULL),
+                (5, 2, 'miku(vocaloid)', NULL),
+                (6, 3, 'character_counter_request', 'general');
+            """
+        )
+
+        query = (
+            _build_base_query("character_count", "i.id")
+            + _group_by_clause("character_count")
+            + " ORDER BY "
+            + _get_order_clause("character_count")
+        )
+        rows = conn.execute(query).fetchall()
+
+        assert rows == [(2, 2), (1, 1), (3, 0)]
 
     def test_rating_sort_reads_denormalized_ai_rating_with_distinct(self):
         q = _build_base_query("rating", "COLS")

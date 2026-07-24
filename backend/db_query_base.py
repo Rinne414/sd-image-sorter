@@ -43,7 +43,15 @@ def _build_base_query(sort_by: str, select_cols: str) -> str:
                    LEFT JOIN tags _agg_tag ON _agg_tag.image_id = i.id"""
     elif sort_by in ("character_count", "character_count_asc"):
         return f"""SELECT {select_cols},
-                   COUNT(DISTINCT CASE WHEN _agg_char.tag LIKE '%character%' THEN _agg_char.id END) as char_count
+                   COUNT(DISTINCT CASE
+                       WHEN LOWER(TRIM(COALESCE(_agg_char.category, ''))) = 'character'
+                            OR (
+                                _agg_char.category IS NULL
+                                AND _agg_char.tag LIKE '%(%)'
+                                AND _agg_char.tag NOT LIKE '%()'
+                            )
+                       THEN _agg_char.id
+                   END) as char_count
                    FROM images i
                    LEFT JOIN tags _agg_char ON _agg_char.image_id = i.id"""
     elif sort_by in ("rating", "rating_desc"):
