@@ -7,6 +7,7 @@ the facade module at call time so existing monkeypatches keep landing
 """
 
 import logging
+import sqlite3
 import threading
 import time
 from fastapi import BackgroundTasks, HTTPException
@@ -354,6 +355,28 @@ class ScanMixin:
                 duration_seconds = max(0.0, now - float(self._scan_progress.get("started_at") or now))
                 metadata_processed = result.get("metadata_processed", 0)
                 metadata_total = result.get("metadata_total", 0)
+
+                # v3.3.2 Library Navigation: scan completion includes atomically
+                # registering the root used by navigation and idle auto-refresh.
+                entry_stats_service.record_activity(
+                    entry_stats_service.KIND_ADDED, new_count
+                )
+                try:
+                    db.record_library_root_scan(normalized_folder_path)
+                except (sqlite3.Error, RuntimeError, ValueError) as exc:
+                    raise ScanError(
+                        message=(
+                            "Image indexing completed, but Library Root persistence "
+                            f"failed for '{normalized_folder_path}': {exc}. "
+                            "Check database write access and scan this folder again."
+                        ),
+                        path=None,
+                        details={
+                            "folder_path": normalized_folder_path,
+                            "database_error": str(exc),
+                        },
+                    ) from exc
+
                 logger.info(
                     "Scan completed: folder=%s files=%s indexed_new=%s unchanged_or_updated=%s removed=%s metadata=%s/%s errors=%s duration=%.1fs",
                     normalized_folder_path,
@@ -366,22 +389,6 @@ class ScanMixin:
                     errors,
                     duration_seconds,
                 )
-
-                # v3.3.2 Library Navigation: remember the scanned folder as a
-                # library root (multi-root management + idle auto-refresh target
-                # list). Bookkeeping must never fail an otherwise-complete scan.
-                entry_stats_service.record_activity(
-                    entry_stats_service.KIND_ADDED, new_count
-                )
-                try:
-                    db.add_library_root(normalized_folder_path)
-                    db.touch_library_root_scanned(normalized_folder_path)
-                except Exception as exc:  # pragma: no cover - defensive
-                    logger.warning(
-                        "Could not register library root %s: %s",
-                        normalized_folder_path,
-                        exc,
-                    )
 
                 if recent_errors:
                     samples = "; ".join(

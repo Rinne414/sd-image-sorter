@@ -50,3 +50,18 @@ class TestLibraryRoots:
         assert db.list_library_roots()[0]["last_scanned_at"] is None
         db.touch_library_root_scanned("l:/pics/anime")  # different case still matches
         assert db.list_library_roots()[0]["last_scanned_at"] is not None
+
+    def test_record_scan_registers_root_and_timestamp_atomically(self, test_db):
+        existing = db.add_library_root("L:/Pics/Anime", label="Anime")
+        assert existing is not None
+        assert db.set_library_root_enabled(existing["id"], False) is True
+
+        scanned = db.record_library_root_scan("l:/pics/anime/")
+
+        roots = db.list_library_roots()
+        assert len(roots) == 1
+        assert scanned == roots[0]
+        assert scanned["path"] == "l:/pics/anime"
+        assert scanned["label"] == "Anime"
+        assert scanned["enabled"] == 0
+        assert scanned["last_scanned_at"] is not None

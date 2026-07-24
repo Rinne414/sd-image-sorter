@@ -198,6 +198,7 @@ from db_collections import (
 )
 from db_library_roots import (
     add_library_root,
+    record_library_root_scan,
     list_library_roots,
     get_library_root,
     remove_library_root,

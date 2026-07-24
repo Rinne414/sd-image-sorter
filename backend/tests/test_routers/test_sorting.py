@@ -40,7 +40,7 @@ def isolated_sorting_service(tmp_path):
     Also redirects ``db.DATABASE_PATH`` to a throwaway DB **unless** a DB-isolating
     fixture (e.g. ``test_db``) has already pointed it at a test path. This keeps
     scan side-effects — notably the v3.3.2 auto-register-library-root hook, which
-    calls ``db.add_library_root`` on scan completion — from leaking rows into the
+    records a Library Root on scan completion — from leaking rows into the
     real ``data/images.db``. Uses the same ``test_``/``tmp`` path heuristic as
     ``test_tagging_service``'s production-DB guard.
     """
@@ -439,6 +439,45 @@ class TestScan:
         assert progress["status"] == "error"
         assert "simulated access denial" in progress["message"]
         assert "internal error" not in progress["message"].lower()
+
+    def test_scan_reports_library_root_persistence_failure_instead_of_done(
+        self,
+        test_client,
+        tmp_path: Path,
+        caplog,
+    ):
+        import logging
+
+        import database as db
+
+        with db.get_db() as conn:
+            conn.execute(
+                """
+                CREATE TRIGGER fail_library_root_scan
+                BEFORE INSERT ON library_roots
+                BEGIN
+                    SELECT RAISE(ABORT, 'library root storage unavailable');
+                END
+                """
+            )
+
+        with caplog.at_level(logging.INFO, logger="services.sorting_service"):
+            response = test_client.post(
+                "/api/scan",
+                json={"folder_path": str(tmp_path), "recursive": False},
+            )
+
+        assert response.status_code == 200
+        progress = test_client.get("/api/scan/progress").json()
+        assert progress["status"] == "error"
+        assert "image indexing completed" in progress["message"].lower()
+        assert "library root storage unavailable" in progress["message"]
+        assert str(tmp_path) in progress["message"]
+        assert "scan this folder again" in progress["message"].lower()
+        assert db.list_library_roots() == []
+        messages = [record.getMessage() for record in caplog.records]
+        assert any("Scan failed:" in message for message in messages)
+        assert not any("Scan completed:" in message for message in messages)
 
     def test_scan_rejects_a_linked_or_junction_root_before_background_start(
         self,

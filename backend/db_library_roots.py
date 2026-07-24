@@ -57,6 +57,37 @@ def add_library_root(path: str, label: Optional[str] = None) -> Optional[Dict[st
         return _row_to_dict(cursor.fetchone())
 
 
+def record_library_root_scan(path: str) -> Dict[str, Any]:
+    """Atomically register a scanned root and stamp its successful scan time."""
+    normalized = _normalize_root_path(path)
+    if not normalized:
+        raise ValueError("Scanned library root path must not be blank")
+
+    key = _root_path_key(normalized)
+    now = datetime.now().isoformat(timespec="seconds")
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO library_roots (
+                path, path_key, label, enabled, added_at, last_scanned_at
+            )
+            VALUES (?, ?, NULL, 1, ?, ?)
+            ON CONFLICT(path_key) DO UPDATE SET
+                path = excluded.path,
+                last_scanned_at = excluded.last_scanned_at
+            """,
+            (normalized, key, now, now),
+        )
+        cursor.execute("SELECT * FROM library_roots WHERE path_key = ?", (key,))
+        stored = _row_to_dict(cursor.fetchone())
+        if stored is None:
+            raise RuntimeError(
+                f"Scanned library root was not readable after persistence: {normalized}"
+            )
+        return stored
+
+
 def list_library_roots() -> List[Dict[str, Any]]:
     """All registered roots, most-recently-added first."""
     with get_db() as conn:
