@@ -3,7 +3,7 @@ import fsPromises from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import net from 'node:net'
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
+import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import type { Request, Response } from '@playwright/test'
 
 import { expect, test } from '../fixtures/click-ledger'
@@ -82,6 +82,26 @@ function waitForProcessExit(child: ChildProcess, timeoutMilliseconds: number): P
       resolve(false)
     }, timeoutMilliseconds)
   })
+}
+
+function canBindLoopbackPort(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = net.createServer()
+    server.unref()
+    server.once('error', () => resolve(false))
+    server.listen({ host: '127.0.0.1', port }, () => {
+      server.close((error) => resolve(error === undefined))
+    })
+  })
+}
+
+async function waitForLoopbackPortRelease(port: number, timeoutMilliseconds: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMilliseconds
+  while (Date.now() < deadline) {
+    if (await canBindLoopbackPort(port)) return true
+    await wait(100)
+  }
+  return canBindLoopbackPort(port)
 }
 
 function reserveLoopbackPort(): Promise<number> {
@@ -175,7 +195,7 @@ async function startIsolatedBackend(): Promise<IsolatedBackend> {
   } catch (error) {
     const startError = error instanceof Error ? error : new Error(String(error))
     try {
-      await stopIsolatedBackend(backend)
+      await stopIsolatedBackend(backend, 5_000)
     } catch (cleanupError) {
       const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
       throw new Error(
@@ -186,47 +206,113 @@ async function startIsolatedBackend(): Promise<IsolatedBackend> {
   }
 }
 
-async function stopIsolatedBackend(backend: IsolatedBackend): Promise<void> {
-  let terminationError: Error | null = null
-  let cleanupError: Error | null = null
+async function stopIsolatedBackend(
+  backend: IsolatedBackend,
+  terminationTimeoutMilliseconds: number,
+): Promise<void> {
+  let taskkillDiagnostic: string | null = null
   try {
     if (
       backend.process.exitCode === null
       && backend.process.signalCode === null
       && !(backend.spawnError !== null && backend.process.pid === undefined)
     ) {
-      backend.process.kill()
-      const stopped = await waitForProcessExit(backend.process, 5_000)
-      if (!stopped) {
-        if (process.platform === 'win32' && backend.process.pid) {
-          execFileSync('taskkill', ['/pid', String(backend.process.pid), '/T', '/F'], {
-            stdio: ['ignore', 'pipe', 'pipe'],
-          })
-        } else {
-          backend.process.kill('SIGKILL')
+      if (process.platform === 'win32' && backend.process.pid) {
+        const taskkill = spawnSync('taskkill', ['/pid', String(backend.process.pid), '/T', '/F'], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          windowsHide: true,
+        })
+        if (taskkill.error) {
+          taskkillDiagnostic = `taskkill could not start: ${taskkill.error.message}`
+        } else if (taskkill.status !== 0) {
+          const output = `${taskkill.stdout || ''}${taskkill.stderr || ''}`.trim()
+          taskkillDiagnostic = `taskkill exited with code ${String(taskkill.status)}${output ? `: ${output}` : ''}`
         }
-        if (!await waitForProcessExit(backend.process, 5_000)) {
+      } else {
+        backend.process.kill()
+      }
+      const stopped = await waitForProcessExit(backend.process, terminationTimeoutMilliseconds)
+      if (!stopped) {
+        if (process.platform === 'win32') {
+          const detail = taskkillDiagnostic === null ? '' : ` ${taskkillDiagnostic}`
+          throw new Error(`Isolated entry backend process tree on port ${backend.port} did not terminate.${detail}`)
+        }
+        backend.process.kill('SIGKILL')
+        if (!await waitForProcessExit(backend.process, terminationTimeoutMilliseconds)) {
           throw new Error(`Isolated entry backend on port ${backend.port} did not terminate.`)
         }
       }
     }
-  } catch (error) {
-    terminationError = error instanceof Error ? error : new Error(String(error))
-  } finally {
-    try {
-      await fsPromises.rm(backend.dataRoot, { recursive: true, force: true })
-    } catch (error) {
-      cleanupError = error instanceof Error ? error : new Error(String(error))
+    if (!await waitForLoopbackPortRelease(backend.port, terminationTimeoutMilliseconds)) {
+      const detail = taskkillDiagnostic === null ? '' : ` ${taskkillDiagnostic}`
+      throw new Error(
+        `Isolated entry backend port ${backend.port} was not released after `
+        + `${terminationTimeoutMilliseconds}ms.${detail}`,
+      )
     }
+  } catch (error) {
+    throw error instanceof Error ? error : new Error(String(error))
   }
-  if (terminationError !== null && cleanupError !== null) {
-    throw new Error(
-      `Isolated entry backend termination failed: ${terminationError.message}; cleanup also failed: ${cleanupError.message}`,
-    )
+  try {
+    await fsPromises.rm(backend.dataRoot, { recursive: true, force: true })
+  } catch (error) {
+    const cleanupError = error instanceof Error ? error : new Error(String(error))
+    throw new Error(`Isolated entry backend cleanup failed for ${backend.dataRoot}: ${cleanupError.message}`)
   }
-  if (terminationError !== null) throw terminationError
-  if (cleanupError !== null) throw cleanupError
 }
+
+test('isolated backend cleanup preserves its data root when the port remains occupied', async () => {
+  const dataRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'sd-image-sorter-entry-cleanup-'))
+  const server = net.createServer()
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    cwd: repoRoot,
+    stdio: 'ignore',
+  })
+  try {
+    await new Promise<void>((resolve, reject) => {
+      child.once('spawn', resolve)
+      child.once('error', reject)
+    })
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen({ host: '127.0.0.1', port: 0 }, resolve)
+    })
+    const address = server.address()
+    if (!address || typeof address === 'string') {
+      throw new Error('Could not determine the occupied cleanup-test port.')
+    }
+    const backend: IsolatedBackend = {
+      baseURL: `http://127.0.0.1:${address.port}`,
+      dataRoot,
+      port: address.port,
+      process: child,
+      spawnError: null,
+      output: [],
+    }
+
+    await expect(stopIsolatedBackend(backend, 100)).rejects.toThrow(
+      `Isolated entry backend port ${address.port} was not released after 100ms.`,
+    )
+    expect(fs.existsSync(dataRoot)).toBe(true)
+  } finally {
+    if (server.listening) {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error)
+          else resolve()
+        })
+      })
+    }
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL')
+      if (!await waitForProcessExit(child, 5_000)) {
+        throw new Error('Cleanup-test child process did not terminate.')
+      }
+    }
+    await fsPromises.rm(dataRoot, { recursive: true, force: true })
+  }
+})
 
 /**
  * v4.0 Aurora shell — mission entry page (canvas #11a, Phase 2).
@@ -397,7 +483,7 @@ test.describe('Entry page (opted in)', () => {
       expect(pageProblems).toEqual([])
       expect(requestProblems).toEqual([])
     } finally {
-      await stopIsolatedBackend(backend)
+      await stopIsolatedBackend(backend, 5_000)
     }
   })
 
