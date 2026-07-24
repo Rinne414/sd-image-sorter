@@ -23,6 +23,24 @@ type CensorTestState = {
 
 type CensorTestWindow = Window & { __CENSOR_STATE__?: CensorTestState }
 
+type LibraryImage = {
+  id: number
+  filename: string
+  path: string
+}
+
+type CensorDetection = {
+  box: [number, number, number, number]
+  class: string
+  confidence: number
+  label: string
+}
+
+type CensorDetectPayload = {
+  detections: CensorDetection[]
+  modelType: string
+}
+
 const repoRoot = path.resolve(__dirname, '..', '..', '..')
 
 function commandExists(candidate: string): boolean {
@@ -85,7 +103,10 @@ const tagIoRoot = path.join(manualRoot, 'tag-io')
 const tagLiveRoot = path.join(manualRoot, 'tag-live-inbox')
 const sidebarLayoutRoot = path.join(manualRoot, 'sidebar-layout')
 const sidebarLayoutFilenamePrefix = 'manual-sidebar-layout-'
-const repoDetectableFixture = path.join(repoRoot, 'backend', 'favorites', '131592481_p26.webp')
+// Public Domain Mark 1.0 fixture: Boris Kustodiev, Lying Nude (1915).
+// Openverse ID: fcaad3ee-42ec-4710-8c50-735cc1b4461a.
+const repoDetectableFixture = path.join(repoRoot, 'tests', 'e2e', 'fixtures', 'censor-nudenet-public-domain.jpg')
+const repoSam3Fixture = path.join(repoRoot, 'backend', 'favorites', '131592481_p26.webp')
 
 function runBackendScript(script: string) {
   return execFileSync(backendPython, ['-X', 'utf8', '-c', script], {
@@ -98,12 +119,55 @@ function runBackendJson<T>(script: string): T {
   return JSON.parse(runBackendScript(script)) as T
 }
 
-function ensureLibraryImageEntry(imagePath: string): { id: number, filename: string, path: string } | null {
+function parseCensorDetectPayload(value: unknown, context: string): CensorDetectPayload {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError(`${context} must be an object`)
+  }
+
+  const modelType = Reflect.get(value, 'model_type')
+  const rawDetections = Reflect.get(value, 'detections')
+  if (typeof modelType !== 'string' || !Array.isArray(rawDetections)) {
+    throw new TypeError(`${context} must contain string model_type and array detections fields`)
+  }
+
+  const detections = rawDetections.map((detection, index): CensorDetection => {
+    if (typeof detection !== 'object' || detection === null || Array.isArray(detection)) {
+      throw new TypeError(`${context}.detections[${index}] must be an object`)
+    }
+
+    const box = Reflect.get(detection, 'box')
+    const detectionClass = Reflect.get(detection, 'class')
+    const confidence = Reflect.get(detection, 'confidence')
+    const label = Reflect.get(detection, 'label')
+    if (
+      !Array.isArray(box)
+      || box.length !== 4
+      || !box.every((coordinate) => typeof coordinate === 'number' && Number.isFinite(coordinate))
+      || typeof detectionClass !== 'string'
+      || typeof confidence !== 'number'
+      || !Number.isFinite(confidence)
+      || typeof label !== 'string'
+    ) {
+      throw new TypeError(`${context}.detections[${index}] has an invalid detection shape`)
+    }
+
+    return {
+      box: [box[0], box[1], box[2], box[3]],
+      class: detectionClass,
+      confidence,
+      label,
+    }
+  })
+
+  return { detections, modelType }
+}
+
+function ensureLibraryImageEntry(imagePath: string): LibraryImage | null {
   if (!require('node:fs').existsSync(imagePath)) {
     return null
   }
 
-  return runBackendJson<{ id: number, filename: string, path: string }>(`
+  return runBackendJson<LibraryImage>(`
 import json
 from pathlib import Path
 import sys
@@ -937,58 +1001,32 @@ function formatArtistNameForUi(name: string) {
     .join(' ')
 }
 
-async function findDetectableImage(request: APIRequestContext) {
+async function findDetectableImage(request: APIRequestContext): Promise<LibraryImage> {
   const seededFixture = ensureLibraryImageEntry(repoDetectableFixture)
-  if (seededFixture) {
-    const detect = await request.post('/api/censor/detect', {
-      timeout: 120000,
-      data: {
-        image_id: seededFixture.id,
-        model_type: 'both',
-        confidence: 0.15,
-        style: 'mosaic',
-        block_size: 16,
-        target_classes: ['breasts', 'pussy', 'dick', 'anus', 'cum'],
-      },
-    })
-    if (detect.ok()) {
-      const detectPayload = await detect.json()
-      if ((detectPayload.detections || []).length > 0) {
-        return seededFixture
-      }
-    }
+  if (!seededFixture) {
+    throw new Error(`Checked-in Censor E2E fixture is missing: ${repoDetectableFixture}`)
   }
 
-  const response = await request.get('/api/images?limit=20')
-  expect(response.ok()).toBeTruthy()
-  const payload = await response.json()
+  const detect = await request.post('/api/censor/detect', {
+    timeout: 120000,
+    data: {
+      image_id: seededFixture.id,
+      model_type: 'nudenet',
+      confidence_threshold: 0.15,
+      target_classes: ['breasts'],
+    },
+  })
+  expect(detect.ok(), `NudeNet fixture detection failed for ${seededFixture.filename}`).toBeTruthy()
 
-  for (const image of payload.images || []) {
-      const detect = await request.post('/api/censor/detect', {
-        timeout: 120000,
-        data: {
-          image_id: image.id,
-          model_type: 'both',
-        confidence: 0.15,
-        style: 'mosaic',
-        block_size: 16,
-        target_classes: ['breasts', 'pussy', 'dick', 'anus', 'cum'],
-      },
-    })
-    if (!detect.ok()) {
-      continue
-    }
-    const detectPayload = await detect.json()
-    if ((detectPayload.detections || []).length > 0) {
-      return image
-    }
-  }
-
-  return null
+  const detectPayload = parseCensorDetectPayload(await detect.json(), 'NudeNet fixture response')
+  expect(detectPayload.modelType).toBe('nudenet')
+  expect(detectPayload.detections.length).toBeGreaterThan(0)
+  expect(detectPayload.detections.every((detection) => detection.label === 'FEMALE_BREAST_EXPOSED')).toBeTruthy()
+  return seededFixture
 }
 
 async function findSam3PromptMatch(request: APIRequestContext) {
-  const seededFixture = ensureLibraryImageEntry(repoDetectableFixture)
+  const seededFixture = ensureLibraryImageEntry(repoSam3Fixture)
   if (seededFixture) {
     for (const prompt of ['person', 'face', 'hand', 'breasts']) {
       const segment = await request.post('/api/censor/segment-text', {
@@ -2581,14 +2619,10 @@ test('censor detect and save should work through the real UI flow', async ({ pag
   const modelsResponse = await request.get('/api/censor/models')
   expect(modelsResponse.ok()).toBeTruthy()
   const modelsPayload = await modelsResponse.json()
-  const detectionBackends = (modelsPayload.models || []).filter((model: any) =>
-    ['legacy', 'nudenet'].includes(String(model?.id || ''))
-  )
-  const availableDetectionBackend = detectionBackends.find((model: any) => model?.available)
+  const nudenetBackend = (modelsPayload.models || []).find((model: any) => model?.id === 'nudenet')
   test.skip(
-    !availableDetectionBackend,
-    detectionBackends.map((model: any) => model?.message).filter(Boolean).join(' | ')
-      || 'No local censor detection backend is ready in this workspace',
+    !nudenetBackend?.available,
+    nudenetBackend?.message || 'NudeNet is not ready in this workspace',
   )
 
   const image = await findDetectableImage(request)
@@ -2609,13 +2643,30 @@ test('censor detect and save should work through the real UI flow', async ({ pag
   await page.locator('#btn-open-detect-modal').click()
   await expect(page.locator('#detect-modal.visible')).toBeVisible()
 
+  await page.selectOption('#censor-model-type', 'nudenet')
+  await expect(page.locator('#censor-model-type')).toHaveValue('nudenet')
+
   await page.locator('#censor-confidence').evaluate((node) => {
     const input = node as HTMLInputElement
     input.value = '0.15'
     input.dispatchEvent(new Event('input', { bubbles: true }))
   })
 
+  const uiDetectionResponsePromise = page.waitForResponse((response) =>
+    response.url().endsWith('/api/censor/detect') && response.request().method() === 'POST'
+  )
   await page.locator('#btn-auto-detect-current-modal').click()
+  const uiDetectionResponse = await uiDetectionResponsePromise
+  expect(uiDetectionResponse.ok()).toBeTruthy()
+  const uiDetectionRequest = uiDetectionResponse.request().postDataJSON()
+  expect(uiDetectionRequest).toMatchObject({
+    confidence_threshold: 0.15,
+    image_id: image.id,
+    model_type: 'nudenet',
+  })
+  const uiDetectionPayload = parseCensorDetectPayload(await uiDetectionResponse.json(), 'NudeNet UI response')
+  expect(uiDetectionPayload.modelType).toBe('nudenet')
+  expect(uiDetectionPayload.detections.length).toBeGreaterThan(0)
   await expect.poll(async () => {
     return await page.locator('#censor-queue-list .queue-thumb-v2.processed').count()
   }, { timeout: 30000 }).toBe(1)
