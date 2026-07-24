@@ -30,9 +30,8 @@ from services.sorting_models import (
 )
 from utils.path_validation import normalize_user_path, validate_folder_path
 from utils.source_paths import (
+    indexed_path_for_runtime,
     is_case_insensitive_indexed_path,
-    normalize_indexed_image_path,
-    translate_posix_mnt_path_to_windows_drive,
 )
 
 # NOTE(decomposition): keep the historical logger channel — tests attach
@@ -59,17 +58,9 @@ def _svc():
     return sorting_service
 
 
-def _indexed_path_for_runtime(indexed_path: Optional[str]) -> str:
-    """Translate a stored drive path to the current runtime representation."""
-    normalized = normalize_indexed_image_path(indexed_path)
-    if os.name == "nt":
-        return translate_posix_mnt_path_to_windows_drive(normalized) or normalized
-    return normalize_user_path(normalized)
-
-
 def _indexed_path_object_for_runtime(indexed_path: Optional[str]) -> PurePath:
     """Build a path object without host-misparsing an unmounted UNC path."""
-    runtime_path = _indexed_path_for_runtime(indexed_path)
+    runtime_path = indexed_path_for_runtime(indexed_path, os.name)
     if os.name != "nt" and runtime_path.startswith("\\\\"):
         return PureWindowsPath(runtime_path)
     return Path(runtime_path)
@@ -140,13 +131,18 @@ class LibraryMixin:
         if not root:
             raise HTTPException(status_code=404, detail="Library root not found")
         request = ScanRequest(
-            folder_path=root["path"],
+            folder_path=indexed_path_for_runtime(root["path"], os.name),
             recursive=True,
             quick_import=True,
             cleanup_missing=False,
             force_reparse=False,
         )
-        return self.start_scan(request, background_tasks, SCAN_SOURCE_LIBRARY_RESCAN)
+        return self.start_registered_root_scan(
+            request,
+            background_tasks,
+            SCAN_SOURCE_LIBRARY_RESCAN,
+            root_record_path=root["path"],
+        )
 
     def auto_refresh_library(self, background_tasks: BackgroundTasks) -> Dict[str, Any]:
         """Idle-triggered quick-scan of the stalest enabled root (v3.3.2 Library Navigation).
@@ -171,17 +167,18 @@ class LibraryMixin:
         # Oldest last_scanned_at first; never-scanned (None -> "") sorts first.
         target = min(roots, key=lambda r: r.get("last_scanned_at") or "")
         request = ScanRequest(
-            folder_path=target["path"],
+            folder_path=indexed_path_for_runtime(target["path"], os.name),
             recursive=True,
             quick_import=True,
             cleanup_missing=False,
             force_reparse=False,
         )
         try:
-            scan = self.start_scan(
+            scan = self.start_registered_root_scan(
                 request,
                 background_tasks,
                 SCAN_SOURCE_LIBRARY_AUTO_REFRESH,
+                root_record_path=target["path"],
             )
         except HTTPException as exc:
             if exc.status_code == 409:

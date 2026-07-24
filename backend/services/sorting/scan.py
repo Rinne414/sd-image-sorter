@@ -66,6 +66,38 @@ class ScanMixin:
         background_tasks: BackgroundTasks,
         source: ScanSource,
     ) -> ScanStartResult:
+        """Start a user-requested scan and register its runtime folder as a root."""
+        return self._start_scan(
+            request,
+            background_tasks,
+            source,
+            root_record_path=normalize_user_path(request.folder_path),
+        )
+
+    def start_registered_root_scan(
+        self,
+        request: ScanRequest,
+        background_tasks: BackgroundTasks,
+        source: ScanSource,
+        *,
+        root_record_path: str,
+    ) -> ScanStartResult:
+        """Start a registered-root scan while preserving its stored display path."""
+        return self._start_scan(
+            request,
+            background_tasks,
+            source,
+            root_record_path=root_record_path,
+        )
+
+    def _start_scan(
+        self,
+        request: ScanRequest,
+        background_tasks: BackgroundTasks,
+        source: ScanSource,
+        *,
+        root_record_path: str,
+    ) -> ScanStartResult:
         """Start scanning a folder for images."""
         if source not in VALID_SCAN_SOURCES:
             raise ValueError(f"Unsupported scan source: {source}")
@@ -362,17 +394,17 @@ class ScanMixin:
                     entry_stats_service.KIND_ADDED, new_count
                 )
                 try:
-                    db.record_library_root_scan(normalized_folder_path)
+                    db.record_library_root_scan(root_record_path)
                 except (sqlite3.Error, RuntimeError, ValueError) as exc:
                     raise ScanError(
                         message=(
                             "Image indexing completed, but Library Root persistence "
-                            f"failed for '{normalized_folder_path}': {exc}. "
+                            f"failed for '{root_record_path}': {exc}. "
                             "Check database write access and scan this folder again."
                         ),
                         path=None,
                         details={
-                            "folder_path": normalized_folder_path,
+                            "folder_path": root_record_path,
                             "database_error": str(exc),
                         },
                     ) from exc

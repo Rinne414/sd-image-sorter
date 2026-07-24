@@ -29,6 +29,7 @@ from utils.pagination_cursor import (
     decode_image_cursor,
     encode_image_cursor_from_image,
 )
+from utils.source_paths import indexed_path_for_runtime
 
 
 def _svc():
@@ -631,7 +632,8 @@ class GalleryMixin:
                         "database_error": database_error,
                     },
                 ) from exc
-            exists = bool(path) and os.path.isdir(path)
+            runtime_path = indexed_path_for_runtime(path, os.name)
+            exists = bool(runtime_path) and os.path.isdir(runtime_path)
             enriched.append({**root, "image_count": count, "exists": exists})
         return {"roots": enriched}
 

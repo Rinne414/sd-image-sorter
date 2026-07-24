@@ -9,6 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from utils import source_paths  # noqa: E402
 from utils.source_paths import (  # noqa: E402
     IndexedPathAccessError,
     build_indexed_folder_scope_query_patterns,
@@ -102,6 +103,42 @@ def test_translate_posix_mnt_path_to_windows_drive():
     translated = translate_posix_mnt_path_to_windows_drive("/mnt/l/Tencent Files/foo/bar.png")
 
     assert translated == r"L:\Tencent Files\foo\bar.png"
+
+
+def test_indexed_path_for_windows_runtime_translates_wsl_drive():
+    runtime_path = source_paths.indexed_path_for_runtime(
+        "/mnt/l/Tencent Files/foo/bar.png",
+        "nt",
+    )
+
+    assert runtime_path == r"L:\Tencent Files\foo\bar.png"
+
+
+def test_indexed_path_for_posix_runtime_translates_windows_drive():
+    runtime_path = source_paths.indexed_path_for_runtime(
+        r"L:\Tencent Files\foo\bar.png",
+        "posix",
+    )
+
+    assert runtime_path == "/mnt/l/Tencent Files/foo/bar.png"
+
+
+def test_indexed_path_for_runtime_preserves_ordinary_posix_path():
+    runtime_path = source_paths.indexed_path_for_runtime(
+        "/srv/Stable Diffusion/Images",
+        "posix",
+    )
+
+    assert runtime_path == "/srv/Stable Diffusion/Images"
+
+
+def test_indexed_path_for_posix_runtime_preserves_unmapped_unc_path():
+    runtime_path = source_paths.indexed_path_for_runtime(
+        r"\\Server\Share\Images",
+        "posix",
+    )
+
+    assert runtime_path == r"\\Server\Share\Images"
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Drive-letter translation is only needed on non-Windows runtimes")

@@ -2176,6 +2176,38 @@ class TestLibraryRootsEndpoint:
         assert resp.status_code == 200
         assert resp.json()["roots"] == []
 
+    def test_exists_uses_runtime_path_without_rewriting_response(
+        self,
+        test_client,
+        test_db,
+        monkeypatch,
+    ):
+        import os
+        import database as db
+
+        if os.name == "nt":
+            registered = db.add_library_root("/mnt/l/Library/Images")
+            runtime_path = r"L:\Library\Images"
+        else:
+            registered = db.add_library_root(r"L:\Library\Images")
+            runtime_path = "/mnt/l/Library/Images"
+        assert registered is not None
+        checked_paths = []
+
+        def fake_isdir(path):
+            checked_paths.append(path)
+            return path == runtime_path
+
+        monkeypatch.setattr("services.image.gallery.os.path.isdir", fake_isdir)
+
+        response = test_client.get("/api/library-roots")
+
+        assert response.status_code == 200
+        root = response.json()["roots"][0]
+        assert root["path"] == registered["path"]
+        assert root["exists"] is True
+        assert checked_paths == [runtime_path]
+
     def test_count_database_failure_is_not_reported_as_zero(
         self,
         test_client,

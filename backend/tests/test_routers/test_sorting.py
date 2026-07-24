@@ -316,7 +316,13 @@ class TestScan:
         db.add_library_root(str(tmp_path))
         service = get_sorting_service()
 
-        def fake_start_scan(request, background_tasks, source):
+        def fake_start_registered_root_scan(
+            request,
+            background_tasks,
+            source,
+            *,
+            root_record_path,
+        ):
             return {
                 "status": "started",
                 "message": "started",
@@ -325,7 +331,11 @@ class TestScan:
                 "internal_only": "filtered",
             }
 
-        monkeypatch.setattr(service, "start_scan", fake_start_scan)
+        monkeypatch.setattr(
+            service,
+            "start_registered_root_scan",
+            fake_start_registered_root_scan,
+        )
 
         response = test_client.post("/api/library/auto-refresh", json={})
 

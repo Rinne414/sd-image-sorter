@@ -87,6 +87,17 @@ def _translate_windows_drive_path_to_posix_indexed(raw_path: str) -> Optional[st
     return str(PurePosixPath("/mnt", drive.lower(), *windows_path.parts[1:]))
 
 
+def indexed_path_for_runtime(
+    indexed_path: Optional[str],
+    runtime_os_name: str,
+) -> str:
+    """Translate a stored indexed path to the requested runtime representation."""
+    normalized = normalize_indexed_image_path(indexed_path)
+    if runtime_os_name == "nt":
+        return translate_posix_mnt_path_to_windows_drive(normalized) or normalized
+    return _translate_windows_drive_path_to_posix_indexed(normalized) or normalized
+
+
 def normalize_indexed_image_path(path: Optional[str]) -> str:
     """Normalize stored image paths without rewriting them to the current host style."""
     text = str(path or "").strip()
