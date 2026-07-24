@@ -11,6 +11,7 @@ import logging
 import os
 import platform
 import string
+from collections.abc import Mapping
 from pathlib import Path, PurePath, PureWindowsPath
 from typing import Any, Dict, List, Optional
 
@@ -18,6 +19,7 @@ from fastapi import BackgroundTasks, HTTPException
 
 import database as db
 from app_info import APP_VERSION, GITHUB_REPOSITORY_URL
+from services.gallery_job_gate import gallery_job_transition
 from services.sorting_models import (
     SCAN_ACTIVE_STATUSES,
     SCAN_SOURCE_LIBRARY_AUTO_REFRESH,
@@ -30,6 +32,7 @@ from services.sorting_models import (
 )
 from utils.path_validation import normalize_user_path, validate_folder_path
 from utils.source_paths import (
+    indexed_image_path_match_key,
     indexed_path_for_runtime,
     is_case_insensitive_indexed_path,
 )
@@ -43,6 +46,23 @@ logger = logging.getLogger("services.sorting_service")
 def _is_manual_completion_pending(status: Optional[str], source: Optional[str]) -> bool:
     """Return whether a manual terminal result still owns shared scan progress."""
     return status in SCAN_TERMINAL_STATUSES and source in {None, SCAN_SOURCE_MANUAL}
+
+
+def _active_scan_targets_library_root(
+    scan_progress: Mapping[str, object],
+    root_id: int,
+    root_path: str,
+) -> bool:
+    """Return whether active scan completion would register the selected root."""
+    if scan_progress.get("status") not in SCAN_ACTIVE_STATUSES:
+        return False
+    if scan_progress.get("registered_root_id") == root_id:
+        return True
+    active_root_path = scan_progress.get("root_record_path")
+    if not isinstance(active_root_path, str):
+        return False
+    root_key = indexed_image_path_match_key(root_path)
+    return bool(root_key) and indexed_image_path_match_key(active_root_path) == root_key
 
 
 def _svc():
@@ -121,9 +141,24 @@ class LibraryMixin:
 
     def remove_library_root(self, root_id: int) -> Dict[str, Any]:
         """Unregister a library root. Indexed images are NOT deleted (v3.3.2)."""
-        if not db.remove_library_root(int(root_id)):
-            raise HTTPException(status_code=404, detail="Library root not found")
-        return {"status": "removed", "id": int(root_id)}
+        normalized_root_id = int(root_id)
+        with gallery_job_transition(), self._scan_lock:
+            root = db.get_library_root(normalized_root_id)
+            if not root:
+                raise HTTPException(status_code=404, detail="Library root not found")
+            suppress_root_record = _active_scan_targets_library_root(
+                self._scan_progress,
+                normalized_root_id,
+                root["path"],
+            )
+            if not db.remove_library_root(normalized_root_id):
+                raise HTTPException(status_code=404, detail="Library root not found")
+            if suppress_root_record:
+                self._scan_progress = {
+                    **self._scan_progress,
+                    "suppress_root_record": True,
+                }
+        return {"status": "removed", "id": normalized_root_id}
 
     def rescan_library_root(self, root_id: int, background_tasks: BackgroundTasks) -> ScanStartResult:
         """Re-scan a registered root to pick up new/changed files (quick import)."""
@@ -142,6 +177,7 @@ class LibraryMixin:
             background_tasks,
             SCAN_SOURCE_LIBRARY_RESCAN,
             root_record_path=root["path"],
+            root_id=root["id"],
         )
 
     def auto_refresh_library(self, background_tasks: BackgroundTasks) -> Dict[str, Any]:
@@ -179,6 +215,7 @@ class LibraryMixin:
                 background_tasks,
                 SCAN_SOURCE_LIBRARY_AUTO_REFRESH,
                 root_record_path=target["path"],
+                root_id=target["id"],
             )
         except HTTPException as exc:
             if exc.status_code == 409:

@@ -322,6 +322,7 @@ class TestScan:
             source,
             *,
             root_record_path,
+            root_id,
         ):
             return {
                 "status": "started",

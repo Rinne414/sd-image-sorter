@@ -72,6 +72,7 @@ class ScanMixin:
             background_tasks,
             source,
             root_record_path=normalize_user_path(request.folder_path),
+            registered_root_id=None,
         )
 
     def start_registered_root_scan(
@@ -81,6 +82,7 @@ class ScanMixin:
         source: ScanSource,
         *,
         root_record_path: str,
+        root_id: int,
     ) -> ScanStartResult:
         """Start a registered-root scan while preserving its stored display path."""
         return self._start_scan(
@@ -88,6 +90,7 @@ class ScanMixin:
             background_tasks,
             source,
             root_record_path=root_record_path,
+            registered_root_id=int(root_id),
         )
 
     def _start_scan(
@@ -97,6 +100,7 @@ class ScanMixin:
         source: ScanSource,
         *,
         root_record_path: str,
+        registered_root_id: int | None,
     ) -> ScanStartResult:
         """Start scanning a folder for images."""
         if source not in VALID_SCAN_SOURCES:
@@ -115,6 +119,11 @@ class ScanMixin:
             )
 
         with gallery_job_transition(), self._scan_lock:
+            if (
+                registered_root_id is not None
+                and db.get_library_root(registered_root_id) is None
+            ):
+                raise HTTPException(status_code=404, detail="Library root not found")
             current_status = self._scan_progress["status"]
             current_source = self._scan_progress.get("source")
             worker_alive = bool(self._scan_worker_thread and self._scan_worker_thread.is_alive())
@@ -167,6 +176,9 @@ class ScanMixin:
             self._scan_progress = {
                 "run_id": run_id,
                 "source": source,
+                "root_record_path": root_record_path,
+                "registered_root_id": registered_root_id,
+                "suppress_root_record": False,
                 "status": "starting",
                 "step": "starting",
                 "current": 0,
@@ -393,21 +405,27 @@ class ScanMixin:
                 entry_stats_service.record_activity(
                     entry_stats_service.KIND_ADDED, new_count
                 )
-                try:
-                    db.record_library_root_scan(root_record_path)
-                except (sqlite3.Error, RuntimeError, ValueError) as exc:
-                    raise ScanError(
-                        message=(
-                            "Image indexing completed, but Library Root persistence "
-                            f"failed for '{root_record_path}': {exc}. "
-                            "Check database write access and scan this folder again."
-                        ),
-                        path=None,
-                        details={
-                            "folder_path": root_record_path,
-                            "database_error": str(exc),
-                        },
-                    ) from exc
+                with gallery_job_transition(), self._scan_lock:
+                    should_record_root = (
+                        run_id == self._scan_run_id
+                        and not self._scan_progress.get("suppress_root_record", False)
+                    )
+                    if should_record_root:
+                        try:
+                            db.record_library_root_scan(root_record_path)
+                        except (sqlite3.Error, RuntimeError, ValueError) as exc:
+                            raise ScanError(
+                                message=(
+                                    "Image indexing completed, but Library Root persistence "
+                                    f"failed for '{root_record_path}': {exc}. "
+                                    "Check database write access and scan this folder again."
+                                ),
+                                path=None,
+                                details={
+                                    "folder_path": root_record_path,
+                                    "database_error": str(exc),
+                                },
+                            ) from exc
 
                 logger.info(
                     "Scan completed: folder=%s files=%s indexed_new=%s unchanged_or_updated=%s removed=%s metadata=%s/%s errors=%s duration=%.1fs",

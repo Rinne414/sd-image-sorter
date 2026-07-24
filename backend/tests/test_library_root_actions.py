@@ -6,6 +6,7 @@ quick-scan of the stalest enabled root). Scan-triggering paths monkeypatch
 persistence is the behavior under test.
 """
 import os
+import threading
 
 import pytest
 from fastapi import BackgroundTasks, HTTPException
@@ -24,6 +25,51 @@ def _cross_runtime_root_path(folder_name: str) -> tuple[str, str]:
     if os.name == "nt":
         return f"/mnt/l/Pics/{folder_name}", rf"L:\Pics\{folder_name}"
     return rf"L:\Pics\{folder_name}", f"/mnt/l/Pics/{folder_name}"
+
+
+def _completed_scan_result() -> dict[str, int]:
+    return {
+        "total": 0,
+        "new": 0,
+        "updated": 0,
+        "removed": 0,
+        "errors": 0,
+        "metadata_processed": 0,
+        "metadata_total": 0,
+    }
+
+
+def _blocking_scan_folder(
+    started: threading.Event,
+    release: threading.Event,
+):
+    def scan_folder(*_args, **_kwargs):
+        started.set()
+        if not release.wait(timeout=5):
+            raise TimeoutError("Timed out waiting to release the test scan")
+        return _completed_scan_result()
+
+    return scan_folder
+
+
+def _start_background_scan(
+    background_tasks: BackgroundTasks,
+    started: threading.Event,
+) -> threading.Thread:
+    worker = threading.Thread(target=background_tasks.tasks[0].func)
+    worker.start()
+    if not started.wait(timeout=5):
+        raise TimeoutError("Timed out waiting for the test scan to start")
+    return worker
+
+
+def _release_background_scan(
+    worker: threading.Thread,
+    release: threading.Event,
+) -> None:
+    release.set()
+    worker.join(timeout=5)
+    assert not worker.is_alive()
 
 
 @pytest.fixture
@@ -48,8 +94,10 @@ def test_manual_scan_keeps_runtime_path_as_root_record(
         source,
         *,
         root_record_path,
+        registered_root_id,
     ):
         captured["root_record_path"] = root_record_path
+        captured["registered_root_id"] = registered_root_id
         return {
             "status": "started",
             "message": "started",
@@ -67,6 +115,7 @@ def test_manual_scan_keeps_runtime_path_as_root_record(
 
     assert result["source"] == SCAN_SOURCE_MANUAL
     assert captured["root_record_path"] == expected_record_path
+    assert captured["registered_root_id"] is None
 
 
 class TestRemoveLibraryRoot:
@@ -79,6 +128,97 @@ class TestRemoveLibraryRoot:
         with pytest.raises(HTTPException) as exc:
             service.remove_library_root(999)
         assert exc.value.status_code == 404
+
+    def test_remove_active_registered_scan_is_final(
+        self,
+        test_db,
+        service,
+        monkeypatch,
+        tmp_path,
+    ):
+        root = db.add_library_root(str(tmp_path))
+        background_tasks = BackgroundTasks()
+        started = threading.Event()
+        release = threading.Event()
+        monkeypatch.setattr(
+            "services.sorting_service.scan_folder",
+            _blocking_scan_folder(started, release),
+        )
+
+        service.rescan_library_root(root["id"], background_tasks)
+        worker = _start_background_scan(background_tasks, started)
+        try:
+            assert service.remove_library_root(root["id"]) == {
+                "status": "removed",
+                "id": root["id"],
+            }
+        finally:
+            _release_background_scan(worker, release)
+
+        assert db.list_library_roots() == []
+        assert service.get_scan_progress()["status"] == "done"
+
+    def test_remove_during_same_path_manual_scan_is_final(
+        self,
+        test_db,
+        service,
+        monkeypatch,
+        tmp_path,
+    ):
+        root = db.add_library_root(str(tmp_path))
+        background_tasks = BackgroundTasks()
+        started = threading.Event()
+        release = threading.Event()
+        monkeypatch.setattr(
+            "services.sorting_service.scan_folder",
+            _blocking_scan_folder(started, release),
+        )
+
+        service.start_scan(
+            ScanRequest(folder_path=str(tmp_path)),
+            background_tasks,
+            SCAN_SOURCE_MANUAL,
+        )
+        worker = _start_background_scan(background_tasks, started)
+        try:
+            assert service.remove_library_root(root["id"])["status"] == "removed"
+        finally:
+            _release_background_scan(worker, release)
+
+        assert db.list_library_roots() == []
+
+    def test_remove_unrelated_root_keeps_active_root_completion(
+        self,
+        test_db,
+        service,
+        monkeypatch,
+        tmp_path,
+    ):
+        active_path = tmp_path / "active"
+        unrelated_path = tmp_path / "unrelated"
+        active_path.mkdir()
+        unrelated_path.mkdir()
+        active_root = db.add_library_root(str(active_path))
+        unrelated_root = db.add_library_root(str(unrelated_path))
+        background_tasks = BackgroundTasks()
+        started = threading.Event()
+        release = threading.Event()
+        monkeypatch.setattr(
+            "services.sorting_service.scan_folder",
+            _blocking_scan_folder(started, release),
+        )
+
+        service.rescan_library_root(active_root["id"], background_tasks)
+        worker = _start_background_scan(background_tasks, started)
+        try:
+            assert service.remove_library_root(unrelated_root["id"])["status"] == "removed"
+        finally:
+            _release_background_scan(worker, release)
+
+        stored_active = db.get_library_root(active_root["id"])
+        assert stored_active is not None
+        assert stored_active["last_scanned_at"] is not None
+        assert db.get_library_root(unrelated_root["id"]) is None
 
 
 class TestRescanLibraryRoot:
@@ -98,10 +238,12 @@ class TestRescanLibraryRoot:
             source,
             *,
             root_record_path,
+            root_id,
         ):
             captured["request"] = request
             captured["source"] = source
             captured["root_record_path"] = root_record_path
+            captured["root_id"] = root_id
             return {
                 "status": "started",
                 "message": "started",
@@ -126,6 +268,7 @@ class TestRescanLibraryRoot:
         assert captured["request"].force_reparse is False
         assert captured["source"] == SCAN_SOURCE_LIBRARY_RESCAN
         assert captured["root_record_path"] == row["path"]
+        assert captured["root_id"] == row["id"]
 
     def test_registered_root_completion_preserves_stored_display_path(
         self,
@@ -157,12 +300,41 @@ class TestRescanLibraryRoot:
             background_tasks,
             SCAN_SOURCE_LIBRARY_RESCAN,
             root_record_path=root["path"],
+            root_id=root["id"],
         )
         background_tasks.tasks[0].func()
 
         stored = db.get_library_root(root["id"])
         assert stored["path"] == root["path"]
         assert stored["last_scanned_at"] is not None
+
+    def test_rescan_rejects_root_removed_before_scan_claim(
+        self,
+        test_db,
+        service,
+        monkeypatch,
+        tmp_path,
+    ):
+        root = db.add_library_root(str(tmp_path))
+        background_tasks = BackgroundTasks()
+
+        def remove_before_claim(path, runtime_os_name):
+            assert path == root["path"]
+            assert runtime_os_name == os.name
+            assert service.remove_library_root(root["id"])["status"] == "removed"
+            return str(tmp_path)
+
+        monkeypatch.setattr(
+            "services.sorting.library.indexed_path_for_runtime",
+            remove_before_claim,
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            service.rescan_library_root(root["id"], background_tasks)
+
+        assert exc.value.status_code == 404
+        assert exc.value.detail == "Library root not found"
+        assert background_tasks.tasks == []
 
     def test_rescan_rejects_pending_manual_completion_with_stable_code(
         self,
@@ -234,10 +406,12 @@ class TestAutoRefreshLibrary:
             source,
             *,
             root_record_path,
+            root_id,
         ):
             captured["path"] = request.folder_path
             captured["source"] = source
             captured["root_record_path"] = root_record_path
+            captured["root_id"] = root_id
             return {
                 "status": "started",
                 "message": "started",
@@ -262,6 +436,7 @@ class TestAutoRefreshLibrary:
         assert captured["path"] == runtime_b
         assert captured["source"] == SCAN_SOURCE_LIBRARY_AUTO_REFRESH
         assert captured["root_record_path"] == root_b["path"]
+        assert captured["root_id"] == root_b["id"]
 
     def test_manual_terminal_must_be_consumed_before_auto_refresh(self, test_db, service):
         db.add_library_root("L:/Pics/Anime")
@@ -303,6 +478,7 @@ class TestAutoRefreshLibrary:
             source,
             *,
             root_record_path,
+            root_id,
         ):
             service._scan_progress.update({
                 "run_id": 8,
@@ -331,6 +507,7 @@ class TestAutoRefreshLibrary:
             source,
             *,
             root_record_path,
+            root_id,
         ):
             service._scan_progress.update({
                 "run_id": 9,
