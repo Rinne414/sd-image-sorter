@@ -273,6 +273,11 @@ def test_init_db_upgrade_019_sanitizes_json_caption_without_touching_clean_rows(
     raw = sqlite3.connect(str(db_path))
     try:
         create_full_schema(raw)
+        next(
+            migration
+            for migration in migrations.get_migrations()
+            if migration.version == 16
+        ).apply(raw)
         _create_pre_019_favorite_paths_table(raw)
         raw.execute(
             "CREATE TABLE schema_version ("

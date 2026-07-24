@@ -3,17 +3,18 @@
 A "library root" is a folder the user added as an image source. It lives in its
 own table so the app remembers a source even when it currently has zero indexed
 images, and so idle auto-refresh / multi-root management have a stable target
-list. Identity is case-insensitive via ``path_key`` (lowered, forward-slash
-normalized path) to avoid duplicate roots on Windows.
+list. ``path_key`` follows filesystem identity: ordinary POSIX paths preserve
+case, while Windows, UNC, and WSL drive paths use Unicode case folding.
 
-Imports only from db_core / db_helpers / stdlib to avoid an import cycle with the
-``database`` facade (mirrors db_collections.py).
+Imports only database primitives and the database-independent source-path helper
+to avoid an import cycle with the ``database`` facade.
 """
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
 from db_core import get_db
 from db_helpers import _row_to_dict
+from utils.source_paths import indexed_image_path_match_key
 
 
 def _normalize_root_path(path: str) -> str:
@@ -26,12 +27,12 @@ def _normalize_root_path(path: str) -> str:
 
 
 def _root_path_key(path: str) -> str:
-    """Case-insensitive identity key for a root path."""
-    return _normalize_root_path(path).lower()
+    """Return the cross-runtime filesystem identity for a root path."""
+    return indexed_image_path_match_key(_normalize_root_path(path))
 
 
 def add_library_root(path: str, label: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """Register a folder as a library root (idempotent by case-insensitive path).
+    """Register a folder as a library root (idempotent by filesystem identity).
 
     Returns the stored row, or ``None`` when ``path`` is blank. Re-adding an
     existing root refreshes its display path/label without creating a duplicate.
@@ -39,7 +40,7 @@ def add_library_root(path: str, label: Optional[str] = None) -> Optional[Dict[st
     normalized = _normalize_root_path(path)
     if not normalized:
         return None
-    key = normalized.lower()
+    key = _root_path_key(normalized)
     now = datetime.now().isoformat(timespec="seconds")
     with get_db() as conn:
         cursor = conn.cursor()

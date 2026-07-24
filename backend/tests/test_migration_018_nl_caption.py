@@ -115,6 +115,11 @@ def test_init_db_upgrade_backfills_missing_nl_caption(tmp_path, monkeypatch):
     try:
         create_full_schema(raw)  # current schema (includes nl_caption + indexes)
         raw.execute("ALTER TABLE images DROP COLUMN nl_caption")  # simulate the gap
+        next(
+            migration
+            for migration in migrations.get_migrations()
+            if migration.version == 16
+        ).apply(raw)
         _create_pre_018_favorite_paths_table(raw)
         raw.execute(
             "CREATE TABLE schema_version ("
