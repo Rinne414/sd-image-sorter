@@ -495,7 +495,7 @@ def test_dataset_folder_import_has_paged_large_folder_controls():
     assert "folderImportAddedManifest" in source
     assert "_markLocalManifestExcluded?.(id)" in part2_source
     assert "exportPreviewManifestNote" in pipeline_source
-    assert "confirmSummaryManifestPreview" in zh_source
+    assert "confirmSummaryManifestPreview" not in zh_source
     assert "dataset.importGalleryManifestCount" in zh_source
     assert "Object.entries(params)" in app_source
 
@@ -777,8 +777,14 @@ def test_dataset_export_uses_background_progress_job():
     local_import = part3
 
     assert "/api/dataset/export/start" in part3
-    assert "/api/dataset/export/progress" in part3
-    assert "/api/dataset/export/cancel" in part3
+    assert "/api/bulk-jobs/${encodeURIComponent(jobId)}" in part3
+    assert "/api/bulk-jobs/${encodeURIComponent(jobId)}/cancel" in part3
+    assert "/api/dataset/export/progress" not in part3
+    assert "/api/dataset/export/cancel" not in part3
+    assert "sd-image-sorter-dataset-export-job" in part3
+    assert "sessionStorage.setItem" in part3
+    assert "sessionStorage.getItem" in part3
+    assert "sessionStorage.removeItem" in part3
     assert 'id="dataset-export-progress-text"' in html
     assert 'id="btn-dataset-export-cancel"' in html
     assert "DM._buildExportPayload" in local_import
@@ -1136,6 +1142,49 @@ def test_dataset_init_syncs_current_naming_preset_ui():
     assert dataset_js.index("this._onPresetChange?.();") < dataset_js.index(
         "this._updateNamingPreview();"
     )
+
+
+def test_dataset_project_store_load_order_and_stable_controls():
+    repo_root = Path(__file__).resolve().parents[2]
+    core = (repo_root / "frontend" / "js" / "dataset" / "core.js").read_text(
+        encoding="utf-8"
+    )
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    project_store = (
+        repo_root / "frontend" / "js" / "dataset" / "project-store.js"
+    ).read_text(encoding="utf-8")
+    project_settings = (
+        repo_root / "frontend" / "js" / "dataset" / "project-settings.js"
+    ).read_text(encoding="utf-8")
+
+    gallery_index = core.index("/static/js/dataset/gallery-import.js")
+    settings_index = core.index("/static/js/dataset/project-settings.js")
+    project_index = core.index("/static/js/dataset/project-store.js")
+    events_index = core.index("/static/js/dataset/events.js")
+    caption_split_index = core.index("/static/js/dataset-maker-caption-split.js")
+    annotation_index = core.index("/static/js/dataset/annotation-ledger.js")
+    assert gallery_index < settings_index < project_index < events_index
+    assert caption_split_index < annotation_index
+    assert "this._initProjectStore?.();" in core
+    assert "this._initProjectSettingsPersistence?.();" in core
+    for test_id in (
+        "dataset-project-toolbar",
+        "dataset-project-selector",
+        "dataset-project-save-as",
+        "dataset-project-save",
+        "dataset-project-menu",
+        "dataset-project-missing",
+        "dataset-annotation-status",
+        "dataset-save-caption-version",
+        "dataset-caption-history",
+    ):
+        assert f'data-testid="{test_id}"' in html
+    assert "expected_revision: active.revision" in project_store
+    assert "settings: settingsSnapshot.settings" in project_store
+    assert "settings: active.settings" in project_store
+    assert "_prepareProjectSettingsRestore" in project_store
+    assert "settings_version: SETTINGS_VERSION" in project_settings
+    assert "dataset_project_revision_conflict" in project_store
 
 
 def test_dataset_vocab_uses_explicit_actions_not_hidden_click_cycle():
@@ -1886,6 +1935,12 @@ def test_sorting_payloads_carry_v33x_gallery_scope_filters():
     # (serializeAutoSepFilters), preview.js (signature + query builder), and
     # move-progress.js (the batchMove scope bundle) - do not DRY them.
     autosep_source = _autosep_family_source(repo_root)
+    autosep_preview_source = (
+        repo_root / "frontend" / "js" / "autosep" / "preview.js"
+    ).read_text(encoding="utf-8")
+    autosep_move_source = (
+        repo_root / "frontend" / "js" / "autosep" / "move-progress.js"
+    ).read_text(encoding="utf-8")
     # Manual-sort-family read: manual-sort.js is being split into
     # manual-sort/*.js. NOTE(split): count >= 4 sums across the family
     # (slot-start x2 incl. the minimap preview, bracket, cull) - do not DRY
@@ -1903,6 +1958,7 @@ def test_sorting_payloads_carry_v33x_gallery_scope_filters():
         "color_temperature:",
         "brightness_distribution:",
         "collection_id:",
+        "scope:",
         "has_metadata:",
     ):
         assert app_source.count(wire_key) >= 2, (
@@ -1920,14 +1976,19 @@ def test_sorting_payloads_carry_v33x_gallery_scope_filters():
         "colorTemperature:",
         "brightnessDistribution:",
         "collectionId:",
+        "scope:",
         "hasMetadata:",
     ):
         assert field in autosep_source, f"serializeAutoSepFilters misses {field}"
+
+    assert "scope: contract.scope === 'library'" in autosep_preview_source
+    assert "scope: contract.scope," in autosep_move_source
 
     # Manual Sort routes the same scope bundle through every start path
     # (slot/bracket/cull) and the minimap preview query.
     assert "function buildManualSortScopeFilters" in manual_sort_source
     assert manual_sort_source.count("buildManualSortScopeFilters(f)") >= 4
+    assert manual_sort_source.count("scope: contract.scope || 'current_session',") >= 2
 
 
 def test_frontend_control_audit_script_reports_inventory():
@@ -1989,3 +2050,85 @@ def test_frontend_control_audit_keeps_known_delegated_controls_out_of_static_onl
             control
         )
         assert control["evidence"], control
+
+
+def test_dataset_trainer_selector_replaces_legacy_kohya_checkbox_and_loads_once():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    core = (repo_root / "frontend" / "js" / "dataset" / "core.js").read_text(
+        encoding="utf-8"
+    )
+    local_import = (
+        repo_root / "frontend" / "js" / "dataset" / "local-import.js"
+    ).read_text(encoding="utf-8")
+    trainer_selector = (
+        repo_root / "frontend" / "js" / "dataset" / "trainer-selector.js"
+    ).read_text(encoding="utf-8")
+
+    assert 'id="dataset-trainer-package"' in html
+    assert 'data-testid="dataset-trainer-contract-retry"' in html
+    assert 'id="dataset-trainer-resolution"' in html
+    assert 'id="dataset-trainer-toml"' not in html
+    assert core.count("/static/js/dataset/trainer-selector.js") == 1
+    assert core.index("/static/js/dataset/output-naming.js") < core.index(
+        "/static/js/dataset/trainer-selector.js"
+    )
+    assert core.index("/static/js/dataset/trainer-selector.js") < core.index(
+        "/static/js/dataset/readiness.js"
+    )
+    assert "this._initTrainerSelector?.();" in core
+    assert "this._trainerExportFields()" in local_import
+    assert "trainer_resolution" in trainer_selector
+
+
+def test_review_cockpit_loads_typed_issue_queue_without_replacing_tag_tools():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    core = (
+        repo_root / "frontend" / "js" / "modules" / "separation-console" / "core.js"
+    ).read_text(encoding="utf-8")
+    issues = (
+        repo_root / "frontend" / "js" / "modules" / "separation-console" / "issues.js"
+    ).read_text(encoding="utf-8")
+    css = (repo_root / "frontend" / "css" / "ui-refresh.css").read_text(
+        encoding="utf-8"
+    )
+    en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(
+        encoding="utf-8"
+    )
+    zh_source = (
+        repo_root / "frontend" / "js" / "lang" / "zh-CN.js"
+    ).read_text(encoding="utf-8")
+
+    assert 'data-testid="review-cockpit-tab-issues"' in html
+    assert 'data-testid="review-cockpit-filter-sidecar-fallback"' in html
+    assert 'id="sepcon-tags-panel"' in html
+    assert 'id="sepcon-issue-filter"' in html
+    assert html.count("/static/js/modules/separation-console/issues.js") == 1
+    assert html.index("/static/js/modules/separation-console/issues.js") < html.index(
+        "/static/js/modules/separation-console/boot.js"
+    )
+    assert "this._initReviewIssues(details);" in core
+    assert "'/api/dataset/review-queue'" in issues
+    assert "reviewParseResponse" in issues
+    assert "schema_version: REVIEW_SCHEMA_VERSION" in issues
+    assert "value_en" in issues
+    assert "value_zh" in issues
+    assert "provider_states must contain each provider exactly once" in issues
+    assert "'sidecar_metadata_dependency'" in issues
+    assert "sidecar_fallback: ['sidecar_metadata_dependency']" in issues
+    assert ".sepcon-issue-rows" in css
+    assert ".sepcon-view-tabs" in css
+    for key in (
+        "dataset.reviewCockpitTitle",
+        "dataset.reviewViewsAria",
+        "dataset.reviewIssuesTab",
+        "dataset.reviewRefreshAria",
+        "dataset.reviewPagesAria",
+        "dataset.reviewIssueFilter",
+        "dataset.reviewIssueSidecarFallback",
+        "dataset.reviewIncludeDuplicates",
+        "dataset.reviewEmpty",
+    ):
+        assert key in en_source
+        assert key in zh_source

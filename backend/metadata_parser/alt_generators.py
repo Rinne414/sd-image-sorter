@@ -11,6 +11,15 @@ import json
 import re
 from typing import Optional, Dict, Any, List
 
+_SIDECAR_FIELD_SOURCE_KEYS = "_sidecar_field_source_keys"
+
+
+def _with_sidecar_field_source_keys(
+    parsed: Dict[str, Any],
+    source_keys: Dict[str, str],
+) -> Dict[str, Any]:
+    return {**parsed, _SIDECAR_FIELD_SOURCE_KEYS: source_keys}
+
 class AltGeneratorsMixin:
     """Alternate generator detectors (Fooocus/EasyDiffusion/InvokeAI/SwarmUI/DrawThings/AI-provider)."""
 
@@ -58,11 +67,11 @@ class AltGeneratorsMixin:
         # `fooocus_scheme` is unique to Fooocus and confirms the source
         # even when the Comment JSON is missing fields we don't know.
         fooocus_scheme = metadata.get("fooocus_scheme") or metadata.get("Fooocus_Scheme")
-        candidate_blocks: List[Any] = []
+        candidate_blocks: List[tuple[str, Any]] = []
 
         for key in ("Comment", "comment"):
             if key in metadata:
-                candidate_blocks.append(metadata[key])
+                candidate_blocks.append((key, metadata[key]))
 
         # Fooocus a1111 scheme writes regular `parameters` text (already
         # caught by the WebUI path). Skip parameters here.
@@ -72,7 +81,7 @@ class AltGeneratorsMixin:
         software = str(metadata.get("Software", metadata.get("software", "")) or "").lower()
         software_is_fooocus = "fooocus" in software
 
-        for block in candidate_blocks:
+        for source_key, block in candidate_blocks:
             data = self._coerce_json_block(block)
             if not isinstance(data, dict):
                 continue
@@ -146,7 +155,7 @@ class AltGeneratorsMixin:
             if checkpoint and "model" not in gen_params:
                 gen_params["model"] = checkpoint
 
-            return {
+            return _with_sidecar_field_source_keys({
                 "generator": "fooocus",
                 "prompt": prompt or None,
                 "negative_prompt": negative or None,
@@ -158,7 +167,9 @@ class AltGeneratorsMixin:
                     checkpoint=checkpoint or None,
                     loras=loras,
                 ),
-            }
+            }, {field: source_key for field in (
+                "prompt", "negative_prompt", "checkpoint", "loras",
+            )})
 
         if fooocus_scheme is not None or software_is_fooocus:
             # Fooocus PNG with only the parameters text chunk (a1111
@@ -166,7 +177,7 @@ class AltGeneratorsMixin:
             # for unusual files where neither Comment JSON nor parameters
             # exist. We still tag the generator so the user sees Fooocus
             # in the gallery instead of a useless "unknown".
-            return {
+            return _with_sidecar_field_source_keys({
                 "generator": "fooocus",
                 "prompt": None,
                 "negative_prompt": None,
@@ -174,7 +185,7 @@ class AltGeneratorsMixin:
                 "loras": [],
                 "generation_params": None,
                 "model_assets": None,
-            }
+            }, {})
         return None
 
     @staticmethod
@@ -271,7 +282,21 @@ class AltGeneratorsMixin:
         elif lora_value:
             loras = [s.strip() for s in re.split(r"[,\n]", str(lora_value)) if s.strip()]
 
-        return {
+        checkpoint_source_key = next(
+            (
+                key for key in (
+                    "use_stable_diffusion_model", "Model", "model",
+                ) if metadata.get(key)
+            ),
+            None,
+        )
+        loras_source_key = next(
+            (
+                key for key in ("use_lora_model", "LoRA") if metadata.get(key)
+            ),
+            None,
+        )
+        return _with_sidecar_field_source_keys({
             "generator": "easy-diffusion",
             "prompt": prompt_text or None,
             "negative_prompt": negative_text or None,
@@ -283,7 +308,16 @@ class AltGeneratorsMixin:
                 checkpoint=checkpoint or None,
                 loras=loras,
             ),
-        }
+        }, {
+            "prompt": "prompt",
+            "negative_prompt": (
+                "negative_prompt"
+                if metadata.get("negative_prompt")
+                else "Negative Prompt"
+            ),
+            **({"checkpoint": checkpoint_source_key} if checkpoint_source_key else {}),
+            **({"loras": loras_source_key} if loras_source_key else {}),
+        })
 
     def _maybe_parse_invokeai(self, metadata: dict) -> Optional[Dict[str, Any]]:
         """Detect InvokeAI PNG metadata.
@@ -308,17 +342,27 @@ class AltGeneratorsMixin:
         checkpoint = None
         loras: List[str] = []
         gen_params: Dict[str, Any] = {}
+        prompt_source_key: Optional[str] = None
+        negative_source_key: Optional[str] = None
+        checkpoint_source_key: Optional[str] = None
+        loras_source_key: Optional[str] = None
 
         if v3_block:
             data = self._coerce_json_block(v3_block)
             if isinstance(data, dict):
                 prompt = self._flatten_text_value(data.get("positive_prompt"))
                 negative = self._flatten_text_value(data.get("negative_prompt"))
+                if prompt:
+                    prompt_source_key = "invokeai_metadata"
+                if negative:
+                    negative_source_key = "invokeai_metadata"
                 model = data.get("model")
                 if isinstance(model, dict):
                     checkpoint = self._flatten_text_value(model.get("model_name") or model.get("name"))
                 elif isinstance(model, str):
                     checkpoint = model
+                if checkpoint:
+                    checkpoint_source_key = "invokeai_metadata"
                 for k in ("steps", "cfg_scale", "scheduler", "seed", "width", "height", "rand_device", "controlnets"):
                     if k in data and data[k] not in (None, ""):
                         gen_params[k] = data[k]
@@ -331,6 +375,8 @@ class AltGeneratorsMixin:
                                 loras.append(str(name))
                         elif entry:
                             loras.append(str(entry))
+                    if loras:
+                        loras_source_key = "invokeai_metadata"
 
         if not prompt and v3_graph:
             # `invokeai_graph` JSON contains a `nodes` dict; the
@@ -350,11 +396,17 @@ class AltGeneratorsMixin:
                 if isinstance(core_meta, dict):
                     prompt = self._flatten_text_value(core_meta.get("positive_prompt"))
                     negative = self._flatten_text_value(core_meta.get("negative_prompt"))
+                    if prompt:
+                        prompt_source_key = "invokeai_graph"
+                    if negative:
+                        negative_source_key = "invokeai_graph"
                     model = core_meta.get("model")
                     if isinstance(model, dict):
                         checkpoint = self._flatten_text_value(model.get("model_name") or model.get("name"))
                     elif isinstance(model, str):
                         checkpoint = model
+                    if checkpoint:
+                        checkpoint_source_key = "invokeai_graph"
                     for k in ("steps", "cfg_scale", "scheduler", "seed", "width", "height"):
                         if k in core_meta and core_meta[k] not in (None, ""):
                             gen_params[k] = core_meta[k]
@@ -370,7 +422,12 @@ class AltGeneratorsMixin:
                         prompt = self._flatten_text_value(first.get("prompt") or first.get("text"))
                 else:
                     prompt = self._flatten_text_value(prompt_field)
-                checkpoint = checkpoint or self._flatten_text_value(data.get("model_weights"))
+                if prompt:
+                    prompt_source_key = "sd-metadata"
+                if not checkpoint:
+                    checkpoint = self._flatten_text_value(data.get("model_weights"))
+                    if checkpoint:
+                        checkpoint_source_key = "sd-metadata"
 
         if not prompt and legacy:
             # Legacy Dream string: "<prompt> -s 50 -S 12345 -W 512 -H 512 -C 7.0"
@@ -380,11 +437,13 @@ class AltGeneratorsMixin:
                 prompt = match.group(1).strip() or None
             else:
                 prompt = text.strip().split(" -", 1)[0].strip() or None
+            if prompt:
+                prompt_source_key = "Dream"
 
         if not prompt and not negative and not checkpoint and not gen_params:
             return None
 
-        return {
+        return _with_sidecar_field_source_keys({
             "generator": "invokeai",
             "prompt": prompt,
             "negative_prompt": negative,
@@ -396,20 +455,25 @@ class AltGeneratorsMixin:
                 checkpoint=checkpoint or None,
                 loras=loras,
             ),
-        }
+        }, {
+            **({"prompt": prompt_source_key} if prompt_source_key else {}),
+            **({"negative_prompt": negative_source_key} if negative_source_key else {}),
+            **({"checkpoint": checkpoint_source_key} if checkpoint_source_key else {}),
+            **({"loras": loras_source_key} if loras_source_key else {}),
+        })
 
     def _maybe_parse_swarmui(self, metadata: dict) -> Optional[Dict[str, Any]]:
         """Detect SwarmUI / StableSwarmUI parameters (`sui_image_params`)."""
-        candidates: List[Any] = []
+        candidates: List[tuple[str, Any]] = []
         for key in ("parameters", "Parameters", "UserComment"):
             if key in metadata:
-                candidates.append(metadata[key])
+                candidates.append((key, metadata[key]))
         # SwarmUI also stores the JSON in EXIF tag 0x0110 (Make).
         for key in ("Make", "make", "0x0110"):
             if key in metadata:
-                candidates.append(metadata[key])
+                candidates.append((key, metadata[key]))
 
-        for block in candidates:
+        for source_key, block in candidates:
             text = block
             if isinstance(text, bytes):
                 text = text.decode("utf-8", errors="replace")
@@ -443,7 +507,7 @@ class AltGeneratorsMixin:
             elif lora_value:
                 loras = [s.strip() for s in re.split(r"[,\n]", str(lora_value)) if s.strip()]
 
-            return {
+            return _with_sidecar_field_source_keys({
                 "generator": "swarmui",
                 "prompt": prompt or None,
                 "negative_prompt": negative or None,
@@ -455,7 +519,9 @@ class AltGeneratorsMixin:
                     checkpoint=checkpoint or None,
                     loras=loras,
                 ),
-            }
+            }, {field: source_key for field in (
+                "prompt", "negative_prompt", "checkpoint", "loras",
+            )})
         return None
 
     def _maybe_parse_drawthings(self, metadata: dict) -> Optional[Dict[str, Any]]:
@@ -491,7 +557,7 @@ class AltGeneratorsMixin:
             k: v for k, v in data.items()
             if k not in ("c", "uc", "prompt", "negative_prompt") and v not in (None, "")
         }
-        return {
+        return _with_sidecar_field_source_keys({
             "generator": "drawthings",
             "prompt": prompt or None,
             "negative_prompt": negative or None,
@@ -502,7 +568,9 @@ class AltGeneratorsMixin:
                 source="drawthings_xmp",
                 checkpoint=checkpoint or None,
             ),
-        }
+        }, {field: "xmp" for field in (
+            "prompt", "negative_prompt", "checkpoint", "loras",
+        )})
 
     # ============================================================
     # Closed-source AI provider detection (Gemini, gpt-image, ...).

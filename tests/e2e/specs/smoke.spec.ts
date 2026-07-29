@@ -2829,6 +2829,37 @@ test.describe('Smoke Tests', () => {
     await page.route('**/api/image-thumbnail/**', async (route) => {
       await route.fulfill({ status: 204 })
     })
+    await page.route('**/api/tags/export-preview', async (route) => {
+      const body = route.request().postDataJSON() as {
+        image_ids?: number[]
+        trigger?: string
+        append?: string[]
+      }
+      const imageIds = Array.isArray(body.image_ids) ? body.image_ids.map(Number) : []
+      const parts = [
+        String(body.trigger || '').trim(),
+        '1girl',
+        'standing',
+        'simple_background',
+        ...(Array.isArray(body.append) ? body.append : []),
+      ]
+      const seen = new Set<string>()
+      const rendered = parts.filter((part) => {
+        const key = String(part).replace(/[\s_]+/g, ' ').trim().toLowerCase()
+        if (!key || seen.has(key)) return false
+        seen.add(key)
+        return true
+      }).join(', ')
+      await route.fulfill({
+        json: {
+          results: imageIds.map((imageId) => ({
+            image_id: imageId,
+            filename: 'caption-flow.png',
+            rendered,
+          })),
+        },
+      })
+    })
     await page.goto('/')
     await page.waitForLoadState('networkidle')
     await page.waitForFunction(() => typeof (window as any).DatasetMaker?._setActive === 'function')
@@ -2848,6 +2879,28 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#btn-dataset-smart-tag')).toBeInViewport()
     await expect(page.locator('.dataset-review-card .dataset-card-title')).toBeInViewport()
     await expect(page.locator('#dataset-step-cleanup > summary')).toBeInViewport()
+
+    const quickFillFit = await page.locator('#dataset-step-setup > .dataset-quickfill-row').evaluate((row) => {
+      const buttons = Array.from(row.querySelectorAll('button'))
+      const rects = buttons.map((button) => button.getBoundingClientRect())
+      return {
+        buttonCount: buttons.length,
+        textClipped: buttons.map((button) => (
+          button.scrollWidth > button.clientWidth || button.scrollHeight > button.clientHeight
+        )),
+        overlaps: rects.some((left, index) => rects.slice(index + 1).some((right) => (
+          left.left < right.right
+          && left.right > right.left
+          && left.top < right.bottom
+          && left.bottom > right.top
+        ))),
+      }
+    })
+    expect(quickFillFit).toEqual({
+      buttonCount: 3,
+      textClipped: [false, false, false],
+      overlaps: false,
+    })
 
     const rightPane = page.locator('#view-dataset .dataset-export-pane')
     const initialPaneBox = await rightPane.boundingBox()

@@ -501,6 +501,7 @@ async function executeAutoSeparateWithProgress() {
                         colorTemperature: contract.colorTemperature,
                         brightnessDistribution: contract.brightnessDistribution,
                         collectionId: contract.collectionId,
+                        scope: contract.scope,
                         folder: contract.folder,
                         hasMetadata: contract.hasMetadata,
                     },

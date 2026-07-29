@@ -148,6 +148,10 @@ async function openScopedAndReady(page: Page, imageIds: number[]): Promise<void>
 }
 
 async function openDatasetAndReady(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const dm = (window as any).DatasetMaker
+    return dm?._trainerContractState?.status === 'ready'
+  })
   await page.evaluate(() => (window as any).SmartTag.open())
   await expect(page.locator('#smart-tag-modal')).toHaveClass(/visible/)
   await expect(page.locator('#smart-tag-tagger-1 option')).toHaveCount(2)
@@ -157,6 +161,11 @@ async function seedLocalCaptionItems(
   page: Page,
   items: Array<{ id: number; path: string; booru: string; nl: string }>,
 ): Promise<void> {
+  await page.evaluate(() => (window as any).App.switchView('dataset'))
+  await page.waitForFunction(() => {
+    const dm = (window as any).DatasetMaker
+    return dm?._trainerContractState?.status === 'ready'
+  })
   await page.evaluate((seedItems) => {
     const dm = (window as any).DatasetMaker
     dm.imageIds = seedItems.map((item) => item.id)

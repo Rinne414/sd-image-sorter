@@ -170,6 +170,8 @@ def init_db() -> None:
             current_version = migration.version
 
         _recover_stale_pending_metadata_rows(conn)
+        if latest_supported_version >= 30:
+            conn.execute("DELETE FROM gallery_session_images")
 
         conn.commit()
         if vacuum_after_commit:

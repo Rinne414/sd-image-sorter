@@ -13,6 +13,28 @@
 'use strict';
 Object.assign(SeparationConsole, {
         // ---- BE-5' health check ----------------------------------------------
+        _healthEffectiveCaptions(ids) {
+            const dm = this.dm;
+            if (!dm) throw new TypeError('Dataset Maker is unavailable.');
+            if (typeof dm._captionTypeFor !== 'function'
+                || typeof dm._booruTextFor !== 'function'
+                || typeof dm._nlTextFor !== 'function') {
+                throw new TypeError('Dataset caption resolvers are unavailable.');
+            }
+            if (!window.CaptionCore || typeof window.CaptionCore.compose !== 'function') {
+                throw new TypeError('Dataset health check requires CaptionCore.compose.');
+            }
+            return ids.map((imageId) => {
+                const captionType = dm._captionTypeFor(imageId);
+                const caption = window.CaptionCore.compose(
+                    dm._booruTextFor(imageId),
+                    dm._nlTextFor(imageId),
+                    captionType,
+                );
+                return { image_id: imageId, caption: String(caption || '') };
+            });
+        },
+
         async runHealthCheck() {
             const out = document.getElementById('sepcon-health-results');
             const btn = document.getElementById('sepcon-health-run');
@@ -34,6 +56,7 @@ Object.assign(SeparationConsole, {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         image_ids: ids,
+                        effective_captions: this._healthEffectiveCaptions(ids),
                         trigger: document.getElementById('dataset-trigger')?.value?.trim() || '',
                         training_purpose: document.getElementById('sepcon-purpose')?.value || 'character',
                     }),
@@ -78,7 +101,9 @@ Object.assign(SeparationConsole, {
                 detail.className = 'sepcon-finding-detail';
                 detail.textContent = zh ? finding.detail_zh : finding.detail_en;
                 card.appendChild(detail);
-                if (finding.id === 'trigger-coverage' && finding.fix?.body?.image_ids?.length) {
+                if (finding.id === 'trigger-coverage'
+                    && finding.fix?.action === 'add_trigger_to_captions'
+                    && finding.fix?.image_ids?.length) {
                     card.appendChild(this._healthFixButton(finding));
                 }
                 out.appendChild(card);
@@ -86,25 +111,31 @@ Object.assign(SeparationConsole, {
         },
 
         _healthFixButton(finding) {
+            const imageIds = finding.fix.image_ids;
+            const trigger = finding.fix.trigger;
+            if (!Array.isArray(imageIds)
+                || imageIds.some((imageId) => !Number.isSafeInteger(imageId) || imageId <= 0)) {
+                throw new TypeError('Trigger coverage fix image_ids must be positive safe integers.');
+            }
+            if (typeof trigger !== 'string' || !trigger.trim()) {
+                throw new TypeError('Trigger coverage fix trigger must be a non-empty string.');
+            }
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'btn btn-secondary btn-small';
-            btn.textContent = sepconT(`Add trigger to ${finding.fix.body.image_ids.length} images`,
-                `一键给 ${finding.fix.body.image_ids.length} 张图补触发词`);
+            btn.textContent = sepconT(`Add trigger to ${imageIds.length} images`,
+                `一键给 ${imageIds.length} 张图补触发词`);
             btn.addEventListener('click', async () => {
                 btn.disabled = true;
                 try {
-                    const body = { ...finding.fix.body, dry_run: false };
-                    const response = await fetch(finding.fix.endpoint, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(body),
-                    });
-                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                    // Journaled server-side (FE-2s) — undoable from the mass editor.
-                    window.App?.showToast?.(sepconT('Trigger added (undo available in Mass Tag Editor)',
-                        '已补触发词（可在批量标签编辑器撤销）'), 'success');
-                    this.runHealthCheck();
+                    const dm = this.dm;
+                    if (!dm || typeof dm._addTriggerToCaptions !== 'function') {
+                        throw new TypeError('Dataset trigger caption writer is unavailable.');
+                    }
+                    dm._addTriggerToCaptions(imageIds, trigger.trim());
+                    window.App?.showToast?.(sepconT('Trigger added to project captions',
+                        '已把触发词加入项目 caption'), 'success');
+                    await this.runHealthCheck();
                 } catch (e) {
                     window.App?.showToast?.(sepconT('Failed: ', '失败：') + String(e.message || e), 'error');
                     btn.disabled = false;

@@ -318,6 +318,11 @@ async def get_images(
         ge=1,
         description="Restrict results to images in this collection (v3.3.1). Composes with all other filters.",
     ),
+    scope: Optional[str] = Query(
+        default=None,
+        pattern="^(current_session|library)$",
+        description="Gallery scope: current_session or library.",
+    ),
     folder: Optional[str] = Query(
         default=None,
         max_length=4096,
@@ -416,6 +421,7 @@ async def get_images(
         color_hues=color_hues,
         exclude_color_hues=exclude_color_hues,
         collection_id=collection_id,
+        scope=scope,
         folder=folder,
         has_metadata=has_metadata,
         no_caption=no_caption,

@@ -357,6 +357,7 @@ class SortFilterRequest(BaseModel):
     exclude_color_hues: Optional[List[str]] = Field(default=None)  # v3.5.0 dominant-hue exclude
     # v3.3.1 collection scope
     collection_id: Optional[int] = Field(default=None, ge=1)
+    scope: Optional[str] = Field(default=None, pattern="^(current_session|library)$")
     # v3.3.2 Library Navigation: recursive folder-subtree scope
     folder: Optional[str] = Field(default=None, max_length=PATH_MAX_LENGTH)
     # v3.3.2: "has SD generation parameters" scope (True/False; None = all)

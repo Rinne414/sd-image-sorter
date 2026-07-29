@@ -151,6 +151,7 @@ class BatchMoveMixin:
             color_temperature=color_temperature,
             brightness_distribution=brightness_distribution,
             collection_id=collection_id,
+            scope=request.scope,
             folder=folder_scope,
             has_metadata=has_metadata,
         )
@@ -261,6 +262,7 @@ class BatchMoveMixin:
                     color_temperature=color_temperature,
                     brightness_distribution=brightness_distribution,
                     collection_id=collection_id,
+                    scope=request.scope,
                     folder=folder_scope,
                     has_metadata=has_metadata,
                 ))

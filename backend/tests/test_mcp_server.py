@@ -184,6 +184,8 @@ def test_export_dataset_payload_and_required_fields(recorder):
         trainer_config="kohya_toml",
         trainer_repeats=7,
         trainer_keep_tokens=1,
+        readiness_report_id="a" * 32,
+        readiness_input_fingerprint="b" * 64,
     )
     call = recorder.calls[0]
     assert call["path"] == "/api/dataset/export"
@@ -194,9 +196,43 @@ def test_export_dataset_payload_and_required_fields(recorder):
         "trainer_config": "kohya_toml",
         "trainer_repeats": 7,
         "trainer_keep_tokens": 1,
+        "readiness_report_id": "a" * 32,
+        "readiness_input_fingerprint": "b" * 64,
     }
     with pytest.raises(RuntimeError, match="output_folder"):
-        mcp_server.export_dataset([1], "  ")
+        mcp_server.export_dataset([1], "  ", "a" * 32, "b" * 64)
+
+
+def test_dataset_readiness_tools_map_to_rest_contract(recorder):
+    payload = {
+        "image_ids": [5, 6],
+        "output_folder": "L:/out",
+        "naming_pattern": "{filename}",
+    }
+
+    mcp_server.start_dataset_readiness(
+        [5, 6],
+        "L:/out",
+        naming_pattern="{filename}",
+    )
+    mcp_server.get_dataset_readiness("a" * 32)
+
+    assert recorder.calls == [
+        {
+            "method": "POST",
+            "path": "/api/dataset/readiness/start",
+            "params": None,
+            "json": payload,
+        },
+        {
+            "method": "GET",
+            "path": f"/api/bulk-jobs/{'a' * 32}",
+            "params": None,
+            "json": None,
+        },
+    ]
+    with pytest.raises(RuntimeError, match="32 lowercase hex"):
+        mcp_server.get_dataset_readiness("Z" * 32)
 
 
 def test_connection_refused_yields_bilingual_start_hint(monkeypatch):
@@ -236,6 +272,8 @@ def test_registration_exposes_the_full_approved_tool_set():
         "list_library",
         "add_tags",
         "remove_tags",
+        "start_dataset_readiness",
+        "get_dataset_readiness",
         "export_dataset",
         "library_stats",
     }

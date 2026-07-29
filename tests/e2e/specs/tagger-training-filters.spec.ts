@@ -171,6 +171,10 @@ async function openMainPage(page: Page) {
       )
     })
   }).toBe(true)
+
+  await page.locator('#gallery-scope-select').selectOption('library')
+  await expect(page.locator('#gallery-scope-select')).toHaveValue('library')
+  await expect.poll(async () => page.evaluate(() => window.App.AppState?.isLoading === false)).toBe(true)
 }
 
 async function selectFixtureAndOpenExportModal(page: Page, ids: number[]) {

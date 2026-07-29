@@ -74,6 +74,7 @@ async def create_selection_token(
         color_hues=request.colorHues,
         exclude_color_hues=request.excludeColorHues,
         collection_id=request.collectionId,
+        scope=request.scope,
         folder=request.folder,
         has_metadata=request.hasMetadata,
         no_caption=request.noCaption,

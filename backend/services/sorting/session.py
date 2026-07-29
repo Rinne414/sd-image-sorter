@@ -96,6 +96,7 @@ class SortSessionMixin:
         color_hues: Optional[Any] = None,
         exclude_color_hues: Optional[Any] = None,
         collection_id: Optional[int] = None,
+        scope: Optional[str] = None,
         folder: Optional[str] = None,
         has_metadata: Optional[bool] = None,
     ) -> Dict[str, Any]:
@@ -178,6 +179,7 @@ class SortSessionMixin:
             color_temperature=color_temperature.strip() if color_temperature else None,
             brightness_distribution=brightness_distribution.strip() if brightness_distribution else None,
             collection_id=collection_id,
+            scope=scope,
             folder=folder.strip() if folder else None,
             has_metadata=has_metadata,
         )

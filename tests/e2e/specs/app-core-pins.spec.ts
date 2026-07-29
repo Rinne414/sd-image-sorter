@@ -120,6 +120,7 @@ test('createDefaultFilterState returns the FilterStore default shape (incl. date
       promptMatchMode: state.promptMatchMode,
       aspectRatio: state.aspectRatio,
       colorTemperature: state.colorTemperature,
+      scope: state.scope,
       artistNull: state.artist === null,
       folderNull: state.folder === null,
       hasMetadataNull: state.hasMetadata === null,
@@ -134,12 +135,12 @@ test('createDefaultFilterState returns the FilterStore default shape (incl. date
     }
   })
 
-  // FilterStore.createDefaultFilterState (stores/filter-store.js) has exactly 43
+  // FilterStore.createDefaultFilterState (stores/filter-store.js) has exactly 44
   // keys. Bump this when a real filter field is added there — and make sure the
   // snake_case query builders + cloneState allowlist get it too (a key missing
   // from EITHER store function is silently stripped every cycle — the date-
   // filter bug this suite originally pinned).
-  expect(probe.keyCount).toBe(43)
+  expect(probe.keyCount).toBe(44)
   expect(probe.matchesFilterStore).toBe(true)
   expect(probe.generatorsLen).toBe(14) // PRIMARY_GENERATORS + OTHERS bundle
   expect(probe.ratings).toEqual(['general', 'sensitive', 'questionable', 'explicit'])
@@ -149,6 +150,7 @@ test('createDefaultFilterState returns the FilterStore default shape (incl. date
   expect(probe.promptMatchMode).toBe('exact')
   expect(probe.aspectRatio).toBe('')
   expect(probe.colorTemperature).toBe('')
+  expect(probe.scope).toBe('current_session')
   expect(probe.artistNull).toBe(true)
   expect(probe.folderNull).toBe(true)
   expect(probe.hasMetadataNull).toBe(true)
@@ -162,10 +164,13 @@ test('createDefaultFilterState returns the FilterStore default shape (incl. date
 // 3. buildSelectionFilterRequest — the camelCase selection/token contract.
 // ---------------------------------------------------------------------------
 
-test('buildSelectionFilterRequest emits the 42-key camelCase selection contract', async ({ page }) => {
+test('buildSelectionFilterRequest emits the 43-key camelCase selection contract', async ({ page }) => {
   const probe = await page.evaluate(() => {
     const App = (window as AnyWin).App
     const req = App.buildSelectionFilterRequest(App.createDefaultFilterState())
+    const libraryState = App.createDefaultFilterState()
+    libraryState.scope = 'library'
+    const libraryReq = App.buildSelectionFilterRequest(libraryState)
     const keys = Object.keys(req)
     return {
       keyCount: keys.length,
@@ -174,6 +179,7 @@ test('buildSelectionFilterRequest emits the 42-key camelCase selection contract'
       hasDateFrom: 'dateFrom' in req,
       hasDateTo: 'dateTo' in req,
       hasCollectionId: 'collectionId' in req,
+      hasScope: 'scope' in req,
       hasFolder: 'folder' in req,
       hasHasMetadata: 'hasMetadata' in req,
       hasNoCaption: 'noCaption' in req,
@@ -183,17 +189,20 @@ test('buildSelectionFilterRequest emits the 42-key camelCase selection contract'
       hasLimit: 'limit' in req,
       // Defaults collapse to null/empty on the wire.
       dateFromValue: req.dateFrom,
+      scopeValue: req.scope,
+      libraryScopeValue: libraryReq.scope,
       artistValue: req.artist,
       aspectRatioValue: req.aspectRatio,
     }
   })
 
-  // buildSelectionFilterRequest (app.js:391) returns 42 keys — the 41 default
-  // fields MINUS `limit` PLUS dateFrom/dateTo (which it re-adds as null).
-  expect(probe.keyCount).toBe(42)
+  // buildSelectionFilterRequest returns 43 keys, including the Gallery scope
+  // consumed by count and selection-token endpoints.
+  expect(probe.keyCount).toBe(43)
   expect(probe.hasDateFrom).toBe(true)
   expect(probe.hasDateTo).toBe(true)
   expect(probe.hasCollectionId).toBe(true)
+  expect(probe.hasScope).toBe(true)
   expect(probe.hasFolder).toBe(true)
   expect(probe.hasHasMetadata).toBe(true)
   expect(probe.hasNoCaption).toBe(true)
@@ -201,6 +210,8 @@ test('buildSelectionFilterRequest emits the 42-key camelCase selection contract'
   expect(probe.hasMinUserRating).toBe(true)
   expect(probe.hasLimit).toBe(false)
   expect(probe.dateFromValue).toBeNull()
+  expect(probe.scopeValue).toBe('current_session')
+  expect(probe.libraryScopeValue).toBe('library')
   expect(probe.artistValue).toBeNull()
   expect(probe.aspectRatioValue).toBeNull() // normalized '' -> null in this builder
 })
@@ -212,13 +223,16 @@ test('buildSelectionFilterRequest emits the 42-key camelCase selection contract'
 test('buildAdvancedFilterContract is the persisted subset (drops sortBy + toolbar 24d keys)', async ({ page }) => {
   const probe = await page.evaluate(() => {
     const App = (window as AnyWin).App
-    const contract = App.buildAdvancedFilterContract(App.createDefaultFilterState())
+    const state = App.createDefaultFilterState()
+    state.scope = 'library'
+    const contract = App.buildAdvancedFilterContract(state)
     const keys = Object.keys(contract)
     return {
       keyCount: keys.length,
       // Kept: the durable filter scope.
       hasDateFrom: 'dateFrom' in contract,
       hasCollectionId: 'collectionId' in contract,
+      scope: contract.scope,
       hasFolder: 'folder' in contract,
       hasHasMetadata: 'hasMetadata' in contract,
       // Dropped: sort + the Aurora Phase-3 toolbar/24d transient toggles.
@@ -229,15 +243,16 @@ test('buildAdvancedFilterContract is the persisted subset (drops sortBy + toolba
       hasSeed: 'seed' in contract,
       // The signature helper is a stable JSON string of exactly this contract.
       signatureMatches:
-        App.getAdvancedFilterContractSignature(App.createDefaultFilterState())
+        App.getAdvancedFilterContractSignature(state)
         === JSON.stringify(contract),
     }
   })
 
-  // buildAdvancedFilterContract (app.js:447) returns 36 keys.
-  expect(probe.keyCount).toBe(36)
+  // buildAdvancedFilterContract returns 37 persisted filter keys.
+  expect(probe.keyCount).toBe(37)
   expect(probe.hasDateFrom).toBe(true)
   expect(probe.hasCollectionId).toBe(true)
+  expect(probe.scope).toBe('library')
   expect(probe.hasFolder).toBe(true)
   expect(probe.hasHasMetadata).toBe(true)
   expect(probe.hasSortBy).toBe(false)

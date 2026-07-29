@@ -65,8 +65,11 @@ class GalleryMixin:
         brightness_max: Optional[float] = None,
         color_temperature: Optional[str] = None,
         brightness_distribution: Optional[str] = None,
+        scope: Optional[str] = None,
     ) -> None:
         """Validate shared gallery filter constraints used by list and selection flows."""
+        if scope not in (None, "current_session", "library"):
+            raise HTTPException(status_code=400, detail="scope must be current_session or library")
         if sort_by not in _svc().VALID_SORT_OPTIONS:
             raise HTTPException(
                 status_code=400,
@@ -190,6 +193,7 @@ class GalleryMixin:
         color_hues: Optional[str] = None,  # v3.5.0 dominant-hue include (CSV)
         exclude_color_hues: Optional[str] = None,  # v3.5.0 dominant-hue exclude (CSV)
         collection_id: Optional[int] = None,
+        scope: Optional[str] = None,
         folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
         has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
         # Aurora Phase 3 gallery filters
@@ -244,6 +248,7 @@ class GalleryMixin:
             brightness_max=brightness_max,
             color_temperature=color_temperature,
             brightness_distribution=brightness_distribution,
+            scope=scope,
         )
 
         gen_list = _sanitize_filter_values(generators)
@@ -334,6 +339,7 @@ class GalleryMixin:
                     color_hues=color_hue_list,
                     exclude_color_hues=ex_color_hue_list,
                     collection_id=collection_id,
+                    scope=scope,
                     skip_count=total >= 0,
                 )
                 if total < 0:
@@ -415,6 +421,7 @@ class GalleryMixin:
                 color_hues=color_hue_list,
                 exclude_color_hues=ex_color_hue_list,
                 collection_id=collection_id,
+                scope=scope,
             )
             if not batch:
                 break
@@ -473,6 +480,7 @@ class GalleryMixin:
             color_hues=color_hue_list,
             exclude_color_hues=ex_color_hue_list,
             collection_id=collection_id,
+            scope=scope,
         )
 
         return {
@@ -520,6 +528,7 @@ class GalleryMixin:
         color_hues: Optional[str] = None,  # v3.5.0 dominant-hue include (CSV)
         exclude_color_hues: Optional[str] = None,  # v3.5.0 dominant-hue exclude (CSV)
         collection_id: Optional[int] = None,
+        scope: Optional[str] = None,
         folder: Optional[str] = None,
         has_metadata: Optional[bool] = None,
         # Aurora Phase 3 gallery filters
@@ -548,6 +557,7 @@ class GalleryMixin:
             brightness_max=brightness_max,
             color_temperature=color_temperature,
             brightness_distribution=brightness_distribution,
+            scope=scope,
         )
 
         color_temperature = _sanitize_filter_value(color_temperature).lower() if color_temperature else None
@@ -588,6 +598,7 @@ class GalleryMixin:
             color_hues=_sanitize_filter_values(color_hues),
             exclude_color_hues=_sanitize_filter_values(exclude_color_hues),
             collection_id=collection_id,
+            scope=scope,
             folder=folder,
             has_metadata=has_metadata,
             no_caption=no_caption,

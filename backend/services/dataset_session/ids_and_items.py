@@ -13,7 +13,6 @@ _session_item_for_path must stamp the same id for the same manifest path.
 from __future__ import annotations
 
 import base64
-import hashlib
 import io
 import logging
 import os
@@ -24,6 +23,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from PIL import Image, UnidentifiedImageError
 
 from config import ALLOWED_IMAGE_EXTENSIONS
+from services.dataset_sidecar import (
+    MAX_DATASET_SIDECAR_BYTES,
+    read_dataset_sidecar,
+)
+from utils.dataset_ids import dataset_source_id
 
 # Same logger channel as the pre-split monolith (report seam: logger verbatim).
 logger = logging.getLogger("services.dataset_session_service")
@@ -43,8 +47,7 @@ def _ds_id_for_path(abs_path: str) -> str:
     re-scanning the same folder produces the same ``ds_id``s, which lets
     captions stored in ``localStorage`` survive reloads.
     """
-    digest = hashlib.sha1(str(abs_path).encode("utf-8", errors="replace")).hexdigest()
-    return f"ds:{digest[:16]}"
+    return dataset_source_id(abs_path)
 
 
 def _is_image_path(path: Path) -> bool:
@@ -103,6 +106,10 @@ def _manifest_item_for_path(path: Any, index: int) -> Dict[str, Any]:
         "scan_index": index,
         "source_kind": "folder_path",
         "sidecar_capability": "beside_image",
+        "sidecar_caption": read_dataset_sidecar(
+            abs_path,
+            MAX_DATASET_SIDECAR_BYTES,
+        ),
     }
 
 
@@ -131,6 +138,10 @@ def _session_item_for_path(path: Path, scan_index: Optional[int] = None) -> Opti
         "scan_index": scan_index,
         "source_kind": "folder_path",
         "sidecar_capability": "beside_image",
+        "sidecar_caption": read_dataset_sidecar(
+            abs_path,
+            MAX_DATASET_SIDECAR_BYTES,
+        ),
     }
 
 

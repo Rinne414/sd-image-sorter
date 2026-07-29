@@ -195,13 +195,31 @@
         },
 
         _clearAll() {
-            if (this.imageIds.length === 0) return;
             const count = this.imageIds.length;
             const title = this._t('dataset.confirmClearTitle', 'Clear Dataset Maker');
             const msg = this._t('dataset.confirmClear',
                 'Remove all {count} images from the Dataset Maker queue? Original files and Gallery records will not be deleted.',
                 { count });
             const doClear = () => {
+                const managedTrigger = String(this._quickfilledTrigger || '').trim();
+                try {
+                    if (managedTrigger) {
+                        this._saveManagedTriggerForLocalIds?.(
+                            this.imageIds,
+                            managedTrigger,
+                            null,
+                        );
+                    }
+                } catch (error) {
+                    const reason = error instanceof Error ? error.message : String(error);
+                    this._toast(this._t(
+                        'dataset.clearPersistenceFailed',
+                        'Clear was cancelled because local caption ownership could not be saved: {reason} Free browser storage and try again.',
+                        { reason },
+                    ), 'error', 8000);
+                    return;
+                }
+                this._discardPendingDatasetEdits?.();
                 this.imageIds = [];
                 this.captions.clear();
                 this.captionEdits.clear();
@@ -216,8 +234,7 @@
                 this.captionType?.clear?.();
                 this.activeId = null;
                 this._clearLocalDatasetState?.();
-                try { localStorage.removeItem('sd-image-sorter-dataset-session'); } catch {}
-                try { sessionStorage.removeItem('sd-image-sorter-dataset-session'); } catch {}
+                this._removeDatasetSession?.(this._activeProject || null);
                 this._saveSession();
                 this._renderQueue();
                 this._renderImportGallery?.();
@@ -230,6 +247,10 @@
                 // changed so they don't serve stale entries.
                 window.dispatchEvent(new CustomEvent('dataset:changed'));
             };
+            if (count === 0) {
+                doClear();
+                return;
+            }
             if (window.App?.showConfirm) {
                 window.App.showConfirm(title, msg, doClear);
                 return;

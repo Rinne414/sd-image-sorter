@@ -11,6 +11,7 @@ import threading
 
 import pytest
 
+import services.bulk_job_service as bulk_jobs
 from services.bulk_job_service import (
     JOB_KIND_DELETE_FILES,
     JOB_KIND_EXPORT_SIDECARS,
@@ -50,6 +51,138 @@ def test_create_job_starts_queued_with_kind_and_total(service):
 def test_create_job_rejects_unknown_kind(service):
     with pytest.raises(ValueError):
         service.create_job("not_a_real_kind")
+
+
+def test_dataset_export_single_flight_create_is_atomic(service):
+    barrier = threading.Barrier(3)
+    created: list[str] = []
+    conflicts: list[Exception] = []
+
+    def create() -> None:
+        barrier.wait()
+        try:
+            created.append(service.create_single_flight_job(
+                bulk_jobs.JOB_KIND_DATASET_EXPORT,
+                total=3,
+                message="Queued",
+                queued_cancel_result={"status": "cancelled", "exported": 0},
+            ))
+        except bulk_jobs.BulkJobAlreadyRunningError as exc:
+            conflicts.append(exc)
+
+    threads = [threading.Thread(target=create) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        _join_thread(thread)
+
+    assert len(created) == 1
+    assert len(conflicts) == 1
+    assert conflicts[0].kind == bulk_jobs.JOB_KIND_DATASET_EXPORT
+    assert conflicts[0].active_job_id == created[0]
+    assert {
+        job["id"] for job in service.list_jobs(active_only=True)
+        if job["kind"] == bulk_jobs.JOB_KIND_DATASET_EXPORT
+    } == {created[0]}
+
+
+def test_dataset_export_single_flight_reopens_after_queued_cancel(service):
+    queued_cancel_result = {"status": "cancelled", "exported": 0}
+    first = service.create_single_flight_job(
+        bulk_jobs.JOB_KIND_DATASET_EXPORT,
+        total=2,
+        message="Queued",
+        queued_cancel_result=queued_cancel_result,
+    )
+    queued = service.get_job(first)
+    cancelled = service.cancel_job(first)
+
+    assert queued is not None
+    assert queued["result"] == {}
+    assert cancelled is not None
+    assert cancelled["status"] == "cancelled"
+    assert cancelled["result"] == queued_cancel_result
+
+    second = service.create_single_flight_job(
+        bulk_jobs.JOB_KIND_DATASET_EXPORT,
+        total=1,
+        message="Queued",
+        queued_cancel_result=queued_cancel_result,
+    )
+
+    assert second != first
+    assert service.get_job(second)["status"] == "queued"
+
+
+def test_complete_result_ignores_late_running_cancel_request(service):
+    job_id = service.create_job(JOB_KIND_EXPORT_SIDECARS, total=3, message="Queued")
+    worker_ready = threading.Event()
+    allow_complete = threading.Event()
+
+    def worker(handle) -> None:
+        worker_ready.set()
+        assert allow_complete.wait(timeout=_THREAD_TIMEOUT_SECONDS) is True
+        handle.complete_result(
+            result={"status": "ok", "exported": 3},
+            processed=3,
+            total=3,
+            message="Published",
+        )
+
+    worker_thread = threading.Thread(target=service.run_job, args=(job_id, worker))
+    worker_thread.start()
+    assert worker_ready.wait(timeout=_THREAD_TIMEOUT_SECONDS) is True
+
+    cancelled = service.cancel_job(job_id)
+    assert cancelled is not None
+    assert cancelled["status"] == "running"
+    allow_complete.set()
+    _join_thread(worker_thread)
+
+    job = service.get_job(job_id)
+    assert job is not None
+    assert job["status"] == "done"
+    assert job["processed"] == 3
+    assert job["total"] == 3
+    assert job["message"] == "Published"
+    assert job["result"] == {"status": "ok", "exported": 3}
+
+
+def test_begin_completion_closes_running_cancel_window(service):
+    job_id = service.create_job(JOB_KIND_EXPORT_SIDECARS, total=3, message="Queued")
+    completion_claimed = threading.Event()
+    allow_complete = threading.Event()
+    cancellation_seen: list[bool] = []
+
+    def worker(handle) -> None:
+        assert handle.begin_completion() is True
+        completion_claimed.set()
+        assert allow_complete.wait(timeout=_THREAD_TIMEOUT_SECONDS) is True
+        cancellation_seen.append(handle.cancelled)
+        handle.complete_result(
+            result={"status": "ok", "exported": 3},
+            processed=3,
+            total=3,
+            message="Published",
+        )
+
+    worker_thread = threading.Thread(target=service.run_job, args=(job_id, worker))
+    worker_thread.start()
+    assert completion_claimed.wait(timeout=_THREAD_TIMEOUT_SECONDS) is True
+
+    cancelled = service.cancel_job(job_id)
+    assert cancelled is not None
+    assert cancelled["status"] == "running"
+    assert cancelled["message"] == "Completion already started"
+    allow_complete.set()
+    _join_thread(worker_thread)
+
+    job = service.get_job(job_id)
+    assert cancellation_seen == [False]
+    assert job is not None
+    assert job["status"] == "done"
+    assert job["result"] == {"status": "ok", "exported": 3}
 
 
 def test_chunked_job_runs_to_done_and_merges_result(service):

@@ -26,6 +26,33 @@ import metadata_parser as metadata_parser_module
 from metadata_parser import parse_image
 
 
+def _sidecar_fallback_evidence(
+    carrier: str,
+    basename: str,
+    fields: list[str],
+) -> dict[str, object]:
+    return {
+        "carrier": carrier,
+        "basename": basename,
+        "method": "sidecar_fallback",
+        "confidence": "high",
+        "parser_version": metadata_parser_module.PARSED_METADATA_VERSION,
+        "fields": fields,
+    }
+
+
+def _sidecar_fallback_state(
+    carrier: str,
+    basename: str,
+    fields: list[str],
+) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "evaluated": True,
+        "evidence": [_sidecar_fallback_evidence(carrier, basename, fields)],
+    }
+
+
 def _write_comfyui_prompt_png(tmp_path: Path, filename: str, workflow: dict, color: str = "white") -> Path:
     """Persist a tiny PNG with ComfyUI prompt metadata for parser tests."""
     from PIL import Image
@@ -1879,6 +1906,13 @@ class TestEdgeCases:
         assert result["prompt"] == "sidecar prompt"
         assert result["negative_prompt"] == "sidecar negative"
         assert result["checkpoint"] == "sidecar_model.safetensors"
+        assert result["metadata"]["_parsed"]["sidecar_fallback"] == (
+            _sidecar_fallback_state(
+                "txt",
+                "sidecar.jpg.txt",
+                ["prompt", "negative_prompt", "checkpoint"],
+            )
+        )
 
     def test_parse_prompt_from_json_sidecar(self, tmp_path: Path):
         """JSON sidecars can provide explicit prompt fields without image metadata."""
@@ -1904,6 +1938,331 @@ class TestEdgeCases:
         assert result["negative_prompt"] == "json negative"
         assert result["checkpoint"] == "json_model.safetensors"
         assert result["loras"] == ["json_lora"]
+        assert result["metadata"]["_parsed"]["sidecar_fallback"] == (
+            _sidecar_fallback_state(
+                "json",
+                "caption.json",
+                ["prompt", "negative_prompt", "checkpoint", "loras"],
+            )
+        )
+
+    def test_multiple_sidecars_record_fields_for_the_contributing_carrier(
+        self,
+        tmp_path: Path,
+    ):
+        from PIL import Image
+
+        image_path = tmp_path / "multiple-sidecars.jpg"
+        Image.new("RGB", (64, 64), color="white").save(image_path, "JPEG")
+        (tmp_path / "multiple-sidecars.jpg.txt").write_text(
+            "text sidecar prompt",
+            encoding="utf-8",
+        )
+        (tmp_path / "multiple-sidecars.json").write_text(
+            json.dumps({
+                "negative_prompt": "json negative",
+                "checkpoint": "json_model.safetensors",
+                "loras": ["json_lora"],
+            }),
+            encoding="utf-8",
+        )
+
+        result = parse_image(str(image_path))
+
+        assert result["prompt"] == "text sidecar prompt"
+        assert result["negative_prompt"] == "json negative"
+        assert result["checkpoint"] == "json_model.safetensors"
+        assert result["loras"] == ["json_lora"]
+        assert result["metadata"]["_parsed"]["sidecar_fallback"]["evidence"] == [
+            _sidecar_fallback_evidence(
+                "txt",
+                "multiple-sidecars.jpg.txt",
+                ["prompt"],
+            ),
+            _sidecar_fallback_evidence(
+                "json",
+                "multiple-sidecars.json",
+                ["negative_prompt", "checkpoint", "loras"],
+            ),
+        ]
+
+    @pytest.mark.parametrize(
+        ("sidecar_suffix", "sidecar_content", "expected_carrier"),
+        [
+            (
+                ".json",
+                json.dumps({
+                    "prompt": "shared prompt",
+                    "negative_prompt": "json negative",
+                }),
+                "json",
+            ),
+            (
+                ".xmp",
+                (
+                    '<x:xmpmeta xmlns:x="adobe:ns:meta/">'
+                    '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+                    '<rdf:Description xmlns:sd="https://github.com/AUTOMATIC111/stable-diffusion-webui/">'
+                    '<sd:parameters>shared prompt\nNegative prompt: xmp negative\n'
+                    'Steps: 18, Sampler: Euler, CFG scale: 6, Seed: 9, Size: 64x64'
+                    '</sd:parameters></rdf:Description></rdf:RDF></x:xmpmeta>'
+                ),
+                "xmp",
+            ),
+        ],
+    )
+    def test_later_sidecar_owns_same_value_fields_consumed_by_final_parse(
+        self,
+        tmp_path: Path,
+        sidecar_suffix: str,
+        sidecar_content: str,
+        expected_carrier: str,
+    ):
+        from PIL import Image
+
+        image_path = tmp_path / "same-value-overwrite.jpg"
+        later_sidecar_path = image_path.with_suffix(sidecar_suffix)
+        Image.new("RGB", (64, 64), color="white").save(image_path, "JPEG")
+        (tmp_path / "same-value-overwrite.jpg.txt").write_text(
+            "shared prompt",
+            encoding="utf-8",
+        )
+        later_sidecar_path.write_text(sidecar_content, encoding="utf-8")
+
+        result = parse_image(str(image_path))
+
+        assert result["prompt"] == "shared prompt"
+        assert result["negative_prompt"] == f"{expected_carrier} negative"
+        assert result["metadata"]["_parsed"]["sidecar_fallback"]["evidence"] == [
+            _sidecar_fallback_evidence(
+                expected_carrier,
+                later_sidecar_path.name,
+                ["prompt", "negative_prompt"],
+            ),
+        ]
+
+    def test_later_sidecar_does_not_own_fields_ignored_by_final_parse(
+        self,
+        tmp_path: Path,
+    ):
+        from PIL import Image
+
+        image_path = tmp_path / "ignored-same-value.jpg"
+        parameters = (
+            "shared prompt\n"
+            "Negative prompt: txt negative\n"
+            "Steps: 18, Sampler: Euler, CFG scale: 6, Seed: 9, Size: 64x64"
+        )
+        Image.new("RGB", (64, 64), color="white").save(image_path, "JPEG")
+        (tmp_path / "ignored-same-value.jpg.txt").write_text(
+            parameters,
+            encoding="utf-8",
+        )
+        (tmp_path / "ignored-same-value.json").write_text(
+            json.dumps({
+                "prompt": "shared prompt",
+                "negative_prompt": "json negative",
+            }),
+            encoding="utf-8",
+        )
+
+        result = parse_image(str(image_path))
+
+        assert result["prompt"] == "shared prompt"
+        assert result["negative_prompt"] == "txt negative"
+        assert result["metadata"]["_parsed"]["sidecar_fallback"]["evidence"] == [
+            _sidecar_fallback_evidence(
+                "txt",
+                "ignored-same-value.jpg.txt",
+                ["prompt", "negative_prompt"],
+            ),
+        ]
+
+    def test_later_same_route_sidecar_does_not_own_ignored_raw_key(
+        self,
+        tmp_path: Path,
+    ):
+        from PIL import Image
+
+        image_path = tmp_path / "same-route-priority.jpg"
+        parameters = (
+            "shared prompt\n"
+            "Negative prompt: shared negative\n"
+            "Steps: 18, Sampler: Euler, CFG scale: 6, Seed: 9, Size: 64x64"
+        )
+        Image.new("RGB", (64, 64), color="white").save(image_path, "JPEG")
+        (tmp_path / "same-route-priority.jpg.txt").write_text(
+            parameters,
+            encoding="utf-8",
+        )
+        (tmp_path / "same-route-priority.json").write_text(
+            json.dumps({"Parameters": parameters}),
+            encoding="utf-8",
+        )
+
+        result = parse_image(str(image_path))
+
+        assert result["prompt"] == "shared prompt"
+        assert result["negative_prompt"] == "shared negative"
+        assert result["metadata"]["_parsed"]["sidecar_fallback"]["evidence"] == [
+            _sidecar_fallback_evidence(
+                "txt",
+                "same-route-priority.jpg.txt",
+                ["prompt", "negative_prompt"],
+            ),
+        ]
+
+    def test_later_novelai_comment_owns_same_value_prompt(
+        self,
+        tmp_path: Path,
+    ):
+        from PIL import Image
+
+        image_path = tmp_path / "comment-priority.jpg"
+        Image.new("RGB", (64, 64), color="white").save(image_path, "JPEG")
+        (tmp_path / "comment-priority.jpg.txt").write_text(
+            "shared prompt",
+            encoding="utf-8",
+        )
+        (tmp_path / "comment-priority.json").write_text(
+            json.dumps({"Comment": json.dumps({"prompt": "shared prompt"})}),
+            encoding="utf-8",
+        )
+
+        result = parse_image(str(image_path))
+
+        assert result["prompt"] == "shared prompt"
+        assert result["generator"] == "nai"
+        assert result["metadata"]["_parsed"]["sidecar_fallback"]["evidence"] == [
+            _sidecar_fallback_evidence(
+                "json",
+                "comment-priority.json",
+                ["prompt"],
+            ),
+        ]
+
+    def test_comfy_workflow_owns_checkpoint_when_prompt_graph_does_not(
+        self,
+        tmp_path: Path,
+    ):
+        from PIL import Image
+
+        image_path = tmp_path / "comfy-workflow-priority.jpg"
+        prompt_graph = {
+            "1": {
+                "class_type": "KSampler",
+                "inputs": {"positive": ["2", 0], "negative": ["3", 0]},
+            },
+            "2": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "shared prompt"},
+            },
+            "3": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "shared negative"},
+            },
+        }
+        workflow_graph = {
+            "nodes": [{
+                "id": 4,
+                "type": "CheckpointLoaderSimple",
+                "widgets_values": ["workflow_model.safetensors"],
+            }],
+        }
+        Image.new("RGB", (64, 64), color="white").save(image_path, "JPEG")
+        (tmp_path / "comfy-workflow-priority.jpg.json").write_text(
+            json.dumps({"prompt": prompt_graph}),
+            encoding="utf-8",
+        )
+        (tmp_path / "comfy-workflow-priority.json").write_text(
+            json.dumps({"workflow": workflow_graph}),
+            encoding="utf-8",
+        )
+
+        result = parse_image(str(image_path))
+
+        assert result["prompt"] == "shared prompt"
+        assert result["negative_prompt"] == "shared negative"
+        assert result["checkpoint"] == "workflow_model.safetensors"
+        assert result["metadata"]["_parsed"]["sidecar_fallback"]["evidence"] == [
+            _sidecar_fallback_evidence(
+                "json",
+                "comfy-workflow-priority.jpg.json",
+                ["prompt", "negative_prompt"],
+            ),
+            _sidecar_fallback_evidence(
+                "json",
+                "comfy-workflow-priority.json",
+                ["checkpoint"],
+            ),
+        ]
+
+    def test_parse_webui_parameters_from_xmp_sidecar_records_provenance(
+        self,
+        tmp_path: Path,
+    ):
+        from PIL import Image
+
+        image_path = tmp_path / "sidecar-xmp.png"
+        parameters = (
+            "xmp sidecar prompt\n"
+            "Negative prompt: xmp sidecar negative\n"
+            "Steps: 18, Sampler: Euler, CFG scale: 6, Seed: 9, Size: 64x64, "
+            "Model: xmp_sidecar_model.safetensors"
+        )
+        xmp = (
+            '<x:xmpmeta xmlns:x="adobe:ns:meta/">'
+            '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+            '<rdf:Description xmlns:sd="https://github.com/AUTOMATIC1111/stable-diffusion-webui/">'
+            f'<sd:parameters>{parameters}</sd:parameters>'
+            '</rdf:Description></rdf:RDF></x:xmpmeta>'
+        )
+        Image.new("RGB", (64, 64), color="white").save(image_path, "PNG")
+        (tmp_path / "sidecar-xmp.xmp").write_text(xmp, encoding="utf-8")
+
+        result = parse_image(str(image_path))
+
+        assert result["prompt"] == "xmp sidecar prompt"
+        assert result["negative_prompt"] == "xmp sidecar negative"
+        assert result["checkpoint"] == "xmp_sidecar_model.safetensors"
+        assert result["metadata"]["_parsed"]["sidecar_fallback"] == (
+            _sidecar_fallback_state(
+                "xmp",
+                "sidecar-xmp.xmp",
+                ["prompt", "negative_prompt", "checkpoint"],
+            )
+        )
+
+    def test_embedded_metadata_does_not_claim_adjacent_sidecar(self, tmp_path: Path):
+        from PIL import Image
+        from PIL.PngImagePlugin import PngInfo
+
+        image_path = tmp_path / "embedded-wins.png"
+        embedded_parameters = (
+            "embedded prompt\n"
+            "Negative prompt: embedded negative\n"
+            "Steps: 20, Sampler: Euler, CFG scale: 7, Seed: 1, Size: 64x64"
+        )
+        metadata = PngInfo()
+        metadata.add_text("parameters", embedded_parameters)
+        Image.new("RGB", (64, 64), color="white").save(
+            image_path,
+            "PNG",
+            pnginfo=metadata,
+        )
+        (tmp_path / "embedded-wins.png.txt").write_text(
+            "sidecar must not be claimed",
+            encoding="utf-8",
+        )
+
+        result = parse_image(str(image_path))
+
+        assert result["prompt"] == "embedded prompt"
+        assert result["metadata"]["_parsed"]["sidecar_fallback"] == {
+            "schema_version": 1,
+            "evaluated": True,
+            "evidence": [],
+        }
 
     def test_parse_gif_comment_parameters(self, tmp_path: Path):
         """GIF comment extension metadata should be harvested when present."""

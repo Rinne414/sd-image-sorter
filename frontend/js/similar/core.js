@@ -61,6 +61,7 @@ const SimilarImages = {
     duplicateEmptyMessage: '',
     uploadDropzoneActive: false,
     collectionId: null,
+    scope: 'library',
     scopeCollections: [],
 
     _t(key, fallback, params) {

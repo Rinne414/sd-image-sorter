@@ -53,6 +53,7 @@ from db_query import (
     _apply_color_filter,
     _apply_artist_filter,
     _apply_collection_filter,
+    _apply_gallery_scope_filter,
     _apply_folder_filter,
     _apply_metadata_presence_filter,
     _apply_readable_filter,
@@ -107,6 +108,7 @@ def get_images_paginated(
     color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue include
     exclude_color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue exclude
     collection_id: Optional[int] = None,
+    scope: Optional[str] = None,
     folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
     # Aurora Phase 3 gallery filters
@@ -231,6 +233,7 @@ def get_images_paginated(
         conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
         conditions, params = _apply_color_hues_filter(conditions, params, color_hues, exclude_color_hues)
         conditions, params = _apply_collection_filter(conditions, params, collection_id)
+        conditions, params = _apply_gallery_scope_filter(conditions, params, scope)
 
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
@@ -326,6 +329,7 @@ def get_images_paginated(
                 min_user_rating=min_user_rating,
                 prompt_match_mode=normalized_prompt_match_mode,
                 collection_id=collection_id,
+                scope=scope,
                 folder=folder,
                 has_metadata=has_metadata,
                 no_caption=no_caption,
@@ -388,6 +392,7 @@ def _get_filtered_count(
     min_user_rating: Optional[int] = None,  # v3.3.2 FF-2: gallery "★≥N" filter
     prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
     collection_id: Optional[int] = None,
+    scope: Optional[str] = None,
     folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
     # Aurora Phase 3 gallery filters. Mirrored here so the cursor-pagination
@@ -504,6 +509,7 @@ def _get_filtered_count(
     # v3.3.1: restrict the count to a collection's members so the gallery's
     # "total" matches the collection-scoped page query (mirrors get_images_paginated).
     conditions, params = _apply_collection_filter(conditions, params, collection_id)
+    conditions, params = _apply_gallery_scope_filter(conditions, params, scope)
 
     # Apply folder-subtree scope (v3.3.2 Library Navigation)
     conditions, params = _apply_folder_filter(conditions, params, folder)

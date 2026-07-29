@@ -62,6 +62,7 @@
             // v3.3.1: browse within a collection (Favorites view = favorites collection id).
             // null = no collection constraint (normal gallery listing).
             collectionId: null,
+            scope: 'current_session',
             // v3.3.2 Library Navigation: recursive folder-subtree scope (null = whole library).
             folder: null,
             // v3.3.2 small-opt: "has SD generation parameters" filter
@@ -135,6 +136,7 @@
             excludeColorHues: sanitizeHues(source.excludeColorHues),
             // v3.3.1 collection browse
             collectionId: source.collectionId ?? null,
+            scope: source.scope === 'library' ? 'library' : 'current_session',
             // v3.3.2 Library Navigation
             folder: source.folder ? String(source.folder).trim() : null,
             // v3.3.2 small-opt: tri-state "has SD generation parameters"

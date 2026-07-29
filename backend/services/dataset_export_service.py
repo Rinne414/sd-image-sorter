@@ -36,22 +36,26 @@ Reuses:
 from __future__ import annotations
 
 import json
-import logging
 import os
 import shutil
 import threading
-import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 import database as db
 from config import ALLOWED_IMAGE_EXTENSIONS
 from services.dataset_naming import NamingError, render_stem, resolve_collision
+from services.bulk_job_service import (
+    JOB_KIND_DATASET_EXPORT,
+    BulkJobAlreadyRunningError,
+    BulkJobHandle,
+    get_bulk_job_service,
+)
 from services.dataset_session_service import (
     count_scan_manifest_paths,
     iter_scan_manifest_paths,
@@ -67,36 +71,21 @@ from services.tag_export_service import (
 )
 from utils.path_validation import normalize_user_path, validate_folder_path
 
-
-logger = logging.getLogger(__name__)
-
-
 # ---------------------------------------------------------------------------
 # Decomposition (2026-07): the constants, Pydantic models, pure helpers, and
 # the two streaming engine functions live in the services/dataset_export/
 # package, re-imported below. THIS module remains a real FILE and the single
 # monkeypatch surface (claude-dsexport-pins-REPORT.md §2/§3/§6 +
 # tests/test_dataset_export_pins.py):
-#   * The JOB-REGISTRY family stays DEFINED here in one namespace — the five
-#     module globals (_EXPORT_JOB_LOCK / _EXPORT_JOB_RUN_ID /
-#     _EXPORT_JOB_THREAD / _EXPORT_JOB_CANCEL_EVENT / _EXPORT_JOB_PROGRESS),
-#     _EXPORT_ACTIVE_STATUSES, and every reader/writer (_copy_progress /
-#     get_dataset_export_progress / cancel_dataset_export /
-#     _set_export_progress_if_current / _clear_export_worker_if_current /
-#     start_dataset_export with its worker()/publish() closures). A ``global``
-#     rebind only affects the defining module's binding, so moving any writer
-#     to a sibling module (or re-exporting a global via ``from x import``)
-#     would silently desync progress/cancel.
-#   * The header import block above is kept verbatim (per-file F401 ignore in
-#     pyproject.toml) so every historical attribute keeps resolving here for
-#     tests that patch through this namespace: export_service.shutil.copy2 and
-#     des.db.update_image_path (module singletons), des.render_stem and
-#     des.DATASET_EXPORT_RESPONSE_ITEM_LIMIT (facade bindings — planning.
-#     _plan_single_rename and the engine closures read them back through
-#     _svc() at call time).
+#   * Synchronous export dependencies remain available through this facade for
+#     tests that patch export_service.shutil.copy2, des.db.update_image_path,
+#     des.render_stem, and des.DATASET_EXPORT_RESPONSE_ITEM_LIMIT. The engine
+#     reads those bindings back through _svc() at call time.
+#   * Background lifecycle state belongs exclusively to BulkJobService. This
+#     facade only adapts export progress and results into the shared job.
 #   * Every Pydantic model is defined ONCE in services/dataset_export/models.py
 #     and re-exported here, so the from-import bindings in routers/dataset.py
-#     keep class identity (response_model= coercion + isinstance).
+#     keep class identity for response_model coercion.
 # ---------------------------------------------------------------------------
 from services.dataset_export._constants import (
     DATASET_EXPORT_DB_CHUNK_SIZE,
@@ -105,6 +94,10 @@ from services.dataset_export._constants import (
     DATASET_LEGACY_TEMPLATE,
     EXPORT_MANIFEST_FILENAME,
     EXPORT_MANIFEST_VERSION,
+    PACKAGE_HASH_CHUNK_SIZE,
+    PACKAGE_INVENTORY_FILENAME,
+    PACKAGE_MANIFEST_SCHEMA,
+    PACKAGE_MANIFEST_VERSION,
     TRAINING_TAG_CONTENT_MODES,
     VALID_IMAGE_OPS,
     VALID_MASK_EXPORT_MODES,
@@ -117,6 +110,8 @@ from services.dataset_export.models import (
     DatasetExportRequest,
     DatasetExportResponse,
     DatasetExportStartResponse,
+    DatasetPackageVerificationRequest,
+    DatasetPackageVerificationResponse,
     ExportProgressCallback,
 )
 from services.dataset_export.planning import (
@@ -146,143 +141,126 @@ from services.dataset_export.artifacts import (
     _build_export_manifest,
     _manifest_item,
     _mask_export_mode,
-    _toml_path_literal,
-    _trainer_config_mode,
     _validate_export_request,
+    _validate_export_request_read_only,
     _write_export_manifest,
-    _write_kohya_dataset_config,
 )
-from services.dataset_export.engine import export_dataset, preview_dataset_export
-
-# Kept next to the job-registry family below (co-location rule, report §2):
-# the cancel/start guards read this exact set to decide "already running"
-# (409) vs "nothing to cancel".
-_EXPORT_ACTIVE_STATUSES = {"starting", "running", "cancelling"}
-
-
-_EXPORT_JOB_LOCK = threading.Lock()
-_EXPORT_JOB_RUN_ID = 0
-_EXPORT_JOB_THREAD: Optional[threading.Thread] = None
-_EXPORT_JOB_CANCEL_EVENT: Optional[threading.Event] = None
-_EXPORT_JOB_PROGRESS: Dict[str, Any] = {
-    "status": "idle",
-    "job_id": None,
-    "step": "idle",
-    "current": 0,
-    "total": 0,
-    "exported": 0,
-    "skipped": 0,
-    "errors": 0,
-    "current_item": None,
-    "recent_errors": [],
-    "output_folder": "",
-    "items_truncated": False,
-    "result": None,
-    "message": "No dataset export is running.",
-    "started_at": None,
-    "updated_at": time.time(),
-}
+from services.dataset_export.kohya_contract import (
+    _toml_path_literal,
+    write_kohya_dataset_config as _write_kohya_dataset_config,
+)
+from services.dataset_export.anima_contract import (
+    write_anima_dataset_config as _write_anima_dataset_config,
+)
+from services.dataset_export.package_integrity import (
+    PackageIntegrityError,
+    package_requested,
+    preflight_package_targets,
+    publish_pending_dataset_package,
+    verify_dataset_package,
+)
+from services.dataset_export.engine import (
+    export_dataset as _export_dataset_engine,
+    export_dataset_job as _export_dataset_job_engine,
+    preview_dataset_export,
+)
+from services.dataset_export.readiness_authorization import authorize_dataset_export
 
 
-def _copy_progress(progress: Dict[str, Any]) -> Dict[str, Any]:
-    snapshot = dict(progress)
-    snapshot["recent_errors"] = list(progress.get("recent_errors") or [])
-    result = progress.get("result")
-    if isinstance(result, DatasetExportResponse):
-        snapshot["result"] = result.model_dump()
-    elif result is not None:
-        snapshot["result"] = result
-    return snapshot
+def export_dataset(
+    request: DatasetExportRequest,
+    *,
+    progress_callback: Optional[ExportProgressCallback] = None,
+    cancel_event: Optional[threading.Event] = None,
+    pending_package_run_id: Optional[str] = None,
+) -> DatasetExportResponse:
+    """Authorize and execute a synchronous public dataset export."""
+    authorize_dataset_export(request)
+    return _export_dataset_engine(
+        request,
+        progress_callback=progress_callback,
+        cancel_event=cancel_event,
+        pending_package_run_id=pending_package_run_id,
+    )
 
 
-def get_dataset_export_progress(job_id: Optional[str] = None) -> Dict[str, Any]:
-    with _EXPORT_JOB_LOCK:
-        if job_id and _EXPORT_JOB_PROGRESS.get("job_id") not in {None, job_id}:
-            raise HTTPException(status_code=404, detail="Dataset export job not found")
-        return _copy_progress(_EXPORT_JOB_PROGRESS)
-
-
-def cancel_dataset_export(job_id: Optional[str] = None) -> Dict[str, Any]:
-    global _EXPORT_JOB_PROGRESS
-    with _EXPORT_JOB_LOCK:
-        if job_id and _EXPORT_JOB_PROGRESS.get("job_id") != job_id:
-            raise HTTPException(status_code=404, detail="Dataset export job not found")
-
-        status = str(_EXPORT_JOB_PROGRESS.get("status") or "idle")
-        if status not in _EXPORT_ACTIVE_STATUSES:
-            return {
-                "status": status,
-                "job_id": _EXPORT_JOB_PROGRESS.get("job_id"),
-                "message": "No dataset export job is running.",
-            }
-
-        if _EXPORT_JOB_CANCEL_EVENT is not None:
-            _EXPORT_JOB_CANCEL_EVENT.set()
-
-        current = int(_EXPORT_JOB_PROGRESS.get("current", 0) or 0)
-        total = int(_EXPORT_JOB_PROGRESS.get("total", 0) or 0)
-        _EXPORT_JOB_PROGRESS = {
-            **_EXPORT_JOB_PROGRESS,
-            "status": "cancelling",
-            "step": "cancelling",
-            "message": f"Cancelling dataset export... ({current}/{total})" if total else "Cancelling dataset export...",
-            "updated_at": time.time(),
-        }
-        return {
-            "status": "cancelling",
-            "job_id": _EXPORT_JOB_PROGRESS.get("job_id"),
-            "message": "Dataset export cancellation requested.",
-        }
-
-
-def _set_export_progress_if_current(run_id: int, updates: Dict[str, Any]) -> bool:
-    global _EXPORT_JOB_PROGRESS
-    with _EXPORT_JOB_LOCK:
-        if run_id != _EXPORT_JOB_RUN_ID:
-            return False
-        recent_errors = updates.get("recent_errors")
-        if recent_errors is not None:
-            updates = {
-                **updates,
-                "recent_errors": list(recent_errors)[-DATASET_EXPORT_RECENT_ERROR_LIMIT:],
-            }
-        _EXPORT_JOB_PROGRESS = {
-            **_EXPORT_JOB_PROGRESS,
-            **updates,
-            "updated_at": time.time(),
-        }
-        return True
-
-
-def _clear_export_worker_if_current(run_id: int, cancel_event: threading.Event) -> None:
-    global _EXPORT_JOB_CANCEL_EVENT
-    with _EXPORT_JOB_LOCK:
-        if run_id == _EXPORT_JOB_RUN_ID and _EXPORT_JOB_CANCEL_EVENT is cancel_event:
-            _EXPORT_JOB_CANCEL_EVENT = None
-
-
-def start_dataset_export(request: DatasetExportRequest) -> DatasetExportStartResponse:
-    """Start a cancellable dataset export worker and return immediately."""
-    global _EXPORT_JOB_RUN_ID, _EXPORT_JOB_THREAD, _EXPORT_JOB_CANCEL_EVENT, _EXPORT_JOB_PROGRESS
-
-    output_mode = _output_mode(request)
+def export_dataset_job(
+    request: DatasetExportRequest,
+    *,
+    progress_callback: ExportProgressCallback,
+    cancel_event: threading.Event,
+    pending_package_run_id: str,
+    completion_gate: Callable[[], bool],
+) -> DatasetExportResponse:
+    """Re-authorize at the async worker boundary before artifact writes."""
+    authorize_dataset_export(request)
     output_path = _validate_export_request(request)
+    if output_path is None:
+        raise PackageIntegrityError(
+            "Verified trainer package requires an output folder"
+        )
+    publish_pending_dataset_package(
+        output_path,
+        request,
+        _requested_item_count(request),
+        _dataset_sidecar_extension(request.content_mode),
+        pending_package_run_id,
+    )
+    return _export_dataset_job_engine(
+        request,
+        progress_callback=progress_callback,
+        cancel_event=cancel_event,
+        pending_package_run_id=pending_package_run_id,
+        completion_gate=completion_gate,
+    )
+
+
+def start_dataset_export(
+    request: DatasetExportRequest,
+    background_tasks: BackgroundTasks,
+) -> DatasetExportStartResponse:
+    """Queue a cancellable dataset export in the shared bulk-job registry."""
+    authorize_dataset_export(request)
+    output_mode = _output_mode(request)
+    output_path = _validate_export_request_read_only(request)
     requested_total = _requested_item_count(request)
+    service = get_bulk_job_service()
+    package_run_id = uuid.uuid4().hex if package_requested(request) else None
+    package_manifest_path = (
+        str(output_path / EXPORT_MANIFEST_FILENAME)
+        if output_path is not None and package_run_id is not None
+        else None
+    )
+    queued_cancel_result = DatasetExportResponse(
+        status="cancelled",
+        exported=0,
+        skipped=0,
+        error_count=0,
+        output_folder=str(output_path or ""),
+        output_mode=output_mode,
+        items=[],
+        total_items=0,
+        items_truncated=False,
+        error_messages=[],
+        package_status="incomplete" if package_requested(request) else "not_requested",
+        package_run_id=package_run_id,
+        package_manifest_path=package_manifest_path,
+    ).model_dump(mode="json")
+    try:
+        job_id = service.create_single_flight_job(
+            JOB_KIND_DATASET_EXPORT,
+            total=requested_total,
+            message=f"Starting dataset export for {requested_total} images...",
+            queued_cancel_result=queued_cancel_result,
+        )
+    except BulkJobAlreadyRunningError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="Dataset export already in progress",
+        ) from exc
 
-    with _EXPORT_JOB_LOCK:
-        current_status = str(_EXPORT_JOB_PROGRESS.get("status") or "idle")
-        if current_status in _EXPORT_ACTIVE_STATUSES:
-            raise HTTPException(status_code=409, detail="Dataset export already in progress")
-
-        _EXPORT_JOB_RUN_ID += 1
-        run_id = _EXPORT_JOB_RUN_ID
-        job_id = uuid.uuid4().hex
-        cancel_event = threading.Event()
-        started_at = time.time()
-        _EXPORT_JOB_CANCEL_EVENT = cancel_event
-        _EXPORT_JOB_PROGRESS = {
-            "status": "starting",
-            "job_id": job_id,
+    def worker(handle: BulkJobHandle) -> None:
+        progress: Dict[str, Any] = {
             "step": "starting",
             "current": 0,
             "total": requested_total,
@@ -294,123 +272,95 @@ def start_dataset_export(request: DatasetExportRequest) -> DatasetExportStartRes
             "output_folder": str(output_path or ""),
             "output_mode": output_mode,
             "items_truncated": False,
-            "result": None,
-            "message": f"Starting dataset export for {requested_total} images...",
-            "started_at": started_at,
-            "updated_at": started_at,
         }
+        reported_error_count = 0
 
-    def publish(updates: Dict[str, Any]) -> None:
-        # v3.4.5 cancel-race fix: the worker must NOT overwrite a
-        # "cancelling" status back to "running" once the cancel event is
-        # set. The previous ``status: "cancelling" if cancel_event.is_set()
-        # else "running"`` re-derived the status on every progress tick;
-        # if the cancel handler set "cancelling" between two ticks, the
-        # next tick could flip it back to "running" for a window. Now the
-        # worker never writes "running" after cancel is requested — it
-        # only escalates to "cancelling" and leaves terminal-status
-        # transitions to the worker()'s final _set_export_progress_if_current
-        # call.
-        if cancel_event.is_set():
-            _set_export_progress_if_current(run_id, {
-                "status": "cancelling",
-                **updates,
-            })
-        else:
-            _set_export_progress_if_current(run_id, {
-                "status": "running",
-                **updates,
-            })
+        def publish(updates: Dict[str, Any]) -> None:
+            nonlocal progress, reported_error_count
+            progress = {**progress, **updates}
+            current = int(progress.get("current", 0) or 0)
+            total = int(progress.get("total", requested_total) or requested_total)
+            message = str(progress.get("message") or "Exporting dataset...")
+            handle.set_progress(processed=current, total=total, message=message)
+            current_error_count = int(progress.get("errors", 0) or 0)
+            if current_error_count > reported_error_count:
+                new_count = current_error_count - reported_error_count
+                recent_errors = [str(item) for item in progress.get("recent_errors") or []]
+                handle.record_errors(new_count, recent_errors[-new_count:])
+                reported_error_count = current_error_count
+            handle.set_result({"progress": dict(progress)})
 
-    def worker() -> None:
         try:
-            publish({
-                "step": "running",
-                "message": f"Preparing dataset export for {requested_total} images...",
-            })
-            result = export_dataset(
-                request,
-                progress_callback=publish,
-                cancel_event=cancel_event,
+            if package_run_id is None:
+                result = export_dataset(
+                    request,
+                    progress_callback=publish,
+                    cancel_event=handle.cancel_event,
+                )
+            else:
+                result = export_dataset_job(
+                    request,
+                    progress_callback=publish,
+                    cancel_event=handle.cancel_event,
+                    pending_package_run_id=package_run_id,
+                    completion_gate=handle.begin_completion,
+                )
+        except Exception as exc:
+            detail = str(exc.detail) if isinstance(exc, HTTPException) else str(exc)
+            failure = DatasetExportResponse(
+                status="failed",
+                exported=int(progress.get("exported", 0) or 0),
+                skipped=int(progress.get("skipped", 0) or 0),
+                error_count=max(1, int(progress.get("errors", 0) or 0)),
+                output_folder=str(output_path or ""),
+                output_mode=output_mode,
+                items=[],
+                total_items=int(progress.get("current", 0) or 0),
+                items_truncated=bool(progress.get("items_truncated", False)),
+                error_messages=[detail],
+                package_status="incomplete" if package_requested(request) else "not_requested",
+                package_run_id=package_run_id,
+                package_manifest_path=package_manifest_path,
             )
-            terminal_status = "cancelled" if result.status == "cancelled" else "done"
-            _set_export_progress_if_current(run_id, {
-                "status": terminal_status,
-                "step": terminal_status,
-                "current": result.total_items if result.status != "cancelled" else _EXPORT_JOB_PROGRESS.get("current", 0),
-                "total": _EXPORT_JOB_PROGRESS.get("total", result.total_items),
-                "exported": result.exported,
-                "skipped": result.skipped,
-                "errors": result.error_count,
-                "current_item": None,
-                "recent_errors": result.error_messages[-DATASET_EXPORT_RECENT_ERROR_LIMIT:],
-                "items_truncated": result.items_truncated,
-                "result": result,
-                "output_folder": result.output_folder,
-                "message": (
-                    f"Cancelled at {_EXPORT_JOB_PROGRESS.get('current', 0)}/{_EXPORT_JOB_PROGRESS.get('total', 0)}. "
-                    f"Exported {result.exported} images."
-                    if result.status == "cancelled"
-                    else f"Dataset export finished: {result.exported} exported, {result.error_count} failed, {result.skipped} skipped."
-                ),
-            })
-        except HTTPException as exc:
-            detail = str(exc.detail)
-            _set_export_progress_if_current(run_id, {
-                "status": "failed",
-                "step": "failed",
-                "current": _EXPORT_JOB_PROGRESS.get("current", 0),
-                "total": _EXPORT_JOB_PROGRESS.get("total", requested_total),
-                "errors": max(1, int(_EXPORT_JOB_PROGRESS.get("errors", 0) or 0)),
-                "current_item": None,
-                "recent_errors": [detail],
-                "result": {
-                    "status": "failed",
-                    "exported": int(_EXPORT_JOB_PROGRESS.get("exported", 0) or 0),
-                    "skipped": int(_EXPORT_JOB_PROGRESS.get("skipped", 0) or 0),
-                    "error_count": 1,
-                    "output_folder": str(output_path or ""),
-                    "output_mode": output_mode,
-                    "items": [],
-                    "total_items": 0,
-                    "items_truncated": False,
-                    "error_messages": [detail],
-                },
-                "message": detail,
-            })
-        except Exception as exc:  # pragma: no cover - defensive worker guard
-            logger.exception("Dataset export background job failed")
-            detail = f"Dataset export failed: {exc}"
-            _set_export_progress_if_current(run_id, {
-                "status": "failed",
-                "step": "failed",
-                "current": _EXPORT_JOB_PROGRESS.get("current", 0),
-                "total": _EXPORT_JOB_PROGRESS.get("total", requested_total),
-                "errors": max(1, int(_EXPORT_JOB_PROGRESS.get("errors", 0) or 0)),
-                "current_item": None,
-                "recent_errors": [detail],
-                "result": {
-                    "status": "failed",
-                    "exported": int(_EXPORT_JOB_PROGRESS.get("exported", 0) or 0),
-                    "skipped": int(_EXPORT_JOB_PROGRESS.get("skipped", 0) or 0),
-                    "error_count": 1,
-                    "output_folder": str(output_path or ""),
-                    "output_mode": output_mode,
-                    "items": [],
-                    "total_items": 0,
-                    "items_truncated": False,
-                    "error_messages": [detail],
-                },
-                "message": detail,
-            })
-        finally:
-            _clear_export_worker_if_current(run_id, cancel_event)
+            handle.set_result(failure.model_dump(mode="json"))
+            raise
 
-    thread = threading.Thread(target=worker, name=f"dataset-export-{job_id[:8]}", daemon=True)
-    with _EXPORT_JOB_LOCK:
-        if run_id == _EXPORT_JOB_RUN_ID:
-            _EXPORT_JOB_THREAD = thread
-    thread.start()
+        if result.error_count > reported_error_count:
+            handle.record_errors(
+                result.error_count - reported_error_count,
+                result.error_messages[-(result.error_count - reported_error_count):],
+            )
+        current = int(progress.get("current", 0) or 0)
+        total = int(progress.get("total", requested_total) or requested_total)
+        message = (
+            f"Cancelled at {current}/{total}. Exported {result.exported} images."
+            if result.status == "cancelled"
+            else (
+                f"Dataset export finished: {result.exported} exported, "
+                f"{result.error_count} failed, {result.skipped} skipped."
+            )
+        )
+        result_payload = result.model_dump(mode="json")
+        if result.status != "cancelled":
+            handle.complete_result(
+                result=result_payload,
+                processed=result.total_items,
+                total=total,
+                message=message,
+            )
+            return
+        handle.set_result(result_payload)
+        handle.set_progress(
+            processed=current,
+            total=total,
+            message=message,
+        )
+
+    try:
+        background_tasks.add_task(service.run_job, job_id, worker)
+    except Exception:
+        service.cancel_job(job_id)
+        raise
 
     return DatasetExportStartResponse(
         status="started",

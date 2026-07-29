@@ -7,6 +7,7 @@ child process.
 """
 
 import gc
+import hmac
 import logging
 import os
 import time
@@ -27,6 +28,12 @@ from services.tagging.filters import (
 from services.tagging.progress import _build_tag_progress_state
 from services.tagging.request import TagRequest, resolve_request_thresholds
 from services.tagging.runtime_plan import _format_runtime_adjustment_message
+from tag_writer_provenance import (
+    build_wd14_writer_provenance,
+    require_image_content_fingerprint,
+    require_unchanged_wd14_loaded_model,
+    replace_wd14_runtime_providers,
+)
 from utils.source_paths import resolve_existing_indexed_image_path
 
 # NOTE(decomposition): keep the historical logger channel so log routing
@@ -39,6 +46,57 @@ logger = logging.getLogger("services.tagging_service")
 # the original facade path — otherwise the relative indexed-image path
 # candidates would silently change.
 _BACKEND_FILE = str(Path(__file__).resolve().parents[1] / "tagging_service.py")
+
+
+def _runtime_provider_chain(tagger: Any) -> List[str]:
+    session = getattr(tagger, "session", None)
+    get_providers = getattr(session, "get_providers", None)
+    if not callable(get_providers):
+        return []
+    return [str(value) for value in get_providers()]
+
+
+def _source_file_identity(image_path: str) -> tuple[int, int, int, int]:
+    source_stat = os.stat(image_path)
+    return (
+        int(source_stat.st_dev),
+        int(source_stat.st_ino),
+        int(source_stat.st_size),
+        int(source_stat.st_mtime_ns),
+    )
+
+
+def _prepare_wd14_source_evidence(
+    image_path: str,
+) -> tuple[str, tuple[int, int, int, int]]:
+    identity_before = _source_file_identity(image_path)
+    content_fingerprint = require_image_content_fingerprint(
+        compute_image_content_fingerprint(image_path)
+    )
+    identity_after = _source_file_identity(image_path)
+    if identity_before != identity_after:
+        raise RuntimeError(
+            "source image changed while its WD14 content fingerprint was computed"
+        )
+    return content_fingerprint, identity_after
+
+
+def _require_unchanged_wd14_source(
+    image_path: str,
+    expected_identity: tuple[int, int, int, int],
+    expected_content_fingerprint: str,
+) -> None:
+    current_fingerprint, current_identity = _prepare_wd14_source_evidence(image_path)
+    if (
+        current_identity != expected_identity
+        or not hmac.compare_digest(
+            current_fingerprint,
+            expected_content_fingerprint,
+        )
+    ):
+        raise RuntimeError(
+            "source image changed while WD14 inference was running; tags were not published"
+        )
 
 
 class _E2ETaggingStub:
@@ -124,6 +182,7 @@ def _tagging_worker_main(
     )
     model_config = TAGGER_MODELS.get(effective_model_name, {})
     runtime_backend = str(model_config.get("runtime_backend", "wd14")).lower()
+    writer_family = str(model_config.get("writer_family", "")).strip().lower()
     effective_use_gpu = bool(
         runtime_plan_payload.get("effective_use_gpu", request.use_gpu)
     )
@@ -314,6 +373,36 @@ def _tagging_worker_main(
             with exclusive_ai_runtime(f"tagger-load:{effective_model_name}"):
                 tagger.load()
 
+        runtime_providers = _runtime_provider_chain(tagger)
+        is_e2e_stub = isinstance(tagger, _E2ETaggingStub)
+        resolved_model_path = getattr(tagger, "_resolved_model_path", None)
+        loaded_model_file_identity = getattr(
+            tagger,
+            "_loaded_model_file_identity",
+            None,
+        )
+        loaded_model_file_sha256 = getattr(
+            tagger,
+            "_loaded_model_file_sha256",
+            None,
+        )
+        writer_provenance = (
+            None
+            if is_e2e_stub
+            else build_wd14_writer_provenance(
+                effective_model_name=effective_model_name,
+                requested_model_path=request.model_path,
+                model_config=model_config,
+                resolved_model_path=resolved_model_path,
+                runtime_providers=runtime_providers,
+                loaded_model_file_identity=loaded_model_file_identity,
+                loaded_model_file_sha256=loaded_model_file_sha256,
+            )
+        )
+        if writer_family == "wd14" and not is_e2e_stub and writer_provenance is None:
+            raise RuntimeError(
+                "WD14 tagging cannot continue without complete writer provenance"
+            )
         if hasattr(tagger, "set_session_refresh_interval"):
             tagger.set_session_refresh_interval(session_refresh_interval)
 
@@ -426,7 +515,36 @@ def _tagging_worker_main(
                     )
                     continue
 
-                existing_images.append({**img, "_resolved_path": resolved_path})
+                source_evidence: Dict[str, Any] = {}
+                if writer_provenance is not None:
+                    try:
+                        content_fingerprint, source_identity = (
+                            _prepare_wd14_source_evidence(resolved_path)
+                        )
+                    except Exception as error:
+                        total_errors += 1
+                        total_processed += 1
+                        logger.error(
+                            "Skipping image without stable WD14 source evidence: %s (%s)",
+                            image_path,
+                            error,
+                        )
+                        send_with_eta(
+                            f"Skipped changed or unverifiable image: {image_name} ({error})",
+                        )
+                        continue
+                    source_evidence = {
+                        "_content_fingerprint": content_fingerprint,
+                        "_source_identity": source_identity,
+                    }
+
+                existing_images.append(
+                    {
+                        **img,
+                        "_resolved_path": resolved_path,
+                        **source_evidence,
+                    }
+                )
                 batch_paths.append(resolved_path)
 
             if existing_images:
@@ -500,12 +618,72 @@ def _tagging_worker_main(
                             "running",
                             f"Tagging {total_processed + 1}/{total}: {first_name}",
                         )
+                    providers_before_inference = (
+                        _runtime_provider_chain(tagger)
+                        if writer_provenance is not None
+                        else []
+                    )
                     batch_results, runtime_info = tagger.tag_batch(
                         batch_paths,
                         preferred_batch_size=batch_size,
                         min_batch_size=1,
                         return_runtime_info=True,
                     )
+                    providers_after_inference = (
+                        _runtime_provider_chain(tagger)
+                        if writer_provenance is not None
+                        else []
+                    )
+
+                    if (
+                        writer_provenance is not None
+                        and (
+                            runtime_info.get("used_cpu_fallback")
+                            or providers_before_inference
+                            != providers_after_inference
+                        )
+                    ):
+                        fallback_runtime_info = runtime_info
+                        retry_providers_before = providers_after_inference
+                        batch_results, retry_runtime_info = tagger.tag_batch(
+                            batch_paths,
+                            preferred_batch_size=batch_size,
+                            min_batch_size=1,
+                            return_runtime_info=True,
+                        )
+                        retry_providers_after = _runtime_provider_chain(tagger)
+                        if (
+                            retry_runtime_info.get("used_cpu_fallback")
+                            or retry_providers_before != retry_providers_after
+                        ):
+                            raise RuntimeError(
+                                "WD14 runtime provider chain changed again while "
+                                "re-running a fallback batch; no tags were published"
+                            )
+                        runtime_info = dict(retry_runtime_info)
+                        runtime_info["used_cpu_fallback"] = True
+                        runtime_info["attempted_gpu_backoff"] = bool(
+                            fallback_runtime_info.get("attempted_gpu_backoff")
+                            or retry_runtime_info.get("attempted_gpu_backoff")
+                        )
+                        runtime_info["backoff_steps"] = [
+                            *(fallback_runtime_info.get("backoff_steps") or []),
+                            *(retry_runtime_info.get("backoff_steps") or []),
+                        ]
+                        providers_after_inference = retry_providers_after
+
+                    batch_writer_provenance = None
+                    if writer_provenance is not None:
+                        require_unchanged_wd14_loaded_model(
+                            writer_provenance,
+                            getattr(tagger, "_resolved_model_path", None),
+                            getattr(tagger, "_loaded_model_file_identity", None),
+                            getattr(tagger, "_loaded_model_file_sha256", None),
+                        )
+                        batch_writer_provenance = replace_wd14_runtime_providers(
+                            writer_provenance,
+                            providers_after_inference,
+                        )
 
                     runtime_adjustment_message = _format_runtime_adjustment_message(
                         runtime_info
@@ -540,26 +718,38 @@ def _tagging_worker_main(
                         if cancel_event.is_set():
                             break
 
-                        if result.get("error"):
+                        result_error = result.get("error")
+                        resolved_path = img.get("_resolved_path") or img["path"]
+                        if result_error is None and writer_provenance is not None:
+                            try:
+                                _require_unchanged_wd14_source(
+                                    resolved_path,
+                                    img["_source_identity"],
+                                    img["_content_fingerprint"],
+                                )
+                            except Exception as error:
+                                result_error = str(error)
+
+                        if result_error:
                             total_errors += 1
                             logger.error(
                                 "Error tagging %s: %s",
-                                img.get("_resolved_path") or img["path"],
-                                result["error"],
+                                resolved_path,
+                                result_error,
                             )
                         else:
-                            content_fingerprint = None
-                            resolved_path = img.get("_resolved_path") or img["path"]
-                            try:
-                                content_fingerprint = compute_image_content_fingerprint(
-                                    resolved_path
-                                )
-                            except Exception as exc:
-                                logger.warning(
-                                    "Could not compute content fingerprint for %s: %s",
-                                    resolved_path,
-                                    exc,
-                                )
+                            content_fingerprint = img.get("_content_fingerprint")
+                            if writer_provenance is None:
+                                try:
+                                    content_fingerprint = (
+                                        compute_image_content_fingerprint(resolved_path)
+                                    )
+                                except Exception as exc:
+                                    logger.warning(
+                                        "Could not compute content fingerprint for %s: %s",
+                                        resolved_path,
+                                        exc,
+                                    )
 
                             # Apply pre-tag filters (T-power-PR1):
                             # 1. pre_tag_blacklist: drop any tag whose name (case-insensitive,
@@ -585,6 +775,12 @@ def _tagging_worker_main(
                                 "image_id": img["id"],
                                 "tags": filtered_tags,
                                 "content_fingerprint": content_fingerprint,
+                                "writer_provenance": (
+                                    batch_writer_provenance.model_dump(mode="python")
+                                    if batch_writer_provenance is not None
+                                    and filtered_tags
+                                    else None
+                                ),
                             }
                             raw_scores = result.get("tag_scores")
                             if raw_scores:

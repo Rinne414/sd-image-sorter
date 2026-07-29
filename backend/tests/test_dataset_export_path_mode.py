@@ -18,6 +18,9 @@ import pytest
 from PIL import Image
 
 
+pytestmark = pytest.mark.usefixtures("authorize_legacy_dataset_exports")
+
+
 @pytest.fixture
 def folder_with_locals(tmp_path: Path) -> tuple[Path, list[Path]]:
     """3 images in a folder NOT scanned into the gallery DB."""
@@ -89,8 +92,8 @@ def test_path_mode_export_works_without_db_rows(test_client, test_db, folder_wit
     )
 
 
-def test_path_mode_invalid_path_reports_error(test_client, test_db, tmp_path):
-    """Garbage paths should surface as per-item errors, not crash the export."""
+def test_path_mode_invalid_path_is_blocked_before_export(test_client, test_db, tmp_path):
+    """Garbage paths are rejected before export artifacts are created."""
     out = tmp_path / "out"
     out.mkdir()
     response = test_client.post("/api/dataset/export", json={
@@ -102,12 +105,11 @@ def test_path_mode_invalid_path_reports_error(test_client, test_db, tmp_path):
         "image_op": "copy",
         "overwrite_policy": "unique",
     })
-    assert response.status_code == 200, response.text
+    assert response.status_code == 409, response.text
     body = response.json()
-    assert body["status"] == "failed", body  # exported=0, error_count>=1
-    assert body["error_count"] >= 1
-    msg = " ".join(body["error_messages"]).lower()
-    assert "ghost.png" in msg or "not a readable image" in msg
+    assert body["code"] == "readiness_blocked", body
+    assert "source_unreadable" in {issue["code"] for issue in body["issues"]}
+    assert list(out.iterdir()) == []
 
 
 def test_path_mode_caption_falls_back_to_template_when_no_override(
@@ -141,12 +143,49 @@ def test_path_mode_caption_falls_back_to_template_when_no_override(
     assert "masterpiece" in cap
 
 
+def test_path_mode_sidecar_stays_dynamic_for_blacklist_common_tags_and_trigger(
+    test_client, test_db, folder_with_locals, tmp_path
+):
+    _folder, paths = folder_with_locals
+    out = tmp_path / "dynamic-sidecar-out"
+    out.mkdir()
+    paths[0].with_suffix(".txt").write_text(
+        "Hero Token, 1girl, red_hair",
+        encoding="utf-8",
+    )
+
+    response = test_client.post("/api/dataset/export", json={
+        "image_ids": [],
+        "image_paths": [str(paths[0])],
+        "output_folder": str(out),
+        "naming_pattern": "{filename}",
+        "trigger": "Hero_Token",
+        "common_tags": ["Hero_Token", "masterpiece"],
+        "blacklist": ["red_hair"],
+        "content_mode": "tags",
+        "image_op": "copy",
+        "overwrite_policy": "unique",
+        "normalize_tag_underscores": False,
+    })
+
+    assert response.status_code == 200, response.text
+    assert (out / "local_a.txt").read_text(encoding="utf-8") == (
+        "Hero_Token, 1girl, masterpiece"
+    )
+
+
 def test_path_mode_export_accepts_dataset_scan_token_without_path_payload(
     test_client, test_db, folder_with_locals, tmp_path
 ):
     folder, paths = folder_with_locals
     out = tmp_path / "token-out"
     out.mkdir()
+    for index, path in enumerate(paths):
+        prefix = "token_trigger, " if index == 0 else ""
+        path.with_suffix(".txt").write_text(
+            f"{prefix}1girl, source_{path.stem}",
+            encoding="utf-8",
+        )
 
     scan = test_client.post("/api/dataset/folder-scan", json={
         "folder_path": str(folder),
@@ -178,6 +217,12 @@ def test_path_mode_export_accepts_dataset_scan_token_without_path_payload(
     assert (out / "local_a.png").exists()
     assert not (out / "local_b.png").exists()
     assert (out / "local_c.png").exists()
+    assert (out / "local_a.txt").read_text(encoding="utf-8") == (
+        "token_trigger, 1girl, source_local_a, clean_caption"
+    )
+    assert (out / "local_c.txt").read_text(encoding="utf-8") == (
+        "token_trigger, 1girl, source_local_c, clean_caption"
+    )
 
 
 def test_path_mode_beside_image_writes_sidecars_next_to_originals_without_output_folder(

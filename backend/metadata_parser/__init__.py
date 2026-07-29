@@ -27,10 +27,12 @@ import json
 import logging
 import os
 import sys
+from collections.abc import Mapping
+from pathlib import Path
 from types import ModuleType
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TypedDict
 from PIL import Image
-from .constants import PARSED_METADATA_VERSION
+from .constants import PARSED_METADATA_VERSION, SIDECAR_EXTENSIONS
 
 from . import _runtime
 from ._runtime import ParserRuntimeMixin, verify_image_readable
@@ -48,6 +50,188 @@ from .novelai import NovelAIMixin
 from .webui import WebUIMixin
 
 logger = logging.getLogger(__name__)
+
+_SIDECAR_FALLBACK_FIELDS = (
+    "prompt",
+    "negative_prompt",
+    "checkpoint",
+    "loras",
+)
+_SIDECAR_FIELD_SOURCE_KEYS = "_sidecar_field_source_keys"
+
+
+class _SidecarFallbackEvidence(TypedDict):
+    carrier: str
+    basename: str
+    method: str
+    confidence: str
+    parser_version: int
+    fields: list[str]
+
+
+class _SidecarFallbackState(TypedDict):
+    schema_version: int
+    evaluated: bool
+    evidence: list[_SidecarFallbackEvidence]
+
+
+def _sidecar_candidates(image_path: str) -> list[Path]:
+    base_path = Path(image_path)
+    candidates = [
+        candidate
+        for extension in SIDECAR_EXTENSIONS
+        for candidate in (Path(f"{image_path}{extension}"), base_path.with_suffix(extension))
+    ]
+    seen: set[str] = set()
+    unique_candidates: list[Path] = []
+    for candidate in candidates:
+        candidate_key = os.path.abspath(os.fspath(candidate))
+        if candidate_key in seen:
+            continue
+        seen.add(candidate_key)
+        unique_candidates.append(candidate)
+    return unique_candidates
+
+
+def _is_material_sidecar_field(field: str, value: object) -> bool:
+    if field == "loras":
+        return isinstance(value, list) and bool(value)
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _with_sidecar_field_source_keys(
+    parsed: Mapping[str, object],
+    source_keys: Mapping[str, str],
+) -> dict[str, object]:
+    material_sources = {
+        field: source_key
+        for field, source_key in source_keys.items()
+        if field in _SIDECAR_FALLBACK_FIELDS
+        and _is_material_sidecar_field(field, parsed.get(field))
+    }
+    return {**parsed, _SIDECAR_FIELD_SOURCE_KEYS: material_sources}
+
+
+def _sidecar_field_origin(
+    field: str,
+    parsed: Mapping[str, object],
+    raw_key_origins: Mapping[str, tuple[int, Path]],
+) -> Optional[tuple[int, Path]]:
+    source_keys = parsed.get(_SIDECAR_FIELD_SOURCE_KEYS)
+    if not isinstance(source_keys, Mapping):
+        return None
+    source_key = source_keys.get(field)
+    if not isinstance(source_key, str):
+        return None
+    return raw_key_origins.get(source_key)
+
+
+def _explicit_metadata_field_source_keys(
+    metadata: Mapping[str, object],
+    parsed: Mapping[str, object],
+) -> dict[str, str]:
+    source_keys: dict[str, str] = {}
+    if "prompt" in metadata:
+        source_keys["prompt"] = "prompt"
+    if "negative_prompt" in metadata:
+        source_keys["negative_prompt"] = "negative_prompt"
+    elif "negative prompt" in metadata:
+        source_keys["negative_prompt"] = "negative prompt"
+
+    selected_checkpoint = parsed.get("checkpoint")
+    if _is_material_sidecar_field("checkpoint", selected_checkpoint):
+        for key in ("model", "checkpoint"):
+            if _flattened_metadata_value(metadata.get(key)) == selected_checkpoint:
+                source_keys["checkpoint"] = key
+                break
+        else:
+            model_key = _metadata_model_source_key(metadata, selected_checkpoint)
+            if model_key is not None:
+                source_keys["checkpoint"] = model_key
+
+    for key in ("loras", "LoRAs", "lora"):
+        value = metadata.get(key)
+        if value:
+            source_keys["loras"] = key
+            break
+    return source_keys
+
+
+def _flattened_metadata_value(value: object) -> Optional[str]:
+    if isinstance(value, str):
+        text = value.strip().strip("\0 ")
+        return text or None
+    return None
+
+
+def _metadata_model_source_key(
+    metadata: Mapping[str, object],
+    selected_value: object,
+) -> Optional[str]:
+    if not isinstance(selected_value, str) or not selected_value.strip():
+        return None
+    normalized_value = selected_value.strip().strip("\0 ")
+    for key in ("Source", "source", "Model", "model"):
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip().strip("\0 ") == normalized_value:
+            return key
+    return None
+
+
+def _ai_provider_field_source_keys(
+    metadata: Mapping[str, object],
+    parsed: Mapping[str, object],
+) -> dict[str, str]:
+    source_keys: dict[str, str] = {}
+    for key in ("Description", "ImageDescription", "Title", "title", "UserComment"):
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip() and _is_material_sidecar_field("prompt", parsed.get("prompt")):
+            source_keys["prompt"] = key
+            break
+    if _is_material_sidecar_field("checkpoint", parsed.get("checkpoint")):
+        selected_checkpoint = parsed.get("checkpoint")
+        for key in ("Model", "model"):
+            if _flattened_metadata_value(metadata.get(key)) == selected_checkpoint:
+                source_keys["checkpoint"] = key
+                break
+    return source_keys
+
+
+def _build_sidecar_fallback_evidence(
+    embedded_parsed: Mapping[str, object],
+    final_parsed: Mapping[str, object],
+    field_origins: dict[str, tuple[int, Path]],
+) -> list[_SidecarFallbackEvidence]:
+    grouped_fields: dict[tuple[int, Path], list[str]] = {}
+    for field in _SIDECAR_FALLBACK_FIELDS:
+        if _is_material_sidecar_field(field, embedded_parsed.get(field)):
+            continue
+        if not _is_material_sidecar_field(field, final_parsed.get(field)):
+            continue
+        origin = field_origins.get(field)
+        if origin is None:
+            raise RuntimeError(f"Sidecar provenance origin missing for parsed field: {field}")
+        grouped_fields.setdefault(origin, []).append(field)
+
+    evidence: list[_SidecarFallbackEvidence] = []
+    for (_, sidecar_path), fields in sorted(grouped_fields.items()):
+        evidence.append({
+            "carrier": sidecar_path.suffix.lower().removeprefix("."),
+            "basename": sidecar_path.name,
+            "method": "sidecar_fallback",
+            "confidence": "high",
+            "parser_version": PARSED_METADATA_VERSION,
+            "fields": fields,
+        })
+    return evidence
+
+
+def _empty_sidecar_fallback_state() -> _SidecarFallbackState:
+    return {
+        "schema_version": 1,
+        "evaluated": True,
+        "evidence": [],
+    }
 
 
 class MetadataParser(
@@ -117,21 +301,71 @@ class MetadataParser(
             result["metadata"] = self._serialize_metadata(metadata["metadata"])
 
             # Detect generator and extract prompts, checkpoint, loras + extras
-            parsed = self._detect_and_parse(metadata["metadata"], image_path=image_path, file_size=result["file_size"])
+            embedded_parsed = self._detect_and_parse(
+                metadata["metadata"],
+                image_path=image_path,
+                file_size=result["file_size"],
+            )
+            parsed = embedded_parsed
+            sidecar_fallback = _empty_sidecar_fallback_state()
             if parsed["generator"] == "unknown" and not any((parsed.get("prompt"), parsed.get("negative_prompt"), parsed.get("checkpoint"), parsed.get("loras"))):
-                sidecar_metadata = self._load_sidecar_metadata(image_path)
-                if sidecar_metadata:
-                    combined_metadata = {**metadata["metadata"], **sidecar_metadata}
-                    sidecar_parsed = self._detect_and_parse(combined_metadata, image_path=image_path, file_size=result["file_size"])
-                    if sidecar_parsed["generator"] != "unknown" or any((
+                combined_metadata = metadata["metadata"]
+                sidecar_parsed = embedded_parsed
+                field_origins: dict[str, tuple[int, Path]] = {}
+                raw_key_origins: dict[str, tuple[int, Path]] = {}
+                loaded_sidecar = False
+                for candidate_order, candidate in enumerate(_sidecar_candidates(image_path)):
+                    if not self._sidecar_candidate_exists(candidate):
+                        continue
+                    loaded = self._load_one_sidecar(candidate)
+                    if not loaded:
+                        continue
+                    loaded_sidecar = True
+                    previous_parsed = sidecar_parsed
+                    candidate_origin = (candidate_order, candidate)
+                    for raw_key in loaded:
+                        raw_key_origins[raw_key] = candidate_origin
+                    combined_metadata = {**combined_metadata, **loaded}
+                    sidecar_parsed = self._detect_and_parse(
+                        combined_metadata,
+                        image_path=image_path,
+                        file_size=result["file_size"],
+                    )
+                    for field in _SIDECAR_FALLBACK_FIELDS:
+                        if _is_material_sidecar_field(field, embedded_parsed.get(field)):
+                            continue
+                        previous_value = previous_parsed.get(field)
+                        current_value = sidecar_parsed.get(field)
+                        if not _is_material_sidecar_field(field, current_value):
+                            field_origins.pop(field, None)
+                            continue
+                        traced_origin = _sidecar_field_origin(
+                            field,
+                            sidecar_parsed,
+                            raw_key_origins,
+                        )
+                        if traced_origin is not None:
+                            field_origins[field] = traced_origin
+                        elif current_value != previous_value:
+                            field_origins[field] = candidate_origin
+
+                if loaded_sidecar and (
+                    sidecar_parsed["generator"] != "unknown"
+                    or any((
                         sidecar_parsed.get("prompt"),
                         sidecar_parsed.get("negative_prompt"),
                         sidecar_parsed.get("checkpoint"),
                         sidecar_parsed.get("loras"),
-                    )):
-                        metadata["metadata"] = combined_metadata
-                        result["metadata"] = self._serialize_metadata(combined_metadata)
-                        parsed = sidecar_parsed
+                    ))
+                ):
+                    metadata["metadata"] = combined_metadata
+                    result["metadata"] = self._serialize_metadata(combined_metadata)
+                    parsed = sidecar_parsed
+                    sidecar_fallback["evidence"] = _build_sidecar_fallback_evidence(
+                        embedded_parsed,
+                        sidecar_parsed,
+                        field_origins,
+                    )
             result["generator"] = parsed["generator"]
             result["prompt"] = parsed["prompt"]
             result["negative_prompt"] = parsed["negative_prompt"]
@@ -152,6 +386,7 @@ class MetadataParser(
                 "prompt_nodes": parsed.get("prompt_nodes"),
                 "model_assets": parsed.get("model_assets"),
                 "civitai_resources": parsed.get("civitai_resources"),
+                "sidecar_fallback": sidecar_fallback,
             }
 
             # Metadata L3: parsing produced no positive prompt but the file
@@ -345,7 +580,15 @@ class MetadataParser(
                             source = "hires fix"
                             base["is_img2img"] = False  # hires fix isn't true img2img
                         base["img2img_info"] = {"denoising_strength": ds, "source": source}
-                return base
+                source_keys = {
+                    "prompt": "parameters",
+                    "negative_prompt": "parameters",
+                }
+                if _is_material_sidecar_field("checkpoint", cp):
+                    source_keys["checkpoint"] = "parameters"
+                if _is_material_sidecar_field("loras", lr):
+                    source_keys["loras"] = "parameters"
+                return _with_sidecar_field_source_keys(base, source_keys)
 
         # === Check for NovelAI EXIF UserComment (V4+ format) ===
         if "UserComment" in metadata:
@@ -357,7 +600,10 @@ class MetadataParser(
                         checkpoint=nai_result.get("checkpoint"),
                     )
                 base.update(nai_result)
-                return base
+                return _with_sidecar_field_source_keys(
+                    base,
+                    {field: "UserComment" for field in _SIDECAR_FALLBACK_FIELDS},
+                )
 
         # === Check for NovelAI 'Comment' PNG text chunk ===
         if "Comment" in metadata:
@@ -394,7 +640,10 @@ class MetadataParser(
                                 base.setdefault("loras", fooocus_result.get("loras") or [])
                                 if not base.get("model_assets"):
                                     base["model_assets"] = fooocus_result.get("model_assets")
-                                return base
+                                return _with_sidecar_field_source_keys(
+                                    base,
+                                    {field: "Comment" for field in _SIDECAR_FALLBACK_FIELDS},
+                                )
 
                     if isinstance(comment_data, dict) and (
                         "prompt" in comment_data
@@ -440,7 +689,10 @@ class MetadataParser(
                                 "denoising_strength": comment_data["strength"],
                                 "source": "img2img",
                             }
-                        return base
+                        return _with_sidecar_field_source_keys(
+                            base,
+                            {field: "Comment" for field in _SIDECAR_FALLBACK_FIELDS},
+                        )
             except (json.JSONDecodeError, TypeError, ValueError) as e:
                 logger.debug("Failed to parse JSON: %s", e)
 
@@ -467,7 +719,15 @@ class MetadataParser(
                     source="nai_description",
                     checkpoint=base["checkpoint"],
                 )
-                return base
+                source_keys = {"prompt": "Description"}
+                if _is_material_sidecar_field("negative_prompt", neg):
+                    source_keys["negative_prompt"] = "Comment"
+                if _is_material_sidecar_field("checkpoint", base["checkpoint"]):
+                    source_keys["checkpoint"] = (
+                        _metadata_model_source_key(metadata, base["checkpoint"])
+                        or "Description"
+                    )
+                return _with_sidecar_field_source_keys(base, source_keys)
 
         # === Check for ComfyUI 'prompt' key with JSON workflow ===
         if "prompt" in metadata:
@@ -499,7 +759,34 @@ class MetadataParser(
                         if img2img:
                             base["is_img2img"] = True
                             base["img2img_info"] = img2img
-                        return base
+                        prompt_only = self._extract_comfyui_data_extended(prompt_data)
+                        prompt_only_values = {
+                            "prompt": prompt_only[0],
+                            "negative_prompt": prompt_only[1],
+                            "checkpoint": prompt_only[2],
+                            "loras": prompt_only[3],
+                        }
+                        workflow_source_available = (
+                            "workflow" in metadata and workflow_data is not None
+                        )
+                        source_keys = {}
+                        for field in _SIDECAR_FALLBACK_FIELDS:
+                            current_value = base.get(field)
+                            if not _is_material_sidecar_field(field, current_value):
+                                continue
+                            prompt_only_value = prompt_only_values[field]
+                            if _is_material_sidecar_field(field, prompt_only_value) and (
+                                prompt_only_value == current_value
+                            ):
+                                source_keys[field] = "prompt"
+                            elif workflow_source_available:
+                                source_keys[field] = "workflow"
+                            else:
+                                source_keys[field] = "prompt"
+                        return _with_sidecar_field_source_keys(
+                            base,
+                            source_keys,
+                        )
             except (json.JSONDecodeError, TypeError, ValueError) as e:
                 logger.debug("Failed to parse JSON: %s", e)
 
@@ -539,11 +826,17 @@ class MetadataParser(
                 if img2img:
                     base["is_img2img"] = True
                     base["img2img_info"] = img2img
-                return base
+                return _with_sidecar_field_source_keys(
+                    base,
+                    {field: "workflow" for field in _SIDECAR_FALLBACK_FIELDS},
+                )
             except Exception as e:
                 logger.debug("Failed to parse ComfyUI workflow: %s", e)
                 base["generator"] = "comfyui"
-                return base
+                return _with_sidecar_field_source_keys(
+                    base,
+                    {field: "workflow" for field in _SIDECAR_FALLBACK_FIELDS},
+                )
 
         # === Check for A1111 format in other EXIF fields ===
         for key in ["Parameters", "UserComment", "ImageDescription"]:
@@ -574,7 +867,15 @@ class MetadataParser(
                             "denoising_strength": gen_params["denoising_strength"],
                             "source": "img2img",
                         }
-                    return base
+                    source_keys = {
+                        "prompt": key,
+                        "negative_prompt": key,
+                    }
+                    if _is_material_sidecar_field("checkpoint", cp):
+                        source_keys["checkpoint"] = key
+                    if _is_material_sidecar_field("loras", lr):
+                        source_keys["loras"] = key
+                    return _with_sidecar_field_source_keys(base, source_keys)
 
         # === Alternate generators (Fooocus / Easy Diffusion / InvokeAI /
         # === SwarmUI / Draw Things). These run before the generic
@@ -610,7 +911,10 @@ class MetadataParser(
             )
             if base["generator"] == "unknown":
                 base["generator"] = "others"
-            return base
+            return _with_sidecar_field_source_keys(
+                base,
+                _explicit_metadata_field_source_keys(metadata, base),
+            )
 
         # === Check Software tag for generator identification ===
         if "Software" in metadata:
@@ -628,7 +932,15 @@ class MetadataParser(
                     source="nai_software_tag",
                     checkpoint=base["checkpoint"],
                 )
-                return base
+                source_keys = {}
+                if _is_material_sidecar_field("prompt", base["prompt"]):
+                    source_keys["prompt"] = "Description" if "Description" in metadata else "ImageDescription"
+                if _is_material_sidecar_field("checkpoint", base["checkpoint"]):
+                    source_keys["checkpoint"] = (
+                        _metadata_model_source_key(metadata, base["checkpoint"])
+                        or "Software"
+                    )
+                return _with_sidecar_field_source_keys(base, source_keys)
             if "comfyui" in software:
                 base["generator"] = "comfyui"
                 return base
@@ -638,7 +950,10 @@ class MetadataParser(
         if ai_provider:
             base.update({k: v for k, v in ai_provider.items() if v is not None or k in ("prompt", "negative_prompt", "checkpoint")})
             base.setdefault("loras", ai_provider.get("loras") or [])
-            return base
+            return _with_sidecar_field_source_keys(
+                base,
+                _ai_provider_field_source_keys(metadata, base),
+            )
 
         # Has metadata but unrecognized generator → "others"
         if base["generator"] == "unknown" and any((base.get("prompt"), base.get("negative_prompt"), base.get("checkpoint"), base.get("loras"))):

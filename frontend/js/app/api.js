@@ -170,6 +170,7 @@ const API = {
         if (filters.excludePrompts?.length) params.set('exclude_prompts', filters.excludePrompts.join(','));
         if (filters.excludeColors?.length) params.set('exclude_colors', filters.excludeColors.join(','));
         if (filters.collectionId) params.set('collection_id', filters.collectionId);
+        if (filters.scope) params.set('scope', filters.scope);
         if (filters.folder) params.set('folder', filters.folder);
         if (filters.hasMetadata != null) params.set('has_metadata', String(filters.hasMetadata));
         if (filters.noCaption === true) params.set('no_caption', 'true');
@@ -234,6 +235,7 @@ const API = {
         if (filters.excludeColors?.length) params.set('exclude_colors', filters.excludeColors.join(','));
         // v3.3.1: restrict to a collection (Favorites view / browse a collection).
         if (filters.collectionId) params.set('collection_id', filters.collectionId);
+        if (filters.scope) params.set('scope', filters.scope);
         // v3.3.2 Library Navigation: recursive folder-subtree scope
         if (filters.folder) params.set('folder', filters.folder);
         if (filters.hasMetadata != null) params.set('has_metadata', String(filters.hasMetadata));

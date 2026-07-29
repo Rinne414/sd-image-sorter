@@ -66,6 +66,7 @@ from db_query_filters import (
     _apply_image_ids_filter,
     _apply_excluded_image_ids_filter,
     _apply_collection_filter,
+    _apply_gallery_scope_filter,
     _apply_readable_filter,
 )
 from db_query_filters_exclude import (

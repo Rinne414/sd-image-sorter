@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
@@ -30,7 +31,7 @@ from fastapi import HTTPException
 
 import database as db
 from config import ALLOWED_IMAGE_EXTENSIONS
-from services.dataset_export.models import DatasetExportRequest
+from services.dataset_export.models import DatasetExportRequest, DatasetReadinessScanToken
 from services.dataset_naming import NamingError, resolve_collision
 from services.dataset_session_service import (
     count_scan_manifest_paths,
@@ -57,15 +58,32 @@ def _svc():
 def _requested_item_count(request: DatasetExportRequest) -> int:
     total = len(list(_iter_unique_image_ids(request.image_ids or []))) + len(request.image_paths or [])
     for source in request.dataset_scan_tokens or []:
-        token = str((source or {}).get("scan_token") or (source or {}).get("token") or "")
+        token = _scan_source_token(source)
         if not token:
             continue
-        exclude_paths = (source or {}).get("exclude_paths") or []
+        exclude_paths = _scan_source_exclude_paths(source)
         try:
             total += count_scan_manifest_paths(token, exclude_paths)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     return total
+
+
+def _scan_source_token(source: object) -> str:
+    if isinstance(source, DatasetReadinessScanToken):
+        return source.scan_token
+    if isinstance(source, Mapping):
+        return str(source.get("scan_token") or source.get("token") or "")
+    raise TypeError(f"Dataset scan source must be an object, received {type(source).__name__}")
+
+
+def _scan_source_exclude_paths(source: object) -> List[str]:
+    if isinstance(source, DatasetReadinessScanToken):
+        return list(source.exclude_paths)
+    if isinstance(source, Mapping):
+        raw_paths = source.get("exclude_paths") or []
+        return [str(path) for path in raw_paths if str(path)]
+    raise TypeError(f"Dataset scan source must be an object, received {type(source).__name__}")
 
 
 def _iter_chunks(values: Iterable[Any], chunk_size: int) -> Iterator[List[Any]]:
@@ -150,12 +168,12 @@ def _dataset_sidecar_extension(content_mode: str) -> str:
 
 def _iter_requested_scan_paths(request: DatasetExportRequest) -> Iterator[str]:
     for source in request.dataset_scan_tokens or []:
-        token = str((source or {}).get("scan_token") or (source or {}).get("token") or "")
+        token = _scan_source_token(source)
         if not token:
             continue
         exclude_paths = {
             str(path)
-            for path in ((source or {}).get("exclude_paths") or [])
+            for path in _scan_source_exclude_paths(source)
             if str(path)
         }
         try:
@@ -191,7 +209,7 @@ def _allocate_sidecar_path(
     return candidate, None
 
 
-def _plan_single_rename(
+def _plan_single_pair(
     record: Dict[str, Any],
     *,
     output_folder: Path,
@@ -201,6 +219,7 @@ def _plan_single_rename(
     caption_extension: str,
     index: int,
     used_image_paths: set[str],
+    used_caption_paths: set[str],
 ) -> Tuple[Optional[Path], Optional[Path], Optional[str]]:
     image_filename = record.get("filename") or os.path.basename(record.get("path") or "")
     ext = os.path.splitext(image_filename)[1] or ".png"
@@ -224,7 +243,68 @@ def _plan_single_rename(
     )
     if image_path is None:
         return None, None, "existing" if overwrite_policy == "skip" else "too_many_collisions"
-    return image_path, output_folder / f"{image_path.stem}{caption_extension}", None
+    caption_path = output_folder / f"{image_path.stem}{caption_extension}"
+    caption_key = str(caption_path)
+    caption_conflicts = caption_key in used_caption_paths or (
+        caption_path.exists() and overwrite_policy != "overwrite"
+    )
+    if caption_conflicts:
+        used_image_paths.discard(str(image_path))
+        return None, None, "caption_destination_collision"
+    used_caption_paths.add(caption_key)
+    return image_path, caption_path, None
+
+
+def _plan_mask_destination(
+    mode: str,
+    exported_image_path: Path,
+    output_folder: Optional[Path],
+) -> tuple[Optional[Path], Optional[str]]:
+    """Plan the trainer-specific mask path without writing directories."""
+    stem = exported_image_path.stem
+    if mode == "onetrainer":
+        return exported_image_path.parent / f"{stem}-masklabel.png", None
+    if mode == "kohya":
+        base = output_folder if output_folder is not None else exported_image_path.parent
+        return base / "mask" / f"{stem}.png", None
+    if output_folder is None:
+        return None, "Anima loss masks require a folder export destination"
+    try:
+        relative_parent = exported_image_path.parent.relative_to(output_folder)
+    except ValueError:
+        return None, (
+            "Anima loss mask destination escaped the export folder: "
+            f"destination={exported_image_path}"
+        )
+    return (
+        output_folder / "mask" / relative_parent / f"{stem}_mask.png",
+        None,
+    )
+
+
+def _plan_single_rename(
+    record: Dict[str, Any],
+    *,
+    output_folder: Path,
+    pattern: str,
+    trigger: str,
+    overwrite_policy: str,
+    caption_extension: str,
+    index: int,
+    used_image_paths: set[str],
+) -> Tuple[Optional[Path], Optional[Path], Optional[str]]:
+    """Compatibility wrapper for callers that plan one isolated pair."""
+    return _plan_single_pair(
+        record,
+        output_folder=output_folder,
+        pattern=pattern,
+        trigger=trigger,
+        overwrite_policy=overwrite_policy,
+        caption_extension=caption_extension,
+        index=index,
+        used_image_paths=used_image_paths,
+        used_caption_paths=set(),
+    )
 
 
 def _plan_beside_image_sidecar(
@@ -242,13 +322,17 @@ def _plan_beside_image_sidecar(
         return None, "source_missing"
     if not src.parent.is_dir():
         return None, "source_folder_missing"
-    return _allocate_sidecar_path(
+    caption_path, skip_reason = _allocate_sidecar_path(
         src.parent,
         src.stem,
         caption_extension,
         overwrite_policy=overwrite_policy,
         used_paths=used_caption_paths,
     )
+    if caption_path is not None and caption_path.stem != src.stem:
+        used_caption_paths.discard(str(caption_path.resolve()))
+        return None, "unpaired_sidecar"
+    return caption_path, skip_reason
 
 
 def _output_mode(request: Any) -> str:

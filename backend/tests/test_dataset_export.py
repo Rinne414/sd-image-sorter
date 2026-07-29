@@ -8,9 +8,13 @@ from __future__ import annotations
 import os
 import threading
 import time
+from dataclasses import replace
 from pathlib import Path
 import pytest
 from PIL import Image
+
+
+pytestmark = pytest.mark.usefixtures("authorize_legacy_dataset_exports")
 
 
 @pytest.fixture
@@ -40,13 +44,375 @@ def _wait_dataset_export_job(test_client, job_id: str, timeout: float = 5.0):
     deadline = time.time() + timeout
     last = None
     while time.time() < deadline:
-        response = test_client.get(f"/api/dataset/export/progress?job_id={job_id}")
+        response = test_client.get(f"/api/bulk-jobs/{job_id}")
         assert response.status_code == 200, response.text
         last = response.json()
-        if last["status"] in {"done", "failed", "cancelled"}:
+        if last["status"] in {"done", "error", "cancelled"}:
             return last
         time.sleep(0.05)
     pytest.fail(f"dataset export job did not finish in time; last progress={last}")
+
+
+def _with_current_readiness(test_client, payload: dict[str, object]) -> dict[str, object]:
+    started = test_client.post("/api/dataset/readiness/start", json=payload)
+    assert started.status_code == 202, started.text
+    job = test_client.get(
+        f"/api/bulk-jobs/{started.json()['job_id']}"
+    )
+    assert job.status_code == 200, job.text
+    body = job.json()
+    assert body["status"] == "done", body
+    report = body["result"]
+    assert report["summary"]["status"] in {"ready", "warnings"}, report
+    return {
+        **payload,
+        "readiness_report_id": report["report_id"],
+        "readiness_input_fingerprint": report["input_fingerprint"],
+    }
+
+
+def test_sync_export_requires_readiness_before_any_output_write(
+    test_client,
+    staged_images,
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "missing-proof-output"
+    response = test_client.post("/api/dataset/export", json={
+        "image_ids": [staged_images[0][0]],
+        "output_folder": str(output),
+        "image_overrides": {str(staged_images[0][0]): "subject"},
+    }, headers={"X-Test-Readiness-Proof": "omit"})
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "code": "readiness_report_required",
+        "message": "A current Dataset Readiness report is required before export.",
+        "action": "Run Dataset Readiness again, then export with its report id and input fingerprint.",
+        "report_id": None,
+        "expected_input_fingerprint": None,
+        "observed_input_fingerprint": None,
+        "rule_version": "dataset-readiness-v1",
+        "issues": [],
+        "error": "A current Dataset Readiness report is required before export.",
+        "type": "HTTPException",
+        "status_code": 409,
+    }
+    assert output.exists() is False
+
+
+def test_sync_export_accepts_reusable_current_readiness_proof(
+    test_client,
+    staged_images,
+    tmp_path: Path,
+) -> None:
+    image_id = staged_images[0][0]
+    first_output = tmp_path / "proof-reuse-first"
+    payload = _with_current_readiness(test_client, {
+        "image_ids": [image_id],
+        "output_folder": str(first_output),
+        "image_overrides": {str(image_id): "subject"},
+    })
+
+    first = test_client.post("/api/dataset/export", json=payload)
+    assert first.status_code == 200, first.text
+
+    second_output = tmp_path / "proof-reuse-second"
+    second_payload = {
+        **payload,
+        "output_folder": str(second_output),
+    }
+    mismatch = test_client.post("/api/dataset/export", json=second_payload)
+    assert mismatch.status_code == 409
+    assert mismatch.json()["code"] == "readiness_request_mismatch"
+    assert second_output.exists() is False
+
+
+def test_sync_export_rejects_source_drift_with_specific_conflict(
+    test_client,
+    staged_images,
+    tmp_path: Path,
+) -> None:
+    image_id, _name, source = staged_images[0]
+    output = tmp_path / "source-drift-output"
+    payload = _with_current_readiness(test_client, {
+        "image_ids": [image_id],
+        "output_folder": str(output),
+        "image_overrides": {str(image_id): "subject"},
+    })
+    Image.new("RGB", (32, 32), color=(1, 2, 3)).save(source)
+
+    response = test_client.post("/api/dataset/export", json=payload)
+
+    assert response.status_code == 409
+    detail = response.json()
+    assert detail["code"] == "readiness_input_mismatch"
+    assert detail["expected_input_fingerprint"] == payload["readiness_input_fingerprint"]
+    assert detail["observed_input_fingerprint"] != payload["readiness_input_fingerprint"]
+    assert output.exists() is False
+
+
+def test_sync_export_rechecks_proof_expiry_after_current_input_scan(
+    test_client,
+    staged_images,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from services.dataset_export import readiness_authorization
+    from services.dataset_export.readiness_proof_store import (
+        ReadinessProofStore,
+        set_readiness_proof_store,
+    )
+
+    now = [100.0]
+    set_readiness_proof_store(ReadinessProofStore(
+        ttl_seconds=10.0,
+        capacity=50,
+        clock=lambda: now[0],
+    ))
+    image_id = staged_images[0][0]
+    output = tmp_path / "proof-expires-during-authorization"
+    payload = _with_current_readiness(test_client, {
+        "image_ids": [image_id],
+        "output_folder": str(output),
+        "image_overrides": {str(image_id): "subject"},
+    })
+    real_run = readiness_authorization.run_dataset_readiness
+
+    def expire_after_scan(*args, **kwargs):
+        report = real_run(*args, **kwargs)
+        now[0] = 111.0
+        return report
+
+    monkeypatch.setattr(
+        readiness_authorization,
+        "run_dataset_readiness",
+        expire_after_scan,
+    )
+
+    response = test_client.post("/api/dataset/export", json=payload)
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "readiness_report_expired"
+    assert output.exists() is False
+
+
+def test_async_export_rejects_missing_proof_before_job_or_package_write(
+    test_client,
+    staged_images,
+    tmp_path: Path,
+) -> None:
+    from services.bulk_job_service import JOB_KIND_DATASET_EXPORT, get_bulk_job_service
+
+    output = tmp_path / "async-missing-proof"
+    response = test_client.post("/api/dataset/export/start", json={
+        "image_ids": [staged_images[0][0]],
+        "output_folder": str(output),
+        "trainer_config": "kohya_toml",
+        "image_overrides": {str(staged_images[0][0]): "subject"},
+    }, headers={"X-Test-Readiness-Proof": "omit"})
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "readiness_report_required"
+    assert [
+        job for job in get_bulk_job_service().list_jobs()
+        if job["kind"] == JOB_KIND_DATASET_EXPORT
+    ] == []
+    assert output.exists() is False
+
+
+def test_kohya_missing_requested_mask_returns_blocked_before_output_write(
+    test_client,
+    staged_images,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from services import mask_service
+
+    image_id = staged_images[0][0]
+    monkeypatch.setattr(mask_service, "MASKS_DIR", tmp_path / "stored-masks")
+    output = tmp_path / "kohya-blocked-before-write"
+    raw_payload = {
+        "image_ids": [image_id],
+        "output_folder": str(output),
+        "image_overrides": {str(image_id): "subject"},
+        "trainer_config": "kohya_toml",
+        "mask_export": "kohya",
+    }
+    started = test_client.post("/api/dataset/readiness/start", json=raw_payload)
+    assert started.status_code == 202, started.text
+    job = test_client.get(f"/api/bulk-jobs/{started.json()['job_id']}").json()
+    assert job["status"] == "done"
+    report = job["result"]
+    assert report["summary"]["status"] == "blocked"
+
+    response = test_client.post("/api/dataset/export", json={
+        **raw_payload,
+        "readiness_report_id": report["report_id"],
+        "readiness_input_fingerprint": report["input_fingerprint"],
+    })
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "readiness_blocked"
+    assert output.exists() is False
+
+
+def test_async_queue_drift_fails_before_pending_manifest_or_config_mutation(
+    test_client,
+    staged_images,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import services.dataset_export_service as export_service
+    from services.bulk_job_service import get_bulk_job_service
+
+    image_id, _name, source = staged_images[0]
+    output = tmp_path / "queue-drift-package"
+    output.mkdir()
+    config = output / "dataset_config.toml"
+    original_config = "# Generated by SD Image Sorter\noriginal = true\n"
+    config.write_text(original_config, encoding="utf-8")
+    payload = _with_current_readiness(test_client, {
+        "image_ids": [image_id],
+        "output_folder": str(output),
+        "naming_pattern": "queued_{index:03d}",
+        "image_overrides": {str(image_id): "subject"},
+        "trainer_config": "anima_lora_toml",
+        "mask_export": "none",
+    })
+    held_tasks: list[tuple[object, tuple[object, ...], dict[str, object]]] = []
+
+    def hold_background_task(self, func, *args, **kwargs) -> None:
+        held_tasks.append((func, args, kwargs))
+
+    monkeypatch.setattr(export_service.BackgroundTasks, "add_task", hold_background_task)
+    started = test_client.post("/api/dataset/export/start", json=payload)
+    assert started.status_code == 200, started.text
+    assert len(held_tasks) == 1
+    assert config.read_text(encoding="utf-8") == original_config
+    assert (output / "export_manifest.json").exists() is False
+
+    Image.new("RGB", (32, 32), color=(200, 10, 20)).save(source)
+    func, args, kwargs = held_tasks[0]
+    func(*args, **kwargs)
+
+    job = get_bulk_job_service().get_job(started.json()["job_id"])
+    assert job is not None
+    assert job["status"] == "error"
+    assert job["result"]["status"] == "failed"
+    assert "readiness_input_mismatch" in job["result"]["error_messages"][0]
+    assert config.read_text(encoding="utf-8") == original_config
+    assert (output / "export_manifest.json").exists() is False
+    assert list(output.glob("queued_*")) == []
+
+
+def test_export_reports_specific_unavailable_proof_conflicts(
+    test_client,
+    staged_images,
+    tmp_path: Path,
+) -> None:
+    from services.bulk_job_service import (
+        JOB_KIND_DATASET_READINESS,
+        JOB_KIND_DELETE_FILES,
+        get_bulk_job_service,
+    )
+
+    service = get_bulk_job_service()
+    wrong_kind_id = service.create_job(JOB_KIND_DELETE_FILES)
+    cancelled_id = service.create_job(JOB_KIND_DATASET_READINESS)
+    service.cancel_job(cancelled_id)
+    queued_id = service.create_job(JOB_KIND_DATASET_READINESS)
+    cases = [
+        ("f" * 32, "readiness_report_not_found"),
+        (wrong_kind_id, "readiness_report_wrong_kind"),
+        (cancelled_id, "readiness_report_cancelled"),
+        (queued_id, "readiness_report_not_ready"),
+    ]
+    for report_id, expected_code in cases:
+        output = tmp_path / expected_code
+        response = test_client.post("/api/dataset/export", json={
+            "image_ids": [staged_images[0][0]],
+            "output_folder": str(output),
+            "readiness_report_id": report_id,
+            "readiness_input_fingerprint": "a" * 64,
+        })
+        assert response.status_code == 409
+        assert response.json()["code"] == expected_code
+        assert output.exists() is False
+
+
+def test_export_rejects_expired_wrong_fingerprint_and_rule_changed_proofs(
+    test_client,
+    staged_images,
+    tmp_path: Path,
+) -> None:
+    from services.dataset_export.readiness_proof_store import (
+        get_readiness_proof_store,
+    )
+
+    image_id = staged_images[0][0]
+    payload = _with_current_readiness(test_client, {
+        "image_ids": [image_id],
+        "output_folder": str(tmp_path / "proof-conflict-output"),
+        "image_overrides": {str(image_id): "subject"},
+    })
+    wrong_fingerprint = test_client.post("/api/dataset/export", json={
+        **payload,
+        "readiness_input_fingerprint": "f" * 64,
+    })
+    assert wrong_fingerprint.status_code == 409
+    assert wrong_fingerprint.json()["code"] == "readiness_fingerprint_mismatch"
+
+    store = get_readiness_proof_store()
+    proof = store.get(str(payload["readiness_report_id"]))
+    assert proof is not None
+    store.publish(replace(proof, expires_at=0.0))
+    expired = test_client.post("/api/dataset/export", json=payload)
+    assert expired.status_code == 409
+    assert expired.json()["code"] == "readiness_report_expired"
+
+    rule_payload = _with_current_readiness(test_client, {
+        "image_ids": [image_id],
+        "output_folder": str(tmp_path / "rule-conflict-output"),
+        "image_overrides": {str(image_id): "subject"},
+    })
+    rule_proof = store.get(str(rule_payload["readiness_report_id"]))
+    assert rule_proof is not None
+    store.publish(replace(rule_proof, rule_version="dataset-readiness-old"))
+    rule_changed = test_client.post("/api/dataset/export", json=rule_payload)
+    assert rule_changed.status_code == 409
+    assert rule_changed.json()["code"] == "readiness_rule_mismatch"
+
+
+def test_warnings_only_readiness_proof_is_exportable(
+    test_client,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "warning-source.png"
+    Image.new("RGB", (8, 8), color=(20, 20, 20)).save(source)
+    output = tmp_path / "warning-output"
+    payload = {
+        "image_paths": [str(source)],
+        "output_folder": str(output),
+        "content_mode": "template",
+        "template_options": {"trigger": "hero"},
+        "image_overrides": {
+            str(source.resolve()): "safe, explicit,\nsecond line",
+        },
+    }
+    started = test_client.post("/api/dataset/readiness/start", json=payload)
+    report = test_client.get(
+        f"/api/bulk-jobs/{started.json()['job_id']}"
+    ).json()["result"]
+    assert report["summary"]["status"] == "warnings"
+
+    response = test_client.post("/api/dataset/export", json={
+        **payload,
+        "readiness_report_id": report["report_id"],
+        "readiness_input_fingerprint": report["input_fingerprint"],
+    })
+
+    assert response.status_code == 200, response.text
+    assert response.json()["exported"] == 1
 
 
 def test_export_default_pattern_keeps_filenames(test_client, staged_images, tmp_path: Path):
@@ -136,10 +502,10 @@ def test_background_export_reports_progress_and_result(test_client, staged_image
 
     progress = _wait_dataset_export_job(test_client, started["job_id"])
     assert progress["status"] == "done"
-    assert progress["current"] == 3
+    assert progress["processed"] == 3
     assert progress["total"] == 3
-    assert progress["exported"] == 3
     assert progress["result"]["status"] == "ok"
+    assert progress["result"]["exported"] == 3
     assert progress["result"]["items_truncated"] is False
     assert (out / "bg_001.png").exists()
     assert (out / "bg_001.txt").exists()
@@ -163,16 +529,28 @@ def test_background_export_can_be_cancelled(test_client, staged_images, tmp_path
 
     monkeypatch.setattr(export_service.shutil, "copy2", slow_copy2)
 
-    response = test_client.post("/api/dataset/export/start", json={
-        "image_ids": image_ids,
-        "output_folder": str(out),
-        "naming_pattern": "cancel_{index:03d}",
-        "image_op": "copy",
-        "overwrite_policy": "unique",
-    })
-    assert response.status_code == 200, response.text
-    job_id = response.json()["job_id"]
+    from services.bulk_job_service import JOB_KIND_DATASET_EXPORT, get_bulk_job_service
+
+    first_response: list[object] = []
+
+    def start_first() -> None:
+        first_response.append(test_client.post("/api/dataset/export/start", json={
+            "image_ids": image_ids,
+            "output_folder": str(out),
+            "naming_pattern": "cancel_{index:03d}",
+            "image_op": "copy",
+            "overwrite_policy": "unique",
+        }))
+
+    start_thread = threading.Thread(target=start_first)
+    start_thread.start()
     assert first_copy_started.wait(timeout=2.0), "worker never reached first copy"
+    active_exports = [
+        job for job in get_bulk_job_service().list_jobs(active_only=True)
+        if job["kind"] == JOB_KIND_DATASET_EXPORT
+    ]
+    assert len(active_exports) == 1
+    job_id = active_exports[0]["job_id"]
 
     second_start = test_client.post("/api/dataset/export/start", json={
         "image_ids": image_ids,
@@ -183,16 +561,188 @@ def test_background_export_can_be_cancelled(test_client, staged_images, tmp_path
     })
     assert second_start.status_code == 409, second_start.text
 
-    cancel_response = test_client.post("/api/dataset/export/cancel", json={"job_id": job_id})
+    cancel_response = test_client.post(f"/api/bulk-jobs/{job_id}/cancel")
     assert cancel_response.status_code == 200, cancel_response.text
-    assert cancel_response.json()["status"] == "cancelling"
+    assert cancel_response.json()["status"] == "running"
+    assert cancel_response.json()["message"] == "Cancellation requested"
     release_copy.set()
+    start_thread.join(timeout=3.0)
+    assert start_thread.is_alive() is False
+    assert first_response and first_response[0].status_code == 200
 
     progress = _wait_dataset_export_job(test_client, job_id)
     assert progress["status"] == "cancelled"
     result = progress["result"]
     assert result["status"] == "cancelled"
     assert 0 < result["exported"] < len(image_ids)
+
+
+def test_background_export_queued_cancel_has_complete_result_and_reopens_slot(
+    test_client,
+    staged_images,
+    tmp_path: Path,
+    monkeypatch,
+):
+    import services.dataset_export_service as export_service
+    from services.bulk_job_service import get_bulk_job_service
+
+    out = tmp_path / "queued-cancel-out"
+    out.mkdir()
+    image_ids = [item[0] for item in staged_images]
+    held_tasks: list[tuple[object, tuple[object, ...], dict[str, object]]] = []
+
+    def hold_background_task(self, func, *args, **kwargs) -> None:
+        held_tasks.append((func, args, kwargs))
+
+    monkeypatch.setattr(export_service.BackgroundTasks, "add_task", hold_background_task)
+    payload = {
+        "image_ids": image_ids,
+        "output_folder": str(out),
+        "naming_pattern": "queued_{index:03d}",
+        "image_op": "copy",
+        "overwrite_policy": "unique",
+    }
+    first_start = test_client.post("/api/dataset/export/start", json=payload)
+    assert first_start.status_code == 200, first_start.text
+    job_id = first_start.json()["job_id"]
+    queued = test_client.get(f"/api/bulk-jobs/{job_id}").json()
+    assert queued["status"] == "queued"
+    assert queued["result"] == {}
+
+    cancel_response = test_client.post(f"/api/bulk-jobs/{job_id}/cancel")
+    assert cancel_response.status_code == 200, cancel_response.text
+    cancelled = cancel_response.json()
+    assert cancelled["status"] == "cancelled"
+    assert cancelled["processed"] == 0
+    assert cancelled["total"] == len(image_ids)
+    assert cancelled["result"] == {
+        "status": "cancelled",
+        "exported": 0,
+        "skipped": 0,
+        "error_count": 0,
+        "masks_written": 0,
+        "masks_missing": 0,
+        "trainer_config_path": None,
+        "output_folder": str(out),
+        "output_mode": "folder",
+        "items": [],
+        "total_items": 0,
+        "items_truncated": False,
+        "error_messages": [],
+        "package_status": "not_requested",
+        "package_run_id": None,
+        "package_manifest_path": None,
+    }
+
+    second_start = test_client.post("/api/dataset/export/start", json=payload)
+    assert second_start.status_code == 200, second_start.text
+    assert second_start.json()["job_id"] != job_id
+    assert len(held_tasks) == 2
+    get_bulk_job_service().cancel_job(second_start.json()["job_id"])
+
+
+def test_background_export_late_cancel_after_manifest_is_done(
+    test_client,
+    staged_images,
+    tmp_path: Path,
+    monkeypatch,
+):
+    import json
+
+    import services.dataset_export.engine as export_engine
+    from services.bulk_job_service import JOB_KIND_DATASET_EXPORT, get_bulk_job_service
+
+    out = tmp_path / "late-cancel-out"
+    out.mkdir()
+    image_ids = [item[0] for item in staged_images]
+    manifest_written = threading.Event()
+    release_manifest = threading.Event()
+    original_write_manifest = export_engine._write_export_manifest
+
+    def block_after_manifest(output_folder, manifest) -> None:
+        original_write_manifest(output_folder, manifest)
+        manifest_written.set()
+        assert release_manifest.wait(timeout=2.0), "test never released manifest boundary"
+
+    monkeypatch.setattr(export_engine, "_write_export_manifest", block_after_manifest)
+    start_responses: list[object] = []
+
+    def start_export() -> None:
+        start_responses.append(test_client.post("/api/dataset/export/start", json={
+            "image_ids": image_ids,
+            "output_folder": str(out),
+            "naming_pattern": "late_{index:03d}",
+            "image_op": "copy",
+            "overwrite_policy": "unique",
+        }))
+
+    start_thread = threading.Thread(target=start_export)
+    start_thread.start()
+    assert manifest_written.wait(timeout=2.0), "worker never reached manifest boundary"
+    active_exports = [
+        job for job in get_bulk_job_service().list_jobs(active_only=True)
+        if job["kind"] == JOB_KIND_DATASET_EXPORT
+    ]
+    assert len(active_exports) == 1
+    job_id = active_exports[0]["job_id"]
+
+    cancel_response = test_client.post(f"/api/bulk-jobs/{job_id}/cancel")
+    assert cancel_response.status_code == 200, cancel_response.text
+    assert cancel_response.json()["message"] == "Cancellation requested"
+    release_manifest.set()
+    start_thread.join(timeout=3.0)
+    assert start_thread.is_alive() is False
+    assert start_responses and start_responses[0].status_code == 200
+
+    job = _wait_dataset_export_job(test_client, job_id)
+    assert job["status"] == "done"
+    assert job["processed"] == len(image_ids)
+    assert job["total"] == len(image_ids)
+    assert job["result"]["status"] == "ok"
+    assert job["result"]["exported"] == len(image_ids)
+    assert job["result"]["total_items"] == len(image_ids)
+    manifest = json.loads((out / "export_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "ok"
+    assert manifest["counts"]["exported"] == len(image_ids)
+    for index in range(1, len(image_ids) + 1):
+        assert (out / f"late_{index:03d}.png").exists()
+        assert (out / f"late_{index:03d}.txt").exists()
+
+
+def test_legacy_dataset_export_progress_and_cancel_routes_are_removed(test_client):
+    assert test_client.get("/api/dataset/export/progress").status_code == 404
+    assert test_client.post("/api/dataset/export/cancel", json={}).status_code == 404
+
+
+def test_background_export_worker_fault_is_actionable(
+    test_client,
+    staged_images,
+    tmp_path: Path,
+    monkeypatch,
+):
+    import services.dataset_export_service as export_service
+
+    detail = "dataset source catalog became unreadable during export"
+
+    def fail_export(request, *, progress_callback, cancel_event):
+        raise RuntimeError(detail)
+
+    monkeypatch.setattr(export_service, "export_dataset", fail_export)
+    response = test_client.post("/api/dataset/export/start", json={
+        "image_ids": [staged_images[0][0]],
+        "output_folder": str(tmp_path / "worker-fault-out"),
+        "naming_pattern": "fault_{index:03d}",
+        "image_op": "copy",
+        "overwrite_policy": "unique",
+    })
+
+    assert response.status_code == 200, response.text
+    job = _wait_dataset_export_job(test_client, response.json()["job_id"])
+    assert job["status"] == "error"
+    assert job["error_count"] == 1
+    assert job["error_samples"] == [detail]
+    assert job["result"]["status"] == "failed"
+    assert job["result"]["error_messages"] == [detail]
 
 
 def test_export_renumber_with_padded_index(test_client, staged_images, tmp_path: Path):
@@ -308,8 +858,7 @@ def test_export_move_removes_source(test_client, staged_images, tmp_path: Path):
 
 
 def test_export_overwrite_policy_skip(test_client, staged_images, tmp_path: Path):
-    """When the output already exists and policy is 'skip', the row is
-    counted as skipped and the existing file is not touched."""
+    """A reviewed blocker prevents the legacy skip path from writing."""
     out = tmp_path / "out"
     out.mkdir()
     # Pre-create one of the targets
@@ -324,10 +873,10 @@ def test_export_overwrite_policy_skip(test_client, staged_images, tmp_path: Path
         "image_op": "copy",
         "overwrite_policy": "skip",
     })
-    assert response.status_code == 200, response.text
+    assert response.status_code == 409, response.text
     body = response.json()
-    assert body["exported"] == 0
-    assert body["skipped"] == 1
+    assert body["code"] == "readiness_blocked"
+    assert "unpaired_output" in {issue["code"] for issue in body["issues"]}
     assert existing.read_bytes() == b"DO NOT OVERWRITE", "existing file was overwritten"
 
 
@@ -499,8 +1048,7 @@ def test_export_empty_image_ids_returns_400(test_client, tmp_path: Path):
 
 
 def test_export_missing_image_recorded_as_error(test_client, tmp_path: Path):
-    """An image_id that doesn't exist in the DB should produce one error
-    entry but not abort the whole export."""
+    """A missing DB image is rejected before creating export artifacts."""
     out = tmp_path / "out"
     out.mkdir()
     response = test_client.post("/api/dataset/export", json={
@@ -508,12 +1056,11 @@ def test_export_missing_image_recorded_as_error(test_client, tmp_path: Path):
         "output_folder": str(out),
         "naming_pattern": "{filename}",
     })
-    assert response.status_code == 200, response.text
+    assert response.status_code == 409, response.text
     body = response.json()
-    assert body["status"] == "failed"
-    assert body["exported"] == 0
-    assert body["error_count"] >= 1
-    assert any("not found in library" in m for m in body["error_messages"])
+    assert body["code"] == "readiness_blocked"
+    assert "source_unreadable" in {issue["code"] for issue in body["issues"]}
+    assert list(out.iterdir()) == []
 
 
 # ---------------------------------------------------------------------------

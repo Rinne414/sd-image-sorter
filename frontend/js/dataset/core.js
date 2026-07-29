@@ -18,6 +18,115 @@
 (function () {
     'use strict';
 
+    const DATASET_DRAFT_SESSION_KEY = 'sd-image-sorter-dataset-session';
+    const DATASET_PROJECT_SESSION_PREFIX = 'sd-image-sorter-dataset-project-session';
+
+    function requireSessionRecord(value, fieldName) {
+        if (value === undefined || value === null) return {};
+        if (typeof value !== 'object' || Array.isArray(value)) {
+            throw new TypeError(`Dataset draft ${fieldName} must be an object.`);
+        }
+        return { ...value };
+    }
+
+    function parseSessionStringMap(value, fieldName) {
+        const record = requireSessionRecord(value, fieldName);
+        for (const [key, entry] of Object.entries(record)) {
+            if (typeof entry !== 'string') {
+                throw new TypeError(`Dataset draft ${fieldName}.${key} must be a string.`);
+            }
+        }
+        return record;
+    }
+
+    function parseSessionCaptionTypes(value) {
+        const record = parseSessionStringMap(value, 'captionType');
+        for (const [key, entry] of Object.entries(record)) {
+            if (entry !== 'booru' && entry !== 'nl' && entry !== 'both') {
+                throw new TypeError(
+                    `Dataset draft captionType.${key} must be booru, nl, or both.`,
+                );
+            }
+        }
+        return record;
+    }
+
+    function normalizeManagedTrigger(value) {
+        return String(value || '').replace(/[\s_]+/g, ' ').trim().toLowerCase();
+    }
+
+    function parseSessionQuickfilledTrigger(value) {
+        if (value === undefined || value === null) return null;
+        if (typeof value !== 'string') {
+            throw new TypeError('Dataset draft quickfilledTrigger must be a string.');
+        }
+        return value.trim();
+    }
+
+    function inferLegacyQuickfilledTrigger(settings) {
+        const captionRender = settings?.caption_render;
+        const trigger = String(captionRender?.trigger || '').trim();
+        const triggerKey = normalizeManagedTrigger(trigger);
+        const commonTags = Array.isArray(captionRender?.common_tags)
+            ? captionRender.common_tags
+            : [];
+        return triggerKey && commonTags.some((tag) => normalizeManagedTrigger(tag) === triggerKey)
+            ? trigger
+            : '';
+    }
+
+    function parseSessionLocalState(value) {
+        const local = requireSessionRecord(value, 'local');
+        const localItems = local.localItems === undefined ? [] : local.localItems;
+        const manifests = local.manifests === undefined ? [] : local.manifests;
+        if (!Array.isArray(localItems)) {
+            throw new TypeError('Dataset draft local.localItems must be an array.');
+        }
+        if (!Array.isArray(manifests)) {
+            throw new TypeError('Dataset draft local.manifests must be an array.');
+        }
+        for (const [index, item] of localItems.entries()) {
+            if (!item || typeof item !== 'object' || Array.isArray(item)) {
+                throw new TypeError(`Dataset draft local.localItems[${index}] must be an object.`);
+            }
+            if (
+                item.meta !== undefined
+                && (!item.meta || typeof item.meta !== 'object' || Array.isArray(item.meta))
+            ) {
+                throw new TypeError(
+                    `Dataset draft local.localItems[${index}].meta must be an object.`,
+                );
+            }
+            if (item.caption_baseline !== undefined && typeof item.caption_baseline !== 'string') {
+                throw new TypeError(
+                    `Dataset draft local.localItems[${index}].caption_baseline must be a string.`,
+                );
+            }
+        }
+        for (const [index, source] of manifests.entries()) {
+            if (!source || typeof source !== 'object' || Array.isArray(source)) {
+                throw new TypeError(`Dataset draft local.manifests[${index}] must be an object.`);
+            }
+            if (source.excludedPaths !== undefined && !Array.isArray(source.excludedPaths)) {
+                throw new TypeError(
+                    `Dataset draft local.manifests[${index}].excludedPaths must be an array.`,
+                );
+            }
+        }
+        return {
+            localItems: localItems.map((item) => ({
+                ...item,
+                ...(item.meta === undefined ? {} : { meta: { ...item.meta } }),
+            })),
+            manifests: manifests.map((source) => ({
+                ...source,
+                ...(source.excludedPaths === undefined
+                    ? {}
+                    : { excludedPaths: [...source.excludedPaths] }),
+            })),
+        };
+    }
+
     const DM = {
         // ---- State ----
         imageIds: [],
@@ -40,8 +149,15 @@
         boundOnce: false,
         _captionInputTimer: null,
         _pendingCaptionEdit: null,
+        _nlCaptionInputTimer: null,
+        _pendingNlCaptionEdit: null,
         _saveSessionTimer: null,
         _restoringSession: false,
+        _quickfilledTrigger: '',
+
+        _inferLegacyQuickfilledTrigger(settings) {
+            return inferLegacyQuickfilledTrigger(settings);
+        },
 
         // ---- i18n helper ----
         _t(key, fallback, params) {
@@ -72,28 +188,70 @@
         },
 
         // ---- Session persistence ----
+        _datasetSessionKey(project) {
+            if (project === null) return DATASET_DRAFT_SESSION_KEY;
+            const projectId = Number(project?.id);
+            const revision = Number(project?.revision);
+            if (!Number.isSafeInteger(projectId) || projectId <= 0) {
+                throw new TypeError('Dataset project session id must be a positive safe integer.');
+            }
+            if (!Number.isSafeInteger(revision) || revision <= 0) {
+                throw new TypeError('Dataset project session revision must be a positive safe integer.');
+            }
+            return `${DATASET_PROJECT_SESSION_PREFIX}-${projectId}-r${revision}`;
+        },
+
+        _currentDatasetSessionKey() {
+            return this._datasetSessionKey(this._activeProject || null);
+        },
+
+        _removeDatasetSession(project) {
+            const storageKey = this._datasetSessionKey(project);
+            try { localStorage.removeItem(storageKey); } catch {}
+            try { sessionStorage.removeItem(storageKey); } catch {}
+        },
+
         _installCaptionEditPersistence() {
             if (this._captionEditPersistenceInstalled) return;
             this._captionEditPersistenceInstalled = true;
-            const map = this.captionEdits;
-            const originalSet = map.set.bind(map);
-            const originalDelete = map.delete.bind(map);
-            const originalClear = map.clear.bind(map);
-            map.set = (key, value) => {
-                const result = originalSet(key, value);
-                if (!this._restoringSession) this._scheduleSaveSession();
-                return result;
+            const installMapPersistence = (map) => {
+                const originalSet = map.set.bind(map);
+                const originalDelete = map.delete.bind(map);
+                const originalClear = map.clear.bind(map);
+                map.set = (key, value) => {
+                    const changed = !map.has(key) || map.get(key) !== value;
+                    const result = originalSet(key, value);
+                    if (!this._restoringSession && changed) {
+                        this._supersedeCaptionFetch?.();
+                        this._scheduleSaveSession();
+                        this._markReadinessStale?.();
+                    }
+                    return result;
+                };
+                map.delete = (key) => {
+                    const changed = map.has(key);
+                    const result = originalDelete(key);
+                    if (!this._restoringSession && changed) {
+                        this._supersedeCaptionFetch?.();
+                        this._scheduleSaveSession();
+                        this._markReadinessStale?.();
+                    }
+                    return result;
+                };
+                map.clear = () => {
+                    const changed = map.size > 0;
+                    const result = originalClear();
+                    if (!this._restoringSession && changed) {
+                        this._supersedeCaptionFetch?.();
+                        this._scheduleSaveSession();
+                        this._markReadinessStale?.();
+                    }
+                    return result;
+                };
             };
-            map.delete = (key) => {
-                const result = originalDelete(key);
-                if (!this._restoringSession) this._scheduleSaveSession();
-                return result;
-            };
-            map.clear = () => {
-                const result = originalClear();
-                if (!this._restoringSession) this._scheduleSaveSession();
-                return result;
-            };
+            installMapPersistence(this.captionEdits);
+            installMapPersistence(this.nlEdits);
+            installMapPersistence(this.captionType);
         },
 
         _scheduleSaveSession(delayMs = 250) {
@@ -110,73 +268,139 @@
             // hours of work — they must survive tab close, browser crash,
             // and the navbar 🔄 hard refresh (which clears sessionStorage).
             // Key name and payload format are FROZEN (restore-compat).
+            const settings = this._pendingProjectSettings
+                || this._serializeDatasetDraftSettings?.()
+                || this._serializeProjectSettings?.()
+                || null;
             const payload = JSON.stringify({
                 imageIds: this.imageIds,
                 captionEdits: Object.fromEntries(this.captionEdits),
                 nlEdits: Object.fromEntries(this.nlEdits),
                 captionType: Object.fromEntries(this.captionType),
+                quickfilledTrigger: this._quickfilledTrigger,
                 activeId: this.activeId,
                 local: this._serializeLocalDatasetState?.() || null,
+                settings,
             });
+            const storageKey = this._currentDatasetSessionKey();
             try {
-                localStorage.setItem('sd-image-sorter-dataset-session', payload);
+                localStorage.setItem(storageKey, payload);
                 return;
             } catch {
                 // Quota exceeded or storage unavailable — degrade to the
                 // old per-tab storage rather than silently losing edits.
             }
             try {
-                sessionStorage.setItem('sd-image-sorter-dataset-session', payload);
+                sessionStorage.setItem(storageKey, payload);
             } catch {}
         },
 
-        _restoreSession() {
+        _readDatasetSession(project) {
+            const storageKey = this._datasetSessionKey(project);
+            let saved = null;
+            try { saved = localStorage.getItem(storageKey); } catch {}
+            if (!saved) {
+                try { saved = sessionStorage.getItem(storageKey); } catch {}
+            }
+            if (!saved) return null;
+            const session = JSON.parse(saved);
+            if (!session || typeof session !== 'object' || Array.isArray(session)) {
+                throw new TypeError('Dataset draft session must be an object.');
+            }
+            if (!Array.isArray(session.imageIds)) {
+                throw new TypeError('Dataset draft imageIds must be an array.');
+            }
+            const imageIds = session.imageIds.map((value, index) => {
+                if (!Number.isSafeInteger(value) || value === 0) {
+                    throw new TypeError(
+                        `Dataset draft imageIds[${index}] must be a non-zero safe integer.`,
+                    );
+                }
+                return value;
+            });
+            if (new Set(imageIds).size !== imageIds.length) {
+                throw new TypeError('Dataset draft imageIds must not contain duplicates.');
+            }
+            const rawSettings = session.settings === undefined
+                ? this._defaultProjectSettings?.()
+                : session.settings;
+            if (!rawSettings || typeof this._parseProjectSettings !== 'function') {
+                throw new TypeError('Dataset draft settings parser is unavailable.');
+            }
+            const settings = this._parseProjectSettings(rawSettings);
+            const storedQuickfilledTrigger = parseSessionQuickfilledTrigger(
+                session.quickfilledTrigger,
+            );
+            const activeId = session.activeId === null || session.activeId === undefined
+                ? null
+                : session.activeId;
+            if (
+                activeId !== null
+                && (!Number.isSafeInteger(activeId) || !imageIds.includes(activeId))
+            ) {
+                throw new TypeError('Dataset draft activeId must be null or an imageIds member.');
+            }
+            return Object.freeze({
+                imageIds,
+                captionEdits: parseSessionStringMap(session.captionEdits, 'captionEdits'),
+                nlEdits: parseSessionStringMap(session.nlEdits, 'nlEdits'),
+                captionType: parseSessionCaptionTypes(session.captionType),
+                quickfilledTrigger: storedQuickfilledTrigger === null
+                    ? inferLegacyQuickfilledTrigger(settings)
+                    : storedQuickfilledTrigger,
+                activeId,
+                local: parseSessionLocalState(session.local),
+                settings,
+            });
+        },
+
+        _applyDatasetSession(session) {
+            this._pendingProjectSettings = session.settings;
+            this._restoringSession = true;
             try {
-                // DUR-1: durable draft first; legacy per-tab draft second so
-                // a session written by a pre-DUR-1 build still restores once.
-                let saved = null;
-                try { saved = localStorage.getItem('sd-image-sorter-dataset-session'); } catch {}
-                if (!saved) {
-                    try { saved = sessionStorage.getItem('sd-image-sorter-dataset-session'); } catch {}
-                }
-                if (!saved) return false;
-                const s = JSON.parse(saved);
-                if (!s || !Array.isArray(s.imageIds) || s.imageIds.length === 0) return false;
-                this._restoringSession = true;
-                this.imageIds = s.imageIds.map(Number).filter(Number.isFinite);
+                this.imageIds = [...session.imageIds];
                 this.captionEdits.clear();
-                if (s.captionEdits) {
-                    for (const [k, v] of Object.entries(s.captionEdits)) {
-                        const id = Number(k);
-                        if (Number.isFinite(id)) this.captionEdits.set(id, v);
-                    }
+                for (const [key, value] of Object.entries(session.captionEdits)) {
+                    this.captionEdits.set(Number(key), value);
                 }
-                // point 2/3: restore the parallel NL-box edits + per-image type.
                 this.nlEdits.clear();
-                if (s.nlEdits) {
-                    for (const [k, v] of Object.entries(s.nlEdits)) {
-                        const id = Number(k);
-                        if (Number.isFinite(id)) this.nlEdits.set(id, v);
-                    }
+                for (const [key, value] of Object.entries(session.nlEdits)) {
+                    this.nlEdits.set(Number(key), value);
                 }
                 this.captionType.clear();
-                if (s.captionType) {
-                    for (const [k, v] of Object.entries(s.captionType)) {
-                        const id = Number(k);
-                        if (Number.isFinite(id) && (v === 'booru' || v === 'nl' || v === 'both')) {
-                            this.captionType.set(id, v);
-                        }
-                    }
+                for (const [key, value] of Object.entries(session.captionType)) {
+                    this.captionType.set(Number(key), value);
                 }
-                const active = Number(s.activeId);
-                this.activeId = Number.isFinite(active) && this.imageIds.includes(active) ? active : null;
-                if (this._restoreLocalSession) this._restoreLocalSession(s.local || {});
-                else this._pendingLocalSession = s.local || {};
-                return true;
-            } catch {
-                return false;
+                this._quickfilledTrigger = session.quickfilledTrigger;
+                this.activeId = session.activeId;
+                if (this._restoreLocalSession) this._restoreLocalSession(session.local);
+                else this._pendingLocalSession = session.local;
+                this._saveManagedTriggerForLocalIds?.(
+                    this.imageIds,
+                    this._quickfilledTrigger,
+                    null,
+                );
             } finally {
                 this._restoringSession = false;
+            }
+        },
+
+        _restoreSession(project) {
+            try {
+                const session = this._readDatasetSession(project);
+                if (!session) return false;
+                this._applyDatasetSession(session);
+                return true;
+            } catch (error) {
+                window.Logger?.error?.('dataset_session_restore_failed', {
+                    error_type: error?.constructor?.name || typeof error,
+                    message: error instanceof Error ? error.message : String(error),
+                });
+                this._toast(
+                    `Dataset draft could not be restored: ${error instanceof Error ? error.message : String(error)}`,
+                    'error',
+                );
+                return false;
             }
         },
 
@@ -187,20 +411,38 @@
                 this._captionInputTimer = null;
             }
             if (!pending || pending.id == null) return;
-            this._pendingCaptionEdit = null;
             const id = Number(pending.id);
             const value = String(pending.value ?? '');
             const prev = this.captionEdits.has(id)
                 ? this.captionEdits.get(id)
                 : (this.captions.get(id) || '');
+            this.captionEdits.set(id, value);
+            this._pendingCaptionEdit = null;
             if (prev !== value) {
                 const stack = this._undoStacks.get(id) || [];
                 stack.push(prev);
                 if (stack.length > 20) stack.shift();
                 this._undoStacks.set(id, stack);
             }
-            this.captionEdits.set(id, value);
             this._refreshQueueItem?.(id);
+        },
+
+        _flushPendingDatasetEdits() {
+            this._flushPendingCaptionEdit();
+            this._flushPendingNlCaptionEdit?.();
+        },
+
+        _discardPendingDatasetEdits() {
+            if (this._captionInputTimer) {
+                clearTimeout(this._captionInputTimer);
+                this._captionInputTimer = null;
+            }
+            if (this._nlCaptionInputTimer) {
+                clearTimeout(this._nlCaptionInputTimer);
+                this._nlCaptionInputTimer = null;
+            }
+            this._pendingCaptionEdit = null;
+            this._pendingNlCaptionEdit = null;
         },
 
         // ---- Lifecycle ----
@@ -209,9 +451,16 @@
             this.boundOnce = true;
             this._installCaptionEditPersistence();
 
-            this.imageIds.length === 0 && this._restoreSession();
+            this._initTrainerSelector?.();
+
+            const restoredDraft = this.imageIds.length === 0 && this._restoreSession(null);
+            if (!restoredDraft && !this._pendingProjectSettings) {
+                this._pendingProjectSettings = this._defaultProjectSettings?.() || null;
+            }
 
             this._bindEvents();
+            this._initProjectSettingsPersistence?.();
+            this._initProjectStore?.();
             this._renderQueue();
             if (this.activeId != null && this.imageIds.includes(Number(this.activeId))) {
                 this._setActive?.(this.activeId);
@@ -220,12 +469,28 @@
             }
             this._onPresetChange?.();
             this._updateNamingPreview();
+            this._initReadiness?.();
             this._updateExportEnabled();
             this._syncSourceCapabilityStatus?.();
             this._syncOutputModeUi?.();
             this._initCaptionHelpAutoOpen();
             this._bindBeforeUnload();
             this._resumeExportProgress?.();
+            void this._restorePendingProjectSettings?.().then(async () => {
+                await this._fetchMissingMeta?.();
+                await this._fetchMissingCaptions?.();
+                this._renderQueue?.();
+                if (this.activeId !== null) this._setActive?.(this.activeId);
+            }).catch((error) => {
+                window.Logger?.error?.('dataset_project_settings_restore_failed', {
+                    error_type: error?.constructor?.name || typeof error,
+                    message: error instanceof Error ? error.message : String(error),
+                });
+                this._toast(
+                    `Dataset settings could not be restored: ${error instanceof Error ? error.message : String(error)}`,
+                    'error',
+                );
+            });
         },
 
         _bindBeforeUnload() {
@@ -235,15 +500,19 @@
             // the primary target browsers — users would F5 and lose all
             // caption edits with no prompt.
             //
-            // Additionally, only prompt when there are UNSAVED edits
-            // (``captionEdits.size > 0``). Just having images queued is
+            // Additionally, only prompt when there are UNSAVED caption edits.
+            // Booru, NL, and caption-type maps are all browser-owned drafts.
+            // Just having images queued is
             // not a strong enough signal to nag every refresh; queue
             // contents are persisted to localStorage (DUR-1) and survive
             // reload, but in-progress caption edits beyond what is
             // already saved would still be jarring to lose mid-typing.
             window.addEventListener('beforeunload', (e) => {
+                this._flushPendingDatasetEdits();
+                this._saveSession();
                 const hasQueue = this.imageIds && this.imageIds.length > 0;
-                const hasUnsavedEdits = this.captionEdits && this.captionEdits.size > 0;
+                const hasUnsavedEdits = [this.captionEdits, this.nlEdits, this.captionType]
+                    .some((draftMap) => draftMap && draftMap.size > 0);
                 if (hasQueue && hasUnsavedEdits) {
                     e.preventDefault();
                     e.returnValue = '';
@@ -335,6 +604,8 @@
     //     preserves the old pipeline init() binder order.
     const datasetModuleSources = [
         '/static/js/dataset/gallery-import.js',
+        '/static/js/dataset/project-settings.js',
+        '/static/js/dataset/project-store.js',
         '/static/js/dataset/events.js',
         '/static/js/dataset/queue-render.js',
         '/static/js/dataset/active-editor.js',
@@ -343,6 +614,8 @@
         '/static/js/dataset/tags.js',
         '/static/js/dataset/caption-fetch.js',
         '/static/js/dataset/output-naming.js',
+        '/static/js/dataset/trainer-selector.js',
+        '/static/js/dataset/readiness.js',
         '/static/js/dataset/tag-all.js',
         '/static/js/dataset/export-run.js',
         '/static/js/dataset/tag-autocomplete.js',
@@ -357,11 +630,10 @@
         '/static/js/dataset/custom-dropdown.js',
         // v3.2.2 T-power-PR2 (C): tag confidence pills inside the caption editor.
         '/static/js/dataset-confidence-pills.js',
-        // point 2/3: two-box caption editor (booru + natural-language) with a
-        // per-image type toggle + bulk/auto helpers. Loaded last so its hooks /
-        // decorators / _renderEmptyEditor wrappers compose over part2 + the
-        // local-import + pipeline patches.
+        // Two-box caption editor loads before the revision ledger so saved
+        // content can wrap its effective-caption helpers.
         '/static/js/dataset-maker-caption-split.js',
+        '/static/js/dataset/annotation-ledger.js',
     ];
 
     const datasetModulesReady = Promise.all(

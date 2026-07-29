@@ -147,30 +147,35 @@ test('window.SimilarImages is an unsealed object + window.initSimilar exposing t
 })
 
 // ---------------------------------------------------------------------------
-// 2. getScopeQuery + onScopeChange — the "&collection_id=" scope suffix contract.
+// 2. getScopeQuery + onScopeChange — explicit session/library/collection scope.
 // ---------------------------------------------------------------------------
 
-test('getScopeQuery is empty for the whole library and onScopeChange only keeps positive integer ids', async ({ page }) => {
+test('getScopeQuery preserves session, library, and positive collection scopes', async ({ page }) => {
   const probe = await page.evaluate(() => {
     const S = (window as any).SimilarImages
     S.currentSearchMode = null // no active search -> onScopeChange never re-fires one
     S.collectionId = null
-    const emptyScope = S.getScopeQuery()
+    S.scope = 'library'
+    const libraryScope = S.getScopeQuery()
+    S.onScopeChange('current_session')
+    const sessionScope = { id: S.collectionId, scope: S.scope, query: S.getScopeQuery() }
     S.onScopeChange('7')
-    const afterSet = { id: S.collectionId, query: S.getScopeQuery() }
+    const afterSet = { id: S.collectionId, scope: S.scope, query: S.getScopeQuery() }
     S.onScopeChange('0')
-    const afterZero = S.collectionId
+    const afterZero = { id: S.collectionId, scope: S.scope, query: S.getScopeQuery() }
     S.onScopeChange('')
     const afterEmpty = S.collectionId
     S.onScopeChange('not-a-number')
     const afterNaN = S.collectionId
-    return { emptyScope, afterSet, afterZero, afterEmpty, afterNaN }
+    return { libraryScope, sessionScope, afterSet, afterZero, afterEmpty, afterNaN }
   })
 
-  expect(probe.emptyScope).toBe('')
+  expect(probe.libraryScope).toBe('&scope=library')
+  expect(probe.sessionScope).toEqual({ id: null, scope: 'current_session', query: '&scope=current_session' })
   expect(probe.afterSet.id).toBe(7)
-  expect(probe.afterSet.query).toBe('&collection_id=7')
-  expect(probe.afterZero).toBeNull()
+  expect(probe.afterSet.scope).toBe('library')
+  expect(probe.afterSet.query).toBe('&collection_id=7&scope=library')
+  expect(probe.afterZero).toEqual({ id: null, scope: 'library', query: '&scope=library' })
   expect(probe.afterEmpty).toBeNull()
   expect(probe.afterNaN).toBeNull()
 })
@@ -323,7 +328,7 @@ test('a newer image search wins the race and the slower older response is droppe
 // 7. searchByText — POST body shape (threshold 0, trimmed query, optional scope).
 // ---------------------------------------------------------------------------
 
-test('searchByText posts the trimmed query with threshold 0 and only adds collection_id when scoped', async ({ page }) => {
+test('searchByText posts the trimmed query with explicit scope and optional collection_id', async ({ page }) => {
   let capturedBody: Record<string, unknown> = {}
   await page.route('**/api/similarity/search-text', (route) => {
     capturedBody = JSON.parse(route.request().postData() || '{}')
@@ -341,9 +346,10 @@ test('searchByText posts the trimmed query with threshold 0 and only adds collec
     S.isEmbedding = false
     S.isCheckingEmbeddingStatus = false
     S.collectionId = null
+    S.scope = 'library'
     return S.searchByText('  red dress  ')
   })
-  expect(capturedBody).toEqual({ query: 'red dress', limit: 100, offset: 0, threshold: 0 })
+  expect(capturedBody).toEqual({ query: 'red dress', limit: 100, offset: 0, threshold: 0, scope: 'library' })
   await expect(page.locator('#similar-results .similar-result[data-id="601"] .similar-score')).toHaveText('30.0%')
 
   // Scoped: collection_id is added.
@@ -352,7 +358,19 @@ test('searchByText posts the trimmed query with threshold 0 and only adds collec
     S.collectionId = 7
     return S.searchByText('cat')
   })
-  expect(capturedBody).toEqual({ query: 'cat', limit: 100, offset: 0, threshold: 0, collection_id: 7 })
+  expect(capturedBody).toEqual({
+    query: 'cat', limit: 100, offset: 0, threshold: 0, collection_id: 7, scope: 'library',
+  })
+
+  await page.evaluate(() => {
+    const S = (window as any).SimilarImages
+    S.collectionId = null
+    S.scope = 'current_session'
+    return S.searchByText('session image')
+  })
+  expect(capturedBody).toEqual({
+    query: 'session image', limit: 100, offset: 0, threshold: 0, scope: 'current_session',
+  })
 })
 
 // ---------------------------------------------------------------------------

@@ -273,9 +273,10 @@ test.describe('Model Manager', () => {
       })
 
       let progressCalls = 0
+      let allowProgressCompletion = false
       await page.route('**/api/models/download-progress', async (route) => {
         progressCalls += 1
-        const done = progressCalls >= 2
+        const done = allowProgressCompletion && progressCalls >= 2
         await route.fulfill({
           json: {
             active: !done,
@@ -342,6 +343,7 @@ test.describe('Model Manager', () => {
       })
 
       await backgroundButton.click()
+      allowProgressCompletion = true
       await expect(page.locator('#model-manager-modal.visible')).toHaveCount(0)
       await expect(
         page.locator('#toast-container .toast.info .toast-message').filter({ hasText: /continues in background|继续在后台/i }),

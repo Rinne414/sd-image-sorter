@@ -68,6 +68,7 @@
             { count: selected.length });
         if (!window.confirm(msg)) return;
 
+        this._supersedeCaptionFetch?.();
         const removeSet = new Set(selected);
         this.imageIds = this.imageIds.filter((id) => !removeSet.has(Number(id)));
         for (const id of selected) {

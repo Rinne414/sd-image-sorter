@@ -15,6 +15,7 @@ rebinds to this module's unchanged object, so the pre-split reload divergence
 
 TAGGER_MODELS: dict = {
     "wd-eva02-large-tagger-v3": {
+        "writer_family": "wd14",
         "repo_id": "SmilingWolf/wd-eva02-large-tagger-v3",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
@@ -25,6 +26,7 @@ TAGGER_MODELS: dict = {
         "default_max_tags_per_image": 60,
     },
     "wd-swinv2-tagger-v3": {
+        "writer_family": "wd14",
         "repo_id": "SmilingWolf/wd-swinv2-tagger-v3",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
@@ -35,6 +37,7 @@ TAGGER_MODELS: dict = {
         "default_max_tags_per_image": 50,
     },
     "wd-convnext-tagger-v3": {
+        "writer_family": "wd14",
         "repo_id": "SmilingWolf/wd-convnext-tagger-v3",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
@@ -45,6 +48,7 @@ TAGGER_MODELS: dict = {
         "default_max_tags_per_image": 50,
     },
     "wd-vit-tagger-v3": {
+        "writer_family": "wd14",
         "repo_id": "SmilingWolf/wd-vit-tagger-v3",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
@@ -55,6 +59,7 @@ TAGGER_MODELS: dict = {
         "default_max_tags_per_image": 40,
     },
     "wd-vit-large-tagger-v3": {
+        "writer_family": "wd14",
         "repo_id": "SmilingWolf/wd-vit-large-tagger-v3",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
@@ -65,6 +70,7 @@ TAGGER_MODELS: dict = {
         "default_max_tags_per_image": 55,
     },
     "camie-tagger-v2": {
+        "writer_family": "camie",
         "repo_id": "Camais03/camie-tagger-v2",
         "model_file": "camie-tagger-v2.onnx",
         "tags_file": "camie-tagger-v2-metadata.json",
@@ -89,6 +95,7 @@ TAGGER_MODELS: dict = {
         "supports_rating": True
     },
     "pixai-tagger-v0.9": {
+        "writer_family": "pixai",
         "repo_id": "deepghs/pixai-tagger-v0.9-onnx",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",

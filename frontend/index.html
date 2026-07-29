@@ -859,6 +859,13 @@
                                 <span data-i18n="gallery.filters">Filters</span>
                             </button>
                             <span class="image-count" id="image-count" aria-live="polite">0</span>
+                            <label class="gallery-scope-control" for="gallery-scope-select">
+                                <span data-i18n="gallery.scopeLabel">View</span>
+                                <select id="gallery-scope-select" class="sort-dropdown" aria-label="Gallery view scope" data-i18n-aria="gallery.scopeLabel">
+                                    <option value="current_session" data-i18n="gallery.scopeSession">Current Session</option>
+                                    <option value="library" data-i18n="gallery.scopeLibrary">Library</option>
+                                </select>
+                            </label>
                             <button id="btn-random" class="btn btn-ghost btn-small btn-icon-only" title="Show a random image from current filter" aria-label="Show random image" data-i18n-title="gallery.randomTooltip" data-i18n-aria="gallery.random">
                                 <span aria-hidden="true">🎲</span>
                             </button>
@@ -2920,7 +2927,7 @@
                                 <div class="similar-scope-row" style="display:flex;align-items:center;gap:8px;width:100%;margin-top:4px;">
                                     <label for="similar-search-scope" style="font-size:12px;white-space:nowrap;color:var(--text-muted,#8899aa);" data-i18n="similar.scopeLabel">Search in:</label>
                                     <select id="similar-search-scope" class="input" style="flex:1;">
-                                        <option value="" data-i18n="similar.scopeAll">All images</option>
+                                        <option value="library" data-i18n="similar.scopeAll">All images</option>
                                     </select>
                                 </div>
                                 <div class="similar-upload-dropzone" id="similar-upload-dropzone" role="button" tabindex="0" aria-describedby="similar-upload-hint">
@@ -3461,6 +3468,39 @@
                                 <span class="dataset-tab-label" data-i18n="dataset.stepExport">Export</span>
                             </button>
                         </nav>
+                        <div class="dataset-project-toolbar" data-testid="dataset-project-toolbar">
+                            <label class="sr-only" for="dataset-project-selector" data-i18n="dataset.projectSelectorLabel">Dataset project</label>
+                            <select id="dataset-project-selector" class="form-select dataset-project-selector"
+                                    data-testid="dataset-project-selector"
+                                    aria-label="Dataset project"
+                                    data-i18n-aria="dataset.projectSelectorLabel">
+                                <option value="" data-i18n="dataset.projectUnsavedDraft">Unsaved draft</option>
+                            </select>
+                            <button class="btn btn-ghost btn-small" id="btn-dataset-project-save-as" type="button"
+                                    data-testid="dataset-project-save-as" data-i18n="dataset.projectSaveAs">Save As</button>
+                            <button class="btn btn-primary btn-small" id="btn-dataset-project-save" type="button"
+                                    data-testid="dataset-project-save" data-i18n="dataset.projectSave" disabled>Save</button>
+                            <details class="dataset-project-menu" id="dataset-project-menu">
+                                <summary class="btn btn-ghost btn-small btn-icon-only"
+                                         data-testid="dataset-project-menu"
+                                         title="Project actions"
+                                         aria-label="Project actions"
+                                         data-i18n-title="dataset.projectActions"
+                                         data-i18n-aria="dataset.projectActions">...</summary>
+                                <div class="dataset-project-menu-popover">
+                                    <button type="button" id="btn-dataset-project-rename" data-testid="dataset-project-rename"
+                                            data-i18n="dataset.projectRename" disabled>Rename</button>
+                                    <button type="button" id="btn-dataset-project-archive" data-testid="dataset-project-archive"
+                                            data-i18n="dataset.projectArchive" disabled>Archive</button>
+                                    <button type="button" id="btn-dataset-project-restore" data-testid="dataset-project-restore"
+                                            data-i18n="dataset.projectRestore" disabled>Restore</button>
+                                    <button type="button" class="danger" id="btn-dataset-project-delete"
+                                            data-testid="dataset-project-delete" data-i18n="dataset.projectDelete" disabled>Delete</button>
+                                </div>
+                            </details>
+                            <span class="dataset-project-status" data-testid="dataset-project-status" data-state="idle"
+                                  data-i18n="dataset.projectStatusIdle">No saved project</span>
+                        </div>
                         <span class="dataset-count-pill" id="dataset-count">
                             <strong id="dataset-count-num">0</strong>
                             <span data-i18n="dataset.imagesInDataset">images</span>
@@ -3474,6 +3514,7 @@
                             <span aria-hidden="true">🗑️</span>
                         </button>
                     </header>
+                    <div class="dataset-project-missing" data-testid="dataset-project-missing" hidden></div>
 
                     <!-- Tab 1: Import + Audit (merged) -->
                     <div class="dataset-tab-import-content" id="dataset-tab-import-content">
@@ -3752,6 +3793,35 @@
                                           data-i18n-placeholder="dataset.nlPlaceholder"
                                           hidden></textarea>
 
+                                <div class="dataset-annotation-ledger" id="dataset-annotation-ledger" hidden>
+                                    <div class="dataset-annotation-toolbar">
+                                        <span class="dataset-annotation-status" id="dataset-annotation-status"
+                                              data-testid="dataset-annotation-status"></span>
+                                        <div class="dataset-annotation-actions">
+                                            <button type="button" class="btn btn-primary btn-small"
+                                                    id="btn-dataset-save-caption-version"
+                                                    data-testid="dataset-save-caption-version"
+                                                    data-i18n="dataset.annotationSaveVersion">Save version</button>
+                                            <button type="button" class="btn btn-ghost btn-small"
+                                                    id="btn-dataset-caption-history"
+                                                    data-testid="dataset-caption-history"
+                                                    aria-expanded="false"
+                                                    data-i18n="dataset.annotationHistory">History</button>
+                                        </div>
+                                    </div>
+                                    <div class="dataset-annotation-provenance"
+                                         id="dataset-annotation-provenance"
+                                         data-testid="dataset-annotation-provenance"
+                                         aria-live="polite"></div>
+                                    <div class="dataset-annotation-history" id="dataset-annotation-history" hidden>
+                                        <div class="dataset-annotation-history-list"
+                                             id="dataset-annotation-history-list"></div>
+                                        <button type="button" class="btn btn-ghost btn-small"
+                                                id="btn-dataset-annotation-history-more" hidden
+                                                data-i18n="dataset.annotationLoadMore">Load more</button>
+                                    </div>
+                                </div>
+
                                 <!-- v3.2.2 T-power-PR2 (C): tag confidence pill panel.
                                      Lets the user spot low-confidence false positives at
                                      a glance and one-click delete them from the caption. -->
@@ -3826,6 +3896,7 @@
                                     <div class="dataset-input-action-row">
                                         <input type="text" id="dataset-trigger" class="form-input"
                                                placeholder="subject"
+                                               maxlength="100"
                                                data-i18n-placeholder="dataset.triggerPlaceholderShort"
                                                aria-label="Trigger word">
                                         <button type="button" class="btn btn-ghost btn-small"
@@ -3880,6 +3951,14 @@
                                             id="btn-dataset-quickfill-quality"
                                             data-i18n="dataset.quickfillQuality">
                                         Add quality tags
+                                    </button>
+                                    <button type="button" class="btn btn-ghost btn-small btn-icon-only"
+                                            id="btn-dataset-cleanup-trigger"
+                                            title="Remove and blacklist one confirmed old trigger"
+                                            aria-label="Remove and blacklist one confirmed old trigger"
+                                            data-i18n-title="dataset.cleanupTriggerTooltip"
+                                            data-i18n-aria="dataset.cleanupTriggerTooltip">
+                                        <span aria-hidden="true">⌫</span>
                                     </button>
                                     <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-anime-defaults"
                                             title="Fill a simple starter setup: common quality tags, underscore handling, and sequential filenames"
@@ -4205,8 +4284,83 @@
                             <details class="dataset-card dataset-card-details" id="dataset-separation-console">
                                 <summary class="dataset-card-title">
                                     <span aria-hidden="true">🧬</span>
-                                    <span data-i18n="dataset.separationConsoleTitle">Separation Console</span>
+                                    <span data-i18n="dataset.reviewCockpitTitle">Review Cockpit</span>
                                 </summary>
+                                <div class="sepcon-view-header">
+                                    <div class="sepcon-view-tabs" role="tablist" aria-label="Review Cockpit views"
+                                         data-i18n-aria="dataset.reviewViewsAria">
+                                        <button type="button" class="sepcon-view-tab" id="sepcon-tab-issues"
+                                                role="tab" aria-controls="sepcon-issues-panel" aria-selected="false"
+                                                tabindex="-1" data-testid="review-cockpit-tab-issues"
+                                                data-i18n="dataset.reviewIssuesTab">Issues</button>
+                                        <button type="button" class="sepcon-view-tab is-active" id="sepcon-tab-tags"
+                                                role="tab" aria-controls="sepcon-tags-panel" aria-selected="true"
+                                                tabindex="0" data-testid="review-cockpit-tab-tags"
+                                                data-i18n="dataset.reviewTagsTab">Tags</button>
+                                    </div>
+                                    <button type="button" class="sepcon-view-refresh" id="sepcon-issues-refresh"
+                                            data-testid="review-cockpit-refresh" aria-label="Refresh issues"
+                                            title="Refresh issues" data-i18n-aria="dataset.reviewRefreshAria"
+                                            data-i18n-title="dataset.reviewRefreshAria">↻</button>
+                                </div>
+                                <section id="sepcon-issues-panel" class="sepcon-issues-panel" role="tabpanel"
+                                         aria-labelledby="sepcon-tab-issues" data-testid="review-cockpit-issues" hidden>
+                                    <div id="sepcon-issue-controls" class="sepcon-issue-controls">
+                                        <label class="form-label sepcon-issue-filter-label">
+                                            <span data-i18n="dataset.reviewIssueFilter">Issue type</span>
+                                            <select id="sepcon-issue-filter" class="input-field">
+                                                <option value="all" data-i18n="dataset.reviewIssueAll">All issues</option>
+                                                <option value="file" data-i18n="dataset.reviewIssueFiles">Files</option>
+                                                <option value="caption" data-i18n="dataset.reviewIssueCaptions">Captions</option>
+                                                <option value="size" data-i18n="dataset.reviewIssueSize">Image size</option>
+                                                <option value="quality" data-i18n="dataset.reviewIssueQuality">Stored quality</option>
+                                                <option value="duplicate" data-i18n="dataset.reviewIssueDuplicates">Saved duplicates</option>
+                                                <option value="tag_integrity" data-i18n="dataset.reviewIssueTagIntegrity">Tag integrity</option>
+                                                <option value="low_tag_confidence" data-i18n="dataset.reviewIssueLowTagConfidence">Low tag confidence</option>
+                                                <option value="metadata_provenance" data-testid="review-cockpit-filter-metadata-provenance"
+                                                        data-i18n="dataset.reviewIssueMetadataProvenance">Metadata provenance</option>
+                                                <option value="sidecar_fallback" data-testid="review-cockpit-filter-sidecar-fallback"
+                                                        data-i18n="dataset.reviewIssueSidecarFallback">Sidecar fallback</option>
+                                            </select>
+                                        </label>
+                                        <label class="form-label sepcon-issue-threshold">
+                                            <span data-i18n="dataset.reviewMinimumSide">Minimum side</span>
+                                            <input type="number" id="sepcon-min-dimension" class="input-field"
+                                                   min="1" max="8192" step="1" placeholder="Optional"
+                                                   data-i18n-placeholder="dataset.reviewOptional">
+                                        </label>
+                                        <label class="form-label sepcon-issue-threshold">
+                                            <span data-i18n="dataset.reviewMinimumAesthetic">Minimum stored aesthetic</span>
+                                            <input type="number" id="sepcon-min-aesthetic" class="input-field"
+                                                   min="0" max="10" step="0.1" placeholder="Optional"
+                                                   data-i18n-placeholder="dataset.reviewOptional">
+                                        </label>
+                                        <label class="checkbox-label sepcon-issue-duplicates">
+                                            <input type="checkbox" id="sepcon-include-duplicates" checked>
+                                            <span class="checkbox-custom" aria-hidden="true"></span>
+                                            <span class="checkbox-text" data-i18n="dataset.reviewIncludeDuplicates">Saved duplicate scan</span>
+                                        </label>
+                                    </div>
+                                    <div id="sepcon-provider-states" class="sepcon-provider-states" aria-live="polite"></div>
+                                    <div id="sepcon-issues-state" class="sepcon-issues-state" aria-live="polite"></div>
+                                    <div id="sepcon-issue-rows" class="sepcon-issue-rows"></div>
+                                    <div id="sepcon-issues-error" class="sepcon-issues-error" data-testid="review-cockpit-error" hidden>
+                                        <p id="sepcon-issues-error-message"></p>
+                                        <button type="button" class="btn btn-secondary btn-small" id="sepcon-issues-retry"
+                                                data-testid="review-cockpit-retry" data-i18n="common.retry">Retry</button>
+                                    </div>
+                                    <div id="sepcon-issues-empty" class="sepcon-issues-empty" data-testid="review-cockpit-empty" hidden
+                                         data-i18n="dataset.reviewEmpty">No issues match the current checks.</div>
+                                    <nav class="sepcon-issues-pagination" aria-label="Review issue pages"
+                                         data-i18n-aria="dataset.reviewPagesAria">
+                                        <button type="button" class="btn btn-ghost btn-small" id="sepcon-issues-prev"
+                                                data-testid="review-cockpit-prev" data-i18n="dataset.reviewPrevious" disabled>Previous</button>
+                                        <span id="sepcon-issues-page" class="sepcon-issues-page"></span>
+                                        <button type="button" class="btn btn-ghost btn-small" id="sepcon-issues-next"
+                                                data-testid="review-cockpit-next" data-i18n="dataset.reviewNext" disabled>Next</button>
+                                    </nav>
+                                </section>
+                                <section id="sepcon-tags-panel" role="tabpanel" aria-labelledby="sepcon-tab-tags">
                                 <p class="helper-text" data-i18n="dataset.separationConsoleHelp">Every tag across the queue: keep it promptable, or prune it so the trigger word absorbs it. Frequency is the evidence.</p>
                                 <div class="sepcon-toolbar">
                                     <span id="sepcon-stats" class="sepcon-stats"></span>
@@ -4248,6 +4402,7 @@
                                     </div>
                                     <div id="sepcon-rt-status" class="sepcon-health-note"></div>
                                 </div>
+                                </section>
                             </details>
 
                             <!-- Section B1.6: Character Purity (CCIP, roadmap #9 v1) —
@@ -4326,6 +4481,38 @@
                                             <input id="dataset-est-batch" type="number" min="1" max="64" step="1" value="2"></label>
                                     </span>
                                 </div>
+                                <section class="dataset-readiness-band" id="dataset-readiness"
+                                         aria-labelledby="dataset-readiness-title"
+                                         data-testid="dataset-readiness">
+                                    <div class="dataset-readiness-head">
+                                        <div class="dataset-readiness-heading">
+                                            <h4 id="dataset-readiness-title" data-i18n="dataset.readinessTitle">Readiness</h4>
+                                            <span class="dataset-readiness-state" id="dataset-readiness-state"
+                                                  data-state="idle" data-testid="dataset-readiness-state"
+                                                  aria-live="polite">Idle</span>
+                                        </div>
+                                        <div class="dataset-readiness-actions">
+                                            <button type="button" class="btn btn-secondary btn-small"
+                                                    id="btn-dataset-readiness-check"
+                                                    data-testid="dataset-readiness-check"
+                                                    data-i18n="dataset.readinessCheck">Check</button>
+                                            <button type="button" class="btn btn-ghost btn-small"
+                                                    id="btn-dataset-readiness-cancel"
+                                                    data-testid="dataset-readiness-cancel"
+                                                    data-i18n="common.cancel" hidden>Cancel</button>
+                                        </div>
+                                    </div>
+                                    <p class="dataset-readiness-message" id="dataset-readiness-message"></p>
+                                    <div class="dataset-readiness-progress" id="dataset-readiness-progress"
+                                         data-testid="dataset-readiness-progress" role="progressbar"
+                                         aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" hidden>
+                                        <span id="dataset-readiness-progress-fill"></span>
+                                    </div>
+                                    <p class="dataset-readiness-counts" id="dataset-readiness-counts"
+                                       data-testid="dataset-readiness-counts" hidden></p>
+                                    <div class="dataset-readiness-issues" id="dataset-readiness-issues"
+                                         data-testid="dataset-readiness-issues" role="list"></div>
+                                </section>
                                 <div class="dataset-export-action-bar">
                                     <button type="button" class="btn btn-primary btn-large full-width dataset-export-cta"
                                             id="btn-dataset-export" disabled
@@ -4457,22 +4644,56 @@
                                             <option value="skip" data-i18n="dataset.overwriteSkip">Skip</option>
                                         </select>
                                     </label>
-                                    <label class="form-label">
-                                        <span data-i18n="dataset.maskExportLabel">Training masks (masked loss)</span>
-                                        <select id="dataset-mask-export" class="form-input">
-                                            <option value="none" selected data-i18n="dataset.maskExportNone">Don't export</option>
-                                            <option value="onetrainer" data-i18n="dataset.maskExportOnetrainer">OneTrainer (name-masklabel.png beside image)</option>
-                                            <option value="kohya" data-i18n="dataset.maskExportKohya">kohya (mask/ conditioning folder)</option>
-                                        </select>
-                                    </label>
-                                    <label class="form-label dataset-trainer-toml-row" style="display:flex;align-items:center;gap:8px;">
-                                        <input type="checkbox" id="dataset-trainer-toml">
-                                        <span data-i18n="dataset.trainerTomlLabel">Also write kohya dataset_config.toml (repeats/batch from the estimator above)</span>
-                                    </label>
-                                    <label class="form-label dataset-trainer-keep-row" style="display:flex;align-items:center;gap:8px;">
-                                        <span data-i18n="dataset.trainerKeepTokensLabel">Shuffle captions, keep first N tags fixed (keep_tokens)</span>
-                                        <input type="number" id="dataset-trainer-keep-tokens" class="form-input" style="width:72px;" min="0" max="50" step="1" value="1">
-                                    </label>
+                                    <section class="dataset-trainer-package-panel" id="dataset-trainer-package-panel"
+                                             aria-labelledby="dataset-trainer-package-label">
+                                        <label class="form-label">
+                                            <span id="dataset-trainer-package-label"
+                                                  data-i18n="dataset.trainerPackageLabel">Trainer package</span>
+                                            <select id="dataset-trainer-package" class="form-input" disabled
+                                                    data-testid="dataset-trainer-package"
+                                                    aria-describedby="dataset-trainer-package-hint dataset-trainer-contract-state">
+                                                <option value="none" selected
+                                                        data-i18n="dataset.trainerPackageLoading">Loading verified trainers...</option>
+                                            </select>
+                                        </label>
+                                        <div class="dataset-trainer-contract-status" aria-live="polite">
+                                            <span id="dataset-trainer-contract-state"
+                                                  data-testid="dataset-trainer-contract-state"
+                                                  data-state="loading">Loading verified trainer contracts...</span>
+                                            <button type="button" class="btn btn-ghost btn-small"
+                                                    id="btn-dataset-trainer-contract-retry"
+                                                    data-testid="dataset-trainer-contract-retry"
+                                                    data-i18n="dataset.trainerContractsRetry" hidden>Retry</button>
+                                        </div>
+                                        <p class="dataset-help" id="dataset-trainer-package-hint"
+                                           data-i18n="dataset.trainerPackageHint">
+                                            Verified packages include the pinned trainer config; repeats and batch use the estimator above.
+                                        </p>
+                                        <p class="dataset-trainer-pin" id="dataset-trainer-pin" hidden></p>
+                                        <label class="form-label">
+                                            <span data-i18n="dataset.maskExportLabel">Training masks (masked loss)</span>
+                                            <select id="dataset-mask-export" class="form-input" disabled>
+                                                <option value="none" selected data-i18n="dataset.maskExportNone">Don't export</option>
+                                                <option value="onetrainer" data-i18n="dataset.maskExportOnetrainer">OneTrainer (name-masklabel.png beside image)</option>
+                                                <option value="kohya" data-i18n="dataset.maskExportKohya">Kohya conditioning masks (mask/ folder)</option>
+                                            </select>
+                                        </label>
+                                        <div class="dataset-trainer-settings" id="dataset-trainer-settings" hidden>
+                                            <label class="form-label">
+                                                <span data-i18n="dataset.trainerResolutionLabel">Training resolution</span>
+                                                <input type="number" id="dataset-trainer-resolution" class="form-input"
+                                                       data-testid="dataset-trainer-resolution"
+                                                       min="256" max="4096" step="1" value="1024">
+                                            </label>
+                                            <label class="form-label">
+                                                <span data-i18n="dataset.trainerKeepTokensLabel">Keep first N caption tokens fixed</span>
+                                                <input type="number" id="dataset-trainer-keep-tokens" class="form-input"
+                                                       min="0" max="50" step="1" value="0">
+                                            </label>
+                                        </div>
+                                        <p class="dataset-trainer-setting-error" id="dataset-trainer-setting-error"
+                                           role="alert" hidden></p>
+                                    </section>
                                     <!-- Hidden mirror element to keep the existing JS that reads
                                          #dataset-image-op working without changes. The radio
                                          above is the visible source of truth. -->
@@ -7421,6 +7642,7 @@
     <script src="/static/js/modules/separation-console/tipo.js"></script>
     <script src="/static/js/modules/separation-console/rethreshold.js"></script>
     <script src="/static/js/modules/separation-console/health.js"></script>
+    <script src="/static/js/modules/separation-console/issues.js"></script>
     <script src="/static/js/modules/separation-console/boot.js"></script>
     <script src="/static/js/modules/separation-console.js"></script>
     <script src="/static/js/modules/character-purity.js"></script>

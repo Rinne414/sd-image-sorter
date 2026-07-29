@@ -1,0 +1,12 @@
+[general]
+enable_bucket = true
+
+[[datasets]]
+resolution = 1024
+batch_size = 2
+
+[[datasets.subsets]]
+image_dir = "./images"
+caption_extension = ".txt"
+num_repeats = 10
+unsupported_contract_probe = true

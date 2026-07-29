@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -401,6 +402,195 @@ def _column_names(conn: sqlite3.Connection, table_name: str) -> set[str]:
     }
 
 
+def test_migration_032_preserves_ordered_library_project_items(tmp_path: Path) -> None:
+    db_path = tmp_path / "images-v31-project.db"
+    _build_versioned_snapshot(db_path, 31)
+    migration = next(item for item in migrations.get_migrations() if item.version == 32)
+    conn = sqlite3.connect(db_path)
+    try:
+        image_id = int(
+            conn.execute(
+                "SELECT id FROM images WHERE path = ?",
+                (CURRENT_IMAGE_PATH,),
+            ).fetchone()[0]
+        )
+        project_id = int(
+            conn.execute(
+                "INSERT INTO dataset_projects (name, name_key) VALUES (?, ?)",
+                ("Migration project", "migration project"),
+            ).lastrowid
+        )
+        conn.execute(
+            """
+            INSERT INTO dataset_project_items (
+                project_id, position, source_image_id, image_id
+            ) VALUES (?, ?, ?, ?)
+            """,
+            (project_id, 0, image_id, image_id),
+        )
+
+        assert migration.apply(conn) is True
+        assert migration.apply(conn) is False
+
+        row = conn.execute(
+            """
+            SELECT position, item_type, source_image_id, image_id, local_source_id
+            FROM dataset_project_items
+            WHERE project_id = ?
+            """,
+            (project_id,),
+        ).fetchone()
+        assert tuple(row) == (0, "library", image_id, image_id, None)
+        local_column_types = {
+            str(column[1]): str(column[2])
+            for column in conn.execute(
+                "PRAGMA table_info(dataset_project_local_sources)"
+            ).fetchall()
+        }
+        assert local_column_types["mtime_ns"] == "TEXT"
+        assert local_column_types["device"] == "TEXT"
+        assert local_column_types["inode"] == "TEXT"
+    finally:
+        conn.close()
+
+
+def test_migration_033_materializes_fixed_project_settings(tmp_path: Path) -> None:
+    db_path = tmp_path / "images-v32-project.db"
+    _build_versioned_snapshot(db_path, 32)
+    migration = next(item for item in migrations.get_migrations() if item.version == 33)
+    conn = sqlite3.connect(db_path)
+    try:
+        project_id = int(
+            conn.execute(
+                "INSERT INTO dataset_projects (name, name_key) VALUES (?, ?)",
+                ("Legacy settings", "legacy settings"),
+            ).lastrowid
+        )
+
+        assert migration.apply(conn) is True
+        assert migration.apply(conn) is False
+
+        settings_json = str(
+            conn.execute(
+                "SELECT settings_json FROM dataset_projects WHERE id = ?",
+                (project_id,),
+            ).fetchone()[0]
+        )
+        assert json.loads(settings_json) == {
+            "settings_version": 1,
+            "target_model": "",
+            "caption_render": {
+                "trigger": "",
+                "common_tags": [],
+                "blacklist": [],
+                "normalize_tag_underscores": True,
+                "content_mode": "template",
+                "prefix": "",
+                "template": {
+                    "template_override": "{trigger}, {tags:filtered}, {append}",
+                    "replace_rules": {},
+                    "max_tags": 0,
+                },
+            },
+            "naming": {
+                "preset": "keep",
+                "custom_pattern": "{trigger}_{index:03d}",
+            },
+            "output": {
+                "mode": "folder",
+                "folder": "",
+                "image_op": "copy",
+                "overwrite_policy": "unique",
+            },
+            "trainer": {
+                "config": "none",
+                "contract_version": None,
+                "mask_export": "none",
+                "repeats": 10,
+                "batch": 2,
+                "resolution": 1024,
+                "keep_tokens": 0,
+            },
+            "planning": {"epochs": 10},
+        }
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "UPDATE dataset_projects SET settings_json = '[]' WHERE id = ?",
+                (project_id,),
+            )
+    finally:
+        conn.close()
+
+
+def test_migration_034_creates_complete_annotation_ledger(tmp_path: Path) -> None:
+    db_path = tmp_path / "images-v33-annotations.db"
+    _build_versioned_snapshot(db_path, 33)
+    migration = next(item for item in migrations.get_migrations() if item.version == 34)
+    conn = sqlite3.connect(db_path)
+    try:
+        assert migration.apply(conn) is True
+        assert migration.apply(conn) is False
+        assert {
+            "annotation_subjects",
+            "annotation_revisions",
+            "annotation_heads",
+        } <= _table_names(conn)
+        assert {
+            "subject_kind",
+            "subject_key",
+            "library_source_image_id",
+            "library_path_key",
+            "library_size",
+            "library_mtime_ns",
+            "library_device",
+            "library_inode",
+            "local_path_key",
+        } <= _column_names(conn, "annotation_subjects")
+        assert {
+            "content_json",
+            "content_sha256",
+            "parent_revision_id",
+            "restored_from_revision_id",
+        } <= _column_names(conn, "annotation_revisions")
+        assert {
+            "active_revision_id",
+            "reviewed_revision_id",
+            "export_revision_id",
+            "generation",
+        } <= _column_names(conn, "annotation_heads")
+        trigger_names = {
+            str(row[0])
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'trigger'"
+            ).fetchall()
+        }
+        assert {
+            "trg_annotation_subjects_immutable",
+            "trg_annotation_revisions_immutable",
+            "trg_annotation_heads_identity_immutable",
+        } <= trigger_names
+        conn.execute("DROP INDEX idx_annotation_revisions_subject_history")
+        with pytest.raises(RuntimeError, match="partially present"):
+            migration.apply(conn)
+    finally:
+        conn.close()
+
+
+def test_migration_034_rejects_partial_annotation_schema(tmp_path: Path) -> None:
+    db_path = tmp_path / "images-v33-partial-annotations.db"
+    _build_versioned_snapshot(db_path, 33)
+    migration = next(item for item in migrations.get_migrations() if item.version == 34)
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute("CREATE TABLE annotation_subjects (id INTEGER PRIMARY KEY)")
+        with pytest.raises(RuntimeError, match="partially present"):
+            migration.apply(conn)
+        assert "annotation_revisions" not in _table_names(conn)
+        assert "annotation_heads" not in _table_names(conn)
+    finally:
+        conn.close()
+
+
 HISTORICAL_SCHEMA_BOUNDARIES = tuple(
     range(0, migrations.get_migrations()[-1].version)
 )
@@ -493,6 +683,12 @@ def test_every_historical_schema_boundary_upgrades_to_current(
             "tag_bulk_ops",
             "tag_scores",
             "image_path_identities",
+            "dataset_projects",
+            "dataset_project_items",
+            "dataset_project_local_sources",
+            "annotation_subjects",
+            "annotation_revisions",
+            "annotation_heads",
         }
         assert required_tables <= _table_names(conn)
         assert {
@@ -501,6 +697,13 @@ def test_every_historical_schema_boundary_upgrades_to_current(
             "ai_rating",
             "ai_rating_confidence",
         } <= _column_names(conn, "images")
+        assert {
+            "item_type",
+            "source_image_id",
+            "image_id",
+            "local_source_id",
+        } <= _column_names(conn, "dataset_project_items")
+        assert "settings_json" in _column_names(conn, "dataset_projects")
 
         if source_version >= 16:
             root = conn.execute(

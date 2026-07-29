@@ -149,6 +149,9 @@ test.beforeEach(async ({ page }) => {
 async function openDetailTagEditor(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('#view-gallery')).toBeVisible()
+  await page.locator('#gallery-scope-select').selectOption('library')
+  await expect(page.locator('#gallery-scope-select')).toHaveValue('library')
+  await expect.poll(async () => page.evaluate(() => window.App.AppState?.isLoading === false)).toBe(true)
   await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible({ timeout: 20_000 })
   await page.locator('#gallery-grid .gallery-item').first().click()
   await expect(page.locator('#image-modal.visible')).toBeVisible({ timeout: 10_000 })

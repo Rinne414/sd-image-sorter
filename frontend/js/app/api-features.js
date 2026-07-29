@@ -383,6 +383,7 @@ Object.assign(API, {
             color_temperature: scopeFilters?.colorTemperature || null,
             brightness_distribution: scopeFilters?.brightnessDistribution || null,
             collection_id: scopeFilters?.collectionId || null,
+            scope: scopeFilters?.scope || 'current_session',
             folder: scopeFilters?.folder || null,
             has_metadata: typeof scopeFilters?.hasMetadata === 'boolean' ? scopeFilters.hasMetadata : null,
             destination_folder: destinationFolder,
@@ -431,6 +432,7 @@ Object.assign(API, {
             color_temperature: scopeFilters?.colorTemperature || null,
             brightness_distribution: scopeFilters?.brightnessDistribution || null,
             collection_id: scopeFilters?.collectionId || null,
+            scope: scopeFilters?.scope || 'current_session',
             folder: scopeFilters?.folder || null,
             has_metadata: typeof scopeFilters?.hasMetadata === 'boolean' ? scopeFilters.hasMetadata : null,
             // v3.3.1: per-slot collection ids ({ key: collectionId|null }).

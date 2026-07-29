@@ -20,7 +20,7 @@ from email.utils import format_datetime
 from itertools import chain
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field
@@ -35,14 +35,45 @@ from services.character_purity_service import (
     start_character_purity,
 )
 from services.dataset_audit_service import AUDIT_RESPONSE_ITEM_LIMIT, audit_dataset
+from services.dataset_review_service import (
+    DatasetReviewRequest,
+    DatasetReviewResponse,
+    build_dataset_review_queue,
+)
+from services.bulk_job_service import (
+    JOB_KIND_DATASET_READINESS,
+    BulkJobHandle,
+    get_bulk_job_service,
+)
+from services.dataset_export.models import (
+    DatasetReadinessRequest,
+    DatasetReadinessStartResponse,
+    DatasetPackageVerificationRequest,
+    DatasetPackageVerificationResponse,
+)
+from services.dataset_export.package_integrity import (
+    PackageIntegrityError,
+    verify_dataset_package,
+)
+from services.dataset_export.trainer_contracts import (
+    TrainerContractsResponse,
+    get_trainer_contracts_response,
+)
+from services.dataset_export.artifacts import _validate_export_request_read_only
+from services.dataset_export.annotations import AnnotationSelectionResolutionError
+from services.dataset_export.planning import _requested_item_count
+from services.dataset_export.readiness import (
+    DatasetReadinessCancelledError,
+    dataset_readiness_fingerprint,
+    run_dataset_readiness,
+)
+from services.dataset_export.readiness_proof_store import get_readiness_proof_store
 from services.dataset_export_service import (
     DatasetExportPreviewRequest,
     DatasetExportRequest,
     DatasetExportResponse,
     DatasetExportStartResponse,
-    cancel_dataset_export,
     export_dataset,
-    get_dataset_export_progress,
     preview_dataset_export,
     start_dataset_export,
 )
@@ -79,6 +110,97 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["dataset"])
 
 
+def _annotation_selection_conflict(
+    error: AnnotationSelectionResolutionError,
+) -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail=(
+            f"Dataset annotation selection conflict: {error}. "
+            "Reload the Dataset Project and run readiness again."
+        ),
+    )
+
+
+@router.post(
+    "/dataset/review-queue",
+    response_model=DatasetReviewResponse,
+    summary="Build a typed stored-evidence review queue",
+)
+def post_dataset_review_queue(payload: DatasetReviewRequest) -> DatasetReviewResponse:
+    return build_dataset_review_queue(payload)
+
+
+@router.get(
+    "/dataset/trainers",
+    response_model=TrainerContractsResponse,
+    summary="List verified Dataset Maker trainer contracts",
+)
+def get_dataset_trainers() -> TrainerContractsResponse:
+    return get_trainer_contracts_response()
+
+
+def _run_dataset_readiness_job(
+    payload: DatasetReadinessRequest,
+    handle: BulkJobHandle,
+) -> None:
+    def update_progress(processed: int, total: int, message: str) -> None:
+        handle.set_progress(processed=processed, total=total, message=message)
+
+    try:
+        report = run_dataset_readiness(
+            payload,
+            readiness_report_id=handle.job_id,
+            progress_callback=update_progress,
+            cancellation_requested=lambda: handle.cancelled,
+        )
+    except DatasetReadinessCancelledError:
+        return
+    proof_store = get_readiness_proof_store()
+    proof = proof_store.prepare(report, dataset_readiness_fingerprint(payload))
+    handle.commit_result(
+        publish_callback=lambda: proof_store.publish(proof),
+        result=report.model_dump(mode="json"),
+        processed=report.summary.processed,
+        total=report.summary.total_requested,
+        message=f"Dataset readiness finished: {report.summary.status}",
+    )
+
+
+@router.post(
+    "/dataset/readiness/start",
+    response_model=DatasetReadinessStartResponse,
+    status_code=202,
+    summary="Start a read-only Dataset Maker readiness job",
+)
+def post_dataset_readiness_start(
+    payload: DatasetReadinessRequest,
+    background_tasks: BackgroundTasks,
+) -> DatasetReadinessStartResponse:
+    _validate_export_request_read_only(payload)
+    total = _requested_item_count(payload)
+    service = get_bulk_job_service()
+    job_id = service.create_job(
+        JOB_KIND_DATASET_READINESS,
+        total=total,
+        message="Queued",
+    )
+
+    def worker(handle: BulkJobHandle) -> None:
+        _run_dataset_readiness_job(payload, handle)
+
+    background_tasks.add_task(service.run_job, job_id, worker)
+    return DatasetReadinessStartResponse(
+        id=job_id,
+        job_id=job_id,
+        kind=JOB_KIND_DATASET_READINESS,
+        status="queued",
+        total=total,
+        processed=0,
+        message="Queued",
+    )
+
+
 @router.post(
     "/dataset/export",
     response_model=DatasetExportResponse,
@@ -100,6 +222,8 @@ router = APIRouter(prefix="/api", tags=["dataset"])
 def post_dataset_export(payload: DatasetExportRequest) -> DatasetExportResponse:
     try:
         return export_dataset(payload)
+    except AnnotationSelectionResolutionError as exc:
+        raise _annotation_selection_conflict(exc) from exc
     except HTTPException:
         raise
     except Exception as exc:
@@ -121,6 +245,8 @@ def post_dataset_export(payload: DatasetExportRequest) -> DatasetExportResponse:
 def post_dataset_export_preview(payload: DatasetExportPreviewRequest) -> Dict[str, Any]:
     try:
         return preview_dataset_export(payload)
+    except AnnotationSelectionResolutionError as exc:
+        raise _annotation_selection_conflict(exc) from exc
     except HTTPException:
         raise
     except Exception as exc:
@@ -129,12 +255,6 @@ def post_dataset_export_preview(payload: DatasetExportPreviewRequest) -> Dict[st
             status_code=500,
             detail="Dataset export preview failed. / 数据集导出预览失败。",
         ) from exc
-
-
-class DatasetExportJobRequest(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    job_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
 
 
 @router.post(
@@ -147,9 +267,14 @@ class DatasetExportJobRequest(BaseModel):
         409: {"description": "Another dataset export is already running"},
     },
 )
-def post_dataset_export_start(payload: DatasetExportRequest) -> DatasetExportStartResponse:
+def post_dataset_export_start(
+    payload: DatasetExportRequest,
+    background_tasks: BackgroundTasks,
+) -> DatasetExportStartResponse:
     try:
-        return start_dataset_export(payload)
+        return start_dataset_export(payload, background_tasks)
+    except AnnotationSelectionResolutionError as exc:
+        raise _annotation_selection_conflict(exc) from exc
     except HTTPException:
         raise
     except Exception as exc:
@@ -160,41 +285,22 @@ def post_dataset_export_start(payload: DatasetExportRequest) -> DatasetExportSta
         ) from exc
 
 
-@router.get(
-    "/dataset/export/progress",
-    summary="Get background dataset export progress",
-)
-def get_dataset_export_job_progress(job_id: Optional[str] = None) -> Dict[str, Any]:
-    try:
-        return get_dataset_export_progress(job_id=job_id)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception("Dataset export progress failed")
-        raise HTTPException(
-            status_code=500,
-            detail="Dataset export progress failed. / 获取导出进度失败。",
-        ) from exc
-
-
 @router.post(
-    "/dataset/export/cancel",
-    summary="Cancel the active background dataset export job",
+    "/dataset/package-verifications",
+    response_model=DatasetPackageVerificationResponse,
+    summary="Verify an existing Dataset Export Package v2",
+    responses={
+        200: {"description": "Typed package integrity result"},
+        400: {"description": "Invalid package folder"},
+    },
 )
-def post_dataset_export_cancel(
-    payload: Optional[DatasetExportJobRequest] = None,
-) -> Dict[str, Any]:
+def post_dataset_package_verification(
+    payload: DatasetPackageVerificationRequest,
+) -> DatasetPackageVerificationResponse:
     try:
-        return cancel_dataset_export(job_id=payload.job_id if payload else None)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception("Dataset export cancel failed")
-        raise HTTPException(
-            status_code=500,
-            detail="Dataset export cancel failed. / 取消导出失败。",
-        ) from exc
-
+        return verify_dataset_package(payload)
+    except PackageIntegrityError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 # ------------------------------ folder-scan ------------------------------
 

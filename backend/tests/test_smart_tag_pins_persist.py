@@ -29,6 +29,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from services.smart_tag_service import _persist_result  # noqa: E402
+from tag_writer_provenance import TagWriterProvenance  # noqa: E402
 
 
 def _add_image(db, path: str) -> int:
@@ -263,6 +264,34 @@ def test_manual_rows_survive_pipeline_persist(test_db):
     assert manual_rows[0]["confidence"] == 1.0  # the user's row, not the 0.4 duplicate
     tagger_row = next(r for r in rows if r["tag"] == "1girl")
     assert tagger_row["source"] == "tagger"
+
+
+def test_smart_tag_explicitly_invalidates_prior_wd14_writer_identity(test_db):
+    db = test_db
+    image_id = _add_image(db, "/pins/persist/writer-provenance.png")
+    provenance = TagWriterProvenance(
+        writer_family="wd14",
+        provider="huggingface",
+        model="SmilingWolf/wd-swinv2-tagger-v3",
+        revision=f"sha256:{'a' * 64}",
+        runtime_provider="CPUExecutionProvider",
+    )
+    db.add_tags_batch(
+        [
+            {
+                "image_id": image_id,
+                "tags": [{"tag": "wd14_tag", "confidence": 0.9}],
+                "content_fingerprint": "b" * 64,
+                "writer_provenance": provenance.model_dump(mode="python"),
+            }
+        ],
+        default_source="tagger",
+        replace_scope="pipeline",
+    )
+
+    _persist_result(image_id, _result(caption="smart tag result"), "replace")
+
+    assert db.get_tag_writer_provenance_map([image_id]) == {}
 
 
 # ===========================================================================

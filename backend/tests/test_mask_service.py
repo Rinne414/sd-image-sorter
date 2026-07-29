@@ -21,6 +21,9 @@ import database as db
 from services import mask_service
 
 
+pytestmark = pytest.mark.usefixtures("authorize_legacy_dataset_exports")
+
+
 def _data_url(mode="L", size=(32, 32), color=255):
     image = Image.new(mode, size, color=color)
     buffer = _io.BytesIO()
@@ -196,6 +199,27 @@ class TestMaskExport:
         for index in range(1, 4):
             assert (out / f"mychar_{index:03d}.png").exists()
             assert (out / "mask" / f"mychar_{index:03d}.png").exists()
+
+    def test_path_source_requested_mask_is_counted_missing(self, tmp_path, masks_dir):
+        from services.dataset_export.engine import export_dataset
+        from services.dataset_export.models import DatasetExportRequest
+
+        source = tmp_path / "local-source.png"
+        Image.new("RGB", (32, 32), color=(120, 60, 30)).save(source)
+        out = tmp_path / "out-local-mask"
+        request = DatasetExportRequest(
+            image_paths=[str(source)],
+            output_folder=str(out),
+            naming_pattern="{filename}",
+            image_overrides={str(source.resolve()): "subject"},
+            mask_export="kohya",
+        )
+
+        result = export_dataset(request)
+
+        assert result.status == "ok"
+        assert result.masks_written == 0
+        assert result.masks_missing == 1
 
     def test_mask_export_none_writes_nothing(self, test_client, test_db, tmp_path, masks_dir):
         ids = self._stage_three(tmp_path)

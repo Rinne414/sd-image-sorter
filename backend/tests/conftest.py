@@ -11,6 +11,8 @@ import os
 import sys
 import json
 import tempfile
+import time
+import uuid
 from pathlib import Path
 from typing import Generator, Dict
 
@@ -322,6 +324,15 @@ def test_client(test_db):
         # do not leak into another's /api/bulk-jobs list (Debt-22).
         from services.bulk_job_service import BulkJobService, set_bulk_job_service
         set_bulk_job_service(BulkJobService())
+        from services.dataset_export.readiness_proof_store import (
+            ReadinessProofStore,
+            set_readiness_proof_store,
+        )
+        set_readiness_proof_store(ReadinessProofStore(
+            ttl_seconds=15 * 60,
+            capacity=50,
+            clock=time.time,
+        ))
 
         client = TestClient(app)
         client.test_db = db
@@ -331,6 +342,7 @@ def test_client(test_db):
         # Cleanup
         set_tagging_pipeline_service(None)
         set_bulk_job_service(None)
+        set_readiness_proof_store(None)
         db.DATABASE_PATH = original_path
         db._pragmas_initialized = set()
         try:
@@ -344,6 +356,69 @@ def test_client(test_db):
                 os.environ.pop(_key, None)
             else:
                 os.environ[_key] = _orig
+
+
+@pytest.fixture
+def authorize_legacy_dataset_exports(request, monkeypatch):
+    """Attach a real in-process Readiness proof to legacy export test calls."""
+    if "test_client" not in request.fixturenames:
+        return
+    test_client = request.getfixturevalue("test_client")
+    from fastapi import HTTPException
+    from pydantic import ValidationError
+
+    from services.dataset_export.models import DatasetReadinessRequest
+    from services.dataset_export.readiness import (
+        dataset_readiness_fingerprint,
+        run_dataset_readiness,
+    )
+    from services.dataset_export.readiness_proof_store import (
+        get_readiness_proof_store,
+    )
+
+    original_post = test_client.post
+
+    def post_with_readiness(url, *args, **kwargs):
+        raw_payload = kwargs.get("json")
+        headers = kwargs.get("headers") or {}
+        skip_proof = headers.get("X-Test-Readiness-Proof") == "omit"
+        is_export = url in {"/api/dataset/export", "/api/dataset/export/start"}
+        already_authorized = isinstance(raw_payload, dict) and bool(
+            raw_payload.get("readiness_report_id")
+        )
+        if not is_export or skip_proof or already_authorized:
+            return original_post(url, *args, **kwargs)
+        if not isinstance(raw_payload, dict):
+            return original_post(url, *args, **kwargs)
+        try:
+            request = DatasetReadinessRequest.model_validate(raw_payload)
+            report_id = uuid.uuid4().hex
+            report = run_dataset_readiness(
+                request,
+                readiness_report_id=report_id,
+                progress_callback=lambda _processed, _total, _message: None,
+                cancellation_requested=lambda: False,
+            )
+        except ValidationError:
+            return original_post(url, *args, **kwargs)
+        except HTTPException:
+            return original_post(
+                "/api/dataset/readiness/start",
+                json=raw_payload,
+            )
+        proof_store = get_readiness_proof_store()
+        proof_store.publish(proof_store.prepare(
+            report,
+            dataset_readiness_fingerprint(request),
+        ))
+        kwargs["json"] = {
+            **raw_payload,
+            "readiness_report_id": report.report_id,
+            "readiness_input_fingerprint": report.input_fingerprint,
+        }
+        return original_post(url, *args, **kwargs)
+
+    monkeypatch.setattr(test_client, "post", post_with_readiness)
 
 
 # ============================================================================

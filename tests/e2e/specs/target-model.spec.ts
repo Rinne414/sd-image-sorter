@@ -204,11 +204,19 @@ test('token budget follows the target model (75 CLIP vs 512 Qwen-VL)', async ({ 
   await expect(page.locator('#dataset-token-counter')).not.toHaveClass(/dataset-token-counter-over/)
 })
 
-test('choice persists across reloads', async ({ page }) => {
+test('draft choice persists when Dataset Maker reopens after a reload', async ({ page }) => {
   await seedDatasetQueue(page)
   await chooseTargetModel(page, 'flux')
+  await expect.poll(() => page.evaluate(() => {
+    const stored = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session') || '{}')
+    return stored.settings?.target_model || ''
+  })).toBe('flux')
   await page.reload()
   await page.waitForLoadState('networkidle')
+  await page.evaluate(() => (window as any).App.switchView('dataset'))
+  await page.waitForFunction(() =>
+    (window as any).DatasetMaker?._trainerContractState?.status === 'ready'
+    && (window as any).DatasetMaker?._pendingProjectSettings === null)
   await expect(page.locator('#dataset-target-model')).toHaveValue('flux')
 })
 test('steps estimator: kohya math, live inputs, hidden when queue empty', async ({ page }) => {

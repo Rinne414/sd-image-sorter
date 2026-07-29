@@ -78,6 +78,7 @@ async def count_images(
     color_hues: Optional[str] = Query(default=None),
     exclude_color_hues: Optional[str] = Query(default=None),
     collection_id: Optional[int] = Query(default=None, ge=1),
+    scope: Optional[str] = Query(default=None, pattern="^(current_session|library)$"),
     folder: Optional[str] = Query(default=None, max_length=4096),
     has_metadata: Optional[bool] = Query(default=None),
     # Aurora Phase 3 gallery filters
@@ -137,6 +138,7 @@ async def count_images(
         color_hues=color_hues,
         exclude_color_hues=exclude_color_hues,
         collection_id=collection_id,
+        scope=scope,
         folder=folder,
         has_metadata=has_metadata,
         no_caption=no_caption,

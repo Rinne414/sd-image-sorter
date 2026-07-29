@@ -64,7 +64,7 @@ class SimilarityService:
         index = get_similarity_index(db)
         return index.request_cancel()
 
-    def _resolve_scope_ids(self, collection_id: Optional[int]) -> Optional[set]:
+    def _resolve_scope_ids(self, collection_id: Optional[int], scope: Optional[str] = None) -> Optional[set]:
         """Resolve a collection scope into a set of allowed image ids.
 
         Returns ``None`` when no scope is requested (whole-library search, the
@@ -73,9 +73,19 @@ class SimilarityService:
         members" — callers short-circuit to an empty result without touching the
         index.
         """
-        if not collection_id or collection_id <= 0:
-            return None
-        return set(db.get_collection_image_ids(collection_id))
+        if scope not in (None, "current_session", "library"):
+            raise HTTPException(status_code=400, detail="scope must be current_session or library")
+        session_ids = set(db.get_gallery_session_image_ids()) if scope == "current_session" else None
+        collection_ids = (
+            set(db.get_collection_image_ids(collection_id))
+            if collection_id and collection_id > 0
+            else None
+        )
+        if session_ids is None:
+            return collection_ids
+        if collection_ids is None:
+            return session_ids
+        return session_ids & collection_ids
 
     @staticmethod
     def _empty_search_result(image_id: Optional[int], limit: int, offset: int) -> dict:
@@ -101,6 +111,7 @@ class SimilarityService:
         threshold: float = 0.5,
         offset: int = 0,
         collection_id: Optional[int] = None,
+        scope: Optional[str] = None,
     ) -> dict:
         """
         Find images similar to a given image ID.
@@ -110,7 +121,7 @@ class SimilarityService:
         that collection's members (e.g. Favorites); ``None`` searches the whole
         library.
         """
-        allowed_ids = self._resolve_scope_ids(collection_id)
+        allowed_ids = self._resolve_scope_ids(collection_id, scope)
         if allowed_ids is not None and not allowed_ids:
             return self._empty_search_result(image_id, limit, offset)
 
@@ -177,6 +188,7 @@ class SimilarityService:
         image_id: int,
         limit: int = 24,
         collection_id: Optional[int] = None,
+        scope: Optional[str] = None,
     ) -> dict:
         """Return the top-K nearest images to ``image_id`` (no threshold).
 
@@ -184,7 +196,7 @@ class SimilarityService:
         "near-duplicates / most-similar" action. Scoped to a collection when
         ``collection_id`` is given.
         """
-        allowed_ids = self._resolve_scope_ids(collection_id)
+        allowed_ids = self._resolve_scope_ids(collection_id, scope)
         if allowed_ids is not None and not allowed_ids:
             return {"query_image_id": image_id, "results": [], "count": 0}
         with db.get_db() as conn:
@@ -216,6 +228,7 @@ class SimilarityService:
         threshold: float = 0.5,
         offset: int = 0,
         collection_id: Optional[int] = None,
+        scope: Optional[str] = None,
     ) -> dict:
         """
         Find images similar to an uploaded image.
@@ -237,7 +250,7 @@ class SimilarityService:
         if not image_data:
             raise HTTPException(status_code=400, detail="Empty file uploaded")
 
-        allowed_ids = self._resolve_scope_ids(collection_id)
+        allowed_ids = self._resolve_scope_ids(collection_id, scope)
         if allowed_ids is not None and not allowed_ids:
             await file.close()
             return self._empty_search_result(None, limit, offset)
@@ -274,11 +287,12 @@ class SimilarityService:
         threshold: float = 0.0,
         offset: int = 0,
         collection_id: Optional[int] = None,
+        scope: Optional[str] = None,
     ) -> dict:
         """Semantic text search over the stored CLIP embeddings (same scope
         + pagination semantics as the upload search; RuntimeError from a
         not-yet-downloaded text tower maps to 503 so the UI can explain)."""
-        allowed_ids = self._resolve_scope_ids(collection_id)
+        allowed_ids = self._resolve_scope_ids(collection_id, scope)
         if allowed_ids is not None and not allowed_ids:
             return self._empty_search_result(None, limit, offset)
 

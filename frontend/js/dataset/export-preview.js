@@ -32,6 +32,15 @@
         previewAbortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
         const list = document.getElementById('dataset-export-preview-list');
         if (!list) return;
+        try {
+            DM._requireDatasetTrigger(
+                document.getElementById('dataset-trigger')?.value || '',
+                'settings.caption_render.trigger',
+            );
+        } catch (error) {
+            if (error instanceof TypeError || error instanceof RangeError) return;
+            throw error;
+        }
         const outputMode = DM._outputMode?.() || 'folder';
         const items = DM.imageIds || [];
         const logicalCount = DM._getLogicalDatasetCount?.() || items.length;
@@ -259,14 +268,18 @@
 
     function bindExportPreview() {
         let previewTimer = null;
-        const schedule = () => {
+        const schedule = (event) => {
+            if (
+                event.currentTarget?.id === 'dataset-trigger'
+                && (event.isComposing || DM._datasetTriggerComposing)
+            ) return;
             if (previewTimer) clearTimeout(previewTimer);
             previewTimer = setTimeout(() => {
                 previewTimer = null;
                 refreshExportPreview();
             }, 250);
         };
-        for (const id of ['dataset-trigger', 'dataset-naming-pattern']) {
+        for (const id of ['dataset-naming-pattern']) {
             document.getElementById(id)?.addEventListener('input', schedule);
         }
         document.querySelectorAll('input[name="dataset-naming-preset"]').forEach((r) => {

@@ -11,6 +11,248 @@
     'use strict';
     if (!window.DatasetMaker) return;
     const DM = window.DatasetMaker;
+    const EXPORT_JOB_STORAGE_KEY = 'sd-image-sorter-dataset-export-job';
+    const EXPORT_JOB_ACTIVE_STATUSES = new Set(['queued', 'running']);
+    const EXPORT_JOB_TERMINAL_STATUSES = new Set(['done', 'error', 'cancelled']);
+    const DATASET_EXPORT_RESULT_STATUSES = new Set(['ok', 'partial', 'failed', 'cancelled']);
+    const EXPORT_JOB_ID_MAX_LENGTH = 64;
+    const READINESS_CONFLICT_CODES = new Set([
+        'readiness_report_required',
+        'readiness_report_not_found',
+        'readiness_report_expired',
+        'readiness_report_wrong_kind',
+        'readiness_report_cancelled',
+        'readiness_report_not_ready',
+        'readiness_report_unavailable',
+        'readiness_rule_mismatch',
+        'readiness_request_mismatch',
+        'readiness_fingerprint_mismatch',
+        'readiness_input_mismatch',
+        'readiness_blocked',
+    ]);
+
+    const invalidExportResponse = message => new Error(`Invalid dataset export API response: ${message}`);
+
+    const requireRecord = (value, path) => {
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+            throw invalidExportResponse(`${path} must be an object`);
+        }
+        return value;
+    };
+
+    const requireString = (value, path) => {
+        if (typeof value !== 'string') {
+            throw invalidExportResponse(`${path} must be a string`);
+        }
+        return value;
+    };
+
+    const requireNullableString = (value, path) => {
+        if (value !== null && typeof value !== 'string') {
+            throw invalidExportResponse(`${path} must be a string or null`);
+        }
+        return value;
+    };
+
+    const requireNonNegativeSafeInteger = (value, path) => {
+        if (!Number.isSafeInteger(value) || value < 0) {
+            throw invalidExportResponse(`${path} must be a non-negative safe integer`);
+        }
+        return value;
+    };
+
+    const requireBoolean = (value, path) => {
+        if (typeof value !== 'boolean') {
+            throw invalidExportResponse(`${path} must be a boolean`);
+        }
+        return value;
+    };
+
+    const requireStringArray = (value, path) => {
+        if (!Array.isArray(value)) {
+            throw invalidExportResponse(`${path} must be an array`);
+        }
+        return value.map((item, index) => requireString(item, `${path}[${index}]`));
+    };
+
+    const parseExportJobId = (value, path) => {
+        const jobId = requireString(value, path);
+        if (!jobId.trim() || jobId.length > EXPORT_JOB_ID_MAX_LENGTH) {
+            throw invalidExportResponse(`${path} must be non-empty and at most ${EXPORT_JOB_ID_MAX_LENGTH} characters`);
+        }
+        return jobId;
+    };
+
+    const parseExportStartResponse = value => {
+        const data = requireRecord(value, 'start response');
+        if (data.status !== 'started') {
+            throw invalidExportResponse("start response.status must be 'started'");
+        }
+        return {
+            status: 'started',
+            job_id: parseExportJobId(data.job_id, 'start response.job_id'),
+            total: requireNonNegativeSafeInteger(data.total, 'start response.total'),
+            output_folder: requireString(data.output_folder, 'start response.output_folder'),
+            message: requireString(data.message, 'start response.message'),
+        };
+    };
+
+    const parseReadinessConflict = value => {
+        const detail = requireRecord(value, 'readiness conflict');
+        const code = requireString(detail.code, 'readiness conflict.code');
+        if (!READINESS_CONFLICT_CODES.has(code)) {
+            throw invalidExportResponse(`readiness conflict.code is not supported: ${code}`);
+        }
+        if (!Array.isArray(detail.issues)) {
+            throw invalidExportResponse('readiness conflict.issues must be an array');
+        }
+        return {
+            code,
+            message: requireString(detail.message, 'readiness conflict.message'),
+            action: requireString(detail.action, 'readiness conflict.action'),
+            reportId: requireNullableString(detail.report_id, 'readiness conflict.report_id'),
+            expectedInputFingerprint: requireNullableString(
+                detail.expected_input_fingerprint,
+                'readiness conflict.expected_input_fingerprint',
+            ),
+            observedInputFingerprint: requireNullableString(
+                detail.observed_input_fingerprint,
+                'readiness conflict.observed_input_fingerprint',
+            ),
+            ruleVersion: requireString(detail.rule_version, 'readiness conflict.rule_version'),
+        };
+    };
+
+    const readOptionalExportProgress = value => {
+        const data = requireRecord(value, 'job result.progress');
+        const progress = {};
+        const integerFields = ['current', 'total', 'exported', 'skipped', 'errors'];
+        const stringFields = ['step', 'message', 'output_folder', 'output_mode'];
+        integerFields.forEach(field => {
+            if (Object.hasOwn(data, field)) {
+                progress[field] = requireNonNegativeSafeInteger(data[field], `job result.progress.${field}`);
+            }
+        });
+        stringFields.forEach(field => {
+            if (Object.hasOwn(data, field)) {
+                progress[field] = requireString(data[field], `job result.progress.${field}`);
+            }
+        });
+        if (Object.hasOwn(data, 'current_item')) {
+            progress.current_item = requireNullableString(data.current_item, 'job result.progress.current_item');
+        }
+        if (Object.hasOwn(data, 'recent_errors')) {
+            progress.recent_errors = requireStringArray(data.recent_errors, 'job result.progress.recent_errors');
+        }
+        if (Object.hasOwn(data, 'items_truncated')) {
+            progress.items_truncated = requireBoolean(data.items_truncated, 'job result.progress.items_truncated');
+        }
+        return progress;
+    };
+
+    const parseExportResultItem = (value, index) => {
+        const path = `job result.items[${index}]`;
+        const data = requireRecord(value, path);
+        return {
+            image_id: requireNonNegativeSafeInteger(data.image_id, `${path}.image_id`),
+            src_image_path: requireNullableString(data.src_image_path, `${path}.src_image_path`),
+            dst_image_path: requireNullableString(data.dst_image_path, `${path}.dst_image_path`),
+            dst_caption_path: requireNullableString(data.dst_caption_path, `${path}.dst_caption_path`),
+            skipped_reason: requireNullableString(data.skipped_reason, `${path}.skipped_reason`),
+            error: requireNullableString(data.error, `${path}.error`),
+        };
+    };
+
+    const parseExportResult = value => {
+        const data = requireRecord(value, 'job result');
+        if (!DATASET_EXPORT_RESULT_STATUSES.has(data.status)) {
+            throw invalidExportResponse('job result.status is not supported');
+        }
+        if (!Array.isArray(data.items)) {
+            throw invalidExportResponse('job result.items must be an array');
+        }
+        return {
+            status: data.status,
+            exported: requireNonNegativeSafeInteger(data.exported, 'job result.exported'),
+            skipped: requireNonNegativeSafeInteger(data.skipped, 'job result.skipped'),
+            error_count: requireNonNegativeSafeInteger(data.error_count, 'job result.error_count'),
+            masks_written: requireNonNegativeSafeInteger(data.masks_written, 'job result.masks_written'),
+            masks_missing: requireNonNegativeSafeInteger(data.masks_missing, 'job result.masks_missing'),
+            trainer_config_path: requireNullableString(data.trainer_config_path, 'job result.trainer_config_path'),
+            output_folder: requireString(data.output_folder, 'job result.output_folder'),
+            output_mode: requireString(data.output_mode, 'job result.output_mode'),
+            items: data.items.map(parseExportResultItem),
+            total_items: requireNonNegativeSafeInteger(data.total_items, 'job result.total_items'),
+            items_truncated: requireBoolean(data.items_truncated, 'job result.items_truncated'),
+            error_messages: requireStringArray(data.error_messages, 'job result.error_messages'),
+        };
+    };
+
+    const parseExportJobResponse = (value, expectedJobId) => {
+        const data = requireRecord(value, 'job response');
+        const id = parseExportJobId(data.id, 'job response.id');
+        const jobId = parseExportJobId(data.job_id, 'job response.job_id');
+        if (id !== expectedJobId || jobId !== expectedJobId) {
+            throw invalidExportResponse('job_id must match the requested job');
+        }
+        if (data.kind !== 'dataset_export') {
+            throw invalidExportResponse("job response.kind must be 'dataset_export'");
+        }
+        const statuses = new Set([...EXPORT_JOB_ACTIVE_STATUSES, ...EXPORT_JOB_TERMINAL_STATUSES]);
+        if (!statuses.has(data.status)) {
+            throw invalidExportResponse('job response.status is not supported');
+        }
+        const rawResult = requireRecord(data.result, 'job response.result');
+        let result = {};
+        if (EXPORT_JOB_ACTIVE_STATUSES.has(data.status)) {
+            if (Object.hasOwn(rawResult, 'progress')) {
+                result = { progress: readOptionalExportProgress(rawResult.progress) };
+            }
+        } else if (Object.keys(rawResult).length > 0) {
+            result = parseExportResult(rawResult);
+            if (data.status === 'cancelled' && result.status !== 'cancelled') {
+                throw invalidExportResponse("cancelled job result.status must be 'cancelled'");
+            }
+            if (data.status === 'done' && result.status === 'cancelled') {
+                throw invalidExportResponse("done job result.status must not be 'cancelled'");
+            }
+            if (data.status === 'error' && result.status !== 'failed') {
+                throw invalidExportResponse("error job result.status must be 'failed'");
+            }
+        } else if (data.status === 'done' || data.status === 'cancelled') {
+            throw invalidExportResponse(`${data.status} job response must include a complete result`);
+        }
+        return {
+            id,
+            job_id: jobId,
+            kind: 'dataset_export',
+            status: data.status,
+            total: requireNonNegativeSafeInteger(data.total, 'job response.total'),
+            processed: requireNonNegativeSafeInteger(data.processed, 'job response.processed'),
+            error_count: requireNonNegativeSafeInteger(data.error_count, 'job response.error_count'),
+            error_samples: requireStringArray(data.error_samples, 'job response.error_samples'),
+            message: requireString(data.message, 'job response.message'),
+            result,
+        };
+    };
+
+    const exportResultChangesReadinessEvidence = result => (
+        result?.status === 'ok'
+        || result?.status === 'partial'
+        || Number(result?.exported || 0) > 0
+        || Number(result?.masks_written || 0) > 0
+        || typeof result?.trainer_config_path === 'string'
+        || result?.items_truncated === true
+        || (Array.isArray(result?.items) && result.items.some(item => (
+            typeof item?.dst_image_path === 'string' && item.dst_image_path.trim().length > 0
+        )))
+    );
+
+    const invalidateReadinessAfterExport = (datasetMaker, progress, result) => {
+        if (progress?.stale_job_id || exportResultChangesReadinessEvidence(result)) {
+            datasetMaker._markReadinessStale?.();
+        }
+    };
 
     // Shared HTML-escape helper for every user-influenced string that gets
     // interpolated into innerHTML via _t(). _t() does NOT escape its
@@ -23,6 +265,7 @@
 
     // ---------- Confirm modal ----------
     DM._showConfirmModal = function () {
+        this._refreshReadinessStaleness?.();
         if (!this._isReadyToExport()) {
             this._validateOutputFolder();
             const wrap = document.querySelector('.dataset-required-label');
@@ -60,7 +303,9 @@
         if (preset === 'keep') {
             namingLabel = this._t('dataset.namingKeepLabel', 'kept as the original filenames');
         } else if (preset === 'renumber') {
-            const trigger = document.getElementById('dataset-trigger')?.value?.trim() || 'subject';
+            const trigger = this._canonicalDatasetTrigger(
+                document.getElementById('dataset-trigger')?.value || '',
+            ) || 'subject';
             namingLabel = this._t('dataset.namingRenumberLabel',
                 'renumbered: {trigger}_001.png, {trigger}_002.png, ...',
                 { trigger: escapeHtml(trigger) });
@@ -71,19 +316,7 @@
         }
 
         const logicalCount = this._getLogicalDatasetCount?.() || this.imageIds.length;
-        const loadedCount = this.imageIds.length;
-        const loadedOnlyChecks = logicalCount !== loadedCount;
         const editedCount = this.captionEdits.size;
-
-        // v3.2.2 (issue #5 follow-up): warn the user if they're about to
-        // export images with empty captions. Common knowledge-gap mistake:
-        // user adds 50 images, forgets to click "Tag all", exports a folder
-        // full of .png + empty .txt that train-on-nothing.
-        const untaggedCount = this.imageIds.filter(id => {
-            if (this.captionEdits.has(id)) return false;
-            const cap = this.captions.get(id);
-            return !cap || String(cap).trim().length === 0;
-        }).length;
 
         const items = [
             this._t('dataset.confirmSummaryImages',
@@ -106,48 +339,11 @@
                     { naming: escapeHtml(namingLabel) }),
             );
         }
-        if (loadedOnlyChecks) {
-            items.push(`<span class="dataset-confirm-warn">${this._t('dataset.confirmSummaryManifestPreview',
-                'Only {loaded} previews are loaded in the browser; export will still include all {total} manifest images. Caption/size warnings below only cover loaded previews.',
-                { loaded: loadedCount, total: logicalCount })}</span>`);
-        }
         if (editedCount > 0) {
             items.push(this._t('dataset.confirmSummaryEdited',
                 '<strong>{count}</strong> have your manually-edited captions',
                 { count: editedCount }));
         }
-        if (untaggedCount > 0) {
-            items.push(`<span class="dataset-confirm-warn">${this._t('dataset.confirmSummaryUntagged',
-                '⚠️ <strong>{count}</strong> have empty captions — their .txt files will be blank. Run "Tag all" first or write captions in Workbench.',
-                { count: untaggedCount })}</span>`);
-        }
-
-        // LoRA-trainer guidance: warn when the dataset is below the
-        // size most trainers consider workable (~15-50 images for a
-        // character LoRA). Empty / tiny datasets are the most common
-        // reason a noob's first LoRA comes out broken.
-        if (logicalCount > 0 && logicalCount < 10) {
-            items.push(`<span class="dataset-confirm-warn">${this._t('dataset.confirmSummaryFewImages',
-                '⚠️ Only <strong>{count}</strong> images. Most LoRA trainers want 15-50 images for a stable character/style; below 10 the model may not generalize.',
-                { count: logicalCount })}</span>`);
-        }
-
-        // Dimension warning - count images with a side under 512 px,
-        // which is the floor below which any base model has to upscale
-        // (and that quality loss tends to bleed into the trained LoRA).
-        let smallCount = 0;
-        for (const id of this.imageIds) {
-            const meta = this.meta.get(id);
-            const w = Number((meta && meta.width) || 0);
-            const h = Number((meta && meta.height) || 0);
-            if (w > 0 && h > 0 && Math.min(w, h) < 512) smallCount++;
-        }
-        if (smallCount > 0) {
-            items.push(`<span class="dataset-confirm-warn">${this._t('dataset.confirmSummarySmallImages',
-                '⚠️ <strong>{count}</strong> images have a side under 512 px — most trainers will upscale them, which hurts quality. Replace with higher-resolution sources if possible.',
-                { count: smallCount })}</span>`);
-        }
-
         // innerHTML sink: `items` is trusted markup. Every entry interpolates
         // only numeric counts or escapeHtml()-wrapped strings (action label,
         // folder, naming). Any new item that embeds user-influenced text MUST
@@ -168,6 +364,72 @@
     // to exist here but was wholesale redefined by local-import at load
     // time (dead code), so it was removed. The wire-format key set is
     // pinned by tests/e2e/specs/dataset-payload-contract.spec.ts.
+
+    DM._reportExportStorageError = function (operation, error) {
+        const details = {
+            operation,
+            message: error instanceof Error ? error.message : String(error),
+        };
+        console.error('dataset_export_session_storage_failed', details);
+        this._toast(
+            this._t('dataset.exportJobStorageFailed',
+                'Export progress could not be saved for refresh recovery: {message}',
+                { message: details.message }),
+            'error',
+            6000,
+        );
+    };
+
+    DM._storeExportJobId = function (jobId) {
+        try {
+            sessionStorage.setItem(
+                EXPORT_JOB_STORAGE_KEY,
+                parseExportJobId(jobId, 'stored job_id'),
+            );
+        } catch (error) {
+            this._reportExportStorageError('write', error);
+        }
+    };
+
+    DM._readStoredExportJobId = function () {
+        try {
+            const jobId = sessionStorage.getItem(EXPORT_JOB_STORAGE_KEY);
+            return jobId === null ? null : parseExportJobId(jobId, 'stored job_id');
+        } catch (error) {
+            this._reportExportStorageError('read', error);
+            return null;
+        }
+    };
+
+    DM._clearStoredExportJobId = function () {
+        try {
+            sessionStorage.removeItem(EXPORT_JOB_STORAGE_KEY);
+        } catch (error) {
+            this._reportExportStorageError('clear', error);
+        }
+    };
+
+    DM._normalizeExportProgress = function (job = {}) {
+        const hasResult = job.result && typeof job.result === 'object' && Object.keys(job.result).length > 0;
+        const rawResult = hasResult ? job.result : {};
+        const activeProgress = rawResult.progress && typeof rawResult.progress === 'object'
+            ? rawResult.progress
+            : {};
+        const terminalResult = hasResult && !rawResult.progress ? rawResult : null;
+        return {
+            ...job,
+            current: Number(job.processed ?? activeProgress.current ?? 0),
+            total: Number(job.total ?? activeProgress.total ?? 0),
+            exported: Number(activeProgress.exported ?? terminalResult?.exported ?? 0),
+            skipped: Number(activeProgress.skipped ?? terminalResult?.skipped ?? 0),
+            errors: Number(job.error_count ?? activeProgress.errors ?? terminalResult?.error_count ?? 0),
+            recent_errors: Array.isArray(job.error_samples) && job.error_samples.length > 0
+                ? job.error_samples
+                : (activeProgress.recent_errors || terminalResult?.error_messages || []),
+            output_folder: activeProgress.output_folder || terminalResult?.output_folder || '',
+            result: terminalResult,
+        };
+    };
 
     DM._setExportBusy = function (busy, options = {}) {
         const btn = document.getElementById('btn-dataset-export');
@@ -195,11 +457,12 @@
         const cancelBtn = document.getElementById('btn-dataset-export-cancel');
         if (progressEl) progressEl.hidden = false;
 
-        const current = Number(progress.current || 0);
-        const total = Number(progress.total || 0);
-        const exported = Number(progress.exported || 0);
-        const errors = Number(progress.errors || 0);
-        const skipped = Number(progress.skipped || 0);
+        const view = this._normalizeExportProgress(progress);
+        const current = view.current;
+        const total = view.total;
+        const exported = view.exported;
+        const errors = view.errors;
+        const skipped = view.skipped;
         const percent = total > 0 ? Math.max(0, Math.min(100, Math.round((current / total) * 100))) : 0;
 
         if (fill) {
@@ -209,7 +472,7 @@
         }
 
         if (text) {
-            const msg = progress.message || this._t('dataset.exportPreparing', 'Preparing export...');
+            const msg = view.message || this._t('dataset.exportPreparing', 'Preparing export...');
             const counts = total > 0
                 ? `${current}/${total} • ${exported} exported${errors ? ` • ${errors} failed` : ''}${skipped ? ` • ${skipped} skipped` : ''}`
                 : `${exported} exported${errors ? ` • ${errors} failed` : ''}`;
@@ -217,8 +480,8 @@
         }
 
         if (cancelBtn) {
-            const cancelling = progress.status === 'cancelling';
-            cancelBtn.hidden = !['starting', 'running', 'cancelling'].includes(progress.status);
+            const cancelling = this._exportCancelRequested === true;
+            cancelBtn.hidden = !['starting', 'queued', 'running'].includes(view.status) && !cancelling;
             cancelBtn.disabled = cancelling;
             cancelBtn.textContent = cancelling
                 ? this._t('dataset.exportCancelling', 'Cancelling...')
@@ -247,14 +510,14 @@
                 (Date.now() - startedAt) > MAX_POLL_DURATION_MS) {
                 return {
                     status: 'failed',
-                    recent_errors: [this._t('dataset.exportJobTimeout',
+                    stale_job_id: false,
+                    error_samples: [this._t('dataset.exportJobTimeout',
                         'The export job did not finish within the polling timeout. Check the output folder, then re-run the export if files are missing.')],
                 };
             }
             let progress;
             try {
-                const qs = jobId ? `?job_id=${encodeURIComponent(jobId)}` : '';
-                const r = await fetch(`/api/dataset/export/progress${qs}`);
+                const r = await fetch(`/api/bulk-jobs/${encodeURIComponent(jobId)}`);
                 if (r.status === 404) {
                     // No such job — e.g. the backend restarted mid-export.
                     // Allow a short grace window before declaring it lost.
@@ -262,7 +525,8 @@
                     if (lostJobCount >= 3) {
                         return {
                             status: 'failed',
-                            recent_errors: [this._t('dataset.exportJobLost',
+                            stale_job_id: true,
+                            error_samples: [this._t('dataset.exportJobLost',
                                 'The export job no longer exists on the backend (it may have restarted). Check the output folder, then re-run the export if files are missing.')],
                         };
                     }
@@ -273,7 +537,7 @@
                     const body = await r.text();
                     throw new Error(body.slice(0, 300) || `Progress failed: ${r.status}`);
                 }
-                progress = await r.json();
+                progress = parseExportJobResponse(await r.json(), jobId);
                 fetchFailures = 0;
             } catch (e) {
                 // Transient fetch errors must not produce a fake "export
@@ -286,24 +550,10 @@
             }
             this._renderExportProgress(progress);
 
-            if (['done', 'failed', 'cancelled'].includes(progress.status)) {
+            if (EXPORT_JOB_TERMINAL_STATUSES.has(progress.status)) {
                 return progress;
             }
-            if (progress.status === 'idle') {
-                // Idle is the backend's "no job" state (e.g. after a restart).
-                // Treat it as terminal after a short grace window so the loop
-                // can't spin at 350ms forever.
-                lostJobCount += 1;
-                if (lostJobCount >= 3) {
-                    return {
-                        status: 'failed',
-                        recent_errors: [this._t('dataset.exportJobLost',
-                            'The export job no longer exists on the backend (it may have restarted). Check the output folder, then re-run the export if files are missing.')],
-                    };
-                }
-            } else {
-                lostJobCount = 0;
-            }
+            lostJobCount = 0;
             // Exponential backoff: a long-running export doesn't need 350ms
             // polling; after 60s of running we stretch toward 5s, which is
             // still snappy enough to feel live on a multi-thousand-image job.
@@ -337,12 +587,53 @@
                 body: JSON.stringify(payload),
             });
             if (!r.ok) {
+                if (r.status === 409) {
+                    let conflictPayload = null;
+                    try {
+                        conflictPayload = await r.json();
+                    } catch (_) {
+                        conflictPayload = null;
+                    }
+                    const hasStructuredCode = conflictPayload
+                        && typeof conflictPayload === 'object'
+                        && !Array.isArray(conflictPayload)
+                        && Object.hasOwn(conflictPayload, 'code');
+                    if (hasStructuredCode) {
+                        this._readinessAcceptedSignature = null;
+                        try {
+                            const conflict = parseReadinessConflict(conflictPayload);
+                            const view = this._readinessView || {};
+                            this._setReadinessView?.({
+                                ...view,
+                                state: 'stale',
+                                message: `${conflict.message} ${conflict.action}`.trim(),
+                                activeJobId: null,
+                                report: null,
+                            });
+                        } catch (error) {
+                            const view = this._readinessView || {};
+                            this._setReadinessView?.({
+                                ...view,
+                                state: 'error',
+                                message: error.message,
+                                activeJobId: null,
+                                report: null,
+                            });
+                        }
+                        this._updateExportEnabled?.();
+                        return;
+                    }
+                    const body = JSON.stringify(conflictPayload ?? {});
+                    this._showResultModal('failed', { errorMessages: [body.slice(0, 400)], output_folder: folder });
+                    return;
+                }
                 const body = await r.text();
                 this._showResultModal('failed', { errorMessages: [body.slice(0, 400)], output_folder: folder });
                 return;
             }
-            const started = await r.json();
-            this._activeExportJobId = started.job_id || null;
+            const started = parseExportStartResponse(await r.json());
+            this._activeExportJobId = started.job_id;
+            this._storeExportJobId(this._activeExportJobId);
             this._renderExportProgress({
                 status: 'running',
                 current: 0,
@@ -353,19 +644,25 @@
                 message: started.message || this._t('dataset.exportRunning', 'Export running...'),
             });
             const progress = await this._pollExportJob(this._activeExportJobId);
-            const result = progress.result || {
+            const view = this._normalizeExportProgress(progress);
+            if (EXPORT_JOB_TERMINAL_STATUSES.has(progress.status) || progress.stale_job_id) {
+                this._clearStoredExportJobId();
+            }
+            const result = view.result || {
                 status: progress.status === 'cancelled' ? 'cancelled' : 'failed',
-                exported: progress.exported || 0,
-                skipped: progress.skipped || 0,
-                error_count: progress.errors || 0,
-                output_folder: progress.output_folder || folder,
-                error_messages: progress.recent_errors || [],
+                exported: view.exported,
+                skipped: view.skipped,
+                error_count: view.errors,
+                output_folder: view.output_folder || folder,
+                error_messages: view.recent_errors,
             };
+            invalidateReadinessAfterExport(this, progress, result);
             this._showResultModal(result.status || (progress.status === 'cancelled' ? 'cancelled' : 'ok'), result);
         } catch (e) {
             this._showResultModal('failed', { errorMessages: [e.message], output_folder: folder });
         } finally {
             this._activeExportJobId = null;
+            this._exportCancelRequested = false;
             this._setExportBusy(false);
             const progressEl = document.getElementById('dataset-export-progress');
             if (progressEl) progressEl.hidden = true;
@@ -374,15 +671,25 @@
 
     DM._cancelExportJob = async function () {
         const jobId = this._activeExportJobId || null;
+        if (!jobId) {
+            this._toast(this._t('dataset.exportJobLost',
+                'The export job no longer exists on the backend (it may have restarted). Check the output folder, then re-run the export if files are missing.'), 'error', 5000);
+            return;
+        }
+        this._exportCancelRequested = true;
         this._setExportBusy(true, { cancelling: true, keepProgressVisible: true });
         try {
-            await fetch('/api/dataset/export/cancel', {
+            const response = await fetch(`/api/bulk-jobs/${encodeURIComponent(jobId)}/cancel`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(jobId ? { job_id: jobId } : {}),
             });
+            if (!response.ok) {
+                const body = await response.text();
+                throw new Error(body.slice(0, 300) || `Cancel failed: ${response.status}`);
+            }
+            this._renderExportProgress(parseExportJobResponse(await response.json(), jobId));
         } catch (e) {
             this._toast(`Cancel failed: ${e.message}`, 'error', 4000);
+            this._exportCancelRequested = false;
             this._setExportBusy(true, { keepProgressVisible: true });
         }
     };
@@ -390,22 +697,31 @@
     DM._resumeExportProgress = async function () {
         if (this._exportResumeChecked) return;
         this._exportResumeChecked = true;
+        const jobId = this._readStoredExportJobId();
+        if (!jobId) return;
+        this._activeExportJobId = jobId;
+        this._setExportBusy(true, { keepProgressVisible: true });
         try {
-            const r = await fetch('/api/dataset/export/progress');
-            if (!r.ok) return;
-            const progress = await r.json();
-            if (!['starting', 'running', 'cancelling'].includes(progress.status)) return;
-            this._activeExportJobId = progress.job_id || null;
-            this._setExportBusy(true, { cancelling: progress.status === 'cancelling', keepProgressVisible: true });
-            this._renderExportProgress(progress);
-            const finalProgress = await this._pollExportJob(this._activeExportJobId);
-            if (finalProgress.result) {
-                this._showResultModal(finalProgress.result.status || 'ok', finalProgress.result);
+            const finalProgress = await this._pollExportJob(jobId);
+            const view = this._normalizeExportProgress(finalProgress);
+            if (EXPORT_JOB_TERMINAL_STATUSES.has(finalProgress.status) || finalProgress.stale_job_id) {
+                this._clearStoredExportJobId();
             }
+            const result = view.result || {
+                status: finalProgress.status === 'cancelled' ? 'cancelled' : 'failed',
+                exported: view.exported,
+                skipped: view.skipped,
+                error_count: view.errors,
+                output_folder: view.output_folder,
+                error_messages: view.recent_errors,
+            };
+            invalidateReadinessAfterExport(this, finalProgress, result);
+            this._showResultModal(result.status || 'failed', result);
         } catch (e) {
             this._toast(`Could not resume export progress: ${e.message}`, 'warning', 5000);
         } finally {
             this._activeExportJobId = null;
+            this._exportCancelRequested = false;
             this._setExportBusy(false);
             const progressEl = document.getElementById('dataset-export-progress');
             if (progressEl) progressEl.hidden = true;
@@ -413,8 +729,31 @@
     };
 
     DM._runExport = async function () {
+        this._refreshReadinessStaleness?.();
+        if (!this._isReadyToExport()) {
+            this._hideConfirmModal();
+            this._toast(this._exportDisabledReason(), 'warning');
+            return;
+        }
         this._hideConfirmModal();
-        const payload = this._buildExportPayload();
+        const report = this._readinessView?.report;
+        if (!report || typeof report.report_id !== 'string' || typeof report.input_fingerprint !== 'string') {
+            this._readinessAcceptedSignature = null;
+            this._setReadinessView?.({
+                ...(this._readinessView || {}),
+                state: 'error',
+                message: 'The accepted Readiness report is missing its export proof.',
+                activeJobId: null,
+                report: null,
+            });
+            this._updateExportEnabled?.();
+            return;
+        }
+        const payload = {
+            ...this._buildExportPayload(),
+            readiness_report_id: report.report_id,
+            readiness_input_fingerprint: report.input_fingerprint,
+        };
         await this._startExportJob(payload);
     };
 

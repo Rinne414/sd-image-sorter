@@ -318,6 +318,7 @@ test('serializeAutoSepFilters fills the full scope shape and normalizes aliases'
   expect(out.empty.tags).toEqual([])
   expect(out.empty.tagMode).toBe('and')
   expect(out.empty.promptMatchMode).toBe('exact')
+  expect(out.empty.scope).toBe('current_session')
   expect(out.empty.folder).toBeNull()
   expect(out.empty.hasMetadata).toBeNull()
 
@@ -325,7 +326,7 @@ test('serializeAutoSepFilters fills the full scope shape and normalizes aliases'
   // key of the serialized object (presence, not just a truthy value).
   const scopeKeys = [
     'excludePrompts', 'excludeColors', 'minUserRating', 'brightnessMin', 'brightnessMax',
-    'colorTemperature', 'brightnessDistribution', 'collectionId', 'hasMetadata',
+    'colorTemperature', 'brightnessDistribution', 'collectionId', 'scope', 'hasMetadata',
   ]
   // The per-item exclude group + the core filter keys must also survive.
   const coreKeys = [

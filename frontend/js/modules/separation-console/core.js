@@ -7,7 +7,7 @@
  * other family file — the original IIFE was strict throughout), the module
  * consts, the i18n + tag-fold helpers, and `const SeparationConsole = {`
  * with the state fields, `get dm()`, init(), _ensureHooks() (the OUTWARD
- * DatasetMaker monkeypatch — _activeChangedHooks.push + captionEdits.set
+ * DatasetMaker monkeypatch — _activeChangedHooks.push + evidence Map writes
  * wrap, guarded by _hooked/__sepconWrapped; the singleton object is never
  * re-created or re-inited by the split), the Dataset Maker state adapter,
  * _scheduleRefresh() and the object-literal `};` closer. Declares the ONE
@@ -103,6 +103,7 @@
             document.getElementById('dataset-editor-textarea')?.addEventListener(
                 'input', () => this._updateTokenCounter());
             this._initRethreshold(details);
+            this._initReviewIssues(details);
         },
         _ensureHooks() {
             const dm = this.dm;
@@ -116,15 +117,45 @@
                 this._markSeen(id);
                 this._updateTokenCounter();
             });
-            // Recompute while the panel is open and captions are being edited.
-            if (dm.captionEdits && !dm.captionEdits.__sepconWrapped) {
-                dm.captionEdits.__sepconWrapped = true;
-                const originalSet = dm.captionEdits.set.bind(dm.captionEdits);
-                dm.captionEdits.set = (key, value) => {
+            // Keep tag rows and review evidence aligned with every caption channel.
+            const wrapEvidenceMap = (evidenceMap) => {
+                if (!evidenceMap || evidenceMap.__sepconWrapped) return;
+                evidenceMap.__sepconWrapped = true;
+                const originalSet = evidenceMap.set.bind(evidenceMap);
+                const originalDelete = evidenceMap.delete.bind(evidenceMap);
+                const originalClear = evidenceMap.clear.bind(evidenceMap);
+                evidenceMap.set = (key, value) => {
                     const out = originalSet(key, value);
+                    this._markReviewDirty?.();
                     this._scheduleRefresh(400);
                     return out;
                 };
+                evidenceMap.delete = (key) => {
+                    const changed = originalDelete(key);
+                    if (changed) {
+                        this._markReviewDirty?.();
+                        this._scheduleRefresh(400);
+                    }
+                    return changed;
+                };
+                evidenceMap.clear = () => {
+                    const changed = evidenceMap.size > 0;
+                    const out = originalClear();
+                    if (changed) {
+                        this._markReviewDirty?.();
+                        this._scheduleRefresh(400);
+                    }
+                    return out;
+                };
+            };
+            for (const evidenceMap of [
+                dm.captions,
+                dm.nlCaptions,
+                dm.captionEdits,
+                dm.nlEdits,
+                dm.captionType,
+            ]) {
+                wrapEvidenceMap(evidenceMap);
             }
         },
 

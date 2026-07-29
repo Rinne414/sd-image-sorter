@@ -2,6 +2,8 @@
 Unit tests for WD14 tagger runtime safety behavior.
 """
 
+import os
+from pathlib import Path
 from typing import Any, List
 import numpy as np
 from PIL import Image
@@ -11,8 +13,11 @@ import tagger as tagger_module
 
 
 @pytest.fixture(autouse=True)
-def reset_session_tracking():
+def reset_session_tracking(tmp_path, monkeypatch):
     """Reset all session tracking state before each test."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "dummy.onnx").write_bytes(b"")
+    (tmp_path / "custom.onnx").write_bytes(b"")
     _FakeInferenceSession.calls = []
     _CpuOnlySessionDespiteCudaRequest.calls = []
     _RuntimeFallbackSession.calls = []
@@ -64,6 +69,24 @@ class _FakeOrtModule:
         return ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
 
+class _SameStatReplacingInferenceSession:
+    def __init__(self, model_path: str, sess_options: Any = None, providers: Any = None):
+        source_stat = os.stat(model_path)
+        Path(model_path).write_bytes(b"modified-model")
+        os.utime(
+            model_path,
+            ns=(source_stat.st_atime_ns, source_stat.st_mtime_ns),
+        )
+        self._providers = list(providers or [])
+
+    def get_providers(self) -> List[str]:
+        return list(self._providers)
+
+
+class _SameStatReplacingOrtModule(_FakeOrtModule):
+    InferenceSession = _SameStatReplacingInferenceSession
+
+
 def _make_score_tagger(monkeypatch, *, threshold: float = 0.5, character_threshold: float = 0.8):
     monkeypatch.setattr(tagger_module, "ort", _FakeOrtModule)
     monkeypatch.setattr(tagger_module, "hf_hub", object())
@@ -73,6 +96,20 @@ def _make_score_tagger(monkeypatch, *, threshold: float = 0.5, character_thresho
         character_threshold=character_threshold,
         use_gpu=False,
     )
+
+
+def test_session_load_rejects_same_stat_model_replacement(monkeypatch, tmp_path):
+    model_path = tmp_path / "same-stat.onnx"
+    model_path.write_bytes(b"original-model")
+    tagger = _make_score_tagger(monkeypatch)
+    monkeypatch.setattr(tagger_module, "ort", _SameStatReplacingOrtModule)
+
+    with pytest.raises(RuntimeError, match="Model file changed"):
+        tagger._create_verified_session(
+            str(model_path),
+            _FakeSessionOptions(),
+            ["CPUExecutionProvider"],
+        )
 
 
 def test_process_probs_applies_general_and_character_thresholds_strictly(monkeypatch):

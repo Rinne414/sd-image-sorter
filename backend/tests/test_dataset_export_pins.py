@@ -6,12 +6,8 @@ test_mask_service / test_underscore_normalize_filename_pairing) leave uncovered,
 so a later decomposition of this 1.7k-line god-file can be proven behavior-neutral.
 
 Focus areas (baseline coverage was 82%):
-  * The module-level JOB-REGISTRY state machine (``_EXPORT_JOB_PROGRESS`` &co) —
-    five module globals with real ``global`` reassignments. This is the #1
-    decomposition hazard: if a split moves any writer to a sibling module and
-    re-exports the globals with ``from x import _EXPORT_JOB_PROGRESS``, the
-    reassignment stops propagating and progress/cancel silently desync. The pins
-    here assert cross-function propagation through the single module namespace.
+  * Dataset Export lifecycle has no private registry state; asynchronous work
+    is owned by the shared BulkJobService contract.
   * Response-shape constants + the three response Pydantic model field sets
     (mirrors the HTTP contract in test_dataset_contract at the unit level).
   * Pure planning / naming / path-safety helpers and their error branches.
@@ -39,6 +35,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import services.dataset_export_service as des
+import services.dataset_export.engine as export_engine
 from services.dataset_export_service import (
     DatasetExportItemResult,
     DatasetExportRequest,
@@ -87,19 +84,23 @@ class TestShapeConstants:
     def test_valid_enum_sets_are_pinned(self):
         assert des.VALID_IMAGE_OPS == {"copy", "move"}
         assert des.VALID_OVERWRITE_POLICIES == {"unique", "overwrite", "skip"}
-        assert des.VALID_MASK_EXPORT_MODES == ("none", "onetrainer", "kohya")
-        assert des.VALID_TRAINER_CONFIGS == ("none", "kohya_toml")
+        assert des.VALID_MASK_EXPORT_MODES == (
+            "none",
+            "onetrainer",
+            "kohya",
+            "anima_lora",
+        )
+        assert des.VALID_TRAINER_CONFIGS == (
+            "none",
+            "kohya_toml",
+            "anima_lora_toml",
+        )
         assert des.TRAINING_TAG_CONTENT_MODES == {
             "tags",
             "caption_tags",
             "caption_merged",
             "tags_nl",
         }
-
-    def test_active_statuses_set_is_pinned(self):
-        # The cancel / start guards read this exact set to decide "already
-        # running" (409) vs "nothing to cancel".
-        assert des._EXPORT_ACTIVE_STATUSES == {"starting", "running", "cancelling"}
 
     def test_nl_compose_modes_alias_matches_shared_engine(self):
         # dataset export and tag export must gate NL-composition identically.
@@ -117,6 +118,9 @@ class TestShapeConstants:
             "masks_written",
             "masks_missing",
             "trainer_config_path",
+            "package_status",
+            "package_run_id",
+            "package_manifest_path",
             "output_folder",
             "output_mode",
             "items",
@@ -146,183 +150,23 @@ class TestShapeConstants:
 
 
 # =========================================================================== #
-# 2. Job-registry state machine — THE dominant decomposition hazard.
-#    Five module globals + `global` reassignments. Every pin restores them.
+# 2. Shared lifecycle boundary.
 # =========================================================================== #
 
 
-@pytest.fixture
-def job_registry_reset():
-    """Snapshot + restore the five job-registry module globals around a test.
+def test_private_export_job_registry_is_removed():
+    removed_names = {
+        "_EXPORT_JOB_LOCK",
+        "_EXPORT_JOB_RUN_ID",
+        "_EXPORT_JOB_THREAD",
+        "_EXPORT_JOB_CANCEL_EVENT",
+        "_EXPORT_JOB_PROGRESS",
+        "_EXPORT_ACTIVE_STATUSES",
+        "get_dataset_export_progress",
+        "cancel_dataset_export",
+    }
 
-    Machine-state isolation: these globals are shared with the real background
-    export worker (test_dataset_export.py). Leaking a fake state would poison it.
-    """
-    saved = (
-        des._EXPORT_JOB_RUN_ID,
-        des._EXPORT_JOB_THREAD,
-        des._EXPORT_JOB_CANCEL_EVENT,
-        dict(des._EXPORT_JOB_PROGRESS),
-    )
-    try:
-        yield
-    finally:
-        des._EXPORT_JOB_RUN_ID = saved[0]
-        des._EXPORT_JOB_THREAD = saved[1]
-        des._EXPORT_JOB_CANCEL_EVENT = saved[2]
-        des._EXPORT_JOB_PROGRESS = saved[3]
-
-    # sanity: the lock is never reassigned, only ever acquired
-    assert isinstance(des._EXPORT_JOB_LOCK, type(threading.Lock()))
-
-
-class TestJobRegistry:
-    def test_all_five_globals_exist(self, job_registry_reset):
-        assert isinstance(des._EXPORT_JOB_PROGRESS, dict)
-        assert isinstance(des._EXPORT_JOB_RUN_ID, int)
-        # thread / cancel-event are Optional and may be None at rest
-        assert des._EXPORT_JOB_THREAD is None or isinstance(
-            des._EXPORT_JOB_THREAD, threading.Thread
-        )
-        assert des._EXPORT_JOB_CANCEL_EVENT is None or isinstance(
-            des._EXPORT_JOB_CANCEL_EVENT, threading.Event
-        )
-
-    def test_get_progress_idle_returns_snapshot_without_404(self, job_registry_reset):
-        des._EXPORT_JOB_PROGRESS = {
-            "status": "idle",
-            "job_id": None,
-            "recent_errors": [],
-        }
-        snap = des.get_dataset_export_progress()
-        assert snap["status"] == "idle"
-        # snapshot is a COPY (mutating it must not affect the live dict)
-        snap["status"] = "mutated"
-        assert des._EXPORT_JOB_PROGRESS["status"] == "idle"
-
-    def test_get_progress_job_id_mismatch_raises_404(self, job_registry_reset):
-        from fastapi import HTTPException
-
-        des._EXPORT_JOB_PROGRESS = {
-            "status": "running",
-            "job_id": "abc",
-            "recent_errors": [],
-        }
-        with pytest.raises(HTTPException) as exc:
-            des.get_dataset_export_progress(job_id="different")
-        assert exc.value.status_code == 404
-
-    def test_get_progress_allows_query_when_no_active_job_id(self, job_registry_reset):
-        # job_id None on the live progress means "any query is fine".
-        des._EXPORT_JOB_PROGRESS = {
-            "status": "idle",
-            "job_id": None,
-            "recent_errors": [],
-        }
-        snap = des.get_dataset_export_progress(job_id="whatever")
-        assert snap["status"] == "idle"
-
-    def test_cancel_when_idle_is_a_noop_not_an_error(self, job_registry_reset):
-        des._EXPORT_JOB_PROGRESS = {
-            "status": "idle",
-            "job_id": None,
-            "recent_errors": [],
-        }
-        des._EXPORT_JOB_CANCEL_EVENT = None
-        out = des.cancel_dataset_export()
-        assert out["status"] == "idle"
-        assert out["message"] == "No dataset export job is running."
-
-    def test_cancel_job_id_mismatch_raises_404(self, job_registry_reset):
-        from fastapi import HTTPException
-
-        des._EXPORT_JOB_PROGRESS = {
-            "status": "running",
-            "job_id": "abc",
-            "recent_errors": [],
-        }
-        with pytest.raises(HTTPException) as exc:
-            des.cancel_dataset_export(job_id="nope")
-        assert exc.value.status_code == 404
-
-    def test_cancel_active_sets_event_and_flips_status_to_cancelling(
-        self, job_registry_reset
-    ):
-        event = threading.Event()
-        des._EXPORT_JOB_CANCEL_EVENT = event
-        des._EXPORT_JOB_PROGRESS = {
-            "status": "running",
-            "job_id": "abc",
-            "current": 2,
-            "total": 5,
-            "recent_errors": [],
-        }
-        out = des.cancel_dataset_export(job_id="abc")
-        assert out["status"] == "cancelling"
-        assert event.is_set()
-        # propagation through the single module namespace (decomposition tripwire)
-        assert des.get_dataset_export_progress(job_id="abc")["status"] == "cancelling"
-
-    def test_set_progress_if_current_true_and_stale(self, job_registry_reset):
-        des._EXPORT_JOB_RUN_ID = 7
-        des._EXPORT_JOB_PROGRESS = {"status": "running", "recent_errors": []}
-        # matching run_id merges + stamps updated_at, returns True
-        assert des._set_export_progress_if_current(7, {"message": "hi"}) is True
-        assert des._EXPORT_JOB_PROGRESS["message"] == "hi"
-        assert "updated_at" in des._EXPORT_JOB_PROGRESS
-        # a stale worker's run_id is ignored (returns False, no mutation)
-        before = dict(des._EXPORT_JOB_PROGRESS)
-        assert des._set_export_progress_if_current(6, {"message": "stale"}) is False
-        assert des._EXPORT_JOB_PROGRESS == before
-
-    def test_set_progress_truncates_recent_errors_to_limit(self, job_registry_reset):
-        des._EXPORT_JOB_RUN_ID = 3
-        des._EXPORT_JOB_PROGRESS = {"status": "running", "recent_errors": []}
-        many = [f"err-{i}" for i in range(50)]
-        des._set_export_progress_if_current(3, {"recent_errors": many})
-        kept = des._EXPORT_JOB_PROGRESS["recent_errors"]
-        assert len(kept) == des.DATASET_EXPORT_RECENT_ERROR_LIMIT
-        assert kept[-1] == "err-49"  # keeps the LAST N
-
-    def test_clear_worker_only_when_run_id_and_event_match(self, job_registry_reset):
-        event = threading.Event()
-        des._EXPORT_JOB_RUN_ID = 9
-        des._EXPORT_JOB_CANCEL_EVENT = event
-        # wrong run_id -> untouched
-        des._clear_export_worker_if_current(8, event)
-        assert des._EXPORT_JOB_CANCEL_EVENT is event
-        # wrong event object -> untouched
-        des._clear_export_worker_if_current(9, threading.Event())
-        assert des._EXPORT_JOB_CANCEL_EVENT is event
-        # both match -> cleared to None
-        des._clear_export_worker_if_current(9, event)
-        assert des._EXPORT_JOB_CANCEL_EVENT is None
-
-    def test_copy_progress_deep_copies_recent_errors(self, job_registry_reset):
-        src = {"status": "running", "recent_errors": ["a", "b"], "result": None}
-        out = des._copy_progress(src)
-        assert out["recent_errors"] == ["a", "b"]
-        assert out["recent_errors"] is not src["recent_errors"]
-        assert out["result"] is None
-
-    def test_copy_progress_serializes_response_result_to_dict(self, job_registry_reset):
-        resp = DatasetExportResponse(
-            status="ok",
-            exported=1,
-            skipped=0,
-            error_count=0,
-            output_folder="/x",
-            items=[],
-            error_messages=[],
-        )
-        out = des._copy_progress({"recent_errors": [], "result": resp})
-        assert isinstance(out["result"], dict)
-        assert out["result"]["status"] == "ok"
-
-    def test_copy_progress_passes_dict_result_through(self, job_registry_reset):
-        payload = {"status": "failed", "exported": 0}
-        out = des._copy_progress({"recent_errors": [], "result": payload})
-        assert out["result"] == payload
+    assert removed_names.isdisjoint(vars(des))
 
 
 # =========================================================================== #
@@ -712,9 +556,15 @@ class TestManifestAndKohya:
 
     def test_kohya_toml_basic_fields(self, tmp_path):
         req = _req(
-            trigger="mychar", trainer_repeats=7, trainer_batch=4, trainer_resolution=768
+            trigger="mychar",
+            trainer_config="kohya_toml",
+            trainer_repeats=7,
+            trainer_batch=4,
+            trainer_resolution=768,
         )
-        out = des._write_kohya_dataset_config(tmp_path, req, masks_written=0)
+        out = des._write_kohya_dataset_config(
+            tmp_path, req, masks_written=0, masks_missing=0
+        )
         content = (tmp_path / "dataset_config.toml").read_text(encoding="utf-8")
         assert out == str(tmp_path / "dataset_config.toml")
         assert "num_repeats = 7" in content
@@ -724,44 +574,65 @@ class TestManifestAndKohya:
         assert "\\" not in content  # forward-slashed paths only
 
     def test_kohya_toml_keep_tokens_emits_shuffle(self, tmp_path):
-        req = _req(trainer_keep_tokens=2)
-        des._write_kohya_dataset_config(tmp_path, req, masks_written=0)
+        req = _req(trainer_config="kohya_toml", trainer_keep_tokens=2)
+        des._write_kohya_dataset_config(
+            tmp_path, req, masks_written=0, masks_missing=0
+        )
         content = (tmp_path / "dataset_config.toml").read_text(encoding="utf-8")
         assert "shuffle_caption = true" in content
         assert "keep_tokens = 2" in content
 
     def test_kohya_toml_keep_tokens_zero_omits_shuffle(self, tmp_path):
-        req = _req(trainer_keep_tokens=0)
-        des._write_kohya_dataset_config(tmp_path, req, masks_written=0)
+        req = _req(trainer_config="kohya_toml", trainer_keep_tokens=0)
+        des._write_kohya_dataset_config(
+            tmp_path, req, masks_written=0, masks_missing=0
+        )
         content = (tmp_path / "dataset_config.toml").read_text(encoding="utf-8")
         assert "shuffle_caption" not in content
         assert "keep_tokens = " not in content
 
     def test_kohya_toml_conditioning_dir_only_when_kohya_masks_written(self, tmp_path):
-        with_masks = _req(mask_export="kohya")
-        des._write_kohya_dataset_config(tmp_path, with_masks, masks_written=3)
+        with_masks = _req(mask_export="kohya", trainer_config="kohya_toml")
+        des._write_kohya_dataset_config(
+            tmp_path, with_masks, masks_written=3, masks_missing=0
+        )
         assert "conditioning_data_dir" in (tmp_path / "dataset_config.toml").read_text(
             "utf-8"
         )
 
-        no_masks = _req(mask_export="kohya")
-        des._write_kohya_dataset_config(tmp_path, no_masks, masks_written=0)
+        no_masks = _req(mask_export="kohya", trainer_config="kohya_toml")
+        des._write_kohya_dataset_config(
+            tmp_path, no_masks, masks_written=0, masks_missing=0
+        )
         assert "conditioning_data_dir" not in (
             tmp_path / "dataset_config.toml"
         ).read_text("utf-8")
 
-    def test_kohya_toml_json_content_mode_uses_json_extension(self, tmp_path):
-        req = _req(content_mode="json")
-        des._write_kohya_dataset_config(tmp_path, req, masks_written=0)
-        assert 'caption_extension = ".json"' in (
-            tmp_path / "dataset_config.toml"
-        ).read_text("utf-8")
+    def test_kohya_toml_rejects_json_content_mode(self, tmp_path):
+        from services.dataset_export.kohya_contract import KohyaTrainerContractError
 
-    def test_kohya_toml_returns_none_on_write_failure(self, tmp_path):
+        req = _req(content_mode="json", trainer_config="kohya_toml")
+        with pytest.raises(KohyaTrainerContractError, match="text captions"):
+            des._write_kohya_dataset_config(
+                tmp_path, req, masks_written=0, masks_missing=0
+            )
+        assert (tmp_path / "dataset_config.toml").exists() is False
+
+    def test_kohya_toml_raises_actionable_error_on_write_failure(self, tmp_path):
+        from services.dataset_export.kohya_contract import KohyaTrainerContractError
+
         f = tmp_path / "is_a_file"
         f.write_text("x", encoding="utf-8")
-        req = _req()
-        assert des._write_kohya_dataset_config(f, req, masks_written=0) is None
+        req = _req(trainer_config="kohya_toml")
+        target = f / "dataset_config.toml"
+        with pytest.raises(KohyaTrainerContractError) as exc:
+            des._write_kohya_dataset_config(
+                f, req, masks_written=0, masks_missing=0
+            )
+        message = str(exc.value)
+        assert "Kohya dataset config could not be written" in message
+        assert str(target).casefold() in message.casefold()
+        assert "error_type=" in message
 
 
 # =========================================================================== #
@@ -844,7 +715,7 @@ class TestExportDatasetBehaviors:
         monkeypatch.setattr(des, "DATASET_EXPORT_RESPONSE_ITEM_LIMIT", 2)
         out = tmp_path / "out"
         out.mkdir()
-        resp = des.export_dataset(
+        resp = export_engine.export_dataset(
             _req(image_paths=self._three_images(tmp_path), output_folder=str(out))
         )
         assert resp.exported == 3
@@ -856,7 +727,7 @@ class TestExportDatasetBehaviors:
         out = tmp_path / "out"
         out.mkdir()
         ghosts = [str(tmp_path / f"ghost{i}.png") for i in range(55)]
-        resp = des.export_dataset(_req(image_paths=ghosts, output_folder=str(out)))
+        resp = export_engine.export_dataset(_req(image_paths=ghosts, output_folder=str(out)))
         assert resp.status == "failed"
         assert resp.error_count == 55
         assert len(resp.error_messages) == 51
@@ -867,7 +738,7 @@ class TestExportDatasetBehaviors:
         out.mkdir()
         event = threading.Event()
         event.set()
-        resp = des.export_dataset(
+        resp = export_engine.export_dataset(
             _req(image_paths=self._three_images(tmp_path), output_folder=str(out)),
             cancel_event=event,
         )
@@ -878,7 +749,7 @@ class TestExportDatasetBehaviors:
         out = tmp_path / "out"
         out.mkdir()
         p = str(_make_image(tmp_path / "dup.png"))
-        resp = des.export_dataset(_req(image_paths=[p, p], output_folder=str(out)))
+        resp = export_engine.export_dataset(_req(image_paths=[p, p], output_folder=str(out)))
         assert resp.exported == 1
         assert resp.skipped == 1
         assert any(i.skipped_reason == "duplicate" for i in resp.items)
@@ -886,7 +757,7 @@ class TestExportDatasetBehaviors:
     def test_unreadable_path_becomes_row_error(self, tmp_path):
         out = tmp_path / "out"
         out.mkdir()
-        resp = des.export_dataset(
+        resp = export_engine.export_dataset(
             _req(image_paths=[str(tmp_path / "nope.png")], output_folder=str(out))
         )
         assert resp.status == "failed"
@@ -897,7 +768,7 @@ class TestExportDatasetBehaviors:
         out = tmp_path / "out"
         out.mkdir()
         p = _make_image(tmp_path / "keep.png")
-        resp = des.export_dataset(
+        resp = export_engine.export_dataset(
             _req(image_paths=[str(p)], output_folder=str(out), image_op="copy")
         )
         assert resp.exported == 1
@@ -907,7 +778,7 @@ class TestExportDatasetBehaviors:
         out = tmp_path / "out"
         out.mkdir()
         p = _make_image(tmp_path / "gomove.png")
-        resp = des.export_dataset(
+        resp = export_engine.export_dataset(
             _req(image_paths=[str(p)], output_folder=str(out), image_op="move")
         )
         assert resp.exported == 1
@@ -917,7 +788,7 @@ class TestExportDatasetBehaviors:
     def test_beside_image_writes_sidecar_without_relocating(self, tmp_path):
         p = _make_image(tmp_path / "img.png")
         key = str(Path(p).resolve())
-        resp = des.export_dataset(
+        resp = export_engine.export_dataset(
             _req(
                 image_paths=[str(p)],
                 output_mode="beside_image",
@@ -938,7 +809,7 @@ class TestExportDatasetBehaviors:
         out = tmp_path / "out"
         out.mkdir()
         p = _make_image(tmp_path / "m.png")
-        des.export_dataset(_req(image_paths=[str(p)], output_folder=str(out)))
+        export_engine.export_dataset(_req(image_paths=[str(p)], output_folder=str(out)))
         assert (out / des.EXPORT_MANIFEST_FILENAME).exists()
 
 

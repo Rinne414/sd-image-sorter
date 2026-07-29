@@ -12,8 +12,6 @@
 (function () {
     'use strict';
 
-    const STORE_KEY = 'sd-image-sorter-dataset-estimator';
-
     function t(en, zh) {
         try {
             const lang = window.I18n?.getLang?.() || document.documentElement.lang || '';
@@ -33,31 +31,13 @@
         init() {
             const wrap = document.getElementById('dataset-steps-estimator');
             if (!wrap) return;
-            try {
-                const stored = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
-                for (const [key, id] of [['repeats', 'dataset-est-repeats'], ['epochs', 'dataset-est-epochs'], ['batch', 'dataset-est-batch']]) {
-                    const input = document.getElementById(id);
-                    if (input && Number(stored[key]) > 0) input.value = String(stored[key]);
-                }
-            } catch (_) { /* defaults stand */ }
             for (const id of ['dataset-est-repeats', 'dataset-est-epochs', 'dataset-est-batch']) {
                 document.getElementById(id)?.addEventListener('input', () => {
-                    this._persist();
                     this.refresh();
                 });
             }
             window.addEventListener('dataset:changed', () => this.refresh());
             this.refresh();
-        },
-
-        _persist() {
-            try {
-                localStorage.setItem(STORE_KEY, JSON.stringify({
-                    repeats: Number(document.getElementById('dataset-est-repeats')?.value) || 10,
-                    epochs: Number(document.getElementById('dataset-est-epochs')?.value) || 10,
-                    batch: Number(document.getElementById('dataset-est-batch')?.value) || 2,
-                }));
-            } catch (_) {}
         },
 
         refresh() {

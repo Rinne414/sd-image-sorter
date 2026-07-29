@@ -293,6 +293,22 @@
         });
     }
 
+    DM._flushPendingNlCaptionEdit = function () {
+        const pending = this._pendingNlCaptionEdit;
+        if (this._nlCaptionInputTimer) {
+            clearTimeout(this._nlCaptionInputTimer);
+            this._nlCaptionInputTimer = null;
+        }
+        if (!pending || pending.id == null) return;
+        this._pendingNlCaptionEdit = null;
+        const id = Number(pending.id);
+        const value = String(pending.value ?? '');
+        this.nlEdits.set(id, value);
+        this._refreshQueueItem?.(id);
+        this._scheduleSaveSession?.();
+        this._refreshExportPreview?.();
+    };
+
     // ---------- bind events once ----------
     function bind() {
         if (DM._captionSplitBound) return;
@@ -301,18 +317,15 @@
         // NL box -> nlEdits (debounced, mirrors the booru box's 200ms debounce)
         const nlBox = document.getElementById('dataset-editor-nl');
         if (nlBox) {
-            let timer = null;
             nlBox.addEventListener('input', () => {
                 if (DM.activeId == null) return;
+                DM._supersedeCaptionFetch?.();
                 const id = Number(DM.activeId);
                 const value = nlBox.value;
-                if (timer) clearTimeout(timer);
-                timer = setTimeout(() => {
-                    timer = null;
-                    DM.nlEdits.set(id, value);
-                    DM._refreshQueueItem?.(id);
-                    DM._scheduleSaveSession?.();
-                    DM._refreshExportPreview?.();
+                DM._pendingNlCaptionEdit = { id, value };
+                if (DM._nlCaptionInputTimer) clearTimeout(DM._nlCaptionInputTimer);
+                DM._nlCaptionInputTimer = setTimeout(() => {
+                    DM._flushPendingNlCaptionEdit();
                 }, 200);
             });
         }

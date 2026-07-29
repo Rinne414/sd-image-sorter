@@ -50,6 +50,7 @@ function serializeManualSortFilters(filters) {
         colorTemperature: source.colorTemperature || '',
         brightnessDistribution: source.brightnessDistribution || '',
         collectionId: source.collectionId ?? null,
+        scope: source.scope === 'library' ? 'library' : 'current_session',
         folder: source.folder ? String(source.folder).trim() : null,
         hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
     };
@@ -110,6 +111,7 @@ function buildManualSortScopeFilters(contract) {
         colorTemperature: contract.colorTemperature || null,
         brightnessDistribution: contract.brightnessDistribution || null,
         collectionId: contract.collectionId || null,
+        scope: contract.scope || 'current_session',
         folder: contract.folder || null,
         hasMetadata: typeof contract.hasMetadata === 'boolean' ? contract.hasMetadata : null,
     };
@@ -220,6 +222,7 @@ function getManualSortScopeSignature(filters) {
         colorTemperature: contract.colorTemperature || '',
         brightnessDistribution: contract.brightnessDistribution || '',
         collectionId: contract.collectionId ?? null,
+        scope: contract.scope || 'current_session',
         folder: contract.folder || null,
         hasMetadata: contract.hasMetadata ?? null,
     });

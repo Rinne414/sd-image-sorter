@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, model_validator
 
 from config import TAGGER_MODELS
+from services.dataset_trigger import DatasetTrigger
 
 # Validation constants
 THRESHOLD_MIN = 0.0
@@ -153,7 +154,7 @@ class ExportPreviewRequest(BaseModel):
     image_ids: List[int] = Field(default_factory=list, max_length=500)
     preset_id: str = "custom"
     template_override: Optional[str] = None
-    trigger: str = ""
+    trigger: DatasetTrigger = ""
     blacklist: List[str] = Field(default_factory=list)
     replace_rules: Dict[str, str] = Field(default_factory=dict)
     max_tags: int = 0

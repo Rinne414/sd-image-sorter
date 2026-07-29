@@ -123,6 +123,7 @@ class SelectionIdsRequest(BaseModel):
     colorHues: List[str] = Field(default_factory=list)  # v3.5.0 dominant-hue include
     excludeColorHues: List[str] = Field(default_factory=list)  # v3.5.0 dominant-hue exclude
     collectionId: Optional[int] = Field(default=None, ge=1)
+    scope: Optional[str] = Field(default=None, pattern="^(current_session|library)$")
     # Aurora Phase 3 gallery filters (compose with selection tokens)
     noCaption: Optional[bool] = Field(default=None)
     aestheticUnscored: Optional[bool] = Field(default=None)

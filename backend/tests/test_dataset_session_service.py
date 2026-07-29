@@ -117,6 +117,39 @@ def test_scan_thumbnails_are_jpeg_base64(folder_with_mixed_files):
     assert raw[:2] == b"\xff\xd8"
 
 
+def test_scan_reads_existing_utf8_sidecars_and_preserves_empty_caption(tmp_path: Path):
+    Image.new("RGB", (32, 32)).save(tmp_path / "tagged.png")
+    Image.new("RGB", (32, 32)).save(tmp_path / "empty.png")
+    Image.new("RGB", (32, 32)).save(tmp_path / "missing.png")
+    (tmp_path / "tagged.txt").write_bytes(b"\xef\xbb\xbf1girl, red_hair\n")
+    (tmp_path / "empty.txt").write_text("", encoding="utf-8")
+
+    result = scan_folder_for_dataset(str(tmp_path), include_thumbnails=False)
+    items = {item["filename"]: item for item in result["items"]}
+
+    assert items["tagged.png"]["sidecar_caption"] == "1girl, red_hair"
+    assert items["empty.png"]["sidecar_caption"] == ""
+    assert items["missing.png"]["sidecar_caption"] is None
+
+
+def test_scan_rejects_non_utf8_sidecar_with_actionable_error(tmp_path: Path):
+    Image.new("RGB", (32, 32)).save(tmp_path / "invalid.png")
+    sidecar = tmp_path / "invalid.txt"
+    sidecar.write_bytes(b"\xff\xfe\x00\x80")
+
+    with pytest.raises(ValueError, match=r"UTF-8.*invalid\.txt"):
+        scan_folder_for_dataset(str(tmp_path))
+
+
+def test_scan_rejects_oversized_sidecar_with_actionable_error(tmp_path: Path):
+    Image.new("RGB", (32, 32)).save(tmp_path / "huge.png")
+    sidecar = tmp_path / "huge.txt"
+    sidecar.write_bytes(b"x" * (1024 * 1024 + 1))
+
+    with pytest.raises(ValueError, match=r"too large.*huge\.txt"):
+        scan_folder_for_dataset(str(tmp_path))
+
+
 def test_scan_invalid_folder_raises_valueerror(tmp_path):
     nonexistent = tmp_path / "does-not-exist"
     with pytest.raises(ValueError):
@@ -357,6 +390,21 @@ def test_route_folder_scan_happy_path(test_client, folder_with_mixed_files):
     assert len(body["items"]) == 3
     assert body["skipped_unreadable"] == 1
     assert body["truncated"] is False
+
+
+def test_route_folder_scan_rejects_invalid_sidecar_encoding(test_client, tmp_path: Path):
+    Image.new("RGB", (32, 32)).save(tmp_path / "invalid.png")
+    (tmp_path / "invalid.txt").write_bytes(b"\xff\xfe\x00\x80")
+
+    response = test_client.post("/api/dataset/folder-scan", json={
+        "folder_path": str(tmp_path),
+        "recursive": False,
+        "include_thumbnails": False,
+    })
+
+    assert response.status_code == 400, response.text
+    assert "UTF-8" in response.json()["error"]
+    assert "invalid.txt" in response.json()["error"]
 
 
 def test_route_folder_scan_invalid_path_returns_400(test_client, tmp_path):

@@ -424,6 +424,7 @@ async function seedAutoSeparateSearchState(page: Page, search: string) {
       prompts: [],
       artist: null,
       search: searchValue,
+      scope: 'library',
       minWidth: null,
       maxWidth: null,
       minHeight: null,
@@ -936,6 +937,10 @@ with sqlite3.connect(db_path) as conn:
 }
 
 async function setGallerySearch(page: Page, search: string) {
+  await page.locator('#gallery-scope-select').selectOption('library')
+  await expect(page.locator('#gallery-scope-select')).toHaveValue('library')
+  await expect.poll(async () => page.evaluate(() => window.App.AppState?.isLoading === false)).toBe(true)
+
   await page.evaluate(async (value) => {
     const waitFor = async (predicate: () => boolean, timeout = 10000) => {
       const start = Date.now()
@@ -1670,6 +1675,9 @@ test('gallery folder tree stays usable above the selection footer on supported d
   try {
     await page.setViewportSize({ width: 1366, height: 768 })
     await openMainPage(page)
+    await page.locator('#gallery-scope-select').selectOption('library')
+    await expect(page.locator('#gallery-scope-select')).toHaveValue('library')
+    await expect.poll(async () => page.evaluate(() => window.App.AppState?.isLoading === false)).toBe(true)
     const folderTreeResponsePromise = page.waitForResponse((response) => response.url().includes('/api/folders'))
     await page.locator('#btn-refresh-folders').click()
     const folderTreeResponse = await folderTreeResponsePromise
@@ -1955,6 +1963,7 @@ test('manual sort should honor search and support move, skip, and undo', async (
     localStorage.setItem('manual_sort_filter_state_v1', JSON.stringify({
       generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
       ratings: ['general', 'sensitive', 'questionable', 'explicit'],
+      scope: 'library',
       tags: [],
       checkpoints: [],
       loras: [],
@@ -2033,6 +2042,7 @@ test('starting a different mode over a paused session asks before discarding, ne
     localStorage.setItem('manual_sort_filter_state_v1', JSON.stringify({
       generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
       ratings: ['general', 'sensitive', 'questionable', 'explicit'],
+      scope: 'library',
       tags: [], checkpoints: [], loras: [], prompts: [], artist: null,
       search, sortBy: 'newest', limit: 0,
       minWidth: null, maxWidth: null, minHeight: null, maxHeight: null,
@@ -2101,6 +2111,7 @@ test('paused bracket keeps the server session authoritative across reload', asyn
     localStorage.setItem('manual_sort_filter_state_v1', JSON.stringify({
       generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
       ratings: ['general', 'sensitive', 'questionable', 'explicit'],
+      scope: 'library',
       tags: [], checkpoints: [], loras: [], prompts: [], artist: null,
       search, sortBy: 'newest', limit: 0,
       minWidth: null, maxWidth: null, minHeight: null, maxHeight: null,
@@ -2259,6 +2270,7 @@ test('A/B Showdown should switch modes, compare a pair, pick a winner, and save 
     localStorage.setItem('manual_sort_filter_state_v1', JSON.stringify({
       generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
       ratings: ['general', 'sensitive', 'questionable', 'explicit'],
+      scope: 'library',
       tags: [],
       checkpoints: [],
       loras: [],
@@ -2348,6 +2360,7 @@ test('Keep/Reject cull should switch modes, keep/reject/skip, and route kept ima
     localStorage.setItem('manual_sort_filter_state_v1', JSON.stringify({
       generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
       ratings: ['general', 'sensitive', 'questionable', 'explicit'],
+      scope: 'library',
       tags: [],
       checkpoints: [],
       loras: [],
@@ -2783,6 +2796,9 @@ test('censor batch rename should update preview and apply only selected queue it
   expect(images).toHaveLength(2)
 
   await openMainPage(page)
+  await page.locator('#gallery-scope-select').selectOption('library')
+  await expect(page.locator('#gallery-scope-select')).toHaveValue('library')
+  await expect.poll(async () => page.evaluate(() => window.App.AppState?.isLoading === false)).toBe(true)
 
   await page.locator('#btn-toggle-select').click()
   for (const image of images) {
@@ -2828,6 +2844,9 @@ test('queue manager should search, reorder, and sync back to the censor sidebar'
   const targetImage = images[1]
 
   await openMainPage(page)
+  await page.locator('#gallery-scope-select').selectOption('library')
+  await expect(page.locator('#gallery-scope-select')).toHaveValue('library')
+  await expect.poll(async () => page.evaluate(() => window.App.AppState?.isLoading === false)).toBe(true)
 
   await page.locator('#btn-toggle-select').click()
   for (const image of images) {

@@ -153,6 +153,7 @@ Object.assign(window.SimilarImages, {
                 threshold: 0,
             };
             if (this.collectionId) body.collection_id = this.collectionId;
+            body.scope = this.scope === 'current_session' ? 'current_session' : 'library';
             const response = await fetch('/api/similarity/search-text', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

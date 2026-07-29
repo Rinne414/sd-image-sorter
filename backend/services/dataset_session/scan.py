@@ -9,7 +9,9 @@ def-time signature default keeps the same value the monolith baked in at
 import.
 
 scan_folder_for_dataset keeps the pinned surfaced-paths registration: only
-the paths returned in THIS page become local-thumbnail readable.
+the paths returned in THIS page become local-thumbnail readable. A new
+explicit scan separately captures save identities for its complete manifest;
+later pagination must never refresh those identities.
 resolve_paths_for_dataset stays permissive and must NOT register (SECURITY
 pin).
 """
@@ -21,7 +23,10 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from config import ALLOWED_IMAGE_EXTENSIONS
-from services.dataset_session.allowlist import _register_session_paths
+from services.dataset_session.allowlist import (
+    _register_thumbnail_paths,
+    register_scan_manifest_paths_for_project_save,
+)
 from services.dataset_session.ids_and_items import (
     _manifest_item_for_path,
     _session_items_for_page_paths,
@@ -111,6 +116,7 @@ def scan_folder_for_dataset(
         base = Path(normalized).resolve()
         token, manifest = _build_scan_manifest(base, recursive)
         total_seen = int(manifest.get("total_files_seen") or 0)
+        register_scan_manifest_paths_for_project_save(token)
 
     end_offset = min(total_seen, normalized_offset + normalized_limit)
     if include_thumbnails:
@@ -129,7 +135,9 @@ def scan_folder_for_dataset(
     # Trust the paths we just surfaced so the local-thumbnail endpoint
     # can serve them. Without this gate the endpoint would be an
     # arbitrary-host-file read oracle.
-    _register_session_paths(item.get("abs_path") for item in items if item.get("abs_path"))
+    _register_thumbnail_paths(
+        item.get("abs_path") for item in items if item.get("abs_path")
+    )
 
     response = {
         "folder_path": str(base),

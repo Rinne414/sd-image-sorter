@@ -216,7 +216,13 @@ def _diff_and_apply(
                     "removed_count": len(removed),
                 }
             )
-        updates.append({"image_id": image_id, "tags": new_tags})
+        updates.append(
+            {
+                "image_id": image_id,
+                "tags": new_tags,
+                "writer_provenance": None,
+            }
+        )
 
     if not dry_run and updates:
         db.add_tags_batch(updates, default_source="tagger", replace_scope="pipeline")

@@ -10,13 +10,16 @@ Split verbatim out of services/smart_tag_service.py.
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from config import ALLOWED_IMAGE_EXTENSIONS, DEFAULT_TAGGER_MODEL, TAGGER_MODELS
+from services.dataset_trigger import (
+    DATASET_TRIGGER_MAX_LENGTH,
+    validate_dataset_trigger,
+)
 from services.tag_export_service import count_selection_token_ids
 from services.tag_training_filters import normalize_training_purpose
 from utils.path_validation import normalize_user_path
@@ -300,16 +303,15 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
     if not cleaned_ids and not selection_token and not cleaned_paths and not dataset_scan_token:
         raise ValueError("Smart Tag needs image_ids, selection_token, image_paths, or dataset_scan_token.")
 
-    # Fix M3: trigger word must be a single token (no internal whitespace) or
-    # it gets injected as multiple comma-separated tokens in the final caption.
-    # Empty trigger is fine (means "don't inject"); leading/trailing whitespace
-    # is stripped silently.
-    trigger_word_raw = str(payload.get("trigger_word") or "").strip()
-    if trigger_word_raw and re.search(r"\s", trigger_word_raw):
+    trigger_word_input = str(payload.get("trigger_word") or "")
+    if len(trigger_word_input) > DATASET_TRIGGER_MAX_LENGTH:
         raise ValueError(
-            "Trigger word should be a single token without spaces. "
-            "Use underscores or camelcase: 'my_lora_trigger' or 'myLoraTrigger'."
+            f"Trigger word must contain at most {DATASET_TRIGGER_MAX_LENGTH} characters."
         )
+    try:
+        trigger_word = validate_dataset_trigger(trigger_word_input)
+    except ValueError as exc:
+        raise ValueError(f"Invalid trigger word: {exc}") from exc
 
     # Fix B2: reject (enable_vlm=True, nl_mode='vlm', no VLM endpoint) at
     # request validation time instead of letting the worker silently fall
@@ -445,7 +447,7 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
         dataset_scan_token=dataset_scan_token,
         dataset_scan_count=dataset_scan_count,
         training_purpose=normalize_training_purpose(payload.get("training_purpose")),
-        trigger_word=trigger_word_raw,
+        trigger_word=trigger_word,
         merge_strategy=str(payload.get("merge_strategy") or "replace").strip().lower(),
         auto_strip_noise=bool(payload.get("auto_strip_noise", True)),
         skip_existing=bool(payload.get("skip_existing", True)),

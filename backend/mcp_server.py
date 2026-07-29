@@ -26,6 +26,7 @@ See docs/MCP.md for the Claude Desktop / Claude Code config snippet.
 from __future__ import annotations
 
 import os
+import re
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -316,6 +317,8 @@ def remove_tags(
 def export_dataset(
     image_ids: List[int],
     output_folder: str,
+    readiness_report_id: str,
+    readiness_input_fingerprint: str,
     trigger: Optional[str] = None,
     content_mode: Optional[str] = None,
     naming_pattern: Optional[str] = None,
@@ -338,6 +341,8 @@ def export_dataset(
         {
             "image_ids": ids,
             "output_folder": str(output_folder).strip(),
+            "readiness_report_id": str(readiness_report_id).strip(),
+            "readiness_input_fingerprint": str(readiness_input_fingerprint).strip(),
             "trigger": trigger,
             "content_mode": content_mode,
             "naming_pattern": naming_pattern,
@@ -349,6 +354,47 @@ def export_dataset(
         }
     )
     return _request("POST", "/api/dataset/export", json=payload)
+
+
+def start_dataset_readiness(
+    image_ids: List[int],
+    output_folder: str,
+    trigger: Optional[str] = None,
+    content_mode: Optional[str] = None,
+    naming_pattern: Optional[str] = None,
+    trainer_config: Optional[str] = None,
+    trainer_repeats: Optional[int] = None,
+    trainer_batch: Optional[int] = None,
+    trainer_keep_tokens: Optional[int] = None,
+    mask_export: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Start the read-only proof job for the exact later export settings."""
+    ids = [int(image_id) for image_id in (image_ids or [])]
+    if not ids:
+        raise RuntimeError("image_ids is required")
+    if not str(output_folder or "").strip():
+        raise RuntimeError("output_folder is required")
+    payload = _drop_none({
+        "image_ids": ids,
+        "output_folder": str(output_folder).strip(),
+        "trigger": trigger,
+        "content_mode": content_mode,
+        "naming_pattern": naming_pattern,
+        "trainer_config": trainer_config,
+        "trainer_repeats": trainer_repeats,
+        "trainer_batch": trainer_batch,
+        "trainer_keep_tokens": trainer_keep_tokens,
+        "mask_export": mask_export,
+    })
+    return _request("POST", "/api/dataset/readiness/start", json=payload)
+
+
+def get_dataset_readiness(report_id: str) -> Dict[str, Any]:
+    """Poll a Dataset Readiness job by the report id returned at start."""
+    normalized = str(report_id or "").strip()
+    if re.fullmatch(r"[a-f0-9]{32}", normalized) is None:
+        raise RuntimeError("report_id must be exactly 32 lowercase hex characters")
+    return _request("GET", f"/api/bulk-jobs/{normalized}")
 
 
 def library_stats() -> Dict[str, Any]:
@@ -364,6 +410,8 @@ _TOOLS = (
     list_library,
     add_tags,
     remove_tags,
+    start_dataset_readiness,
+    get_dataset_readiness,
     export_dataset,
     library_stats,
 )

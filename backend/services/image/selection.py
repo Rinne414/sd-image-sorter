@@ -110,6 +110,7 @@ class SelectionMixin:
                     color_hues=contract.get("colorHues"),
                     exclude_color_hues=contract.get("excludeColorHues"),
                     collection_id=contract.get("collectionId"),
+                    scope=contract.get("scope"),
                     folder=contract.get("folder"),
                     has_metadata=contract.get("hasMetadata"),
                     no_caption=contract.get("noCaption"),
@@ -182,6 +183,7 @@ class SelectionMixin:
         color_hues: Optional[List[str]] = None,
         exclude_color_hues: Optional[List[str]] = None,
         collection_id: Optional[int] = None,
+        scope: Optional[str] = None,
         folder: Optional[str] = None,  # v3.3.2 Library Navigation
         has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
         # Aurora Phase 3 gallery filters
@@ -212,6 +214,9 @@ class SelectionMixin:
         brightness_distribution = _coerce_optional_string_filter(brightness_distribution, "brightnessDistribution")
         brightness_distribution = brightness_distribution.lower() if brightness_distribution else None
         collection_id = _coerce_optional_int_filter(collection_id, "collectionId")
+        scope = _coerce_optional_string_filter(scope, "scope")
+        if scope not in (None, "current_session", "library"):
+            raise HTTPException(status_code=400, detail="scope must be current_session or library")
         tag_mode = _coerce_tag_mode(tag_mode)
         prompt_match_mode = _coerce_prompt_match_mode(prompt_match_mode)
         excluded_image_ids = _coerce_selection_id_list(
@@ -267,6 +272,7 @@ class SelectionMixin:
             "colorHues": _sanitize_filter_values(color_hues) or [],
             "excludeColorHues": _sanitize_filter_values(exclude_color_hues) or [],
             "collectionId": collection_id,
+            "scope": scope,
             "folder": _coerce_optional_string_filter(folder, "folder"),
             "hasMetadata": _coerce_optional_bool_filter(has_metadata, "hasMetadata"),
             # Aurora Phase 3 gallery filters
@@ -325,6 +331,7 @@ class SelectionMixin:
             color_hues=contract.get("colorHues"),
             exclude_color_hues=contract.get("excludeColorHues"),
             collection_id=contract.get("collectionId"),
+            scope=contract.get("scope"),
             folder=contract.get("folder"),
             has_metadata=contract.get("hasMetadata"),
             no_caption=contract.get("noCaption"),
@@ -374,6 +381,7 @@ class SelectionMixin:
             color_hues=contract.get("colorHues"),
             exclude_color_hues=contract.get("excludeColorHues"),
             collection_id=contract.get("collectionId"),
+            scope=contract.get("scope"),
             folder=contract.get("folder"),
             has_metadata=contract.get("hasMetadata"),
             no_caption=contract.get("noCaption"),
@@ -459,6 +467,7 @@ class SelectionMixin:
                 color_hues=filters.get("colorHues"),
                 exclude_color_hues=filters.get("excludeColorHues"),
                 collection_id=filters.get("collectionId") or filters.get("collection_id"),
+                scope=filters.get("scope"),
                 folder=filters.get("folder"),
                 has_metadata=filters.get("hasMetadata"),
                 no_caption=filters.get("noCaption"),

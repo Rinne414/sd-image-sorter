@@ -13,12 +13,20 @@ seam and stays verbatim.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+from collections.abc import Mapping, Sequence
 from typing import Any, Dict, List, Optional, Tuple
 
+from services.annotation_models import TrainingCaptionContentV1
 from services.dataset_export._constants import (
     DATASET_LEGACY_TEMPLATE,
     TRAINING_TAG_CONTENT_MODES,
+)
+from services.dataset_sidecar import (
+    MAX_DATASET_SIDECAR_BYTES,
+    dataset_sidecar_tag_rows,
+    read_dataset_sidecar,
 )
 from services.tag_export_service import (
     NL_COMPOSE_MODES,
@@ -67,6 +75,109 @@ def _split_image_overrides(request: Any) -> Tuple[Dict[int, str], Dict[str, str]
 # the sentence globally, so compose is skipped for them to avoid doubling it.
 # Shared with tag_export_service so both export engines gate identically.
 _NL_COMPOSE_MODES = NL_COMPOSE_MODES
+
+
+def _caption_token_key(value: str) -> str:
+    return " ".join(str(value).replace("_", " ").split()).casefold()
+
+
+def _caption_token_entries(caption: str) -> list[tuple[str, str]]:
+    chunks = re.split(r"([,\r\n]+[ \t]*)", caption.strip())
+    entries: list[tuple[str, str]] = []
+    separator = ""
+    for index, chunk in enumerate(chunks):
+        if index % 2 == 1:
+            separator += chunk
+            continue
+        token = chunk.strip()
+        if not token:
+            continue
+        entries.append((separator, token))
+        separator = ""
+    return entries
+
+
+def _preserved_caption_separator(separators: Sequence[str]) -> str:
+    combined = "".join(separators)
+    newline = re.search(r"\r\n|\r|\n", combined)
+    if newline is None:
+        return separators[-1] if separators else ", "
+    trailing_whitespace = re.search(r"(?:\r\n|\r|\n)([ \t]*)[^\r\n]*$", combined)
+    indentation = trailing_whitespace.group(1) if trailing_whitespace is not None else ""
+    return f"{newline.group(0)}{indentation}"
+
+
+def _ensure_caption_token_once(caption: str, token: str) -> str:
+    clean_caption = str(caption).strip()
+    clean_token = str(token).strip()
+    if not clean_token:
+        return clean_caption
+    token_key = _caption_token_key(clean_token)
+    entries = _caption_token_entries(clean_caption)
+    match_count = sum(
+        _caption_token_key(entry_token) == token_key
+        for _separator, entry_token in entries
+    )
+    if match_count == 0:
+        return f"{clean_token}, {clean_caption}" if clean_caption else clean_token
+    if match_count == 1 and any(
+        entry_token == clean_token
+        for _separator, entry_token in entries
+    ):
+        return clean_caption
+
+    kept: list[tuple[str, str]] = []
+    skipped_separators: list[str] = []
+    found = False
+    for separator, entry_token in entries:
+        is_match = _caption_token_key(entry_token) == token_key
+        if is_match and found:
+            skipped_separators.append(separator)
+            continue
+        if is_match:
+            found = True
+        kept_separator = (
+            ""
+            if not kept
+            else _preserved_caption_separator([*skipped_separators, separator])
+        )
+        kept.append((kept_separator, clean_token if is_match else entry_token))
+        skipped_separators = []
+    return "".join(f"{separator}{entry_token}" for separator, entry_token in kept)
+
+
+def _finalize_dataset_caption(
+    rendered: str,
+    trigger: str,
+    common_tags: Sequence[str],
+) -> str:
+    clean_trigger = str(trigger).strip()
+    if not clean_trigger:
+        return rendered
+    trigger_key = _caption_token_key(clean_trigger)
+    quickfill_active = any(
+        _caption_token_key(str(common_tag)) == trigger_key
+        for common_tag in common_tags
+    )
+    if not quickfill_active:
+        return rendered
+    return _ensure_caption_token_once(rendered, clean_trigger)
+
+
+def render_training_caption_content(
+    content: TrainingCaptionContentV1,
+    caption_transforms: Mapping[str, object],
+    trigger: str,
+    common_tags: Sequence[str],
+) -> str:
+    """Render one immutable caption content object without legacy field mixing."""
+    rendered = compose_caption_with_nl(
+        content.booru_caption,
+        content.caption_type,
+        content.nl_caption,
+    )
+    transformed = apply_caption_transforms(rendered, dict(caption_transforms))
+    return _finalize_dataset_caption(transformed, trigger, common_tags)
 
 
 def _compose_nl_caption(
@@ -141,9 +252,12 @@ def _append_common_tags_for_mode(content: str, request: Any, content_mode: str) 
     if not common_tags:
         return content
     parts = [part.strip() for part in str(content or "").split(",") if part.strip()]
-    seen = {" ".join(part.split()).lower() for part in parts}
+    def tag_key(value: str) -> str:
+        return " ".join(value.replace("_", " ").split()).casefold()
+
+    seen = {tag_key(part) for part in parts}
     for tag in common_tags:
-        key = " ".join(tag.split()).lower()
+        key = tag_key(tag)
         if key and key not in seen:
             seen.add(key)
             parts.append(tag)
@@ -152,8 +266,12 @@ def _append_common_tags_for_mode(content: str, request: Any, content_mode: str) 
 
 def _build_dataset_template_options(request: Any, blacklist_set: set[str]) -> Dict[str, Any]:
     raw_options = getattr(request, "template_options", None)
-    if isinstance(raw_options, dict):
+    if hasattr(raw_options, "model_dump"):
+        options = raw_options.model_dump(exclude_unset=True)
+        nested_fields = raw_options.model_fields_set
+    elif isinstance(raw_options, dict):
         options = dict(raw_options)
+        nested_fields = set(raw_options)
     else:
         options = {
             "preset_id": "custom",
@@ -164,6 +282,7 @@ def _build_dataset_template_options(request: Any, blacklist_set: set[str]) -> Di
             "max_tags": 0,
             "append": [],
         }
+        nested_fields = set()
 
     existing_append = options.get("append") or []
     if isinstance(existing_append, str):
@@ -179,8 +298,11 @@ def _build_dataset_template_options(request: Any, blacklist_set: set[str]) -> Di
             seen_append.add(value.lower())
             append_values.append(value)
     options["append"] = append_values
-    options.setdefault("trigger", str(getattr(request, "trigger", "") or ""))
-    options.setdefault("blacklist", list(blacklist_set))
+    request_fields = getattr(request, "model_fields_set", set())
+    if "trigger" in request_fields or "trigger" not in nested_fields:
+        options["trigger"] = str(getattr(request, "trigger", "") or "")
+    if "blacklist" in request_fields or "blacklist" not in nested_fields:
+        options["blacklist"] = list(blacklist_set)
 
     normalize = bool(getattr(request, "normalize_tag_underscores", True))
     options.setdefault("underscore_to_space_override", normalize)
@@ -209,6 +331,14 @@ def _render_dataset_sidecar(
     elif src_image_path and src_image_path in image_overrides_path:
         rendered = image_overrides_path[src_image_path]
     else:
+        effective_tags = list(tags or [])
+        if not image_id and src_image_path and content_mode != "json":
+            source_caption = read_dataset_sidecar(
+                src_image_path,
+                MAX_DATASET_SIDECAR_BYTES,
+            )
+            if source_caption is not None:
+                effective_tags = dataset_sidecar_tag_rows(source_caption)
         template_options = (
             _build_dataset_template_options(request, blacklist_set)
             if content_mode == "template"
@@ -216,7 +346,7 @@ def _render_dataset_sidecar(
         )
         rendered = build_sidecar_content(
             record,
-            tags or [],
+            effective_tags,
             content_mode=content_mode,
             blacklist=blacklist_set,
             prefix=str(getattr(request, "prefix", "") or ""),
@@ -237,4 +367,14 @@ def _render_dataset_sidecar(
         nl_overrides_int=nl_overrides_int or {},
         nl_overrides_path=nl_overrides_path or {},
     )
-    return apply_caption_transforms(rendered, getattr(request, "caption_transforms", None) or {})
+    transformed = apply_caption_transforms(
+        rendered,
+        getattr(request, "caption_transforms", None) or {},
+    )
+    if content_mode not in {*TRAINING_TAG_CONTENT_MODES, "nl_caption", "template"}:
+        return transformed
+    return _finalize_dataset_caption(
+        transformed,
+        str(getattr(request, "trigger", "") or ""),
+        [str(tag) for tag in (getattr(request, "common_tags", None) or [])],
+    )

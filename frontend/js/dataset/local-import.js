@@ -43,6 +43,11 @@
     const DM = window.DatasetMaker;
 
     const LOCAL_CAPTIONS_KEY = 'sd-image-sorter-dataset-local-captions';
+    const LOCAL_CAPTION_TRIGGERS_KEY = 'sd-image-sorter-dataset-local-caption-triggers';
+
+    const usesUnscopedLocalCaptionCache = (datasetMaker) => (
+        datasetMaker._activeProject === null || datasetMaker._activeProject === undefined
+    );
 
     /** Local-only state (in addition to the shared ``imageIds`` / ``meta``). */
     DM.localItemPaths = DM.localItemPaths || new Map();   // negative id -> abs_path
@@ -107,13 +112,43 @@
 
     // -------- localStorage caption persistence (path-keyed) --------
 
-    DM._loadLocalCaptions = function () {
+    function storageFailureReason(error) {
+        return error instanceof Error ? error.message : String(error);
+    }
+
+    function readStoredStringMap(storageKey) {
+        let raw;
         try {
-            const raw = localStorage.getItem(LOCAL_CAPTIONS_KEY);
-            if (!raw) return {};
-            const parsed = JSON.parse(raw);
-            return (parsed && typeof parsed === 'object') ? parsed : {};
-        } catch { return {}; }
+            raw = localStorage.getItem(storageKey);
+        } catch (error) {
+            throw new Error(
+                `Could not read browser storage key "${storageKey}": ${storageFailureReason(error)}`,
+            );
+        }
+        if (!raw) return {};
+        let parsed;
+        try {
+            parsed = JSON.parse(raw);
+        } catch (error) {
+            throw new SyntaxError(
+                `Browser storage key "${storageKey}" contains invalid JSON: ${storageFailureReason(error)}`,
+            );
+        }
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            throw new TypeError(`Browser storage key "${storageKey}" must contain an object.`);
+        }
+        for (const [path, value] of Object.entries(parsed)) {
+            if (typeof value !== 'string') {
+                throw new TypeError(
+                    `Browser storage key "${storageKey}" path "${path}" must contain a string.`,
+                );
+            }
+        }
+        return parsed;
+    }
+
+    DM._loadLocalCaptions = function () {
+        return readStoredStringMap(LOCAL_CAPTIONS_KEY);
     };
 
     DM._saveLocalCaption = function (absPath, caption) {
@@ -124,12 +159,103 @@
         } else {
             all[absPath] = String(caption);
         }
-        try { localStorage.setItem(LOCAL_CAPTIONS_KEY, JSON.stringify(all)); }
-        catch { /* quota or sandbox; non-fatal */ }
+        try {
+            localStorage.setItem(LOCAL_CAPTIONS_KEY, JSON.stringify(all));
+        } catch (error) {
+            throw new Error(
+                `Could not persist local caption for "${absPath}": ${storageFailureReason(error)}`,
+            );
+        }
+    };
+
+    DM._loadLocalCaptionTriggers = function () {
+        return readStoredStringMap(LOCAL_CAPTION_TRIGGERS_KEY);
+    };
+
+    DM._persistLocalCaptionState = function (captions, captionTriggers) {
+        let previousCaptions;
+        try {
+            previousCaptions = localStorage.getItem(LOCAL_CAPTIONS_KEY);
+        } catch (error) {
+            throw new Error(
+                `Could not read browser storage before persisting local captions: ${storageFailureReason(error)}`,
+            );
+        }
+        const nextCaptions = JSON.stringify(captions);
+        const nextCaptionTriggers = JSON.stringify(captionTriggers);
+        let captionsWritten = false;
+        try {
+            localStorage.setItem(LOCAL_CAPTIONS_KEY, nextCaptions);
+            captionsWritten = true;
+            localStorage.setItem(LOCAL_CAPTION_TRIGGERS_KEY, nextCaptionTriggers);
+        } catch (error) {
+            let rollbackError = null;
+            if (captionsWritten) {
+                try {
+                    if (previousCaptions === null) localStorage.removeItem(LOCAL_CAPTIONS_KEY);
+                    else localStorage.setItem(LOCAL_CAPTIONS_KEY, previousCaptions);
+                } catch (caughtRollbackError) {
+                    rollbackError = caughtRollbackError;
+                }
+            }
+            const rollbackDetail = rollbackError === null
+                ? ''
+                : ` Caption rollback also failed: ${storageFailureReason(rollbackError)}.`;
+            throw new Error(
+                `Could not persist local caption ownership in browser storage: ${storageFailureReason(error)}.${rollbackDetail}`,
+            );
+        }
+    };
+
+    DM._saveManagedTriggerForLocalIds = function (ids, trigger, captionOverrides) {
+        if (captionOverrides !== null && captionOverrides !== undefined && !(captionOverrides instanceof Map)) {
+            throw new TypeError('Local caption overrides must be a Map, null, or undefined.');
+        }
+        if (!usesUnscopedLocalCaptionCache(this)) return;
+        const localIdsWithBooruOverrides = Array.from(ids || [])
+            .map(Number)
+            .filter((id) => {
+                if (!this.isLocalId(id)) return false;
+                if (captionOverrides instanceof Map) return captionOverrides.has(id);
+                return this.captionEdits.has(id);
+            });
+        if (localIdsWithBooruOverrides.length === 0) return;
+        const captions = this._loadLocalCaptions();
+        const captionTriggers = this._loadLocalCaptionTriggers();
+        const cleanTrigger = String(trigger || '').trim();
+        let changed = false;
+        for (const id of localIdsWithBooruOverrides) {
+            const hasOverride = captionOverrides?.has(id) === true;
+            const absPath = this.localItemPaths.get(id);
+            if (!absPath) continue;
+            const caption = String(
+                hasOverride ? captionOverrides.get(id) : this.captionEdits.get(id),
+            );
+            const preservesExplicitEmptyCaption = caption === '' && (
+                hasOverride || Object.prototype.hasOwnProperty.call(captions, absPath)
+            );
+            if (caption || preservesExplicitEmptyCaption) {
+                captions[absPath] = caption;
+                if (cleanTrigger) captionTriggers[absPath] = cleanTrigger;
+                else delete captionTriggers[absPath];
+            } else {
+                delete captions[absPath];
+                delete captionTriggers[absPath];
+            }
+            changed = true;
+        }
+        if (changed) this._persistLocalCaptionState(captions, captionTriggers);
     };
 
     DM._clearLocalCaption = function (absPath) {
-        DM._saveLocalCaption(absPath, '');
+        if (!absPath) return;
+        const captions = DM._loadLocalCaptions();
+        const captionTriggers = DM._loadLocalCaptionTriggers();
+        const changed = Object.prototype.hasOwnProperty.call(captions, absPath)
+            || Object.prototype.hasOwnProperty.call(captionTriggers, absPath);
+        delete captions[absPath];
+        delete captionTriggers[absPath];
+        if (changed) DM._persistLocalCaptionState(captions, captionTriggers);
     };
 
     DM._registerFolderManifest = function (data) {
@@ -140,6 +266,9 @@
             scan_token: token,
             folder_path: data.folder_path || existing.folder_path || '',
             total: Number(data.total_files_seen || existing.total || 0) || 0,
+            queueIndex: Number.isSafeInteger(existing.queueIndex)
+                ? existing.queueIndex
+                : this.imageIds.length,
             excludedPaths: isNativeSet(existing.excludedPaths) ? existing.excludedPaths : newNativeSet(),
         });
         this._scheduleSaveSession?.();
@@ -212,6 +341,290 @@
         return count;
     };
 
+    function requireManifestPage(data, scanToken, offset, expectedTotal) {
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
+            throw new TypeError(`Folder manifest ${scanToken} returned an invalid response object.`);
+        }
+        if (data.scan_token !== scanToken) {
+            throw new TypeError(`Folder manifest ${scanToken} returned a different scan token.`);
+        }
+        if (!Number.isSafeInteger(data.total_files_seen) || data.total_files_seen !== expectedTotal) {
+            throw new TypeError(
+                `Folder manifest ${scanToken} expected ${expectedTotal} files but returned ${data.total_files_seen}.`,
+            );
+        }
+        if (!Number.isSafeInteger(data.offset) || data.offset !== offset) {
+            throw new TypeError(`Folder manifest ${scanToken} returned an unexpected offset.`);
+        }
+        if (typeof data.has_more !== 'boolean' || !Array.isArray(data.items)) {
+            throw new TypeError(`Folder manifest ${scanToken} returned invalid pagination fields.`);
+        }
+        const items = data.items.map((item, index) => {
+            if (!item || typeof item !== 'object' || Array.isArray(item)) {
+                throw new TypeError(`Folder manifest ${scanToken} item ${index} is invalid.`);
+            }
+            const dsId = String(item.ds_id || '');
+            const absPath = String(item.abs_path || '').trim();
+            const filename = String(item.filename || '').trim();
+            const scanIndex = Number(item.scan_index);
+            const width = Number(item.width);
+            const height = Number(item.height);
+            const mtime = Number(item.mtime);
+            const size = Number(item.size);
+            const sidecarCaption = item.sidecar_caption;
+            if (!/^ds:[0-9a-f]{16}$/.test(dsId) || !absPath || !filename) {
+                throw new TypeError(`Folder manifest ${scanToken} item ${index} has invalid identity fields.`);
+            }
+            if (
+                !Number.isSafeInteger(scanIndex)
+                || scanIndex < 0
+                || scanIndex >= expectedTotal
+                || scanIndex !== offset + index
+            ) {
+                throw new TypeError(`Folder manifest ${scanToken} item ${index} has an invalid scan index.`);
+            }
+            if (
+                !Number.isSafeInteger(width)
+                || width < 0
+                || !Number.isSafeInteger(height)
+                || height < 0
+                || !Number.isFinite(mtime)
+                || mtime < 0
+                || !Number.isSafeInteger(size)
+                || size < 0
+                || typeof item.thumb_b64 !== 'string'
+                || item.source_kind !== 'folder_path'
+                || item.sidecar_capability !== 'beside_image'
+                || (sidecarCaption !== undefined
+                    && sidecarCaption !== null
+                    && typeof sidecarCaption !== 'string')
+            ) {
+                throw new TypeError(`Folder manifest ${scanToken} item ${index} has invalid file fields.`);
+            }
+            return {
+                ds_id: dsId,
+                abs_path: absPath,
+                filename,
+                width,
+                height,
+                mtime,
+                size,
+                thumb_b64: item.thumb_b64,
+                scan_index: scanIndex,
+                folder_scan_token: scanToken,
+                source_kind: 'folder_path',
+                sidecar_capability: 'beside_image',
+                sidecar_caption: typeof sidecarCaption === 'string' ? sidecarCaption : null,
+            };
+        });
+        const nextOffset = data.next_offset;
+        const pageEndOffset = offset + items.length;
+        if (data.has_more) {
+            if (
+                !Number.isSafeInteger(nextOffset)
+                || nextOffset !== pageEndOffset
+                || nextOffset <= offset
+                || nextOffset >= expectedTotal
+            ) {
+                throw new TypeError(`Folder manifest ${scanToken} did not advance pagination.`);
+            }
+        } else if (nextOffset !== null) {
+            throw new TypeError(`Folder manifest ${scanToken} returned a terminal next offset.`);
+        } else if (pageEndOffset !== expectedTotal) {
+            throw new TypeError(`Folder manifest ${scanToken} returned an incomplete terminal page.`);
+        }
+        return { items, nextOffset };
+    }
+
+    async function requestManifestPage(scanToken, offset, limit, expectedTotal) {
+        const response = await fetch('/api/dataset/folder-scan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                scan_token: scanToken,
+                offset,
+                limit,
+                include_thumbnails: false,
+            }),
+        });
+        let data;
+        try {
+            data = await response.json();
+        } catch (error) {
+            throw new TypeError(
+                `Folder manifest ${scanToken} returned invalid JSON: ${String(error)}`,
+            );
+        }
+        if (!response.ok) {
+            throw new Error(
+                `Folder manifest ${scanToken} failed with HTTP ${response.status}: ${JSON.stringify(data)}`,
+            );
+        }
+        return requireManifestPage(data, scanToken, offset, expectedTotal);
+    }
+
+    async function readManifestPage(scanToken, offset, limit, expectedTotal) {
+        let lastError = null;
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+            try {
+                return await requestManifestPage(scanToken, offset, limit, expectedTotal);
+            } catch (error) {
+                lastError = error;
+                if (attempt === 1) throw error;
+                window.Logger?.warn?.('dataset_project_manifest_retry', {
+                    scan_token: scanToken,
+                    offset,
+                    attempt: attempt + 1,
+                    error: String(error),
+                });
+            }
+        }
+        throw lastError;
+    }
+
+    async function loadCompleteManifest(source, pageSize) {
+        const scanToken = String(source.scan_token || '').trim();
+        const expectedTotal = Number(source.total);
+        if (!scanToken || !Number.isSafeInteger(expectedTotal) || expectedTotal < 0) {
+            throw new TypeError('Dataset project contains invalid folder manifest state.');
+        }
+        const items = [];
+        let offset = 0;
+        while (offset < expectedTotal) {
+            const page = await readManifestPage(scanToken, offset, pageSize, expectedTotal);
+            items.push(...page.items);
+            if (page.nextOffset === null) break;
+            offset = page.nextOffset;
+        }
+        if (items.length !== expectedTotal) {
+            throw new TypeError(
+                `Folder manifest ${scanToken} expected ${expectedTotal} files but materialized ${items.length}.`,
+            );
+        }
+        const uniquePaths = new Set(items.map((item) => item.abs_path));
+        if (uniquePaths.size !== items.length) {
+            throw new TypeError(`Folder manifest ${scanToken} contains duplicate paths.`);
+        }
+        return { source, items };
+    }
+
+    DM._materializeProjectLocalItems = async function () {
+        const sources = Array.from(this.localManifestTokens.values());
+        if (sources.length === 0) return;
+        const pageSize = Number(this._folderScanPageSize);
+        if (!Number.isSafeInteger(pageSize) || pageSize <= 0) {
+            throw new TypeError('Dataset folder scan page size is unavailable.');
+        }
+
+        const originalIds = this.imageIds.slice();
+        const originalManifestState = new Map(sources.map((source) => [
+            String(source.scan_token || ''),
+            {
+                source,
+                excludedPaths: Array.from(source.excludedPaths || []),
+            },
+        ]));
+        const originalTokenIds = new Map(sources.map((source) => {
+            const token = String(source.scan_token || '');
+            return [token, originalIds.filter((id) => (
+                String(this.meta.get(Number(id))?.folder_scan_token || '') === token
+            ))];
+        }));
+        for (const source of sources) {
+            const token = String(source.scan_token || '');
+            const total = Number(source.total);
+            const excludedCount = isNativeSet(source.excludedPaths)
+                ? source.excludedPaths.size
+                : 0;
+            if (total > excludedCount && (originalTokenIds.get(token) || []).length === 0) {
+                throw new Error(
+                    `Folder manifest ${token} has no loaded queue anchor. Load another preview page or scan the folder again before saving.`,
+                );
+            }
+        }
+        const manifests = await Promise.all(
+            sources.map((source) => loadCompleteManifest(source, pageSize)),
+        );
+        const queueUnchanged = this.imageIds.length === originalIds.length
+            && this.imageIds.every((id, index) => id === originalIds[index]);
+        const manifestsUnchanged = this.localManifestTokens.size === originalManifestState.size
+            && Array.from(originalManifestState.entries()).every(([token, state]) => {
+                const current = this.localManifestTokens.get(token);
+                const currentExcluded = Array.from(current?.excludedPaths || []);
+                return current === state.source
+                    && currentExcluded.length === state.excludedPaths.length
+                    && currentExcluded.every((path, index) => path === state.excludedPaths[index]);
+            });
+        if (!queueUnchanged || !manifestsUnchanged) {
+            throw new Error(
+                'Dataset queue changed while project sources were being prepared. Save again with the current queue.',
+            );
+        }
+        const includedPaths = [];
+        for (const { source, items } of manifests) {
+            const excludedPaths = isNativeSet(source.excludedPaths)
+                ? source.excludedPaths
+                : newNativeSet();
+            includedPaths.push(...items
+                .filter((item) => !excludedPaths.has(item.abs_path))
+                .map((item) => item.abs_path));
+        }
+        if (new Set(includedPaths).size !== includedPaths.length) {
+            throw new TypeError('Dataset folder manifests contain duplicate local paths.');
+        }
+        const allItems = manifests.flatMap(({ items }) => items);
+        this.addLocalItems(allItems, {
+            switchView: false,
+            showToast: false,
+            focusImportTab: false,
+        });
+
+        let nextIds = this.imageIds.slice();
+        for (const { source, items } of manifests) {
+            const token = String(source.scan_token);
+            const excludedPaths = isNativeSet(source.excludedPaths)
+                ? source.excludedPaths
+                : newNativeSet();
+            const idsByPath = new Map(
+                Array.from(this.localItemPaths.entries()).map(([id, path]) => [path, Number(id)]),
+            );
+            const orderedIds = items
+                .filter((item) => !excludedPaths.has(item.abs_path))
+                .map((item) => {
+                    const id = idsByPath.get(item.abs_path);
+                    if (!Number.isSafeInteger(id) || id >= 0) {
+                        throw new TypeError(
+                            `Folder manifest ${token} could not resolve ${item.abs_path} in the Dataset queue.`,
+                        );
+                    }
+                    return id;
+                });
+            const orderedSet = new Set(orderedIds);
+            const preexistingIndices = (originalTokenIds.get(token) || [])
+                .map((id) => nextIds.indexOf(id))
+                .filter((index) => index >= 0);
+            const requestedIndex = preexistingIndices.length > 0
+                ? Math.min(...preexistingIndices)
+                : Number(source.queueIndex);
+            const withoutManifest = nextIds.filter((id) => !orderedSet.has(Number(id)));
+            const insertionIndex = Number.isSafeInteger(requestedIndex)
+                ? Math.max(0, Math.min(requestedIndex, withoutManifest.length))
+                : withoutManifest.length;
+            nextIds = [
+                ...withoutManifest.slice(0, insertionIndex),
+                ...orderedIds,
+                ...withoutManifest.slice(insertionIndex),
+            ];
+            source.queueIndex = insertionIndex;
+        }
+        this.imageIds = nextIds;
+        this._renderQueue();
+        this._renderImportGallery?.();
+        this._updateCount();
+        this._updateExportEnabled();
+        this._saveSession();
+    };
+
     // -------- Add local items from folder-scan response --------
 
     /**
@@ -226,55 +639,118 @@
         const showToast = options.showToast !== false;
         const focusImportTab = options.focusImportTab === true;
 
-        const before = this.imageIds.length;
+        const originalImageIds = [...this.imageIds];
+        const originalActiveId = this.activeId;
+        const originalLastClickedId = this._lastClickedId;
+        const before = originalImageIds.length;
         const seen = new Set(this.imageIds.map(Number));
-        const localCaptions = this._loadLocalCaptions();
+        const usePathCaptionCache = usesUnscopedLocalCaptionCache(this);
+        const localCaptions = usePathCaptionCache ? this._loadLocalCaptions() : {};
+        const localCaptionTriggers = usePathCaptionCache ? this._loadLocalCaptionTriggers() : {};
+        const managedTrigger = String(this._quickfilledTrigger || '').trim();
+        if (managedTrigger && typeof this._replaceManagedTriggerInCaptionsByOwner !== 'function') {
+            throw new TypeError('Dataset trigger caption owner writer is unavailable.');
+        }
+        const addedLocalItems = new Map();
+        const touchedItemState = new Map();
         let touchedActive = false;
 
-        for (const item of (items || [])) {
-            const dsId = String(item.ds_id || '');
-            if (!dsId.startsWith('ds:')) continue;
-            let numericId = this._dsIdToNumericId(dsId);
-            const absPath = String(item.abs_path || '');
-            if (!absPath) continue;
+        try {
+            for (const item of (items || [])) {
+                const dsId = String(item.ds_id || '');
+                if (!dsId.startsWith('ds:')) continue;
+                let numericId = this._dsIdToNumericId(dsId);
+                const absPath = String(item.abs_path || '');
+                if (!absPath) continue;
 
-            // Extremely defensive collision handling for synthetic local IDs.
-            while (seen.has(numericId) && this.localItemPaths.get(numericId) !== absPath) {
-                numericId -= 1;
-            }
+                // Extremely defensive collision handling for synthetic local IDs.
+                while (seen.has(numericId) && this.localItemPaths.get(numericId) !== absPath) {
+                    numericId -= 1;
+                }
+                if (!touchedItemState.has(numericId)) {
+                    touchedItemState.set(numericId, {
+                        path: mapEntry(this.localItemPaths, numericId),
+                        dsId: mapEntry(this.localItemDsIds, numericId),
+                        meta: mapEntry(this.meta, numericId),
+                        caption: mapEntry(this.captions, numericId),
+                        captionEdit: mapEntry(this.captionEdits, numericId),
+                        nlCaption: mapEntry(this.nlCaptions, numericId),
+                        nlEdit: mapEntry(this.nlEdits, numericId),
+                        captionType: mapEntry(this.captionType, numericId),
+                        undoStack: mapEntry(this._undoStacks, numericId),
+                        selected: this._queueSelection.has(numericId),
+                    });
+                }
 
-            if (!seen.has(numericId)) {
-                this.imageIds.push(numericId);
-                seen.add(numericId);
+                if (!seen.has(numericId)) {
+                    this.imageIds.push(numericId);
+                    seen.add(numericId);
+                    addedLocalItems.set(
+                        numericId,
+                        String(localCaptionTriggers[absPath] || '').trim(),
+                    );
+                }
+                this.localItemPaths.set(numericId, absPath);
+                this.localItemDsIds.set(numericId, dsId);
+                const existing = this.meta.get(numericId) || {};
+                const scanIndex = Number(item.scan_index);
+                const nextMeta = {
+                    ...existing,
+                    source: 'local',
+                    ds_id: dsId,
+                    abs_path: absPath,
+                    filename: item.filename || existing.filename || '',
+                    thumbnail_path: '',
+                    thumb_b64: item.thumb_b64 || existing.thumb_b64 || '',
+                    width: Number(item.width || existing.width || 0),
+                    height: Number(item.height || existing.height || 0),
+                    mtime: Number(item.mtime || existing.mtime || 0),
+                    size: Number(item.size || existing.size || 0),
+                    scan_index: Number.isFinite(scanIndex) ? scanIndex : existing.scan_index,
+                    folder_scan_token: item.folder_scan_token || existing.folder_scan_token || '',
+                    source_kind: item.source_kind || existing.source_kind || 'folder_path',
+                    sidecar_capability: item.sidecar_capability || existing.sidecar_capability || 'beside_image',
+                };
+                delete nextMeta.sidecar_caption;
+                this.meta.set(numericId, nextMeta);
+                if (Number(this.activeId) === Number(numericId)) touchedActive = true;
+                if (typeof item.sidecar_caption === 'string' && !this.captions.has(numericId)) {
+                    this.captions.set(numericId, item.sidecar_caption);
+                }
+                // Restore any saved caption for this path so re-imports
+                // pick the user's previous edit back up.
+                const hasSavedCaption = Object.prototype.hasOwnProperty.call(localCaptions, absPath);
+                if (hasSavedCaption && !this.captionEdits.has(numericId)) {
+                    this.captionEdits.set(numericId, String(localCaptions[absPath] ?? ''));
+                }
             }
-            this.localItemPaths.set(numericId, absPath);
-            this.localItemDsIds.set(numericId, dsId);
-            const existing = this.meta.get(numericId) || {};
-            const scanIndex = Number(item.scan_index);
-            this.meta.set(numericId, {
-                ...existing,
-                source: 'local',
-                ds_id: dsId,
-                abs_path: absPath,
-                filename: item.filename || existing.filename || '',
-                thumbnail_path: '',
-                thumb_b64: item.thumb_b64 || existing.thumb_b64 || '',
-                width: Number(item.width || existing.width || 0),
-                height: Number(item.height || existing.height || 0),
-                mtime: Number(item.mtime || existing.mtime || 0),
-                size: Number(item.size || existing.size || 0),
-                scan_index: Number.isFinite(scanIndex) ? scanIndex : existing.scan_index,
-                folder_scan_token: item.folder_scan_token || existing.folder_scan_token || '',
-                source_kind: item.source_kind || existing.source_kind || 'folder_path',
-                sidecar_capability: item.sidecar_capability || existing.sidecar_capability || 'beside_image',
-            });
-            if (Number(this.activeId) === Number(numericId)) touchedActive = true;
-            // Restore any saved caption for this path so re-imports
-            // pick the user's previous edit back up.
-            const saved = localCaptions[absPath];
-            if (saved && !this.captionEdits.has(numericId)) {
-                this.captionEdits.set(numericId, saved);
+            if (managedTrigger && addedLocalItems.size > 0) {
+                this._replaceManagedTriggerInCaptionsByOwner(addedLocalItems, managedTrigger);
             }
+        } catch (error) {
+            this.imageIds = originalImageIds;
+            this.activeId = originalActiveId;
+            this._lastClickedId = originalLastClickedId;
+            const previousRestoringSession = this._restoringSession;
+            this._restoringSession = true;
+            try {
+                for (const [id, snapshot] of touchedItemState.entries()) {
+                    restoreMapEntry(this.localItemPaths, id, snapshot.path);
+                    restoreMapEntry(this.localItemDsIds, id, snapshot.dsId);
+                    restoreMapEntry(this.meta, id, snapshot.meta);
+                    restoreMapEntry(this.captions, id, snapshot.caption);
+                    restoreMapEntry(this.captionEdits, id, snapshot.captionEdit);
+                    restoreMapEntry(this.nlCaptions, id, snapshot.nlCaption);
+                    restoreMapEntry(this.nlEdits, id, snapshot.nlEdit);
+                    restoreMapEntry(this.captionType, id, snapshot.captionType);
+                    restoreMapEntry(this._undoStacks, id, snapshot.undoStack);
+                    if (snapshot.selected) this._queueSelection.add(id);
+                    else this._queueSelection.delete(id);
+                }
+            } finally {
+                this._restoringSession = previousRestoringSession;
+            }
+            throw error;
         }
 
         const added = this.imageIds.length - before;
@@ -319,11 +795,15 @@
             const numericId = Number(id);
             const meta = { ...(this.meta.get(numericId) || {}) };
             delete meta.thumb_b64;
+            delete meta.sidecar_caption;
             localItems.push({
                 id: numericId,
                 abs_path: absPath,
                 ds_id: this.localItemDsIds.get(numericId) || meta.ds_id || '',
                 meta,
+                ...(this.captions.has(numericId)
+                    ? { caption_baseline: String(this.captions.get(numericId) ?? '') }
+                    : {}),
             });
         }
         const manifests = [];
@@ -332,6 +812,7 @@
                 scan_token: token,
                 folder_path: source?.folder_path || '',
                 total: Number(source?.total || 0) || 0,
+                queueIndex: Number.isSafeInteger(source?.queueIndex) ? source.queueIndex : 0,
                 excludedPaths: Array.from(source?.excludedPaths || []),
             });
         }
@@ -351,6 +832,7 @@
                 scan_token: token,
                 folder_path: source.folder_path || '',
                 total: Number(source.total || 0) || 0,
+                queueIndex: Number.isSafeInteger(source.queueIndex) ? source.queueIndex : 0,
                 excludedPaths: newNativeSet(Array.isArray(source.excludedPaths) ? source.excludedPaths : []),
             });
         }
@@ -365,9 +847,205 @@
             meta.ds_id = item.ds_id || meta.ds_id || '';
             meta.source_kind = meta.source_kind || 'folder_path';
             meta.sidecar_capability = meta.sidecar_capability || 'beside_image';
+            delete meta.sidecar_caption;
             this.localItemPaths.set(id, absPath);
             if (meta.ds_id) this.localItemDsIds.set(id, meta.ds_id);
             this.meta.set(id, meta);
+            if (typeof item.caption_baseline === 'string') {
+                this.captions.set(id, item.caption_baseline);
+            }
+        }
+    };
+
+    DM._restoreProjectLocalItems = function (items) {
+        const idsByPosition = new Map();
+        const restoredCaptionOwners = new Map();
+        const usedIds = newNativeSet();
+        for (const item of items) {
+            const absPath = String(item.path);
+            const dsId = String(item.ds_id);
+            let numericId = this._dsIdToNumericId(dsId);
+            while (usedIds.has(numericId)) numericId -= 1;
+            usedIds.add(numericId);
+
+            const filename = absPath.split(/[\\/]/).pop() || absPath;
+            this.localItemPaths.set(numericId, absPath);
+            this.localItemDsIds.set(numericId, dsId);
+            this.meta.set(numericId, {
+                source: 'local',
+                ds_id: dsId,
+                abs_path: absPath,
+                filename,
+                thumbnail_path: '',
+                thumb_b64: '',
+                width: 0,
+                height: 0,
+                mtime: Number(item.mtime_ns) / 1_000_000_000,
+                mtime_ns: item.mtime_ns,
+                size: item.size,
+                source_device: item.device,
+                source_inode: item.inode,
+                source_kind: 'project_local',
+                sidecar_capability: 'beside_image',
+            });
+            if (typeof item.sidecar_caption === 'string' && !this.captions.has(numericId)) {
+                this.captions.set(numericId, item.sidecar_caption);
+            }
+            const hasExistingCaptionEdit = this.captionEdits.has(numericId);
+            if (!hasExistingCaptionEdit) {
+                restoredCaptionOwners.set(numericId, '');
+            }
+            idsByPosition.set(item.position, numericId);
+        }
+        return { idsByPosition, restoredCaptionOwners };
+    };
+
+    function mapEntry(map, key) {
+        return map.has(key)
+            ? { present: true, value: map.get(key) }
+            : { present: false, value: null };
+    }
+
+    function restoreMapEntry(map, key, entry) {
+        if (entry.present) map.set(key, entry.value);
+        else map.delete(key);
+    }
+
+    DM._rekeyLocalCaptionState = function (plans) {
+        if (!usesUnscopedLocalCaptionCache(this)) return;
+        const captions = this._loadLocalCaptions();
+        const captionTriggers = this._loadLocalCaptionTriggers();
+        let changed = false;
+        for (const plan of plans) {
+            const oldPath = String(plan.oldPath);
+            const newPath = String(plan.item.path);
+            if (!oldPath || !newPath || oldPath === newPath) continue;
+            if (Object.prototype.hasOwnProperty.call(captions, oldPath)) {
+                captions[newPath] = captions[oldPath];
+                delete captions[oldPath];
+                changed = true;
+            }
+            if (Object.prototype.hasOwnProperty.call(captionTriggers, oldPath)) {
+                captionTriggers[newPath] = captionTriggers[oldPath];
+                delete captionTriggers[oldPath];
+                changed = true;
+            }
+        }
+        if (changed) this._persistLocalCaptionState(captions, captionTriggers);
+    };
+
+    DM._applySavedProjectLocalIdentities = function (items) {
+        if (!Array.isArray(items) || items.length !== this.imageIds.length) {
+            throw new TypeError('Saved Dataset project membership does not match the current queue.');
+        }
+        const usedIds = newNativeSet();
+        const plans = [];
+        for (const item of items) {
+            const currentId = Number(this.imageIds[item.position]);
+            if (item.item_type === 'library') {
+                if (!Number.isSafeInteger(currentId) || currentId <= 0 || currentId !== item.image_id) {
+                    throw new TypeError(`Saved Dataset project item ${item.position} does not match the Library queue.`);
+                }
+                continue;
+            }
+            if (item.source_status !== 'available' || !this.isLocalId(currentId)) {
+                throw new TypeError(`Saved Dataset project item ${item.position} is not an available local queue item.`);
+            }
+            let nextId = this._dsIdToNumericId(item.ds_id);
+            while (usedIds.has(nextId)) nextId -= 1;
+            usedIds.add(nextId);
+            const oldPath = String(this.localItemPaths.get(currentId) || '');
+            if (!oldPath) {
+                throw new TypeError(`Saved Dataset project item ${item.position} has no local path.`);
+            }
+            plans.push({
+                currentId,
+                nextId,
+                oldPath,
+                item,
+                meta: mapEntry(this.meta, currentId),
+                caption: mapEntry(this.captions, currentId),
+                captionEdit: mapEntry(this.captionEdits, currentId),
+                nlCaption: mapEntry(this.nlCaptions, currentId),
+                nlEdit: mapEntry(this.nlEdits, currentId),
+                captionType: mapEntry(this.captionType, currentId),
+                undoStack: mapEntry(this._undoStacks, currentId),
+                selected: this._queueSelection.has(currentId),
+            });
+        }
+
+        this._rekeyLocalCaptionState(plans);
+
+        this._restoringSession = true;
+        try {
+            for (const plan of plans) {
+                this.localItemPaths.delete(plan.currentId);
+                this.localItemDsIds.delete(plan.currentId);
+                this.meta.delete(plan.currentId);
+                this.captions.delete(plan.currentId);
+                this.captionEdits.delete(plan.currentId);
+                this.nlCaptions.delete(plan.currentId);
+                this.nlEdits.delete(plan.currentId);
+                this.captionType.delete(plan.currentId);
+                this._undoStacks.delete(plan.currentId);
+                this._queueSelection.delete(plan.currentId);
+            }
+            for (const plan of plans) {
+                const oldMeta = plan.meta.present ? plan.meta.value : {};
+                const {
+                    folder_scan_token: ignoredFolderToken,
+                    scan_index: ignoredScanIndex,
+                    sidecar_caption: ignoredSidecarCaption,
+                    ...preservedMeta
+                } = oldMeta;
+                void ignoredFolderToken;
+                void ignoredScanIndex;
+                void ignoredSidecarCaption;
+                this.localItemPaths.set(plan.nextId, plan.item.path);
+                this.localItemDsIds.set(plan.nextId, plan.item.ds_id);
+                this.meta.set(plan.nextId, {
+                    ...preservedMeta,
+                    source: 'local',
+                    ds_id: plan.item.ds_id,
+                    abs_path: plan.item.path,
+                    filename: String(plan.item.path).split(/[\\/]/).pop() || plan.item.path,
+                    mtime: Number(plan.item.mtime_ns) / 1_000_000_000,
+                    mtime_ns: plan.item.mtime_ns,
+                    size: plan.item.size,
+                    source_device: plan.item.device,
+                    source_inode: plan.item.inode,
+                    source_kind: 'project_local',
+                    sidecar_capability: 'beside_image',
+                });
+                if (plan.caption.present) {
+                    this.captions.set(plan.nextId, plan.caption.value);
+                } else if (typeof plan.item.sidecar_caption === 'string') {
+                    this.captions.set(plan.nextId, plan.item.sidecar_caption);
+                }
+                if (plan.captionEdit.present) {
+                    this.captionEdits.set(plan.nextId, plan.captionEdit.value);
+                }
+                if (plan.nlCaption.present) this.nlCaptions.set(plan.nextId, plan.nlCaption.value);
+                if (plan.nlEdit.present) this.nlEdits.set(plan.nextId, plan.nlEdit.value);
+                if (plan.captionType.present) this.captionType.set(plan.nextId, plan.captionType.value);
+                if (plan.undoStack.present) this._undoStacks.set(plan.nextId, plan.undoStack.value);
+                if (plan.selected) this._queueSelection.add(plan.nextId);
+            }
+            const idByPosition = new Map(plans.map((plan) => [plan.item.position, plan.nextId]));
+            this.imageIds = this.imageIds.map((id, position) => idByPosition.get(position) ?? id);
+            const activePlan = plans.find((plan) => plan.currentId === Number(this.activeId));
+            if (activePlan) this.activeId = activePlan.nextId;
+            const clickedPlan = plans.find((plan) => plan.currentId === Number(this._lastClickedId));
+            if (clickedPlan) this._lastClickedId = clickedPlan.nextId;
+            this.localManifestTokens.clear();
+            this._folderScanToken = null;
+            this._folderScanNextOffset = 0;
+            this._folderScanHasMore = false;
+            this._folderScanTotal = 0;
+            this._folderScanPreviewed = 0;
+            this._setFolderLoadMoreState?.(false);
+        } finally {
+            this._restoringSession = false;
         }
     };
 
@@ -467,86 +1145,6 @@
         this._renderTagPills?.();
     };
 
-    // -------- Skip backend fetches for local items --------
-    //
-    // v3.4.5 race fix: the previous implementation swapped
-    // ``this.imageIds`` to a filtered list across the ``await``, then
-    // restored it in ``finally``. If any concurrent reader (the render
-    // loop, export preview, another fetch) touched ``imageIds`` during
-    // the await, it saw a truncated list and could drop local items
-    // from the queue / preview. We now pass a snapshot of the real
-    // (gallery) ids to the original method via a transient option
-    // instead of mutating shared state.
-    //
-    // The originals read ``this.imageIds`` directly, so we still need
-    // to constrain what they see — but we do it by stashing the full
-    // list on a private field and restoring synchronously around the
-    // call, with a guard that refuses to clobber a list that another
-    // in-flight fetch has already stashed. This keeps the window
-    // tightly bounded to the call itself rather than the whole await.
-
-    const _LOCAL_FETCH_INFLIGHT = Symbol('localFetchInflight');
-
-    function withGalleryIdsOnly(fn) {
-        return async function () {
-            if (this[_LOCAL_FETCH_INFLIGHT]) {
-                // Another filtered fetch is already running; just call
-                // through with the current (already-filtered) state.
-                return fn.call(this);
-            }
-            const fullIds = this.imageIds;
-            const galleryIds = fullIds.filter((id) => !this.isLocalId(id));
-            this[_LOCAL_FETCH_INFLIGHT] = true;
-            this.imageIds = galleryIds;
-            try {
-                return await fn.call(this);
-            } finally {
-                // Only restore if nobody else has replaced imageIds
-                // underneath us (they would have had to clear
-                // _LOCAL_FETCH_INFLIGHT first, which we guard above).
-                if (this.imageIds === galleryIds) {
-                    this.imageIds = fullIds;
-                }
-                this[_LOCAL_FETCH_INFLIGHT] = false;
-            }
-        };
-    }
-
-    const original_fetchMissingMeta = DM._fetchMissingMeta;
-    DM._fetchMissingMeta = withGalleryIdsOnly(original_fetchMissingMeta);
-
-    const original_fetchMissingCaptions = DM._fetchMissingCaptions;
-    DM._fetchMissingCaptions = withGalleryIdsOnly(original_fetchMissingCaptions);
-
-    const original_refreshAllCaptions = DM._refreshAllCaptions;
-    DM._refreshAllCaptions = async function () {
-        const fullIds = this.imageIds;
-        const galleryIds = fullIds.filter((id) => !this.isLocalId(id));
-        const alreadyInflight = !!this[_LOCAL_FETCH_INFLIGHT];
-        if (!alreadyInflight) {
-            this[_LOCAL_FETCH_INFLIGHT] = true;
-            this.imageIds = galleryIds;
-        }
-        try {
-            await original_refreshAllCaptions.call(this);
-        } finally {
-            if (!alreadyInflight) {
-                if (this.imageIds === galleryIds) {
-                    this.imageIds = fullIds;
-                }
-                this[_LOCAL_FETCH_INFLIGHT] = false;
-            }
-        }
-        // Re-render the queue tiles + export preview with the FULL queue
-        // restored so refreshed captions/tags appear without a re-import.
-        // (Bug: gallery-source Smart Tag results updated this.captions but the
-        // queue/preview kept showing the stale pre-tag state, so users had to
-        // re-import from the gallery to see their tags.) _renderQueue must run
-        // after imageIds is restored above, or local items would be dropped.
-        this._renderQueue?.();
-        this._refreshExportPreview?.();
-    };
-
     // -------- Caption edits: persist local-source edits to localStorage --------
 
     // The textarea input handler in dataset-maker.js writes to
@@ -565,16 +1163,15 @@
     // side effects (session save + localStorage persist) fire in order.
     const original_captionEdits_set = DM.captionEdits.set.bind(DM.captionEdits);
     DM.captionEdits.set = function (id, val) {
-        const result = original_captionEdits_set(id, val);
-        if (DM.isLocalId(id)) {
+        if (!DM._restoringSession && usesUnscopedLocalCaptionCache(DM) && DM.isLocalId(id)) {
             const absPath = DM.localItemPaths.get(Number(id));
             if (absPath) DM._saveLocalCaption(absPath, val);
         }
-        return result;
+        return original_captionEdits_set(id, val);
     };
     const original_captionEdits_delete = DM.captionEdits.delete.bind(DM.captionEdits);
     DM.captionEdits.delete = function (id) {
-        if (DM.isLocalId(id)) {
+        if (!DM._restoringSession && usesUnscopedLocalCaptionCache(DM) && DM.isLocalId(id)) {
             const absPath = DM.localItemPaths.get(Number(id));
             if (absPath) DM._clearLocalCaption(absPath);
         }
@@ -630,7 +1227,10 @@
     DM._buildExportPayload = function () {
         const folder = document.getElementById('dataset-output-folder')?.value?.trim();
         const pattern = this._effectivePattern();
-        const trigger = document.getElementById('dataset-trigger')?.value || '';
+        const trigger = this._requireDatasetTrigger(
+            document.getElementById('dataset-trigger')?.value || '',
+            'settings.caption_render.trigger',
+        );
         const imageOp = document.getElementById('dataset-image-op')?.value || 'copy';
         const outputMode = this._outputMode?.() || 'folder';
         const overwrite = document.getElementById('dataset-overwrite')?.value || 'unique';
@@ -687,6 +1287,11 @@
             if (this.nlEdits.has(id)) image_nl_overrides[key] = this.nlEdits.get(id);
         }
 
+        if (typeof this._trainerExportFields !== 'function') {
+            throw new TypeError('Dataset export requires DatasetMaker._trainerExportFields');
+        }
+        const trainerFields = this._trainerExportFields();
+
         return {
             image_ids: galleryIds,
             image_paths: localPaths,
@@ -707,15 +1312,7 @@
             image_overrides,
             image_types,
             image_nl_overrides,
-            // Phase 4 masked training: mask sidecar format for the trainer.
-            mask_export: document.getElementById('dataset-mask-export')?.value || 'none',
-            // Trainer handoff (roadmap #2): ready dataset_config.toml.
-            // repeats/batch ride the step-estimator inputs so the plan the
-            // user just previewed is the plan the trainer gets.
-            trainer_config: document.getElementById('dataset-trainer-toml')?.checked ? 'kohya_toml' : 'none',
-            trainer_repeats: Math.max(1, Number(document.getElementById('dataset-est-repeats')?.value) || 10),
-            trainer_batch: Math.max(1, Number(document.getElementById('dataset-est-batch')?.value) || 2),
-            trainer_keep_tokens: Math.max(0, Number(document.getElementById('dataset-trainer-keep-tokens')?.value) || 0),
+            ...trainerFields,
         };
     };
 

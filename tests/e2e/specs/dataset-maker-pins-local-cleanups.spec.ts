@@ -1,4 +1,13 @@
+import fs from 'node:fs'
+import path from 'node:path'
+
 import { expect, test, type Page } from '../fixtures/click-ledger'
+
+const localFixtureImage = path.resolve(
+  process.cwd(),
+  'fixtures',
+  'censor-nudenet-public-domain.jpg',
+)
 
 /**
  * Characterization pins for the Dataset Maker "classic script" family —
@@ -14,6 +23,15 @@ import { expect, test, type Page } from '../fixtures/click-ledger'
 test.describe.configure({ mode: 'serial' })
 
 async function stubDatasetRoutes(page: Page) {
+  await page.route('**/api/images/701', (route) => route.fulfill({
+    json: {
+      id: 701,
+      filename: 'a.png',
+      path: 'C:/source/a.png',
+      width: 1024,
+      height: 1024,
+    },
+  }))
   await page.route('**/api/image-thumbnail/**', (route) => route.fulfill({ status: 204 }))
   await page.route('**/api/dataset/local-thumbnail**', (route) => route.fulfill({ status: 204 }))
   await page.route('**/api/tags/export-preview', (route) => route.fulfill({ json: { results: [] } }))
@@ -36,6 +54,8 @@ async function seedDataset(page: Page) {
     ;(window as any).App.switchView('dataset')
     dm._setActive(701)
   })
+  await page.waitForFunction(() =>
+    (window as any).DatasetMaker?._trainerContractState?.status === 'ready')
 }
 
 test.beforeEach(async ({ page }) => {
@@ -103,6 +123,163 @@ test('addLocalItems assigns negative ids, tags source=local, and dedups by ds_id
   expect(r.finalCount).toBe(2)
 })
 
+test('addLocalItems keeps the scanned sidecar baseline and freezes quickfill as an override', async ({ page }) => {
+  await seedDataset(page)
+  await page.locator('#dataset-tab-workbench').click()
+  await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm.imageIds = []
+    dm.localItemPaths.clear()
+    dm.localItemDsIds.clear()
+    dm.captions.clear()
+    dm.captionEdits.clear()
+    dm.addLocalItems([{
+      ds_id: 'ds:sidecarcaption',
+      abs_path: 'C:/dataset/one.png',
+      filename: 'one.png',
+      width: 512,
+      height: 512,
+      sidecar_caption: '1girl, red_hair',
+    }], { switchView: false, showToast: false })
+    ;(document.getElementById('dataset-common-tags') as HTMLTextAreaElement).value = 'masterpiece'
+    ;(document.getElementById('dataset-blacklist') as HTMLTextAreaElement).value = 'red_hair'
+  })
+  await page.locator('#dataset-trigger').fill('Hero_Token')
+  await page.locator('#btn-dataset-quickfill-trigger').click()
+
+  const result = await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    const id = dm.imageIds[0]
+    const payload = dm._buildExportPayload()
+    return {
+      caption: dm.captions.get(id),
+      override: payload.image_overrides['C:/dataset/one.png'],
+      overridePresent: Object.prototype.hasOwnProperty.call(
+        payload.image_overrides,
+        'C:/dataset/one.png',
+      ),
+      commonTags: payload.common_tags,
+      blacklist: payload.blacklist,
+      sidecarInMeta: Object.prototype.hasOwnProperty.call(dm.meta.get(id), 'sidecar_caption'),
+    }
+  })
+
+  expect(result).toEqual({
+    caption: '1girl, red_hair',
+    override: 'Hero_Token, 1girl, red_hair',
+    overridePresent: true,
+    commonTags: ['masterpiece', 'Hero_Token'],
+    blacklist: ['red_hair'],
+    sidecarInMeta: false,
+  })
+})
+
+test('folder scan quickfill persists one authoritative caption override through reload', async ({ page }, testInfo) => {
+  const localFixtureFolder = testInfo.outputPath('trigger-source')
+  fs.mkdirSync(localFixtureFolder, { recursive: true })
+  fs.copyFileSync(localFixtureImage, path.join(localFixtureFolder, 'trigger-source.jpg'))
+
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+  await page.waitForFunction(() => typeof (window as any).DatasetMaker?.addLocalItems === 'function')
+  await page.evaluate(() => (window as any).App.switchView('dataset'))
+
+  await page.locator('#dataset-folder-import-path').fill(localFixtureFolder)
+  await page.locator('#btn-dataset-folder-import-go').click()
+  await expect.poll(() => page.evaluate(() => (window as any).DatasetMaker.imageIds.length)).toBe(1)
+
+  await page.locator('#dataset-tab-workbench').click()
+  await page.locator('#dataset-trigger').fill('Hero_Token')
+  await page.locator('#btn-dataset-quickfill-trigger').click()
+  await expect(page.locator('#dataset-editor-textarea')).toHaveValue('Hero_Token')
+
+  const initial = await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    const id = dm.imageIds[0]
+    const payload = dm._buildExportPayload()
+    return {
+      baseline: dm.captions.get(id) ?? '',
+      draft: dm.captionEdits.get(id),
+      overrideValues: Object.values(payload.image_overrides),
+      scanTokenCount: payload.dataset_scan_tokens.length,
+    }
+  })
+  expect(initial).toEqual({
+    baseline: '',
+    draft: 'Hero_Token',
+    overrideValues: ['Hero_Token'],
+    scanTokenCount: 1,
+  })
+
+  await page.locator('#dataset-trigger').fill('New_Token')
+  await page.locator('#dataset-common-tags').fill('best_quality')
+  await expect(page.locator('#dataset-editor-textarea')).toHaveValue('Hero_Token')
+  expect(await page.evaluate(() => {
+    const payload = (window as any).DatasetMaker._buildExportPayload()
+    return Object.values(payload.image_overrides)
+  })).toEqual(['Hero_Token'])
+
+  await page.evaluate(() => (window as any).DatasetMaker._saveSession())
+  await page.reload()
+  await page.waitForFunction(() => typeof (window as any).DatasetMaker?.addLocalItems === 'function')
+  await page.evaluate(() => (window as any).App.switchView('dataset'))
+  await page.locator('#dataset-tab-workbench').click()
+
+  await expect(page.locator('#dataset-editor-textarea')).toHaveValue('Hero_Token')
+  expect(await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    return Object.values(dm._buildExportPayload().image_overrides)
+  })).toEqual(['Hero_Token'])
+})
+
+test('local sidecar baseline survives draft restoration without becoming an override', async ({ page }) => {
+  await seedDataset(page)
+  await page.locator('#dataset-tab-workbench').click()
+  const result = await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm.imageIds = []
+    dm.localItemPaths.clear()
+    dm.localItemDsIds.clear()
+    dm.meta.clear()
+    dm.captions.clear()
+    dm.captionEdits.clear()
+    dm.addLocalItems([{
+      ds_id: 'ds:sidecarrestore',
+      abs_path: 'C:/dataset/restore.png',
+      filename: 'restore.png',
+      width: 512,
+      height: 512,
+      sidecar_caption: 'Hero_Token, 1girl, red_hair',
+    }], { switchView: false, showToast: false })
+    const id = dm.imageIds[0]
+    const local = dm._serializeLocalDatasetState()
+    dm.captions.clear()
+    dm.meta.clear()
+    dm.localItemPaths.clear()
+    dm.localItemDsIds.clear()
+    dm._restoreLocalSession(local)
+    const payload = dm._buildExportPayload()
+    return {
+      serializedBaseline: local.localItems[0].caption_baseline,
+      sidecarInMeta: Object.prototype.hasOwnProperty.call(local.localItems[0].meta, 'sidecar_caption'),
+      restoredCaption: dm.captions.get(id),
+      overridePresent: dm.captionEdits.has(id),
+      exportOverridePresent: Object.prototype.hasOwnProperty.call(
+        payload.image_overrides,
+        'C:/dataset/restore.png',
+      ),
+    }
+  })
+
+  expect(result).toEqual({
+    serializedBaseline: 'Hero_Token, 1girl, red_hair',
+    sidecarInMeta: false,
+    restoredCaption: 'Hero_Token, 1girl, red_hair',
+    overridePresent: false,
+    exportOverridePresent: false,
+  })
+})
+
 test('_getLogicalDatasetCount = loaded non-manifest items + (manifest total - excluded)', async ({ page }) => {
   await seedDataset(page)
   const count = await page.evaluate(() => {
@@ -121,6 +298,93 @@ test('_getLogicalDatasetCount = loaded non-manifest items + (manifest total - ex
   })
   // 2 loaded + (10 - 1 excluded) = 11
   expect(count).toBe(11)
+})
+
+test('delayed gallery fetches keep the mixed local queue identity intact', async ({ page }) => {
+  await seedDataset(page)
+  await page.unroute('**/api/tags/export-preview')
+  const capturedBodies: Array<{ image_ids?: number[] }> = []
+  const releaseResponses: Array<() => void> = []
+  const responseGates = Array.from({ length: 3 }, () => new Promise<void>((resolve) => {
+    releaseResponses.push(resolve)
+  }))
+  await page.route('**/api/tags/export-preview', async (route) => {
+    const requestIndex = capturedBodies.length
+    capturedBodies.push(route.request().postDataJSON() as { image_ids?: number[] })
+    await responseGates[requestIndex]
+    await route.fulfill({ json: { results: [] } })
+  })
+
+  await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    const localEntries = ['a', 'b', 'c', 'd'].map((suffix) => {
+      const dsId = `ds:queue-currentness-local-${suffix}`
+      return { dsId, localId: dm._dsIdToNumericId(dsId) }
+    })
+    const localIds = localEntries.map(({ localId }) => localId)
+    for (const [index, { dsId, localId }] of localEntries.entries()) {
+      const path = `C:/source/local-currentness-${index}.png`
+      dm.localItemPaths.set(localId, path)
+      dm.localItemDsIds.set(localId, dsId)
+      dm.meta.set(localId, {
+        source: 'local',
+        ds_id: dsId,
+        abs_path: path,
+        filename: `local-currentness-${index}.png`,
+        width: 1024,
+        height: 1024,
+      })
+    }
+    dm.imageIds = [701, localIds[0]]
+    dm.meta.delete(701)
+    ;(window as any).__datasetQueueReference = dm.imageIds
+    ;(window as any).__datasetQueueMutations = [
+      [localIds[0], 701, localIds[1]],
+      [localIds[2], 701, localIds[1]],
+      [localIds[1], localIds[3], 701, localIds[2]],
+    ]
+    ;(window as any).__datasetPendingFetch = dm._fetchMissingMeta()
+  })
+
+  for (let requestIndex = 0; requestIndex < 3; requestIndex += 1) {
+    await expect.poll(() => capturedBodies.length).toBe(requestIndex + 1)
+    expect(capturedBodies[requestIndex].image_ids).toEqual([701])
+    const duringFetch = await page.evaluate((index) => {
+      const dm = (window as any).DatasetMaker
+      const nextIds = (window as any).__datasetQueueMutations[index] as number[]
+      dm.imageIds.splice(0, dm.imageIds.length, ...nextIds)
+      return {
+        ids: [...dm.imageIds],
+        sameReference: dm.imageIds === (window as any).__datasetQueueReference,
+      }
+    }, requestIndex)
+    expect(duringFetch.sameReference).toBe(true)
+
+    releaseResponses[requestIndex]()
+    await page.evaluate(async () => {
+      await (window as any).__datasetPendingFetch
+    })
+    const afterFetch = await page.evaluate(() => {
+      const dm = (window as any).DatasetMaker
+      return {
+        ids: [...dm.imageIds],
+        sameReference: dm.imageIds === (window as any).__datasetQueueReference,
+      }
+    })
+    expect(afterFetch).toEqual(duringFetch)
+
+    if (requestIndex === 0) {
+      await page.evaluate(() => {
+        const dm = (window as any).DatasetMaker
+        dm.captions.delete(701)
+        ;(window as any).__datasetPendingFetch = dm._fetchMissingCaptions()
+      })
+    } else if (requestIndex === 1) {
+      await page.evaluate(() => {
+        ;(window as any).__datasetPendingFetch = (window as any).DatasetMaker._refreshAllCaptions()
+      })
+    }
+  }
 })
 
 test('beside_image output mode forces output_folder="" and image_op="copy" (pinned quirk)', async ({ page }) => {
@@ -207,7 +471,7 @@ test('clear button unticks every prune category and sets the type to "custom"', 
 // Export confirm modal + naming preview
 // ---------------------------------------------------------------------------
 
-test('confirm modal surfaces empty-caption, small-image, and few-image warnings', async ({ page }) => {
+test('confirm modal leaves readiness rules to the backend report', async ({ page }) => {
   await seedDataset(page)
   await page.evaluate(() => {
     const dm = (window as any).DatasetMaker
@@ -222,6 +486,26 @@ test('confirm modal surfaces empty-caption, small-image, and few-image warnings'
     const folder = document.getElementById('dataset-output-folder') as HTMLInputElement
     folder.value = 'C:/out'
     folder.dispatchEvent(new Event('input', { bubbles: true }))
+    const signature = dm._readinessPayloadSnapshot().signature
+    dm._readinessAcceptedSignature = signature
+    dm._setReadinessView({
+      state: 'ready',
+      message: 'Dataset readiness finished: ready',
+      activeJobId: null,
+      processed: 3,
+      total: 3,
+      report: {
+        summary: {
+          status: 'ready',
+          total_requested: 3,
+          processed: 3,
+          trainable_pairs: 3,
+          blocker_count: 0,
+          warning_count: 0,
+        },
+        issues: [],
+      },
+    })
     dm._updateExportEnabled()
   })
   await page.locator('#dataset-tab-export').click()
@@ -229,9 +513,10 @@ test('confirm modal surfaces empty-caption, small-image, and few-image warnings'
 
   const summary = page.locator('#dataset-confirm-summary')
   await expect(page.locator('#dataset-confirm-modal')).toBeVisible()
-  await expect(summary).toContainText('have empty captions') // 902 untagged
-  await expect(summary).toContainText('under 512 px') // 902 small
-  await expect(summary).toContainText('15-50 images') // only 3 images total (< 10)
+  await expect(summary).toContainText('3 images')
+  await expect(summary).not.toContainText('have empty captions')
+  await expect(summary).not.toContainText('under 512 px')
+  await expect(summary).not.toContainText('15-50 images')
 })
 
 test('renumber naming drops the orphan underscore when the trigger is empty (MED-5 quirk)', async ({ page }) => {

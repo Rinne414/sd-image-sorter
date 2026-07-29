@@ -5,6 +5,7 @@ Supports automatic model download from HuggingFace and local model loading.
 
 import csv
 import gc
+import hmac
 import os
 import json
 import logging
@@ -29,6 +30,7 @@ from config import (
 )
 from ai_runtime_guard import exclusive_ai_runtime, looks_like_cuda_oom
 from model_download_sources import endpoint_label, get_hf_endpoint_order
+from tag_writer_provenance import ModelFileIdentity, model_file_snapshot
 from utils.path_validation import normalize_user_path
 
 logger = logging.getLogger(__name__)
@@ -176,6 +178,8 @@ class WD14Tagger(
         self._load_lock = threading.Lock()
         self._resolved_model_path: Optional[str] = None
         self._resolved_tags_path: Optional[str] = None
+        self._loaded_model_file_identity: Optional[ModelFileIdentity] = None
+        self._loaded_model_file_sha256: Optional[str] = None
         self._input_name: Optional[str] = None
         self._input_hw: Tuple[int, int] = (448, 448)
         self._supports_true_batch: bool = False
@@ -249,6 +253,30 @@ class WD14Tagger(
         )
         return sess_options
 
+    def _create_verified_session(
+        self,
+        model_path: str,
+        sess_options: "ort.SessionOptions",
+        providers: List[str],
+    ) -> "ort.InferenceSession":
+        identity_before, sha256_before = model_file_snapshot(model_path)
+        session = ort.InferenceSession(
+            model_path,
+            sess_options=sess_options,
+            providers=providers,
+        )
+        identity_after, sha256_after = model_file_snapshot(model_path)
+        if (
+            identity_before != identity_after
+            or not hmac.compare_digest(sha256_before, sha256_after)
+        ):
+            raise RuntimeError(
+                "Model file changed while ONNX Runtime was loading the session"
+            )
+        self._loaded_model_file_identity = identity_after
+        self._loaded_model_file_sha256 = sha256_after
+        return session
+
     def _create_session(
         self,
         model_path: str,
@@ -258,8 +286,10 @@ class WD14Tagger(
     ) -> "ort.InferenceSession":
         """Create an ONNX session, retrying once after repairing a corrupted model."""
         try:
-            return ort.InferenceSession(
-                model_path, sess_options=sess_options, providers=providers
+            return self._create_verified_session(
+                model_path,
+                sess_options,
+                providers,
             )
         except Exception as e:
             error_msg = str(e)
@@ -278,9 +308,13 @@ class WD14Tagger(
 
                 logger.info("Re-downloading model...")
                 model_path, tags_path = self._download_model()
+                self._resolved_model_path = model_path
+                self._resolved_tags_path = tags_path
                 try:
-                    return ort.InferenceSession(
-                        model_path, sess_options=sess_options, providers=providers
+                    return self._create_verified_session(
+                        model_path,
+                        sess_options,
+                        providers,
                     )
                 except Exception as e2:
                     raise RuntimeError(

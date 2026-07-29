@@ -86,6 +86,11 @@
                 this._collections = collections;
                 const favorites = collections.find((c) => c.slug === FAVORITES_SLUG);
                 this._favoritesId = favorites ? favorites.id : null;
+                const activeId = Number(appRef()?.AppState?.filters?.collectionId);
+                this._activeId = Number.isFinite(activeId)
+                    && collections.some((collection) => Number(collection.id) === activeId)
+                    ? activeId
+                    : null;
                 this._renderList();
             } catch (error) {
                 log('warn', 'Failed to load collections', error);
@@ -201,7 +206,10 @@
         browse(id) {
             const app = appRef();
             this._activeId = id;
-            app.updateFilters?.((filters) => { filters.collectionId = id; });
+            app.updateFilters?.((filters) => {
+                filters.collectionId = id;
+                filters.scope = 'library';
+            });
             app.updateFilterSummary?.();
             app.loadImages?.();
             this._renderList();
@@ -210,7 +218,10 @@
         clearBrowse() {
             const app = appRef();
             this._activeId = null;
-            app.updateFilters?.((filters) => { filters.collectionId = null; });
+            app.updateFilters?.((filters) => {
+                filters.collectionId = null;
+                filters.scope = 'current_session';
+            });
             app.updateFilterSummary?.();
             app.loadImages?.();
             this._renderList();

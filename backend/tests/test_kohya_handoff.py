@@ -19,6 +19,9 @@ import database as db
 from services import mask_service
 
 
+pytestmark = pytest.mark.usefixtures("authorize_legacy_dataset_exports")
+
+
 @pytest.fixture
 def masks_dir(tmp_path, monkeypatch):
     target = tmp_path / "masks"

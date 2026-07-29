@@ -485,6 +485,7 @@ def _persist_result(image_id: int, result: Dict[str, Any], merge_strategy: str) 
                 "ai_caption": final_caption or None,
                 "nl_caption": final_nl or None,
                 "tag_scores": result.get("tag_score_sets") or None,
+                "writer_provenance": None,
             }
         ],
         default_source="tagger",

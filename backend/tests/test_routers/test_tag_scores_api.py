@@ -12,6 +12,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import database as db
+from tag_writer_provenance import TagWriterProvenance
 
 
 def _add_image(path):
@@ -103,6 +104,42 @@ class TestRethreshold:
         assert "1girl" in names
         assert "general" in names, "rating argmax survives any threshold"
         assert "my_oc_tag" in names, "manual rows survive (provenance)"
+
+    def test_apply_invalidates_unproven_score_lineage(self, test_client):
+        image_id = self._seed()
+        provenance = TagWriterProvenance(
+            writer_family="wd14",
+            provider="huggingface",
+            model="SmilingWolf/wd-swinv2-tagger-v3",
+            revision=f"sha256:{'e' * 64}",
+            runtime_provider="CPUExecutionProvider",
+        )
+        db.add_tags_batch(
+            [
+                {
+                    "image_id": image_id,
+                    "tags": db.get_image_tags(image_id),
+                    "content_fingerprint": "f" * 64,
+                    "writer_provenance": provenance.model_dump(mode="python"),
+                }
+            ],
+            default_source=None,
+            replace_scope="all",
+        )
+
+        response = test_client.post(
+            "/api/tags/rethreshold",
+            json={
+                "image_ids": [image_id],
+                "model": "wd-test",
+                "threshold": 0.50,
+                "character_threshold": 0.85,
+                "dry_run": False,
+            },
+        )
+
+        assert response.status_code == 200
+        assert db.get_tag_writer_provenance_map([image_id]) == {}
 
     def test_lower_threshold_recovers_subthreshold_tags(self, test_client):
         image_id = self._seed()

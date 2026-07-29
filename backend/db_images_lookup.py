@@ -204,7 +204,7 @@ def get_images_by_ids(image_ids: List[int]) -> Dict[int, Dict[str, Any]]:
             batch = image_ids[i:i + batch_size]
             placeholders = ",".join("?" * len(batch))
             cursor.execute(
-                f"SELECT {_IMAGE_COLUMNS_BARE} FROM images WHERE id IN ({placeholders})",
+                f"SELECT {_IMAGE_COLUMNS_BARE}, content_fingerprint FROM images WHERE id IN ({placeholders})",
                 batch
             )
             for row in cursor.fetchall():

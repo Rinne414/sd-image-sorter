@@ -97,6 +97,7 @@ function cloneFilterState(filters) {
         colorHues: [...(source.colorHues || [])],
         excludeColorHues: [...(source.excludeColorHues || [])],
         collectionId: source.collectionId ?? null,
+        scope: source.scope === 'library' ? 'library' : 'current_session',
         folder: source.folder ? String(source.folder).trim() : null,
         hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
         // Aurora Phase 3 toolbar/24d filters
@@ -188,6 +189,7 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
         colorHues: [...(source.colorHues || [])],
         excludeColorHues: [...(source.excludeColorHues || [])],
         collectionId: source.collectionId ?? null,
+        scope: source.scope === 'library' ? 'library' : 'current_session',
         folder: source.folder ? String(source.folder).trim() : null,
         hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
         // Aurora Phase 3 toolbar/24d filters
@@ -240,6 +242,7 @@ function buildAdvancedFilterContract(filters = AppState?.filters || createDefaul
         colorHues: request.colorHues,
         excludeColorHues: request.excludeColorHues,
         collectionId: request.collectionId ?? null,
+        scope: request.scope || 'current_session',
         folder: request.folder || null,
         hasMetadata: request.hasMetadata ?? null,
     };

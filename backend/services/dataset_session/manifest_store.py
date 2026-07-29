@@ -10,9 +10,9 @@ facade FILE and the pin suite patches it there
 hit the real data tree.
 
 iter_scan_manifest_entries keeps its pinned side effect: surfaced paths are
-registered with the session allowlist ONLY on full consumption of the
-generator (the trailing _register_session_paths calls; report §7-b) — do not
-"optimize" them into per-yield calls.
+registered with the thumbnail allowlist ONLY on full consumption of the
+generator (the trailing _register_thumbnail_paths calls; report §7-b) — do
+not "optimize" them into per-yield calls.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 from config import ALLOWED_IMAGE_EXTENSIONS
-from services.dataset_session.allowlist import _register_session_paths
+from services.dataset_session.allowlist import _register_thumbnail_paths
 
 # Same logger channel as the pre-split monolith (report seam: logger verbatim).
 logger = logging.getLogger("services.dataset_session_service")
@@ -240,12 +240,12 @@ def iter_scan_manifest_entries(scan_token: str) -> Iterator[Dict[str, Any]]:
     manifest = _load_scan_manifest(scan_token)
     legacy_paths = manifest.get("paths")
     if isinstance(legacy_paths, list):
-        registered: List[str] = []
+        legacy_registered: List[str] = []
         for index, path in enumerate(legacy_paths):
             value = str(path or "").strip()
             if value:
                 p = Path(value)
-                registered.append(value)
+                legacy_registered.append(value)
                 yield {
                     "path": value,
                     "filename": p.name,
@@ -253,12 +253,12 @@ def iter_scan_manifest_entries(scan_token: str) -> Iterator[Dict[str, Any]]:
                     "size": 0,
                     "mtime": 0.0,
                 }
-        _register_session_paths(registered)
+        _register_thumbnail_paths(legacy_registered)
         return
 
     paths_file = str(manifest.get("paths_file") or "")
     paths_path = _svc()._get_scan_dir() / Path(paths_file).name
-    registered: List[str] = []
+    streamed_registered: List[str] = []
     try:
         with paths_path.open("r", encoding="utf-8") as handle:
             for index, line in enumerate(handle):
@@ -273,7 +273,7 @@ def iter_scan_manifest_entries(scan_token: str) -> Iterator[Dict[str, Any]]:
                     path = str(value.get("path") or "").strip()
                     if not path:
                         continue
-                    registered.append(path)
+                    streamed_registered.append(path)
                     yield {
                         "path": path,
                         "filename": str(value.get("filename") or Path(path).name),
@@ -284,7 +284,7 @@ def iter_scan_manifest_entries(scan_token: str) -> Iterator[Dict[str, Any]]:
                     continue
                 path = str(value or "").strip()
                 if path:
-                    registered.append(path)
+                    streamed_registered.append(path)
                     yield {
                         "path": path,
                         "filename": Path(path).name,
@@ -292,7 +292,7 @@ def iter_scan_manifest_entries(scan_token: str) -> Iterator[Dict[str, Any]]:
                         "size": 0,
                         "mtime": 0.0,
                     }
-        _register_session_paths(registered)
+        _register_thumbnail_paths(streamed_registered)
     except OSError as exc:
         raise ValueError("Folder scan token path manifest is unreadable. Scan the folder again.") from exc
 

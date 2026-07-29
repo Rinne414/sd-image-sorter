@@ -304,15 +304,34 @@ def test_bulk_ops_preserve_tag_provenance(test_client, tmp_path):
     would then delete formerly-manual rows.
     """
     import database as db
+    from tag_writer_provenance import TagWriterProvenance
 
     image_path = tmp_path / "bulk-provenance.png"
     image_path.write_bytes(b"not a real image")
     image_id = db.add_image(path=str(image_path), filename=image_path.name)
-    db.add_tags(image_id, [
-        {"tag": "hand_made", "confidence": 1.0, "source": "manual", "category": "outfit"},
-        {"tag": "machine_made", "confidence": 0.9, "source": "tagger", "category": "general"},
-        {"tag": "old_name", "confidence": 0.8, "source": "tagger", "category": "general"},
-    ])
+    provenance = TagWriterProvenance(
+        writer_family="wd14",
+        provider="huggingface",
+        model="SmilingWolf/wd-swinv2-tagger-v3",
+        revision=f"sha256:{'a' * 64}",
+        runtime_provider="CPUExecutionProvider",
+    )
+    db.add_tags_batch(
+        [
+            {
+                "image_id": image_id,
+                "tags": [
+                    {"tag": "hand_made", "confidence": 1.0, "source": "manual", "category": "outfit"},
+                    {"tag": "machine_made", "confidence": 0.9, "source": "tagger", "category": "general"},
+                    {"tag": "old_name", "confidence": 0.8, "source": "tagger", "category": "general"},
+                ],
+                "content_fingerprint": "b" * 64,
+                "writer_provenance": provenance.model_dump(mode="python"),
+            }
+        ],
+        default_source=None,
+        replace_scope="all",
+    )
 
     # --- find/replace: rename old_name -> new_name ---
     response = test_client.post("/api/tags/bulk/find-replace", json={
@@ -329,6 +348,7 @@ def test_bulk_ops_preserve_tag_provenance(test_client, tmp_path):
     assert rows["machine_made"]["category"] == "general"
     # A user-initiated rename produces a user-owned row.
     assert rows["new_name"]["source"] == "manual"
+    assert db.get_tag_writer_provenance_map([image_id])
 
     # --- bulk add: untouched rows keep provenance, new rows are manual ---
     response = test_client.post("/api/tags/bulk/add", json={
@@ -342,6 +362,7 @@ def test_bulk_ops_preserve_tag_provenance(test_client, tmp_path):
     assert rows["hand_made"]["category"] == "outfit"
     assert rows["machine_made"]["source"] == "tagger"
     assert rows["user_added"]["source"] == "manual"
+    assert db.get_tag_writer_provenance_map([image_id])
 
     # --- bulk remove: surviving rows keep provenance ---
     response = test_client.post("/api/tags/bulk/remove", json={
@@ -354,6 +375,7 @@ def test_bulk_ops_preserve_tag_provenance(test_client, tmp_path):
     assert "user_added" not in rows
     assert rows["hand_made"]["source"] == "manual"
     assert rows["machine_made"]["source"] == "tagger"
+    assert db.get_tag_writer_provenance_map([image_id])
 
     # --- cleanup (dedupe path) : surviving rows keep provenance ---
     response = test_client.post("/api/tags/bulk/cleanup", json={
@@ -369,6 +391,15 @@ def test_bulk_ops_preserve_tag_provenance(test_client, tmp_path):
     assert rows["hand_made"]["category"] == "outfit"
     assert rows["machine_made"]["source"] == "tagger"
     assert rows["machine_made"]["category"] == "general"
+    assert db.get_tag_writer_provenance_map([image_id])
+
+    response = test_client.post("/api/tags/bulk/remove", json={
+        "image_ids": [image_id],
+        "tags": ["machine_made"],
+        "dry_run": False,
+    })
+    assert response.status_code == 200
+    assert db.get_tag_writer_provenance_map([image_id]) == {}
 
 
 def _seed_provenance_image(db, tmp_path, name):

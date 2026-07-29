@@ -52,6 +52,7 @@ from db_query import (
     _apply_image_ids_filter,
     _apply_excluded_image_ids_filter,
     _apply_collection_filter,
+    _apply_gallery_scope_filter,
     _apply_folder_filter,
     _apply_metadata_presence_filter,
     _apply_readable_filter,
@@ -104,6 +105,7 @@ def get_images(
     color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue include
     exclude_color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue exclude
     collection_id: Optional[int] = None,
+    scope: Optional[str] = None,
     folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
     # Aurora Phase 3 gallery filters
@@ -235,6 +237,7 @@ def get_images(
         conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
         conditions, params = _apply_color_hues_filter(conditions, params, color_hues, exclude_color_hues)
         conditions, params = _apply_collection_filter(conditions, params, collection_id)
+        conditions, params = _apply_gallery_scope_filter(conditions, params, scope)
 
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
@@ -316,6 +319,7 @@ def get_filtered_image_count(
     color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue include
     exclude_color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue exclude
     collection_id: Optional[int] = None,
+    scope: Optional[str] = None,
     folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
     # Aurora Phase 3 gallery filters
@@ -430,6 +434,7 @@ def get_filtered_image_count(
         conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
         conditions, params = _apply_color_hues_filter(conditions, params, color_hues, exclude_color_hues)
         conditions, params = _apply_collection_filter(conditions, params, collection_id)
+        conditions, params = _apply_gallery_scope_filter(conditions, params, scope)
 
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
@@ -492,6 +497,7 @@ def get_filtered_image_ids(
     color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue include
     exclude_color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue exclude
     collection_id: Optional[int] = None,
+    scope: Optional[str] = None,
     folder: Optional[str] = None,  # v3.3.2 Library Navigation: recursive folder-subtree scope
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
     # Aurora Phase 3 gallery filters
@@ -605,6 +611,7 @@ def get_filtered_image_ids(
         conditions, params = _apply_exclude_colors_filter(conditions, params, exclude_colors)
         conditions, params = _apply_color_hues_filter(conditions, params, color_hues, exclude_color_hues)
         conditions, params = _apply_collection_filter(conditions, params, collection_id)
+        conditions, params = _apply_gallery_scope_filter(conditions, params, scope)
 
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)

@@ -35,6 +35,7 @@ class TextSearchRequest(BaseModel):
     threshold: float = Field(default=0.0, ge=0.0, le=1.0)
     offset: int = Field(default=0, ge=0)
     collection_id: Optional[int] = Field(default=None, ge=1)
+    scope: Optional[str] = Field(default=None, pattern="^(current_session|library)$")
 
 
 class EmbedRequest(BaseModel):
@@ -111,12 +112,21 @@ async def search_text(
     service: SimilarityService = Depends(get_similarity_service),
 ):
     """Semantic text-to-image search over stored CLIP embeddings."""
+    if request.scope is None:
+        return await service.search_by_text(
+            request.query,
+            request.limit,
+            request.threshold,
+            request.offset,
+            request.collection_id,
+        )
     return await service.search_by_text(
         request.query,
         request.limit,
         request.threshold,
         request.offset,
         request.collection_id,
+        request.scope,
     )
 
 
@@ -175,11 +185,16 @@ async def search_similar(
     offset: int = Query(default=0, ge=0, description="Number of ranked results to skip for pagination"),
     threshold: float = Query(default=0.5, ge=0.0, le=1.0, description="Minimum similarity threshold (0.0-1.0)"),
     collection_id: Optional[int] = Query(default=None, ge=1, description="Restrict similar results to this collection's members (v3.3.1)"),
+    scope: Optional[str] = Query(default=None, pattern="^(current_session|library)$"),
     service: SimilarityService = Depends(get_similarity_service),
 ):
     """Find images similar to a given image ID."""
+    if scope is None:
+        return await run_in_threadpool(
+            service.search_similar, image_id, limit, threshold, offset, collection_id
+        )
     return await run_in_threadpool(
-        service.search_similar, image_id, limit, threshold, offset, collection_id
+        service.search_similar, image_id, limit, threshold, offset, collection_id, scope
     )
 
 
@@ -215,10 +230,13 @@ async def search_by_upload(
     offset: int = Query(default=0, ge=0, description="Number of ranked results to skip for pagination"),
     threshold: float = Query(default=0.5, ge=0.0, le=1.0, description="Minimum similarity threshold"),
     collection_id: Optional[int] = Query(default=None, ge=1, description="Restrict similar results to this collection's members (v3.3.1)"),
+    scope: Optional[str] = Query(default=None, pattern="^(current_session|library)$"),
     service: SimilarityService = Depends(get_similarity_service),
 ):
     """Find images similar to an uploaded image."""
-    return await service.search_by_upload(file, limit, threshold, offset, collection_id)
+    if scope is None:
+        return await service.search_by_upload(file, limit, threshold, offset, collection_id)
+    return await service.search_by_upload(file, limit, threshold, offset, collection_id, scope)
 
 
 @router.get(
@@ -294,10 +312,13 @@ async def near_images(
     image_id: int,
     limit: int = Query(default=24, ge=1, le=200, description="Maximum nearest images (1-200)"),
     collection_id: Optional[int] = Query(default=None, ge=1, description="Restrict to a collection's members"),
+    scope: Optional[str] = Query(default=None, pattern="^(current_session|library)$"),
     service: SimilarityService = Depends(get_similarity_service),
 ):
     """Top-K nearest images to a given image ID."""
-    return await run_in_threadpool(service.find_near, image_id, limit, collection_id)
+    if scope is None:
+        return await run_in_threadpool(service.find_near, image_id, limit, collection_id)
+    return await run_in_threadpool(service.find_near, image_id, limit, collection_id, scope)
 
 
 @router.get("/stats")

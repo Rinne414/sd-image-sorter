@@ -376,37 +376,49 @@ test('model-audit action: posts to tag-audit and renders one line per scoring mo
   expect(auditCalls[0].image_ids).toEqual([601, 602])
 })
 
-test('health check: posts the consistency report, renders findings, and the trigger fix bulk-adds', async ({ page }) => {
+test('health check uses effective captions and fixes only the project draft', async ({ page }) => {
   await boot(page)
   await seedQueue(page, [
-    { id: 601, filename: 'a.png', caption: '1girl' },
+    { id: 601, filename: 'a.png', caption: 'mychar, 1girl' },
     { id: 602, filename: 'b.png', caption: '1girl' },
     { id: 603, filename: 'c.png', caption: '1girl' },
   ])
   const reportCalls: Array<Record<string, unknown>> = []
   await page.route('**/api/tags/consistency/report', async (route) => {
-    reportCalls.push(route.request().postDataJSON() as Record<string, unknown>)
+    const body = route.request().postDataJSON() as Record<string, unknown>
+    reportCalls.push(body)
+    const captions = body.effective_captions as Array<{ image_id: number, caption: string }>
+    const missingIds = captions
+      .filter((item) => !item.caption.split(/[,\n]+/).some((token) => (
+        token.trim().toLowerCase().replace(/_/g, ' ') === 'mychar'
+      )))
+      .map((item) => item.image_id)
     await route.fulfill({
       json: {
         images: 3,
-        findings: [
+        findings: missingIds.length > 0 ? [
           {
             id: 'trigger-coverage', severity: 'warn',
             title_en: 'Trigger word missing from 2 images', title_zh: 'trigger zh',
             detail_en: 'Two images do not carry the trigger word.', detail_zh: 'detail zh',
-            fix: { endpoint: '/api/tags/bulk/add', body: { image_ids: [602, 603], tags: ['mychar'] } },
+            fix: {
+              action: 'add_trigger_to_captions',
+              image_ids: missingIds,
+              trigger: 'mychar',
+            },
           },
-        ],
+        ] : [],
       },
     })
   })
-  const bulkCalls: Array<Record<string, unknown>> = []
+  let bulkEndpointCalled = false
   await page.route('**/api/tags/bulk/add', async (route) => {
-    bulkCalls.push(route.request().postDataJSON() as Record<string, unknown>)
+    bulkEndpointCalled = true
     await route.fulfill({ json: { operation: 'bulk_add', updated: 2 } })
   })
 
   await openConsole(page)
+  await page.locator('#dataset-trigger').fill('mychar')
   await page.locator('#sepcon-health-run').click()
 
   const out = page.locator('#sepcon-health-results')
@@ -416,15 +428,83 @@ test('health check: posts the consistency report, renders findings, and the trig
   await expect(out).toContainText('[warn] Trigger word missing from 2 images')
   expect(reportCalls).toHaveLength(1)
   expect(reportCalls[0].image_ids).toEqual([601, 602, 603])
+  expect(reportCalls[0].effective_captions).toEqual([
+    { image_id: 601, caption: 'mychar, 1girl' },
+    { image_id: 602, caption: '1girl' },
+    { image_id: 603, caption: '1girl' },
+  ])
   expect(reportCalls[0].training_purpose).toBe('character')
 
-  // The trigger-coverage finding exposes a one-click fix that bulk-adds the
-  // trigger (dry_run=false) and then re-runs the health check.
+  // The trigger fix writes the Dataset draft, never the global Library tags,
+  // and the rerun must observe the repaired effective captions. A caption
+  // fixed after the report was created makes this stale action idempotent.
+  await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm.captionEdits.set(602, 'mychar, 1girl')
+  })
   await out.getByRole('button', { name: /Add trigger to 2 images/ }).click()
-  await expect.poll(() => bulkCalls.length).toBe(1)
-  expect(bulkCalls[0].image_ids).toEqual([602, 603])
-  expect(bulkCalls[0].dry_run).toBe(false)
   await expect.poll(() => reportCalls.length).toBe(2)
+  expect(bulkEndpointCalled).toBe(false)
+  expect(reportCalls[1].effective_captions).toEqual([
+    { image_id: 601, caption: 'mychar, 1girl' },
+    { image_id: 602, caption: 'mychar, 1girl' },
+    { image_id: 603, caption: 'mychar, 1girl' },
+  ])
+  await expect(out).toContainText('no issues found')
+  expect(await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    return {
+      second: dm.captionEdits.get(602),
+      third: dm.captionEdits.get(603),
+    }
+  })).toEqual({ second: 'mychar, 1girl', third: 'mychar, 1girl' })
+})
+
+test('health check composes Both captions before checking trigger coverage', async ({ page }) => {
+  const reportCalls: Array<Record<string, any>> = []
+  await boot(page)
+  await seedQueue(page, [
+    { id: 601, filename: 'both.png', caption: '1girl, smile', nl: 'Hero_Token, A person.' },
+  ])
+  await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm.captionType.set(601, 'both')
+  })
+  await page.route('**/api/tags/consistency/report', async (route) => {
+    const body = route.request().postDataJSON() as Record<string, any>
+    reportCalls.push(body)
+    const missingIds = body.effective_captions
+      .filter((item: { caption: string }) => !item.caption.includes('Hero_Token'))
+      .map((item: { image_id: number }) => item.image_id)
+    await route.fulfill({
+      json: {
+        images: 1,
+        findings: missingIds.length > 0 ? [{
+          id: 'trigger-coverage',
+          severity: 'warn',
+          title_en: 'Trigger missing',
+          title_zh: 'Trigger missing',
+          detail_en: 'Trigger missing',
+          detail_zh: 'Trigger missing',
+          fix: {
+            action: 'add_trigger_to_captions',
+            image_ids: missingIds,
+            trigger: 'Hero_Token',
+          },
+        }] : [],
+      },
+    })
+  })
+  await openConsole(page)
+  await page.locator('#dataset-trigger').fill('Hero_Token')
+  await page.locator('#sepcon-health-run').click()
+
+  await expect.poll(() => reportCalls.length).toBe(1)
+  expect(reportCalls[0].effective_captions).toEqual([{
+    image_id: 601,
+    caption: '1girl, smile, Hero_Token, A person.',
+  }])
+  await expect(page.locator('#sepcon-health-results')).toContainText('no issues found')
 })
 
 test('NL leak scan: a blacklisted trait still present in a natural-language caption is flagged', async ({ page }) => {

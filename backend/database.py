@@ -205,6 +205,47 @@ from db_library_roots import (
     set_library_root_enabled,
     touch_library_root_scanned,
 )
+from db_gallery_session import (
+    clear_gallery_session,
+    add_gallery_session_image_ids,
+    add_gallery_session_paths,
+    get_gallery_session_image_ids,
+)
+from db_dataset_projects import (
+    list_dataset_project_records,
+    get_dataset_project_record,
+    require_dataset_project_revision,
+    create_dataset_project_record,
+    update_dataset_project_record,
+    archive_dataset_project_record,
+    restore_dataset_project_record,
+    delete_dataset_project_record,
+)
+from db_annotation_revisions import (
+    ANNOTATION_KIND_TRAINING_CAPTION,
+    AnnotationRevisionError,
+    AnnotationContentValidationError,
+    AnnotationProjectNotFoundError,
+    AnnotationProjectRevisionConflictError,
+    AnnotationProjectStateConflictError,
+    AnnotationSubjectNotInProjectError,
+    AnnotationSubjectNotFoundError,
+    AnnotationSubjectProjectConflictError,
+    AnnotationSubjectIdentityConflictError,
+    AnnotationHeadConflictError,
+    AnnotationRevisionNotFoundError,
+    AnnotationRevisionSubjectConflictError,
+    create_project_library_training_caption_revision,
+    create_project_local_training_caption_revision,
+    restore_project_training_caption_revision,
+    select_project_training_caption_head,
+    get_project_training_caption_head,
+    validate_project_training_caption_subject,
+    resolve_project_library_training_caption_head,
+    resolve_project_local_training_caption_head,
+    list_project_training_caption_heads,
+    list_project_training_caption_revisions,
+)
 from db_reconnect_reviews import (
     add_reconnect_review,
     delete_pending_reconnect_reviews,
@@ -223,6 +264,7 @@ from db_tags import (
     tag_update_transaction,
     get_image_tags,
     get_image_tags_map,
+    get_tag_writer_provenance_map,
     get_image_ids_already_tagged,
     get_all_tags,
     _facet_search_rank_params,
@@ -358,6 +400,7 @@ def iter_filtered_image_id_chunks(
     color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue include
     exclude_color_hues: Optional[List[str]] = None,  # v3.5.0 dominant-hue exclude
     collection_id: Optional[int] = None,
+    scope: Optional[str] = None,
     folder: Optional[str] = None,
     has_metadata: Optional[bool] = None,
     # Aurora Phase 3 gallery filters
@@ -428,6 +471,7 @@ def iter_filtered_image_id_chunks(
             color_hues=color_hues,
             exclude_color_hues=exclude_color_hues,
             collection_id=collection_id,
+            scope=scope,
             folder=folder,
             has_metadata=has_metadata,
             no_caption=no_caption,

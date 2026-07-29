@@ -85,6 +85,7 @@
         display.type = 'button';
         display.className = 'dataset-custom-dropdown-display';
         display.textContent = sel.options[sel.selectedIndex]?.textContent || '';
+        display.disabled = sel.disabled;
 
         const list = document.createElement('div');
         list.className = 'dataset-custom-dropdown-list';
@@ -144,10 +145,18 @@
             }
         });
 
-        sel.addEventListener('change', () => {
+        function syncFromSelect() {
             display.textContent = sel.options[sel.selectedIndex]?.textContent || '';
+            display.disabled = sel.disabled;
+            display.setAttribute('aria-disabled', String(sel.disabled));
+            if (sel.disabled) {
+                list.hidden = true;
+                OPEN_LISTS.delete(list);
+            }
             buildOptions();
-        });
+        }
+        sel.addEventListener('change', syncFromSelect);
+        sel.addEventListener('dataset:select-sync', syncFromSelect);
 
         wrapper.append(display);
         sel.parentNode.insertBefore(wrapper, sel.nextSibling);

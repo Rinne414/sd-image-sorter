@@ -174,6 +174,7 @@
             const msg = this._t('dataset.confirmRemove', 'Remove this image from the dataset?');
             if (!window.confirm(msg)) return;
         }
+        this._supersedeCaptionFetch?.();
         const idx = this.imageIds.indexOf(id);
         this.imageIds.splice(idx, 1);
         this.captions.delete(id);

@@ -4,16 +4,16 @@ A LoRA trainer\'s deepest pain is discovering a dataset problem AFTER hours
 of GPU time. This service runs the checks an experienced trainer performs
 by eye — trigger hygiene, composition balance, tag-set consistency — and
 attaches symptom -> cause -> fix guidance to every finding so the report
-teaches while it audits. Read-only: fixes are ready-made payloads for the
-existing bulk endpoints, never applied here.
+teaches while it audits. Read-only: fixes describe explicit Dataset Maker
+actions and are never applied here.
 """
 from __future__ import annotations
 
 import logging
 from collections import Counter
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 import database as db
 from tag_rules import categorize_tag
@@ -37,19 +37,72 @@ TOP_FREQUENCY_ROWS = 500
 COOCCURRENCE_TOP_TAGS = 150
 COOCCURRENCE_MIN_JACCARD = 0.9
 MAX_PAYLOAD_IDS = 10_000
+MAX_CAPTION_LENGTH = 100_000
+
+PositiveStrictInt = Annotated[int, Field(strict=True, gt=0)]
+
+
+class EffectiveCaption(BaseModel):
+    """Final caption text inspected by the Dataset Maker health check."""
+
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+    image_id: PositiveStrictInt
+    caption: str = Field(max_length=MAX_CAPTION_LENGTH)
 
 
 class ConsistencyReportRequest(BaseModel):
     """Scope + context for one health-check run."""
 
-    image_ids: Optional[List[int]] = Field(default=None, max_length=MAX_REPORT_IMAGES)
+    model_config = ConfigDict(extra="ignore", strict=True)
+
+    image_ids: Optional[List[PositiveStrictInt]] = Field(
+        default=None,
+        max_length=MAX_REPORT_IMAGES,
+    )
     selection_token: Optional[str] = Field(default=None, min_length=1)
+    effective_captions: Optional[List[EffectiveCaption]] = Field(
+        default=None,
+        max_length=MAX_REPORT_IMAGES,
+    )
     trigger: str = Field(default="", max_length=256)
     training_purpose: str = Field(default="", max_length=32)
 
+    @model_validator(mode="after")
+    def validate_effective_caption_scope(self) -> "ConsistencyReportRequest":
+        if self.image_ids is not None and len(set(self.image_ids)) != len(self.image_ids):
+            raise ValueError("image_ids must not contain duplicate values")
+        if self.effective_captions is None:
+            if self.trigger.strip():
+                raise ValueError(
+                    "effective_captions is required when trigger coverage is checked"
+                )
+            return self
+        if self.image_ids is None:
+            raise ValueError("effective_captions requires an explicit image_ids scope")
+        caption_ids = [item.image_id for item in self.effective_captions]
+        if len(set(caption_ids)) != len(caption_ids):
+            raise ValueError("effective_captions must not contain duplicate image_id values")
+        if set(caption_ids) != set(self.image_ids):
+            missing = sorted(set(self.image_ids) - set(caption_ids))
+            unexpected = sorted(set(caption_ids) - set(self.image_ids))
+            raise ValueError(
+                "effective_captions must cover image_ids exactly; "
+                f"missing={missing[:20]}, unexpected={unexpected[:20]}"
+            )
+        return self
+
 
 def _fold(tag: str) -> str:
-    return str(tag or "").strip().lower().replace("_", " ")
+    return " ".join(str(tag or "").strip().lower().replace("_", " ").split())
+
+
+def _caption_tags(caption: str) -> set[str]:
+    return {
+        folded
+        for token in str(caption).replace("\r", "\n").replace(",", "\n").split("\n")
+        if (folded := _fold(token))
+    }
 
 
 def _resolve_scope_ids(request: ConsistencyReportRequest) -> List[int]:
@@ -105,6 +158,21 @@ def build_consistency_report(request: ConsistencyReportRequest) -> Dict[str, Any
     if total == 0:
         return {"images": 0, "findings": [], "tag_frequencies": [], "shot_distribution": {}}
 
+    effective_captions = None
+    if request.effective_captions is not None:
+        effective_captions = {
+            item.image_id: _caption_tags(item.caption)
+            for item in request.effective_captions
+        }
+        missing_caption_ids = sorted(set(ids) - set(effective_captions))
+        unexpected_caption_ids = sorted(set(effective_captions) - set(ids))
+        if missing_caption_ids or unexpected_caption_ids:
+            raise ValueError(
+                "effective_captions must cover the resolved report scope exactly; "
+                f"missing={missing_caption_ids[:20]}, "
+                f"unexpected={unexpected_caption_ids[:20]}"
+            )
+
     trigger_fold = _fold(request.trigger)
     purpose = str(request.training_purpose or "").strip().lower()
 
@@ -143,7 +211,11 @@ def build_consistency_report(request: ConsistencyReportRequest) -> Dict[str, Any
                 rating_zero.append(image_id)
             elif rating_rows > 1:
                 rating_multi.append(image_id)
-            if trigger_fold and trigger_fold not in unique:
+            if (
+                trigger_fold
+                and effective_captions is not None
+                and trigger_fold not in effective_captions[image_id]
+            ):
                 trigger_missing.append(image_id)
 
     findings: List[Dict[str, Any]] = []
@@ -167,12 +239,9 @@ def build_consistency_report(request: ConsistencyReportRequest) -> Dict[str, Any
                 "Every caption must carry the trigger, or the images without it teach the model that the character appears WITHOUT being asked — identity bleeds into unrelated prompts.",
                 "每张图的 caption 都必须带触发词；缺少触发词的图会教模型“不用提示也出现这个角色”，导致身份渗漏到无关提示词里。",
                 fix={
-                    "endpoint": "/api/tags/bulk/add",
-                    "body": {
-                        "image_ids": trigger_missing[:MAX_PAYLOAD_IDS],
-                        "tags": [request.trigger.strip()],
-                        "dry_run": True,
-                    },
+                    "action": "add_trigger_to_captions",
+                    "image_ids": trigger_missing[:MAX_PAYLOAD_IDS],
+                    "trigger": request.trigger.strip(),
                 },
                 data={"missing": len(trigger_missing)},
             ))

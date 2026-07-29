@@ -36,6 +36,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import metadata_parser as metadata_parser_module
+from metadata_storage import compact_metadata_dict
 from metadata_parser import (
     PARSED_METADATA_VERSION,
     MetadataParser,
@@ -198,6 +199,7 @@ def test_parsed_block_exact_key_set(tmp_path):
         "prompt_nodes",
         "model_assets",
         "civitai_resources",
+        "sidecar_fallback",
     }
 
 
@@ -207,6 +209,37 @@ def test_parsed_block_version_matches_constant(tmp_path):
         str(_write_png(tmp_path / "webui.png", {"parameters": _WEBUI_PARAMS}))
     )
     assert result["metadata"]["_parsed"]["version"] == PARSED_METADATA_VERSION
+
+
+def test_sidecar_fallback_marker_is_compact_and_does_not_persist_raw_data(tmp_path):
+    from PIL import Image
+
+    image_path = tmp_path / "compact-sidecar.jpg"
+    sidecar_path = tmp_path / "compact-sidecar.jpg.txt"
+    Image.new("RGB", (64, 64), color="white").save(image_path, "JPEG")
+    sidecar_path.write_text("private sidecar prompt", encoding="utf-8")
+
+    result = parse_image(str(image_path))
+    compact = compact_metadata_dict(result["metadata"])
+
+    expected = {
+        "schema_version": 1,
+        "evaluated": True,
+        "evidence": [
+            {
+                "carrier": "txt",
+                "basename": "compact-sidecar.jpg.txt",
+                "method": "sidecar_fallback",
+                "confidence": "high",
+                "parser_version": PARSED_METADATA_VERSION,
+                "fields": ["prompt"],
+            }
+        ],
+    }
+    assert compact["_parsed"]["sidecar_fallback"] == expected
+    serialized = json.dumps(compact, ensure_ascii=False)
+    assert "private sidecar prompt" not in serialized
+    assert str(tmp_path) not in serialized
 
 
 # --------------------------------------------------------------------------

@@ -16,6 +16,23 @@ This project now treats SQLite schema changes as versioned application code, not
 - Each migration runs inside its own SQLite `SAVEPOINT`.
 - If one migration fails, that migration is rolled back without advancing `schema_version`, and startup fails loudly.
 - If the database schema is newer than the latest bundled migration, startup fails before persistent connection PRAGMAs, migrations, or recovery writes run.
+- Migration 030 adds `gallery_session_images`, a restart-cleared membership index;
+  it never owns image pixels or permanent Library/Collection records.
+- Migration 031 adds named Dataset projects with ordered Library references;
+  deleted Library rows remain explicit missing project sources.
+- Migration 032 extends Dataset projects with ordered local-file references;
+  saved file identity remains immutable evidence when a source changes or disappears.
+- Migration 033 adds versioned Dataset project settings with materialized defaults.
+- Migration 034 adds immutable, project-scoped training-caption revisions with
+  generation-CAS active, reviewed, and export heads; Library and local subjects
+  retain saved file identity so replacement files cannot inherit old heads.
+- Migration 035 adds strict Gallery WD14 writer provenance. New writes record
+  provider, model identity, model-file SHA-256, and actual runtime provider in
+  the same transaction as tag rows; legacy rows remain explicitly unknown.
+- Migration 036 upgrades development databases that already applied the
+  nullable draft of migration 035. Existing evidence is preserved only when
+  complete; incomplete rows fail the migration explicitly instead of being
+  deleted or guessed.
 
 ## Downgrade Policy
 

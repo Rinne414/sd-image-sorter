@@ -28,6 +28,10 @@ from db_helpers import (
 )
 from db_images_write import _mark_image_tagged
 from db_tag_scores import replace_scores_in_cursor
+from tag_writer_provenance import (
+    TagWriterProvenance,
+    require_image_content_fingerprint,
+)
 
 
 def _dedupe_tags(tags: List[Tuple[str, float]]) -> List[Tuple[str, float]]:
@@ -174,6 +178,26 @@ def _replace_tag_rows(
         )
 
 
+def _has_tagger_rows(cursor: sqlite3.Cursor, image_id: int) -> bool:
+    row = cursor.execute(
+        "SELECT 1 FROM tags WHERE image_id = ? AND source = 'tagger' LIMIT 1",
+        (image_id,),
+    ).fetchone()
+    return row is not None
+
+
+def _clear_orphaned_writer_provenance(
+    cursor: sqlite3.Cursor,
+    image_id: int,
+) -> None:
+    if _has_tagger_rows(cursor, image_id):
+        return
+    cursor.execute(
+        "DELETE FROM tag_writer_provenance WHERE image_id = ? AND writer_family = 'wd14'",
+        (image_id,),
+    )
+
+
 def add_tags(
     image_id: int,
     tags: List[Dict[str, Any]],
@@ -203,6 +227,7 @@ def add_tags(
             cursor, image_id, tags,
             default_source=default_source, replace_scope=replace_scope,
         )
+        _clear_orphaned_writer_provenance(cursor, image_id)
         _sync_ai_rating(cursor, image_id)
         _mark_image_tagged(cursor, image_id, content_fingerprint)
     _invalidate_tags_cache()
@@ -226,6 +251,27 @@ def _apply_tag_updates(
             image_id,
             item.get("content_fingerprint"),
         )
+        writer_provenance_present = "writer_provenance" in item
+        writer_provenance = None
+        if writer_provenance_present and item.get("writer_provenance") is not None:
+            try:
+                writer_provenance = TagWriterProvenance.model_validate(
+                    item["writer_provenance"],
+                    strict=True,
+                )
+            except Exception as exc:
+                raise ValueError(
+                    f"Invalid tag writer provenance for image id={image_id}: {exc}"
+                ) from exc
+        if writer_provenance is not None:
+            try:
+                content_fingerprint = require_image_content_fingerprint(
+                    content_fingerprint
+                )
+            except ValueError as exc:
+                raise ValueError(
+                    f"Invalid tag writer provenance for image id={image_id}: {exc}"
+                ) from exc
 
         _replace_tag_rows(
             cursor,
@@ -244,6 +290,31 @@ def _apply_tag_updates(
             "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, ai_caption = COALESCE(?, ai_caption), nl_caption = COALESCE(?, nl_caption), content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
             (ai_caption, nl_caption, content_fingerprint, image_id),
         )
+        if writer_provenance_present:
+            cursor.execute(
+                "DELETE FROM tag_writer_provenance WHERE image_id = ? AND writer_family = ?",
+                (image_id, "wd14"),
+            )
+            if writer_provenance is not None and _has_tagger_rows(cursor, image_id):
+                cursor.execute(
+                    """
+                    INSERT INTO tag_writer_provenance (
+                        image_id, writer_family, provider, model, revision,
+                        runtime_provider, content_fingerprint
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        image_id,
+                        writer_provenance.writer_family,
+                        writer_provenance.provider,
+                        writer_provenance.model,
+                        writer_provenance.revision,
+                        writer_provenance.runtime_provider,
+                        content_fingerprint,
+                    ),
+                )
+        else:
+            _clear_orphaned_writer_provenance(cursor, image_id)
 
 
 @contextmanager
@@ -290,6 +361,8 @@ def add_tags_batch(
               of raw tagger scores >= config.TAG_SCORES_FLOOR, persisted to the
               tag_scores table in the same transaction (BE-1). Absent = no
               score write (leaves any previously stored scores untouched).
+            - writer_provenance: Optional strict writer identity. Presence owns
+              replacement of the persisted WD14 lineage; explicit None clears it.
         default_source: provenance for rows that carry no 'source' key
             ('tagger' | 'vlm' | 'manual' | 'trigger'); None keeps legacy NULL.
         replace_scope: "all" (historical full replace) or "pipeline"
@@ -349,6 +422,46 @@ def get_image_tags_map(image_ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
                     }
                 )
 
+    return result
+
+
+def get_tag_writer_provenance_map(
+    image_ids: List[int],
+) -> Dict[int, List[Dict[str, Any]]]:
+    """Read persisted writer identity without changing the tag-row contract."""
+
+    if not image_ids:
+        return {}
+
+    result: Dict[int, List[Dict[str, Any]]] = {}
+    batch_size = 500
+    with get_db() as conn:
+        cursor = conn.cursor()
+        for start in range(0, len(image_ids), batch_size):
+            batch = image_ids[start : start + batch_size]
+            placeholders = ",".join("?" * len(batch))
+            cursor.execute(
+                f"""
+                SELECT image_id, writer_family, provider, model, revision,
+                       runtime_provider, content_fingerprint, created_at
+                FROM tag_writer_provenance
+                WHERE image_id IN ({placeholders})
+                ORDER BY image_id ASC, writer_family ASC
+                """,
+                batch,
+            )
+            for row in cursor.fetchall():
+                result.setdefault(row["image_id"], []).append(
+                    {
+                        "writer_family": row["writer_family"],
+                        "provider": row["provider"],
+                        "model": row["model"],
+                        "revision": row["revision"],
+                        "runtime_provider": row["runtime_provider"],
+                        "content_fingerprint": row["content_fingerprint"],
+                        "created_at": row["created_at"],
+                    }
+                )
     return result
 
 

@@ -1478,6 +1478,74 @@ Auto-start the local Ollama server when it is installed but not running. Useful 
 
 The Dataset tab (📦) drives a focused LoRA dataset preparation workflow.
 
+#### GET /api/dataset/trainers
+
+Return the verified Dataset Maker trainer contracts, including supported wire values, capabilities, and strict option bounds.
+
+#### POST /api/dataset/review-queue
+
+Build a typed review queue from the submitted Dataset Maker scope and its stored caption, tag, score, mask, and duplicate evidence. The response includes a scope fingerprint, issue rows, and evidence-availability summaries without modifying source images.
+
+#### POST /api/dataset/readiness/start
+
+Validate the exact requested export settings and queue a read-only Dataset Readiness job. Returns HTTP 202 with a durable `dataset_readiness` bulk-job snapshot; poll `GET /api/bulk-jobs/{job_id}` for progress and the final report.
+
+#### POST /api/dataset/package-verifications
+
+Verify an existing Dataset Export Package v2 against its manifest and expected run id. The typed result reports `complete`, `incomplete`, `invalid`, or `missing`, together with checked counts and concrete integrity issues.
+
+#### GET /api/dataset/projects
+
+List active persistent Dataset Maker projects.
+
+#### GET /api/dataset/projects/archived
+
+List archived persistent Dataset Maker projects.
+
+#### POST /api/dataset/projects
+
+Create a named Dataset Maker project from validated Library and local items plus its typed settings. Returns the persisted project at revision 1.
+
+#### GET /api/dataset/projects/{project_id}
+
+Return one persistent Dataset Maker project, including its current revision, state, items, settings, and captured local-source identity.
+
+#### PUT /api/dataset/projects/{project_id}
+
+Replace an active project's name, items, and settings using the required `expected_revision`. Stale revisions fail with HTTP 409 instead of overwriting newer edits.
+
+#### POST /api/dataset/projects/{project_id}/archive
+
+Archive an active project using the required `expected_revision` and return the incremented project revision.
+
+#### POST /api/dataset/projects/{project_id}/restore
+
+Restore an archived project using the required `expected_revision`. A conflicting active project name fails with HTTP 409.
+
+#### DELETE /api/dataset/projects/{project_id}
+
+Delete a project using the required `expected_revision`. The response identifies the deleted project; stale revisions fail with HTTP 409.
+
+#### POST /api/annotations/projects/{project_id}/training-captions/head
+
+Resolve the current training-caption head for a Library or project-local subject at the required project revision.
+
+#### GET /api/annotations/projects/{project_id}/training-captions/heads
+
+Page through the current training-caption heads for a project. Query parameters include `expected_project_revision`, `limit`, and optional `after_subject_id`.
+
+#### POST /api/annotations/projects/{project_id}/training-captions/revisions
+
+Append an immutable manual training-caption revision and advance its subject head using `expected_project_revision` and `expected_head_generation` conflict checks.
+
+#### GET /api/annotations/projects/{project_id}/subjects/{subject_id}/training-captions/revisions
+
+Page through one subject's immutable training-caption history. Query parameters include `expected_project_revision`, `limit`, and optional `before_revision_id`.
+
+#### POST /api/annotations/projects/{project_id}/subjects/{subject_id}/training-captions/restore
+
+Restore a selected immutable revision as the subject's active caption using project-revision and head-generation conflict checks.
+
 #### POST /api/dataset/export
 Combined image-and-caption export for LoRA training datasets. Renames every image according to the supplied pattern, copies (or moves) it to the output folder, and writes the matching `.txt` caption sidecar with the same stem. Optional `mask_export` (`"none"` default | `"onetrainer"` | `"kohya"`, v3.5.x Phase 4): also exports stored training masks — OneTrainer writes `<stem>-masklabel.png` beside each exported image, kohya writes `mask/<stem>.png` (a `conditioning_data_dir` layout). Images without a stored mask count in `masks_missing`, never fail (no mask = train the whole image); successful copies count in `masks_written`. Both counters ride the response. Optional `trainer_config: "kohya_toml"` (+ `trainer_repeats` 1-1000 default 10, `trainer_batch` 1-64 default 2, `trainer_resolution` 256-4096 default 1024) drops a ready `dataset_config.toml` into the output folder — one subset with explicit `num_repeats` (kohya's config method ignores folder-name repeats, per `docs/config_README-en.md`), `caption_extension` matching the export, `class_tokens` from the trigger, and `conditioning_data_dir = <output>/mask` when kohya-style masks were written (`docs/masked_loss_README.md`). Optional `trainer_keep_tokens` (0-50, default 0) additionally emits `shuffle_caption = true` + `keep_tokens = N` on the subset (official config example) so the trigger and leading common tags stay first while the rest shuffle. `trainer_config_path` rides the response; folder mode only.
 
@@ -1524,23 +1592,7 @@ Returns `{total, returned, items_truncated, content_mode, output_mode, sidecar_e
 
 Start the same dataset export as a background job so large queues can show progress and be cancelled without blocking the browser request. Body is the same as `/api/dataset/export`.
 
-Returns `{status: "started", job_id, total, output_folder, message}`. If another dataset export is already running, returns `409`.
-
----
-
-#### GET /api/dataset/export/progress
-
-Live progress for the active dataset export job. Optional query: `job_id`.
-
-Returns `{status, job_id, step, current, total, exported, skipped, errors, current_item, recent_errors, output_folder, items_truncated, result, message}`. Terminal progress uses `status: "done"`, `"cancelled"`, or `"failed"`; when available, `result` is the same summary shape returned by `/api/dataset/export`.
-
----
-
-#### POST /api/dataset/export/cancel
-
-Request cooperative cancellation for the active dataset export job. Optional body: `{job_id}`.
-
-The worker finishes the current image pair, then stops before the next image and reports a `cancelled` result with the number already exported.
+Returns `{status: "started", job_id, total, output_folder, message}`. Poll `GET /api/bulk-jobs/{job_id}` and cancel with `POST /api/bulk-jobs/{job_id}/cancel`; the shared job result carries the export progress or terminal `DatasetExportResponse`. If another dataset export is already running, returns `409`.
 
 ---
 

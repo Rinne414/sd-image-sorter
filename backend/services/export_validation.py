@@ -12,6 +12,7 @@ validator catch future regressions of these classes automatically.
 from __future__ import annotations
 
 import os
+import re
 from typing import Any, Dict, List, Optional
 
 # Content modes whose output is legitimately multi-line by design
@@ -99,7 +100,10 @@ class ExportValidator:
         needs_tokens = bool(self._trigger_norm) or self.content_mode in _RATING_CHECK_MODES
         if not needs_tokens:
             return
-        tokens = {_normalize_token(part) for part in text.split(",")}
+        tokens = {
+            _normalize_token(part)
+            for part in re.split(r"[,\r\n]+", text)
+        }
         tokens.discard("")
 
         if self._trigger_norm and self._trigger_norm not in tokens:

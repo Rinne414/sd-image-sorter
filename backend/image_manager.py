@@ -19,6 +19,7 @@ import json
 from config import ALLOWED_IMAGE_EXTENSIONS as IMAGE_EXTENSIONS
 from database import (
     add_images_batch,
+    add_gallery_session_paths,
     update_image_path,
     update_image_metadata,
     get_image_scan_state_by_paths,
@@ -904,6 +905,7 @@ def scan_folder(
                         )
 
                 _flush_placeholder_records(pending_placeholder_records)
+                add_gallery_session_paths(image_paths)
                 for job in batch_metadata_jobs:
                     _drain_metadata_until_backlog_below_limit()
                     _submit_metadata_job(_ensure_metadata_executor(), job)

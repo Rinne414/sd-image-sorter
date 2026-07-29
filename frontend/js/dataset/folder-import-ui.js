@@ -11,6 +11,7 @@
     // token, so export/audit can include unloaded images without sending a
     // million absolute paths to the browser.
     const FOLDER_SCAN_PAGE_SIZE = 5000;
+    DM._folderScanPageSize = FOLDER_SCAN_PAGE_SIZE;
     const UPLOAD_BATCH_SIZE = 250;
     const LARGE_BROWSER_DROP_WARNING_FILES = 5000;
 

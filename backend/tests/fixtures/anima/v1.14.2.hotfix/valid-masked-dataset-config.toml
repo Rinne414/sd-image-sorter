@@ -1,0 +1,8 @@
+[[datasets]]
+batch_size = 2
+
+[[datasets.subsets]]
+image_dir = "./images"
+caption_extension = ".txt"
+num_repeats = 10
+mask_dir = "./mask"

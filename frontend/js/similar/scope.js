@@ -9,11 +9,11 @@
 Object.assign(window.SimilarImages, {
     // ============== Search Scope (Favorites / Collections) ==============
 
-    // Build the "&collection_id=<id>" query suffix for the active scope.
-    // Returns '' when searching the whole library (default), so request URLs
-    // stay byte-for-byte identical to the pre-scope behavior.
+    // Build the query suffix for the active session, library, or collection.
     getScopeQuery() {
-        return this.collectionId ? `&collection_id=${encodeURIComponent(this.collectionId)}` : '';
+        if (this.scope === 'current_session') return '&scope=current_session';
+        if (this.collectionId) return `&collection_id=${encodeURIComponent(this.collectionId)}&scope=library`;
+        return '&scope=library';
     },
 
     async loadScopeOptions() {
@@ -35,7 +35,11 @@ Object.assign(window.SimilarImages, {
         const favorites = collections.find((c) => c.slug === 'favorites');
         const others = collections.filter((c) => c.slug !== 'favorites');
 
-        const options = [`<option value="">${escapeHtml(allLabel)}</option>`];
+        const sessionLabel = this._t('similar.scopeSession', 'Current Session');
+        const options = [
+            `<option value="current_session">${escapeHtml(sessionLabel)}</option>`,
+            `<option value="library">${escapeHtml(allLabel)}</option>`,
+        ];
         if (favorites) {
             options.push(`<option value="${favorites.id}">${escapeHtml(favoritesLabel)}</option>`);
         }
@@ -47,15 +51,18 @@ Object.assign(window.SimilarImages, {
         // Preserve a previously chosen scope across reloads when it still exists.
         if (this.collectionId && collections.some((c) => String(c.id) === String(this.collectionId))) {
             select.value = String(this.collectionId);
+            this.scope = 'library';
         } else {
             this.collectionId = null;
-            select.value = '';
+            this.scope = this.scope === 'current_session' ? 'current_session' : 'library';
+            select.value = this.scope;
         }
     },
 
     onScopeChange(value) {
         const parsed = parseInt(value, 10);
         this.collectionId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+        this.scope = value === 'current_session' ? 'current_session' : 'library';
         // Re-run the active search under the new scope, if there is one.
         if (this.currentSearchMode === 'id' && this.currentSearchId) {
             this.searchByImage(this.currentSearchId);

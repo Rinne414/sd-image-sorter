@@ -1676,10 +1676,12 @@ def test_coerce_request_allows_vlm_disabled_without_endpoint(monkeypatch) -> Non
         "two words",
         "leading_ok and_trailing_ok with space",
         "tab\there",
+        "zero\ufeffwidth",
+        "next\u0085line",
     ],
 )
 def test_coerce_request_rejects_trigger_word_with_internal_whitespace(trigger) -> None:
-    with pytest.raises(ValueError, match="single token"):
+    with pytest.raises(ValueError, match="one token"):
         _coerce_request({
             "image_ids": [1],
             "enable_vlm": False,
@@ -1687,25 +1689,43 @@ def test_coerce_request_rejects_trigger_word_with_internal_whitespace(trigger) -
         })
 
 
+def test_coerce_request_rejects_trigger_word_that_normalizes_to_empty() -> None:
+    with pytest.raises(ValueError, match="characters other than"):
+        _coerce_request({
+            "image_ids": [1],
+            "enable_vlm": False,
+            "trigger_word": "  ",
+        })
+
+
+def test_coerce_request_rejects_trigger_word_over_shared_length_limit() -> None:
+    with pytest.raises(ValueError, match="at most 100"):
+        _coerce_request({
+            "image_ids": [1],
+            "enable_vlm": False,
+            "trigger_word": "x" * 101,
+        })
+
+
 @pytest.mark.parametrize(
-    "trigger",
+    ("trigger", "expected"),
     [
-        "",
-        "  ",  # whitespace-only -> stripped to empty -> allowed
-        "single",
-        "my_lora_trigger",
-        "myLoraTrigger",
-        "  trailing_and_leading_ok  ",  # outer whitespace stripped silently
+        ("", ""),
+        ("single", "single"),
+        ("my_lora_trigger", "my_lora_trigger"),
+        ("myLoraTrigger", "myLoraTrigger"),
+        ("  trailing_and_leading_ok  ", "trailing_and_leading_ok"),
+        ("\u0085edge_trigger\u0085", "edge_trigger"),
+        ("\ufeffedge_trigger\ufeff", "edge_trigger"),
     ],
 )
-def test_coerce_request_allows_valid_trigger_words(trigger) -> None:
+def test_coerce_request_allows_valid_trigger_words(trigger, expected) -> None:
     req = _coerce_request({
         "image_ids": [1],
         "enable_vlm": False,
         "trigger_word": trigger,
     })
-    # Outer whitespace must be stripped, but the inner content stays intact.
-    assert req.trigger_word == trigger.strip()
+    assert req.trigger_word == expected
 
 
 # ---------------------------------------------------------------------------

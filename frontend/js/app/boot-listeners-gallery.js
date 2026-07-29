@@ -9,6 +9,20 @@ function initBootListenersGallery() {
     // Random button
     $('#btn-random').addEventListener('click', showRandomImage);
 
+    const galleryScopeSelect = $('#gallery-scope-select');
+    if (galleryScopeSelect) {
+        galleryScopeSelect.value = AppState.filters.scope === 'library' ? 'library' : 'current_session';
+        galleryScopeSelect.addEventListener('change', (event) => {
+            const scope = event.target.value === 'library' ? 'library' : 'current_session';
+            updateAppFilters((filters) => {
+                filters.scope = scope;
+                if (scope === 'current_session') filters.collectionId = null;
+            });
+            updateFilterSummary?.();
+            loadImages();
+        });
+    }
+
     // Multi-select toggle
     $('#btn-toggle-select').addEventListener('click', () => {
         setSelectionMode(!AppState.selectionMode);

@@ -26,6 +26,9 @@ import os
 from pathlib import Path
 
 import pytest
+
+
+pytestmark = pytest.mark.usefixtures("authorize_legacy_dataset_exports")
 from PIL import Image
 
 

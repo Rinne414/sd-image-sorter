@@ -77,6 +77,7 @@ def _clear_image_derived_state(cursor: sqlite3.Cursor, image_id: int) -> None:
     )
     cursor.execute("DELETE FROM tags WHERE image_id = ?", (image_id,))
     cursor.execute("DELETE FROM tag_scores WHERE image_id = ?", (image_id,))
+    cursor.execute("DELETE FROM tag_writer_provenance WHERE image_id = ?", (image_id,))
     cursor.execute("DELETE FROM artist_predictions WHERE image_id = ?", (image_id,))
 
 def _sync_image_loras(

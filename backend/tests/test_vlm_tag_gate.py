@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from services import vlm_tag_gate
+from tag_writer_provenance import TagWriterProvenance
 
 
 def test_hallucinated_tag_dropped_but_vocab_and_library_tags_kept(monkeypatch):
@@ -195,6 +196,51 @@ def test_persist_vlm_result_tags_only_preserves_existing_captions(
         "prior_manual",
         "1girl",
     }
+
+
+def test_persist_vlm_result_preserves_current_wd14_writer_identity(
+    monkeypatch,
+    test_db,
+):
+    db = test_db
+    import routers.vlm as vlm_router
+
+    image_id = db.add_image(
+        path="/t/vlm-writer-provenance.png",
+        filename="vlm-writer-provenance.png",
+    )
+    provenance = TagWriterProvenance(
+        writer_family="wd14",
+        provider="huggingface",
+        model="SmilingWolf/wd-swinv2-tagger-v3",
+        revision=f"sha256:{'c' * 64}",
+        runtime_provider="CPUExecutionProvider",
+    )
+    db.add_tags_batch(
+        [
+            {
+                "image_id": image_id,
+                "tags": [
+                    {"tag": "wd14_tag", "confidence": 0.9, "source": "tagger"}
+                ],
+                "content_fingerprint": "d" * 64,
+                "writer_provenance": provenance.model_dump(mode="python"),
+            }
+        ],
+        default_source="tagger",
+        replace_scope="pipeline",
+    )
+    monkeypatch.setattr(
+        vlm_tag_gate,
+        "_danbooru_accept_set",
+        lambda: frozenset({"1girl"}),
+    )
+    monkeypatch.setattr(vlm_tag_gate, "_library_tag_set", lambda: set())
+
+    vlm_router._persist_vlm_result(db, image_id, "caption", ["1girl"])
+
+    stored = db.get_tag_writer_provenance_map([image_id])[image_id][0]
+    assert stored["revision"] == provenance.revision
 
 
 def test_persist_vlm_result_updates_caption_when_all_tags_already_exist(

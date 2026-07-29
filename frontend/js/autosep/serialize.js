@@ -46,6 +46,7 @@ function serializeAutoSepFilters(filters) {
         colorTemperature: source.colorTemperature || '',
         brightnessDistribution: source.brightnessDistribution || '',
         collectionId: source.collectionId ?? null,
+        scope: source.scope === 'library' ? 'library' : 'current_session',
         folder: source.folder ? String(source.folder).trim() : null,
         hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
     };

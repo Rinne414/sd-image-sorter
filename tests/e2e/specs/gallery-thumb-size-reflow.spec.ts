@@ -159,6 +159,10 @@ async function openGalleryWithFixture(page: Page) {
     })
   }).toBe(true)
 
+  await page.locator('#gallery-scope-select').selectOption('library')
+  await expect(page.locator('#gallery-scope-select')).toHaveValue('library')
+  await expect.poll(async () => page.evaluate(() => window.App.AppState?.isLoading === false)).toBe(true)
+
   const search = page.locator('#gallery-search-input')
   await search.fill(SEARCH_TOKEN)
   await search.press('Enter')

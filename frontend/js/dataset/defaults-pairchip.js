@@ -109,7 +109,9 @@
         const png = document.getElementById('dataset-pair-chip-png');
         const txt = document.getElementById('dataset-pair-chip-txt');
         if (!png || !txt) return;
-        const trigger = (document.getElementById('dataset-trigger')?.value || '').trim();
+        const trigger = DM._canonicalDatasetTrigger(
+            document.getElementById('dataset-trigger')?.value || '',
+        );
         const preset = (document.querySelector('input[name="dataset-naming-preset"]:checked')?.value) || 'keep';
         const ext = extensionForDatasetId((DM.imageIds || [])[0]);
         const outputMode = DM._outputMode?.() || 'folder';

@@ -178,6 +178,8 @@ window.AppFilterAccess = {
         if (filters.excludeLoras?.length) params.set('exclude_loras', filters.excludeLoras.join(','));
         if (filters.excludePrompts?.length) params.set('exclude_prompts', filters.excludePrompts.join(','));
         if (filters.excludeColors?.length) params.set('exclude_colors', filters.excludeColors.join(','));
+        if (filters.collectionId) params.set('collection_id', filters.collectionId);
+        if (filters.scope) params.set('scope', filters.scope);
         if (filters.folder) params.set('folder', filters.folder);
         if (filters.hasMetadata != null) params.set('has_metadata', String(filters.hasMetadata));
         // Aurora Phase 3 toolbar/24d filters

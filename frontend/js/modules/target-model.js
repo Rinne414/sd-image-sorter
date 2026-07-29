@@ -26,7 +26,6 @@
 (function () {
     'use strict';
 
-    const STORE_KEY = 'sd-image-sorter-dataset-target-model';
     const DEFAULT_CAPTION_HELP_KEYS = Object.freeze([
         ['dataset-caption-help-intro', 'dataset.helpIntro'],
         ['dataset-caption-help-rule-1', 'dataset.helpRule1'],
@@ -123,12 +122,7 @@
         init() {
             const select = document.getElementById('dataset-target-model');
             if (!select) return;
-            try {
-                const stored = localStorage.getItem(STORE_KEY);
-                if (stored && PROFILES[stored]) select.value = stored;
-            } catch (_) { /* stateless fallback */ }
             select.addEventListener('change', () => {
-                try { localStorage.setItem(STORE_KEY, select.value); } catch (_) {}
                 this.refresh();
             });
             document.getElementById('btn-dataset-target-model-apply')

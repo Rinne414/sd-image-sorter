@@ -630,6 +630,7 @@ async def start_sort_session(
             exclude_prompts=request.exclude_prompts,
             exclude_colors=request.exclude_colors,
             collection_id=request.collection_id,
+            scope=request.scope,
             folder=request.folder,
             has_metadata=request.has_metadata,
         )

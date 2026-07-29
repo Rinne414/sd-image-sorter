@@ -1,4 +1,4 @@
-"""Durable, job-ID-keyed registry for long-running Gallery bulk operations.
+"""Durable, job-ID-keyed registry for long-running bulk operations.
 
 This is the shared background-job framework that closes Debt-22 (token-scoped
 delete / remove-from-gallery / same-name sidecar export were chunked but still
@@ -22,6 +22,7 @@ import logging
 import threading
 import time
 import uuid
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
@@ -39,12 +40,16 @@ JOB_KIND_DUPLICATE_SCAN = "duplicate_scan"
 # v3.5.0 metadata L3: re-parse missing-prompt images from stored raw
 # envelopes (or the files themselves) through the current parser.
 JOB_KIND_REPARSE_METADATA = "reparse_metadata"
+JOB_KIND_DATASET_READINESS = "dataset_readiness"
+JOB_KIND_DATASET_EXPORT = "dataset_export"
 VALID_JOB_KINDS = {
     JOB_KIND_DELETE_FILES,
     JOB_KIND_REMOVE_FROM_GALLERY,
     JOB_KIND_EXPORT_SIDECARS,
     JOB_KIND_DUPLICATE_SCAN,
     JOB_KIND_REPARSE_METADATA,
+    JOB_KIND_DATASET_READINESS,
+    JOB_KIND_DATASET_EXPORT,
 }
 
 STATUS_QUEUED = "queued"
@@ -69,6 +74,17 @@ ProgressCallback = Callable[[Dict[str, Any]], None]
 PublishCallback = Callable[[], None]
 
 
+class BulkJobAlreadyRunningError(RuntimeError):
+    """Raised when an atomic per-kind job slot is already occupied."""
+
+    def __init__(self, kind: str, active_job_id: str) -> None:
+        self.kind = kind
+        self.active_job_id = active_job_id
+        super().__init__(
+            f"Bulk job kind already active: kind={kind}, job_id={active_job_id}"
+        )
+
+
 @dataclass
 class _BulkJob:
     """Internal mutable job record. ``cancel_event`` is never serialized."""
@@ -82,10 +98,12 @@ class _BulkJob:
     error_samples: List[str] = field(default_factory=list)
     message: str = ""
     result: Dict[str, Any] = field(default_factory=dict)
+    queued_cancel_result: Optional[Dict[str, Any]] = None
     created_at: float = field(default_factory=time.time)
     started_at: Optional[float] = None
     finished_at: Optional[float] = None
     cancel_event: threading.Event = field(default_factory=threading.Event)
+    cancellation_closed: bool = False
 
     def to_public(self) -> Dict[str, Any]:
         """Serializable snapshot for the status endpoint (no cancel_event)."""
@@ -132,6 +150,11 @@ class BulkJobHandle:
     def cancelled(self) -> bool:
         return self._service._is_cancelled(self._job_id)
 
+    @property
+    def cancel_event(self) -> threading.Event:
+        """Return the shared cancellation event for legacy cooperative workers."""
+        return self._service._get_cancel_event(self._job_id)
+
     def set_progress(
         self,
         *,
@@ -171,6 +194,27 @@ class BulkJobHandle:
             message=message,
         )
 
+    def complete_result(
+        self,
+        *,
+        result: Dict[str, Any],
+        processed: int,
+        total: int,
+        message: str,
+    ) -> None:
+        """Settle completed work after all external output is already published."""
+        self._service._complete_result(
+            self._job_id,
+            result=result,
+            processed=processed,
+            total=total,
+            message=message,
+        )
+
+    def begin_completion(self) -> bool:
+        """Atomically close cancellation before publishing final external state."""
+        return self._service._begin_completion(self._job_id)
+
 
 class BulkJobService:
     """Registry + generic execution engine for token-scoped bulk jobs."""
@@ -199,6 +243,38 @@ class BulkJobService:
             self._prune_unlocked()
         return job_id
 
+    def create_single_flight_job(
+        self,
+        kind: str,
+        *,
+        total: int,
+        message: str,
+        queued_cancel_result: Dict[str, Any],
+    ) -> str:
+        """Atomically create one queued job when no same-kind job is active."""
+        if kind not in VALID_JOB_KINDS:
+            raise ValueError(f"Unknown bulk job kind: {kind}")
+        with self._lock:
+            active = next(
+                (
+                    job for job in self._jobs.values()
+                    if job.kind == kind and job.status not in TERMINAL_STATUSES
+                ),
+                None,
+            )
+            if active is not None:
+                raise BulkJobAlreadyRunningError(kind, active.id)
+            job_id = uuid.uuid4().hex
+            self._jobs[job_id] = _BulkJob(
+                id=job_id,
+                kind=kind,
+                total=int(total),
+                message=message,
+                queued_cancel_result=deepcopy(queued_cancel_result),
+            )
+            self._prune_unlocked()
+            return job_id
+
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         with self._lock:
             job = self._jobs.get(job_id)
@@ -220,9 +296,13 @@ class BulkJobService:
                 return None
             if job.status == STATUS_QUEUED:
                 job.cancel_event.set()
+                if job.queued_cancel_result is not None:
+                    job.result = deepcopy(job.queued_cancel_result)
                 job.status = STATUS_CANCELLED
                 job.finished_at = time.time()
                 job.message = "Cancelled before start"
+            elif job.status not in TERMINAL_STATUSES and job.cancellation_closed:
+                job.message = "Completion already started"
             elif job.status not in TERMINAL_STATUSES:
                 job.cancel_event.set()
                 job.message = "Cancellation requested"
@@ -324,6 +404,30 @@ class BulkJobService:
         with self._lock:
             job = self._jobs.get(job_id)
             return bool(job is not None and job.cancel_event.is_set())
+
+    def _get_cancel_event(self, job_id: str) -> threading.Event:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                raise KeyError(f"Bulk job not found: job_id={job_id}")
+            return job.cancel_event
+
+    def _begin_completion(self, job_id: str) -> bool:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                raise KeyError(
+                    f"Bulk job disappeared before completion claim: job_id={job_id}"
+                )
+            if job.status != STATUS_RUNNING:
+                raise RuntimeError(
+                    "Bulk job completion claim requires running status: "
+                    f"job_id={job_id}, status={job.status}"
+                )
+            if job.cancel_event.is_set():
+                return False
+            job.cancellation_closed = True
+            return True
 
     def _update_progress(
         self,
@@ -430,6 +534,38 @@ class BulkJobService:
             job.status = STATUS_DONE
             job.finished_at = time.time()
             return True
+
+    def _complete_result(
+        self,
+        job_id: str,
+        *,
+        result: Dict[str, Any],
+        processed: int,
+        total: int,
+        message: str,
+    ) -> None:
+        """Settle already-published work; a running cancel request is too late."""
+        completed_result = deepcopy(result)
+        completed_processed = int(processed)
+        completed_total = int(total)
+        completed_message = str(message)
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                raise KeyError(
+                    f"Bulk job disappeared before completion: job_id={job_id}"
+                )
+            if job.status != STATUS_RUNNING:
+                raise RuntimeError(
+                    "Bulk job completion requires running status: "
+                    f"job_id={job_id}, status={job.status}"
+                )
+            job.result = completed_result
+            job.processed = completed_processed
+            job.total = completed_total
+            job.message = completed_message
+            job.status = STATUS_DONE
+            job.finished_at = time.time()
 
     def _prune_unlocked(self) -> None:
         terminal = [job for job in self._jobs.values() if job.status in TERMINAL_STATUSES]

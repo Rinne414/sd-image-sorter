@@ -43,10 +43,12 @@
         return { total: besideReady + cacheOnly + unknown, besideReady, cacheOnly, unknown };
     };
 
-    DM._exportDisabledReason = function () {
+    DM._baseExportDisabledReason = function () {
         if ((this.imageIds || []).length === 0) {
             return this._t('dataset.exportNeedImages', 'Add at least one image to enable export.');
         }
+        const trainerReason = this._trainerContractDisabledReason?.() || '';
+        if (trainerReason) return trainerReason;
         const outputMode = this._outputMode();
         if (outputMode === 'beside_image') {
             const stats = this._sidecarCapabilityStats();
@@ -72,6 +74,12 @@
         return '';
     };
 
+    DM._exportDisabledReason = function () {
+        const baseReason = this._baseExportDisabledReason();
+        if (baseReason) return baseReason;
+        return this._readinessExportDisabledReason?.() || '';
+    };
+
     DM._syncSourceCapabilityStatus = function () {
         const status = document.getElementById('dataset-sidecar-source-status');
         if (!status) return;
@@ -87,6 +95,7 @@
     };
 
     DM._syncOutputModeUi = function () {
+        this._syncTrainerOutputControls?.();
         const outputMode = this._outputMode();
         const stats = this._sidecarCapabilityStats();
         const warning = document.getElementById('dataset-beside-image-warning');
@@ -96,9 +105,10 @@
         // cache_only items write beside their imported app-data copy (the
         // import notice promises this), so they must NOT disable the radio
         // or auto-flip the user's selection back to folder.
+        const trainerPackageSelected = this._hasSelectedTrainerPackage?.() === true;
         const besideBlocked = stats.total > 0 && stats.unknown > 0;
         if (besideRadio) {
-            besideRadio.disabled = besideBlocked;
+            besideRadio.disabled = besideBlocked || trainerPackageSelected;
         }
         const effectiveMode = this._outputMode();
         document.querySelectorAll('[data-export-folder-only]').forEach((el) => {
@@ -134,7 +144,9 @@
         if (preset === 'keep') return '{filename}';
         // v3.5.0 audit MED-5: with no trigger word, '{trigger}_{index}'
         // exported files named '_001.png'. Drop the orphaned underscore.
-        const hasTrigger = !!(document.getElementById('dataset-trigger')?.value || '').trim();
+        const hasTrigger = !!this._canonicalDatasetTrigger(
+            document.getElementById('dataset-trigger')?.value || '',
+        );
         const renumberPattern = hasTrigger ? '{trigger}_{index:03d}' : '{index:03d}';
         if (preset === 'renumber') return renumberPattern;
         // custom
@@ -146,6 +158,7 @@
         const customRow = document.getElementById('dataset-custom-row');
         if (customRow) customRow.hidden = (preset !== 'custom');
         this._updateNamingPreview();
+        this._markReadinessStale?.();
     };
 
     DM._updateNamingPreview = function () {
@@ -158,7 +171,9 @@
         }
         // Mirror _effectivePattern exactly: no trigger word -> plain '001',
         // so the preview never promises a name the export won't produce.
-        const trigger = document.getElementById('dataset-trigger')?.value?.trim() || '';
+        const trigger = this._canonicalDatasetTrigger(
+            document.getElementById('dataset-trigger')?.value || '',
+        );
         const sampleStem = trigger ? `${trigger}_001` : '001';
         const firstId = (this.imageIds || [])[0];
         const filename = this.meta?.get?.(firstId)?.filename || '';
@@ -195,7 +210,10 @@
         if (btn) btn.disabled = !ready;
         if (hint) {
             hint.hidden = ready;
-            if (!ready) hint.textContent = this._exportDisabledReason();
+            if (!ready) {
+                hint.removeAttribute('data-i18n');
+                hint.textContent = this._exportDisabledReason();
+            }
         }
         this._syncOutputModeUi?.();
         this._refreshExportPreview?.();

@@ -14,19 +14,19 @@ urllib.parse.quote) are origin-module seams and stay verbatim.
 [SAFETY] copy never touches the original (shutil.copy2); only move relocates.
 [SAFETY] beside_image is a pure sidecar write — it never copies or relocates.
 [SAFETY] a missing stored mask is COUNTED (masks_missing), never errored.
-The job registry (progress/cancel globals) stays on the facade; this module
-never touches it — cancellation arrives via the cancel_event parameter and
-progress leaves via progress_callback.
+BulkJobService owns the asynchronous lifecycle outside this module;
+cancellation arrives via cancel_event and progress leaves via progress_callback.
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional
 
 from fastapi import HTTPException
 
@@ -34,16 +34,23 @@ import database as db
 from services.dataset_export._constants import VALID_OVERWRITE_POLICIES
 from services.dataset_export.artifacts import (
     _build_export_manifest,
+    _invalidate_existing_anima_config,
     _mask_export_mode,
     _trainer_config_mode,
     _validate_export_request,
     _write_export_manifest,
-    _write_kohya_dataset_config,
 )
 from services.dataset_export.captions import (
     _render_dataset_sidecar,
     _split_image_overrides,
     _split_keyed_str_map,
+    render_training_caption_content,
+)
+from services.dataset_export.annotations import (
+    AnnotationProvenance,
+    annotation_selection_key,
+    resolve_annotation_selections,
+    validate_annotation_selection_coverage,
 )
 from services.dataset_export.models import (
     DatasetExportItemResult,
@@ -52,17 +59,40 @@ from services.dataset_export.models import (
     DatasetExportResponse,
     ExportProgressCallback,
 )
+from services.dataset_export.anima_contract import (
+    AnimaTrainerContractError,
+    write_anima_dataset_config as _write_anima_dataset_config,
+)
+from services.dataset_export.kohya_contract import (
+    KohyaTrainerContractError,
+    write_kohya_dataset_config as _write_kohya_dataset_config,
+)
 from services.dataset_export.planning import (
     _dataset_sidecar_extension,
     _iter_chunks,
     _iter_requested_scan_paths,
     _iter_unique_image_ids,
     _output_mode,
+    _plan_mask_destination,
     _plan_beside_image_sidecar,
-    _plan_single_rename,
+    _plan_single_pair,
     _reconcile_moved_image_path,
     _requested_item_count,
     _resolve_dataset_image_path,
+)
+from services.dataset_export.package_integrity import (
+    DatasetPackageBuild,
+    PackageIntegrityError,
+    PackageLockError,
+    PackageOwnershipError,
+    abort_dataset_package,
+    begin_dataset_package,
+    build_inventory_record,
+    copy_package_file_atomic,
+    finalize_dataset_package,
+    package_requested,
+    resume_pending_dataset_package,
+    write_package_text_atomic,
 )
 from services.dataset_session_service import virtual_image_record_for_path
 from services.tag_export_service import VALID_CONTENT_MODES, VALID_OUTPUT_MODES
@@ -87,6 +117,41 @@ def export_dataset(
     *,
     progress_callback: Optional[ExportProgressCallback] = None,
     cancel_event: Optional[threading.Event] = None,
+    pending_package_run_id: Optional[str] = None,
+) -> DatasetExportResponse:
+    return _export_dataset(
+        request,
+        progress_callback=progress_callback,
+        cancel_event=cancel_event,
+        pending_package_run_id=pending_package_run_id,
+        completion_gate=None,
+    )
+
+
+def export_dataset_job(
+    request: DatasetExportRequest,
+    *,
+    progress_callback: ExportProgressCallback,
+    cancel_event: threading.Event,
+    pending_package_run_id: str,
+    completion_gate: Callable[[], bool],
+) -> DatasetExportResponse:
+    return _export_dataset(
+        request,
+        progress_callback=progress_callback,
+        cancel_event=cancel_event,
+        pending_package_run_id=pending_package_run_id,
+        completion_gate=completion_gate,
+    )
+
+
+def _export_dataset(
+    request: DatasetExportRequest,
+    *,
+    progress_callback: Optional[ExportProgressCallback],
+    cancel_event: Optional[threading.Event],
+    pending_package_run_id: Optional[str],
+    completion_gate: Optional[Callable[[], bool]],
 ) -> DatasetExportResponse:
     """Run a full dataset export. Atomic-per-row: a per-image failure
     leaves earlier rows intact and adds an error entry for the failed
@@ -97,6 +162,8 @@ def export_dataset(
     longer builds a 100k-1M ``image_records`` list or a full rename plan before
     the first file is written.
     """
+    resolved_annotations = resolve_annotation_selections(request)
+    validate_annotation_selection_coverage(request, resolved_annotations)
     output_mode = _output_mode(request)
     output_path = _validate_export_request(request)
     output_mode = _output_mode(request)
@@ -131,6 +198,57 @@ def export_dataset(
     nl_overrides_int, nl_overrides_path = _split_keyed_str_map(getattr(request, "image_nl_overrides", None))
     caption_extension = _dataset_sidecar_extension(request.content_mode)
     mask_export_mode = _mask_export_mode(request)
+    package_build: Optional[DatasetPackageBuild] = None
+    package_integrity_failed = False
+    package_status = "not_requested"
+    package_run_id: Optional[str] = None
+    package_manifest_path: Optional[str] = None
+    if package_requested(request):
+        if output_path is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Verified trainer packages require output_mode='folder'",
+            )
+        try:
+            if pending_package_run_id is None:
+                package_build = begin_dataset_package(
+                    output_path,
+                    request,
+                    requested_total,
+                    caption_extension,
+                )
+            else:
+                package_build = resume_pending_dataset_package(
+                    output_path,
+                    request,
+                    requested_total,
+                    caption_extension,
+                    pending_package_run_id,
+                )
+        except (PackageLockError, PackageOwnershipError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except PackageIntegrityError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        package_status = "incomplete"
+        package_run_id = package_build.run_id
+
+    try:
+        _invalidate_existing_anima_config(
+            output_path,
+            _trainer_config_mode(request),
+        )
+    except Exception as exc:
+        if package_build is not None:
+            try:
+                abort_dataset_package(
+                    package_build,
+                    f"Trainer config invalidation failed: {exc}",
+                )
+            except PackageIntegrityError as abort_exc:
+                raise PackageIntegrityError(
+                    f"{exc}; package_abort_cleanup_error={abort_exc}"
+                ) from exc
+        raise
 
     # ---- Execute the plan ----
     items: List[DatasetExportItemResult] = []
@@ -148,6 +266,42 @@ def export_dataset(
     used_image_paths: set[str] = set()
     used_caption_paths: set[str] = set()
     seen_virtual_paths: set[str] = set()
+
+    def _append_package_record(
+        *,
+        index: int,
+        image_id: int,
+        source_path: str,
+        disposition: Literal["exported", "skipped", "failed"],
+        reason: Optional[str],
+        image_path: Optional[Path],
+        caption_path: Optional[Path],
+        mask_path: Optional[Path],
+        expected_caption_sha256: Optional[str],
+        annotation_provenance: Optional[AnnotationProvenance],
+    ) -> None:
+        nonlocal package_integrity_failed, error_count
+        if package_build is None or package_integrity_failed:
+            return
+        try:
+            record = build_inventory_record(
+                package_build.output_folder,
+                index,
+                image_id,
+                source_path,
+                disposition,
+                reason,
+                image_path,
+                caption_path,
+                mask_path,
+                expected_caption_sha256,
+                annotation_provenance,
+            )
+            package_build.inventory_writer.append(record)
+        except PackageIntegrityError as exc:
+            package_integrity_failed = True
+            error_count += 1
+            _add_error(str(exc))
 
     def _append_item(item: DatasetExportItemResult) -> None:
         nonlocal total_items
@@ -189,6 +343,18 @@ def export_dataset(
             src_image_path=src_image_path or None,
             error=message,
         ))
+        _append_package_record(
+            index=total_items,
+            image_id=image_id,
+            source_path=src_image_path,
+            disposition="failed",
+            reason=message,
+            image_path=None,
+            caption_path=None,
+            mask_path=None,
+            expected_caption_sha256=None,
+            annotation_provenance=None,
+        )
         _emit(f"Failed {current_item or src_image_path or image_id} ({processed}/{total_expected})", current_item)
 
     def _record_skip(image_id: int, src_image_path: str, reason: str, current_item: Optional[str] = None) -> None:
@@ -200,7 +366,31 @@ def export_dataset(
             src_image_path=src_image_path or None,
             skipped_reason=reason,
         ))
+        _append_package_record(
+            index=total_items,
+            image_id=image_id,
+            source_path=src_image_path,
+            disposition="skipped",
+            reason=reason,
+            image_path=None,
+            caption_path=None,
+            mask_path=None,
+            expected_caption_sha256=None,
+            annotation_provenance=None,
+        )
         _emit(f"Skipped {current_item or src_image_path or image_id} ({processed}/{total_expected})", current_item)
+
+    def _path_entry_exists(path: Path) -> bool:
+        try:
+            path.lstat()
+        except FileNotFoundError:
+            return False
+        except OSError as exc:
+            raise PackageIntegrityError(
+                "Package mask target could not be inspected: "
+                f"path={path}, error_type={type(exc).__name__}, error={exc}"
+            ) from exc
+        return True
 
     def _export_record(record: Dict[str, Any], tags: Optional[List[Any]] = None) -> bool:
         nonlocal exported, skipped, error_count, processed, export_index, cancelled
@@ -212,6 +402,9 @@ def export_dataset(
         export_index += 1
         image_id = int(record.get("id") or 0)
         src_image_path = str(record.get("path") or "")
+        annotation = resolved_annotations.get(
+            annotation_selection_key(image_id, src_image_path)
+        )
         filename = os.path.basename(src_image_path) or f"image-{image_id}"
         dst_image_path: Optional[Path] = None
         dst_caption_path: Optional[Path] = None
@@ -227,7 +420,7 @@ def export_dataset(
             if output_path is None:
                 _record_error(image_id, src_image_path, "Output folder is required for folder export mode.", filename)
                 return True
-            dst_image_path, dst_caption_path, skip_reason = _plan_single_rename(
+            dst_image_path, dst_caption_path, skip_reason = _plan_single_pair(
                 record,
                 output_folder=output_path,
                 pattern=request.naming_pattern,
@@ -236,30 +429,70 @@ def export_dataset(
                 caption_extension=caption_extension,
                 index=export_index,
                 used_image_paths=used_image_paths,
+                used_caption_paths=used_caption_paths,
             )
 
         if dst_caption_path is None:
             _record_skip(image_id, src_image_path, skip_reason or "skipped", filename)
             return True
 
+        if (
+            package_build is not None
+            and mask_export_mode != "none"
+            and image_id > 0
+            and request.overwrite_policy in {"unique", "skip"}
+        ):
+            if dst_image_path is None:
+                raise PackageIntegrityError(
+                    "Package mask planning requires an image destination"
+                )
+            planned_mask_path, mask_plan_error = _plan_mask_destination(
+                mask_export_mode,
+                dst_image_path,
+                output_path,
+            )
+            if mask_plan_error is not None or planned_mask_path is None:
+                raise PackageIntegrityError(
+                    mask_plan_error or "Package mask destination is missing"
+                )
+            if _path_entry_exists(planned_mask_path):
+                _record_skip(
+                    image_id,
+                    src_image_path,
+                    f"existing mask target: {planned_mask_path}",
+                    filename,
+                )
+                return True
+
         # Render caption
         try:
-            caption_text = _render_dataset_sidecar(
-                record,
-                tags or [],
-                request,
-                blacklist_set=blacklist_set,
-                image_overrides_int=image_overrides_int,
-                image_overrides_path=image_overrides_path,
-                image_types_int=image_types_int,
-                image_types_path=image_types_path,
-                nl_overrides_int=nl_overrides_int,
-                nl_overrides_path=nl_overrides_path,
-            )
+            if annotation is not None and annotation["content"] is not None:
+                caption_text = render_training_caption_content(
+                    annotation["content"],
+                    request.caption_transforms or {},
+                    request.trigger,
+                    request.common_tags,
+                )
+            else:
+                caption_text = _render_dataset_sidecar(
+                    record,
+                    tags or [],
+                    request,
+                    blacklist_set=blacklist_set,
+                    image_overrides_int=image_overrides_int,
+                    image_overrides_path=image_overrides_path,
+                    image_types_int=image_types_int,
+                    image_types_path=image_types_path,
+                    nl_overrides_int=nl_overrides_int,
+                    nl_overrides_path=nl_overrides_path,
+                )
         except Exception as exc:  # pragma: no cover - defensive
             msg = f"caption render failed for image {image_id}: {exc}"
             _record_error(image_id, src_image_path, msg, filename)
             return True
+        expected_caption_sha256 = hashlib.sha256(
+            caption_text.encode("utf-8")
+        ).hexdigest()
 
         # Verify source exists
         if not src_image_path or not os.path.exists(src_image_path):
@@ -270,12 +503,28 @@ def export_dataset(
         # Copy / move the image in folder mode only. Beside-image mode is a
         # pure sidecar write and must not duplicate or relocate source images.
         if output_mode == "folder":
+            folder_image_path = dst_image_path
+            if folder_image_path is None:
+                _record_error(
+                    image_id,
+                    src_image_path,
+                    "Folder export planning did not produce an image destination.",
+                    filename,
+                )
+                return True
             try:
-                os.makedirs(dst_image_path.parent, exist_ok=True)
+                os.makedirs(folder_image_path.parent, exist_ok=True)
                 if request.image_op == "copy":
-                    # copy2 preserves mtime so trainers and downstream tools
-                    # see the original recency.
-                    shutil.copy2(src_image_path, str(dst_image_path))
+                    if package_build is not None:
+                        copy_package_file_atomic(
+                            Path(src_image_path),
+                            folder_image_path,
+                            package_build.output_folder,
+                        )
+                    else:
+                        # copy2 preserves mtime so trainers and downstream tools
+                        # see the original recency.
+                        shutil.copy2(src_image_path, str(folder_image_path))
                 else:  # move
                     # Move the file first, then reconcile the indexed DB
                     # row. Previously the DB update was wrapped in a bare
@@ -284,18 +533,18 @@ def export_dataset(
                     # file move. We now roll the file back to its source
                     # path on DB failure and surface the error, so the
                     # library never points at a non-existent path.
-                    shutil.move(src_image_path, str(dst_image_path))
+                    shutil.move(src_image_path, str(folder_image_path))
                     if image_id:
                         move_error = _reconcile_moved_image_path(
                             image_id,
                             src_image_path,
-                            str(dst_image_path),
+                            str(folder_image_path),
                         )
                         if move_error:
                             # Best-effort rollback so the on-disk state
                             # matches the DB row we just failed to update.
                             try:
-                                shutil.move(str(dst_image_path), src_image_path)
+                                shutil.move(str(folder_image_path), src_image_path)
                             except OSError:
                                 # If rollback fails we must still report
                                 # the desync rather than hide it.
@@ -320,21 +569,29 @@ def export_dataset(
         # a ``.tmp`` suffix on the SAME directory so the rename is atomic
         # on the same filesystem (POSIX rename + Windows MoveFileEx are
         # both atomic for same-volume renames).
+        tmp_caption_path: Optional[Path] = None
         try:
-            os.makedirs(dst_caption_path.parent, exist_ok=True)
-            tmp_caption_path = dst_caption_path.with_suffix(dst_caption_path.suffix + ".tmp")
-            # newline="\n" (P3-14): keep caption sidecars LF on Windows too.
-            with open(tmp_caption_path, "w", encoding="utf-8", newline="\n") as handle:
-                handle.write(caption_text)
-                handle.flush()
-                try:
-                    os.fsync(handle.fileno())
-                except OSError:
-                    # fsync may be unavailable on some streams (e.g. over
-                    # network mounts); the rename is still the primary
-                    # atomicity guarantee, so don't fail the row here.
-                    pass
-            os.replace(str(tmp_caption_path), str(dst_caption_path))
+            if package_build is not None:
+                write_package_text_atomic(
+                    dst_caption_path,
+                    caption_text,
+                    package_build.output_folder,
+                )
+            else:
+                os.makedirs(dst_caption_path.parent, exist_ok=True)
+                tmp_caption_path = dst_caption_path.with_suffix(dst_caption_path.suffix + ".tmp")
+                # newline="\n" (P3-14): keep caption sidecars LF on Windows too.
+                with open(tmp_caption_path, "w", encoding="utf-8", newline="\n") as handle:
+                    handle.write(caption_text)
+                    handle.flush()
+                    try:
+                        os.fsync(handle.fileno())
+                    except OSError:
+                        # fsync may be unavailable on some streams (e.g. over
+                        # network mounts); the rename is still the primary
+                        # atomicity guarantee, so don't fail the row here.
+                        pass
+                os.replace(str(tmp_caption_path), str(dst_caption_path))
         except Exception as exc:
             msg = f"failed to write caption for image {image_id}: {exc}"
             # Don't remove the image — the user can re-run the export and
@@ -353,30 +610,34 @@ def export_dataset(
             # Best-effort: remove the temp file if the rename failed so
             # we don't leave .tmp litter next to the captions.
             try:
-                if os.path.exists(str(tmp_caption_path)):
+                if tmp_caption_path is not None and os.path.exists(str(tmp_caption_path)):
                     os.unlink(str(tmp_caption_path))
             except OSError:
                 pass
             return True
 
-        # Masked-training sidecar (Phase 4): copy the stored mask, named for
-        # the chosen trainer. Local-source items (id <= 0) have no stored
-        # masks; a missing mask is normal (trainers treat it as full-image)
-        # and never fails the row.
-        if mask_export_mode != "none" and image_id > 0:
-            nonlocal_dst = dst_image_path if dst_image_path is not None else Path(src_image_path)
-            mask_error = _write_mask_sidecar(
-                image_id,
-                mask_export_mode,
-                exported_image_path=nonlocal_dst,
-                output_folder=output_path,
-            )
-            if mask_error is None:
-                masks_written += 1
-            elif mask_error == "missing":
+        # Stored masks are keyed by library image id, so path sources cannot
+        # satisfy any requested mask mode and must be counted as missing.
+        exported_mask_path: Optional[Path] = None
+        if mask_export_mode != "none":
+            if image_id <= 0:
                 masks_missing += 1
             else:
-                _add_error(mask_error)
+                nonlocal_dst = dst_image_path if dst_image_path is not None else Path(src_image_path)
+                exported_mask_path, mask_error = _write_mask_sidecar(
+                    image_id,
+                    mask_export_mode,
+                    exported_image_path=nonlocal_dst,
+                    output_folder=output_path,
+                )
+                if mask_error is None:
+                    masks_written += 1
+                elif mask_error == "missing":
+                    masks_missing += 1
+                else:
+                    masks_missing += 1
+                    error_count += 1
+                    _add_error(mask_error)
 
         exported += 1
         processed += 1
@@ -386,6 +647,20 @@ def export_dataset(
             dst_image_path=str(dst_image_path) if dst_image_path is not None else None,
             dst_caption_path=str(dst_caption_path),
         ))
+        _append_package_record(
+            index=total_items,
+            image_id=image_id,
+            source_path=src_image_path,
+            disposition="exported",
+            reason=None,
+            image_path=dst_image_path,
+            caption_path=dst_caption_path,
+            mask_path=exported_mask_path,
+            expected_caption_sha256=expected_caption_sha256,
+            annotation_provenance=(
+                annotation["provenance"] if annotation is not None else None
+            ),
+        )
         _emit(f"Exported {filename} ({processed}/{total_expected})", filename)
         return True
 
@@ -395,26 +670,34 @@ def export_dataset(
         *,
         exported_image_path: Path,
         output_folder: Optional[Path],
-    ) -> Optional[str]:
+    ) -> tuple[Optional[Path], Optional[str]]:
         """Copy the stored mask next to the exported pair. Returns None on
         success, "missing" when no mask is stored, or an error string."""
         from services import mask_service
 
         source_mask = mask_service.get_mask_file(image_id)
         if source_mask is None:
-            return "missing"
-        stem = exported_image_path.stem
-        if mode == "onetrainer":
-            target = exported_image_path.parent / f"{stem}-masklabel.png"
-        else:  # kohya conditioning_data_dir layout
-            base = output_folder if output_folder is not None else exported_image_path.parent
-            target = base / "mask" / f"{stem}.png"
+            return None, "missing"
+        target, target_error = _plan_mask_destination(
+            mode,
+            exported_image_path,
+            output_folder,
+        )
+        if target_error is not None or target is None:
+            return None, target_error or "Mask destination is missing"
         try:
             os.makedirs(target.parent, exist_ok=True)
-            shutil.copy2(str(source_mask), str(target))
-            return None
+            if package_build is not None:
+                copy_package_file_atomic(
+                    Path(source_mask),
+                    target,
+                    package_build.output_folder,
+                )
+            else:
+                shutil.copy2(str(source_mask), str(target))
+            return target, None
         except Exception as exc:  # noqa: BLE001
-            return f"failed to write mask for image {image_id}: {exc}"
+            return None, f"failed to write mask for image {image_id}: {exc}"
 
     def _process_path_source(raw_path: Any) -> bool:
         nonlocal cancelled
@@ -433,58 +716,143 @@ def export_dataset(
         record = virtual_image_record_for_path(normalized_path, read_dimensions=False)
         return _export_record(record, [])
 
-    _emit(f"Exporting 0/{total_expected} images...")
+    try:
+        _emit(f"Exporting 0/{total_expected} images...")
 
-    # ---- DB-source records in bounded chunks ----
-    for image_id_chunk in _iter_chunks(_iter_unique_image_ids(request.image_ids or []), _svc().DATASET_EXPORT_DB_CHUNK_SIZE):
-        if cancelled:
-            break
-        if cancel_event is not None and cancel_event.is_set():
-            cancelled = True
-            break
-        ids = [int(image_id) for image_id in image_id_chunk]
-        images_map = db.get_images_by_ids(ids) if ids else {}
-        tags_map = db.get_image_tags_map(ids) if ids else {}
-        for image_id in ids:
+        # ---- DB-source records in bounded chunks ----
+        for image_id_chunk in _iter_chunks(_iter_unique_image_ids(request.image_ids or []), _svc().DATASET_EXPORT_DB_CHUNK_SIZE):
+            if cancelled:
+                break
             if cancel_event is not None and cancel_event.is_set():
                 cancelled = True
                 break
-            record = images_map.get(image_id)
-            if not record:
-                _record_error(image_id, "", f"image {image_id} not found in library", f"id-{image_id}")
-                continue
-            if not _export_record(dict(record), tags_map.get(image_id, []) or []):
-                break
+            ids = [int(image_id) for image_id in image_id_chunk]
+            images_map = db.get_images_by_ids(ids) if ids else {}
+            tags_map = db.get_image_tags_map(ids) if ids else {}
+            for image_id in ids:
+                if cancel_event is not None and cancel_event.is_set():
+                    cancelled = True
+                    break
+                record = images_map.get(image_id)
+                if not record:
+                    _record_error(image_id, "", f"image {image_id} not found in library", f"id-{image_id}")
+                    continue
+                if not _export_record(dict(record), tags_map.get(image_id, []) or []):
+                    break
 
-    # ---- Explicit path-source records ----
-    if not cancelled:
-        for raw_path in request.image_paths or []:
-            if not _process_path_source(raw_path):
-                break
+        # ---- Explicit path-source records ----
+        if not cancelled:
+            for raw_path in request.image_paths or []:
+                if not _process_path_source(raw_path):
+                    break
 
-    # ---- Token-backed folder manifest records ----
-    if not cancelled:
-        for raw_path in _iter_requested_scan_paths(request):
-            if not _process_path_source(raw_path):
-                break
+        # ---- Token-backed folder manifest records ----
+        if not cancelled:
+            for raw_path in _iter_requested_scan_paths(request):
+                if not _process_path_source(raw_path):
+                    break
 
-    if cancelled:
-        status = "cancelled"
-        _emit(f"Cancelled at {processed}/{total_expected}. Exported {exported} images.")
-    elif error_count == 0:
-        status = "ok"
-    elif exported == 0:
-        status = "failed"
-    else:
-        status = "partial"
+        trainer_config_path = None
+        trainer_config_mode = _trainer_config_mode(request)
+        trainer_config_selected = (
+            trainer_config_mode in {"kohya_toml", "anima_lora_toml"}
+            and output_mode == "folder"
+            and output_path is not None
+            and not cancelled
+        )
+        trainer_name = "Kohya" if trainer_config_mode == "kohya_toml" else "Anima"
+        if trainer_config_selected and error_count > 0:
+            _add_error(
+                f"{trainer_name} dataset config withheld because the export has errors; "
+                "fix the reported items and run the export again."
+            )
+        elif trainer_config_selected and exported > 0:
+            if output_path is None:
+                raise RuntimeError(
+                    "Trainer config output path is missing for a selected folder export."
+                )
+            try:
+                if trainer_config_mode == "kohya_toml":
+                    trainer_config_path = _write_kohya_dataset_config(
+                        output_path,
+                        request,
+                        masks_written=masks_written,
+                        masks_missing=masks_missing,
+                    )
+                else:
+                    trainer_config_path = _write_anima_dataset_config(
+                        output_path,
+                        request,
+                        masks_written=masks_written,
+                        masks_missing=masks_missing,
+                    )
+            except (KohyaTrainerContractError, AnimaTrainerContractError) as exc:
+                error_count += 1
+                _add_error(str(exc))
+
+        if cancel_event is not None and cancel_event.is_set():
+            cancelled = True
+
+        if cancelled:
+            status = "cancelled"
+            _emit(f"Cancelled at {processed}/{total_expected}. Exported {exported} images.")
+        elif error_count == 0:
+            status = "ok"
+        elif exported == 0:
+            status = "failed"
+        else:
+            status = "partial"
+    except Exception as exc:
+        if package_build is not None:
+            try:
+                abort_dataset_package(
+                    package_build,
+                    f"Package export execution failed: {exc}",
+                )
+            except PackageIntegrityError as abort_exc:
+                raise PackageIntegrityError(
+                    f"{exc}; package_abort_cleanup_error={abort_exc}"
+                ) from exc
+        raise
 
     items_truncated = total_items > len(items)
+
+    if package_build is not None:
+        if (
+            not cancelled
+            and completion_gate is not None
+            and not completion_gate()
+        ):
+            cancelled = True
+            status = "cancelled"
+        try:
+            package_status, package_manifest_path = finalize_dataset_package(
+                package_build,
+                requested_total,
+                processed,
+                exported,
+                skipped,
+                error_count,
+                masks_written,
+                masks_missing,
+                trainer_config_path,
+                cancelled,
+                tuple(error_messages),
+            )
+        except PackageIntegrityError as exc:
+            package_integrity_failed = True
+            error_count += 1
+            _add_error(str(exc))
+            package_status = "incomplete"
+            package_manifest_path = None
+        if package_status == "incomplete" and not cancelled:
+            status = "failed" if exported == 0 else "partial"
 
     # Best-effort: drop an ``export_manifest.json`` describing this run into
     # the output folder. Only ``folder`` mode has a single destination folder;
     # ``beside_image`` writes sidecars next to each source image (output_path
     # is None), so there is no one place a run-level manifest belongs.
-    if output_mode == "folder" and output_path is not None:
+    if output_mode == "folder" and output_path is not None and package_build is None:
         manifest = _build_export_manifest(
             request,
             status=status,
@@ -501,20 +869,6 @@ def export_dataset(
         )
         _write_export_manifest(output_path, manifest)
 
-    trainer_config_path = None
-    if (
-        _trainer_config_mode(request) == "kohya_toml"
-        and output_mode == "folder"
-        and output_path is not None
-        and exported > 0
-        and not cancelled
-    ):
-        trainer_config_path = _write_kohya_dataset_config(
-            output_path, request, masks_written=masks_written
-        )
-        if trainer_config_path is None:
-            _add_error("dataset_config.toml could not be written (pairs on disk are intact)")
-
     return DatasetExportResponse(
         trainer_config_path=trainer_config_path,
         masks_written=masks_written,
@@ -529,11 +883,16 @@ def export_dataset(
         total_items=total_items,
         items_truncated=items_truncated,
         error_messages=error_messages,
+        package_status=package_status,
+        package_run_id=package_run_id,
+        package_manifest_path=package_manifest_path,
     )
 
 
 def preview_dataset_export(request: DatasetExportPreviewRequest) -> Dict[str, Any]:
     """Render a bounded Dataset Maker export preview without writing files."""
+    resolved_annotations = resolve_annotation_selections(request)
+    validate_annotation_selection_coverage(request, resolved_annotations)
     output_mode = _output_mode(request)
     if output_mode not in VALID_OUTPUT_MODES:
         raise HTTPException(status_code=400, detail=f"Invalid output_mode: {output_mode!r}")
@@ -590,6 +949,9 @@ def preview_dataset_export(request: DatasetExportPreviewRequest) -> Dict[str, An
 
         image_id = int(record.get("id") or 0)
         src_image_path = str(record.get("path") or "")
+        annotation = resolved_annotations.get(
+            annotation_selection_key(image_id, src_image_path)
+        )
         if output_mode == "beside_image":
             dst_image_path = None
             dst_caption_path, skip_reason = _plan_beside_image_sidecar(
@@ -599,7 +961,7 @@ def preview_dataset_export(request: DatasetExportPreviewRequest) -> Dict[str, An
                 used_caption_paths=used_caption_paths,
             )
         else:
-            dst_image_path, dst_caption_path, skip_reason = _plan_single_rename(
+            dst_image_path, dst_caption_path, skip_reason = _plan_single_pair(
                 record,
                 output_folder=output_path,
                 pattern=request.naming_pattern,
@@ -608,23 +970,32 @@ def preview_dataset_export(request: DatasetExportPreviewRequest) -> Dict[str, An
                 caption_extension=caption_extension,
                 index=export_index,
                 used_image_paths=used_image_paths,
+                used_caption_paths=used_caption_paths,
             )
         rendered = ""
         render_error = error
-        if not render_error and dst_caption_path is not None:
+        if not render_error:
             try:
-                rendered = _render_dataset_sidecar(
-                    record,
-                    tags or [],
-                    request,
-                    blacklist_set=blacklist_set,
-                    image_overrides_int=image_overrides_int,
-                    image_overrides_path=image_overrides_path,
-                    image_types_int=image_types_int,
-                    image_types_path=image_types_path,
-                    nl_overrides_int=nl_overrides_int,
-                    nl_overrides_path=nl_overrides_path,
-                )
+                if annotation is not None and annotation["content"] is not None:
+                    rendered = render_training_caption_content(
+                        annotation["content"],
+                        request.caption_transforms or {},
+                        request.trigger,
+                        request.common_tags,
+                    )
+                else:
+                    rendered = _render_dataset_sidecar(
+                        record,
+                        tags or [],
+                        request,
+                        blacklist_set=blacklist_set,
+                        image_overrides_int=image_overrides_int,
+                        image_overrides_path=image_overrides_path,
+                        image_types_int=image_types_int,
+                        image_types_path=image_types_path,
+                        nl_overrides_int=nl_overrides_int,
+                        nl_overrides_path=nl_overrides_path,
+                    )
             except Exception as exc:  # pragma: no cover - defensive preview fallback
                 render_error = str(exc)
 

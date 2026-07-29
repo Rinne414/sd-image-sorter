@@ -558,6 +558,7 @@ test('WASD combo counter should become visible during sorting and reset on undo'
       search,
       sortBy: 'newest',
       limit: 0,
+      scope: 'library',
       minWidth: null,
       maxWidth: null,
       minHeight: null,

@@ -21,6 +21,12 @@ from pathlib import Path
 
 import pytest
 from PIL import Image
+from pydantic import ValidationError
+
+from services.dataset_export.models import DatasetExportRequest
+
+
+pytestmark = pytest.mark.usefixtures("authorize_legacy_dataset_exports")
 
 
 # ----------------------------- shared fixtures -----------------------------
@@ -58,11 +64,24 @@ EXPORT_RESPONSE_TOP_KEYS = {
     # Trainer handoff (roadmap #2): path of the generated kohya
     # dataset_config.toml, null unless trainer_config="kohya_toml".
     "trainer_config_path",
+    "package_status", "package_run_id", "package_manifest_path",
 }
 EXPORT_ITEM_KEYS = {
     "image_id", "src_image_path", "dst_image_path", "dst_caption_path",
     "skipped_reason", "error",
 }
+
+
+def test_export_proof_fields_are_strict_optional_hex_contract() -> None:
+    request = DatasetExportRequest.model_validate({})
+    assert request.readiness_report_id is None
+    assert request.readiness_input_fingerprint is None
+    with pytest.raises(ValidationError):
+        DatasetExportRequest.model_validate({"readiness_report_id": "not-a-report"})
+    with pytest.raises(ValidationError):
+        DatasetExportRequest.model_validate({
+            "readiness_input_fingerprint": "A" * 64,
+        })
 
 
 def test_export_response_shape_is_pinned(test_client, contract_images):
@@ -251,7 +270,7 @@ FOLDER_SCAN_TOP_KEYS = {
 FOLDER_SCAN_ITEM_KEYS = {
     "ds_id", "abs_path", "filename", "width", "height",
     "mtime", "size", "thumb_b64", "scan_index",
-    "source_kind", "sidecar_capability",
+    "source_kind", "sidecar_capability", "sidecar_caption",
 }
 
 
@@ -298,3 +317,4 @@ def test_folder_scan_response_shape_is_pinned(test_client, tmp_path: Path):
         assert item["scan_index"] is None or isinstance(item["scan_index"], int)
         assert isinstance(item["source_kind"], str)
         assert isinstance(item["sidecar_capability"], str)
+        assert item["sidecar_caption"] is None or isinstance(item["sidecar_caption"], str)

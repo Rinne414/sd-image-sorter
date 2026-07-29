@@ -674,6 +674,25 @@ def _apply_collection_filter(conditions: List[str], params: List[Any],
     return conditions, params
 
 
+def _apply_gallery_scope_filter(
+    conditions: List[str],
+    params: List[Any],
+    scope: Optional[str],
+) -> tuple:
+    """Restrict Gallery queries to the short-lived current session when requested."""
+    if scope is None or scope == "library":
+        return conditions, params
+    if scope == "current_session":
+        conditions.append(
+            "EXISTS ("
+            "SELECT 1 FROM gallery_session_images gsi "
+            "WHERE gsi.image_id = i.id"
+            ")"
+        )
+        return conditions, params
+    raise ValueError("scope must be 'current_session' or 'library'")
+
+
 def _apply_readable_filter(
     conditions: List[str],
     params: List[Any],

@@ -14,6 +14,9 @@ import pytest
 from PIL import Image
 
 
+pytestmark = pytest.mark.usefixtures("authorize_legacy_dataset_exports")
+
+
 @pytest.fixture
 def two_tagged_images(test_db, tmp_path: Path):
     """Two on-disk images added to the DB and tagged. Returns (ids, src_dir)."""
@@ -123,11 +126,10 @@ def test_beside_image_export_skips_manifest(test_client, two_tagged_images, tmp_
     assert not (tmp_path / "export_manifest.json").exists()
 
 
-def test_failed_folder_export_still_writes_manifest_recording_error(
+def test_blocked_folder_export_writes_no_manifest(
     test_client, tmp_path: Path, test_db
 ):
-    """Even a fully-failed folder export writes a manifest that records the
-    failure counts and the per-item error, since files may still be present."""
+    """A Readiness blocker prevents the legacy failed-export manifest."""
     out = tmp_path / "out"
     out.mkdir()
 
@@ -136,15 +138,11 @@ def test_failed_folder_export_still_writes_manifest_recording_error(
         "output_folder": str(out),
         "naming_pattern": "{filename}",
     })
-    assert response.status_code == 200, response.text
+    assert response.status_code == 409, response.text
     body = response.json()
-    assert body["status"] == "failed", body
+    assert body["code"] == "readiness_blocked", body
+    assert "source_unreadable" in {issue["code"] for issue in body["issues"]}
 
     manifest_path = out / "export_manifest.json"
-    assert manifest_path.exists(), "manifest missing for a failed folder export"
-
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert manifest["status"] == "failed"
-    assert manifest["counts"] == {"total": 1, "exported": 0, "skipped": 0, "failed": 1}
-    assert len(manifest["items"]) == 1
-    assert "not found in library" in (manifest["items"][0]["error"] or "")
+    assert manifest_path.exists() is False
+    assert list(out.iterdir()) == []

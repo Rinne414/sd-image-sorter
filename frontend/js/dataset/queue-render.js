@@ -412,6 +412,7 @@
         if (num) num.textContent = String(this.imageIds.length);
         const clearBtn = document.getElementById('btn-dataset-clear');
         if (clearBtn) clearBtn.hidden = this.imageIds.length === 0;
+        this._syncTriggerQuickfillButton?.();
         if (DM._refreshExportPreview) DM._refreshExportPreview();
     };
 
