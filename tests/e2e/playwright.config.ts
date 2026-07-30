@@ -52,6 +52,34 @@ function commandExists(candidate: string): boolean {
 const backendPython = process.env.PW_BACKEND_PYTHON || backendPythonCandidates.find((candidate) => commandExists(candidate)) || backendPythonCandidates[0]
 const backendMain = path.join(repoRoot, 'backend', 'main.py')
 
+function backendPythonHasModule(moduleName: string): boolean {
+  const result = spawnSync(
+    backendPython,
+    [
+      '-c',
+      'import importlib.util, sys; print("1" if importlib.util.find_spec(sys.argv[1]) else "0")',
+      moduleName,
+    ],
+    {
+      encoding: 'utf8',
+      env: { ...process.env, PYTHONPATH: '' },
+    },
+  )
+  if (result.status !== 0) {
+    const details = result.error?.message || result.stderr || result.stdout || 'probe exited without diagnostics'
+    throw new Error(
+      `Failed to inspect Python module ${moduleName} with ${backendPython}: ${details}`,
+    )
+  }
+  const availability = result.stdout.trim()
+  if (availability !== '0' && availability !== '1') {
+    throw new Error(
+      `Python module probe returned an invalid result for ${moduleName} with ${backendPython}: ${availability}`,
+    )
+  }
+  return availability === '1'
+}
+
 function isWindowsExecutable(candidate: string): boolean {
   return candidate.toLowerCase().endsWith('.exe')
 }
@@ -170,6 +198,9 @@ writeStubModule('torch.py', `__version__ = '2.13.0+cu126'\nclass version:\n    c
 writeStubModule('transformers.py', `__version__ = '5.6.2'\n`)
 writeStubModule('safetensors.py', `__version__ = '0.7.0'\n`)
 writeStubModule('timm.py', `__version__ = '1.0.26'\n`)
+if (!backendPythonHasModule('cv2')) {
+  writeStubModule('cv2.py', `__version__ = '4.11.0'\n`)
+}
 writeStubModule('sam3/__init__.py', '')
 writeStubModule('einops.py', '')
 writeStubModule('hydra.py', '')
@@ -181,6 +212,7 @@ writeStubPackageMetadata('torch', '2.13.0+cu126')
 writeStubPackageMetadata('transformers', '5.6.2')
 writeStubPackageMetadata('timm', '1.0.26')
 writeStubPackageMetadata('safetensors', '0.7.0')
+writeStubPackageMetadata('opencv-python', '4.11.0.86')
 
 // The onboarding tour's auto-start was retired (QA P3-4) so its completion
 // flag no longer needs seeding here — only the entry overlay must be skipped.

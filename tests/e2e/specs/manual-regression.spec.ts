@@ -238,14 +238,22 @@ print("ok")
   runBackendScript(script)
 }
 
+async function waitForActiveView(page: Page, view: string) {
+  await expect(page.locator(`#view-${view}.active`)).toBeVisible()
+  await expect(page.locator('.view.active')).toHaveCount(1)
+  await expect.poll(async () => page.evaluate(() => (window as any).App.AppState.currentView)).toBe(view)
+  await expect(page.locator('#mobile-nav-overlay')).not.toHaveClass(/\bvisible\b/)
+}
+
 async function openView(page: Page, view: string) {
   // v3.3.3: Prompt Helper + Style Finder live under the "Tools ▾" dropdown.
   const toolItem = page.locator(`#nav-tools-menu [data-view="${view}"]`)
   if (await toolItem.count()) {
     const toggle = page.locator('#nav-tools-toggle')
     if (await toggle.isVisible().catch(() => false)) {
-      await toggle.click({ force: true })
-      await toolItem.click({ force: true })
+      await toggle.evaluate((node: HTMLButtonElement) => node.click())
+      await toolItem.evaluate((node: HTMLButtonElement) => node.click())
+      await waitForActiveView(page, view)
       return
     }
   }
@@ -254,7 +262,8 @@ async function openView(page: Page, view: string) {
   if (await desktopTab.count()) {
     const box = await desktopTab.boundingBox()
     if (box && box.width > 0 && box.height > 0) {
-      await desktopTab.click({ force: true })
+      await desktopTab.evaluate((node: HTMLButtonElement) => node.click())
+      await waitForActiveView(page, view)
       return
     }
   }
@@ -266,17 +275,19 @@ async function openView(page: Page, view: string) {
   if (await mirrorItem.count()) {
     const toggle = page.locator('#nav-tools-toggle')
     if (await toggle.isVisible().catch(() => false)) {
-      await toggle.click({ force: true })
-      await mirrorItem.click({ force: true })
+      await toggle.evaluate((node: HTMLButtonElement) => node.click())
+      await mirrorItem.evaluate((node: HTMLButtonElement) => node.click())
+      await waitForActiveView(page, view)
       return
     }
   }
 
   const mobileToggle = page.locator('#mobile-menu-toggle')
   if (await mobileToggle.isVisible().catch(() => false)) {
-    await mobileToggle.click({ force: true })
+    await mobileToggle.evaluate((node: HTMLButtonElement) => node.click())
     await expect(page.locator('#mobile-nav-overlay')).toHaveClass(/visible/)
     await page.locator(`#mobile-nav-overlay .mobile-nav-item[data-view="${view}"]`).evaluate((node: HTMLButtonElement) => node.click())
+    await waitForActiveView(page, view)
     return
   }
 

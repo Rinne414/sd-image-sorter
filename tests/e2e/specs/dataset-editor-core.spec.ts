@@ -1605,7 +1605,6 @@ test('trigger quickfill reports a pending local edit storage failure without par
     }], { showToast: false, switchView: false, focusImportTab: false })
     dm._setActive(dm.imageIds[0])
   })
-  await page.locator('#dataset-editor-textarea').fill('freshly edited, smile')
   await page.locator('#dataset-trigger').fill('Instant_Token')
   await page.evaluate(() => {
     const captionKey = 'sd-image-sorter-dataset-local-captions'
@@ -1617,6 +1616,12 @@ test('trigger quickfill reports a pending local edit storage failure without par
       if (key === captionKey) throw new DOMException('quota exhausted', 'QuotaExceededError')
       return originalSetItem.call(this, key, value)
     }
+    const dm = (window as any).DatasetMaker
+    const textarea = document.getElementById('dataset-editor-textarea') as HTMLTextAreaElement
+    textarea.value = 'freshly edited, smile'
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    clearTimeout(dm._captionInputTimer)
+    dm._captionInputTimer = null
   })
   await page.locator('#btn-dataset-quickfill-trigger').click()
 

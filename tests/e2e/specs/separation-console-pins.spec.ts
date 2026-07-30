@@ -67,6 +67,11 @@ async function boot(page: Page) {
 }
 
 async function seedQueue(page: Page, rows: SeedRow[]) {
+  await page.evaluate(() => (window as any).App.switchView('dataset'))
+  await page.waitForFunction(() => {
+    const dm = (window as any).DatasetMaker
+    return dm?._trainerContractState?.status === 'ready' && dm?._pendingProjectSettings === null
+  })
   await page.evaluate((seedRows: SeedRow[]) => {
     const dm = (window as any).DatasetMaker
     dm.imageIds = seedRows.map((r) => r.id)
@@ -75,7 +80,6 @@ async function seedQueue(page: Page, rows: SeedRow[]) {
       dm.captions.set(r.id, r.caption)
       if (r.nl != null) dm.nlCaptions.set(r.id, r.nl)
     }
-    ;(window as any).App.switchView('dataset')
     dm._setActive(seedRows[0].id)
   }, rows)
 }

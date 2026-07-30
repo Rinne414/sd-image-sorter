@@ -170,12 +170,6 @@ test('visible Aesthetic controls follow the active task across start, cancel, an
   await expect(visibleStart).toBeEnabled()
   await expect(visibleStop).toBeHidden()
 
-  const firstStartResponse = page.waitForResponse((response) => {
-    const url = new URL(response.url())
-    return response.request().method() === 'POST'
-      && url.pathname === '/api/aesthetic/score-all'
-      && response.status() === 200
-  })
   await visibleStart.click()
   await expect.poll(() => startRequests).toBe(1)
   await expect.poll(async () => await visibleStart.getAttribute('class')).not.toContain('is-busy')
@@ -253,6 +247,12 @@ test('visible Aesthetic controls follow the active task across start, cancel, an
   })
   const inFlightStartRequests = startRequests
   holdNextRunningProgress = true
+  const firstStartResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === 'POST'
+      && url.pathname === '/api/aesthetic/score-all'
+      && response.status() === 200
+  })
   releaseStartResponse()
   await firstStartResponse
   await heldProgressStarted

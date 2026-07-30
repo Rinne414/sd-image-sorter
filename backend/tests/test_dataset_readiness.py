@@ -845,6 +845,7 @@ def test_readiness_duplicate_local_and_scan_matches_export_skip(
 
 
 def test_readiness_db_missing_preserves_export_index_parity(
+    test_db,
     tmp_path: Path,
 ) -> None:
     source = tmp_path / "indexed.png"

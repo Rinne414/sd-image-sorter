@@ -1345,6 +1345,22 @@ def test_release_ci_keeps_security_audit_and_windows_linux_guardrails():
     assert "cache: \"pip\"" in workflow
 
 
+def test_macos_compat_installs_node_dependencies_before_backend_suite():
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    macos_job = workflow.split("  macos-compat:", 1)[1].split(
+        "  linux-portable-smoke:",
+        1,
+    )[0]
+
+    setup_node_index = macos_job.index("actions/setup-node@v4")
+    npm_install_index = macos_job.index("npm ci")
+    backend_suite_index = macos_job.index("Backend full test suite (macOS)")
+
+    assert 'node-version: "20"' in macos_job
+    assert "working-directory: tests/e2e" in macos_job
+    assert setup_node_index < npm_install_index < backend_suite_index
+
+
 def test_release_ci_runs_runtime_dependency_check_as_a_blocking_step():
     run_ci = (ROOT / "scripts" / "run_ci.py").read_text(encoding="utf-8")
     checker_path = ROOT / "scripts" / "check_runtime_dependencies.py"
@@ -1395,6 +1411,11 @@ def test_playwright_ai_runtime_stubs_match_exact_lock():
     assert "writeStubPackageMetadata('transformers', '5.6.2')" in config
     assert "writeStubModule('timm.py', `__version__ = '1.0.26'\\n`)" in config
     assert "writeStubPackageMetadata('timm', '1.0.26')" in config
+    assert "function backendPythonHasModule(moduleName: string): boolean" in config
+    assert "env: { ...process.env, PYTHONPATH: '' }" in config
+    assert "if (!backendPythonHasModule('cv2'))" in config
+    assert "writeStubModule('cv2.py', `__version__ = '4.11.0'\\n`)" in config
+    assert "writeStubPackageMetadata('opencv-python', '4.11.0.86')" in config
 
 
 def test_frontend_i18n_and_censor_css_keep_safety_contracts():
