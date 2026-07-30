@@ -5,6 +5,12 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0-beta.2] - 2026-07-31
+
+Beta 2 closes two high-impact correctness and desktop UX defects found after the first public beta. Signed Stealth PNG Info carriers are now decoded across alpha/RGB and compressed/uncompressed variants, existing incomplete PNG records are re-parsed after the parser revision bump, and Queue Solitaire keeps the user's scroll position across drag, selection, sorting, collapsing, and other same-session re-renders. The release pipeline is also stabilized across Windows, macOS, Linux, and both Linux portable architectures.
+
+Beta 2 修复首个公开测试版之后发现的两个高影响正确性与桌面体验问题：元数据解析器现可读取 alpha/RGB、压缩/未压缩的签名 Stealth PNG Info 载体，并通过解析器修订号自动重解析旧的 PNG 不完整记录；队列接龙在拖拽、选择、排序、折叠及其他同会话重渲染后保持用户当前滚动位置。发布流水线同时已在 Windows、macOS、Linux 与两种 Linux portable 架构上稳定通过。
+
 ## [3.5.0] - 2026-07-19
 
 v3.5.0 stable 落地 v4.0「清爽极光」重设计：新增任务入口页与可定制导航，图库/排序/打码/打标四大工作流同步升级，并重做 LoRA/Dataset 导出、完整搜索语法、查重清理、颜色搜索和大图库后台任务。beta 到 stable 的收口补齐 Krea 2 自然语言优先 Smart Tag、Qwen3-VL Instruct 推荐路径、AI/Mass Tag 生命周期竞态、扫描与元数据边界、打码输出完整性、模型运行时诊断，以及 Model Manager 等高风险模块拆分与桌面回归覆盖。
