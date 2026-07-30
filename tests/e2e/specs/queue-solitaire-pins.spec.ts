@@ -490,3 +490,145 @@ test('filter summary keeps the idle data-i18n key, then strips it once a quick f
   expect(applied.i18n).toBeNull() // data-i18n stripped so I18n can't reset the live summary
   expect(applied.text).toContain('comfyui') // the active quick keyword is reflected
 })
+
+test('same-queue rerenders preserve the sections viewport across drag and selection', async ({ page }) => {
+  await bootApp(page)
+  await seedQueue(
+    page,
+    Array.from({ length: 80 }, (_, index) => index + 1),
+    [],
+  )
+  await page.evaluate(() => {
+    const w = window as QueueSolitaireWin
+    w.App.switchView('censor')
+    w.QueueSolitaire!.open()
+  })
+  await expect(page.locator('#queue-solitaire.active')).toBeVisible()
+
+  const before = await page.evaluate(() => {
+    const sections = document.getElementById('qs-sections') as HTMLElement | null
+    if (!sections) return { scrollTop: 0, maxScrollTop: 0, visibleId: null, dropId: null }
+    sections.scrollTop = Math.min(360, Math.max(0, sections.scrollHeight - sections.clientHeight))
+    const rect = sections.getBoundingClientRect()
+    const visible = Array.from(sections.querySelectorAll<HTMLElement>('.qs-thumb[data-id]'))
+      .filter((thumb) => {
+        const thumbRect = thumb.getBoundingClientRect()
+        return thumbRect.top >= rect.top + 8 && thumbRect.bottom <= rect.bottom - 8
+      })
+    return {
+      scrollTop: sections.scrollTop,
+      maxScrollTop: sections.scrollHeight - sections.clientHeight,
+      visibleId: visible[0]?.dataset.id ?? null,
+      dropId: visible[1]?.dataset.id ?? null,
+    }
+  })
+  expect(before.maxScrollTop).toBeGreaterThan(0)
+  expect(before.scrollTop).toBeGreaterThan(0)
+  expect(before.visibleId).not.toBeNull()
+  expect(before.dropId).not.toBeNull()
+  const draggedId = Number(before.visibleId)
+  await page.locator('#qs-sections').evaluate((element) => {
+    const sections = element as HTMLElement
+    sections.addEventListener('dragstart', (event) => {
+      const target = event.target as HTMLElement | null
+      sections.dataset.testDraggedId = target?.dataset.id ?? ''
+    }, { capture: true, once: true })
+    sections.addEventListener('drop', () => {
+      sections.dataset.testDropScrollTop = String(sections.scrollTop)
+    }, { capture: true, once: true })
+  })
+
+  await page
+    .locator(`#qs-sections .qs-thumb[data-id="${draggedId}"]`)
+    .dragTo(page.locator(`#qs-sections .qs-thumb[data-id="${before.dropId}"]`))
+
+  const afterDrag = await page.evaluate(() => {
+    const sections = document.getElementById('qs-sections') as HTMLElement
+    const qs = (window as QueueSolitaireWin).QueueSolitaire!
+    return {
+      scrollTop: sections.scrollTop,
+      dropScrollTop: Number(sections.dataset.testDropScrollTop || 0),
+      draggedId: Number(sections.dataset.testDraggedId || 0),
+      selected: Array.from(qs.state.selected),
+      lastItem: qs.state.sections[0]?.items.at(-1),
+    }
+  })
+  expect(afterDrag.draggedId).toBeGreaterThan(0)
+  expect(afterDrag.dropScrollTop).toBeGreaterThan(0)
+  expect(afterDrag.scrollTop).toBeGreaterThan(0)
+  expect(Math.abs(afterDrag.scrollTop - afterDrag.dropScrollTop)).toBeLessThanOrEqual(2)
+  expect(afterDrag.selected).toEqual([afterDrag.draggedId])
+  expect(afterDrag.lastItem).toBe(afterDrag.draggedId)
+
+  const visibleId = await page.evaluate(() => {
+    const sections = document.getElementById('qs-sections') as HTMLElement
+    const rect = sections.getBoundingClientRect()
+    return Array.from(sections.querySelectorAll<HTMLElement>('.qs-thumb[data-id]'))
+      .find((thumb) => thumb.getBoundingClientRect().bottom > rect.top)
+      ?.dataset.id ?? null
+  })
+  expect(visibleId).not.toBeNull()
+  await page.locator('#qs-sections').evaluate((element) => {
+    const sections = element as HTMLElement
+    sections.addEventListener('click', () => {
+      sections.dataset.testClickScrollTop = String(sections.scrollTop)
+    }, { capture: true, once: true })
+  })
+  await page.locator(`#qs-sections .qs-thumb[data-id="${visibleId}"]`).click()
+
+  const afterSelection = await page.evaluate(() => {
+    const sections = document.getElementById('qs-sections') as HTMLElement
+    return {
+      scrollTop: sections.scrollTop,
+      clickScrollTop: Number(sections.dataset.testClickScrollTop || 0),
+    }
+  })
+  expect(afterSelection.clickScrollTop).toBeGreaterThan(0)
+  expect(Math.abs(afterSelection.scrollTop - afterSelection.clickScrollTop)).toBeLessThanOrEqual(2)
+
+  await page.evaluate(() => {
+    const w = window as QueueSolitaireWin
+    w.App.AppState.images = Array.from({ length: 80 }, (_, index) => ({
+      id: index + 1,
+      width: index < 40 ? 2048 : 1024,
+      height: 1024,
+    }))
+  })
+  await page.locator('#qs-btn-auto-sort').click()
+  await page.locator('#qs-sort-resolution').click()
+  await page.locator('#qs-sections').evaluate((element) => {
+    const sections = element as HTMLElement
+    sections.scrollTop = sections.scrollHeight
+  })
+  const beforeCollapse = await page.locator('#qs-sections').evaluate((element) => {
+    const sections = element as HTMLElement
+    return {
+      scrollTop: sections.scrollTop,
+      maxScrollTop: sections.scrollHeight - sections.clientHeight,
+    }
+  })
+  expect(beforeCollapse.scrollTop).toBe(beforeCollapse.maxScrollTop)
+  expect(beforeCollapse.maxScrollTop).toBeGreaterThan(0)
+
+  const firstSectionId = await page.evaluate(() => (
+    (window as QueueSolitaireWin).QueueSolitaire!.state.sections[0]?.id ?? null
+  ))
+  expect(firstSectionId).not.toBeNull()
+  await page.locator(
+    `#qs-sections .qs-section[data-section="${firstSectionId}"] .qs-section-collapse`,
+  ).evaluate((element) => (element as HTMLElement).click())
+  const afterCollapse = await page.locator('#qs-sections').evaluate((element) => {
+    const sections = element as HTMLElement
+    return {
+      scrollTop: sections.scrollTop,
+      maxScrollTop: sections.scrollHeight - sections.clientHeight,
+    }
+  })
+  expect(afterCollapse.maxScrollTop).toBeGreaterThan(0)
+  expect(afterCollapse.maxScrollTop).toBeLessThan(beforeCollapse.maxScrollTop)
+  expect(afterCollapse.scrollTop).toBe(afterCollapse.maxScrollTop)
+
+  await page.evaluate(() => (window as QueueSolitaireWin).QueueSolitaire!.close())
+  await openSolitaire(page)
+  await expect.poll(() => page.locator('#qs-sections').evaluate((element) => (element as HTMLElement).scrollTop)).toBe(0)
+})

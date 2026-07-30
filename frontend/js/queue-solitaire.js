@@ -1219,6 +1219,7 @@
     function render() {
         const container = document.getElementById('qs-sections');
         if (!container) return;
+        const previousScrollTop = container.scrollTop;
 
         // Stats
         const statsEl = document.getElementById('qs-stats');
@@ -1315,6 +1316,9 @@
 
         // Update preview
         renderPreview();
+
+        const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+        container.scrollTop = Math.min(previousScrollTop, maxScrollTop);
     }
 
     function renderPreview() {
@@ -1695,6 +1699,8 @@
             filterBar.classList.add('active');
             filterBar.style.display = 'flex';
         }
+        const sections = document.getElementById('qs-sections');
+        if (sections) sections.scrollTop = 0;
         clearQuickFilterInputs();
 
         // Hide the normal censor workspace children
