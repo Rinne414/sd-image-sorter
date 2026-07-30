@@ -309,7 +309,10 @@ test('Build prompt cleanup preserves LoRA directives across every cleanup action
   const promptArea = page.locator('#pl-build-prompt')
   const clean = async (value: string, buttonId: string, expected: string) => {
     await promptArea.fill(value)
-    await page.locator(buttonId).click()
+    const button = page.locator(buttonId)
+    await button.focus()
+    await expect(page.locator('.caption-autocomplete-dropdown')).toBeHidden()
+    await button.click()
     await expect(promptArea).toHaveValue(expected)
   }
   const viewports = [

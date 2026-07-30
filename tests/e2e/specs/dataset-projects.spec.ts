@@ -3074,6 +3074,18 @@ test('project lifecycle migrates revision drafts and restores the unsaved Librar
     image_id: 301,
     missing: false,
   }], null)
+  const waitForAnnotationHeads = async (revision: number) => {
+    await expect.poll(() => page.evaluate(() => {
+      const dm = (window as any).DatasetMaker
+      return {
+        status: dm._annotationHeadsStatus,
+        owner: dm._annotationHeadsOwner,
+      }
+    })).toEqual({
+      status: 'ready',
+      owner: { project_id: 31, project_revision: revision },
+    })
+  }
   await page.route('**/api/dataset/projects', (route) =>
     route.fulfill({ json: { projects: [projectSummary(current)] } }))
   await page.route('**/api/dataset/projects/31/**', (route) => {
@@ -3107,6 +3119,7 @@ test('project lifecycle migrates revision drafts and restores the unsaved Librar
   await page.getByTestId('dataset-project-archive').click()
   await acceptConfirm(page)
   await expect(page.getByTestId('dataset-project-restore')).toBeEnabled()
+  await waitForAnnotationHeads(2)
   await expect.poll(() => page.evaluate(() => {
     const dm = (window as any).DatasetMaker
     return {
@@ -3127,6 +3140,7 @@ test('project lifecycle migrates revision drafts and restores the unsaved Librar
   await page.getByTestId('dataset-project-menu').click()
   await page.getByTestId('dataset-project-restore').click()
   await expect(page.getByTestId('dataset-project-archive')).toBeEnabled()
+  await waitForAnnotationHeads(3)
   await expect.poll(() => page.evaluate(() => {
     const dm = (window as any).DatasetMaker
     return {

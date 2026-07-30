@@ -7,7 +7,7 @@ import {
   buildPlaywrightReportEnv,
 } from './playwright-env.mjs'
 
-const DEFAULT_SHARD_COUNT = 4
+const DEFAULT_SHARD_COUNT = 2
 const MAX_SHARD_COUNT = 8
 const COVERAGE_RUN_SCHEMA_VERSION = 1
 const COVERAGE_RUN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/

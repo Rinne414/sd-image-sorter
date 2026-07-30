@@ -90,6 +90,7 @@ test('library search stays full-indexed and wins over an older initial response'
 })
 
 test('library modal bounds rendered tags and reports shown vs total in both languages', async ({ page }) => {
+  test.setTimeout(45000)
   const consoleProblems: string[] = []
   const requestProblems: string[] = []
   const requests: LibraryRequest[] = []

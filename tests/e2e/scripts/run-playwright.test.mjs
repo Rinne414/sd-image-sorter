@@ -170,7 +170,7 @@ test('plain full test command shards unless an external server or opt-out is exp
 })
 
 test('shard count is bounded and rejects invalid configuration', () => {
-  assert.equal(resolveShardCount({}), 4)
+  assert.equal(resolveShardCount({}), 2)
   assert.equal(resolveShardCount({ PW_SHARD_COUNT: '3' }), 3)
   assert.throws(() => resolveShardCount({ PW_SHARD_COUNT: '0' }), /between 1 and 8/)
   assert.throws(() => resolveShardCount({ PW_SHARD_COUNT: 'not-a-number' }), /integer/)

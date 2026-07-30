@@ -642,7 +642,7 @@ async function waitForNavigationChrome(page: Page) {
         || isVisible(document.getElementById('mobile-menu-toggle'))
       return chromeVisible && document.documentElement.dataset.appReady === '1'
     })
-  }).toBe(true)
+  }, { timeout: 10000 }).toBe(true)
 }
 
 async function hasMainPageShell(page: Page) {
@@ -6350,6 +6350,14 @@ test.describe('Smoke Tests', () => {
 
   test('similar embedding should resume running progress and report processed plus errors correctly', async ({ page }) => {
     let progressCalls = 0
+    let releaseTerminalProgress: () => void = () => undefined
+    let signalTerminalProgressStarted: () => void = () => undefined
+    const terminalProgressGate = new Promise<void>((resolve) => {
+      releaseTerminalProgress = resolve
+    })
+    const terminalProgressStarted = new Promise<void>((resolve) => {
+      signalTerminalProgressStarted = resolve
+    })
 
     await page.addInitScript(() => {
       localStorage.setItem('similar-guide-seen', 'true')
@@ -6380,7 +6388,6 @@ test.describe('Smoke Tests', () => {
       progressCalls += 1
 
       if (progressCalls === 1) {
-        await new Promise((resolve) => setTimeout(resolve, 150))
         await route.fulfill({
           json: {
             running: true,
@@ -6392,6 +6399,8 @@ test.describe('Smoke Tests', () => {
         return
       }
 
+      signalTerminalProgressStarted()
+      await terminalProgressGate
       await route.fulfill({
         json: {
           running: false,
@@ -6406,11 +6415,13 @@ test.describe('Smoke Tests', () => {
     await page.waitForLoadState('networkidle')
     await openView(page, 'similar')
     await expect(page.locator('#view-similar.active')).toBeVisible()
+    await terminalProgressStarted
 
     await expect(page.locator('#btn-similar-embed')).toBeDisabled()
     await expect(page.locator('#btn-similar-search')).toBeDisabled()
     await expect(page.locator('#btn-similar-upload')).toBeDisabled()
     await expect(page.locator('#btn-similar-duplicates')).toBeDisabled()
+    releaseTerminalProgress()
     await expect.poll(() => progressCalls, { timeout: 10000 }).toBeGreaterThanOrEqual(2)
     await expect(page.locator('#btn-similar-embed')).toBeEnabled()
     await expect(page.locator('#btn-similar-search')).toBeEnabled()

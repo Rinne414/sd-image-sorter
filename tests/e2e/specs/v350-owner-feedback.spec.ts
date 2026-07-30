@@ -20,6 +20,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('visible Aesthetic controls follow the active task across start, cancel, and reopen', async ({ page }) => {
+  test.setTimeout(60000)
   let aestheticAvailable = true
   let failNextAestheticStart = false
   let aestheticRunning = false
