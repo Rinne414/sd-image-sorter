@@ -823,7 +823,7 @@ def test_scan_folder_reparses_unchanged_images_with_old_parser_version(test_db, 
     assert parse_calls["count"] == 1
 
 
-def test_scan_folder_does_not_reparse_old_non_jpeg_parser_version(test_db, tmp_path: Path, monkeypatch):
+def test_scan_folder_reparses_unchanged_png_with_old_parser_version(test_db, tmp_path: Path, monkeypatch):
     image_path = tmp_path / "old-parser-version.png"
     Image.new("RGB", (64, 64), color="white").save(image_path)
     stat = image_path.stat()
@@ -852,9 +852,9 @@ def test_scan_folder_does_not_reparse_old_non_jpeg_parser_version(test_db, tmp_p
     result = scan_folder(str(tmp_path), recursive=False)
 
     assert result["updated"] == 1
-    assert result["unchanged"] == 1
-    assert result["metadata_updated"] == 0
-    assert parse_calls["count"] == 0
+    assert result["unchanged"] == 0
+    assert result["metadata_updated"] == 1
+    assert parse_calls["count"] == 1
 
 
 def test_scan_folder_indexes_tiff_metadata(test_db, tmp_path: Path):

@@ -32,6 +32,7 @@ from .constants import (
     PNG_SIGNATURE,
     _MAX_PNG_CHUNK_BYTES,
     _MAX_DECOMPRESSED_BYTES,
+    _MAX_PNG_STEALTH_PROBE_BYTES,
     JPEG_SIGNATURE,
     _MAX_JPEG_SEGMENT_BYTES,
     _MAX_XMP_CHUNK_BYTES,
@@ -43,6 +44,14 @@ from .constants import (
     WEBP_SIGNATURE,
     WEBP_FOURCC,
     _MAX_WEBP_CHUNK_BYTES,
+)
+from .png_stealth import (
+    PNG_STEALTH_ERROR_PREFIX,
+    PNGStealthMetadataError,
+    decode_png_stealth_metadata,
+    png_stealth_probe_layout,
+    probe_png_stealth_signature,
+    unfilter_png_scanline_prefix,
 )
 
 logger = logging.getLogger(__name__)
@@ -126,9 +135,14 @@ class ParserRuntimeMixin:
     def _load_png_metadata_fast(self, image_path: str) -> Dict[str, Any]:
         """Read PNG dimensions + text metadata without a full Pillow open."""
         metadata: Dict[str, Any] = {}
+        metadata_error: Optional[str] = None
         width = 0
         height = 0
+        bit_depth = 0
+        color_type = -1
+        interlace_method = -1
         seen_iend = False
+        idat_ranges: list[tuple[int, int]] = []
 
         file_size = os.path.getsize(image_path)
 
@@ -158,6 +172,9 @@ class ParserRuntimeMixin:
                 if chunk_end > file_size:
                     raise ValueError("Truncated PNG chunk data")
 
+                if chunk_type == b"IDAT":
+                    idat_ranges.append((offset, chunk_length))
+
                 if chunk_type == b"IEND":
                     if chunk_length != 0:
                         raise ValueError("Invalid PNG IEND chunk")
@@ -186,9 +203,12 @@ class ParserRuntimeMixin:
                     raise ValueError("Truncated PNG chunk CRC")
 
                 if chunk_type == b"IHDR":
-                    if chunk_length < 8:
+                    if chunk_length != 13:
                         raise ValueError("Invalid PNG IHDR chunk")
                     width, height = struct.unpack(">II", chunk_data[:8])
+                    bit_depth = chunk_data[8]
+                    color_type = chunk_data[9]
+                    interlace_method = chunk_data[12]
                 elif chunk_type == b"tEXt":
                     text_item = self._decode_png_text_chunk(chunk_data)
                     if text_item:
@@ -211,11 +231,134 @@ class ParserRuntimeMixin:
         if not seen_iend:
             raise ValueError("Truncated PNG missing IEND chunk")
 
+        if bit_depth == 8 and interlace_method == 0 and idat_ranges:
+            stealth_metadata, metadata_error = self._load_png_stealth_metadata(
+                image_path,
+                width,
+                height,
+                color_type,
+                idat_ranges,
+            )
+            metadata = {**stealth_metadata, **metadata}
+
         return {
             "width": width,
             "height": height,
             "metadata": metadata,
+            "metadata_error": metadata_error,
         }
+
+    def _load_png_stealth_metadata(
+        self,
+        image_path: str,
+        width: int,
+        height: int,
+        color_type: int,
+        idat_ranges: list[tuple[int, int]],
+    ) -> tuple[Dict[str, Any], Optional[str]]:
+        """Probe cheaply, then decode pixels only for a confirmed signed carrier."""
+        signature = self._probe_png_stealth_signature(
+            image_path,
+            width,
+            height,
+            color_type,
+            idat_ranges,
+        )
+        if signature is None:
+            return {}, None
+
+        try:
+            with Image.open(image_path) as image:
+                image.load()
+                decoded = decode_png_stealth_metadata(
+                    image,
+                    signature,
+                    _MAX_PNG_CHUNK_BYTES,
+                    _MAX_DECOMPRESSED_BYTES,
+                )
+            return decoded, None
+        except PNGStealthMetadataError as exc:
+            return {}, f"{PNG_STEALTH_ERROR_PREFIX}{exc}"
+        except (OSError, ValueError) as exc:
+            return {}, f"{PNG_STEALTH_ERROR_PREFIX}pixel decode failed: {exc}"
+
+    def _probe_png_stealth_signature(
+        self,
+        image_path: str,
+        width: int,
+        height: int,
+        color_type: int,
+        idat_ranges: list[tuple[int, int]],
+    ) -> Optional[bytes]:
+        """Inspect only the scanline prefix needed to confirm a carrier signature."""
+        layout = png_stealth_probe_layout(height, color_type)
+        if layout is None:
+            return None
+        rows_to_decode, prefix_bytes, bytes_per_pixel = layout
+        row_bytes = width * bytes_per_pixel
+        required_output_bytes = rows_to_decode * (row_bytes + 1)
+        if required_output_bytes > _MAX_PNG_STEALTH_PROBE_BYTES:
+            return None
+
+        decompressed = self._read_png_idat_prefix(
+            image_path,
+            idat_ranges,
+            required_output_bytes,
+        )
+        if decompressed is None:
+            return None
+
+        previous_prefix = bytes(prefix_bytes)
+        scanline_prefixes: list[bytes] = []
+        for row_index in range(rows_to_decode):
+            scanline_offset = row_index * (row_bytes + 1)
+            filter_type = decompressed[scanline_offset]
+            filtered_prefix = decompressed[
+                scanline_offset + 1:scanline_offset + 1 + prefix_bytes
+            ]
+            try:
+                reconstructed = unfilter_png_scanline_prefix(
+                    filter_type,
+                    filtered_prefix,
+                    previous_prefix,
+                    bytes_per_pixel,
+                )
+            except ValueError:
+                return None
+            scanline_prefixes.append(reconstructed)
+            previous_prefix = reconstructed
+        return probe_png_stealth_signature(scanline_prefixes, height, color_type)
+
+    def _read_png_idat_prefix(
+        self,
+        image_path: str,
+        idat_ranges: list[tuple[int, int]],
+        required_output_bytes: int,
+    ) -> Optional[bytes]:
+        """Stream IDAT data until the requested decompressed scanline prefix is complete."""
+        decompressor = zlib.decompressobj()
+        output = bytearray()
+        try:
+            with open(image_path, "rb") as png_file:
+                for data_offset, data_length in idat_ranges:
+                    png_file.seek(data_offset)
+                    remaining_data = data_length
+                    while remaining_data > 0 and len(output) < required_output_bytes:
+                        compressed = png_file.read(min(64 * 1024, remaining_data))
+                        if not compressed:
+                            return None
+                        remaining_data -= len(compressed)
+                        output.extend(
+                            decompressor.decompress(
+                                compressed,
+                                required_output_bytes - len(output),
+                            )
+                        )
+                    if len(output) >= required_output_bytes:
+                        return bytes(output)
+        except zlib.error:
+            return None
+        return None
 
     def _decode_png_text_chunk(self, chunk_data: bytes) -> Optional[Tuple[str, str]]:
         """Decode a PNG tEXt chunk into a key/value pair."""

@@ -119,13 +119,18 @@ def _stored_parsed_metadata_version(existing: Optional[Dict[str, Any]]) -> Optio
 
 
 def _needs_metadata_parser_upgrade(existing: Optional[Dict[str, Any]]) -> bool:
-    """Return True when an unchanged JPEG row was parsed by an older parser."""
+    """Return True when an unchanged JPEG or PNG row used an older parser."""
     source_path = str((existing or {}).get("path") or (existing or {}).get("filename") or "")
-    if Path(source_path).suffix.lower() not in {".jpg", ".jpeg"}:
+    required_version = {
+        ".jpg": 7,
+        ".jpeg": 7,
+        ".png": PARSED_METADATA_VERSION,
+    }.get(Path(source_path).suffix.lower())
+    if required_version is None:
         return False
 
     stored_version = _stored_parsed_metadata_version(existing)
-    return stored_version is None or stored_version < PARSED_METADATA_VERSION
+    return stored_version is None or stored_version < required_version
 
 
 def _should_compute_content_fingerprint(existing: Optional[Dict[str, Any]]) -> bool:

@@ -8,6 +8,8 @@ from typing import Any, Dict, List
 
 import pytest
 
+from metadata_parser import PARSED_METADATA_VERSION
+
 
 ALL_ISSUE_KINDS = [
     "file_missing",
@@ -30,7 +32,7 @@ def _current_model_metadata(
 ) -> Dict[str, object]:
     return {
         "_parsed": {
-            "version": 7,
+            "version": PARSED_METADATA_VERSION,
             "model_assets": {
                 "checkpoint_candidates": [
                     {
@@ -50,7 +52,7 @@ def _sidecar_fallback_metadata(
 ) -> Dict[str, object]:
     return {
         "_parsed": {
-            "version": 7,
+            "version": PARSED_METADATA_VERSION,
             "sidecar_fallback": {
                 "schema_version": 1,
                 "evaluated": True,
@@ -1219,18 +1221,18 @@ def test_metadata_provenance_discloses_stale_and_weak_model_asset_evidence(
                     )["_parsed"]["model_assets"],
                 },
             },
-            "Parsed metadata version 6 is older than current version 7",
+            f"Parsed metadata version 6 is older than current version {PARSED_METADATA_VERSION}",
         ),
         (
             "malformed-assets",
-            {"_parsed": {"version": 7, "model_assets": "broken"}},
+            {"_parsed": {"version": PARSED_METADATA_VERSION, "model_assets": "broken"}},
             "Malformed",
         ),
         (
             "blank-candidate",
             {
                 "_parsed": {
-                    "version": 7,
+                    "version": PARSED_METADATA_VERSION,
                     "model_assets": {
                         "checkpoint_candidates": [
                             {
@@ -1248,7 +1250,7 @@ def test_metadata_provenance_discloses_stale_and_weak_model_asset_evidence(
             "missing-source-mode",
             {
                 "_parsed": {
-                    "version": 7,
+                    "version": PARSED_METADATA_VERSION,
                     "model_assets": {
                         "checkpoint_candidates": [
                             {
@@ -1275,7 +1277,7 @@ def test_metadata_provenance_discloses_stale_and_weak_model_asset_evidence(
             "malformed-source-mode",
             {
                 "_parsed": {
-                    "version": 7,
+                    "version": PARSED_METADATA_VERSION,
                     "model_assets": {
                         "checkpoint_candidates": [
                             {
@@ -1700,7 +1702,7 @@ def test_sidecar_metadata_dependency_reports_only_persisted_extraction_evidence(
                     "basename": "sidecar-dependent.json",
                     "method": "sidecar_fallback",
                     "confidence": "high",
-                    "parser_version": 7,
+                    "parser_version": PARSED_METADATA_VERSION,
                     "fields": ["prompt", "checkpoint", "loras"],
                 }
             ]
@@ -1729,7 +1731,7 @@ def test_sidecar_metadata_dependency_reports_only_persisted_extraction_evidence(
         "Affected fields": "prompt, checkpoint, loras",
         "Extraction method": "sidecar_fallback",
         "Confidence": "high",
-        "Parser version": "7",
+        "Parser version": str(PARSED_METADATA_VERSION),
     }
     assert issue["action"]["availability"] == "available"
     provider = next(
@@ -1768,7 +1770,7 @@ def test_sidecar_metadata_dependency_marks_legacy_records_partial_without_guessi
     _set_stored_provenance(
         test_client,
         legacy_id,
-        {"_parsed": {"version": 7}},
+        {"_parsed": {"version": PARSED_METADATA_VERSION}},
         None,
         None,
     )
@@ -1812,7 +1814,7 @@ def test_sidecar_metadata_dependency_marks_legacy_records_partial_without_guessi
             "basename": "sample.yaml",
             "method": "sidecar_fallback",
             "confidence": "high",
-            "parser_version": 7,
+            "parser_version": PARSED_METADATA_VERSION,
             "fields": ["prompt"],
         },
         {
@@ -1820,7 +1822,7 @@ def test_sidecar_metadata_dependency_marks_legacy_records_partial_without_guessi
             "basename": "C:/private/sample.txt",
             "method": "sidecar_fallback",
             "confidence": "high",
-            "parser_version": 7,
+            "parser_version": PARSED_METADATA_VERSION,
             "fields": ["prompt"],
         },
         {
@@ -1828,7 +1830,7 @@ def test_sidecar_metadata_dependency_marks_legacy_records_partial_without_guessi
             "basename": "sample.json",
             "method": "sidecar_fallback",
             "confidence": "high",
-            "parser_version": 7,
+            "parser_version": PARSED_METADATA_VERSION,
             "fields": ["unsupported_field"],
         },
         {
@@ -1836,7 +1838,7 @@ def test_sidecar_metadata_dependency_marks_legacy_records_partial_without_guessi
             "basename": "C:private.txt",
             "method": "sidecar_fallback",
             "confidence": "high",
-            "parser_version": 7,
+            "parser_version": PARSED_METADATA_VERSION,
             "fields": ["prompt"],
         },
         {
@@ -1844,7 +1846,7 @@ def test_sidecar_metadata_dependency_marks_legacy_records_partial_without_guessi
             "basename": "sample.txt:stream.txt",
             "method": "sidecar_fallback",
             "confidence": "high",
-            "parser_version": 7,
+            "parser_version": PARSED_METADATA_VERSION,
             "fields": ["prompt"],
         },
         {
@@ -1852,7 +1854,7 @@ def test_sidecar_metadata_dependency_marks_legacy_records_partial_without_guessi
             "basename": "sample\x00.txt",
             "method": "sidecar_fallback",
             "confidence": "high",
-            "parser_version": 7,
+            "parser_version": PARSED_METADATA_VERSION,
             "fields": ["prompt"],
         },
         {
@@ -1860,7 +1862,7 @@ def test_sidecar_metadata_dependency_marks_legacy_records_partial_without_guessi
             "basename": "sample?.txt",
             "method": "sidecar_fallback",
             "confidence": "high",
-            "parser_version": 7,
+            "parser_version": PARSED_METADATA_VERSION,
             "fields": ["prompt"],
         },
         {
@@ -1868,7 +1870,7 @@ def test_sidecar_metadata_dependency_marks_legacy_records_partial_without_guessi
             "basename": "CON.txt",
             "method": "sidecar_fallback",
             "confidence": "high",
-            "parser_version": 7,
+            "parser_version": PARSED_METADATA_VERSION,
             "fields": ["prompt"],
         },
         {
@@ -1876,7 +1878,7 @@ def test_sidecar_metadata_dependency_marks_legacy_records_partial_without_guessi
             "basename": "sample..txt.",
             "method": "sidecar_fallback",
             "confidence": "high",
-            "parser_version": 7,
+            "parser_version": PARSED_METADATA_VERSION,
             "fields": ["prompt"],
         },
     ],
@@ -1981,7 +1983,7 @@ def test_sidecar_metadata_dependency_change_invalidates_cursor(
                         "basename": f"sidecar-cursor-{index}.txt",
                         "method": "sidecar_fallback",
                         "confidence": "high",
-                        "parser_version": 7,
+                        "parser_version": PARSED_METADATA_VERSION,
                         "fields": ["prompt"],
                     }
                 ]
@@ -2010,7 +2012,7 @@ def test_sidecar_metadata_dependency_change_invalidates_cursor(
                     "basename": "sidecar-cursor-1.txt",
                     "method": "sidecar_fallback",
                     "confidence": "high",
-                    "parser_version": 7,
+                    "parser_version": PARSED_METADATA_VERSION,
                     "fields": ["prompt", "checkpoint"],
                 }
             ]

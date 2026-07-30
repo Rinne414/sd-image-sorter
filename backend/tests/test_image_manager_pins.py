@@ -156,22 +156,33 @@ class TestPureHelpers:
             is None
         )
 
-    def test_needs_metadata_parser_upgrade_is_jpeg_only(self):
-        old = json.dumps({"_parsed": {"version": PARSED_METADATA_VERSION - 1}})
+    def test_needs_metadata_parser_upgrade_covers_jpeg_and_png(self):
+        jpeg_old = json.dumps({"_parsed": {"version": 6}})
+        jpeg_current = json.dumps({"_parsed": {"version": 7}})
+        png_old = json.dumps({"_parsed": {"version": PARSED_METADATA_VERSION - 1}})
         cur = json.dumps({"_parsed": {"version": PARSED_METADATA_VERSION}})
         # JPEG parsed by an older parser -> upgrade
         assert (
-            _needs_metadata_parser_upgrade({"path": "a.jpg", "metadata_json": old})
+            _needs_metadata_parser_upgrade({"path": "a.jpg", "metadata_json": jpeg_old})
             is True
         )
-        # JPEG already at current version -> no upgrade
+        # JPEG already has its format-specific parser version -> no upgrade
         assert (
-            _needs_metadata_parser_upgrade({"path": "a.jpeg", "metadata_json": cur})
+            _needs_metadata_parser_upgrade({"path": "a.jpeg", "metadata_json": jpeg_current})
             is False
         )
-        # Non-JPEG is exempt regardless of stored version
+        # PNG parsed by an older parser -> upgrade for hidden carrier recovery
         assert (
-            _needs_metadata_parser_upgrade({"path": "a.png", "metadata_json": old})
+            _needs_metadata_parser_upgrade({"path": "a.png", "metadata_json": png_old})
+            is True
+        )
+        assert (
+            _needs_metadata_parser_upgrade({"path": "a.png", "metadata_json": cur})
+            is False
+        )
+        # Other formats remain exempt regardless of stored version
+        assert (
+            _needs_metadata_parser_upgrade({"path": "a.webp", "metadata_json": png_old})
             is False
         )
 
@@ -199,6 +210,9 @@ class TestFingerprintGates:
             "source_mtime_ns": st.st_mtime_ns,
             "source_size": st.st_size,
             "path": str(path),
+            "metadata_json": json.dumps({
+                "_parsed": {"version": PARSED_METADATA_VERSION}
+            }),
         }
         base.update(overrides)
         return base, st

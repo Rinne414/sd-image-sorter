@@ -121,7 +121,7 @@ def test_parsed_metadata_version_is_current_value():
     """image_manager gates re-parse on `stored_version < PARSED_METADATA_VERSION`
     (image_manager.py:256). Pin the current wire value so a bump is a deliberate,
     visible change rather than an accident of the module move."""
-    assert PARSED_METADATA_VERSION == 7
+    assert PARSED_METADATA_VERSION == 8
     assert isinstance(PARSED_METADATA_VERSION, int)
 
 

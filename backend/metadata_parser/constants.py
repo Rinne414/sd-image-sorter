@@ -9,10 +9,11 @@
 # __init__.py (stage 3); see tests/test_metadata_parser_pins.py.
 from typing import Optional, Dict, Tuple, Set
 
-PARSED_METADATA_VERSION = 7
+PARSED_METADATA_VERSION = 8
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 _MAX_PNG_CHUNK_BYTES = 64 * 1024 * 1024       # 64 MB – generous cap for any single PNG chunk
 _MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024    # 64 MB – cap for zlib-decompressed text data
+_MAX_PNG_STEALTH_PROBE_BYTES = 64 * 1024 * 1024
 JPEG_SIGNATURE = b"\xff\xd8"
 _MAX_JPEG_SEGMENT_BYTES = 64 * 1024 * 1024
 _MAX_XMP_CHUNK_BYTES = 8 * 1024 * 1024
