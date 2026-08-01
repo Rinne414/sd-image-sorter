@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import re
@@ -262,6 +263,31 @@ def test_release_copy_project_prunes_excluded_directory_trees(monkeypatch, tmp_p
     assert not (stage_root / "htmlcov/index.html").exists()
     assert not (stage_root / "backend/htmlcov/index.html").exists()
     assert not (stage_root / ".git/config").exists()
+
+
+def test_app_patch_python_sources_support_legacy_windows_runtime():
+    release_builder = load_release_builder()
+    syntax_errors: list[str] = []
+
+    for source_path, relative_path in release_builder.iter_project_files():
+        if relative_path.suffix.lower() != ".py":
+            continue
+        try:
+            ast.parse(
+                source_path.read_text(encoding="utf-8-sig"),
+                filename=relative_path.as_posix(),
+                feature_version=(3, 11),
+            )
+        except SyntaxError as exc:
+            syntax_errors.append(
+                f"{relative_path.as_posix()}:{exc.lineno}: {exc.msg}"
+            )
+
+    syntax_error_details = "\n".join(syntax_errors)
+    assert syntax_errors == [], (
+        "App-patch Python sources must remain parseable by the Python 3.11 "
+        f"runtime bundled with v3.4.x and Beta 1:\n{syntax_error_details}"
+    )
 
 
 def test_rescue_batch_files_are_release_managed(tmp_path):

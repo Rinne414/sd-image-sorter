@@ -489,7 +489,7 @@ test('project config fails closed when the supported wrapper isolation marker is
   assert.equal(output.includes(fakeParentCredentialValue), false)
 })
 
-test('each shard owns a port, backend data root, blob, result directory, and click ledger', () => {
+test('each shard owns a port, transform cache, backend data root, blob, result directory, and click ledger', () => {
   const undefinedArtifact = path.join(repoRoot, 'undefined')
   assert.equal(fs.existsSync(undefinedArtifact), false)
 
@@ -527,7 +527,9 @@ test('each shard owns a port, backend data root, blob, result directory, and cli
   assert.equal(new Set(descriptors.map((descriptor) => descriptor.env.PLAYWRIGHT_BLOB_OUTPUT_FILE)).size, 4)
   assert.equal(new Set(descriptors.map((descriptor) => descriptor.env.PW_E2E_FIXTURE_ROOT)).size, 4)
   assert.equal(new Set(descriptors.map((descriptor) => descriptor.env.PW_E2E_DATA_ROOT)).size, 4)
+  assert.equal(new Set(descriptors.map((descriptor) => descriptor.env.PWTEST_CACHE_DIR)).size, 4)
   assert.equal(new Set(descriptors.map((descriptor) => descriptor.env.PW_TEST_OUTPUT_DIR)).size, 4)
+  assert.ok(descriptors.every((descriptor) => descriptor.env.PWTEST_CACHE_DIR.includes('fixture-run')))
   assert.deepEqual(descriptors.map((descriptor) => descriptor.env.PW_SHARD_INDEX), ['1', '2', '3', '4'])
   assert.ok(descriptors.every((descriptor) => descriptor.env.PW_COVERAGE_LEDGER_OWNER === 'runner'))
   assert.ok(descriptors.every((descriptor) => descriptor.env.PW_REUSE_SERVER === '0'))

@@ -111,6 +111,7 @@ export function buildShardDescriptors(input) {
         ...childBaseEnv,
         PLAYWRIGHT_BLOB_OUTPUT_FILE: path.join(paths.blobRoot, `shard-${shardIndex}.zip`),
         PWTEST_BLOB_DO_NOT_REMOVE: '1',
+        PWTEST_CACHE_DIR: path.join(paths.runRoot, 'transform-cache', `shard-${shardIndex}`),
         PW_COVERAGE_LEDGER_OWNER: 'runner',
         PW_E2E_FIXTURE_ROOT: path.join(paths.fixtureRoot, `shard-${shardIndex}`),
         PW_E2E_DATA_ROOT: path.join(paths.dataRoot, `shard-${shardIndex}`),

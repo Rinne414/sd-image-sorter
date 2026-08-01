@@ -20,8 +20,8 @@ REQUIRED_COLUMNS = {
     "last_scanned_at",
 }
 
-type RootRow = tuple[int, str, str | None, int, str, str | None]
-type MigratedRootRow = tuple[int, str, str, str | None, int, str, str | None]
+RootRow = tuple[int, str, str | None, int, str, str | None]
+MigratedRootRow = tuple[int, str, str, str | None, int, str, str | None]
 
 
 def _normalize_root_path(path: str) -> str:
