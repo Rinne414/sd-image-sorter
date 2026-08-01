@@ -5,6 +5,12 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0-beta.3] - 2026-08-01
+
+Beta 3 restores startup for legacy Windows portable installations that received Beta 2 through the in-app updater. The app patch is again parseable by the bundled Python 3.11 runtime, release tests now enforce that compatibility across every shipped Python source, and isolated Playwright transform caches remove an intermittent CI collection race.
+
+Beta 3 修复旧版 Windows portable 通过应用内更新安装 Beta 2 后无法启动的问题。应用补丁重新兼容内置 Python 3.11，发布测试会检查补丁内每个 Python 源文件的语法兼容性；Playwright 分片也使用独立转换缓存，消除间歇性的 CI 测试收集竞态。
+
 ## [3.5.0-beta.2] - 2026-07-31
 
 Beta 2 closes two high-impact correctness and desktop UX defects found after the first public beta. Signed Stealth PNG Info carriers are now decoded across alpha/RGB and compressed/uncompressed variants, existing incomplete PNG records are re-parsed after the parser revision bump, and Queue Solitaire keeps the user's scroll position across drag, selection, sorting, collapsing, and other same-session re-renders. The release pipeline is also stabilized across Windows, macOS, Linux, and both Linux portable architectures.
