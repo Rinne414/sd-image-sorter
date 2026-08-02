@@ -220,7 +220,7 @@
             this._activeId = null;
             app.updateFilters?.((filters) => {
                 filters.collectionId = null;
-                filters.scope = 'current_session';
+                filters.scope = 'library';
             });
             app.updateFilterSummary?.();
             app.loadImages?.();

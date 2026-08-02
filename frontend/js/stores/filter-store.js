@@ -138,7 +138,9 @@
             excludeColorHues: sanitizeHues(source.excludeColorHues),
             // v3.3.1 collection browse
             collectionId: source.collectionId ?? null,
-            scope: source.scope === 'library' ? 'library' : 'current_session',
+            // Multi-library product: long-lived library is always the gallery
+            // truth. Legacy saved "current_session" scopes coerce to library.
+            scope: 'library',
             // v3.3.2 Library Navigation
             folder: source.folder ? String(source.folder).trim() : null,
             // v3.3.2 small-opt: tri-state "has SD generation parameters"

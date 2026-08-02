@@ -197,7 +197,7 @@ function _buildAutoSepImageQuery(filters, cursor = null, limit = 500) {
         colorTemperature: contract.colorTemperature || null,
         brightnessDistribution: contract.brightnessDistribution || null,
         collectionId: contract.collectionId || null,
-        scope: contract.scope === 'library' ? 'library' : 'current_session',
+        scope: 'library',
         folder: contract.folder || null,
         hasMetadata: typeof contract.hasMetadata === 'boolean' ? contract.hasMetadata : null,
         limit,

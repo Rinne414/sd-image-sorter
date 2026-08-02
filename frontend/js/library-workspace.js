@@ -70,7 +70,44 @@
     function apiFetch(url, options) {
         const opts = Object.assign({}, options || {});
         opts.headers = libraryHeaders(opts.headers || {});
-        return fetch(url, opts);
+        // Use native fetch to avoid re-entrancy once the global guard is installed.
+        const native = window.__sdNativeFetch || window.fetch;
+        return native.call(window, url, opts);
+    }
+
+    /**
+     * Patch window.fetch so every /api/* call carries X-SD-Library-Id.
+     * Closes residual bare-fetch leaks without editing every call site.
+     */
+    function installFetchGuard() {
+        if (window.__sdLibraryFetchPatched) return;
+        if (typeof window.fetch !== 'function') return;
+        window.__sdLibraryFetchPatched = true;
+        const original = window.fetch.bind(window);
+        window.__sdNativeFetch = original;
+        window.fetch = function sdLibraryFetch(input, init) {
+            try {
+                let url = '';
+                if (typeof input === 'string') url = input;
+                else if (input && typeof input.url === 'string') url = input.url;
+                const isApi = typeof url === 'string' && url.indexOf('/api/') !== -1;
+                if (!isApi) return original(input, init);
+
+                if (typeof Request !== 'undefined' && input instanceof Request) {
+                    const merged = libraryHeaders(input.headers);
+                    if (init && init.headers) {
+                        Object.assign(merged, libraryHeaders(init.headers));
+                    }
+                    const nextInit = Object.assign({}, init || {}, { headers: merged });
+                    return original(new Request(input, nextInit));
+                }
+                const next = Object.assign({}, init || {});
+                next.headers = libraryHeaders(next.headers || {});
+                return original(input, next);
+            } catch (_e) {
+                return original(input, init);
+            }
+        };
     }
 
     function getCurrentLibrary() {
@@ -665,11 +702,16 @@
     }
 
     function init() {
+        installFetchGuard();
         wireEntry();
         applyLibraryDefaultScope();
         refreshFromServer();
         document.addEventListener('i18n-applied', () => refreshEntryHome());
     }
+
+    // Install as early as this classic script loads (before DOMContentLoaded),
+    // so subsequent module fetches still get the library header.
+    installFetchGuard();
 
     window.LibraryWorkspace = {
         HEADER,

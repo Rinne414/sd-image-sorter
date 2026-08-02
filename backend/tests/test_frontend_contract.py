@@ -1981,14 +1981,14 @@ def test_sorting_payloads_carry_v33x_gallery_scope_filters():
     ):
         assert field in autosep_source, f"serializeAutoSepFilters misses {field}"
 
-    assert "scope: contract.scope === 'library'" in autosep_preview_source
+    assert "scope: 'library'" in autosep_preview_source
     assert "scope: contract.scope," in autosep_move_source
 
     # Manual Sort routes the same scope bundle through every start path
     # (slot/bracket/cull) and the minimap preview query.
     assert "function buildManualSortScopeFilters" in manual_sort_source
     assert manual_sort_source.count("buildManualSortScopeFilters(f)") >= 4
-    assert manual_sort_source.count("scope: contract.scope || 'current_session',") >= 2
+    assert manual_sort_source.count("scope: contract.scope || 'library',") >= 2
 
 
 def test_frontend_control_audit_script_reports_inventory():
