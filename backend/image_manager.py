@@ -248,6 +248,7 @@ def scan_folder(
         "unchanged": 0,
         "metadata_updated": 0,
         "skipped_other_library": 0,
+        "skipped_other_library_paths": [],
         "removed": 0,
         "errors": 0,
         "by_generator": {},
@@ -442,6 +443,7 @@ def scan_folder(
         result["skipped_other_library"] = int(result.get("skipped_other_library") or 0) + int(
             counts.get("skipped_other_library") or 0
         )
+        skipped_paths = result.setdefault("skipped_other_library_paths", [])
         placeholder_status_by_path.update(counts.get("statuses") or {})
         for path, status in (counts.get("statuses") or {}).items():
             normalized = normalize_indexed_image_path(path)
@@ -449,13 +451,25 @@ def scan_folder(
                 run_new_placeholder_paths.add(normalized)
             elif status == "updated":
                 run_updated_placeholder_paths.add(normalized)
-            # skipped_other_library: path already owned by another long-lived library
+            elif status == "skipped_other_library":
+                if len(skipped_paths) < 200 and normalized not in skipped_paths:
+                    skipped_paths.append(normalized)
         pending_records.clear()
 
     def _flush_metadata_records(pending_records: List[Dict[str, Any]]) -> None:
         if not pending_records:
             return
-        add_images_batch(pending_records)
+        counts = add_images_batch(pending_records, return_statuses=True)
+        result["skipped_other_library"] = int(result.get("skipped_other_library") or 0) + int(
+            counts.get("skipped_other_library") or 0
+        )
+        skipped_paths = result.setdefault("skipped_other_library_paths", [])
+        for path, status in (counts.get("statuses") or {}).items():
+            if status != "skipped_other_library":
+                continue
+            normalized = normalize_indexed_image_path(path)
+            if len(skipped_paths) < 200 and normalized not in skipped_paths:
+                skipped_paths.append(normalized)
         pending_records.clear()
 
     def _flush_deleted_new_paths(paths: List[str]) -> None:

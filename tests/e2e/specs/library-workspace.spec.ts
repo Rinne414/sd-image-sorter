@@ -89,4 +89,23 @@ test.describe('library workspace', () => {
     expect(String(copy.message).length).toBeGreaterThan(10)
     expect(String(copy.title).toLowerCase()).toMatch(/clear|清空/)
   })
+
+  test('export / claim / move APIs are exposed on LibraryWorkspace', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto('/')
+    await page.waitForFunction(() => Boolean((window as any).LibraryWorkspace?.exportLibraryIndex), null, {
+      timeout: 15000,
+    })
+    const apis = await page.evaluate(() => {
+      const lw = (window as any).LibraryWorkspace
+      return {
+        export: typeof lw.exportLibraryIndex === 'function',
+        claim: typeof lw.claimPaths === 'function',
+        move: typeof lw.moveImagesToLibrary === 'function',
+      }
+    })
+    expect(apis.export).toBe(true)
+    expect(apis.claim).toBe(true)
+    expect(apis.move).toBe(true)
+  })
 })

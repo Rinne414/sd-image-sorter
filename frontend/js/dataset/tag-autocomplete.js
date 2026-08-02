@@ -95,7 +95,7 @@
                 // imported) captions, which /api/tags/suggest can't see.
                 let matches = [];
                 try {
-                    const r = await fetch(`/api/tags/suggest?q=${encodeURIComponent(q)}&limit=8`);
+                    const r = await (window.apiFetch || fetch)(`/api/tags/suggest?q=${encodeURIComponent(q)}&limit=8`);
                     if (r.ok) {
                         const data = await r.json();
                         matches = (data.suggestions || []).map(s => s.tag).filter(Boolean);

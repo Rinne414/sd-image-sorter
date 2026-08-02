@@ -368,7 +368,7 @@
         ));
         if (missing.length === 0) return;
         try {
-            const r = await fetch('/api/tags/export-preview', {
+            const r = await (window.apiFetch || fetch)('/api/tags/export-preview', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ image_ids: missing.slice(0, 500), preset_id: 'custom' }),
@@ -453,7 +453,7 @@
         try {
             for (let i = 0; i < targetIds.length; i += batchSize) {
                 const batch = targetIds.slice(i, i + batchSize);
-                const r = await fetch('/api/tags/export-preview', {
+                const r = await (window.apiFetch || fetch)('/api/tags/export-preview', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ image_ids: batch, ...opts }),
@@ -557,7 +557,7 @@
             const batch = galleryIds.slice(i, i + batchSize);
             let data;
             try {
-                const r = await fetch('/api/tags/export-preview', {
+                const r = await (window.apiFetch || fetch)('/api/tags/export-preview', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ image_ids: batch, preset_id: 'custom' }),

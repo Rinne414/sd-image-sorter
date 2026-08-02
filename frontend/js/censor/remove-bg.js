@@ -88,7 +88,7 @@ async function showRemoveBackgroundPreview() {
         previewContainer.style.display = 'none';
 
         try {
-            const response = await fetch('/api/censor/remove-background', {
+            const response = await (window.apiFetch || fetch)('/api/censor/remove-background', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

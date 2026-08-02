@@ -181,5 +181,177 @@ def delete_library(library_id: str) -> Dict[str, Any]:
         raise KeyError(lid)
     removed = clear_library_images(lid)
     with get_db() as conn:
+        # Drop roots owned by this workspace (images already cleared).
+        try:
+            conn.execute(
+                "DELETE FROM library_roots WHERE COALESCE(library_id, 'main') = ?",
+                (lid,),
+            )
+        except Exception:
+            pass
         conn.execute("DELETE FROM libraries WHERE id = ?", (lid,))
     return {"id": lid, "removed_images": removed, "name": lib["name"]}
+
+
+def move_images_to_library(
+    image_ids: List[int],
+    target_library_id: str,
+) -> Dict[str, Any]:
+    """Reassign existing image rows to another long-lived library.
+
+    Path uniqueness is preserved (ownership moves; no duplicate rows).
+    """
+    target = resolve_active_library_id(target_library_id)
+    ids = sorted({int(i) for i in image_ids if int(i) > 0})
+    if not ids:
+        return {"moved": 0, "target_library_id": target, "image_ids": []}
+    placeholders = ",".join("?" for _ in ids)
+    with get_db() as conn:
+        cursor = conn.execute(
+            f"""
+            UPDATE images
+            SET library_id = ?
+            WHERE id IN ({placeholders})
+              AND COALESCE(library_id, 'main') != ?
+            """,
+            (target, *ids, target),
+        )
+        moved = int(cursor.rowcount or 0)
+    if moved:
+        try:
+            from db_tags import _invalidate_tags_cache  # type: ignore
+
+            _invalidate_tags_cache()
+        except Exception:
+            pass
+        try:
+            from db_facets import _invalidate_facet_caches  # type: ignore
+
+            _invalidate_facet_caches()
+        except Exception:
+            pass
+    return {"moved": moved, "target_library_id": target, "image_ids": ids}
+
+
+def claim_paths_to_library(
+    paths: List[str],
+    target_library_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Move ownership of indexed paths into ``target_library_id`` (current by default).
+
+    Used after a scan reports ``skipped_other_library`` for paths already indexed
+    under a different workspace.
+    """
+    from db_helpers import _normalize_indexed_image_path
+
+    target = resolve_active_library_id(target_library_id)
+    normalized = []
+    seen = set()
+    for raw in paths or []:
+        path = _normalize_indexed_image_path(str(raw or ""))
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        normalized.append(path)
+    if not normalized:
+        return {"moved": 0, "target_library_id": target, "paths": []}
+
+    moved = 0
+    chunk = 80
+    with get_db() as conn:
+        for start in range(0, len(normalized), chunk):
+            batch = normalized[start : start + chunk]
+            placeholders = ",".join("?" for _ in batch)
+            cursor = conn.execute(
+                f"""
+                UPDATE images
+                SET library_id = ?
+                WHERE path IN ({placeholders})
+                  AND COALESCE(library_id, 'main') != ?
+                """,
+                (target, *batch, target),
+            )
+            moved += int(cursor.rowcount or 0)
+    if moved:
+        try:
+            from db_tags import _invalidate_tags_cache  # type: ignore
+
+            _invalidate_tags_cache()
+        except Exception:
+            pass
+        try:
+            from db_facets import _invalidate_facet_caches  # type: ignore
+
+            _invalidate_facet_caches()
+        except Exception:
+            pass
+    return {"moved": moved, "target_library_id": target, "paths": normalized}
+
+
+def export_library_index(library_id: Optional[str] = None) -> Dict[str, Any]:
+    """Export a portable JSON index for one library (paths + light metadata)."""
+    from datetime import datetime, timezone
+
+    lid = resolve_active_library_id(library_id)
+    lib = get_library(lid)
+    if lib is None:
+        raise KeyError(lid)
+
+    roots: List[Dict[str, Any]] = []
+    try:
+        from db_library_roots import list_library_roots
+
+        for root in list_library_roots(lid):
+            roots.append({
+                "path": root.get("path"),
+                "label": root.get("label"),
+                "enabled": bool(root.get("enabled")),
+                "last_scanned_at": root.get("last_scanned_at"),
+            })
+    except Exception:
+        roots = []
+
+    images: List[Dict[str, Any]] = []
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, path, filename, generator, width, height, file_size,
+                   checkpoint, prompt, negative_prompt, created_at, indexed_at
+            FROM images
+            WHERE COALESCE(library_id, 'main') = ?
+            ORDER BY id ASC
+            """,
+            (lid,),
+        ).fetchall()
+        for row in rows:
+            images.append({
+                "id": int(row["id"]),
+                "path": str(row["path"] or ""),
+                "filename": str(row["filename"] or ""),
+                "generator": str(row["generator"] or "unknown"),
+                "width": row["width"],
+                "height": row["height"],
+                "file_size": row["file_size"],
+                "checkpoint": row["checkpoint"],
+                "prompt": row["prompt"],
+                "negative_prompt": row["negative_prompt"],
+                "created_at": row["created_at"],
+                "indexed_at": row["indexed_at"],
+            })
+
+    return {
+        "format": "sd-image-sorter-library-export-v1",
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "library": {
+            "id": lib["id"],
+            "name": lib["name"],
+            "is_default": bool(lib.get("is_default")),
+        },
+        "image_count": len(images),
+        "roots": roots,
+        "images": images,
+        "notes": (
+            "Index-only export. Image files on disk are not copied. "
+            "Use paths to locate originals or re-scan roots into this or another install."
+        ),
+    }

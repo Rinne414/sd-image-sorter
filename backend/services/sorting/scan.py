@@ -190,6 +190,8 @@ class ScanMixin:
                 "errors": 0,
                 "new": 0,
                 "updated": 0,
+                "skipped_other_library": 0,
+                "skipped_other_library_paths": [],
                 "removed": 0,
                 "library_ready": False,
                 "quick_import": request.quick_import,
@@ -467,6 +469,10 @@ class ScanMixin:
                         "errors": errors,
                         "new": new_count,
                         "updated": updated_count,
+                        "skipped_other_library": int(result.get("skipped_other_library") or 0),
+                        "skipped_other_library_paths": list(
+                            result.get("skipped_other_library_paths") or []
+                        )[:200],
                         "removed": removed_count,
                         "library_ready": result.get("library_ready", request.quick_import),
                         "quick_import": request.quick_import,

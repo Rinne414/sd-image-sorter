@@ -264,7 +264,26 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
         // next-step CTA. Warnings/errors still toast. Skip the banner when
         // auto-tag is on (the tag modal opens itself right after).
         const _scanNewCount = Number(progress.new ?? progress.result?.new ?? progress.processed ?? 0);
+        const _scanSkippedOther = Number(
+            progress.skipped_other_library
+            ?? progress.result?.skipped_other_library
+            ?? 0,
+        );
+        const _scanSkippedPaths = Array.isArray(progress.skipped_other_library_paths)
+            ? progress.skipped_other_library_paths
+            : (Array.isArray(progress.result?.skipped_other_library_paths)
+                ? progress.result.skipped_other_library_paths
+                : []);
         const _scanAutoTagOn = !!document.getElementById('scan-auto-tag')?.checked;
+        if (_scanSkippedOther > 0) {
+            showToast(
+                appT(
+                    'scan.skippedOtherLibrary',
+                    '{count} image(s) already belong to another library and were not reassigned.',
+                ).replace('{count}', String(_scanSkippedOther)),
+                'warning',
+            );
+        }
         if (errorCount > 0) {
             showToast(completionMessage, 'warning');
         } else if (_scanAutoTagOn) {
@@ -282,6 +301,21 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
                     icon: '📚',
                     label: appT('flow.ctaCreateCollection', 'Create collection'),
                     action: () => createCollectionFromScanFolder(ctaFolder),
+                });
+            }
+            if (_scanSkippedOther > 0 && _scanSkippedPaths.length > 0) {
+                const pathsToClaim = _scanSkippedPaths.slice();
+                _scanCtaActions.push({
+                    icon: '↪️',
+                    label: appT(
+                        'scan.claimOtherLibraryCta',
+                        'Move {count} into this library',
+                    ).replace('{count}', String(_scanSkippedOther)),
+                    action: () => {
+                        if (typeof window.LibraryWorkspace?.claimPaths === 'function') {
+                            return window.LibraryWorkspace.claimPaths(pathsToClaim);
+                        }
+                    },
                 });
             }
             showPipelineNextStep({

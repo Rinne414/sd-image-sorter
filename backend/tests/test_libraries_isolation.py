@@ -180,3 +180,84 @@ def test_path_conflict_does_not_steal_across_libraries(test_db):
     finally:
         reset_current_library_id(token)
     assert all(int(r["id"]) != main_id for r in other_rows)
+
+
+def test_claim_paths_and_move_images_between_libraries(test_db):
+    libdb.ensure_default_library()
+    other = libdb.create_library("Claim target")
+    other_id = other["id"]
+    path = "/tmp/lib-claim-move.png"
+    img_id = _insert_image(path, MAIN_LIBRARY_ID)
+
+    claimed = libdb.claim_paths_to_library([path], other_id)
+    assert claimed["moved"] == 1
+    with db.get_db() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(library_id,'main') AS library_id FROM images WHERE id = ?",
+            (img_id,),
+        ).fetchone()
+    assert str(row["library_id"]) == other_id
+
+    moved = libdb.move_images_to_library([img_id], MAIN_LIBRARY_ID)
+    assert moved["moved"] == 1
+    with db.get_db() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(library_id,'main') AS library_id FROM images WHERE id = ?",
+            (img_id,),
+        ).fetchone()
+    assert str(row["library_id"]) == MAIN_LIBRARY_ID
+
+
+def test_export_library_index_contains_images_and_roots(test_db):
+    libdb.ensure_default_library()
+    other = libdb.create_library("Export me")
+    other_id = other["id"]
+    _insert_image("/tmp/lib-export-a.png", other_id)
+    token = set_current_library_id(other_id)
+    try:
+        db.add_library_root("/tmp/lib-export-root", label="Root")
+        payload = libdb.export_library_index(other_id)
+    finally:
+        reset_current_library_id(token)
+    assert payload["format"] == "sd-image-sorter-library-export-v1"
+    assert payload["library"]["id"] == other_id
+    assert payload["image_count"] >= 1
+    assert any(img["path"].endswith("lib-export-a.png") for img in payload["images"])
+    assert any((r.get("path") or "").endswith("lib-export-root") for r in payload["roots"])
+
+
+def test_library_roots_are_scoped_per_library(test_db):
+    libdb.ensure_default_library()
+    other = libdb.create_library("Roots B")
+    other_id = other["id"]
+
+    token = set_current_library_id(MAIN_LIBRARY_ID)
+    try:
+        db.add_library_root("L:/Pics/MainOnly", label="Main")
+    finally:
+        reset_current_library_id(token)
+
+    token = set_current_library_id(other_id)
+    try:
+        db.add_library_root("L:/Pics/OtherOnly", label="Other")
+        # Same path can exist in two libraries after multi-library roots.
+        db.add_library_root("L:/Pics/Shared", label="Shared B")
+        other_roots = db.list_library_roots()
+    finally:
+        reset_current_library_id(token)
+
+    token = set_current_library_id(MAIN_LIBRARY_ID)
+    try:
+        db.add_library_root("L:/Pics/Shared", label="Shared A")
+        main_roots = db.list_library_roots()
+    finally:
+        reset_current_library_id(token)
+
+    main_paths = {r["path"] for r in main_roots}
+    other_paths = {r["path"] for r in other_roots}
+    assert "L:/Pics/MainOnly" in main_paths
+    assert "L:/Pics/OtherOnly" not in main_paths
+    assert "L:/Pics/OtherOnly" in other_paths
+    assert "L:/Pics/MainOnly" not in other_paths
+    assert "L:/Pics/Shared" in main_paths
+    assert "L:/Pics/Shared" in other_paths

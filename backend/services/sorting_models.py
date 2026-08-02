@@ -175,6 +175,8 @@ class ScanProgressResponse(BaseModel):
     errors: int
     new: int
     updated: int
+    skipped_other_library: int = 0
+    skipped_other_library_paths: List[str] = Field(default_factory=list)
     removed: int
     library_ready: bool
     quick_import: bool

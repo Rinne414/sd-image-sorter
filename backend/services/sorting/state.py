@@ -59,6 +59,8 @@ class SortingStateMixin:
             "errors": 0,
             "new": 0,
             "updated": 0,
+            "skipped_other_library": 0,
+            "skipped_other_library_paths": [],
             "removed": 0,
             "library_ready": False,
             "quick_import": True,

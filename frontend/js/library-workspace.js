@@ -296,6 +296,48 @@
         });
         menu.appendChild(createBtn);
 
+        const exportBtn = document.createElement('button');
+        exportBtn.type = 'button';
+        exportBtn.className = 'entry-library-menu-create';
+        exportBtn.textContent = _t(
+            'library.exportCurrent',
+            'Export current library index…',
+        );
+        exportBtn.addEventListener('click', async () => {
+            closeMenu();
+            await exportLibraryIndex(current.id, current.name);
+        });
+        menu.appendChild(exportBtn);
+
+        // Move gallery selection into a chosen library (when selection exists).
+        const selectedIds = _selectedImageIds();
+        if (selectedIds.length > 0) {
+            const moveLabel = document.createElement('p');
+            moveLabel.className = 'entry-library-menu-note';
+            moveLabel.textContent = _t(
+                'library.moveSelectionHint',
+                'Move {count} selected image(s) into…',
+                { count: String(selectedIds.length) },
+            );
+            menu.appendChild(moveLabel);
+            libs.forEach((lib) => {
+                if (lib.id === current.id) return;
+                const moveBtn = document.createElement('button');
+                moveBtn.type = 'button';
+                moveBtn.className = 'entry-library-menu-create';
+                moveBtn.textContent = _t(
+                    'library.moveSelectionTo',
+                    '→ {name}',
+                    { name: lib.name },
+                );
+                moveBtn.addEventListener('click', async () => {
+                    closeMenu();
+                    await moveImagesToLibrary(selectedIds, lib.id, lib.name);
+                });
+                menu.appendChild(moveBtn);
+            });
+        }
+
         const note = document.createElement('p');
         note.className = 'entry-library-menu-note';
         note.textContent = _t(
@@ -303,6 +345,133 @@
             'Clearing the gallery only empties the current library. Other libraries stay intact.',
         );
         menu.appendChild(note);
+    }
+
+    function _selectedImageIds() {
+        try {
+            if (typeof window.AppFilterAccess?.getSelectedImageIds === 'function') {
+                const ids = window.AppFilterAccess.getSelectedImageIds();
+                if (Array.isArray(ids)) return ids.map(Number).filter((n) => n > 0);
+            }
+            const sel = window.AppState?.selectedIds;
+            if (sel instanceof Set) return Array.from(sel).map(Number).filter((n) => n > 0);
+            if (Array.isArray(sel)) return sel.map(Number).filter((n) => n > 0);
+        } catch (_e) { /* ignore */ }
+        return [];
+    }
+
+    async function moveImagesToLibrary(imageIds, targetLibraryId, targetName) {
+        const ids = (imageIds || []).map(Number).filter((n) => n > 0);
+        if (!ids.length || !targetLibraryId) return null;
+        try {
+            const res = await apiFetch('/api/libraries/move-images', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                },
+                body: JSON.stringify({
+                    image_ids: ids,
+                    target_library_id: targetLibraryId,
+                }),
+            });
+            if (!res.ok) throw new Error('move_failed');
+            const data = await res.json();
+            await refreshFromServer();
+            if (typeof window.loadImages === 'function') {
+                try { await window.loadImages(false, { coalesce: true }); } catch (_e) { /* ignore */ }
+            }
+            if (typeof window.showToast === 'function') {
+                window.showToast(
+                    _t(
+                        'library.movedToast',
+                        'Moved {count} image(s) to “{name}”',
+                        {
+                            count: String(data.moved || 0),
+                            name: targetName || targetLibraryId,
+                        },
+                    ),
+                    'success',
+                );
+            }
+            return data;
+        } catch (_e) {
+            if (typeof window.showToast === 'function') {
+                window.showToast(_t('library.moveFailed', 'Could not move images'), 'error');
+            }
+            return null;
+        }
+    }
+
+    async function claimPaths(paths, targetLibraryId) {
+        const list = Array.isArray(paths) ? paths.filter(Boolean) : [];
+        if (!list.length) return null;
+        try {
+            const res = await apiFetch('/api/libraries/claim-paths', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                },
+                body: JSON.stringify({
+                    paths: list.slice(0, 500),
+                    target_library_id: targetLibraryId || getCurrentLibraryId(),
+                }),
+            });
+            if (!res.ok) throw new Error('claim_failed');
+            const data = await res.json();
+            await refreshFromServer();
+            if (typeof window.loadImages === 'function') {
+                try { await window.loadImages(false, { coalesce: true }); } catch (_e) { /* ignore */ }
+            }
+            if (typeof window.showToast === 'function') {
+                window.showToast(
+                    _t(
+                        'library.claimedToast',
+                        'Claimed {count} image(s) into this library',
+                        { count: String(data.moved || 0) },
+                    ),
+                    'success',
+                );
+            }
+            return data;
+        } catch (_e) {
+            if (typeof window.showToast === 'function') {
+                window.showToast(_t('library.claimFailed', 'Could not claim images'), 'error');
+            }
+            return null;
+        }
+    }
+
+    async function exportLibraryIndex(libraryId, libraryName) {
+        const id = libraryId || getCurrentLibraryId();
+        try {
+            const res = await apiFetch(
+                `/api/libraries/${encodeURIComponent(id)}/export?download=1`,
+                { headers: { Accept: 'application/json' } },
+            );
+            if (!res.ok) throw new Error('export_failed');
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const safe = String(libraryName || id).replace(/[^\w\-]+/g, '_').slice(0, 40);
+            a.href = url;
+            a.download = `library-export-${safe || 'library'}.json`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+            if (typeof window.showToast === 'function') {
+                window.showToast(
+                    _t('library.exportToast', 'Library index downloaded'),
+                    'success',
+                );
+            }
+        } catch (_e) {
+            if (typeof window.showToast === 'function') {
+                window.showToast(_t('library.exportFailed', 'Could not export library'), 'error');
+            }
+        }
     }
 
     async function createLibraryInteractive() {
@@ -517,6 +686,9 @@
         createLibraryInteractive,
         renameLibraryInteractive,
         deleteLibrary,
+        moveImagesToLibrary,
+        claimPaths,
+        exportLibraryIndex,
         _STORAGE_KEY: STORAGE_KEY,
         _DEFAULT_ID: DEFAULT_ID,
     };

@@ -293,8 +293,13 @@ lifetime and wrong name).
 4. Storage panel (index/thumbs/models per library where applicable).  
 5. Optional: export/backup one library folder.
 
-Track in release plans; this section is the **product law**, not the completed
-schema migration.
+**Status (P0–P3, 2026-08):** multi-library registry + `library_id` isolation,
+nav chip, path non-steal + claim/move, per-library `library_roots`, scan skip
+messaging, index export JSON, and disk panel library breakdown are implemented.
+Thumbs remain path-keyed (path is globally unique); clear does best-effort thumb
+delete. Full `thumbnails/<library_id>/` partition is optional later polish.
+
+Track remaining polish in release plans; this section is the **product law**.
 
 ---
 
