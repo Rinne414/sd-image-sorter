@@ -302,7 +302,30 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
         _scanLastAutoRefreshAt = 0;
         _hideBgScanProgress();
         updateScanDiagnosticsCard(null);
+        // Post-scan: prefer newest so the just-imported batch is on top.
+        try {
+            if (_scanNewCount > 0 && typeof updateAppFilters === 'function') {
+                updateAppFilters((filters) => {
+                    filters.sortBy = 'newest';
+                    filters.scope = 'library';
+                });
+                const sortSelect = document.getElementById('sort-by');
+                if (sortSelect) sortSelect.value = 'newest';
+                if (typeof updateSortReverseButton === 'function') updateSortReverseButton();
+            }
+        } catch (_e) { /* boot order */ }
         _refreshScanDrivenViews(true, { refreshGallery: true });
+        if (_scanNewCount > 0 && errorCount === 0 && !_scanAutoTagOn) {
+            try {
+                showToast(
+                    appT(
+                        'scan.sortedNewestHint',
+                        'Gallery sorted by newest so the import is easy to find.',
+                    ),
+                    'info',
+                );
+            } catch (_e) { /* ignore */ }
+        }
         // Auto-tag: if checkbox was on, trigger tagging with current settings
         const autoTagCheckbox = document.getElementById('scan-auto-tag');
         if (autoTagCheckbox && autoTagCheckbox.checked) {

@@ -237,7 +237,7 @@
             const body = openOverlay(t('clipTools.compareTitle', 'CLIP similarity'));
             setLoading(body);
             try {
-                const r = await fetch(`/api/similarity/compare?id_a=${a}&id_b=${b}`);
+                const r = await (window.apiFetch || fetch)(`/api/similarity/compare?id_a=${a}&id_b=${b}`);
                 if (!r.ok) {
                     body.innerHTML = '';
                     const e = document.createElement('div');
@@ -262,7 +262,7 @@
             const body = openOverlay(t('clipTools.nearTitle', 'Near-duplicates'));
             setLoading(body);
             try {
-                const r = await fetch(`/api/similarity/near/${id}?limit=${Number(limit) || 24}`);
+                const r = await (window.apiFetch || fetch)(`/api/similarity/near/${id}?limit=${Number(limit) || 24}`);
                 if (!r.ok) {
                     body.innerHTML = '';
                     const e = document.createElement('div');

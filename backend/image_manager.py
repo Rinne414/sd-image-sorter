@@ -247,6 +247,7 @@ def scan_folder(
         "updated": 0,
         "unchanged": 0,
         "metadata_updated": 0,
+        "skipped_other_library": 0,
         "removed": 0,
         "errors": 0,
         "by_generator": {},
@@ -438,6 +439,9 @@ def scan_folder(
         result["new"] += counts["new"]
         result["updated"] += counts["updated"]
         result["metadata_updated"] += counts["updated"]
+        result["skipped_other_library"] = int(result.get("skipped_other_library") or 0) + int(
+            counts.get("skipped_other_library") or 0
+        )
         placeholder_status_by_path.update(counts.get("statuses") or {})
         for path, status in (counts.get("statuses") or {}).items():
             normalized = normalize_indexed_image_path(path)
@@ -445,6 +449,7 @@ def scan_folder(
                 run_new_placeholder_paths.add(normalized)
             elif status == "updated":
                 run_updated_placeholder_paths.add(normalized)
+            # skipped_other_library: path already owned by another long-lived library
         pending_records.clear()
 
     def _flush_metadata_records(pending_records: List[Dict[str, Any]]) -> None:

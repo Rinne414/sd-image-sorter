@@ -11815,6 +11815,47 @@ html.lang-zh #view-censor .queue-action-btn span {
     display: none !important;
 }
 
+.nav-library-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    align-self: center;
+    margin-right: 6px;
+    padding: 4px 10px;
+    border-radius: var(--r-pill, 999px);
+    background: rgba(var(--blue-rgb, 92, 200, 255), 0.12);
+    border: 1px solid rgba(var(--blue-rgb, 92, 200, 255), 0.35);
+    color: var(--text, #edf0f7);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    flex: 0 0 auto;
+    cursor: pointer;
+    max-width: 220px;
+}
+
+.nav-library-chip[hidden] {
+    display: none !important;
+}
+
+.nav-library-chip:hover {
+    background: rgba(var(--blue-rgb, 92, 200, 255), 0.18);
+}
+
+.nav-library-chip .chip-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.nav-library-chip-icon {
+    flex: 0 0 auto;
+    font-size: 13px;
+    line-height: 1;
+}
+
 .nav-mission-chip {
     display: inline-flex;
     align-items: center;

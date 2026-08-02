@@ -353,6 +353,12 @@
                      reorder. Glyphs disambiguated: Sort 🗂️ (was 📁), Similar 🔎
                      (was 🔍), Style Finder 🖌️ (was 🎨 = the brand logo). -->
                 <div class="nav-tabs" role="tablist" aria-label="Application views">
+                    <!-- Current long-lived library chip (click → manage libraries). -->
+                    <button type="button" class="nav-library-chip" id="nav-library-chip" hidden
+                            title="Current library" aria-label="Current library">
+                        <span class="nav-library-chip-icon" aria-hidden="true">📚</span>
+                        <span class="chip-label" id="nav-library-chip-label"></span>
+                    </button>
                     <!-- Mission mode chip (owner 2026-07-07): shown while a mission
                          scopes the bar to its pipeline tabs; ✕ restores the full set. -->
                     <span class="nav-mission-chip" id="nav-mission-chip" hidden>

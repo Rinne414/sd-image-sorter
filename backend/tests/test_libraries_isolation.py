@@ -120,3 +120,63 @@ def test_list_query_does_not_cross_libraries(test_db):
     other_ids = {int(r["id"]) for r in other_rows}
     assert other_img in other_ids
     assert main_img not in other_ids
+
+
+def test_path_conflict_does_not_steal_across_libraries(test_db):
+    """Same disk path is unique — scanning into library B must not reassign A's row."""
+    libdb.ensure_default_library()
+    other = libdb.create_library("Training pack")
+    other_id = other["id"]
+    shared_path = "/tmp/lib-path-conflict-shared.png"
+
+    main_id = _insert_image(shared_path, MAIN_LIBRARY_ID)
+    with db.get_db() as conn:
+        before = conn.execute(
+            "SELECT id, COALESCE(library_id,'main') AS library_id FROM images WHERE id = ?",
+            (main_id,),
+        ).fetchone()
+    assert before is not None
+    assert str(before["library_id"]) == MAIN_LIBRARY_ID
+
+    token = set_current_library_id(other_id)
+    try:
+        result_id, status = db.add_image(
+            path=shared_path,
+            filename="lib-path-conflict-shared.png",
+            generator="unknown",
+            width=64,
+            height=64,
+            file_size=100,
+            is_readable=True,
+            return_status=True,
+        )
+    finally:
+        reset_current_library_id(token)
+
+    assert int(result_id) == main_id
+    assert status == "skipped_other_library"
+
+    with db.get_db() as conn:
+        after = conn.execute(
+            "SELECT id, COALESCE(library_id,'main') AS library_id, COUNT(*) AS c FROM images WHERE path = ?",
+            (shared_path,),
+        ).fetchone()
+        # path still one row, still owned by main
+        row = conn.execute(
+            "SELECT COALESCE(library_id,'main') AS library_id FROM images WHERE id = ?",
+            (main_id,),
+        ).fetchone()
+        other_count = conn.execute(
+            "SELECT COUNT(*) AS c FROM images WHERE COALESCE(library_id,'main') = ?",
+            (other_id,),
+        ).fetchone()["c"]
+
+    assert str(row["library_id"]) == MAIN_LIBRARY_ID
+    assert int(other_count) == 0
+
+    token = set_current_library_id(other_id)
+    try:
+        other_rows = db.get_images(limit=100)
+    finally:
+        reset_current_library_id(token)
+    assert all(int(r["id"]) != main_id for r in other_rows)

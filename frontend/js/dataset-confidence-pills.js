@@ -111,7 +111,7 @@
         if (!imageId || imageId <= 0) return [];
         if (DM._confidenceCache.has(imageId)) return DM._confidenceCache.get(imageId);
         try {
-            const r = await fetch(`/api/images/${imageId}`);
+            const r = await (window.apiFetch || fetch)(`/api/images/${imageId}`);
             if (!r.ok) return [];
             const data = await r.json();
             const tags = data.tags || data.image?.tags || [];

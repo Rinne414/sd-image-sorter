@@ -541,6 +541,9 @@ function initBootListenersShell() {
         // only. The server endpoints are re-checked both before the modal opens
         // and immediately before the destructive request is sent.
         if (!await verifyClearGalleryJobsIdle()) return;
+        try {
+            await window.LibraryWorkspace?.refreshFromServer?.();
+        } catch (_e) { /* offline */ }
         const copy = (typeof window.LibraryWorkspace?.clearConfirmCopy === 'function')
             ? window.LibraryWorkspace.clearConfirmCopy()
             : {
@@ -559,6 +562,9 @@ function initBootListenersShell() {
                 try {
                     await API.clearGallery();
                     showToast(copy.success);
+                    try {
+                        await window.LibraryWorkspace?.refreshFromServer?.();
+                    } catch (_e) { /* ignore */ }
                     loadImages();
                     loadStats();
                     // The "N images can't open" banner reads a 60s-cached

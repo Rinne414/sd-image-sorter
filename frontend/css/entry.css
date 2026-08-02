@@ -687,15 +687,27 @@ body.entry-active {
     min-width: 0;
 }
 
+.entry-library-menu-rename,
 .entry-library-menu-delete {
     flex: 0 0 auto;
     border: none;
     border-radius: 8px;
     background: transparent;
-    color: rgba(255, 122, 118, 0.85);
     font-size: 14px;
     padding: 0 10px;
     cursor: pointer;
+}
+
+.entry-library-menu-rename {
+    color: rgba(var(--blue-rgb, 92, 200, 255), 0.9);
+}
+
+.entry-library-menu-rename:hover {
+    background: rgba(var(--blue-rgb, 92, 200, 255), 0.12);
+}
+
+.entry-library-menu-delete {
+    color: rgba(255, 122, 118, 0.85);
 }
 
 .entry-library-menu-delete:hover {

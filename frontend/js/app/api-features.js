@@ -172,9 +172,10 @@ Object.assign(API, {
         for (let i = 0; i < fileList.length; i++) {
             form.append('files', fileList[i]);
         }
-        const response = await fetch(`${API_BASE}/api/import-files`, {
+        const response = await (window.apiFetch || fetch)(`${API_BASE}/api/import-files`, {
             method: 'POST',
             body: form,
+            headers: (window.libraryFetchHeaders || ((h) => h))({}),
         });
         if (!response.ok) {
             const err = await response.json().catch(() => ({}));

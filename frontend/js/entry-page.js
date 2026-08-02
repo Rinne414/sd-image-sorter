@@ -47,7 +47,9 @@
 
     async function api(path) {
         try {
-            const response = await fetch(path);
+            const response = await (window.apiFetch || fetch)(path, {
+                headers: { Accept: 'application/json' },
+            });
             if (!response.ok) return null;
             return await response.json();
         } catch (error) {

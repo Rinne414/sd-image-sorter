@@ -126,7 +126,16 @@ def rename_library(library_id: str, name: str) -> Dict[str, Any]:
 def clear_library_images(library_id: Optional[str] = None) -> int:
     """Delete all image rows for one library. Cascades tags via FK."""
     lid = resolve_active_library_id(library_id)
+    paths: List[str] = []
     with get_db() as conn:
+        try:
+            path_rows = conn.execute(
+                "SELECT path FROM images WHERE COALESCE(library_id, 'main') = ?",
+                (lid,),
+            ).fetchall()
+            paths = [str(r["path"]) for r in path_rows if r and r["path"]]
+        except Exception:
+            paths = []
         cursor = conn.execute(
             "DELETE FROM images WHERE COALESCE(library_id, 'main') = ?",
             (lid,),
@@ -145,6 +154,20 @@ def clear_library_images(library_id: Optional[str] = None) -> int:
             _invalidate_facet_caches()
         except Exception:
             pass
+        # Best-effort: free thumbnail cache for removed library paths.
+        try:
+            from thumbnail_cache import delete_thumbnails_for_paths
+
+            delete_thumbnails_for_paths(paths)
+        except Exception:
+            pass
+        # Reclaim SQLite pages after large clears (non-blocking best-effort).
+        if removed >= 50:
+            try:
+                with get_db() as conn:
+                    conn.execute("PRAGMA incremental_vacuum(64)")
+            except Exception:
+                pass
     return removed
 
 

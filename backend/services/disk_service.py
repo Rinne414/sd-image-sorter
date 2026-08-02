@@ -335,10 +335,43 @@ def get_cache_status() -> Dict[str, Any]:
             "size_complete": True,
         })
 
-    from config import get_thumbnail_cache_max_mb
+    from config import get_thumbnail_cache_max_mb, DATABASE_PATH
     from thumbnail_cache import get_cache_stats as get_thumbnail_cache_stats
 
     thumbnail_cache = get_thumbnail_cache_stats()
+
+    # Long-lived library index (images.db + per-library counts).
+    library_index: Dict[str, Any] = {
+        "db_path": "",
+        "db_size_bytes": 0,
+        "total_images": 0,
+        "libraries": [],
+    }
+    try:
+        db_path = Path(DATABASE_PATH).resolve()
+        library_index["db_path"] = str(db_path)
+        if db_path.exists():
+            library_index["db_size_bytes"] = int(db_path.stat().st_size)
+        try:
+            import db_libraries as libdb
+
+            libs = libdb.list_libraries()
+            library_index["libraries"] = [
+                {
+                    "id": item["id"],
+                    "name": item["name"],
+                    "is_default": bool(item.get("is_default")),
+                    "image_count": int(item.get("image_count") or 0),
+                }
+                for item in libs
+            ]
+            library_index["total_images"] = sum(
+                int(item.get("image_count") or 0) for item in libs
+            )
+        except Exception as exc:
+            logger.debug("library index listing failed: %s", exc)
+    except Exception as exc:
+        logger.debug("library index status failed: %s", exc)
 
     return {
         "safe_to_clean": safe_to_clean,
@@ -346,6 +379,7 @@ def get_cache_status() -> Dict[str, Any]:
         "settings": {"thumbnail_cache_max_mb": get_thumbnail_cache_max_mb()},
         "thumbnail_cache": thumbnail_cache,
         "runtime_environment": get_runtime_environment_status(),
+        "library_index": library_index,
     }
 
 

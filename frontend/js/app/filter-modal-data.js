@@ -120,7 +120,10 @@ async function runFilterCountPreview() {
     try {
         if (_filterCountPreviewAbort) _filterCountPreviewAbort.abort();
         _filterCountPreviewAbort = new AbortController();
-        const resp = await fetch(`/api/images/count?${params}`, { signal: _filterCountPreviewAbort.signal });
+        const resp = await (window.apiFetch || fetch)(`/api/images/count?${params}`, {
+            signal: _filterCountPreviewAbort.signal,
+            headers: (window.libraryFetchHeaders || ((h) => h))({ Accept: 'application/json' }),
+        });
         if (!resp.ok) return;
         const data = await resp.json();
         const total = Number(data?.total);

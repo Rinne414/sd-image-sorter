@@ -292,7 +292,7 @@
             var api = window.App && window.App.API;
             var data = api && typeof api.get === 'function'
                 ? await api.get('/api/library-health?sample_limit=8')
-                : await fetch('/api/library-health?sample_limit=8').then(function (response) {
+                : await (window.apiFetch || fetch)('/api/library-health?sample_limit=8').then(function (response) {
                     if (!response.ok) throw new Error('HTTP ' + response.status);
                     return response.json();
                 });
@@ -317,7 +317,7 @@
     function apiGet(url) {
         var api = window.App && window.App.API;
         if (api && typeof api.get === 'function') return api.get(url);
-        return fetch(url).then(function (response) {
+        return (window.apiFetch || fetch)(url).then(function (response) {
             if (!response.ok) throw new Error('HTTP ' + response.status);
             return response.json();
         });
@@ -418,7 +418,7 @@
         var api = window.App && window.App.API;
         var request = api && typeof api.post === 'function'
             ? api.post('/api/metadata/reparse', { scope: 'missing_prompt' })
-            : fetch('/api/metadata/reparse', {
+            : (window.apiFetch || fetch)('/api/metadata/reparse', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ scope: 'missing_prompt' })

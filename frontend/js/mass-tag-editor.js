@@ -365,7 +365,7 @@
             // backend consume it in DB chunks. Do not expand it in the browser.
             try {
                 const tokenBody = this._buildSelectionTokenBody();
-                const tokenResp = await fetch("/api/images/selection-token", {
+                const tokenResp = await (window.apiFetch || fetch)("/api/images/selection-token", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(tokenBody),
@@ -624,7 +624,7 @@
 
             this._setStatus(this.t("Running dry-run…", "正在试算..."), "info");
             try {
-                const resp = await fetch(ENDPOINTS[operationTab], {
+                const resp = await (window.apiFetch || fetch)(ENDPOINTS[operationTab], {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(body),
@@ -812,7 +812,7 @@
         async _performApply(body, operationTab) {
             this._setStatus(this.t("Applying…", "正在应用..."), "info");
             try {
-                const resp = await fetch(ENDPOINTS[operationTab], {
+                const resp = await (window.apiFetch || fetch)(ENDPOINTS[operationTab], {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(body),
@@ -901,7 +901,7 @@
             btn.onclick = async () => {
                 btn.disabled = true;
                 try {
-                    const resp = await fetch(`/api/tags/bulk/undo/${encodeURIComponent(data.op_id)}`, {
+                    const resp = await (window.apiFetch || fetch)(`/api/tags/bulk/undo/${encodeURIComponent(data.op_id)}`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({}),

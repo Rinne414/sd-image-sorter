@@ -547,6 +547,38 @@ def cleanup_old_cache(max_age_days: int = CACHE_MAX_AGE_DAYS) -> int:
     return count
 
 
+def delete_thumbnails_for_paths(paths) -> int:
+    """Best-effort remove cached thumbs for known source paths.
+
+    Keys include mtime, so we only delete when the file still exists (or we
+    can read its mtime). Orphans for deleted files age out via normal cleanup.
+    """
+    if not paths:
+        return 0
+    deleted = 0
+    for source_path in paths:
+        if not source_path:
+            continue
+        try:
+            if not os.path.exists(source_path):
+                continue
+            mtime = os.path.getmtime(source_path)
+        except OSError:
+            continue
+        for size in SUPPORTED_SIZES:
+            try:
+                cache_path = _get_cache_path(_get_cache_key(str(source_path), size, mtime))
+                if cache_path.exists() and cache_path.is_file():
+                    cache_path.unlink()
+                    deleted += 1
+            except OSError as exc:
+                logger.debug("Failed to delete thumb for %s size=%s: %s", source_path, size, exc)
+    global _approx_cache_size_bytes
+    if deleted:
+        _approx_cache_size_bytes = None
+    return deleted
+
+
 def get_cache_stats() -> dict:
     """Get statistics about the thumbnail cache.
 

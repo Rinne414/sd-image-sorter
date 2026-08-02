@@ -55,9 +55,22 @@
     }
 
     function libraryHeaders(extra) {
-        const headers = Object.assign({}, extra || {});
+        const headers = {};
+        // Accept Headers instance or plain object from bare fetch call sites.
+        if (extra && typeof Headers !== 'undefined' && extra instanceof Headers) {
+            extra.forEach((value, key) => { headers[key] = value; });
+        } else if (extra && typeof extra === 'object') {
+            Object.assign(headers, extra);
+        }
         headers[HEADER] = getCurrentLibraryId();
         return headers;
+    }
+
+    /** Fetch with X-SD-Library-Id for image-scoped / library-scoped APIs. */
+    function apiFetch(url, options) {
+        const opts = Object.assign({}, options || {});
+        opts.headers = libraryHeaders(opts.headers || {});
+        return fetch(url, opts);
     }
 
     function getCurrentLibrary() {
@@ -152,12 +165,16 @@
 
     function clearConfirmCopy() {
         const current = getCurrentLibrary();
+        const count = Number(current.image_count || 0);
+        const countText = count > 0
+            ? _t('gallery.clearCountPart', '{count} indexed images', { count: String(count) })
+            : _t('gallery.clearCountUnknown', 'all indexed images');
         return {
             title: _t('gallery.clearTitle', 'Clear current library'),
             message: _t(
-                'gallery.clearMessageNamed',
-                'Clear all indexed images from “{name}”? Other libraries are not affected. Files on disk are not deleted.',
-                { name: current.name },
+                'gallery.clearMessageNamedCount',
+                'Clear {countText} from library “{name}”? Other libraries are not affected. Files on disk are not deleted.',
+                { name: current.name, countText, count: String(count) },
             ),
             success: _t(
                 'gallery.clearSuccessNamed',
@@ -167,10 +184,32 @@
         };
     }
 
+    function refreshNavChip() {
+        const chip = document.getElementById('nav-library-chip');
+        const label = document.getElementById('nav-library-chip-label');
+        if (!chip || !label) return;
+        const current = getCurrentLibrary();
+        const count = Number(current.image_count || 0);
+        label.textContent = count > 0
+            ? `${current.name} · ${count}`
+            : current.name;
+        chip.hidden = false;
+        chip.title = _t(
+            'nav.libraryChipTitle',
+            'Current library: {name}. Click to manage libraries.',
+            { name: current.name },
+        );
+        chip.setAttribute(
+            'aria-label',
+            _t('entry.currentLibraryAria', 'Current library: {name}', { name: current.name }),
+        );
+    }
+
     function refreshEntryHome() {
         const current = getCurrentLibrary();
         const nameEl = document.getElementById('entry-library-name');
         if (nameEl) nameEl.textContent = current.name;
+        refreshNavChip();
 
         const switcher = document.getElementById('entry-library-switcher');
         if (switcher) {
@@ -216,6 +255,19 @@
                 await setCurrentLibraryId(lib.id);
             });
             row.appendChild(btn);
+
+            const rename = document.createElement('button');
+            rename.type = 'button';
+            rename.className = 'entry-library-menu-rename';
+            rename.title = _t('library.renameTitle', 'Rename library');
+            rename.setAttribute('aria-label', _t('library.renameTitle', 'Rename library'));
+            rename.textContent = '✎';
+            rename.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                await renameLibraryInteractive(lib.id, lib.name);
+            });
+            row.appendChild(rename);
 
             if (!lib.is_default && lib.id !== DEFAULT_ID) {
                 const del = document.createElement('button');
@@ -291,6 +343,39 @@
         } catch (_e) {
             if (typeof window.showToast === 'function') {
                 window.showToast(_t('library.createFailed', 'Could not create library'), 'error');
+            }
+        }
+    }
+
+    async function renameLibraryInteractive(id, currentName) {
+        const suggested = currentName || _t('library.newNamePlaceholder', 'New library');
+        const nameRaw = window.prompt(
+            _t('library.renamePrompt', 'Rename library:'),
+            suggested,
+        );
+        if (nameRaw == null) return;
+        const name = String(nameRaw).trim();
+        if (!name || name === currentName) return;
+        try {
+            const res = await apiFetch(`/api/libraries/${encodeURIComponent(id)}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                },
+                body: JSON.stringify({ name }),
+            });
+            if (!res.ok) throw new Error('rename_failed');
+            await refreshFromServer();
+            if (typeof window.showToast === 'function') {
+                window.showToast(
+                    _t('library.renamedToast', 'Library renamed to “{name}”', { name }),
+                    'success',
+                );
+            }
+        } catch (_e) {
+            if (typeof window.showToast === 'function') {
+                window.showToast(_t('library.renameFailed', 'Could not rename library'), 'error');
             }
         }
     }
@@ -383,13 +468,30 @@
             e.stopPropagation();
             openMenu();
         });
+        document.getElementById('nav-library-chip')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // Prefer entry home management; if entry hidden, still open menu if present.
+            const entry = document.getElementById('entry-page');
+            if (entry && entry.hidden && typeof window.EntryPage?.show === 'function') {
+                try { window.EntryPage.show(); } catch (_e) { /* ignore */ }
+            }
+            openMenu();
+        });
         document.addEventListener('click', (e) => {
             const home = document.getElementById('entry-library-home');
-            if (!home || home.contains(e.target)) return;
+            const chip = document.getElementById('nav-library-chip');
+            if (home && home.contains(e.target)) return;
+            if (chip && chip.contains(e.target)) return;
+            const menu = document.getElementById('entry-library-menu');
+            if (menu && menu.contains(e.target)) return;
             closeMenu();
         });
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') closeMenu();
+        });
+        window.addEventListener('library-workspace-changed', () => {
+            refreshNavChip();
         });
     }
 
@@ -405,16 +507,21 @@
         getCurrentLibraryId,
         getCurrentLibrary,
         libraryHeaders,
+        apiFetch,
         setCurrentLibraryId,
         refreshFromServer,
         refreshEntryHome,
+        refreshNavChip,
         clearConfirmCopy,
         applyLibraryDefaultScope,
         createLibraryInteractive,
+        renameLibraryInteractive,
         deleteLibrary,
         _STORAGE_KEY: STORAGE_KEY,
         _DEFAULT_ID: DEFAULT_ID,
     };
+    window.libraryFetchHeaders = libraryHeaders;
+    window.apiFetch = apiFetch;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init, { once: true });

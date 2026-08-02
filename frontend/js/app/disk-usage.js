@@ -73,7 +73,31 @@ function renderDiskUsage(data) {
         ? appT('disk.rebuildPending', 'Rebuild scheduled for next start')
         : appT('disk.runtimeSizeStatus', '{size} currently used', { size: _formatBytes(runtimeSize) });
 
+    const libraryIndex = data?.library_index || {};
+    const libraryRows = Array.isArray(libraryIndex.libraries)
+        ? libraryIndex.libraries.map((lib) => {
+            const count = Number(lib.image_count || 0);
+            return `
+                <div class="disk-preserved-row">
+                    <span class="disk-preserved-name">${escapeHtml(lib.name || lib.id)}</span>
+                    <span class="disk-preserved-size">${escapeHtml(String(count))} ${escapeHtml(appT('disk.imagesUnit', 'images'))}</span>
+                </div>
+            `;
+        }).join('')
+        : '';
+    const dbSizeText = _formatBytes(Number(libraryIndex.db_size_bytes || 0));
+    const totalLibImages = Number(libraryIndex.total_images || 0);
+
     bodyEl.innerHTML = `
+        <div class="disk-section disk-library-index-section">
+            <div class="disk-section-header">
+                <strong>${escapeHtml(appT('disk.libraryIndexTitle', 'Library index'))}</strong>
+                <span class="disk-section-total">${escapeHtml(dbSizeText)} · ${escapeHtml(String(totalLibImages))} ${escapeHtml(appT('disk.imagesUnit', 'images'))}</span>
+            </div>
+            <p class="disk-section-hint">${escapeHtml(appT('disk.libraryIndexHint', 'images.db holds the long-lived library index (paths, tags, metadata). Clearing a library removes index rows only — original files on disk stay. Thumbnail cache is separate and can be cleaned below.'))}</p>
+            <div class="disk-preserved-list">${libraryRows || `<div class="disk-empty">${escapeHtml(appT('disk.noLibraries', 'No libraries yet.'))}</div>`}</div>
+            ${libraryIndex.db_path ? `<p class="disk-section-hint disk-path-hint" title="${escapeHtml(libraryIndex.db_path)}">${escapeHtml(libraryIndex.db_path)}</p>` : ''}
+        </div>
         <div class="disk-section disk-settings-section">
             <div class="disk-section-header">
                 <strong>${escapeHtml(appT('disk.thumbnailLimitTitle', 'Thumbnail cache limit'))}</strong>

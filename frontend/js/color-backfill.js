@@ -150,7 +150,7 @@
         async startAnalysis() {
             this.hideBanner();
             try {
-                const resp = await fetch("/api/colors/analyze", {
+                const resp = await (window.apiFetch || fetch)("/api/colors/analyze", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     // Cap one call at 50k images (backend Field max_length).
@@ -190,7 +190,7 @@
 
         async cancelAnalysis() {
             try {
-                await fetch("/api/colors/cancel", { method: "POST" });
+                await (window.apiFetch || fetch)("/api/colors/cancel", { method: "POST" });
             } catch (_) { /* ignore */ }
         },
 
@@ -222,7 +222,7 @@
         async refreshProgress() {
             let data;
             try {
-                const resp = await fetch("/api/colors/progress");
+                const resp = await (window.apiFetch || fetch)("/api/colors/progress");
                 if (!resp.ok) return;
                 data = await resp.json();
             } catch (_) {
@@ -380,7 +380,7 @@
 
         async _fetchMissingCount() {
             try {
-                const resp = await fetch("/api/colors/missing-count");
+                const resp = await (window.apiFetch || fetch)("/api/colors/missing-count");
                 if (!resp.ok) return 0;
                 const data = await resp.json();
                 return Number(data.missing) || 0;

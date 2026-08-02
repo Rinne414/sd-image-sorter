@@ -136,6 +136,7 @@ def _get_existing_images_by_paths(
                    library_order_time, source_file_mtime, created_at,
                    is_readable, read_error, source_mtime_ns, source_size, metadata_status,
                    content_fingerprint, tagged_at, ai_caption, aesthetic_score,
+                   COALESCE(library_id, 'main') AS library_id,
                    CASE WHEN embedding IS NOT NULL THEN 1 ELSE 0 END AS has_embedding,
                    EXISTS(SELECT 1 FROM artist_predictions ap WHERE ap.image_id = images.id) AS has_artist_predictions
             FROM images
@@ -165,7 +166,11 @@ def _get_existing_images_by_paths(
 def add_images_batch(image_records: List[Dict[str, Any]], return_statuses: bool = False) -> Dict[str, Any]:
     """Insert or update many images in a single transaction."""
     if not image_records:
-        empty_result: Dict[str, Any] = {"new": 0, "updated": 0}
+        empty_result: Dict[str, Any] = {
+            "new": 0,
+            "updated": 0,
+            "skipped_other_library": 0,
+        }
         if return_statuses:
             empty_result["statuses"] = {}
         return empty_result
@@ -182,7 +187,7 @@ def add_images_batch(image_records: List[Dict[str, Any]], return_statuses: bool 
             cursor,
             [record["path"] for record in normalized_records],
         )
-        counts = {"new": 0, "updated": 0}
+        counts = {"new": 0, "updated": 0, "skipped_other_library": 0}
         statuses: Dict[str, str] = {}
 
         for record in normalized_records:
@@ -191,7 +196,7 @@ def add_images_batch(image_records: List[Dict[str, Any]], return_statuses: bool 
                 record,
                 existing_row=existing_by_path.get(record["path"]),
             )
-            counts[status] += 1
+            counts[status] = int(counts.get(status, 0)) + 1
             statuses[record["path"]] = status
 
         _invalidate_tags_cache()

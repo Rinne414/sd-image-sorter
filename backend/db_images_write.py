@@ -186,6 +186,7 @@ def _upsert_image_record(
                 SELECT id, path, source_mtime_ns, source_size, content_fingerprint,
                        library_order_time, source_file_mtime, created_at,
                        tagged_at, ai_caption, aesthetic_score,
+                       COALESCE(library_id, 'main') AS library_id,
                        CASE WHEN embedding IS NOT NULL THEN 1 ELSE 0 END AS has_embedding,
                        EXISTS(SELECT 1 FROM artist_predictions ap WHERE ap.image_id = images.id) AS has_artist_predictions
                 FROM images
@@ -207,6 +208,32 @@ def _upsert_image_record(
 
     if existing_row:
         image_id = existing_row["id"]
+        # Path is globally unique: do not steal a row owned by another library.
+        try:
+            existing_lib = existing_row["library_id"]
+        except (KeyError, IndexError, TypeError):
+            existing_lib = None
+        if existing_lib is None:
+            try:
+                lib_row = cursor.execute(
+                    "SELECT COALESCE(library_id, 'main') AS library_id FROM images WHERE id = ?",
+                    (image_id,),
+                ).fetchone()
+                existing_lib = lib_row["library_id"] if lib_row else "main"
+            except Exception:
+                existing_lib = "main"
+        target_lib = _active_library_id_for_write(record)
+        try:
+            from library_context import normalize_library_id
+
+            existing_lib_norm = normalize_library_id(str(existing_lib or "main"))
+            target_lib_norm = normalize_library_id(str(target_lib or "main"))
+        except Exception:
+            existing_lib_norm = str(existing_lib or "main")
+            target_lib_norm = str(target_lib or "main")
+        if existing_lib_norm != target_lib_norm:
+            return image_id, "skipped_other_library"
+
         write_status = "updated"
         source_changed = _is_source_fingerprint_changed(existing_row, record)
         incoming_source_mtime_ns = record.get("source_mtime_ns")
