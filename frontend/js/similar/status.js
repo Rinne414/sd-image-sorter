@@ -27,6 +27,9 @@ Object.assign(window.SimilarImages, {
     },
 
     refreshFirstUseCard() {
+        // B5: the multi-step "start here" card stacked with setup/index CTAs and
+        // diluted the primary action. Prepare/ready phases own that guidance now.
+        // Keep the node in the DOM for legacy dismiss storage, but always hide it.
         const card = document.getElementById('similar-start-card');
         const dismissBtn = document.getElementById('similar-start-dismiss');
         if (!card) return;
@@ -34,24 +37,79 @@ Object.assign(window.SimilarImages, {
             dismissBtn.addEventListener('click', () => this.dismissFirstUseCard());
             dismissBtn.dataset.bound = 'true';
         }
-        card.hidden = localStorage.getItem('similar-guide-seen') === 'true';
+        card.hidden = true;
+        localStorage.setItem('similar-guide-seen', 'true');
+    },
+
+    /**
+     * B5 two-phase shell:
+     *   prepare — CLIP missing, empty library, or zero embeddings
+     *   ready   — at least one embedding exists (search tools usable)
+     * Prepare shows a single primary path; ready hides setup noise.
+     */
+    getSimilarPhase() {
+        const { embedded } = this.getEmbeddingStats();
+        const modelReady = this.modelStatus ? this.modelStatus.available !== false : true;
+        return modelReady && embedded > 0 ? 'ready' : 'prepare';
     },
 
     refreshContentVisibility() {
-        const { total, embedded } = this.getEmbeddingStats();
+        const view = document.getElementById('view-similar');
+        const { total, embedded, pending } = this.getEmbeddingStats();
         const progress = this.embedProgress || {};
         const running = Boolean(this.isEmbedding || this.isCheckingEmbeddingStatus || progress.running);
         const modelReady = this.modelStatus ? this.modelStatus.available !== false : true;
-        const canUseSearch = modelReady && embedded > 0 && !running;
+        const phase = this.getSimilarPhase();
+        const canUseSearch = phase === 'ready';
         const tabs = document.querySelector('#view-similar .similar-tabs');
         const body = document.querySelector('#view-similar .similar-body');
         const embedRow = document.querySelector('#view-similar .similar-embed-row');
         const workflowCard = document.getElementById('similar-workflow-status');
+        const statsEl = document.getElementById('similar-stats');
+        const healthBanner = document.getElementById('similar-model-health');
 
+        if (view) view.dataset.similarPhase = phase;
+
+        // Tools only when ready (partial index still counts as ready).
         if (tabs) tabs.hidden = !canUseSearch;
         if (body) body.hidden = !canUseSearch;
-        if (embedRow) embedRow.hidden = !(modelReady && total > 0 && embedded > 0);
-        workflowCard?.classList.toggle('similar-workflow-primary', !canUseSearch);
+
+        // Prepare: one CTA path via workflow/health — hide the secondary embed row.
+        // Ready: show embed row only when more images still need indexing.
+        if (embedRow) {
+            if (phase === 'prepare') {
+                embedRow.hidden = true;
+            } else {
+                embedRow.hidden = !(modelReady && total > 0 && pending > 0);
+            }
+        }
+
+        // Stats are noise while CLIP is missing or nothing is indexed yet.
+        if (statsEl) {
+            statsEl.hidden = phase === 'prepare' && !running;
+        }
+
+        // Health banner only while CLIP is not ready (single setup CTA).
+        if (healthBanner) {
+            healthBanner.hidden = modelReady;
+            healthBanner.classList.toggle('similar-health-primary', !modelReady);
+        }
+
+        // Workflow card is the prepare primary (index) or a compact ready strip
+        // when partial/running. Fully ready + idle → hide the card entirely.
+        if (workflowCard) {
+            const fullyReady = phase === 'ready' && pending === 0 && !running;
+            if (!modelReady) {
+                // Model-health owns the CTA; hide duplicate workflow messaging.
+                workflowCard.hidden = true;
+            } else if (fullyReady) {
+                workflowCard.hidden = true;
+            } else {
+                workflowCard.hidden = false;
+            }
+            workflowCard.classList.toggle('similar-workflow-primary', phase === 'prepare' || running);
+            workflowCard.classList.toggle('similar-workflow-compact', phase === 'ready' && !running);
+        }
     },
 
     refreshWorkflowStatus() {

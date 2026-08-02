@@ -763,6 +763,8 @@ window.I18nLang_en = {
     'autosep.configDeleted': 'Deleted config "{name}"',
     'autosep.filterTitle': 'Auto-Separate Filters',
     'autosep.applyFilters': 'Apply to Auto-Separate',
+    'autosep.destinationPrompt': 'Enter the destination folder path.\nExample: D:\\sorted\\my-folder',
+    'autosep.recentDestinations': 'Recent',
     'autosep.resetFilters': 'Reset Auto-Separate Filters',
     'autosep.progressMoved': '{count} moved',
     'autosep.progressCopied': '{count} copied',
@@ -2393,6 +2395,8 @@ window.I18nLang_en = {
     'models.clip.loaded': 'CLIP model is loaded and ready.',
     'models.clip.missingRuntime': 'CLIP model files are downloaded, but the FastEmbed runtime is missing.',
     'models.clip.missingModel': 'Local CLIP model is missing. Similar search will need a first-run download.',
+    'models.oppai.ready': 'OppaiOracle V1.1 ONNX bundle is ready.',
+    'models.oppai.missing': 'OppaiOracle V1.1 (~947 MB ONNX) is not downloaded yet.',
 
     // Aesthetic Predictor messages
     'models.aesthetic.ready': 'Aesthetic predictor is ready (CLIP + linear head).',

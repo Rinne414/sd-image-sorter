@@ -27,6 +27,7 @@ function persistAutoSepDestination(value) {
     if (!AutoSepState.settings.rememberDestination) return;
     if (value) {
         localStorage.setItem(AUTOSEP_DESTINATION_KEY, value);
+        rememberAutoSepDestinationMru(value);
     } else {
         localStorage.removeItem(AUTOSEP_DESTINATION_KEY);
     }
@@ -34,6 +35,55 @@ function persistAutoSepDestination(value) {
 
 function getSavedAutoSepDestination() {
     return localStorage.getItem(AUTOSEP_DESTINATION_KEY) || '';
+}
+
+/** B3: recent destinations MRU (local only; max AUTOSEP_DESTINATION_MRU_LIMIT). */
+function getAutoSepDestinationMru() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(AUTOSEP_DESTINATION_MRU_KEY) || '[]');
+        if (!Array.isArray(raw)) return [];
+        return raw.map((item) => String(item || '').trim()).filter(Boolean).slice(0, AUTOSEP_DESTINATION_MRU_LIMIT);
+    } catch (_) {
+        return [];
+    }
+}
+
+function rememberAutoSepDestinationMru(path) {
+    const value = String(path || '').trim();
+    if (!value) return;
+    const next = [value, ...getAutoSepDestinationMru().filter((item) => item !== value)]
+        .slice(0, AUTOSEP_DESTINATION_MRU_LIMIT);
+    try {
+        localStorage.setItem(AUTOSEP_DESTINATION_MRU_KEY, JSON.stringify(next));
+    } catch (_) { /* ignore quota */ }
+}
+
+function renderAutoSepDestinationMru() {
+    const host = document.getElementById('autosep-destination-mru');
+    if (!host) return;
+    const items = getAutoSepDestinationMru();
+    if (!items.length) {
+        host.hidden = true;
+        host.innerHTML = '';
+        return;
+    }
+    host.hidden = false;
+    const label = window.I18n?.t?.('autosep.recentDestinations') || 'Recent';
+    host.innerHTML = `<span class="autosep-mru-label">${escapeHtml(label)}</span>` + items.map((path) => {
+        const short = path.length > 36 ? `…${path.slice(-34)}` : path;
+        return `<button type="button" class="autosep-mru-chip" data-path="${escapeHtml(path)}" title="${escapeHtml(path)}">${escapeHtml(short)}</button>`;
+    }).join('');
+    host.querySelectorAll('.autosep-mru-chip').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const path = btn.getAttribute('data-path') || '';
+            const input = document.getElementById('autosep-destination');
+            if (!input || !path) return;
+            input.value = path;
+            persistAutoSepDestination(path);
+            updateAutoSepSettingsSummary();
+            renderAutoSepDestinationMru();
+        });
+    });
 }
 
 function applyAutoSepSettingsToUi() {
@@ -46,6 +96,9 @@ function applyAutoSepSettingsToUi() {
 
     if (destinationInput && AutoSepState.settings.rememberDestination && !destinationInput.value.trim()) {
         destinationInput.value = getSavedAutoSepDestination();
+    }
+    if (typeof renderAutoSepDestinationMru === 'function') {
+        renderAutoSepDestinationMru();
     }
 
     updateAutoSepActionUi();

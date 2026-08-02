@@ -75,30 +75,56 @@ function initAutoSeparate() {
         executeBtn.addEventListener('click', executeAutoSeparateWithProgress);
     }
 
-    // Browse button for destination folder
+    // Browse button for destination folder — real folder-browser widget (B3),
+    // not a free-text prompt modal. Falls back to text input modal if the
+    // browser widget is unavailable.
     const browseBtn = $('#btn-browse-destination');
     if (browseBtn) {
         browseBtn.addEventListener('click', async () => {
             const input = $('#autosep-destination');
-            // Browser can't access filesystem directly, prompt user for path
-            const currentPath = input ? input.value : '';
+            if (!input) return;
+            if (typeof window.showFolderBrowser === 'function') {
+                try {
+                    await window.showFolderBrowser(input);
+                    return;
+                } catch (err) {
+                    window.Logger?.warn?.('Auto-Sep folder browser failed, falling back to text modal', err);
+                }
+            }
+            const currentPath = input.value || '';
             const path = await window.App.showInputModal(
-                'Destination Folder',
-                'Enter the destination folder path.\nExample: D:\\sorted\\my-folder',
+                window.I18n?.t?.('autosep.destination') || 'Destination Folder',
+                window.I18n?.t?.('autosep.destinationPrompt')
+                    || 'Enter the destination folder path.\nExample: D:\\sorted\\my-folder',
                 currentPath
             );
-            if (path !== null && input) {
+            if (path !== null) {
                 input.value = path;
                 persistAutoSepDestination(path);
+                rememberAutoSepDestinationMru(path);
                 updateAutoSepSettingsSummary();
+                renderAutoSepDestinationMru();
             }
         });
     }
 
     $('#autosep-destination')?.addEventListener('input', (event) => {
-        persistAutoSepDestination(String(event.target.value || '').trim());
+        const value = String(event.target.value || '').trim();
+        persistAutoSepDestination(value);
         updateAutoSepSettingsSummary();
+        renderAutoSepDestinationMru();
     });
+    // When the folder browser selects a path it writes input.value then blur —
+    // also capture change so MRU updates without requiring another keystroke.
+    $('#autosep-destination')?.addEventListener('change', (event) => {
+        const value = String(event.target.value || '').trim();
+        if (!value) return;
+        persistAutoSepDestination(value);
+        rememberAutoSepDestinationMru(value);
+        updateAutoSepSettingsSummary();
+        renderAutoSepDestinationMru();
+    });
+    renderAutoSepDestinationMru();
 
     $('#btn-autosep-settings')?.addEventListener('click', openAutoSepSettingsModal);
     $('#btn-close-autosep-settings')?.addEventListener('click', closeAutoSepSettingsModal);

@@ -146,6 +146,7 @@ function _attachFolderBrowserEvents(container, data) {
                 const pathToSet = _folderBrowserState.selectedPath || _folderBrowserState.currentPath || '';
                 _folderBrowserState.inputElement.value = pathToSet;
                 _folderBrowserState.inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+                _folderBrowserState.inputElement.dispatchEvent(new Event('change', { bubbles: true }));
             }
             hideFolderBrowser();
         });
@@ -165,6 +166,7 @@ function _attachFolderBrowserEvents(container, data) {
             if (_folderBrowserState && _folderBrowserState.inputElement) {
                 _folderBrowserState.inputElement.value = itemPath;
                 _folderBrowserState.inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+                _folderBrowserState.inputElement.dispatchEvent(new Event('change', { bubbles: true }));
             }
             hideFolderBrowser();
         });

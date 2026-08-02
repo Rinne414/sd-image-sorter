@@ -7744,10 +7744,13 @@ input[type="radio"] {
     padding: 4px;
     min-width: 190px;
     max-width: min(260px, calc(100vw - 16px));
-    max-height: calc(100vh - 16px);
+    /* P3-6: keep the menu short enough that overflow is obvious, with a
+       sticky bottom fade when more items remain (.has-more-below). */
+    max-height: min(420px, calc(100vh - 24px));
     overflow-y: auto;
     overscroll-behavior: contain;
     box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+    scrollbar-gutter: stable;
 }
 /* Bottom fade while more items remain below the fold (.has-more-below is
    toggled from the menu's scroll handler). */
@@ -7756,15 +7759,21 @@ input[type="radio"] {
     display: block;
     position: sticky;
     bottom: -4px;
-    height: 28px;
-    margin-top: -28px;
-    background: linear-gradient(to top, rgba(24, 27, 36, 0.96), rgba(24, 27, 36, 0));
+    height: 32px;
+    margin-top: -32px;
+    background: linear-gradient(to top, rgba(24, 27, 36, 0.98) 20%, rgba(24, 27, 36, 0));
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.15s;
 }
 .gallery-context-menu.has-more-below::after {
     opacity: 1;
+}
+.gallery-context-menu.has-more-below {
+    /* Soft cue that the list continues past the rounded bottom edge. */
+    box-shadow:
+        0 14px 40px rgba(0, 0, 0, 0.45),
+        inset 0 -18px 18px -12px rgba(0, 0, 0, 0.35);
 }
 .context-menu-item {
     align-items: center;
@@ -8395,7 +8404,8 @@ input[type="radio"] {
     justify-content: center;
 }
 .bracket-fighter .bchip,
-.cull-caption .bchip {
+.cull-caption .bchip,
+#cull-meta .bchip {
     font-size: 10.5px;
     line-height: 1.4;
     padding: 2px 7px;
@@ -8406,6 +8416,9 @@ input[type="radio"] {
     -webkit-backdrop-filter: blur(6px);
     border: 1px solid rgba(255, 255, 255, 0.14);
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
 }
 .bracket-fighter .bchip b,
 .cull-caption .bchip b { color: var(--text-muted); font-weight: 600; }

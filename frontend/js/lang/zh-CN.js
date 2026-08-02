@@ -765,6 +765,8 @@ window.I18nLang_zhCN = {
     'autosep.configDeleted': '已删除配置“{name}”',
     'autosep.filterTitle': '自动分类筛选',
     'autosep.applyFilters': '应用到自动分类',
+    'autosep.destinationPrompt': '输入目标文件夹路径。\n例如：D:\\sorted\\my-folder',
+    'autosep.recentDestinations': '最近使用',
     'autosep.resetFilters': '重置自动分类筛选',
     'autosep.progressMoved': '已移动 {count} 张',
     'autosep.progressCopied': '已复制 {count} 张',
@@ -2569,6 +2571,8 @@ window.I18nLang_zhCN = {
     'models.clip.loaded': 'CLIP 模型已加载就绪。',
     'models.clip.missingRuntime': 'CLIP 模型文件已下载，但 FastEmbed 运行环境缺失。',
     'models.clip.missingModel': '本地 CLIP 模型缺失，首次使用相似搜索时需要下载。',
+    'models.oppai.ready': 'OppaiOracle V1.1 ONNX 套件已就绪。',
+    'models.oppai.missing': 'OppaiOracle V1.1（约 947 MB ONNX）尚未下载。',
 
     // Aesthetic Predictor messages
     'models.aesthetic.ready': '美学评分已就绪（CLIP + 线性头）。',

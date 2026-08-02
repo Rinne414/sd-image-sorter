@@ -313,6 +313,12 @@ def get_model_health() -> Dict[str, Any]:
             "tags_path": str(oppai_oracle_tags.resolve()) if oppai_oracle_tags.exists() else None,
             "requires_gpu": False,
             "expected_size_mb": 947,
+            # P3-7: message_key lets the UI localize; English message stays fallback.
+            "message_key": (
+                "models.oppai.ready"
+                if oppai_oracle_model.exists() and oppai_oracle_tags.exists()
+                else "models.oppai.missing"
+            ),
             "message": (
                 "OppaiOracle V1.1 ONNX bundle is ready."
                 if oppai_oracle_model.exists() and oppai_oracle_tags.exists()
@@ -327,6 +333,15 @@ def get_model_health() -> Dict[str, Any]:
             "model_name": CLIP_MODEL_NAME,
             "model_path": clip_model_path,
             "expected_path": str(Path(get_clip_model_dir()) / CLIP_MODEL_NAME.replace("/", "-").replace("\\", "-")),
+            "message_key": (
+                "models.clip.ready"
+                if clip_model_path and _module_installed("fastembed")
+                else (
+                    "models.clip.missingRuntime"
+                    if clip_model_path
+                    else "models.clip.missingModel"
+                )
+            ),
             "message": (
                 "Local CLIP model ready."
                 if clip_model_path and _module_installed("fastembed")

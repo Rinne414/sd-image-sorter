@@ -1614,9 +1614,12 @@
                                 <div class="autosep-action-block">
                                     <label class="autosep-action-block-label" data-i18n="autosep.destination">Destination Folder</label>
                                     <div class="folder-input-group">
-                                        <input type="text" id="autosep-destination" class="input-field" placeholder="D:\sorted\my-folder">
-                                        <button class="btn btn-secondary" id="btn-browse-destination">Browse</button>
+                                        <input type="text" id="autosep-destination" class="input-field" placeholder="D:\sorted\my-folder"
+                                               data-folder-browser-container="autosep-destination-browser">
+                                        <button class="btn btn-secondary" id="btn-browse-destination" type="button" data-i18n="scan.browse">Browse</button>
                                     </div>
+                                    <div id="autosep-destination-browser" class="autosep-destination-browser" aria-live="polite"></div>
+                                    <div id="autosep-destination-mru" class="autosep-destination-mru" hidden></div>
                                     <div class="autosep-settings-summary" id="autosep-settings-summary"></div>
                                 </div>
 
@@ -2137,7 +2140,7 @@
                             <div class="cull-card" id="cull-card">
                                 <img id="cull-image" src="" alt="Image to judge">
                                 <div class="cull-caption">
-                                    <span class="bracket-meta" id="cull-meta"></span>
+                                    <div class="bracket-meta" id="cull-meta"></div>
                                     <span class="bracket-name" id="cull-name"></span>
                                 </div>
                                 <span class="cull-stamp cull-stamp-keep" id="cull-stamp-keep" aria-hidden="true" data-i18n="manual.cullKeep">Keep</span>
