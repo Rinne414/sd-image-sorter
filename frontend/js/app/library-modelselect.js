@@ -90,12 +90,22 @@ function renderModelSelectList() {
 
 function confirmModelSelection() {
     const { type, tempSelected } = AppState.modalSelection;
+    const selected = Array.from(tempSelected);
     updateAppFilters((filters) => {
-        filters[`${type}s`] = Array.from(tempSelected);
+        // B2: model-select used to update the store without reloading the
+        // gallery, so "selected base model" looked applied in the summary
+        // but results never narrowed.
+        if (type === 'checkpoint' && typeof normalizeCheckpointFilterValue === 'function') {
+            filters.checkpoints = selected.map(normalizeCheckpointFilterValue).filter(Boolean);
+        } else {
+            filters[`${type}s`] = selected;
+        }
     });
 
     updateModelSelectionSummaries();
+    if (typeof updateFilterSummary === 'function') updateFilterSummary();
     hideModal('model-select-modal');
+    if (typeof loadImages === 'function') loadImages();
 }
 
 function updateModelSelectionSummaries() {

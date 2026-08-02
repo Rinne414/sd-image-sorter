@@ -520,12 +520,35 @@ Object.assign(window.Gallery, {
             if (!targetId || !collapseKey) return;
             const target = document.getElementById(targetId);
             if (!target) return;
+            const section = toggle.closest('.modal-section');
+            // Never leave a visible section header when its body has no real
+            // content (QA P3-12). Parent renderers set display:none on empty
+            // sections; this is a belt-and-suspenders pass after collapse state.
+            if (section && this._isModalSectionBodyEmpty(target)) {
+                section.style.display = 'none';
+                return;
+            }
             const expanded = this.modalSectionState[collapseKey] !== false;
             target.style.display = expanded ? '' : 'none';
             toggle.classList.toggle('section-collapsed', !expanded);
             const icon = toggle.querySelector('.collapse-icon');
             if (icon) icon.textContent = expanded ? '▼' : '▶';
         });
+    },
+
+    /**
+     * True when a collapsible modal body has nothing useful to show.
+     * Used so empty sections don't linger as lone headers.
+     */
+    _isModalSectionBodyEmpty(target) {
+        if (!target) return true;
+        const text = String(target.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!text || text === '-' || text === '—') return true;
+        // Loading placeholders while details hydrate — treat as empty for hide.
+        if (/^(Loading|加载|載入)/i.test(text)) return true;
+        // Empty list/grid containers (no child nodes with substance).
+        if (target.children && target.children.length === 0 && text.length < 2) return true;
+        return false;
     },
 
     _escapeHtml(value) {

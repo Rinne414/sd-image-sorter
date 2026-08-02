@@ -57,6 +57,18 @@ class DetectProviderRequest(BaseModel):
     endpoint: str
 
 
+class ProbeConcurrencyRequest(BaseModel):
+    """Probe the configured VLM endpoint for the highest stable concurrent load.
+
+    Uses the lightweight provider ``test_connection`` call (typically GET /models)
+    fired N-at-a-time, ramping from 1 to ``max_level``. The last fully-successful
+    level is the recommended ``concurrent_requests`` value.
+    """
+
+    max_level: int = Field(default=8, ge=1, le=16)
+    apply: bool = False  # when True, write recommended value into vlm-settings.json
+
+
 class SaveSettingsRequest(BaseModel):
     provider: Optional[str] = None
     endpoint: Optional[str] = None

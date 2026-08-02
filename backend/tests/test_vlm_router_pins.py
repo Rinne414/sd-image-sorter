@@ -108,6 +108,12 @@ EXPECTED_ROUTE_TABLE = [
     ("/api/vlm/settings", ["GET"], "get_settings", "get_settings"),
     ("/api/vlm/settings", ["POST"], "save_settings", "save_settings"),
     ("/api/vlm/test", ["POST"], "test_connection", "test_connection"),
+    (
+        "/api/vlm/probe-concurrency",
+        ["POST"],
+        "probe_concurrency",
+        "probe_concurrency",
+    ),
     ("/api/vlm/models", ["POST"], "fetch_models", "fetch_models"),
     ("/api/vlm/caption", ["POST"], "caption_single", "caption_single"),
     ("/api/vlm/caption-batch", ["POST"], "caption_batch", "caption_batch"),
@@ -135,7 +141,7 @@ EXPECTED_ROUTE_TABLE = [
 # add/remove/rename/reorder/method change. Recompute intentionally when the
 # route surface is meant to change; never silently.
 EXPECTED_ROUTE_TABLE_SHA256 = (
-    "0ffa53a0cf370d04d682df91d8cc61f6b10417e4328a7e33e7ff39826acdf9c2"
+    "168f9030ce44a42e33415a960f170a0327e82a265be2ac33d155c7e9ed7208e3"
 )
 
 
@@ -228,8 +234,8 @@ class TestRouteTableIdentity:
         for route in vlm.router.routes:
             assert len(route.methods) == 1
 
-    def test_route_count_is_seventeen(self):
-        assert len(vlm.router.routes) == 17
+    def test_route_count_is_eighteen(self):
+        assert len(vlm.router.routes) == 18
 
 
 # ============================================================================

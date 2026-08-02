@@ -49,7 +49,7 @@ function _clearAutoSepFilterField(field) {
     }, 350);
 }
 
-function _openAutoSepFilterModalForField() {
+function _openAutoSepFilterModalForField(focusField) {
     if (!window.App || !window.App.openFilterModal) return;
     window.App.openFilterModal({
         mode: 'auto-separate',
@@ -57,6 +57,7 @@ function _openAutoSepFilterModalForField() {
         applyButtonText: tKey('autosep.applyFilters', 'Apply to Auto-Separate', '应用到自动分类'),
         resetButtonText: tKey('autosep.resetFilters', 'Reset Auto-Separate Filters', '重置自动分类筛选'),
         filterState: getAutoSepFilters(),
+        focusField: focusField || null,
         onApply: (f) => {
             setAutoSepFilters(f);
             markAutoSepScopeCustomized();
@@ -93,9 +94,11 @@ function _applyAutoSepChip(el, field, filters) {
         clearBtn.textContent = '\u00d7';
         clearBtn.addEventListener('click', (e) => { e.stopPropagation(); _clearAutoSepFilterField(field); });
         parent.appendChild(clearBtn);
-        // Click label/value to open modal
+        // Click label/value to open modal (focus that field)
         parent.style.cursor = 'pointer';
-        parent.onclick = (e) => { if (!e.target.closest('.autosep-filter-chip-clear')) _openAutoSepFilterModalForField(); };
+        parent.onclick = (e) => {
+            if (!e.target.closest('.autosep-filter-chip-clear')) _openAutoSepFilterModalForField(field);
+        };
     } else {
         parent.classList.remove('autosep-filter-chip-active');
         parent.classList.add('autosep-filter-chip-add');
@@ -105,7 +108,10 @@ function _applyAutoSepChip(el, field, filters) {
         addBtn.className = 'autosep-chip-btn autosep-filter-chip-add-icon';
         addBtn.title = 'Add filter';
         addBtn.textContent = '+';
-        addBtn.addEventListener('click', (e) => { e.stopPropagation(); _openAutoSepFilterModalForField(); });
+        addBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            _openAutoSepFilterModalForField(field);
+        });
         parent.appendChild(addBtn);
         parent.style.cursor = '';
         parent.onclick = null;

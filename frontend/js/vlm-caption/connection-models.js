@@ -31,6 +31,50 @@ Object.assign(window.VLMCaption, {
         }
     },
 
+    /**
+     * Probe the configured VLM API for the highest stable concurrent_requests.
+     * Saves form first (same as Test Connection), then ramps concurrent
+     * health checks and writes the recommendation into #vlm-concurrent.
+     */
+    async probeConcurrency() {
+        if (!await this._saveBeforeAction(
+            'vlm-status',
+            this._t('vlmSettings.savingThenProbing', 'Saving settings, then probing max concurrency...')
+        )) return;
+        const maxLevel = Math.min(16, Math.max(1, parseInt(this._getVal('vlm-concurrent'), 10) || 8));
+        // Probe at least up to 8 even if the field is currently 1–2.
+        const probeMax = Math.max(8, maxLevel);
+        try {
+            const resp = await fetch('/api/vlm/probe-concurrency', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ max_level: probeMax, apply: true }),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                const reason = data.detail || data.error || data.message || resp.statusText || 'Unknown';
+                this._showStatus('vlm-status', `Probe failed: ${reason}`, 'error');
+                return;
+            }
+            const recommended = Number(data.recommended) || 0;
+            if (recommended > 0) {
+                this._setVal('vlm-concurrent', recommended);
+                if (this.settings) this.settings.concurrent_requests = recommended;
+            }
+            const levels = Array.isArray(data.levels) ? data.levels : [];
+            const detail = levels.map((row) => {
+                const mark = row.success ? '✓' : '✗';
+                return `${mark}${row.level}(${row.elapsed_ms || 0}ms)`;
+            }).join(' ');
+            const msg = data.status === 'ok'
+                ? `${this._t('vlmSettings.probeOk', 'Max stable concurrency')}: ${recommended}${detail ? ` — ${detail}` : ''}`
+                : (data.message || this._t('vlmSettings.probeFailed', 'Probe did not find a stable level'));
+            this._showStatus('vlm-status', msg, data.status === 'ok' ? 'success' : 'error');
+        } catch (e) {
+            this._showStatus('vlm-status', `Probe error: ${e.message}`, 'error');
+        }
+    },
+
     async fetchModels() {
         if (!await this._saveBeforeAction('vlm-model-list-status', this._t('vlmSettings.savingThenFetching', 'Saving settings, then fetching models...'))) return;
         try {

@@ -125,6 +125,63 @@ function renderActiveTagFilters() {
 
 // ============== Unified Filter Modal ==============
 
+/**
+ * Map a focusField key (sidebar / chip deep-link) to a selector inside
+ * #filter-modal. Used so "模型" / checkpoint chips open the modal already
+ * scrolled to the Base model (checkpoint) list — not the generators block.
+ */
+const FILTER_MODAL_FOCUS_TARGETS = Object.freeze({
+    generators: '#modal-generator-filters',
+    ratings: '#modal-rating-filters',
+    tags: '#modal-tag-search',
+    prompts: '#modal-prompt-search',
+    search: '#modal-free-text-search',
+    checkpoints: '#modal-checkpoint-list',
+    // Aliases users / plans use for the same control
+    checkpoint: '#modal-checkpoint-list',
+    model: '#modal-checkpoint-list',
+    'base-model': '#modal-checkpoint-list',
+    baseModel: '#modal-checkpoint-list',
+    meta: '#modal-checkpoint-list',
+    loras: '#modal-lora-list',
+    lora: '#modal-lora-list',
+    colors: 'input[name="color-hue"]',
+    dimensions: '#filter-min-width',
+    hasMetadata: 'input[name="has-metadata"]',
+    metadata: 'input[name="has-metadata"]',
+    aesthetic: '#filter-aesthetic-min',
+});
+
+/**
+ * Scroll/highlight a filter-modal section after open. Safe no-op when the
+ * field is unknown or the modal is closed.
+ */
+function focusFilterModalField(focusField) {
+    if (!focusField) return;
+    const key = String(focusField).trim();
+    const selector = FILTER_MODAL_FOCUS_TARGETS[key] || FILTER_MODAL_FOCUS_TARGETS[key.toLowerCase()];
+    if (!selector) return;
+    const modal = document.getElementById('filter-modal');
+    if (!modal) return;
+    const target = modal.querySelector(selector);
+    if (!target) return;
+    const section = target.closest('.filter-section, .filter-panel') || target;
+    try {
+        section.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    } catch (_e) {
+        section.scrollIntoView();
+    }
+    section.classList.add('filter-focus-target');
+    section.setAttribute('data-filter-focused', '1');
+    if (typeof target.focus === 'function') {
+        try { target.focus({ preventScroll: true }); } catch (_e) { /* non-focusable ok */ }
+    }
+    window.setTimeout(() => {
+        section.classList.remove('filter-focus-target');
+        // Keep a durable marker for tests / a11y until the next open.
+    }, 1800);
+}
+
 async function openFilterModal(options = {}) {
     const targetState = options.filterState || AppState.filters;
     FilterModalController.mode = options.mode || 'gallery';
@@ -136,6 +193,7 @@ async function openFilterModal(options = {}) {
     FilterModalController.applyButtonText = options.applyButtonText || null;
     FilterModalController.resetButtonText = options.resetButtonText || null;
     FilterModalController.optionData = options.optionData || null;
+    FilterModalController.focusField = options.focusField || null;
 
     // Show skeleton while loading
     if (window.SkeletonFilterModal) {
@@ -282,6 +340,15 @@ async function openFilterModal(options = {}) {
     }
 
     showModal('filter-modal');
+
+    // Deep-link: sidebar / chip asked for a specific block (e.g. checkpoints).
+    // Wait a frame so layout is final after showModal + list render.
+    const focusField = options.focusField || FilterModalController.focusField;
+    if (focusField) {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => focusFilterModalField(focusField));
+        });
+    }
 
     // v3.2.1 task #26: notify modules that the filter modal was just opened so
     // ColorBackfill (and future addons) can refresh their inline banners.

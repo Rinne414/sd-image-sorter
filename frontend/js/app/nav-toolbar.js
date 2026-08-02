@@ -38,7 +38,23 @@ function updateNavigationOverflowState() {
         // The previous formula tried to predict the available width
         // from sibling sizes; on 1440 px laptops it under-counted the
         // gap and let the last tab silently clip.
-        return navTabs.scrollWidth > navTabs.clientWidth + 1;
+        //
+        // Also treat a visible tab whose right edge past the tabs box
+        // as overflow. scrollWidth can lag a frame after display:none
+        // on priority tabs, leaving "更多" half-clipped (QA 1366).
+        if (navTabs.scrollWidth > navTabs.clientWidth + 1) return true;
+        const tabsBox = navTabs.getBoundingClientRect();
+        const visibleTabs = navTabs.querySelectorAll(
+            '.nav-tab:not([hidden]), .nav-tools-toggle'
+        );
+        for (const el of visibleTabs) {
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden') continue;
+            const rect = el.getBoundingClientRect();
+            if (rect.width <= 0) continue;
+            if (rect.right > tabsBox.right + 1) return true;
+        }
+        return false;
     };
 
     if (!needsOverflow()) {

@@ -681,38 +681,39 @@
                         <div class="sidebar-section-body" id="sidebar-body-filters">
                             <!-- Active Filter Summary -->
                             <div class="filter-summary" id="filter-summary">
-                                <div class="summary-row">
+                                <!-- data-filter-field: click opens filter modal focused on that block (B2). -->
+                                <div class="summary-row" data-filter-field="generators" title="Open filter editor: Generators">
                                     <!-- Colons live outside the data-i18n node: i18n.js replaces
                                          textContent wholesale and the summary.* values have no colon
                                          (ui-refresh.js _setSummaryStrongs appends its own ':'). -->
                                     <span class="summary-label"><span data-i18n="summary.generators">Generators</span>:</span>
                                     <span class="summary-value" id="summary-generators" data-i18n="common.all">All</span>
                                 </div>
-                                <div class="summary-row">
+                                <div class="summary-row" data-filter-field="ratings" title="Open filter editor: Ratings">
                                     <span class="summary-label"><span data-i18n="summary.ratings">Ratings</span>:</span>
                                     <span class="summary-value" id="summary-ratings" data-i18n="common.all">All</span>
                                 </div>
-                                <div class="summary-row">
+                                <div class="summary-row" data-filter-field="tags" title="Open filter editor: Tags">
                                     <span class="summary-label"><span data-i18n="summary.tags">Tags</span>:</span>
                                     <span class="summary-value" id="summary-tags" data-i18n="common.none">None</span>
                                 </div>
-                                <div class="summary-row">
+                                <div class="summary-row" data-filter-field="checkpoints" title="Open filter editor: Base model / Checkpoints">
                                     <span class="summary-label"><span data-i18n="summary.checkpoints">Checkpoints</span>:</span>
                                     <span class="summary-value" id="summary-checkpoints" data-i18n="common.none">None</span>
                                 </div>
-                                <div class="summary-row">
+                                <div class="summary-row" data-filter-field="loras" title="Open filter editor: LoRAs">
                                     <span class="summary-label"><span data-i18n="summary.loras">LoRAs</span>:</span>
                                     <span class="summary-value" id="summary-loras" data-i18n="common.none">None</span>
                                 </div>
-                                <div class="summary-row">
+                                <div class="summary-row" data-filter-field="prompts" title="Open filter editor: Prompt filters">
                                     <span class="summary-label"><span data-i18n="summary.prompt">Prompt</span>:</span>
                                     <span class="summary-value" id="summary-prompt">-</span>
                                 </div>
-                                <div class="summary-row">
+                                <div class="summary-row" data-filter-field="search" title="Open filter editor: Text search">
                                     <span class="summary-label"><span data-i18n="summary.search">Search</span>:</span>
                                     <span class="summary-value" id="summary-search" data-i18n="common.none">None</span>
                                 </div>
-                                <div class="summary-row">
+                                <div class="summary-row" data-filter-field="colors" title="Open filter editor: Colors">
                                     <span class="summary-label"><span data-i18n="filter.colors">Colors</span>:</span>
                                     <span class="summary-value" id="summary-colors" data-i18n="filter.any">Any</span>
                                 </div>
@@ -7994,7 +7995,14 @@
                     </div>
                     <div class="form-group">
                         <label for="vlm-concurrent" data-i18n="vlmSettings.concurrent">Concurrent</label>
-                        <input type="number" id="vlm-concurrent" class="input-field" value="2" min="1" max="8">
+                        <div style="display:flex; gap:8px; align-items:center">
+                            <input type="number" id="vlm-concurrent" class="input-field" value="2" min="1" max="16" style="flex:1">
+                            <button type="button" class="btn btn-small btn-secondary" id="btn-vlm-probe-concurrency"
+                                    title="Probe the API for the highest stable concurrent request count"
+                                    data-i18n-title="vlmSettings.probeConcurrentTitle"
+                                    data-i18n="vlmSettings.probeConcurrent">Probe max</button>
+                        </div>
+                        <small class="helper-text" data-i18n="vlmSettings.probeConcurrentHelper">Runs ramped concurrent health checks against your endpoint and fills the recommended value.</small>
                     </div>
                     <div class="form-group">
                         <label for="vlm-caption-max-tokens" data-i18n="vlmSettings.captionMaxTokens">Caption max tokens</label>

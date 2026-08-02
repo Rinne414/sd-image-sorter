@@ -51,6 +51,7 @@ Object.assign(window.VLMCaption, {
         document.getElementById('btn-vlm-start')?.addEventListener('click', () => this.startBatchCaption());
         document.getElementById('btn-vlm-cancel')?.addEventListener('click', () => this.cancelBatch());
         document.getElementById('btn-vlm-test')?.addEventListener('click', () => this.testConnection());
+        document.getElementById('btn-vlm-probe-concurrency')?.addEventListener('click', () => this.probeConcurrency());
         document.getElementById('btn-vlm-fetch-models')?.addEventListener('click', () => this.fetchModels());
         document.getElementById('btn-vlm-save-settings')?.addEventListener('click', () => this.saveSettings());
         document.getElementById('vlm-preset-select')?.addEventListener('change', (e) => this.applyPreset(e.target.value));

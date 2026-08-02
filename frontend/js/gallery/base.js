@@ -180,14 +180,16 @@ const Gallery = {
     // Hydrated from /api/collections/favorites/ids on load; kept in sync as
     // the user toggles hearts so re-renders show the correct state.
     favoriteIds: new Set(),
+    // Default expand primary metadata so users don't see "empty" collapsed
+    // headers (QA P3-12). Secondary / verbose blocks stay collapsed.
     modalSectionState: {
         prompt: true,
-        negative: false,
-        params: false,
-        modelAssets: false,
-        loras: false,
+        negative: true,
+        params: true,
+        modelAssets: true,
+        loras: true,
         nodes: false,
-        color: false,
+        color: true,
     },
     _histogramMode: 'rgb',
 

@@ -400,8 +400,12 @@ function _collectAllAwareCheckboxValues(listId, searchId) {
     const checked = boxes.filter((cb) => cb.checked).map((cb) => cb.value);
     const searchEl = searchId ? document.getElementById(searchId) : null;
     const searchActive = Boolean(searchEl && searchEl.value.trim());
-    if (!searchActive && boxes.length > 0 && checked.length === boxes.length) {
-        return []; // every option selected == match all (no restriction)
+    // Collapse "every option selected" to no-restriction only when there are
+    // multiple options. A single checked box is always intentional (B2: small
+    // libraries / one base model looked "selected" but never narrowed results).
+    // Search-active lists still keep the explicit checked subset.
+    if (!searchActive && boxes.length > 1 && checked.length === boxes.length) {
+        return [];
     }
     return checked;
 }
@@ -423,7 +427,12 @@ function readFilterModalDomInto(filterState) {
     // Get checkpoints / loras. "Select all" must mean NO restriction (match
     // every image), not an explicit IN(...) list that would drop NULL-checkpoint
     // / zero-LoRA images. See _collectAllAwareCheckboxValues.
-    filterState.checkpoints = _collectAllAwareCheckboxValues('modal-checkpoint-list', 'modal-checkpoint-search');
+    // Normalize checkpoint values so display names with .safetensors / hashes
+    // match backend checkpoint_normalized (B2: selected base model not applied).
+    const rawCheckpoints = _collectAllAwareCheckboxValues('modal-checkpoint-list', 'modal-checkpoint-search');
+    filterState.checkpoints = typeof normalizeCheckpointFilterValue === 'function'
+        ? [...new Set(rawCheckpoints.map(normalizeCheckpointFilterValue).filter(Boolean))]
+        : rawCheckpoints;
     filterState.loras = _collectAllAwareCheckboxValues('modal-lora-list', 'modal-lora-search');
 
     // Prompts: don't use prompt search bar as text search — prompts array is built via Enter key

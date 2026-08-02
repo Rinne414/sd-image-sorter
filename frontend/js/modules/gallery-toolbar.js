@@ -536,7 +536,17 @@
             // mousedown-accept runs before blur; a plain blur just closes.
             setTimeout(() => hideSuggest(), 0);
         });
+        // Clear-contract freeze (B1 / P2-1):
+        // - #gallery-search-clear is the ONLY search clear control (input is
+        //   type=text, so there is no native webkit search ✕).
+        // - Clicking it runs applySearch('') which removes box-owned list
+        //   values, box-owned scalars, and box-owned gen/rating narrows only.
+        // - Modal/sidebar-owned filters (and #btn-clear-filters) are separate:
+        //   full reset goes through resetAllFilters, not this button.
         if (clearBtn) {
+            if (!clearBtn.getAttribute('aria-label')) {
+                clearBtn.setAttribute('aria-label', t('gallerySearch.clear', 'Clear search'));
+            }
             clearBtn.addEventListener('click', () => {
                 input.value = '';
                 syncClearButton(input, clearBtn);

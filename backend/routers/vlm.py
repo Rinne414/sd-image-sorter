@@ -52,9 +52,9 @@ VLM_SETTINGS_PATH = CONFIG_DIR / "vlm-settings.json"
 # where now unused (F401 ignored in pyproject.toml, like routers/images.py).
 from routers.vlm_models import (
     BatchCaptionRequest, CaptionSingleRequest, DeleteModelRequest,
-    DetectProviderRequest, PullModelRequest, SaveSettingsRequest,
-    VLMResultPersistenceError, _BatchImageSource, _PersistedVLMTagRow,
-    _StoredVLMTagRow, _VLMImageUpdate, _VLMPersistenceStore,
+    DetectProviderRequest, ProbeConcurrencyRequest, PullModelRequest,
+    SaveSettingsRequest, VLMResultPersistenceError, _BatchImageSource,
+    _PersistedVLMTagRow, _StoredVLMTagRow, _VLMImageUpdate, _VLMPersistenceStore,
 )
 from routers.vlm_persistence import _persist_tags, _persist_vlm_result
 from routers.vlm_debug import (
@@ -346,6 +346,95 @@ async def test_connection():
     provider = get_provider(config)
     result = await provider.test_connection()
     return result
+
+
+async def _run_concurrency_probe_level(provider: Any, level: int) -> Dict[str, Any]:
+    """Fire ``level`` concurrent test_connection calls and summarise outcomes."""
+    started = time.perf_counter()
+    raw = await asyncio.gather(
+        *[provider.test_connection() for _ in range(level)],
+        return_exceptions=True,
+    )
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    ok = 0
+    errors: List[str] = []
+    rate_limited = 0
+    for item in raw:
+        if isinstance(item, Exception):
+            errors.append(str(item)[:200])
+            continue
+        if not isinstance(item, dict):
+            errors.append(f"unexpected result type: {type(item).__name__}")
+            continue
+        if item.get("status") == "ok":
+            ok += 1
+            continue
+        err_type = str(item.get("error_type") or "")
+        err_msg = str(item.get("error") or item.get("detail") or "error")
+        if err_type == "rate_limit" or "rate" in err_msg.lower() and "limit" in err_msg.lower():
+            rate_limited += 1
+        errors.append(err_msg[:200])
+    return {
+        "level": level,
+        "ok": ok,
+        "failed": level - ok,
+        "rate_limited": rate_limited,
+        "elapsed_ms": elapsed_ms,
+        "success": ok == level,
+        "errors": errors[:5],
+    }
+
+
+@router.post("/probe-concurrency")
+async def probe_concurrency(request: ProbeConcurrencyRequest):
+    """Ramp concurrent test_connection calls to find a stable worker count.
+
+    User-facing goal: different VLM APIs have different parallel limits; this
+    probe discovers the highest N where all N concurrent health checks succeed,
+    then optionally writes it to ``concurrent_requests``.
+    """
+    config = _build_config()
+    if not config.endpoint and not config.use_vertex:
+        raise HTTPException(400, "No endpoint configured")
+    provider = get_provider(config)
+
+    levels: List[Dict[str, Any]] = []
+    recommended = 0
+    max_level = int(request.max_level)
+    for level in range(1, max_level + 1):
+        summary = await _run_concurrency_probe_level(provider, level)
+        levels.append(summary)
+        if summary["success"]:
+            recommended = level
+            continue
+        # First failing level ends the ramp — higher is unlikely to recover.
+        break
+
+    if recommended < 1:
+        # Even level-1 failed: still return diagnostics, keep current setting.
+        current = _coerce_int_setting(config.concurrent_requests, 2, minimum=1, maximum=16)
+        return {
+            "status": "error",
+            "recommended": current,
+            "applied": False,
+            "levels": levels,
+            "message": "Probe failed at concurrency=1; check connection/API key first.",
+        }
+
+    applied = False
+    if request.apply:
+        current = _load_vlm_settings()
+        current["concurrent_requests"] = recommended
+        _save_vlm_settings(current)
+        applied = True
+
+    return {
+        "status": "ok",
+        "recommended": recommended,
+        "applied": applied,
+        "levels": levels,
+        "message": f"Highest stable concurrency: {recommended}",
+    }
 
 
 @router.post("/models")

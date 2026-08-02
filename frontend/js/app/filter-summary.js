@@ -49,9 +49,42 @@ function saveFilterState() {
     }
 }
 
+/**
+ * Wire gallery sidebar filter-summary rows as deep-link chips into the
+ * filter modal (B2). Clicking "模型" opens the modal scrolled to checkpoints
+ * so users stop confusing the read-only summary with dead text / prompt chips.
+ * Idempotent — safe to call from updateFilterSummary repeatedly.
+ */
+function ensureFilterSummaryDeepLinks() {
+    const host = document.getElementById('filter-summary');
+    if (!host || host.dataset.deepLinksBound === '1') return;
+    host.dataset.deepLinksBound = '1';
+
+    host.querySelectorAll('.summary-row[data-filter-field]').forEach((row) => {
+        row.classList.add('filter-summary-chip');
+        if (!row.hasAttribute('role')) row.setAttribute('role', 'button');
+        if (!row.hasAttribute('tabindex')) row.setAttribute('tabindex', '0');
+        const field = row.getAttribute('data-filter-field');
+        const open = (event) => {
+            if (event.target.closest('.btn-clear-filter, button')) return;
+            event.preventDefault();
+            if (typeof openFilterModal === 'function') {
+                openFilterModal({ focusField: field });
+            }
+        };
+        row.addEventListener('click', open);
+        row.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                open(event);
+            }
+        });
+    });
+}
+
 function updateFilterSummary() {
     // Save filter state whenever summary is updated
     saveFilterState();
+    ensureFilterSummaryDeepLinks();
 
     const f = AppState.filters;
 
@@ -85,6 +118,33 @@ function updateFilterSummary() {
     setSummary('#summary-prompt', summary.prompts);
     setSummary('#summary-search', summary.search);
     setSummary('#summary-colors', summary.colors || appT('filter.any', 'Any'));
+
+    // Mark active rows so the chip affordance is obvious when a filter is set.
+    const activeByField = {
+        generators: Array.isArray(f.generators) && Array.isArray(ALL_GENERATORS)
+            && f.generators.length > 0 && f.generators.length < ALL_GENERATORS.length,
+        ratings: Array.isArray(f.ratings) && f.ratings.length > 0 && f.ratings.length < 4,
+        tags: Array.isArray(f.tags) && f.tags.length > 0,
+        checkpoints: Array.isArray(f.checkpoints) && f.checkpoints.length > 0,
+        loras: Array.isArray(f.loras) && f.loras.length > 0,
+        prompts: Array.isArray(f.prompts) && f.prompts.length > 0,
+        search: Boolean(f.search && String(f.search).trim()),
+        colors: Boolean(
+            (f.colorHues && f.colorHues.length)
+            || (f.excludeColorHues && f.excludeColorHues.length)
+            || f.colorTemperature
+            || f.brightnessDistribution
+            || f.brightnessMin != null
+            || f.brightnessMax != null
+            || f.minSaturation != null
+            || f.maxSaturation != null
+        ),
+    };
+    document.querySelectorAll('#filter-summary .summary-row[data-filter-field]').forEach((row) => {
+        const field = row.getAttribute('data-filter-field');
+        row.classList.toggle('is-active', Boolean(activeByField[field]));
+        row.setAttribute('aria-pressed', activeByField[field] ? 'true' : 'false');
+    });
 
     // Artist filter
     const artistRow = $('#artist-filter-row');
