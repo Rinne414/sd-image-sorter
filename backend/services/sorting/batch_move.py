@@ -7,10 +7,12 @@ the facade module at call time (report §3 route A).
 
 import logging
 import os
+import re
 import tempfile
 import threading
 import time
-from typing import Any, Dict, List
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from fastapi import BackgroundTasks, HTTPException
 
@@ -18,6 +20,8 @@ import database as db
 from services import entry_stats_service
 from services.sorting_models import BatchMoveRequest
 from utils.path_validation import normalize_user_path, validate_folder_path
+
+_SPLIT_FOLDER_UNSAFE = re.compile(r'[<>:"/\\|?*\x00-\x1f]+')
 
 # NOTE(decomposition): keep the historical logger channel — tests attach
 # handlers / caplog filters to "services.sorting_service" (heartbeat pins),
@@ -45,6 +49,51 @@ def verify_image_readable(*args, **kwargs):
 
 class BatchMoveMixin:
     """Batch-move slice of SortingService (assembled in services/sorting_service.py)."""
+
+    @staticmethod
+    def _sanitize_split_folder_name(raw: str, *, fallback: str = "unknown") -> str:
+        """Make a single path segment safe on Windows/POSIX filesystems."""
+        text = str(raw or "").strip()
+        if not text:
+            return fallback
+        text = _SPLIT_FOLDER_UNSAFE.sub("_", text)
+        text = text.rstrip(" .")
+        # Drop extension noise on checkpoints: "foo.safetensors" → "foo"
+        if text.lower().endswith((".safetensors", ".ckpt", ".pt", ".pth", ".bin")):
+            text = Path(text).stem
+        text = text[:80].strip(" ._") or fallback
+        return text
+
+    @classmethod
+    def _split_destination_for_image(
+        cls,
+        base_destination: str,
+        image: Dict[str, Any],
+        split_by: Optional[str],
+    ) -> str:
+        """Resolve per-image destination folder when split_by is active (B3-②)."""
+        if not split_by:
+            return base_destination
+        if split_by == "generator":
+            value = image.get("generator") or "unknown"
+        elif split_by == "checkpoint":
+            value = (
+                image.get("checkpoint_normalized")
+                or image.get("checkpoint")
+                or "unknown"
+            )
+        elif split_by == "rating":
+            # Content ratings live in the tags table; the image row has user_rating
+            # (0–5 stars). Split by star folders: unrated / star-1 … star-5.
+            try:
+                stars = int(image.get("user_rating") or 0)
+            except (TypeError, ValueError):
+                stars = 0
+            value = f"star-{stars}" if stars > 0 else "unrated"
+        else:
+            return base_destination
+        leaf = cls._sanitize_split_folder_name(str(value))
+        return str(Path(base_destination) / leaf)
 
     @staticmethod
     def _write_id_snapshot(id_chunks) -> str:
@@ -82,6 +131,7 @@ class BatchMoveMixin:
         is_valid, error = validate_folder_path(destination_folder, allow_create=True)
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid destination folder")
+        split_by = request.split_by  # already normalized by Pydantic (None or facet key)
 
         with self._batch_move_lock:
             # "cancelling" is still busy: the worker is alive and draining; a
@@ -301,10 +351,16 @@ class BatchMoveMixin:
                                     db.mark_image_unreadable(image["id"], error_message)
                                 else:
                                     try:
+                                        # B3-②: optional per-image subfolder under destination.
+                                        target_folder = self._split_destination_for_image(
+                                            destination_folder, image, split_by
+                                        )
+                                        if target_folder != destination_folder:
+                                            os.makedirs(target_folder, exist_ok=True)
                                         self._apply_file_operation(
                                             operation=operation,
                                             image_id=image["id"],
-                                            destination_folder=destination_folder,
+                                            destination_folder=target_folder,
                                             source_path=source_path,
                                         )
                                         moved += 1

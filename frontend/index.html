@@ -1620,6 +1620,14 @@
                                     </div>
                                     <div id="autosep-destination-browser" class="autosep-destination-browser" aria-live="polite"></div>
                                     <div id="autosep-destination-mru" class="autosep-destination-mru" hidden></div>
+                                    <label class="autosep-action-block-label" for="autosep-split-by" style="margin-top:10px" data-i18n="autosep.splitBy">Split into subfolders</label>
+                                    <select id="autosep-split-by" class="input-field" aria-describedby="autosep-split-by-help">
+                                        <option value="" data-i18n="autosep.splitByNone">None — all into one folder</option>
+                                        <option value="generator" data-i18n="autosep.splitByGenerator">By generator</option>
+                                        <option value="checkpoint" data-i18n="autosep.splitByCheckpoint">By base model / checkpoint</option>
+                                        <option value="rating" data-i18n="autosep.splitByRating">By user star rating</option>
+                                    </select>
+                                    <small class="helper-text" id="autosep-split-by-help" data-i18n="autosep.splitByHelp">Creates one subfolder per value under the destination (e.g. …/webui, …/comfyui).</small>
                                     <div class="autosep-settings-summary" id="autosep-settings-summary"></div>
                                 </div>
 
@@ -5580,6 +5588,10 @@
                 <button class="modal-close" id="btn-close-tag-modal" aria-label="Close">✕</button>
                 <h3 id="tag-modal-title" data-i18n="modal.tagTitle">AI Auto Tagging</h3>
                 <p class="modal-description" data-i18n="modal.tagDescription">Use supported tagger models to generate tags for images.</p>
+                <!-- B4: explain why gallery images without a sibling .txt are still in scope. -->
+                <p class="helper-text tag-modal-scope-note" id="tag-modal-scope-note" data-i18n="tagModal.noSidecarNote">
+                    Images without a same-name .txt are still included: AI tags are stored in the app database, not as sidecars. Export writes .txt only when you choose to.
+                </p>
 
                 <!-- v3.2.2 task #5: Smart Tag wizard discoverability hint.
                      Returning users dismiss it once and never see it again. -->

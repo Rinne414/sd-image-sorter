@@ -347,7 +347,7 @@ Object.assign(API, {
         });
     },
 
-    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operation = 'move', artist = null, promptMatchMode = 'exact', tagMode = 'and', excludeFilters = null, scopeFilters = null) {
+    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operation = 'move', artist = null, promptMatchMode = 'exact', tagMode = 'and', excludeFilters = null, scopeFilters = null, splitBy = null) {
         return this.post('/api/batch-move', {
             generators,
             tags,
@@ -388,6 +388,8 @@ Object.assign(API, {
             has_metadata: typeof scopeFilters?.hasMetadata === 'boolean' ? scopeFilters.hasMetadata : null,
             destination_folder: destinationFolder,
             operation,
+            // B3-②: optional subfolder split under destination (generator/checkpoint/rating).
+            split_by: splitBy || null,
         });
     },
 

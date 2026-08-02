@@ -464,6 +464,9 @@ async function executeAutoSeparateWithProgress() {
                     aspectRatio: contract.aspectRatio
                 };
 
+                const splitByEl = document.getElementById('autosep-split-by');
+                const splitBy = (splitByEl?.value || '').trim() || null;
+
                 const startResult = await API.batchMove(
                     contract.generators?.length > 0 ? contract.generators : null,
                     contract.tags?.length > 0 ? contract.tags : null,
@@ -505,6 +508,7 @@ async function executeAutoSeparateWithProgress() {
                         folder: contract.folder,
                         hasMetadata: contract.hasMetadata,
                     },
+                    splitBy,
                 );
 
                 if (startResult?.error) {

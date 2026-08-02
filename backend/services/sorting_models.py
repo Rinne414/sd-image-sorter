@@ -410,11 +410,17 @@ class SortFilterRequest(BaseModel):
         return v
 
 
+VALID_BATCH_MOVE_SPLIT_BY = frozenset({"", "none", "generator", "checkpoint", "rating"})
+
+
 class BatchMoveRequest(SortFilterRequest):
     """Request model for batch move operations."""
 
     destination_folder: str = Field(..., max_length=PATH_MAX_LENGTH)
     operation: str = Field(default="move")
+    # B3-②: optional subfolder split under destination_folder.
+    # "" / "none" = flat; generator | checkpoint | rating = one child folder per value.
+    split_by: Optional[str] = Field(default=None, max_length=32)
 
     @field_validator("operation")
     @classmethod
@@ -422,6 +428,20 @@ class BatchMoveRequest(SortFilterRequest):
         if v not in VALID_FILE_OPERATIONS:
             raise ValueError(f"operation must be one of: {', '.join(VALID_FILE_OPERATIONS)}")
         return v
+
+    @field_validator("split_by")
+    @classmethod
+    def validate_split_by(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        normalized = str(v).strip().lower()
+        if normalized not in VALID_BATCH_MOVE_SPLIT_BY:
+            raise ValueError(
+                "split_by must be one of: none, generator, checkpoint, rating"
+            )
+        if normalized in {"", "none"}:
+            return None
+        return normalized
 
     @model_validator(mode="after")
     def require_at_least_one_filter(self) -> "BatchMoveRequest":
