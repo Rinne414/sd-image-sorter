@@ -6,11 +6,29 @@
  * same object at load time. Classic script: one shared global lexical
  * environment; index.html loads this before app.js. No behavior change.
  */
+function _libraryFetchHeaders(extra) {
+    if (window.LibraryWorkspace && typeof window.LibraryWorkspace.libraryHeaders === 'function') {
+        return window.LibraryWorkspace.libraryHeaders(extra || {});
+    }
+    const headers = Object.assign({}, extra || {});
+    try {
+        const raw = localStorage.getItem('sd-library-workspace-v1');
+        const id = raw ? (JSON.parse(raw).currentId || 'main') : 'main';
+        headers['X-SD-Library-Id'] = id;
+    } catch (_e) {
+        headers['X-SD-Library-Id'] = 'main';
+    }
+    return headers;
+}
+
 const API = {
     async get(endpoint, options = {}) {
         const { signal, requestKey } = options;
         try {
-            const response = await fetch(`${API_BASE}${endpoint}`, { signal });
+            const response = await fetch(`${API_BASE}${endpoint}`, {
+                signal,
+                headers: _libraryFetchHeaders({ Accept: 'application/json' }),
+            });
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
                 const message = formatApiError(response.status, errorData);
@@ -51,7 +69,10 @@ const API = {
         try {
             const response = await fetch(`${API_BASE}${endpoint}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: _libraryFetchHeaders({
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                }),
                 body: JSON.stringify(data),
                 signal
             });
@@ -80,6 +101,7 @@ const API = {
         try {
             const response = await fetch(`${API_BASE}${endpoint}`, {
                 method: 'DELETE',
+                headers: _libraryFetchHeaders({ Accept: 'application/json' }),
                 signal
             });
             if (!response.ok) {
@@ -105,7 +127,10 @@ const API = {
         try {
             const response = await fetch(`${API_BASE}${endpoint}`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: _libraryFetchHeaders({
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                }),
                 body: JSON.stringify(data),
                 signal
             });

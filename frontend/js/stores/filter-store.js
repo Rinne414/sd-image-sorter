@@ -62,7 +62,9 @@
             // v3.3.1: browse within a collection (Favorites view = favorites collection id).
             // null = no collection constraint (normal gallery listing).
             collectionId: null,
-            scope: 'current_session',
+            // Product narrative: long-term library is the default truth.
+            // Process "session" scope is not a user-facing gallery world.
+            scope: 'library',
             // v3.3.2 Library Navigation: recursive folder-subtree scope (null = whole library).
             folder: null,
             // v3.3.2 small-opt: "has SD generation parameters" filter

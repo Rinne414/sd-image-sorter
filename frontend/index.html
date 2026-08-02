@@ -198,14 +198,28 @@
                  the biggest button; the Model Center moves to the bottom row
                  (its wd14-missing attention ring + badge still glow there, so
                  new users find it without old users misclicking it daily). -->
-            <div class="entry-row">
-                <button type="button" class="entry-tile entry-fn entry-fn-xl entry-fn-gallery" id="entry-fn-gallery">
-                    <span class="fn-head">
-                        <span class="fn-count" id="entry-count-gallery"></span>
-                        <span class="fn-title" data-i18n="entry.tileGallery">Library</span>
-                    </span>
-                    <span class="fn-sub" id="entry-sub-gallery" data-i18n="entry.tileGallerySubQuiet">Browse, filter, and pick images</span>
-                </button>
+            <!-- Product narrative: current long-lived library lives on the entry
+                 home card (Phase 1 = 主图库 only; switcher menu is the multi-lib home). -->
+            <div class="entry-row entry-library-row">
+                <div class="entry-library-home entry-tile entry-fn entry-fn-xl" id="entry-library-home">
+                    <div class="entry-library-top">
+                        <button type="button" class="entry-library-switcher" id="entry-library-switcher"
+                                aria-haspopup="listbox" aria-expanded="false"
+                                aria-controls="entry-library-menu">
+                            <span class="entry-library-name" id="entry-library-name" data-i18n="library.defaultName">Main library</span>
+                            <span class="entry-library-chevron" aria-hidden="true">▾</span>
+                        </button>
+                        <span class="entry-library-count fn-count" id="entry-count-gallery" aria-live="polite"></span>
+                    </div>
+                    <p class="entry-library-sub fn-sub" id="entry-sub-gallery" data-i18n="entry.tileGallerySubQuiet">Browse, filter, and pick images</p>
+                    <div class="entry-library-actions">
+                        <button type="button" class="entry-library-enter" id="entry-fn-gallery"
+                                data-i18n="entry.enterLibrary">Enter library</button>
+                        <button type="button" class="entry-library-manage" id="entry-library-manage"
+                                data-i18n="entry.manageLibraries">Manage libraries…</button>
+                    </div>
+                    <div class="entry-library-menu" id="entry-library-menu" role="listbox" hidden></div>
+                </div>
             </div>
             <div class="entry-row">
                 <button type="button" class="entry-tile entry-fn entry-fn-censor" id="entry-fn-censor">
@@ -860,13 +874,6 @@
                                 <span data-i18n="gallery.filters">Filters</span>
                             </button>
                             <span class="image-count" id="image-count" aria-live="polite">0</span>
-                            <label class="gallery-scope-control" for="gallery-scope-select">
-                                <span data-i18n="gallery.scopeLabel">View</span>
-                                <select id="gallery-scope-select" class="sort-dropdown" aria-label="Gallery view scope" data-i18n-aria="gallery.scopeLabel">
-                                    <option value="current_session" data-i18n="gallery.scopeSession">Current Session</option>
-                                    <option value="library" data-i18n="gallery.scopeLibrary">Library</option>
-                                </select>
-                            </label>
                             <button id="btn-random" class="btn btn-ghost btn-small btn-icon-only" title="Show a random image from current filter" aria-label="Show random image" data-i18n-title="gallery.randomTooltip" data-i18n-aria="gallery.random">
                                 <span aria-hidden="true">🎲</span>
                             </button>
@@ -929,8 +936,8 @@
                              extra separation so it stays far from everyday controls (view
                              toggles / sort / aspect). Same #btn-clear-db id so the existing
                              handler + busy-guard (app.js) keep working unchanged. -->
-                        <button id="btn-clear-db" class="btn btn-ghost btn-small danger gallery-clear-button" type="button" title="Remove all images from the current library (files stay on disk)" data-i18n-title="action.clearGalleryTooltip" aria-label="Clear Current Library" data-i18n-aria="action.clearGallery">
-                            <span aria-hidden="true">🗑️</span> <span data-i18n="action.clearGallery">Clear Current Library</span>
+                        <button id="btn-clear-db" class="btn btn-ghost btn-small danger gallery-clear-button" type="button" title="Clear all indexed images from the current library (files stay on disk)" data-i18n-title="action.clearGalleryTooltip" aria-label="Clear current library" data-i18n-aria="action.clearGallery">
+                            <span aria-hidden="true">🗑️</span> <span data-i18n="action.clearGallery">Clear current library</span>
                         </button>
 
                     </div>
@@ -1108,9 +1115,15 @@
                             </div>
                         </div>
                     </div>
+                    <!-- Comfort-1: quiet status ribbon (resume / today stats). Hidden by default. -->
+                    <div id="gallery-comfort-ribbon" class="gallery-comfort-ribbon" hidden role="status" aria-live="polite" title="Click to dismiss"></div>
+                    <div id="gallery-daily-loop" class="gallery-daily-loop" hidden role="note">
+                        <span class="gallery-daily-loop-text" data-i18n="gallery.comfort.dailyLoop">Today: browse → pick a few → tag or sort</span>
+                        <button type="button" class="gallery-daily-loop-dismiss" data-daily-loop-dismiss aria-label="Dismiss" data-i18n-aria="gallery.comfort.dailyLoopDismiss">✕</button>
+                    </div>
                     <div id="gallery-empty-state" style="display:none" role="status">
                         <div class="empty-state-card empty-state-onboarding">
-                            <span class="empty-icon">🖼️</span>
+                            <span class="empty-icon" aria-hidden="true">🖼️</span>
                             <h3 data-i18n="gallery.noImages">No images yet</h3>
                             <p data-i18n="gallery.scanPrompt">Import an image folder to start browsing, filtering, and organizing your images</p>
                             <div class="empty-actions">
@@ -1118,7 +1131,7 @@
                                     <span aria-hidden="true">📂</span> <span data-i18n="action.scanFolder">Import Images</span>
                                 </button>
                             </div>
-                            <!-- v3.2.1 task #30: numbered onboarding steps that point to key UI areas. -->
+                            <!-- Owner review: keep getting-started steps open — empty gallery has room, and collapsed tips are never opened. -->
                             <ol class="onboarding-steps" aria-label="Getting started">
                                 <li class="onboarding-step">
                                     <span class="onboarding-step-num">1</span>
@@ -4983,6 +4996,30 @@
                     </div>
                     <div class="settings-row">
                         <div class="settings-row-copy">
+                            <strong data-i18n="comfort.zenTitle">Zen mode</strong>
+                            <span data-i18n="comfort.zenBody">Quieter chrome so the image stays the focus (Ctrl+.)</span>
+                        </div>
+                        <button type="button" class="btn btn-ghost" id="btn-settings-comfort-zen" aria-pressed="false">
+                            <span aria-hidden="true" id="settings-comfort-zen-icon">🖥️</span>
+                            <span id="settings-comfort-zen-label" data-i18n="comfort.zenOffLabel">Off</span>
+                        </button>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-copy">
+                            <strong data-i18n="comfort.warmthTitle">Room warmth</strong>
+                            <span data-i18n="comfort.warmthBody">Cool studio, neutral, or slightly warm dark</span>
+                        </div>
+                        <label class="settings-inline-control">
+                            <span data-i18n="comfort.warmthLabel">Tone</span>
+                            <select id="settings-comfort-warmth" class="input-field">
+                                <option value="cool" data-i18n="comfort.warmthCool">Cool</option>
+                                <option value="neutral" data-i18n="comfort.warmthNeutral" selected>Neutral</option>
+                                <option value="warm" data-i18n="comfort.warmthWarm">Warm</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-copy">
                             <strong data-i18n="settings.appearanceTitle">Appearance</strong>
                             <span id="settings-ui-scale-current" data-i18n="settings.uiScaleBody">UI scale follows your desktop size</span>
                         </div>
@@ -7369,6 +7406,7 @@
     <!-- Main application remainder (initEventListeners, the DOMContentLoaded
          boot sequence and the sealed window.App facade assembly) -->
     <script src="/static/js/app.js"></script>
+    <script src="/static/js/library-workspace.js"></script>
     <script src="/static/js/entry-page.js"></script>
     <script src="/static/js/folder-browser.js"></script>
     <script src="/static/js/tag-category-copy.js"></script>
@@ -7393,6 +7431,8 @@
     <script src="/static/js/gallery/context-menu.js"></script>
     <script src="/static/js/gallery/lifecycle-a11y.js"></script>
     <script src="/static/js/gallery/metadata-editor.js"></script>
+    <script src="/static/js/gallery/comfort.js"></script>
+    <script src="/static/js/comfort-app.js"></script>
     <script src="/static/js/gallery.js"></script>
     <script src="/static/js/collections-ui.js"></script>
     <script src="/static/js/modules/smart-folders.js"></script>

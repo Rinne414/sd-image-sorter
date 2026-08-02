@@ -38,6 +38,23 @@ from utils.source_paths import (
     indexed_image_path_match_key,
 )
 from metadata_storage import compact_existing_metadata_json, compact_metadata_json
+
+
+def _active_library_id_for_write(record: Optional[Dict[str, Any]] = None) -> str:
+    """Pin new image rows to the request's long-lived library workspace."""
+    if record and record.get("library_id"):
+        try:
+            from library_context import normalize_library_id
+
+            return normalize_library_id(str(record.get("library_id")))
+        except Exception:
+            return str(record.get("library_id") or "main")
+    try:
+        from library_context import get_current_library_id
+
+        return get_current_library_id()
+    except Exception:
+        return "main"
 from db_core import (
     get_db,
     _invalidate_facet_caches,
@@ -280,8 +297,8 @@ def _upsert_image_record(
             (path, filename, generator, prompt, negative_prompt, metadata_json,
              width, height, file_size, checkpoint, checkpoint_normalized, loras, model_hash, is_readable, read_error,
              source_mtime_ns, source_size, metadata_status, content_fingerprint,
-             library_order_time, source_file_mtime, created_at, raw_metadata_gz, indexed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+             library_order_time, source_file_mtime, created_at, raw_metadata_gz, indexed_at, library_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
             """,
             (
                 path,
@@ -307,6 +324,7 @@ def _upsert_image_record(
                 record.get("source_file_mtime"),
                 record.get("created_at"),
                 record.get("raw_metadata_gz"),
+                _active_library_id_for_write(record),
             ),
         )
         image_id = cursor.lastrowid

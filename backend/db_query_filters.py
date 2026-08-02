@@ -674,12 +674,39 @@ def _apply_collection_filter(conditions: List[str], params: List[Any],
     return conditions, params
 
 
+def _apply_library_workspace_filter(
+    conditions: List[str],
+    params: List[Any],
+    library_id: Optional[str] = None,
+) -> tuple:
+    """Always pin image queries to the active long-lived library workspace.
+
+    Prevents cross-library leaks when multi-library is enabled. Defaults to
+    ``main`` so pre-migration rows and missing headers stay correct.
+    """
+    try:
+        from library_context import get_current_library_id, normalize_library_id
+
+        lid = normalize_library_id(library_id if library_id is not None else get_current_library_id())
+    except Exception:
+        lid = str(library_id or "main").strip() or "main"
+    conditions.append("COALESCE(i.library_id, 'main') = ?")
+    params.append(lid)
+    return conditions, params
+
+
 def _apply_gallery_scope_filter(
     conditions: List[str],
     params: List[Any],
     scope: Optional[str],
 ) -> tuple:
-    """Restrict Gallery queries to the short-lived current session when requested."""
+    """Legacy process-session scope + mandatory long-lived library pin.
+
+    ``current_session`` membership is retained for internal/compat callers but
+    is no longer a user-facing gallery world. Library workspace filter always
+    runs so multi-library isolation cannot be skipped.
+    """
+    conditions, params = _apply_library_workspace_filter(conditions, params)
     if scope is None or scope == "library":
         return conditions, params
     if scope == "current_session":

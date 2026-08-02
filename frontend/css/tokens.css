@@ -53,9 +53,11 @@
     --purple-rgb: 167, 139, 255;
     --purple-hover: #B9A3FF;
     --purple-active: #9174E8;
-    --grad: linear-gradient(90deg, #5CC8FF, #A78BFF);
+    /* De-AI: no brand gradient. Solid blue is the only primary action fill.
+       --grad kept as an alias so old selectors don't invent a second look. */
+    --grad: var(--blue);
     --on-accent: #12141A;       /* ink on solid blue/pink/purple */
-    --tag-chip-bg: rgba(167, 139, 255, 0.14);
+    --tag-chip-bg: rgba(167, 139, 255, 0.10);
 
     /* ===== Aurora canonical: semantic (always paired with ✓ ⚠ ✕ glyph) ===== */
     --success: #5FDBA7;
@@ -168,8 +170,8 @@
 
     /* progress / shadows */
     --progress-track: rgba(255, 255, 255, 0.07);
-    --progress-fill: var(--grad);               /* total-progress may carry the gradient */
-    --shadow-glow: 0 0 24px rgba(var(--blue-rgb), 0.10);
+    --progress-fill: var(--blue);               /* solid — no decorative gradient bars */
+    --shadow-glow: 0 0 0 transparent;           /* de-AI: no ambient glow brand */
     --shadow-card: 0 12px 32px rgba(0, 0, 0, 0.35);
     --shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.5);
     --shadow-float: 0 12px 32px rgba(0, 0, 0, 0.4);
@@ -288,5 +290,1869 @@ textarea:focus-visible,
     .btn-primary {
         background: var(--accent-primary);
         color: #000000;
+    }
+}
+
+/* ==========================================================================
+   Phase 2.5 — Visual Unification Pass
+   Spec: design_handoff_aurora_redesign/README.md + docs/DESIGN.md §principles
+
+   Goals (app-wide, not per-view rewrites):
+   1. Semantic accents land where they mean something (pink=user, purple=AI).
+   2. Glass is budgeted: only shell chrome / floating overlays may blur.
+   3. Five shared patterns look like one family: empty, CTA, progress, toast,
+      panel header.
+   4. Legacy neon/amber "decoration accents" retire in favor of Aurora tokens.
+
+   Loaded last via tokens.css so these win over styles.css / ui-refresh.css
+   without needing a third competing stylesheet (DESIGN.md §css-ownership).
+   ========================================================================== */
+
+/* --- Surfaces: solid elevation, glass only where it earns its keep ------ */
+
+.nav-bar {
+    background: rgba(18, 20, 26, 0.97);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03), 0 12px 28px rgba(0, 0, 0, 0.28);
+    backdrop-filter: blur(10px) saturate(120%);
+    -webkit-backdrop-filter: blur(10px) saturate(120%);
+}
+
+/* Content panels: solid surface-1, no blur (reads cleaner over dense grids). */
+.filter-sidebar,
+.autosep-panel,
+.sort-setup,
+.similar-header,
+.similar-tabs,
+.similar-panel,
+.promptlab-browser,
+.promptlab-builder,
+.promptlab-output-panel,
+.artist-stats,
+.artist-controls,
+.artist-results,
+.artist-details {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-card);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+/* Floating chrome may keep a light blur (over images / stage). */
+.modal-content,
+.selection-fab,
+.gallery-action-bar,
+.gallery-search-suggest,
+.update-popup-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(12px) saturate(120%);
+    -webkit-backdrop-filter: blur(12px) saturate(120%);
+}
+
+.modal-content {
+    border-radius: var(--r-modal);
+    box-shadow: var(--shadow-modal);
+    background: rgba(31, 35, 48, 0.98);
+}
+
+/* Nested inset cards: one quiet elevation step, no second glass layer. */
+.filter-summary,
+.filter-summary-compact,
+.autosep-preview-list,
+.gallery-preview-bar,
+.preview-section,
+.control-section,
+.artist-detail-content {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--hairline-2);
+    border-radius: var(--r-card);
+}
+
+/* --- Buttons: hierarchy + radius contract -------------------------------- */
+
+.btn,
+.btn-help {
+    border-radius: var(--r-ctl);
+    font-weight: 600;
+    letter-spacing: 0;
+    border: 1px solid var(--border);
+    box-shadow: none;
+    transition:
+        background var(--duration-fast) ease,
+        border-color var(--duration-fast) ease,
+        color var(--duration-fast) ease,
+        opacity var(--duration-fast) ease,
+        transform 100ms ease;
+}
+
+/* Neutral buttons only — never restate background on bare .btn or it
+   stomps .btn-primary (same specificity, later wins). */
+.btn:not(.btn-primary):not(.btn-grad):not(.danger):not(.btn-danger),
+.btn-help {
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text);
+}
+
+.btn-secondary,
+.btn-help,
+.btn-ghost {
+    background: transparent;
+    color: var(--text-2);
+    border-color: var(--border);
+}
+
+.btn-secondary:hover:not(:disabled),
+.btn-help:hover:not(:disabled),
+.btn-ghost:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--border-strong);
+    color: var(--text);
+    box-shadow: none;
+}
+
+.btn.danger,
+.btn-danger,
+.btn-ghost.danger {
+    border-color: rgba(var(--danger-rgb), 0.42);
+    background: rgba(var(--danger-rgb), 0.10);
+    color: #ffb4b1;
+}
+
+.btn.danger:hover:not(:disabled),
+.btn-danger:hover:not(:disabled),
+.btn-ghost.danger:hover:not(:disabled) {
+    border-color: rgba(var(--danger-rgb), 0.62);
+    background: rgba(var(--danger-rgb), 0.18);
+    color: #ffd0ce;
+}
+
+/* Re-assert solid blue primary AFTER the generic .btn rules (Phase 1
+   block sits above this section and would otherwise lose the cascade). */
+.btn-primary {
+    background: var(--blue);
+    color: var(--on-accent);
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--blue-hover);
+    color: var(--on-accent);
+    box-shadow: none;
+    transform: none;
+}
+
+.btn-primary:active:not(:disabled) {
+    background: var(--blue-active);
+}
+
+/* Cross-step actions use the SAME solid blue as primary — no gradient brand. */
+.btn-grad,
+.btn[data-cta="cross-step"],
+.btn-primary.btn-grad {
+    background: var(--blue);
+    color: var(--on-accent);
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.btn-grad:hover:not(:disabled),
+.btn[data-cta="cross-step"]:hover:not(:disabled) {
+    background: var(--blue-hover);
+    filter: none;
+    box-shadow: none;
+}
+
+/* --- Typography hierarchy ------------------------------------------------ */
+
+.panel-title,
+.setup-title,
+.sidebar-title,
+.results-header h3,
+.promptlab-browser-header h4,
+.promptlab-builder-header h4,
+.promptlab-output-header h4,
+.similar-header h3,
+.guide-modal-title,
+.modal-header h2,
+.modal-header h3,
+.modal-title {
+    font-family: var(--font-display);
+    font-size: var(--fs-modal-title);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    color: var(--text);
+}
+
+.panel-description,
+.setup-description,
+.modal-description {
+    color: var(--text-2);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+}
+
+/* --- Nav: quiet active state --------------------------------------------- */
+
+.nav-tab::after,
+.nav-tabs button::after {
+    background: var(--blue);
+    height: 2px;
+}
+
+.nav-tab.active,
+.nav-tabs button.active,
+.nav-tabs button[aria-selected="true"] {
+    color: var(--text);
+}
+
+.brand-version {
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-footnote);
+}
+
+/* --- Selection = pink (user decision) — all multi-select surfaces -------- */
+
+.gallery-item.selected {
+    outline: 2px solid var(--pink);
+    outline-offset: -2px;
+    box-shadow:
+        0 0 0 1px rgba(var(--pink-rgb), 0.45),
+        0 12px 28px rgba(0, 0, 0, 0.28);
+}
+
+.gallery-item.selected::after {
+    background: var(--pink);
+    color: var(--on-accent);
+}
+
+.gallery-grid.selection-mode .gallery-item.selected::before {
+    border-color: var(--pink);
+    background: var(--pink);
+    color: var(--on-accent);
+}
+
+/* Idle select toggle is a mode switch, not the screen's primary CTA —
+   keep it quiet until armed (then pink = user decision). */
+#btn-toggle-select.btn-primary:not(.selection-active):not([aria-pressed="true"]) {
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text);
+    border-color: var(--border);
+    box-shadow: none;
+}
+
+#btn-toggle-select.btn-primary:not(.selection-active):not([aria-pressed="true"]):hover {
+    background: rgba(var(--pink-rgb), 0.10);
+    border-color: rgba(var(--pink-rgb), 0.40);
+    color: var(--text);
+}
+
+#btn-toggle-select.selection-active,
+#btn-toggle-select[aria-pressed="true"] {
+    background: var(--pink);
+    border-color: var(--pink-active);
+    color: var(--on-accent);
+    box-shadow: 0 10px 24px rgba(var(--pink-rgb), 0.22);
+}
+
+.dataset-import-gallery-grid .import-thumb.multi-selected,
+.dataset-import-gallery-grid .import-thumb-selected,
+#view-dataset .dataset-queue-item.multi-selected {
+    outline: 2px solid var(--pink);
+    outline-offset: -2px;
+    border-color: rgba(var(--pink-rgb), 0.55);
+    box-shadow: 0 0 0 1px rgba(var(--pink-rgb), 0.35);
+}
+
+.queue-manager-grid-item.is-selected,
+.queue-thumb-v2.selected {
+    outline: 2px solid var(--pink);
+    border-color: rgba(var(--pink-rgb), 0.55);
+    box-shadow: 0 0 0 1px rgba(var(--pink-rgb), 0.35);
+}
+
+.artist-card.selected,
+.artist-card:has(input:checked),
+.repair-review-candidate:has(input:checked),
+.tagger-model-choice.is-selected,
+.model-select-item.selected,
+.dataset-custom-dropdown-option.selected {
+    border-color: rgba(var(--pink-rgb), 0.55);
+    background: rgba(var(--pink-rgb), 0.08);
+    box-shadow: inset 0 0 0 1px rgba(var(--pink-rgb), 0.22);
+}
+
+.gallery-item-fav.is-favorited {
+    color: var(--pink);
+}
+
+.gallery-item-fav.is-favorited,
+.gallery-item-fav:hover {
+    color: var(--pink);
+}
+
+/* User star rating = decision → pink (was decorative gold). */
+.star-rating .star.is-filled,
+.star-rating-interactive:hover .star,
+.gallery-item-rating-stars,
+.gallery-star-badge .star.is-filled {
+    color: var(--pink);
+}
+
+.star-rating-interactive .star:hover ~ .star {
+    color: rgba(255, 255, 255, 0.22);
+}
+
+/* Browse chips: quiet neutral — pink only for real selection, not chrome. */
+.gallery-chip.is-active,
+.aesthetic-quick.is-active {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+
+/* Search "understood as" chips are parsed query state → quiet blue (action). */
+.gsq-chip {
+    border-color: rgba(var(--blue-rgb), 0.35);
+    background: rgba(var(--blue-rgb), 0.10);
+    color: var(--text);
+}
+
+.gsq-suggest-item:hover,
+.gsq-suggest-item.is-active {
+    background: rgba(var(--blue-rgb), 0.14);
+}
+
+/* --- AI output = purple -------------------------------------------------- */
+
+.gallery-item-aesthetic,
+.library-tag .tag-count,
+.promptlab-tag-item .tag-count,
+.tag-chip,
+.tag-pill,
+.ai-tag,
+.wd-tag,
+.vlm-score,
+.detect-score,
+.similarity-score {
+    color: var(--purple);
+}
+
+.library-tag {
+    background: rgba(var(--purple-rgb), 0.06);
+    border: 1px solid rgba(var(--purple-rgb), 0.18);
+    border-radius: var(--r-card);
+}
+
+.library-tag:hover {
+    background: rgba(var(--purple-rgb), 0.10);
+    border-color: rgba(var(--purple-rgb), 0.32);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+}
+
+.library-tag .tag-name {
+    color: var(--text);
+}
+
+.library-tag .tag-count {
+    font-family: var(--font-mono);
+    font-size: var(--fs-data);
+    color: var(--purple);
+    background: var(--tag-chip-bg);
+    padding: 2px 8px;
+    border-radius: var(--r-pill);
+}
+
+/* Default soft tag chips (AI / catalog). Booru category chips keep their
+   data-viz hues (DESIGN.md §color-exemptions) via more-specific rules. */
+.tag-chip:not([class*="booru"]):not([data-category]),
+.tag-pill:not([class*="booru"]):not([data-category]),
+.smart-tag-result-chip {
+    background: var(--tag-chip-bg);
+    color: var(--purple);
+    border-color: rgba(var(--purple-rgb), 0.28);
+}
+
+/* --- Shared empty state -------------------------------------------------- */
+
+.empty-state,
+.empty-state-card,
+.autosep-preview-empty,
+.repair-review-empty,
+.similar-empty,
+.artist-empty {
+    max-width: 720px;
+    margin-inline: auto;
+    text-align: center;
+    padding: 28px 24px;
+    border-radius: var(--r-card);
+    border: 1px solid var(--border);
+    background: var(--empty-bg);
+    color: var(--text-2);
+}
+
+.empty-state .empty-icon,
+.empty-state-card .empty-icon {
+    font-size: 28px;
+    line-height: 1;
+    opacity: 0.9;
+    margin-bottom: 10px;
+}
+
+.empty-state h3,
+.empty-state-card h3,
+.autosep-preview-empty-title {
+    font-size: var(--fs-modal-title);
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 8px;
+}
+
+.empty-state p,
+.empty-state-card p,
+.empty-state .empty-hint,
+.autosep-preview-empty-hint {
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    color: var(--text-2);
+    max-width: 52ch;
+    margin: 0 auto;
+}
+
+.empty-state .empty-actions,
+.empty-state-card .empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 18px;
+}
+
+.autosep-preview-empty--no-filters {
+    border: 1px dashed var(--border-strong);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* Onboarding step numbers: blue = next action, not decorative amber. */
+.onboarding-step {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+}
+
+.onboarding-step:hover {
+    border-color: rgba(var(--blue-rgb), 0.35);
+    background: rgba(var(--blue-rgb), 0.06);
+}
+
+.onboarding-step-num {
+    background: rgba(var(--blue-rgb), 0.16);
+    color: var(--blue);
+}
+
+.onboarding-step-copy em,
+.onboarding-tip em {
+    color: var(--blue);
+    background: rgba(var(--blue-rgb), 0.10);
+}
+
+/* --- Progress ------------------------------------------------------------ */
+
+.progress-bar,
+.progress-track,
+.sort-interface .sort-progress-enhanced .progress-bar {
+    background: var(--progress-track);
+    border-radius: var(--r-pill);
+    overflow: hidden;
+}
+
+.progress-bar-fill,
+.progress-fill,
+.progress-bar > .fill,
+.smart-tag-progress .progress-bar-fill,
+.autosep-move-progress .progress-bar-fill {
+    background: var(--blue);
+    border-radius: inherit;
+}
+
+/* Progress is always solid action blue — never a decorative gradient. */
+.progress-total .progress-bar-fill,
+.progress-total .progress-fill,
+.pipeline-progress .progress-bar-fill,
+.export-progress .progress-bar-fill,
+[data-progress="total"] .progress-bar-fill {
+    background: var(--blue);
+}
+
+/* --- Toast family -------------------------------------------------------- */
+
+.toast {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-left-color: var(--blue);
+    border-radius: var(--r-card);
+    color: var(--text);
+    box-shadow: var(--shadow-float);
+}
+
+.toast.success {
+    border-left-color: var(--success);
+    border-color: rgba(var(--success-rgb), 0.28);
+}
+
+.toast.error {
+    border-left-color: var(--danger);
+    border-color: rgba(var(--danger-rgb), 0.32);
+}
+
+.toast.warning {
+    border-left-color: var(--warning);
+    border-color: rgba(var(--warning-rgb), 0.32);
+}
+
+.toast.info {
+    border-left-color: var(--blue);
+    border-color: rgba(var(--blue-rgb), 0.28);
+}
+
+/* --- Inputs / controls --------------------------------------------------- */
+
+input[type="text"],
+input[type="search"],
+input[type="number"],
+input[type="password"],
+input[type="url"],
+input[type="email"],
+select,
+textarea,
+.combo-display {
+    background: var(--control-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--r-ctl);
+    color: var(--text);
+}
+
+input:hover,
+select:hover,
+textarea:hover,
+.combo-display:hover {
+    border-color: var(--border-strong);
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+.combo-display:focus {
+    border-color: rgba(var(--blue-rgb), 0.55);
+    box-shadow: var(--focus-ring);
+    outline: none;
+}
+
+/* Checkbox / radio accent for user choices */
+input[type="checkbox"],
+input[type="radio"] {
+    accent-color: var(--pink);
+}
+
+/* --- Links = next action blue -------------------------------------------- */
+
+a,
+.link,
+.update-popup-link,
+.btn-link {
+    color: var(--blue);
+}
+
+a:hover,
+.link:hover,
+.update-popup-link:hover {
+    color: var(--blue-hover);
+}
+
+/* --- Gen tabs / segment controls ----------------------------------------- */
+
+.gen-tab[aria-selected="true"],
+.dataset-tab[aria-selected="true"],
+.toggle-btn.active,
+.view-btn.active {
+    background: rgba(var(--blue-rgb), 0.14);
+    border-color: rgba(var(--blue-rgb), 0.42);
+    color: var(--text);
+}
+
+/* --- Scrollbars (desktop) — quieter chrome ------------------------------- */
+
+@media (min-width: 1280px) {
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+    }
+
+    *::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+
+    *::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.14);
+        border-radius: 999px;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+    }
+
+    *::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.22);
+        background-clip: padding-box;
+    }
+
+    *::-webkit-scrollbar-track {
+        background: transparent;
+    }
+}
+
+/* --- Stage behind images: deeper, less chrome noise ---------------------- */
+
+#view-censor .censor-canvas-wrap,
+.sort-stage,
+.reader-stage,
+.gallery-item {
+    background-color: var(--stage);
+}
+
+/* Soften heavy multi-layer glows that survived the neon era. */
+.btn-primary {
+    filter: none;
+    box-shadow: none;
+}
+
+/* De-AI hard stops: kill gradient *images* that older sheets still set. */
+.btn-primary,
+.btn-grad,
+[data-cta="cross-step"],
+#view-dataset .dataset-export-cta,
+#view-dataset .dataset-export-cta.btn-primary,
+#view-censor #btn-save-all-processed,
+#btn-save-all-processed {
+    background-image: none !important;
+}
+
+/* --- Modal footer rhythm ------------------------------------------------- */
+
+.modal-actions,
+.filter-modal-actions,
+.update-popup-actions {
+    gap: 10px;
+    padding-top: 4px;
+}
+
+.modal-header {
+    border-bottom: 1px solid var(--hairline-2);
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+}
+
+/* --- Dataset / censor queue selection chips ------------------------------ */
+
+.queue-selection-count,
+#queue-selection-count,
+.dataset-selection-summary {
+    color: var(--pink);
+    font-family: var(--font-mono);
+    font-size: var(--fs-data);
+}
+
+/* --- Kill leftover decorative amber on chrome (keep warning semantics) --- */
+
+.workspace-start-eyebrow,
+.update-popup-value.has-update,
+.search-help-syntax {
+    color: var(--blue);
+}
+
+/* Prefer solid blue for "active primary path" panels over dual gradients. */
+#similar-workflow-status.similar-workflow-primary {
+    background:
+        linear-gradient(180deg, rgba(var(--blue-rgb), 0.10), rgba(255, 255, 255, 0.02));
+    border-color: rgba(var(--blue-rgb), 0.28);
+}
+
+/* Filter summary values: quieter mono data, not competing accents. */
+.filter-summary .summary-value,
+.filter-summary-compact .summary-value {
+    font-family: var(--font-mono);
+    font-size: var(--fs-data);
+    color: var(--text-2);
+}
+
+/* View shell containers: consistent padding/gap across workbenches. */
+.autosep-container,
+.manual-sort-container,
+.similar-container,
+.promptlab-container,
+.artist-container {
+    gap: 18px;
+}
+
+/* Active nav tab pill — solid surface, blue underline already handles focus. */
+.nav-tab.active,
+.nav-tabs button.active,
+.nav-tabs button[aria-selected="true"] {
+    background: rgba(var(--blue-rgb), 0.10);
+    color: var(--text);
+}
+
+/* Soften floating action bars over dense grids. */
+.gallery-action-bar {
+    background: rgba(31, 35, 48, 0.96);
+    border: 1px solid var(--border);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(12px) saturate(120%);
+    -webkit-backdrop-filter: blur(12px) saturate(120%);
+}
+
+/* --- Reduced motion: no bounce on toasts -------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+    .toast {
+        animation: none;
+    }
+
+    .modal.visible .modal-content {
+        animation: none;
+    }
+}
+
+/* ==========================================================================
+   Phase 3 — Workbench unification (Censor + Dataset)
+   Spec: design_handoff #25d / #15e + DESIGN.md accent semantics
+
+   Censor and Dataset still carry pre-Aurora glass, cyan selection, and
+   multiple solid-blue primaries. This block remaps them without rewriting
+   feature layout CSS (feature sheets keep structure; tokens own chrome).
+   ========================================================================== */
+
+/* Censor accent aliases track Aurora action blue (not legacy neon). */
+:root {
+    --censor-accent: var(--blue);
+    --censor-accent-rgb: var(--blue-rgb);
+    --censor-accent-strong: var(--purple);
+    --censor-accent-strong-rgb: var(--purple-rgb);
+    --censor-accent-text: var(--text);
+}
+
+/* --------------------------------------------------------------------------
+   Censor workspace shell
+   -------------------------------------------------------------------------- */
+
+#view-censor .censor-workspace-v2 {
+    background: var(--stage) !important;
+}
+
+/* Sidebars: solid surface, no glass. !important beats censor-v2 glass stack. */
+#view-censor .censor-sidebar-v2,
+#view-censor .censor-sidebar-v2.right {
+    background: var(--surface-1) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-color: var(--border) !important;
+    box-shadow: none !important;
+    color: var(--text);
+}
+
+#view-censor .censor-sidebar-v2 {
+    border-right: 1px solid var(--border) !important;
+}
+
+#view-censor .censor-sidebar-v2.right {
+    border-left: 1px solid var(--border) !important;
+    border-right: none !important;
+}
+
+#view-censor .censor-sidebar-v2 .sidebar-title-v2,
+#view-censor .section-title,
+#view-censor .censor-control-label {
+    color: var(--text-2);
+    text-transform: none;
+    letter-spacing: 0.01em;
+    text-shadow: none;
+    font-size: var(--fs-section);
+    font-weight: 700;
+}
+
+/* Floating toolbar + footer: one light glass layer only (over the stage).
+   !important needed — ui-refresh pins legacy rgba backgrounds with !important. */
+#view-censor .censor-toolbar-v2 {
+    background: rgba(31, 35, 48, 0.94) !important;
+    backdrop-filter: blur(12px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(12px) saturate(120%) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--r-pill) !important;
+    box-shadow: var(--shadow-float) !important;
+}
+
+#view-censor .censor-footer-bars {
+    background: rgba(18, 20, 26, 0.94) !important;
+    backdrop-filter: blur(10px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(10px) saturate(120%) !important;
+    border-top: 1px solid var(--border) !important;
+}
+
+#view-censor .zoom-controls-bar,
+#view-censor .zoom-controls-v2 {
+    background: rgba(31, 35, 48, 0.92) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    border: 1px solid var(--border) !important;
+    box-shadow: var(--shadow-float) !important;
+}
+
+#view-censor .property-section,
+#view-censor .queue-control-card {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--r-card);
+    box-shadow: none !important;
+}
+
+#view-censor .zoom-controls-bar:hover {
+    background: var(--surface-2);
+    border-color: rgba(var(--blue-rgb), 0.35);
+    box-shadow: var(--shadow-float);
+}
+
+#view-censor .zoom-level {
+    color: var(--blue);
+    text-shadow: none;
+    font-family: var(--font-mono);
+}
+
+/* Tool buttons: quiet chrome; active tool = blue (current action mode). */
+#view-censor .tool-btn-v2 {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    border-radius: var(--r-ctl);
+    color: var(--text-2);
+}
+
+#view-censor .tool-btn-v2:hover {
+    background: rgba(var(--blue-rgb), 0.10);
+    border-color: rgba(var(--blue-rgb), 0.35);
+    color: var(--text);
+    transform: none;
+}
+
+#view-censor .tool-btn-v2.active {
+    background: rgba(var(--blue-rgb), 0.18);
+    border-color: rgba(var(--blue-rgb), 0.55);
+    color: var(--text);
+    box-shadow: none;
+}
+
+#view-censor .tool-btn-v2.active .tool-icon-v2 {
+    filter: none;
+}
+
+#view-censor .toolbar-select {
+    background: var(--control-bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--r-ctl);
+}
+
+#view-censor .toolbar-select option {
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+#view-censor .censor-input {
+    background: var(--control-bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--r-ctl);
+}
+
+#view-censor .censor-input:focus {
+    border-color: rgba(var(--blue-rgb), 0.55);
+    background: var(--control-bg);
+    box-shadow: var(--focus-ring);
+}
+
+/* Queue thumbs: current = blue; multi-selected = pink; done = success. */
+#view-censor .queue-thumb-v2 {
+    border: 1px solid var(--border);
+    border-radius: var(--r-tile);
+    transition: border-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
+}
+
+#view-censor .queue-thumb-v2:hover {
+    transform: none;
+    border-color: rgba(var(--blue-rgb), 0.40);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+}
+
+#view-censor .queue-thumb-v2.active {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 1px rgba(var(--blue-rgb), 0.45);
+    transform: none;
+}
+
+#view-censor .queue-thumb-v2.selected,
+#view-censor .queue-thumb-v2.selected.active {
+    border-color: var(--pink);
+    box-shadow: 0 0 0 2px rgba(var(--pink-rgb), 0.40);
+}
+
+#view-censor .queue-thumb-v2.processed {
+    border-color: var(--success);
+    box-shadow: 0 0 0 1px rgba(var(--success-rgb), 0.35);
+}
+
+#view-censor .queue-thumb-v2.batch-error {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 2px rgba(var(--danger-rgb), 0.40);
+    filter: none;
+}
+
+#view-censor .queue-thumb-v2.batch-refined:not(.processed) {
+    border-color: var(--purple);
+    box-shadow: 0 0 0 1px rgba(var(--purple-rgb), 0.40);
+}
+
+#view-censor .queue-selection-count,
+#view-censor #queue-selection-count {
+    color: var(--pink);
+    font-family: var(--font-mono);
+    font-size: var(--fs-data);
+}
+
+/* Queue manager modal grid */
+#view-censor .queue-manager-grid-item,
+.queue-manager-grid-item {
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    border-radius: var(--r-card);
+}
+
+.queue-manager-grid-item:hover {
+    border-color: rgba(var(--blue-rgb), 0.35);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+}
+
+.queue-manager-grid-item.is-selected {
+    border-color: var(--pink);
+    box-shadow: 0 0 0 2px rgba(var(--pink-rgb), 0.35);
+}
+
+.queue-manager-grid-item.is-active {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 2px rgba(var(--blue-rgb), 0.30);
+}
+
+.queue-manager-grid-item.is-processed {
+    border-color: rgba(var(--success-rgb), 0.45);
+}
+
+/* Empty / no-image */
+#view-censor .queue-empty-state-v2,
+#view-censor .no-image-state-v2 {
+    color: var(--text-2);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--r-card);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* Review conveyor: AI conf = purple; approve = user pink when armed. */
+#view-censor .censor-review-region {
+    border: 1px solid var(--border);
+    border-radius: var(--r-ctl);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+#view-censor .censor-review-region-conf {
+    color: var(--purple);
+    font-family: var(--font-mono);
+    font-size: var(--fs-data);
+}
+
+#view-censor .censor-review-region.is-excluded {
+    opacity: 0.55;
+    border-color: rgba(var(--danger-rgb), 0.35);
+}
+
+/* Primary CTA discipline on Censor:
+   demote every .btn-primary, then re-promote the true screen primary
+   (save/apply pipeline) + one empty-state escape. */
+#view-censor .btn.btn-primary {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    border: 1px solid var(--border);
+    box-shadow: none;
+}
+
+#view-censor .btn.btn-primary:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+
+#view-censor #btn-save-all-processed,
+#view-censor .censor-save-primary,
+#view-censor #btn-censor-empty-open-gallery {
+    background: var(--blue);
+    color: var(--on-accent);
+    border-color: transparent;
+}
+
+#view-censor #btn-save-all-processed:hover:not(:disabled),
+#view-censor .censor-save-primary:hover:not(:disabled),
+#view-censor #btn-censor-empty-open-gallery:hover:not(:disabled) {
+    background: var(--blue-hover);
+    color: var(--on-accent);
+}
+
+/* Save pipeline: solid blue primary (de-AI — no gradient CTA). */
+#view-censor #btn-save-all-processed.censor-save-primary,
+#view-censor #btn-save-all-processed {
+    background: var(--blue);
+    color: var(--on-accent);
+}
+
+#view-censor #btn-save-all-processed:hover:not(:disabled) {
+    filter: none;
+    background: var(--blue-hover);
+}
+
+/* User confirm in review = pink (decision). */
+#view-censor #btn-review-approve:not(:disabled) {
+    background: var(--pink);
+    color: var(--on-accent);
+    border-color: transparent;
+}
+
+#view-censor #btn-review-approve:not(:disabled):hover {
+    background: var(--pink-hover);
+    color: var(--on-accent);
+}
+
+/* Detect actions stay quiet secondary (AI prep), not competing primaries. */
+#view-censor #btn-auto-detect-current,
+#view-censor #btn-run-auto-censor,
+#view-censor #btn-review-detect,
+#view-censor #btn-apply-filters,
+#view-censor #btn-open-queue-manager {
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+/* --------------------------------------------------------------------------
+   Dataset workbench
+   -------------------------------------------------------------------------- */
+
+#view-dataset .dataset-maker {
+    color: var(--text);
+}
+
+#view-dataset .dataset-header {
+    border-bottom: 1px solid var(--border);
+}
+
+#view-dataset .dataset-title {
+    font-size: var(--fs-screen-title);
+    font-weight: 900;
+    color: var(--text);
+}
+
+#view-dataset .dataset-count-pill {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    color: var(--text-2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-data);
+}
+
+#view-dataset .dataset-count-pill strong {
+    color: var(--text);
+    font-family: var(--font-mono);
+}
+
+/* Tabs: step numbers = blue pipeline. */
+#view-dataset .dataset-tab {
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--text-2);
+    border-radius: var(--r-ctl);
+}
+
+#view-dataset .dataset-tab:hover {
+    background: rgba(var(--blue-rgb), 0.08);
+    border-color: rgba(var(--blue-rgb), 0.35);
+    color: var(--text);
+}
+
+#view-dataset .dataset-tab[aria-selected="true"] {
+    background: rgba(var(--blue-rgb), 0.14);
+    border-color: rgba(var(--blue-rgb), 0.50);
+    color: var(--text);
+}
+
+#view-dataset .dataset-tab-num {
+    background: rgba(var(--blue-rgb), 0.16);
+    color: var(--blue);
+}
+
+#view-dataset .dataset-tab[aria-selected="true"] .dataset-tab-num {
+    background: var(--blue);
+    color: var(--on-accent);
+}
+
+/* Panes: solid surface family. */
+#view-dataset .dataset-queue-pane,
+#view-dataset .dataset-editor-pane,
+#view-dataset .dataset-export-pane {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    box-shadow: none;
+}
+
+#view-dataset .dataset-pane-head {
+    border-bottom: 1px solid var(--hairline-2);
+}
+
+#view-dataset .dataset-pane-head strong {
+    font-size: var(--fs-section);
+    font-weight: 700;
+    color: var(--text);
+}
+
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-pane {
+    border-color: rgba(var(--blue-rgb), 0.22);
+    background: var(--surface-1);
+}
+
+/* Queue selection = pink (user multi-select); active focus = blue. */
+#view-dataset .dataset-queue-item {
+    border-radius: var(--r-ctl);
+    border: 1px solid transparent;
+}
+
+#view-dataset .dataset-queue-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: var(--border);
+}
+
+#view-dataset .dataset-queue-item.active {
+    background: rgba(var(--blue-rgb), 0.12);
+    border-color: rgba(var(--blue-rgb), 0.45);
+}
+
+#view-dataset .dataset-queue-item.multi-selected {
+    background: rgba(var(--pink-rgb), 0.12);
+    border-color: rgba(var(--pink-rgb), 0.48);
+    box-shadow: inset 0 0 0 1px rgba(var(--pink-rgb), 0.18);
+}
+
+#view-dataset .dataset-queue-item.multi-selected.active {
+    background: rgba(var(--pink-rgb), 0.16);
+    border-color: var(--pink);
+}
+
+#view-dataset .dataset-queue-select-toggle {
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    background: rgba(18, 20, 26, 0.72);
+    border-radius: 4px;
+}
+
+#view-dataset .dataset-queue-select-toggle[aria-checked="true"] {
+    border-color: var(--pink);
+    background: var(--pink);
+}
+
+#view-dataset .dataset-queue-select-toggle[aria-checked="true"]::before {
+    color: var(--on-accent);
+}
+
+#view-dataset .dataset-queue-order {
+    font-family: var(--font-mono);
+    font-size: var(--fs-data);
+    background: rgba(var(--pink-rgb), 0.14);
+    border-color: rgba(var(--pink-rgb), 0.35);
+    color: var(--text);
+}
+
+#view-dataset .dataset-selection-summary {
+    color: var(--pink);
+    font-family: var(--font-mono);
+    font-size: var(--fs-data);
+}
+
+/* Import multi-select thumbs */
+#view-dataset .dataset-import-gallery-grid .import-thumb.multi-selected,
+#view-dataset .dataset-import-gallery-grid .import-thumb-selected {
+    outline: 2px solid var(--pink);
+    outline-offset: -2px;
+    border-color: rgba(var(--pink-rgb), 0.55);
+}
+
+/* Cards / inputs */
+#view-dataset .dataset-card {
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid var(--hairline-2);
+    border-radius: var(--r-card);
+}
+
+#view-dataset input:not([type="checkbox"]):not([type="radio"]),
+#view-dataset textarea,
+#view-dataset select {
+    background: var(--control-bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--r-ctl);
+}
+
+#view-dataset input[type="checkbox"],
+#view-dataset input[type="radio"] {
+    accent-color: var(--pink);
+}
+
+#view-dataset input[type="checkbox"]:checked,
+#view-dataset input[type="radio"]:checked {
+    border-color: var(--pink);
+    background: rgba(var(--pink-rgb), 0.18);
+}
+
+/* Export sticky bar + cross-step CTA (ONE gradient on this tab). */
+#view-dataset .dataset-export-action-bar {
+    background: rgba(24, 27, 35, 0.96);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+}
+
+#view-dataset .dataset-export-cta.btn-primary,
+#view-dataset .dataset-export-cta {
+    background: var(--blue);
+    color: var(--on-accent);
+    border: none;
+    border-radius: var(--r-ctl);
+    box-shadow: none;
+    font-weight: 700;
+}
+
+#view-dataset .dataset-export-cta:hover:not(:disabled) {
+    filter: none;
+    background: var(--blue-hover);
+    box-shadow: none;
+    transform: none;
+}
+
+#view-dataset .dataset-export-cta:disabled {
+    background: rgba(255, 255, 255, 0.045);
+    color: var(--text-disabled);
+    box-shadow: none;
+    filter: grayscale(0.4);
+    opacity: 0.55;
+}
+
+/* Primary discipline inside Dataset:
+   demote generic primaries; re-promote tab-appropriate CTAs only. */
+#view-dataset .btn.btn-primary {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    border: 1px solid var(--border);
+    box-shadow: none;
+}
+
+#view-dataset .btn.btn-primary:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+
+/* Import tab: gallery import is the next action. */
+#view-dataset .dataset-maker[data-active-tab="import"] #btn-dataset-import-gallery,
+#view-dataset #btn-dataset-import-gallery.btn-primary {
+    background: var(--blue);
+    color: var(--on-accent);
+    border-color: transparent;
+}
+
+#view-dataset .dataset-maker[data-active-tab="import"] #btn-dataset-import-gallery:hover:not(:disabled),
+#view-dataset #btn-dataset-import-gallery.btn-primary:hover:not(:disabled) {
+    background: var(--blue-hover);
+    color: var(--on-accent);
+}
+
+/* Export tab: solid blue primary. */
+#view-dataset .dataset-maker[data-active-tab="export"] .dataset-export-cta.btn-primary,
+#view-dataset .dataset-export-cta.btn-primary {
+    background: var(--blue);
+    color: var(--on-accent);
+    border-color: transparent;
+}
+
+/* Modal confirm inside dataset stays solid blue (single action dialog). */
+#view-dataset .dataset-modal .btn.btn-primary,
+#view-dataset #btn-dataset-confirm-go {
+    background: var(--blue);
+    color: var(--on-accent);
+    border-color: transparent;
+}
+
+#view-dataset .dataset-modal-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-modal);
+    box-shadow: var(--shadow-modal);
+}
+
+#view-dataset .dataset-modal-backdrop {
+    background: var(--scrim);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+/* Smart-tag on workbench is AI prep — quiet, not solid primary. */
+#view-dataset #btn-dataset-smart-tag {
+    background: rgba(var(--purple-rgb), 0.10);
+    border: 1px solid rgba(var(--purple-rgb), 0.35);
+    color: var(--purple);
+}
+
+#view-dataset #btn-dataset-smart-tag:hover:not(:disabled) {
+    background: rgba(var(--purple-rgb), 0.16);
+    border-color: rgba(var(--purple-rgb), 0.50);
+    color: var(--purple-hover);
+}
+
+/* Project save = secondary chrome, not competing primary. */
+#view-dataset #btn-dataset-project-save {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    color: var(--text-2);
+}
+
+/* AI / tag surfaces in dataset editor stay purple-quiet. */
+#view-dataset .dataset-tag-chip,
+#view-dataset .dataset-ai-badge,
+#view-dataset .dataset-health-chip {
+    background: var(--tag-chip-bg);
+    color: var(--purple);
+    border-color: rgba(var(--purple-rgb), 0.28);
+}
+
+/* --------------------------------------------------------------------------
+   Gallery sidebar: one more primary-discipline fix (select-all is not THE CTA)
+   -------------------------------------------------------------------------- */
+
+.filter-sidebar #btn-select-all.btn-primary,
+.selection-panel #btn-select-all.btn-primary {
+    background: rgba(var(--pink-rgb), 0.12);
+    border: 1px solid rgba(var(--pink-rgb), 0.42);
+    color: var(--text);
+    box-shadow: none;
+}
+
+.filter-sidebar #btn-select-all.btn-primary:hover:not(:disabled),
+.selection-panel #btn-select-all.btn-primary:hover:not(:disabled) {
+    background: rgba(var(--pink-rgb), 0.18);
+    border-color: rgba(var(--pink-rgb), 0.55);
+    color: var(--text);
+}
+
+/* Filter open icon is utility, not primary. */
+#btn-open-filters.btn-primary {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    border: 1px solid var(--border);
+    box-shadow: none;
+}
+
+#btn-open-filters.btn-primary:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+}
+
+/* ==========================================================================
+   Comfort-1 — Gallery as a quiet room
+   Goal: people want to *stay* and browse, not feel examined by chrome.
+   ========================================================================== */
+
+/* Stage is flat dark — images are the only material (de-AI: no ambient orbs). */
+html.gallery-comfort-room #view-gallery .gallery-container,
+#view-gallery.is-comfort-room .gallery-container {
+    position: relative;
+    isolation: isolate;
+    background: var(--stage);
+}
+
+html.gallery-comfort-room #view-gallery .gallery-container::before,
+#view-gallery.is-comfort-room .gallery-container::before {
+    display: none;
+}
+
+html.gallery-comfort-room #view-gallery .gallery-container > *,
+#view-gallery.is-comfort-room .gallery-container > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* More breathing room in the grid — less “control panel”, more wall. */
+html.gallery-comfort-room #gallery-grid.gallery-grid,
+#view-gallery.is-comfort-room #gallery-grid {
+    gap: 14px;
+    padding: 6px 4px 18px;
+}
+
+html.gallery-comfort-room #view-gallery .gallery-item,
+#view-gallery.is-comfort-room .gallery-item {
+    border-radius: var(--r-tile);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+    transition:
+        transform var(--duration-fast) ease,
+        box-shadow var(--duration-fast) ease,
+        outline-color var(--duration-fast) ease;
+}
+
+html.gallery-comfort-room #view-gallery .gallery-item:hover,
+#view-gallery.is-comfort-room .gallery-item:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.30);
+}
+
+/* Quiet the chrome density slightly while browsing. */
+html.gallery-comfort-room #view-gallery .gallery-header,
+html.gallery-comfort-room #view-gallery .gallery-search-row,
+#view-gallery.is-comfort-room .gallery-header,
+#view-gallery.is-comfort-room .gallery-search-row {
+    border-color: var(--hairline-2);
+    background: transparent;
+}
+
+html.gallery-comfort-room #view-gallery .filter-sidebar,
+#view-gallery.is-comfort-room ~ .filter-sidebar {
+    /* sibling not guaranteed — also target global sidebar when room class is on */
+}
+
+html.gallery-comfort-room .filter-sidebar {
+    background: rgba(24, 27, 35, 0.92);
+    border-color: var(--hairline-2);
+    box-shadow: none;
+}
+
+/* Empty library card — room for open onboarding steps (owner: do not collapse). */
+#gallery-empty-state .empty-state-onboarding {
+    max-width: min(880px, 92%);
+    padding: 28px 24px 22px;
+    background: rgba(24, 27, 35, 0.72);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-card);
+}
+
+#gallery-empty-state .empty-state-onboarding .empty-icon {
+    font-size: 34px;
+    margin-bottom: 10px;
+    opacity: 0.85;
+}
+
+#gallery-empty-state .empty-state-onboarding > h3 {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0 0 8px;
+}
+
+#gallery-empty-state .empty-state-onboarding > p {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text-2);
+    max-width: 48ch;
+    margin: 0 auto 16px;
+}
+
+#gallery-empty-state .onboarding-steps {
+    margin-top: 18px;
+}
+
+#gallery-empty-state .onboarding-tip {
+    margin-top: 12px;
+    text-align: center;
+}
+
+/* Soft daily / resume ribbon */
+.gallery-comfort-ribbon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 0 0 10px;
+    padding: 7px 14px;
+    border-radius: var(--r-pill);
+    border: 1px solid rgba(var(--blue-rgb), 0.22);
+    background: rgba(var(--blue-rgb), 0.08);
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition: opacity var(--duration-normal) var(--ease-out), background var(--duration-fast) ease;
+}
+
+.gallery-comfort-ribbon[hidden] {
+    display: none !important;
+}
+
+.gallery-comfort-ribbon:hover {
+    background: rgba(var(--blue-rgb), 0.12);
+    color: var(--text);
+}
+
+.gallery-comfort-ribbon[data-mode="restored"] {
+    border-color: rgba(var(--purple-rgb), 0.28);
+    background: rgba(var(--purple-rgb), 0.10);
+}
+
+/* Sidebar collapse affordance a bit quieter in comfort room. */
+html.gallery-comfort-room #btn-restore-desktop-sidebar {
+    opacity: 0.85;
+}
+
+/* ==========================================================================
+   Comfort-2 — hand-feel + continuity + daily rhythm
+   ========================================================================== */
+
+/* De-AI: no hero-bleed wallpaper filter. Continuity is behavioral (resume),
+   not a decorative blur layer. */
+html.gallery-comfort-has-hero #view-gallery .gallery-container::after {
+    display: none;
+}
+
+/* Space light peek — full-bleed quiet preview, not a second product modal. */
+.gallery-comfort-peek {
+    position: fixed;
+    inset: 0;
+    z-index: 2400;
+    display: grid;
+    place-items: center;
+    pointer-events: auto;
+}
+
+.gallery-comfort-peek[hidden] {
+    display: none !important;
+}
+
+.gallery-comfort-peek-scrim {
+    position: absolute;
+    inset: 0;
+    background: rgba(6, 8, 12, 0.72);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+.gallery-comfort-peek-stage {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    max-width: min(92vw, 1280px);
+    max-height: min(88vh, 960px);
+    animation: comfortPeekIn 180ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+
+.gallery-comfort-peek-img {
+    display: block;
+    max-width: min(92vw, 1280px);
+    max-height: min(80vh, 900px);
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 14px;
+    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+    background: var(--stage);
+}
+
+.gallery-comfort-peek-hint {
+    font-size: 12px;
+    color: var(--text-2);
+    letter-spacing: 0.02em;
+    padding: 6px 12px;
+    border-radius: var(--r-pill);
+    background: rgba(18, 20, 26, 0.72);
+    border: 1px solid var(--border);
+}
+
+@keyframes comfortPeekIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.985); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+html.gallery-comfort-peeking {
+    cursor: zoom-in;
+}
+
+/* Daily loop: opt-in only (default hidden). When shown, look like a status
+   line — not a purple product-coach chip. */
+.gallery-daily-loop {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 10px;
+    padding: 4px 6px 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--hairline-2);
+    background: transparent;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 500;
+}
+
+/* Explicit opt-in class if a future setting re-enables the tip. */
+.gallery-daily-loop.is-opted-in:not([hidden]) {
+    display: inline-flex;
+}
+
+.gallery-daily-loop[hidden] {
+    display: none !important;
+}
+
+.gallery-daily-loop-text {
+    line-height: 1.35;
+}
+
+.gallery-daily-loop-dismiss {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+}
+
+.gallery-daily-loop-dismiss:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+}
+
+/* Selection action bar: short settle, neutral chrome (no pink glow brand). */
+#gallery-action-bar.is-magnet-in {
+    animation: comfortMagnetIn 180ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42);
+    border-color: var(--border);
+}
+
+@keyframes comfortMagnetIn {
+    from { opacity: 0; transform: translateY(14px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .gallery-comfort-peek-stage,
+    #gallery-action-bar.is-magnet-in {
+        animation: none;
+    }
+}
+
+/* ==========================================================================
+   Comfort-3 — whole-app studio shell (zen / warmth / room enter)
+   ========================================================================== */
+
+/* --- Warmth personalization (data-comfort-warmth on <html>) --- */
+html[data-comfort-warmth="cool"] {
+    --bg: #10131a;
+    --surface-1: #161a22;
+    --surface-2: #1c2230;
+    --stage: #0c0f14;
+    --text: #e8eef8;
+    --text-2: #94a0b5;
+}
+
+html[data-comfort-warmth="neutral"] {
+    /* Aurora defaults already neutral-cool; keep as identity. */
+}
+
+html[data-comfort-warmth="warm"] {
+    --bg: #14120f;
+    --surface-1: #1c1915;
+    --surface-2: #252019;
+    --stage: #100e0c;
+    --text: #f4efe6;
+    --text-2: #b0a496;
+    --border: #3a342c;
+    --border-strong: #4a4238;
+    --hairline-1: #221e19;
+    --hairline-2: #2c2720;
+    /* Slightly warmer accents (still semantic roles). */
+    --blue: #6bc4e8;
+    --blue-rgb: 107, 196, 232;
+    --pink: #f09bb8;
+    --pink-rgb: 240, 155, 184;
+    --purple: #b49ae8;
+    --purple-rgb: 180, 154, 232;
+}
+
+/* Remap legacy tokens when warmth overrides canonicals. */
+html[data-comfort-warmth="cool"] ,
+html[data-comfort-warmth="warm"] {
+    --bg-dark: var(--bg);
+    --bg-card: var(--surface-1);
+    --bg-card-solid: var(--surface-1);
+    --bg-hover: var(--surface-2);
+    --bg-elevated: var(--surface-2);
+    --surface-canvas: var(--bg);
+    --surface-panel: var(--surface-1);
+    --surface-panel-solid: var(--surface-1);
+    --surface-card: var(--surface-1);
+    --surface-elevated: var(--surface-2);
+    --text-primary: var(--text);
+    --text-secondary: var(--text-2);
+    --text-muted: var(--muted);
+    --accent-primary: var(--blue);
+    --accent-primary-rgb: var(--blue-rgb);
+    --accent-secondary: var(--purple);
+    --accent-secondary-rgb: var(--purple-rgb);
+    --border-color: var(--border);
+}
+
+html[data-comfort-warmth="cool"] body,
+html[data-comfort-warmth="warm"] body {
+    background: var(--bg);
+    color: var(--text);
+}
+
+/* --- Soft zen (chrome recedes; nav still reachable) --- */
+html.comfort-zen .nav-bar {
+    background: rgba(18, 20, 26, 0.82);
+    box-shadow: none;
+    border-bottom-color: transparent;
+}
+
+html.comfort-zen .nav-bar .brand-text,
+html.comfort-zen .nav-bar .brand-version {
+    opacity: 0.55;
+}
+
+html.comfort-zen .nav-tabs .nav-tab:not(.active) {
+    opacity: 0.62;
+}
+
+html.comfort-zen .nav-actions .btn:not(.btn-primary) {
+    opacity: 0.72;
+}
+
+html.comfort-zen .filter-sidebar {
+    background: rgba(18, 20, 26, 0.78);
+    border-color: transparent;
+}
+
+html.comfort-zen .gallery-header,
+html.comfort-zen .gallery-search-row,
+html.comfort-zen .dataset-header,
+html.comfort-zen .similar-header {
+    opacity: 0.92;
+}
+
+html.comfort-zen #view-censor .censor-sidebar-v2,
+html.comfort-zen #view-censor .censor-sidebar-v2.right {
+    background: rgba(18, 20, 26, 0.88) !important;
+    border-color: transparent !important;
+}
+
+html.comfort-zen .gallery-daily-loop {
+    display: none !important;
+}
+
+/* Exit chip — minimal, instrument-like (de-AI: no floating product mascot). */
+.comfort-zen-chip {
+    position: fixed;
+    top: 8px;
+    right: 12px;
+    z-index: 2600;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: none;
+    opacity: 0.85;
+}
+
+.comfort-zen-chip[hidden] {
+    display: none !important;
+}
+
+.comfort-zen-chip:hover {
+    color: var(--text);
+    border-color: rgba(var(--blue-rgb), 0.4);
+}
+
+/* --- View room enter (censor / dataset / gallery / …) --- */
+.view.comfort-room-enter-active {
+    animation: comfortRoomEnter 240ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+
+@keyframes comfortRoomEnter {
+    from { opacity: 0.55; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+html.comfort-view-switching .view.active {
+    will-change: opacity, transform;
+}
+
+/* Workbench rooms: slightly deeper stage, quieter chrome */
+#view-censor.is-comfort-room .censor-workspace-v2,
+#view-dataset.is-comfort-room .dataset-maker,
+#view-similar.is-comfort-room .similar-container {
+    background: var(--stage);
+}
+
+#view-censor.is-comfort-room .censor-toolbar-v2 {
+    opacity: 0.96;
+}
+
+#view-dataset.is-comfort-room .dataset-queue-pane,
+#view-dataset.is-comfort-room .dataset-editor-pane,
+#view-dataset.is-comfort-room .dataset-export-pane {
+    background: var(--surface-1);
+    border-color: var(--hairline-2);
+}
+
+#view-dataset.is-comfort-room .dataset-header {
+    border-bottom-color: var(--hairline-2);
+}
+
+/* Zen + warmth: dim decorative badges slightly */
+html.comfort-zen .gen-tab:not([aria-selected="true"]),
+html.comfort-zen .dataset-tab:not([aria-selected="true"]) {
+    opacity: 0.75;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .view.comfort-room-enter-active {
+        animation: none;
+    }
+}
+
+/* Desktop-only: soft zen may compact nav labels a touch at 1366 */
+@media (min-width: 1280px) and (max-width: 1500px) {
+    html.comfort-zen .nav-actions .btn:not(.btn-primary) .btn-label,
+    html.comfort-zen .nav-actions .btn:not(.btn-primary) > span:last-child:not([aria-hidden]) {
+        /* leave structure; opacity already quiets chrome */
     }
 }

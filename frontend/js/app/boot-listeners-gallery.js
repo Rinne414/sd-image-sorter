@@ -9,17 +9,13 @@ function initBootListenersGallery() {
     // Random button
     $('#btn-random').addEventListener('click', showRandomImage);
 
-    const galleryScopeSelect = $('#gallery-scope-select');
-    if (galleryScopeSelect) {
-        galleryScopeSelect.value = AppState.filters.scope === 'library' ? 'library' : 'current_session';
-        galleryScopeSelect.addEventListener('change', (event) => {
-            const scope = event.target.value === 'library' ? 'library' : 'current_session';
-            updateAppFilters((filters) => {
-                filters.scope = scope;
-                if (scope === 'current_session') filters.collectionId = null;
-            });
-            updateFilterSummary?.();
-            loadImages();
+    // Dual-scope session|library chrome removed (DESIGN.md §product-narrative).
+    // Long-term library is the only Gallery world; "just imported" = sort/filter.
+    if (typeof window.LibraryWorkspace?.applyLibraryDefaultScope === 'function') {
+        window.LibraryWorkspace.applyLibraryDefaultScope();
+    } else {
+        updateAppFilters((filters) => {
+            filters.scope = 'library';
         });
     }
 

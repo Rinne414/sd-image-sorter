@@ -345,6 +345,10 @@
                     : t('entry.tileGallerySubQuiet', {}, 'Browse, filter, and pick images');
             }
         }
+        // Keep the long-lived library name on the entry home card in sync.
+        if (window.LibraryWorkspace && typeof window.LibraryWorkspace.refreshEntryHome === 'function') {
+            window.LibraryWorkspace.refreshEntryHome();
+        }
 
         const streakNum = el('entry-streak-num');
         if (streakNum) streakNum.textContent = String(summary.streak_days || 0);
@@ -545,9 +549,25 @@
             // "还没看过" watermark.
             try { localStorage.setItem(LAST_SEEN_KEY, state.summary.server_now); } catch (e) { /* ignore */ }
         }
+        // Comfort-2: carry today's cover into the gallery stage so Entry →
+        // Library doesn't feel like a hard cut into a blank shell.
+        if (view === 'gallery') {
+            const heroId = state.summary?.hero?.id
+                || state.heroPool?.ids?.[state.slideshowIndex || 0]
+                || state.heroPool?.ids?.[0]
+                || null;
+            if (heroId != null && window.GalleryComfort?.stashHeroId) {
+                window.GalleryComfort.stashHeroId(heroId);
+            } else if (heroId != null) {
+                try { localStorage.setItem('sd-gallery-comfort-hero-id', String(heroId)); } catch (e) { /* ignore */ }
+            }
+        }
         hide();
         const tab = document.getElementById(`nav-tab-${view}`);
         if (tab) tab.click();
+        if (view === 'gallery' && window.GalleryComfort?.applyEntryHeroContinuity) {
+            try { window.GalleryComfort.applyEntryHeroContinuity(); } catch (e) { /* ignore */ }
+        }
     }
 
     // ------------------------------------------------------------------

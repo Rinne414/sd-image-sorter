@@ -296,20 +296,34 @@ class SortingService(
         return find_existing_session_file(self._get_session_file_candidates())
 
     def clear_gallery(self) -> Dict[str, str]:
-        """Clear all image records from the database.
+        """Clear image records for the **current** long-lived library only.
 
-        Tags are removed automatically via ON DELETE CASCADE foreign key.
+        Other libraries are untouched. Tags cascade via ON DELETE CASCADE.
         """
-        with db.get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM images")
+        try:
+            from db_libraries import clear_library_images, resolve_active_library_id
+
+            lid = resolve_active_library_id()
+            removed = clear_library_images(lid)
+        except Exception:
+            # Pre-migration / test DBs without libraries table: legacy full clear.
+            with db.get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM images")
+                removed = int(cursor.rowcount or 0)
+            lid = "main"
         # The library-health report (which drives the "N images can't open"
         # gallery banner) is cached for 60s and counts unreadable rows straight
         # from `images`. Without this invalidation the banner keeps showing the
         # pre-clear count until the TTL lapses — the report is now empty, so make
         # the next /api/library-health call recompute it to zero immediately.
         invalidate_library_health_cache()
-        return {"status": "ok", "message": "Gallery cleared"}
+        return {
+            "status": "ok",
+            "message": "Library cleared",
+            "library_id": str(lid),
+            "removed": str(int(removed)),
+        }
 
     def get_library_health(self, sample_limit: int = 8) -> Dict[str, Any]:
         """Get a read-only library quality and archive-readiness report.

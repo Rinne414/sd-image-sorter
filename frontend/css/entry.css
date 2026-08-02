@@ -507,6 +507,230 @@ body.entry-active {
     font-weight: 600;
 }
 
+/* --- Current long-lived library home card (entry; Phase 1 = 主图库) --- */
+.entry-library-row {
+    width: 100%;
+}
+
+.entry-library-home {
+    position: relative;
+    width: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 16px 18px 14px;
+    text-align: left;
+    cursor: default;
+}
+
+.entry-library-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+}
+
+.entry-library-switcher {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 70%;
+    margin: 0;
+    padding: 2px 4px 2px 0;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text, #edf0f7);
+    font: inherit;
+    font-size: 18px;
+    font-weight: 900;
+    line-height: 1.2;
+    cursor: pointer;
+    text-align: left;
+}
+
+.entry-library-switcher:hover {
+    color: var(--blue, #5cc8ff);
+}
+
+.entry-library-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.entry-library-chevron {
+    flex: 0 0 auto;
+    font-size: 12px;
+    opacity: 0.55;
+}
+
+.entry-library-count {
+    flex: 0 0 auto;
+    font-family: var(--font-numeral);
+    font-weight: 500;
+    font-size: 26px;
+    line-height: 1;
+    color: rgba(237, 240, 247, 0.92);
+}
+
+.entry-library-sub {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: rgba(237, 240, 247, 0.55);
+}
+
+.entry-library-sub.is-cta {
+    color: var(--blue, #5cc8ff);
+    font-weight: 600;
+}
+
+.entry-library-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.entry-library-enter {
+    border: none;
+    border-radius: var(--r-ctl, 10px);
+    padding: 9px 18px;
+    background: var(--blue, #5cc8ff);
+    color: var(--on-accent, #12141a);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.entry-library-enter:hover {
+    background: var(--blue-hover, #7dd3ff);
+}
+
+.entry-library-manage {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--r-ctl, 10px);
+    padding: 8px 12px;
+    background: transparent;
+    color: rgba(237, 240, 247, 0.7);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.entry-library-manage:hover {
+    color: var(--text, #edf0f7);
+    border-color: rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.entry-library-menu {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    top: calc(100% - 6px);
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(24, 27, 35, 0.98);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+.entry-library-menu[hidden] {
+    display: none !important;
+}
+
+.entry-library-menu-item {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 9px 10px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text, #edf0f7);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+
+.entry-library-menu-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.entry-library-menu-item.is-current {
+    background: rgba(var(--blue-rgb, 92, 200, 255), 0.14);
+    box-shadow: inset 0 0 0 1px rgba(var(--blue-rgb, 92, 200, 255), 0.28);
+}
+
+.entry-library-menu-row {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+}
+
+.entry-library-menu-row .entry-library-menu-item {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.entry-library-menu-delete {
+    flex: 0 0 auto;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: rgba(255, 122, 118, 0.85);
+    font-size: 14px;
+    padding: 0 10px;
+    cursor: pointer;
+}
+
+.entry-library-menu-delete:hover {
+    background: rgba(255, 122, 118, 0.12);
+}
+
+.entry-library-menu-create {
+    display: block;
+    width: 100%;
+    margin: 4px 0 0;
+    padding: 9px 10px;
+    border: 1px dashed rgba(255, 255, 255, 0.16);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--blue, #5cc8ff);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+}
+
+.entry-library-menu-create:hover {
+    background: rgba(var(--blue-rgb, 92, 200, 255), 0.08);
+}
+
+.entry-library-menu-note {
+    margin: 6px 4px 2px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 11px;
+    line-height: 1.45;
+    color: rgba(237, 240, 247, 0.45);
+}
+
 /* model-center tile — the new-user starting point (owner FB 2026-07-06).
    Blue = next action: the attention ring shows while the core booru tagger
    is missing, then the tile settles into a normal tool card. */

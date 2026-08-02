@@ -57,6 +57,7 @@ function _applyGalleryEmptyStateVariant(emptyState) {
     const hintEl = emptyState.querySelector('p');
     const importBtn = emptyState.querySelector('#empty-state-scan-btn');
     const onboardingSteps = emptyState.querySelector('.onboarding-steps');
+    const onboardingTip = emptyState.querySelector('.onboarding-tip');
     const clearFiltersBtn = emptyState.querySelector('#empty-state-clear-filters-btn');
 
     if (browsingCollection) {
@@ -80,6 +81,7 @@ function _applyGalleryEmptyStateVariant(emptyState) {
         }
         if (importBtn) importBtn.style.display = 'none';
         if (onboardingSteps) onboardingSteps.style.display = 'none';
+        if (onboardingTip) onboardingTip.style.display = 'none';
         if (clearFiltersBtn) clearFiltersBtn.style.display = 'none';
         if (window.I18n && typeof window.I18n.applyToDOM === 'function') {
             try { window.I18n.applyToDOM(emptyState); } catch (_e) {}
@@ -99,6 +101,7 @@ function _applyGalleryEmptyStateVariant(emptyState) {
         }
         if (importBtn) importBtn.style.display = 'none';
         if (onboardingSteps) onboardingSteps.style.display = 'none';
+        if (onboardingTip) onboardingTip.style.display = 'none';
         // Inject a "Clear filters" CTA if not already present
         let cta = clearFiltersBtn;
         if (!cta) {
@@ -139,6 +142,7 @@ function _applyGalleryEmptyStateVariant(emptyState) {
         }
         if (importBtn) importBtn.style.display = '';
         if (onboardingSteps) onboardingSteps.style.display = '';
+        if (onboardingTip) onboardingTip.style.display = '';
         if (clearFiltersBtn) clearFiltersBtn.style.display = 'none';
     }
     // v3.2.2: re-apply i18n to the empty state subtree so the new

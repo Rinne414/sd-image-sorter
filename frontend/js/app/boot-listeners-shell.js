@@ -535,20 +535,30 @@ function initBootListenersShell() {
 
 
 
-    // Clear DB button
+    // Clear current long-lived library (not process session; not other libraries).
     $('#btn-clear-db').addEventListener('click', async () => {
         // Local timers can outlive their backend jobs, so they are diagnostic
         // only. The server endpoints are re-checked both before the modal opens
         // and immediately before the destructive request is sent.
         if (!await verifyClearGalleryJobsIdle()) return;
+        const copy = (typeof window.LibraryWorkspace?.clearConfirmCopy === 'function')
+            ? window.LibraryWorkspace.clearConfirmCopy()
+            : {
+                title: appT('gallery.clearTitle', 'Clear current library'),
+                message: appT(
+                    'gallery.clearMessage',
+                    'Clear all indexed images from the current library? Files on disk are not deleted.',
+                ),
+                success: appT('gallery.clearSuccess', 'Library cleared'),
+            };
         showConfirm(
-            appT('gallery.clearTitle', 'Clear Gallery'),
-            appT('gallery.clearMessage', 'Are you sure you want to clear all images from the database? This will NOT delete your physical files.'),
+            copy.title,
+            copy.message,
             async () => {
                 if (!await verifyClearGalleryJobsIdle()) return;
                 try {
                     await API.clearGallery();
-                    showToast(appT('gallery.clearSuccess', 'Gallery cleared successfully'));
+                    showToast(copy.success);
                     loadImages();
                     loadStats();
                     // The "N images can't open" banner reads a 60s-cached

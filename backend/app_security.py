@@ -115,6 +115,21 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
+async def library_workspace_middleware(request: Request, call_next):
+    """Bind long-lived library id for the request (multi-library isolation)."""
+    from library_context import (
+        LIBRARY_HEADER,
+        bind_library_id_from_header,
+        reset_current_library_id,
+    )
+
+    token = bind_library_id_from_header(request.headers.get(LIBRARY_HEADER))
+    try:
+        return await call_next(request)
+    finally:
+        reset_current_library_id(token)
+
+
 def configure_security_middleware(app: FastAPI) -> None:
     """Attach CORS, local-only, rate-limit, and security-header middleware."""
     app.add_middleware(
@@ -122,9 +137,15 @@ def configure_security_middleware(app: FastAPI) -> None:
         allow_origin_regex=CORS_ORIGIN_REGEX,
         allow_credentials=False,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Accept", "X-Requested-With"],
+        allow_headers=[
+            "Content-Type",
+            "Accept",
+            "X-Requested-With",
+            "X-SD-Library-Id",
+        ],
     )
     app.middleware("http")(localhost_only_middleware)
     app.middleware("http")(rate_limit_middleware)
+    app.middleware("http")(library_workspace_middleware)
     app.middleware("http")(add_security_headers)
 
