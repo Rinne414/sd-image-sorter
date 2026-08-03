@@ -699,14 +699,19 @@
         window.addEventListener('selection-state-changed', onSelectionChanged);
         document.addEventListener('selection-changed', onSelectionChanged);
 
-        // Favorites: card heart buttons bubble through gallery-grid.
-        document.getElementById('gallery-grid')?.addEventListener('click', (e) => {
+        // Favorites: the card's own click handler calls stopPropagation() on the
+        // heart (gallery/card-markup.js) so the event never bubbles to
+        // #gallery-grid — this listener used to count nothing and the daily
+        // ribbon stayed empty no matter how many images you hearted. Listen in
+        // the CAPTURE phase, which runs before the card can stop it. Bound on
+        // document so a re-rendered / virtualised grid stays covered.
+        document.addEventListener('click', (e) => {
             const fav = e.target.closest?.('.gallery-item-fav');
-            if (fav) {
-                // Count optimistic intent; exact on/off not required for comfort stats.
-                setTimeout(onFavoriteToggled, 0);
-            }
-        });
+            if (!fav) return;
+            if (!e.target.closest?.('#gallery-grid')) return;
+            // Count optimistic intent; exact on/off not required for comfort stats.
+            setTimeout(onFavoriteToggled, 0);
+        }, true);
 
         // Wrap switchView (classic global) so leaving/entering gallery stays cozy.
         if (typeof window.switchView === 'function' && !window.switchView.__comfortWrapped) {
