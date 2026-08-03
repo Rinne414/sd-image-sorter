@@ -11,18 +11,43 @@
  * initSimilar LAST.
  */
 Object.assign(window.SimilarImages, {
+    /**
+     * Label-only refresh for the embed-row primary. Split out of
+     * setEmbeddingUiState because the button is rendered before
+     * /api/similarity/stats answers: with embedded still 0 it read
+     * "Build Similarity Index" forever, even once 49/4883 were indexed.
+     * Never calls back into refreshWorkflowStatus (recursion).
+     */
+    syncEmbedButtonLabel(isRunning) {
+        const btnEmbed = document.getElementById('btn-similar-embed');
+        if (!btnEmbed) return;
+        const { embedded, pending } = this.getEmbeddingStats();
+        const hasExistingIndex = embedded > 0;
+        // The button only stays visible while pending > 0 (refreshContentVisibility),
+        // i.e. the click CONTINUES an unfinished index — "Rebuild" was a lie
+        // that also collided with the workflow card's own start CTA.
+        const continuesPartialIndex = hasExistingIndex && pending > 0;
+
+        btnEmbed.textContent = isRunning
+            ? this._t('similar.indexingNow', 'Indexing...')
+            : this._t(
+                continuesPartialIndex ? 'similar.continueIndexing'
+                    : hasExistingIndex ? 'similar.rebuildIndex' : 'similar.generateEmbed',
+                continuesPartialIndex ? 'Continue Indexing'
+                    : hasExistingIndex ? 'Rebuild Index' : 'Generate Embeddings'
+            );
+    },
+
     setEmbeddingUiState(isRunning, label = null) {
         const btnEmbed = document.getElementById('btn-similar-embed');
         if (!btnEmbed) return;
-        const hasExistingIndex = this.getEmbeddingStats().embedded > 0;
 
         btnEmbed.disabled = isRunning;
-        btnEmbed.textContent = label || (isRunning
-            ? this._t('similar.indexingNow', 'Indexing...')
-            : this._t(
-                hasExistingIndex ? 'similar.rebuildIndex' : 'similar.generateEmbed',
-                hasExistingIndex ? 'Rebuild Index' : 'Generate Embeddings'
-            ));
+        if (label) {
+            btnEmbed.textContent = label;
+        } else {
+            this.syncEmbedButtonLabel(isRunning);
+        }
         this.updateActionAvailability();
         this.refreshWorkflowStatus();
     },

@@ -3117,6 +3117,14 @@ textarea:focus,
     gap: 8px;
 }
 
+/* .btn's own display:inline-flex outranks the UA [hidden] rule, so status.js
+   setting cta.hidden = true was silently ignored — that is how the workflow
+   card kept showing a second "build the index" button next to the embed-row
+   primary. Honor `hidden` explicitly (same guard as .similar-embed-row). */
+.scope-status-actions .btn[hidden] {
+    display: none;
+}
+
 #autosep-preview-scope-summary,
 #manual-sort-execution-scope {
     margin-top: 10px;
@@ -3137,8 +3145,12 @@ textarea:focus,
     }
 }
 
+/* The two-item switch (Auto-sort / Manual sort) is a segmented control, not a
+   bar: a 980px-wide shell left two thirds of it empty. Hug the content and
+   stay centered above the panel below. */
 .sorting-sub-tabs {
-    width: min(980px, calc(100% - 36px));
+    width: fit-content;
+    max-width: calc(100% - 36px);
     margin: 0 auto 18px;
 }
 
@@ -3691,6 +3703,23 @@ textarea:focus,
     gap: 6px;
     margin-left: auto;
     flex-shrink: 0;
+}
+
+/* Every tag row carried three action buttons, so the Statistics tab rested at
+   152 visible buttons (筛到图库 / 用于随机生成 / 加入构建 each printed 40
+   times) and the tag names — the actual content — lost the row. The primary
+   action stays; the two secondary ones fade in on row hover or keyboard focus.
+   Space is reserved either way, so revealing them never shifts the layout. */
+.promptlab-tag-item .promptlab-inline-actions .btn-ghost {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition-fast, 0.15s) ease;
+}
+
+.promptlab-tag-item:hover .promptlab-inline-actions .btn-ghost,
+.promptlab-tag-item:focus-within .promptlab-inline-actions .btn-ghost {
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .promptlab-action-columns {
@@ -4723,6 +4752,22 @@ textarea:focus,
     top: 12px;
     left: 42px;
     z-index: 5;
+}
+
+/* The order badge answers "which number is this in the current sort?" — a
+   question you only ask while picking or ordering. Keeping it stamped on
+   every thumbnail put a chip of chrome on top of every artwork, so it now
+   fades in on hover and stays pinned during selection mode (where it pairs
+   with the checkbox). Same DOM node, same text — visibility only. */
+.gallery-item-order {
+    opacity: 0;
+    transition: opacity var(--transition-fast, 0.15s) ease;
+}
+
+.gallery-item:hover .gallery-item-order,
+.gallery-item:focus-within .gallery-item-order,
+.gallery-grid.selection-mode .gallery-item-order {
+    opacity: 1;
 }
 
 .gallery-grid.selection-mode .gallery-item.selected::before {

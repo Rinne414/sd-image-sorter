@@ -129,6 +129,11 @@
         } else {
             hideBanner();
         }
+        // The gallery count label explains a shown/total gap with this number
+        // in its tooltip, and this poll resolves after the first load.
+        if (typeof window.applyGalleryCountLabel === 'function') {
+            window.applyGalleryCountLabel();
+        }
     }
 
     function bind() {
@@ -181,6 +186,11 @@
         invalidate: function () {
             state.cachedCount = null;
             state.cachedAt = 0;
+        },
+        // Last known unreadable-row count (null = not checked yet). Read by
+        // the gallery image-count label to explain shown/total mismatches.
+        getLastCount: function () {
+            return state.cachedCount;
         }
     };
 

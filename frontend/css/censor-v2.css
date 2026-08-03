@@ -1621,9 +1621,16 @@ button.censor-batch-outcome-badge:focus-visible {
     border-radius: 999px;
     background: rgba(var(--censor-accent-rgb), 0.14);
     color: #f3e8ff;
-    
+
     font-weight: 600;
     display: none;
+}
+
+/* A later scoped rule re-shows this span inside the grid row, so with no
+   selection it rendered as a fourth empty pill next to All / None / Filter.
+   Collapse it while it has no text (grid then gives the buttons that space). */
+.queue-selection-count:empty {
+    display: none !important;
 }
 
 .queue-action-btn {

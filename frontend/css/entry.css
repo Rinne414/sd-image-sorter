@@ -363,13 +363,13 @@ body.entry-active {
 
 .entry-tile .tile-output {
     font-size: 11px;
-    color: rgba(237, 240, 247, 0.55);
+    color: rgba(237, 240, 247, 0.68);
 }
 
 .entry-tile .tile-steps {
     font-family: var(--font-mono);
-    font-size: 9px;
-    color: rgba(237, 240, 247, 0.32);
+    font-size: 10px;
+    color: rgba(237, 240, 247, 0.5);
 }
 
 /* continue (anchor) slab — accent tier */
@@ -870,6 +870,11 @@ body.entry-active {
 }
 
 /* --- bottom-left identity block (FB-2: greeting + live stat row) --- */
+/* The cover art sits directly behind this block. At 1920 it ends before the
+   text; on a 1366 laptop the cover reaches across it and white-on-bright
+   made the greeting and stat labels hard to read. A soft local scrim (own
+   padding, negative offsets so the visual position is unchanged) keeps the
+   text legible over any cover without boxing it in on the dark empty state. */
 .entry-identity {
     position: absolute;
     left: 40px;
@@ -879,6 +884,17 @@ body.entry-active {
     gap: 18px;
     z-index: 2;
     max-width: min(760px, calc(100vw - 760px));
+    /* content-box so the scrim padding below does NOT eat into the width the
+       greeting/stat row had before — at 1366 that squeezed the hero line and
+       wrapped the cover-mode switch labels onto two lines. */
+    box-sizing: content-box;
+    padding: 20px 26px 18px;
+    margin: -20px -26px -18px;
+    border-radius: 22px;
+    background: radial-gradient(120% 130% at 0% 100%,
+        rgba(8, 12, 19, 0.82) 0%,
+        rgba(8, 12, 19, 0.62) 45%,
+        rgba(8, 12, 19, 0) 100%);
 }
 
 .entry-identity .identity-greeting {

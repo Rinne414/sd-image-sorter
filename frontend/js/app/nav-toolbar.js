@@ -62,16 +62,19 @@ function updateNavigationOverflowState() {
         return false;
     }
 
-    // Desktop-first degradation: show Prompt Helper / Style Finder directly
-    // when there is room, then move only those low-priority tools into More.
-    navBar.classList.add('nav-priority-overflow');
+    // Density before removal: at 1920px the bar overflows by only ~65px, and
+    // compact-labels (smaller brand/tab/action paddings) reclaims far more
+    // than that — so Prompt Helper / Style Finder stay as direct tabs on
+    // ordinary desktop widths, as the v3.4.3 design intends. Dropping tabs
+    // into More is now the SECOND resort, not the first.
+    navBar.classList.add('nav-tabs-compact-labels');
     if (!needsOverflow()) {
         closeMobileMenu();
         return false;
     }
 
-    // Keep the core pipeline labels readable before falling back to icon-only.
-    navBar.classList.add('nav-tabs-compact-labels');
+    // Only when compacting is not enough: move the low-priority tools into More.
+    navBar.classList.add('nav-priority-overflow');
     if (!needsOverflow()) {
         closeMobileMenu();
         return false;

@@ -2372,17 +2372,20 @@
                                 <button class="btn btn-primary btn-small queue-manager-btn" id="btn-open-queue-manager" title="Queue Manager" type="button" data-i18n-title="censor.queueManager">🗂️ <span data-i18n="censor.queueManager">Manager</span></button>
                             </div>
                             <div class="queue-btn-rows">
+                                <!-- Row 1 (select/deselect/filter) gets visible labels — bare ✓/✕/🔍
+                                     read as decoration, not actions. Row 2 keeps icon-only arrows
+                                     (direction is self-evident) with localized tooltips. -->
                                 <div class="queue-btn-row">
-                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-select-all" title="Select All">✓</button>
-                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-deselect-all" title="Deselect">✕</button>
-                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-filter" title="Filter">🔍</button>
+                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-select-all" title="Select All" data-i18n-title="censor.queueSelectAllTip">✓ <span data-i18n="censor.queueSelectAll">All</span></button>
+                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-deselect-all" title="Deselect" data-i18n-title="censor.queueDeselectTip">✕ <span data-i18n="censor.queueDeselect">None</span></button>
+                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-filter" title="Filter" data-i18n-title="censor.queueFilterTip">🔍 <span data-i18n="censor.queueFilter">Filter</span></button>
                                     <span class="queue-selection-count" id="queue-selection-count"></span>
                                 </div>
                                 <div class="queue-btn-row">
-                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-move-top" title="Top">⤒</button>
-                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-move-up" title="Up">↑</button>
-                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-move-down" title="Down">↓</button>
-                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-move-bottom" title="Bottom">⤓</button>
+                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-move-top" title="Top" data-i18n-title="censor.queueMoveTop">⤒</button>
+                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-move-up" title="Up" data-i18n-title="censor.queueMoveUp">↑</button>
+                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-move-down" title="Down" data-i18n-title="censor.queueMoveDown">↓</button>
+                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-move-bottom" title="Bottom" data-i18n-title="censor.queueMoveBottom">⤓</button>
                                 </div>
                             </div>
                             <div class="queue-filter-row" id="queue-filter-row" style="display: none;">
@@ -2963,8 +2966,8 @@
                                 </div>
                                 <div class="similar-upload-dropzone" id="similar-upload-dropzone" role="button" tabindex="0" aria-describedby="similar-upload-hint">
                                     <div class="similar-upload-copy">
-                                        <span class="similar-upload-title">Drop an image here</span>
-                                        <span class="similar-upload-hint" id="similar-upload-hint">or click to browse and compare against your library</span>
+                                        <span class="similar-upload-title" data-i18n="similar.uploadTitle">Drop an image here</span>
+                                        <span class="similar-upload-hint" id="similar-upload-hint" data-i18n="similar.uploadHint">or click to browse and compare against your library</span>
                                     </div>
                                     <button class="btn btn-secondary" id="btn-similar-upload" data-i18n="similar.upload">Upload Image</button>
                                     <input type="file" id="similar-upload-input" accept="image/*" style="display: none;">

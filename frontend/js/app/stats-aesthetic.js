@@ -38,6 +38,12 @@ async function loadStats() {
         // Update generator tab counts
         const countAll = $('#count-all');
         if (countAll) countAll.textContent = reportedTotal;
+        // The image-count label renders "shown / library total" off this very
+        // number, and stats can land after the gallery load — re-render it so
+        // the pair never disagrees just because of arrival order.
+        if (typeof applyGalleryCountLabel === 'function' && !AppState.isLoading) {
+            applyGalleryCountLabel();
+        }
 
         ['nai', 'comfyui', 'forge', 'webui', 'unknown'].forEach(gen => {
             const countEl = $(`#count-${gen}`);

@@ -180,6 +180,12 @@ Object.assign(window.SimilarImages, {
                 { embedded, pending }
             );
             card.classList.add('is-warning');
+            // Single-CTA rule: in the partial state the embed-row primary
+            // button ("Continue Indexing") is already visible and runs the
+            // exact same startEmbedding() — showing a second button here
+            // read as two different actions. The card stays informational;
+            // its own CTA is reserved for the prepare phase (zero indexed).
+            cta.hidden = true;
         } else {
             badge.textContent = this._t('similar.statusReady', 'Similarity index is ready');
             detail.textContent = this._t('similar.statusReadyDetail', 'Search and duplicate scan are ready to use.');
@@ -205,6 +211,13 @@ Object.assign(window.SimilarImages, {
             } else if (embedded < 2) {
                 this.renderDuplicateMessage(this._t('similar.duplicatesBlockedNeedsIndex', 'Duplicate search is waiting for more indexed images.'));
             }
+        }
+
+        // Stats usually land after the embed button's first render, so re-derive
+        // its idle label here ("Continue Indexing" once a partial index exists).
+        // Running-state labels are owned by the embedding flow — don't stomp them.
+        if (!running && typeof this.syncEmbedButtonLabel === 'function') {
+            this.syncEmbedButtonLabel(false);
         }
 
         this.refreshContentVisibility();

@@ -230,6 +230,8 @@ window.I18nLang_en = {
     // Gallery View
     // ========================
     'gallery.imageCount': '{count} images',
+    'gallery.imageCountOf': '{count} of {total} images',
+    'gallery.imageCountMissingTip': '{total} indexed in this library; {missing} originals are not at their recorded location.',
     'gallery.noImages': 'No images yet',
     'gallery.scanPrompt': 'Import an image folder to start browsing, filtering, and organizing your images',
     'gallery.noMatchesTitle': 'No images match your filters',
@@ -1049,6 +1051,16 @@ window.I18nLang_en = {
     // Censor Edit View
     // ========================
     'censor.queue': 'Processing Queue',
+    'censor.queueSelectAll': 'All',
+    'censor.queueSelectAllTip': 'Select every queued image',
+    'censor.queueDeselect': 'None',
+    'censor.queueDeselectTip': 'Clear the queue selection',
+    'censor.queueFilter': 'Filter',
+    'censor.queueFilterTip': 'Filter the queue by filename',
+    'censor.queueMoveTop': 'Move to top',
+    'censor.queueMoveUp': 'Move up',
+    'censor.queueMoveDown': 'Move down',
+    'censor.queueMoveBottom': 'Move to bottom',
     'censor.queueSubtitle': 'Click to edit \u2022 Ctrl/Shift multi-select',
     'censor.moveTop': 'Top',
     'censor.moveUp': 'Up',
@@ -1454,6 +1466,9 @@ window.I18nLang_en = {
     'similar.startStep3Title': '3. Or drop a new image',
     'similar.startStep3Text': 'Upload a reference image to compare with your library.',
     'similar.rebuildIndex': 'Rebuild Index',
+    'similar.continueIndexing': 'Continue Indexing',
+    'similar.uploadTitle': 'Drop an image here',
+    'similar.uploadHint': 'or click to browse and compare against your library',
     'similar.setupReadyTitle': 'CLIP model is ready',
     'similar.setupNeedsTitle': 'Similarity setup needs one more step',
     'similar.setupReadyDetail': 'Model is ready — build the index below to start searching; rebuild any time after importing more images.',

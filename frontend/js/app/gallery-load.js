@@ -154,8 +154,7 @@ async function loadImages(appendMode = false, options = {}) {
             : AppState.images.length;
 
         if (imageCount) {
-            imageCount.textContent = appT('gallery.imageCount', '{count} images')
-                .replace('{count}', _galleryCountText());
+            applyGalleryCountLabel();
         }
 
         // Clean stale selections on fresh load, but do not corrupt true filtered-result selection.
@@ -246,8 +245,7 @@ async function loadImages(appendMode = false, options = {}) {
                 Gallery.setImages(AppState.images);
             }
             if (imageCount) {
-                imageCount.textContent = appT('gallery.imageCount', '{count} images')
-                    .replace('{count}', _galleryCountText());
+                applyGalleryCountLabel();
             }
             const emptyState = $('#gallery-empty-state');
             if (emptyState) {

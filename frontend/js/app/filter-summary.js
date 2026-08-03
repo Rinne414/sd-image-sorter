@@ -180,17 +180,59 @@ function _galleryCountText() {
     return String(AppState.images.length) + (AppState.pagination.hasMore ? '+' : '');
 }
 
+/**
+ * Render the "#image-count" label. Shown vs library-total is rendered as
+ * "shown / total" whenever they differ, because the same toolbar also shows
+ * the All-generator tab's library total — two different numbers side by side
+ * read as a bug. The tooltip names the usual cause (originals not at their
+ * recorded location). Called from every place that writes this label:
+ * gallery-load.js after a load and refreshLocalizedImageCount on i18n change.
+ */
+function applyGalleryCountLabel() {
+    const imageCount = $('#image-count');
+    if (!imageCount) return;
+
+    const shown = _galleryCountText();
+    const totalEl = document.getElementById('count-all');
+    const libraryTotal = totalEl ? parseInt(totalEl.textContent, 10) : NaN;
+    const shownNum = parseInt(shown, 10);
+
+    if (Number.isFinite(libraryTotal) && libraryTotal > 0
+            && Number.isFinite(shownNum) && shownNum !== libraryTotal) {
+        imageCount.textContent = appT('gallery.imageCountOf', '{count} of {total} images')
+            .replace('{count}', shown)
+            .replace('{total}', String(libraryTotal));
+        const missing = (window.UnreadableBanner && typeof window.UnreadableBanner.getLastCount === 'function')
+            ? window.UnreadableBanner.getLastCount()
+            : null;
+        if (missing > 0) {
+            imageCount.title = appT(
+                'gallery.imageCountMissingTip',
+                '{total} indexed in this library; {missing} originals are not at their recorded location.',
+                { total: libraryTotal, missing }
+            );
+        } else {
+            imageCount.removeAttribute('title');
+        }
+        return;
+    }
+
+    imageCount.removeAttribute('title');
+    imageCount.textContent = appT('gallery.imageCount', '{count} images')
+        .replace('{count}', shown);
+}
+
 function refreshLocalizedImageCount() {
     const imageCount = $('#image-count');
     if (!imageCount) return;
 
     if (AppState.isLoading) {
         imageCount.textContent = appT('gallery.loading', 'Loading images...');
+        imageCount.removeAttribute('title');
         return;
     }
 
-    imageCount.textContent = appT('gallery.imageCount', '{count} images')
-        .replace('{count}', _galleryCountText());
+    applyGalleryCountLabel();
 }
 
 function refreshLocalizedDynamicUi() {

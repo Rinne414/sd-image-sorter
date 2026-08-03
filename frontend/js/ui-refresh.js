@@ -263,7 +263,19 @@
 
         _translateSimilar: function () {
             this._setText('#view-similar .similar-header h3', 'similar.title');
-            this._setButton('#btn-similar-embed', 'similar.generateEmbed');
+            // The embed-row primary is state-derived (build / continue / rebuild /
+            // indexing…), so this re-apply must NOT hard-set it back to "build" —
+            // that is what pinned it to 建立相似索引 even with a partial index.
+            // Let SimilarImages relabel it; fall back only before it is live.
+            var similar = window.SimilarImages;
+            if (similar && typeof similar.syncEmbedButtonLabel === 'function') {
+                var running = Boolean(similar.isEmbedding
+                    || similar.isCheckingEmbeddingStatus
+                    || (similar.embedProgress && similar.embedProgress.running));
+                similar.syncEmbedButtonLabel(running);
+            } else {
+                this._setButton('#btn-similar-embed', 'similar.generateEmbed');
+            }
             this._setText('#view-similar .similar-tab[data-target="panel-similar-search"]', 'similar.search');
             this._setText('#view-similar .similar-tab[data-target="panel-similar-duplicates"]', 'similar.duplicates');
             this._setPlaceholder('#similar-search-id', 'similar.searchById');

@@ -232,6 +232,8 @@ window.I18nLang_zhCN = {
     // Gallery View
     // ========================
     'gallery.imageCount': '{count} 张图片',
+    'gallery.imageCountOf': '{count} / {total} 张图片',
+    'gallery.imageCountMissingTip': '图库共索引 {total} 张；其中 {missing} 张原始文件不在原位。',
     'gallery.noImages': '还没有图片',
     'gallery.scanPrompt': '先导入一个图片文件夹，就可以开始看图、筛图和整理图片',
     'gallery.noMatchesTitle': '没有符合条件的图片',
@@ -1060,6 +1062,16 @@ window.I18nLang_zhCN = {
     // Censor Edit View
     // ========================
     'censor.queue': '处理队列',
+    'censor.queueSelectAll': '全选',
+    'censor.queueSelectAllTip': '全选队列',
+    'censor.queueDeselect': '取消',
+    'censor.queueDeselectTip': '取消全选',
+    'censor.queueFilter': '筛选',
+    'censor.queueFilterTip': '按文件名筛选队列',
+    'censor.queueMoveTop': '移到最上',
+    'censor.queueMoveUp': '上移',
+    'censor.queueMoveDown': '下移',
+    'censor.queueMoveBottom': '移到最下',
     'censor.queueSubtitle': '点击编辑 \u2022 Ctrl/Shift 多选',
     'censor.moveTop': '置顶',
     'censor.moveUp': '上移',
@@ -1465,6 +1477,9 @@ window.I18nLang_zhCN = {
     'similar.startStep3Title': '3. 或上传一张新参考图',
     'similar.startStep3Text': '也可以上传参考图和本地图库比对。',
     'similar.rebuildIndex': '重建索引',
+    'similar.continueIndexing': '继续建立索引',
+    'similar.uploadTitle': '把图片拖到这里',
+    'similar.uploadHint': '或点击选择图片，与图库比对相似图',
     'similar.setupReadyTitle': 'CLIP 模型已就绪',
     'similar.setupNeedsTitle': '相似搜索还差一步准备',
     'similar.setupReadyDetail': '模型已就绪；先在下方建立索引即可搜索，导入新图后也可以随时重建。',
