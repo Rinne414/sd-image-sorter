@@ -37,7 +37,12 @@
     /* ===== Aurora canonical: text ===== */
     --text: #EDF0F7;
     --text-2: #9CA6B8;
-    --muted: #5F6878;           /* never the sole carrier of meaning */
+    /* Measured 2026-08-04: the previous #5F6878 rendered at 3.06:1 on the card
+       surfaces and 3.36:1 on the page background — below WCAG AA (4.5:1) for
+       the 11-13px text this token carries in 265+ places (helper text, stat
+       labels, hints, placeholders). #8792A6 measures 5.49:1 / 6.01:1 and stays
+       visibly secondary against --text-2. */
+    --muted: #8792A6;           /* never the sole carrier of meaning */
     --text-disabled: #4A5158;   /* disabled control text (+ reason tooltip) */
 
     /* ===== Aurora canonical: accents (each OWNS a semantic) ===== */

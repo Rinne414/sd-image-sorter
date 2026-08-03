@@ -3709,11 +3709,35 @@ textarea:focus,
    152 visible buttons (筛到图库 / 用于随机生成 / 加入构建 each printed 40
    times) and the tag names — the actual content — lost the row. The primary
    action stays; the two secondary ones fade in on row hover or keyboard focus.
-   Space is reserved either way, so revealing them never shifts the layout. */
+
+   1280px (lowest supported width): the three buttons claimed 264px of a 366px
+   row at flex:0 0 auto, so .tag-name (flex:1 1 0) collapsed to ZERO — the row
+   showed a bar, a percentage and a clipped button, and no tag. The idle
+   secondaries are therefore taken out of flow, and the name keeps a floor. */
+.promptlab-inline-actions {
+    position: relative;
+}
+
+.promptlab-tag-item .tag-name {
+    flex: 1 1 auto;
+    min-width: 4.5em;
+}
+
 .promptlab-tag-item .promptlab-inline-actions .btn-ghost {
+    position: absolute;
+    right: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    margin-right: 6px;
     opacity: 0;
     pointer-events: none;
+    white-space: nowrap;
     transition: opacity var(--transition-fast, 0.15s) ease;
+}
+
+/* second secondary sits further left, clear of the first */
+.promptlab-tag-item .promptlab-inline-actions .btn-ghost:first-child {
+    right: calc(100% + 6.4em);
 }
 
 .promptlab-tag-item:hover .promptlab-inline-actions .btn-ghost,
