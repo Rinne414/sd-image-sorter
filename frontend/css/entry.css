@@ -373,6 +373,77 @@ body.entry-active {
 }
 
 /* continue (anchor) slab — accent tier */
+/* Browse resume slab. Deliberately quieter than .entry-anchor (hairline, no
+   blue border): an unfinished WASD session is a commitment, a saved scroll
+   offset is just a convenience, and both can show at once. */
+.entry-resume {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    background: rgba(10, 14, 18, 0.6);
+    border: 1px solid var(--hairline-2);
+    border-radius: var(--r-card);
+    padding: 12px 16px;
+    text-align: left;
+    color: var(--text);
+}
+
+.entry-resume .resume-meta {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+}
+
+.entry-resume .resume-badge {
+    color: var(--text-2);
+}
+
+.entry-resume .resume-when {
+    color: var(--muted);
+}
+
+.entry-resume .resume-body {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-right: auto;
+}
+
+.entry-resume .resume-title {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.entry-resume .resume-detail {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.entry-resume .resume-continue {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    padding: 7px 15px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.entry-resume .resume-continue:hover {
+    background: rgba(var(--blue-rgb), 0.14);
+    border-color: rgba(var(--blue-rgb), 0.4);
+}
+
+.entry-resume .resume-continue:active {
+    transform: translateY(1px);
+}
+
 .entry-anchor {
     background: rgba(10, 14, 18, 0.88);
     border: 1px solid rgba(var(--blue-rgb), 0.55);

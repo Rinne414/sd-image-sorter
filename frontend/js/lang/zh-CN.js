@@ -232,6 +232,14 @@ window.I18nLang_zhCN = {
     // Gallery View
     // ========================
     'gallery.imageCount': '{count} 张图片',
+    'entry.resumeBadge': '上次看到这里',
+    'entry.resumeTitle': '回到图库',
+    'entry.resumeBtn': '接着看',
+    'entry.resumeDetail': '当时已经翻过 {n} 张',
+    'entry.agoJustNow': '刚刚',
+    'entry.agoMinutes': '{n} 分钟前',
+    'entry.agoHours': '{n} 小时前',
+    'entry.agoDays': '{n} 天前',
     'gallery.imageCountOf': '{count} / {total} 张图片',
     'gallery.imageCountMissingTip': '图库共索引 {total} 张；其中 {missing} 张原始文件不在原位。',
     'gallery.noImages': '还没有图片',

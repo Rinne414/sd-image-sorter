@@ -23,6 +23,10 @@
 
     let _saveTimer = null;
     let _restoring = false;
+    let _restoreClaimedAt = 0;
+    // Hard ceiling on the restore window so a failed restore can never leave
+    // scroll-to-top suppressed for the rest of the session.
+    const RESTORE_CLAIM_MAX_MS = 5000;
     let _boundScroll = false;
     let _resumeAnnouncedFor = null;
     let _hoverImageId = null;
@@ -35,6 +39,22 @@
         const m = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
         return `${y}-${m}-${day}`;
+    }
+
+    /**
+     * app.js keeps AppState inside the sealed window.App context — there is no
+     * window.AppState. Every read here used to go through window.AppState?.…,
+     * which is permanently undefined, so:
+     *   - tryRestoreResume() always bailed at its `count === 0` guard and the
+     *     scroll position was NEVER restored (the feature looked implemented
+     *     but could not fire), and
+     *   - saveResumeNow()'s "only while viewing the gallery" guard never
+     *     engaged, which is how a fresh launch overwrote a good position.
+     * Resolve the real object once, with the legacy global as a fallback in
+     * case a future build re-exports it.
+     */
+    function _appState() {
+        return (window.App && window.App.AppState) || window.AppState || null;
     }
 
     function _t(key, fallback, params) {
@@ -124,27 +144,88 @@
                 return;
             }
         }
-        window.scrollTo(0, y);
+        // behavior:'instant' explicitly: a CSS scroll-behavior:smooth (or an
+        // in-flight smooth scroll from the view-switch reset) would otherwise
+        // animate this write and let the previous animation win the race.
+        try {
+            window.scrollTo({ top: y, left: 0, behavior: 'instant' });
+        } catch (_e) {
+            window.scrollTo(0, y);
+        }
+    }
+
+    /** Largest offset the current scroller can actually hold. */
+    function _maxScrollTop() {
+        let el = null;
+        if (window.Gallery && typeof window.Gallery._getScrollContainer === 'function') {
+            el = window.Gallery._getScrollContainer();
+        }
+        if (!el || el === document.body || el === document.scrollingElement) {
+            el = document.documentElement;
+        }
+        return Math.max(0, (el.scrollHeight || 0) - (el.clientHeight || 0));
+    }
+
+    /**
+     * Keep the restore claim (and the position) alive until switchView's reset
+     * ladder has finished. Its last write lands at ~700ms and at least one is a
+     * behavior:'smooth' scroll, so a plain "we arrived" release let that glide
+     * drag the view back to the top over the next second — which looked exactly
+     * like the restore had never happened.
+     */
+    function _releaseRestoreAfterResets(target = null) {
+        const holdUntil = Date.now() + 1100;
+        const hold = () => {
+            if (target != null && Math.abs(_getScrollTop() - target) > 4) {
+                // A reset (or its smooth glide) moved us: cancel the animation
+                // by re-asserting the target instantly.
+                _setScrollTop(target);
+            }
+            if (Date.now() < holdUntil) {
+                requestAnimationFrame(() => setTimeout(hold, 60));
+                return;
+            }
+            _restoring = false;
+        };
+        hold();
     }
 
     function _filtersSnapshot() {
-        const f = window.AppState?.filters || {};
+        const f = _appState()?.filters || {};
         return {
             scope: String(f.scope || 'current_session'),
             sortBy: String(f.sortBy || ''),
         };
     }
 
+    /**
+     * True while the entry overlay covers the app. On relaunch AppState's
+     * currentView already reads 'gallery' even though the user is still looking
+     * at the entry page and the grid is scrolled to 0 — saving in that window
+     * is what erased the position we are trying to keep.
+     */
+    function _entryOverlayUp() {
+        const entry = document.getElementById('entry-page');
+        if (!entry || entry.hidden) return false;
+        return getComputedStyle(entry).display !== 'none';
+    }
+
     function saveResumeNow() {
         if (_restoring) return;
-        if (window.AppState?.currentView && window.AppState.currentView !== 'gallery') return;
+        if (_appState()?.currentView && _appState().currentView !== 'gallery') return;
+        if (_entryOverlayUp()) return;
         const snap = _filtersSnapshot();
         const state = _read();
+        const scrollTop = _getScrollTop();
+        // Never let a top-of-list write bury a real position. Relaunch, a
+        // filter reset and a programmatic jump all momentarily report 0, and
+        // "resume at the top" is the same as no resume anyway.
+        if (scrollTop < 80 && Number(state.resume?.scrollTop) >= 80) return;
         state.resume = {
-            scrollTop: _getScrollTop(),
+            scrollTop,
             scope: snap.scope,
             sortBy: snap.sortBy,
-            imageCount: Array.isArray(window.AppState?.images) ? window.AppState.images.length : 0,
+            imageCount: Array.isArray(_appState()?.images) ? _appState().images.length : 0,
             savedAt: Date.now(),
         };
         _write(state);
@@ -183,25 +264,51 @@
         if (resume.scope && snap.scope && resume.scope !== snap.scope) return false;
         if (resume.sortBy && snap.sortBy && resume.sortBy !== snap.sortBy) return false;
 
-        const count = Array.isArray(window.AppState?.images) ? window.AppState.images.length : 0;
+        const count = Array.isArray(_appState()?.images) ? _appState().images.length : 0;
         if (count === 0) return false;
 
         _restoring = true;
+        _restoreClaimedAt = Date.now();
         const target = resume.scrollTop;
-        // Double rAF + short delays so virtual list / layout can settle.
-        const apply = () => _setScrollTop(target);
-        requestAnimationFrame(() => {
-            apply();
-            requestAnimationFrame(() => {
-                apply();
-                setTimeout(() => {
-                    apply();
-                    _restoring = false;
-                    // Virtual list may remeasure; one more gentle nudge.
-                    setTimeout(apply, 120);
-                }, 60);
-            });
-        });
+        // The old fixed rAF + 60ms/120ms ladder gave up ~180ms in, but the
+        // virtual list keeps growing the scroll height for a second or more
+        // after the first page renders — so the offset was clamped to whatever
+        // fit at that instant (usually 0) and the restore silently did nothing.
+        // Retry until the position actually holds. "Target beyond the current
+        // max scroll" is NOT a stop condition: that is exactly the state a
+        // still-filling grid reports. Stop when we land, when the grid has
+        // stopped growing while pinned at the bottom, or on the deadline.
+        const DEADLINE_MS = 4000;
+        const startedAt = Date.now();
+        let lastMax = -1;
+        let stalledAtBottom = 0;
+        const apply = () => {
+            _setScrollTop(target);
+            const now = _getScrollTop();
+            if (Math.abs(now - target) <= 4) {
+                // Landed. Do NOT release the claim yet: switchView's reset
+                // ladder runs out to 700ms and one of its writes is a
+                // behavior:'smooth' scroll, whose glide would otherwise carry
+                // us back to 0 over the following second.
+                _releaseRestoreAfterResets(target);
+                return;
+            }
+            const max = _maxScrollTop();
+            // Pinned at the bottom of a grid that is no longer growing means the
+            // library really is shorter than it was — accept where we are.
+            if (max === lastMax && now >= max - 4) {
+                stalledAtBottom += 1;
+            } else {
+                stalledAtBottom = 0;
+            }
+            lastMax = max;
+            if (stalledAtBottom >= 4 || Date.now() - startedAt > DEADLINE_MS) {
+                _releaseRestoreAfterResets();
+                return;
+            }
+            requestAnimationFrame(() => setTimeout(apply, 80));
+        };
+        requestAnimationFrame(apply);
 
         const signature = `${resume.savedAt}:${Math.round(target)}`;
         if (_resumeAnnouncedFor !== signature) {
@@ -218,6 +325,32 @@
             _showRibbon('restored');
         }
         return true;
+    }
+
+    /**
+     * Restore when arriving at an ALREADY-loaded gallery (entry page → library).
+     * That route reuses the mounted view, so neither gallery-images-loaded nor
+     * the switchView wrapper fires and the position was never reapplied. Polls
+     * briefly because the grid needs a moment to be tall enough to hold the
+     * offset, and gives up quietly if the guards say no.
+     */
+    function restoreSoon(attempts = 12) {
+        // Claim the restore window up front: switchView's scroll reset runs
+        // synchronously on the same click, before our first tick.
+        _restoring = true;
+        _restoreClaimedAt = Date.now();
+        let left = Math.max(1, attempts);
+        const tick = () => {
+            left -= 1;
+            const active = _isGalleryActive();
+            const ok = active ? tryRestoreResume() : false;
+            if (!active || ok || left <= 0) {
+                if (!ok) _restoring = false;
+                return;
+            }
+            setTimeout(tick, 220);
+        };
+        setTimeout(tick, 120);
     }
 
     function bumpDay(field, amount) {
@@ -361,7 +494,7 @@
 
     function showPeek(imageId) {
         if (!imageId || !_isGalleryActive()) return;
-        if (window.AppState?.selectionMode) return;
+        if (_appState()?.selectionMode) return;
         if (_overlayBlockingPeek()) return;
         const el = _ensurePeekEl();
         const img = el.querySelector('.gallery-comfort-peek-img');
@@ -399,7 +532,7 @@
             }
             if (!_isGalleryActive()) return;
             if (_isEditingTarget(e.target) || _isEditingTarget(document.activeElement)) return;
-            if (window.AppState?.selectionMode) return; // keep Space = toggle select
+            if (_appState()?.selectionMode) return; // keep Space = toggle select
             if (_overlayBlockingPeek()) return;
 
             const id = _resolvePeekImageId();
@@ -485,8 +618,8 @@
                 return;
             }
         } catch (_e) { /* keep evaluating */ }
-        const count = Array.isArray(window.AppState?.images) ? window.AppState.images.length : 0;
-        const total = Number(window.AppState?.pagination?.total || 0);
+        const count = Array.isArray(_appState()?.images) ? _appState().images.length : 0;
+        const total = Number(_appState()?.pagination?.total || 0);
         if (count <= 0 && total <= 0) {
             chip.hidden = true;
             chip.classList.remove('is-opted-in');
@@ -527,16 +660,16 @@
         if (!append) {
             bumpDay('loads', 1);
             // Fresh load: attempt resume once images exist.
-            if (Array.isArray(window.AppState?.images) && window.AppState.images.length > 0) {
+            if (Array.isArray(_appState()?.images) && _appState().images.length > 0) {
                 tryRestoreResume();
             }
         }
-        markGalleryRoom(window.AppState?.currentView === 'gallery');
+        markGalleryRoom(_appState()?.currentView === 'gallery');
         _refreshRibbon();
     }
 
     function onSelectionChanged() {
-        const size = window.AppState?.selectedIds?.size || 0;
+        const size = _appState()?.selectedIds?.size || 0;
         if (size > 0) bumpDay('selectsPeak', size);
     }
 
@@ -545,7 +678,7 @@
     }
 
     function _isGalleryActive() {
-        const view = window.AppState?.currentView;
+        const view = _appState()?.currentView;
         if (view) return view === 'gallery';
         const el = document.getElementById('view-gallery');
         return Boolean(el && el.classList.contains('active'));
@@ -553,7 +686,7 @@
 
     function init() {
         bindScrollSave();
-        markGalleryRoom(_isGalleryActive() || !window.AppState);
+        markGalleryRoom(_isGalleryActive() || !_appState());
         // Re-assert after boot/entry handoff settles.
         setTimeout(() => markGalleryRoom(_isGalleryActive()), 300);
         setTimeout(() => markGalleryRoom(_isGalleryActive()), 1200);
@@ -579,7 +712,7 @@
         if (typeof window.switchView === 'function' && !window.switchView.__comfortWrapped) {
             const originalSwitchView = window.switchView;
             const wrapped = function comfortSwitchView(viewName) {
-                if (window.AppState?.currentView === 'gallery' && viewName !== 'gallery') {
+                if (_appState()?.currentView === 'gallery' && viewName !== 'gallery') {
                     saveResumeNow();
                 }
                 const result = originalSwitchView.apply(this, arguments);
@@ -588,9 +721,9 @@
                     _refreshRibbon();
                     // Returning with cached images may not fire gallery-images-loaded.
                     setTimeout(() => {
-                        if (window.AppState?.currentView === 'gallery'
-                            && Array.isArray(window.AppState?.images)
-                            && window.AppState.images.length > 0) {
+                        if (_appState()?.currentView === 'gallery'
+                            && Array.isArray(_appState()?.images)
+                            && _appState().images.length > 0) {
                             tryRestoreResume();
                         }
                     }, 80);
@@ -629,6 +762,12 @@
     window.GalleryComfort = {
         saveResumeNow,
         tryRestoreResume,
+        restoreSoon,
+        // Read by app/selection.js scheduleViewScrollReset so a deliberate
+        // resume is not overwritten by the view-switch scroll-to-top.
+        isRestoring: () => Boolean(
+            _restoring && Date.now() - _restoreClaimedAt < RESTORE_CLAIM_MAX_MS,
+        ),
         bumpDay,
         showPeek,
         hidePeek,

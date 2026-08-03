@@ -162,6 +162,26 @@
                 </div>
             </article>
 
+            <!-- Browse resume. gallery/comfort.js already persists where you were
+                 in the library (scroll offset + scope + sort, 14-day window) but
+                 the entry page never read it, so the most common activity —
+                 browsing and picking — restarted cold every launch. Separate
+                 node from #entry-anchor on purpose: that slab is pinned to the
+                 WASD sort session (entry-page.spec.ts expects it hidden without
+                 one), and the two can be resumable at the same time. -->
+            <article class="entry-resume" id="entry-resume" hidden>
+                <div class="resume-meta">
+                    <span class="resume-badge" data-i18n="entry.resumeBadge">Where you left off</span>
+                    <span class="resume-when" id="entry-resume-when"></span>
+                </div>
+                <div class="resume-body">
+                    <span class="resume-title" data-i18n="entry.resumeTitle">Back to the library</span>
+                    <span class="resume-detail" id="entry-resume-detail"></span>
+                </div>
+                <button type="button" class="resume-continue" id="entry-resume-continue"
+                        data-i18n="entry.resumeBtn">Pick it up</button>
+            </article>
+
             <div class="entry-eyebrow"><span data-i18n="entry.groupMissions">Missions</span></div>
             <div class="entry-row">
                 <button type="button" class="entry-tile entry-mission-lora" id="entry-mission-lora">

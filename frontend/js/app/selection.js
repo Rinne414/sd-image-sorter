@@ -485,14 +485,27 @@ function resetViewScrollPosition() {
 }
 
 function scheduleViewScrollReset() {
+    // Gallery Comfort may be deliberately restoring a saved browse position on
+    // this very view switch. This reset fires at 0/rAF/50/160/320/700ms, so it
+    // used to stomp the restore six times over and "continue where you left
+    // off" could never work. Honour an in-progress restore and skip.
+    const restoring = () => Boolean(
+        window.GalleryComfort && typeof window.GalleryComfort.isRestoring === 'function'
+        && window.GalleryComfort.isRestoring(),
+    );
+    if (restoring()) return;
+    const resetUnlessRestoring = () => {
+        if (restoring()) return;
+        resetViewScrollPosition();
+    };
     resetViewScrollPosition();
     requestAnimationFrame(() => {
-        resetViewScrollPosition();
-        requestAnimationFrame(resetViewScrollPosition);
+        resetUnlessRestoring();
+        requestAnimationFrame(resetUnlessRestoring);
     });
-    setTimeout(resetViewScrollPosition, 50);
-    setTimeout(resetViewScrollPosition, 160);
-    setTimeout(resetViewScrollPosition, 320);
-    setTimeout(resetViewScrollPosition, 700);
+    setTimeout(resetUnlessRestoring, 50);
+    setTimeout(resetUnlessRestoring, 160);
+    setTimeout(resetUnlessRestoring, 320);
+    setTimeout(resetUnlessRestoring, 700);
 }
 

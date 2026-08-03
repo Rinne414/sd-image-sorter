@@ -18,6 +18,12 @@
     const HERO_MODE_KEY = 'aurora-entry-hero-mode';
     const HERO_SEED_KEY = 'aurora-entry-hero-seed';
     const LAST_SEEN_KEY = 'aurora-entry-last-seen';
+    // Owned by gallery/comfort.js (STORAGE_KEY there); read-only here so the
+    // entry page can advertise a resumable browse position. Keep these three
+    // in sync with comfort.js if its thresholds change.
+    const COMFORT_STATE_KEY = 'sd-gallery-comfort-v1';
+    const COMFORT_RESUME_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+    const COMFORT_RESUME_MIN_SCROLL = 80;
 
     const HERO_MODES = ['off', 'single', 'slideshow', 'film'];
     const SLIDESHOW_INTERVAL_MS = 8000;
@@ -393,12 +399,14 @@
         if (!resumable) {
             anchor.hidden = true;
             if (organizeTile) organizeTile.hidden = false;
+            renderBrowseResume();
             return;
         }
 
         // The anchor absorbs its parent mission's tile (批量整理 hosts manual sort).
         anchor.hidden = false;
         if (organizeTile) organizeTile.hidden = true;
+        renderBrowseResume();
 
         const total = Number(session.total || 0);
         const remaining = Number(session.remaining || 0);
@@ -408,6 +416,65 @@
         el('entry-anchor-count').textContent = `${done} / ${total}`;
         el('entry-anchor-fill').style.width = total > 0 ? `${Math.round((done / total) * 100)}%` : '0%';
         el('entry-anchor-when').textContent = '';
+    }
+
+    /**
+     * Human "how long ago" for the resume slab. Deliberately coarse: the point
+     * is "is this still my session?", not a timestamp.
+     */
+    function formatAgo(ms) {
+        const mins = Math.max(0, Math.round((Date.now() - ms) / 60000));
+        if (mins < 2) return t('entry.agoJustNow', {}, 'just now');
+        if (mins < 60) return t('entry.agoMinutes', { n: mins }, '{n} min ago');
+        const hours = Math.round(mins / 60);
+        if (hours < 24) return t('entry.agoHours', { n: hours }, '{n} h ago');
+        const days = Math.round(hours / 24);
+        return t('entry.agoDays', { n: days }, '{n} d ago');
+    }
+
+    /**
+     * Surface the browse position gallery/comfort.js already stores, so the
+     * library picks up instead of restarting. comfort.js owns the actual scroll
+     * restore on load; this slab only advertises it and routes there.
+     *
+     * Reads localStorage directly rather than through window.GalleryComfort:
+     * index.html loads entry-page.js BEFORE gallery/comfort.js, so that global
+     * does not exist yet on first render. The key is shared, not duplicated
+     * state — comfort.js stays the only writer.
+     */
+    function readComfortResume() {
+        try {
+            const raw = localStorage.getItem(COMFORT_STATE_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            const resume = parsed && typeof parsed === 'object' ? parsed.resume : null;
+            return resume && typeof resume === 'object' ? resume : null;
+        } catch (_e) {
+            return null;
+        }
+    }
+
+    function renderBrowseResume() {
+        const slab = el('entry-resume');
+        if (!slab) return;
+        const resume = readComfortResume();
+
+        // Same bar comfort.js uses to decide a restore is worth doing: a real
+        // saved offset inside the 14-day window. Anything else is noise.
+        const savedAt = Number(resume && resume.savedAt) || 0;
+        const scrollTop = Number(resume && resume.scrollTop) || 0;
+        const fresh = savedAt > 0 && (Date.now() - savedAt) < COMFORT_RESUME_MAX_AGE_MS;
+        if (!fresh || scrollTop < COMFORT_RESUME_MIN_SCROLL) {
+            slab.hidden = true;
+            return;
+        }
+
+        const seen = Number(resume.imageCount) || 0;
+        el('entry-resume-when').textContent = formatAgo(savedAt);
+        el('entry-resume-detail').textContent = seen > 0
+            ? t('entry.resumeDetail', { n: seen }, 'you had scrolled through {n} images')
+            : '';
+        slab.hidden = false;
     }
 
     function formatBytes(bytes) {
@@ -570,6 +637,12 @@
         if (view === 'gallery' && window.GalleryComfort?.applyEntryHeroContinuity) {
             try { window.GalleryComfort.applyEntryHeroContinuity(); } catch (e) { /* ignore */ }
         }
+        // Entry → Library reuses the already-mounted gallery, so comfort.js sees
+        // neither a fresh load nor its switchView wrapper and the saved scroll
+        // position was never reapplied. Ask for it explicitly.
+        if (view === 'gallery' && window.GalleryComfort?.restoreSoon) {
+            try { window.GalleryComfort.restoreSoon(); } catch (e) { /* ignore */ }
+        }
     }
 
     // ------------------------------------------------------------------
@@ -698,6 +771,9 @@
                 enterMission('organize');
                 navigate('sorting');
             },
+            // comfort.js restores the exact offset once the gallery loads; this
+            // just gets the user there without a detour.
+            'entry-resume-continue': () => freeNavigate('gallery'),
             'entry-fn-gallery': () => freeNavigate('gallery'),
             // Tile promises "Manual Sort" — land on that sub-tab, not
             // whichever one (usually Auto-Separate) was last active.

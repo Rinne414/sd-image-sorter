@@ -230,6 +230,14 @@ window.I18nLang_en = {
     // Gallery View
     // ========================
     'gallery.imageCount': '{count} images',
+    'entry.resumeBadge': 'Where you left off',
+    'entry.resumeTitle': 'Back to the library',
+    'entry.resumeBtn': 'Pick it up',
+    'entry.resumeDetail': 'you had scrolled through {n} images',
+    'entry.agoJustNow': 'just now',
+    'entry.agoMinutes': '{n} min ago',
+    'entry.agoHours': '{n} h ago',
+    'entry.agoDays': '{n} d ago',
     'gallery.imageCountOf': '{count} of {total} images',
     'gallery.imageCountMissingTip': '{total} indexed in this library; {missing} originals are not at their recorded location.',
     'gallery.noImages': 'No images yet',
