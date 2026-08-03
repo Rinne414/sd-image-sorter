@@ -59,6 +59,9 @@ def _validate_webp_exif_payload(exif_bytes: bytes) -> Optional[str]:
 
     active_offsets: Set[int] = set()
     validated_offsets: Set[int] = set()
+    # Byte ranges claimed by tag VALUES. A next-IFD word that lands inside one
+    # of these is not a pointer at all — see the omitted-terminator note below.
+    value_ranges: list = []
 
     def validate_ifd(offset: int, label: str, depth: int) -> Optional[str]:
         if offset in validated_offsets:
@@ -98,6 +101,7 @@ def _validate_webp_exif_payload(exif_bytes: bytes) -> Optional[str]:
                             f"{value_offset}:{value_offset + value_bytes} is outside "
                             f"the {len(payload)}-byte payload"
                         )
+                    value_ranges.append((value_offset, value_offset + value_bytes))
 
             if tag not in _TIFF_IFD_POINTER_TAGS or value_count == 0:
                 continue
@@ -124,8 +128,19 @@ def _validate_webp_exif_payload(exif_bytes: bytes) -> Optional[str]:
                     active_offsets.remove(offset)
                     return child_error
 
-        next_ifd_offset = read_u32(offset + 2 + (entry_count * 12))
-        if next_ifd_offset != 0:
+        # The next-IFD terminator is REQUIRED by TIFF 6.0 but real writers omit
+        # it: NovelAI V4/V4.5 WebP ends the Exif sub-IFD's entry table flush
+        # against its UserComment data, so these 4 bytes are the "ASCII\0\0\0"
+        # charset prefix (0x41534349 -> 1095975753), not a pointer. Treating it
+        # as one rejected the whole chunk and silently dropped the prompt on
+        # every such file, even though Pillow parses them fine. Only trust this
+        # word when it does not overlap data another tag already claimed.
+        next_ifd_field = offset + 2 + (entry_count * 12)
+        next_ifd_offset = read_u32(next_ifd_field)
+        overlaps_value_data = any(
+            start <= next_ifd_field < end for start, end in value_ranges
+        )
+        if next_ifd_offset != 0 and not overlaps_value_data:
             next_error = validate_ifd(next_ifd_offset, "EXIF next IFD", depth + 1)
             if next_error is not None:
                 active_offsets.remove(offset)
