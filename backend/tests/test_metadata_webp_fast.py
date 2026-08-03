@@ -247,6 +247,63 @@ class TestWebPIntegration:
         """Create a parser instance."""
         return MetadataParser()
 
+    def test_novelai_v4_subifd_without_next_ifd_terminator_still_parses(
+        self, parser, tmp_path
+    ):
+        """Regression: NovelAI V4/V4.5 WebP omit the next-IFD terminator word.
+
+        Real files (verified against the reference library) lay out the Exif
+        sub-IFD so its single UserComment entry's data begins immediately after
+        the entry table, with no terminating zero next-IFD LONG. The structural
+        validator used to read those 4 bytes as a pointer, decode the
+        "ASCII\\0\\0\\0" charset prefix as 0x41534349 = 1095975753, call it
+        out-of-bounds and discard the WHOLE chunk — dropping the prompt on every
+        such file even though Pillow reads them fine.
+
+        Every pre-existing WebP EXIF test wrote a well-formed terminator, which
+        is why this shipped unnoticed. This one must NOT include it.
+        """
+        nai_json = (
+            '{"Description": "1girl, solo, best quality", '
+            '"Comment": {"uc": "lowres, bad anatomy", "steps": 28}}'
+        )
+        usercomment = b"ASCII\x00\x00\x00" + nai_json.encode("utf-8")
+
+        # IFD0: Software + ExifIFD pointer, big-endian like the real files.
+        software = b"NovelAI\x00"
+        ifd0_offset = 8
+        ifd0_entries = 2
+        ifd0_end = ifd0_offset + 2 + ifd0_entries * 12 + 4  # IFD0 keeps its terminator
+        software_offset = ifd0_end
+        sub_ifd_offset = software_offset + len(software)
+        # Sub-IFD: 1 entry, then its data IMMEDIATELY — no terminator word.
+        usercomment_offset = sub_ifd_offset + 2 + 12
+
+        payload = b"MM\x00\x2a" + struct.pack(">I", ifd0_offset)
+        payload += struct.pack(">H", ifd0_entries)
+        payload += struct.pack(">HHI", 0x0131, 2, len(software))
+        payload += struct.pack(">I", software_offset)
+        payload += struct.pack(">HHI", 0x8769, 4, 1)
+        payload += struct.pack(">I", sub_ifd_offset)
+        payload += struct.pack(">I", 0)  # IFD0 next-IFD = none
+        assert len(payload) + 6 - 6 == software_offset, "IFD0 layout drifted"
+        payload += software
+        payload += struct.pack(">H", 1)
+        payload += struct.pack(">HHI", 0x9286, 7, len(usercomment))
+        payload += struct.pack(">I", usercomment_offset)
+        # DELIBERATELY no next-IFD terminator here.
+        payload += usercomment
+
+        image_path = _write_verified_webp(tmp_path / "nai-v4.webp", payload)
+        result = parser.parse(str(image_path), validate_image_data=True)
+
+        assert result["parse_error"] is None
+        # The whole point: no structural rejection, and the prompt survives.
+        assert result.get("metadata_error") is None, (
+            f"validator rejected a real NovelAI layout: {result.get('metadata_error')}"
+        )
+        assert "1girl, solo, best quality" in str(result.get("prompt") or "")
+
     def test_corrupt_exif_is_a_nonfatal_metadata_error(self, parser, tmp_path):
         image_path = _write_verified_webp(
             tmp_path / "corrupt-exif.webp",
