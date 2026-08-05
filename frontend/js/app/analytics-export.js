@@ -157,6 +157,13 @@ function getExportFormatDescription(format) {
     return descriptions[format] || descriptions.prompt;
 }
 
+function updateExportModalTitle(format) {
+    const title = $('#export-title');
+    if (!title) return;
+    title.dataset.i18nLocked = '1';
+    title.textContent = `${format === 'tags' ? '🏷️' : '📤'} ${getExportFormatLabel(format)}`;
+}
+
 function getBatchExportContentDescription(mode) {
     const descriptions = {
         caption_merged: appT('batchExport.descCaptionMerged', 'Writes one same-name .txt per image for LoRA training: optional Class Token + AI caption + Prompt + Tags, merged into one line.'),
@@ -370,7 +377,7 @@ function renderExportModalText(format = null) {
     const select = $('#export-format');
     if (select && select.value !== selectedFormat) select.value = selectedFormat;
 
-    $('#export-title').textContent = `${selectedFormat === 'tags' ? '🏷️' : '📤'} ${getExportFormatLabel(selectedFormat)}`;
+    updateExportModalTitle(selectedFormat);
     setExportModalMode(selectedFormat === 'tags' ? 'tags' : 'prompts');
     updateExportFormatDescription(selectedFormat);
 
@@ -391,7 +398,7 @@ async function showExportModalWithFormat(format = 'prompt') {
     const select = $('#export-format');
     if (select) select.value = format;
     setExportModalMode(format === 'tags' ? 'tags' : 'prompts');
-    $('#export-title').textContent = `${format === 'tags' ? '🏷️' : '📤'} ${getExportFormatLabel(format)}`;
+    updateExportModalTitle(format);
     updateExportFormatDescription(format);
     const textArea = $('#export-text');
     textArea.value = format === 'tags'

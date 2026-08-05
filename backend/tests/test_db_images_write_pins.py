@@ -309,10 +309,15 @@ class TestAddImageUpsert:
 
 class TestBatchWrites:
     def test_empty_batch_returns_zero_counts(self, test_db):
-        assert db.add_images_batch([]) == {"new": 0, "updated": 0}
+        assert db.add_images_batch([]) == {
+            "new": 0,
+            "updated": 0,
+            "skipped_other_library": 0,
+        }
         assert db.add_images_batch([], return_statuses=True) == {
             "new": 0,
             "updated": 0,
+            "skipped_other_library": 0,
             "statuses": {},
         }
 
@@ -323,7 +328,11 @@ class TestBatchWrites:
                 {"path": "/w/b2.png", "filename": "b2.png"},
             ]
         )
-        assert first == {"new": 2, "updated": 0}
+        assert first == {
+            "new": 2,
+            "updated": 0,
+            "skipped_other_library": 0,
+        }
 
         second = db.add_images_batch(
             [

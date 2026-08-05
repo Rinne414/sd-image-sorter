@@ -111,7 +111,7 @@ function isGalleryImageSelected(AppState, imageId) {
  * Gallery Virtual Scrolling Configuration
  */
 const GALLERY_VIRTUAL_CONFIG = {
-    bufferSize: 20,           // Items to render outside viewport (增加 10 → 20)
+    bufferSize: 3,            // Rows rendered above and below the viewport
     threshold: 96,            // Minimum items to enable virtual scrolling
     estimatedItemHeight: 200, // Estimated height for grid mode
     rowGap: 16,               // Gap between rows

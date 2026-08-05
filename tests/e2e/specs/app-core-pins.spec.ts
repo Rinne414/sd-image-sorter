@@ -150,7 +150,7 @@ test('createDefaultFilterState returns the FilterStore default shape (incl. date
   expect(probe.promptMatchMode).toBe('exact')
   expect(probe.aspectRatio).toBe('')
   expect(probe.colorTemperature).toBe('')
-  expect(probe.scope).toBe('current_session')
+  expect(probe.scope).toBe('library')
   expect(probe.artistNull).toBe(true)
   expect(probe.folderNull).toBe(true)
   expect(probe.hasMetadataNull).toBe(true)
@@ -210,7 +210,7 @@ test('buildSelectionFilterRequest emits the 43-key camelCase selection contract'
   expect(probe.hasMinUserRating).toBe(true)
   expect(probe.hasLimit).toBe(false)
   expect(probe.dateFromValue).toBeNull()
-  expect(probe.scopeValue).toBe('current_session')
+  expect(probe.scopeValue).toBe('library')
   expect(probe.libraryScopeValue).toBe('library')
   expect(probe.artistValue).toBeNull()
   expect(probe.aspectRatioValue).toBeNull() // normalized '' -> null in this builder

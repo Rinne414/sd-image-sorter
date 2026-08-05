@@ -17,7 +17,7 @@ class VirtualList {
      * Default configuration
      */
     static DEFAULT_CONFIG = {
-        bufferSize: 10,           // Items to render outside viewport (above + below)
+        bufferSize: 10,           // Rows rendered above and below the viewport
         threshold: 240,           // Minimum items to enable virtual scrolling
         forceVirtual: false,      // Always use virtual layout regardless of item count
         estimatedItemHeight: 200, // Estimated height for grid mode
@@ -118,6 +118,18 @@ class VirtualList {
         return this.scrollEventTarget === window;
     }
 
+    /** Convert visual rect coordinates back to layout coordinates under CSS zoom. */
+    _getLayoutScale() {
+        if (!this.container) return 1;
+
+        const layoutWidth = this.container.offsetWidth;
+        const visualWidth = this.container.getBoundingClientRect().width;
+        if (layoutWidth <= 0 || visualWidth <= 0) return 1;
+
+        const scale = visualWidth / layoutWidth;
+        return Number.isFinite(scale) && scale > 0 ? scale : 1;
+    }
+
     _getScrollTop() {
         if (this._isViewportScrollContainer()) {
             return window.pageYOffset || document.documentElement.scrollTop || this.scrollContainer.scrollTop || 0;
@@ -127,20 +139,23 @@ class VirtualList {
     }
 
     _getViewportHeight() {
-        return this._isViewportScrollContainer()
-            ? window.innerHeight
-            : this.scrollContainer.clientHeight;
+        if (this._isViewportScrollContainer()) {
+            return window.innerHeight / this._getLayoutScale();
+        }
+
+        return this.scrollContainer.clientHeight;
     }
 
     _getRelativeScroll() {
+        const layoutScale = this._getLayoutScale();
         if (this._isViewportScrollContainer()) {
-            return Math.max(0, -this.container.getBoundingClientRect().top);
+            return Math.max(0, -this.container.getBoundingClientRect().top / layoutScale);
         }
 
         const scrollTop = this._getScrollTop();
         const containerRect = this.container.getBoundingClientRect();
         const scrollRect = this.scrollContainer.getBoundingClientRect();
-        const containerTop = containerRect.top - scrollRect.top;
+        const containerTop = (containerRect.top - scrollRect.top) / layoutScale;
         return Math.max(0, scrollTop - containerTop);
     }
 

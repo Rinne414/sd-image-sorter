@@ -7,6 +7,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from db_core import get_db
+from db_helpers import _path_query_match_clause
 from library_context import MAIN_LIBRARY_ID, get_current_library_id, normalize_library_id
 
 
@@ -261,15 +262,17 @@ def claim_paths_to_library(
     with get_db() as conn:
         for start in range(0, len(normalized), chunk):
             batch = normalized[start : start + chunk]
-            placeholders = ",".join("?" for _ in batch)
+            query_clause, query_params = _path_query_match_clause(batch)
+            if not query_clause:
+                continue
             cursor = conn.execute(
                 f"""
                 UPDATE images
                 SET library_id = ?
-                WHERE path IN ({placeholders})
+                WHERE ({query_clause})
                   AND COALESCE(library_id, 'main') != ?
                 """,
-                (target, *batch, target),
+                (target, *query_params, target),
             )
             moved += int(cursor.rowcount or 0)
     if moved:

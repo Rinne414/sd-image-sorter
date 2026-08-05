@@ -948,8 +948,6 @@ with sqlite3.connect(db_path) as conn:
 }
 
 async function setGallerySearch(page: Page, search: string) {
-  await page.locator('#gallery-scope-select').selectOption('library')
-  await expect(page.locator('#gallery-scope-select')).toHaveValue('library')
   await expect.poll(async () => page.evaluate(() => window.App.AppState?.isLoading === false)).toBe(true)
 
   await page.evaluate(async (value) => {
@@ -1686,8 +1684,6 @@ test('gallery folder tree stays usable above the selection footer on supported d
   try {
     await page.setViewportSize({ width: 1366, height: 768 })
     await openMainPage(page)
-    await page.locator('#gallery-scope-select').selectOption('library')
-    await expect(page.locator('#gallery-scope-select')).toHaveValue('library')
     await expect.poll(async () => page.evaluate(() => window.App.AppState?.isLoading === false)).toBe(true)
     const folderTreeResponsePromise = page.waitForResponse((response) => response.url().includes('/api/folders'))
     await page.locator('#btn-refresh-folders').click()
@@ -2807,8 +2803,6 @@ test('censor batch rename should update preview and apply only selected queue it
   expect(images).toHaveLength(2)
 
   await openMainPage(page)
-  await page.locator('#gallery-scope-select').selectOption('library')
-  await expect(page.locator('#gallery-scope-select')).toHaveValue('library')
   await expect.poll(async () => page.evaluate(() => window.App.AppState?.isLoading === false)).toBe(true)
 
   await page.locator('#btn-toggle-select').click()
@@ -2855,8 +2849,6 @@ test('queue manager should search, reorder, and sync back to the censor sidebar'
   const targetImage = images[1]
 
   await openMainPage(page)
-  await page.locator('#gallery-scope-select').selectOption('library')
-  await expect(page.locator('#gallery-scope-select')).toHaveValue('library')
   await expect.poll(async () => page.evaluate(() => window.App.AppState?.isLoading === false)).toBe(true)
 
   await page.locator('#btn-toggle-select').click()

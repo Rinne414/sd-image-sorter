@@ -214,7 +214,7 @@ test('clear gallery button should be visible on the gallery page, not buried in 
   // location (the busy-guard probes progress endpoints first, then confirms).
   await clearButton.click()
   await expect(page.locator('#confirm-modal.visible')).toBeVisible()
-  await expect(page.locator('#confirm-modal')).toContainText('Clear Gallery')
+  await expect(page.locator('#confirm-modal')).toContainText('Clear current library')
   await page.locator('#btn-confirm-cancel').click()
   await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
 
@@ -326,7 +326,7 @@ for (const viewport of CLEAR_GALLERY_VIEWPORTS) {
     rejectScanProbe = false
     await page.locator('#btn-clear-db').click()
     await expect(page.locator('#confirm-modal.visible')).toBeVisible()
-    await expect(page.locator('#confirm-modal')).toContainText('Clear Gallery')
+    await expect(page.locator('#confirm-modal')).toContainText('Clear current library')
     expect(clearRequests).toBe(0)
     await page.locator('#btn-confirm-cancel').click()
     await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
@@ -468,7 +468,7 @@ test('clear gallery validates active, malformed tag, and malformed aesthetic pro
   malformedAesthetic = false
   await page.locator('#btn-clear-db').click()
   await expect(page.locator('#confirm-modal.visible')).toBeVisible()
-  await expect(page.locator('#confirm-modal')).toContainText('Clear Gallery')
+  await expect(page.locator('#confirm-modal')).toContainText('Clear current library')
 
   tagMode = 'running'
   tagProbeCalls = 0

@@ -5,6 +5,12 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0-beta.4] - 2026-08-04
+
+Beta 4 introduces durable, isolated multi-library workspaces and restores the Gallery comfort features that previously looked present but silently did nothing. Long-distance virtual scrolling now stays aligned across all desktop Gallery modes and UI scales, while NovelAI V4/V4.5 WebP files retain their positive and negative prompts without weakening corrupt-EXIF validation. Similarity setup, Auto-Separate destinations, and VLM concurrency guidance are also clearer.
+
+Beta 4 新增持久且严格隔离的多图库工作区，并修复此前看似存在却静默失效的图库续看与每日进度功能。长距离虚拟滚动现可在所有桌面图库模式与 UI 缩放下保持对齐；NovelAI V4/V4.5 WebP 会保留正向和负向提示词，同时不放宽损坏 EXIF 的拒绝规则。相似度准备、自动分类目标目录与 VLM 并发建议也更加清晰。
+
 ## [3.5.0-beta.3] - 2026-08-01
 
 Beta 3 restores startup for legacy Windows portable installations that received Beta 2 through the in-app updater. The app patch is again parseable by the bundled Python 3.11 runtime, release tests now enforce that compatibility across every shipped Python source, and isolated Playwright transform caches remove an intermittent CI collection race.

@@ -318,7 +318,7 @@ test('serializeAutoSepFilters fills the full scope shape and normalizes aliases'
   expect(out.empty.tags).toEqual([])
   expect(out.empty.tagMode).toBe('and')
   expect(out.empty.promptMatchMode).toBe('exact')
-  expect(out.empty.scope).toBe('current_session')
+  expect(out.empty.scope).toBe('library')
   expect(out.empty.folder).toBeNull()
   expect(out.empty.hasMetadata).toBeNull()
 

@@ -77,7 +77,10 @@ async function initSimilarView(page: Page): Promise<void> {
     }))
   await page.route('**/api/similarity/progress', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ running: false }) }))
-  await page.evaluate(() => (window as any).initSimilar())
+  // Use the real app router so only the Similar view remains active. A direct
+  // init() call leaves Gallery's active class in place and its shell can
+  // intercept clicks on the Similar sub-tabs.
+  await page.evaluate(() => (window as any).App.switchView('similar'))
   await page.waitForFunction(() => (window as any).SimilarImages.isCheckingEmbeddingStatus === false)
 }
 

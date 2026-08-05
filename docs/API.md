@@ -1,6 +1,6 @@
 ﻿# SD Image Sorter API Documentation
 
-**Version:** 3.5.0-beta.3
+**Version:** 3.5.0-beta.4
 **Base URL:** `http://127.0.0.1:8487` (default; configurable via `SD_IMAGE_SORTER_PORT`)
 **Interactive Docs:** `http://127.0.0.1:8487/docs` (Swagger UI, same port as runtime)
 
@@ -579,6 +579,32 @@ Open an image's containing folder in the host file explorer.
 
 #### POST /api/parse-image
 Parse uploaded image metadata without inserting into library DB.
+
+### Libraries
+
+#### GET /api/libraries
+List durable local library workspaces and return the active library id.
+
+#### GET /api/libraries/current
+Return the active library workspace and its id.
+
+#### POST /api/libraries
+Create a library workspace. Body: `{ "name": "Library name" }`.
+
+#### POST /api/libraries/move-images
+Move indexed image ownership to another library without moving source files. Body: `{ "image_ids": [1, 2], "target_library_id": "library-id" }`.
+
+#### POST /api/libraries/claim-paths
+Claim indexed paths for the target (or current) library. Body: `{ "paths": ["/absolute/path/image.png"], "target_library_id": "library-id" }`.
+
+#### GET /api/libraries/{library_id}/export
+Export one library's indexed paths and light metadata as JSON. Add `download=false` for an inline JSON response.
+
+#### PATCH /api/libraries/{library_id}
+Rename a library workspace. Body: `{ "name": "New name" }`.
+
+#### DELETE /api/libraries/{library_id}
+Delete a non-default library and its indexed ownership; source files are not deleted.
 
 ### Tags
 
@@ -1462,6 +1488,9 @@ Persist the VLM configuration. Body: full settings payload (secrets handled serv
 
 #### POST /api/vlm/test
 Test the current VLM credentials and endpoint with a tiny probe image. Returns `{ok, latency_ms, sample_caption, error}`.
+
+#### POST /api/vlm/probe-concurrency
+Probe concurrent VLM health-check capacity and optionally persist the stable worker count.
 
 #### POST /api/vlm/models
 List available models for the configured provider (calls provider's `models` API or falls back to a curated list).

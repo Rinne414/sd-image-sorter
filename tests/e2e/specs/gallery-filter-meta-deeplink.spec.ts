@@ -23,7 +23,6 @@ async function enterGalleryLibrary(page: import('@playwright/test').Page) {
     await enter.click()
   }
   await page.evaluate(() => {
-    // @ts-expect-error classic global
     if (window.App?.switchView) window.App.switchView('gallery')
   })
   await page.locator('#gallery-scope-select').selectOption('library').catch(async () => {

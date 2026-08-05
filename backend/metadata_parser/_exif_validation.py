@@ -11,7 +11,7 @@
 # SET/DEL routing for that name keep resolving in _runtime, where its sole
 # reader (_parse_webp_exif_chunk) lives.
 import struct
-from typing import Optional, Set
+from typing import List, Optional, Set, Tuple
 
 
 _TIFF_FIELD_UNIT_BYTES = {
@@ -59,9 +59,6 @@ def _validate_webp_exif_payload(exif_bytes: bytes) -> Optional[str]:
 
     active_offsets: Set[int] = set()
     validated_offsets: Set[int] = set()
-    # Byte ranges claimed by tag VALUES. A next-IFD word that lands inside one
-    # of these is not a pointer at all — see the omitted-terminator note below.
-    value_ranges: list = []
 
     def validate_ifd(offset: int, label: str, depth: int) -> Optional[str]:
         if offset in validated_offsets:
@@ -82,6 +79,9 @@ def _validate_webp_exif_payload(exif_bytes: bytes) -> Optional[str]:
             )
 
         active_offsets.add(offset)
+        # Only values owned by this IFD may explain an omitted next-IFD word.
+        # Descendant ranges must not mask a corrupt pointer in this IFD.
+        value_ranges: List[Tuple[int, int]] = []
         for index in range(entry_count):
             entry_offset = offset + 2 + (index * 12)
             tag = read_u16(entry_offset)
@@ -134,11 +134,11 @@ def _validate_webp_exif_payload(exif_bytes: bytes) -> Optional[str]:
         # charset prefix (0x41534349 -> 1095975753), not a pointer. Treating it
         # as one rejected the whole chunk and silently dropped the prompt on
         # every such file, even though Pillow parses them fine. Only trust this
-        # word when it does not overlap data another tag already claimed.
+        # word when a value in this IFD starts at the field itself.
         next_ifd_field = offset + 2 + (entry_count * 12)
         next_ifd_offset = read_u32(next_ifd_field)
         overlaps_value_data = any(
-            start <= next_ifd_field < end for start, end in value_ranges
+            start == next_ifd_field for start, _ in value_ranges
         )
         if next_ifd_offset != 0 and not overlaps_value_data:
             next_error = validate_ifd(next_ifd_offset, "EXIF next IFD", depth + 1)

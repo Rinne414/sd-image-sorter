@@ -484,6 +484,18 @@ function resetViewScrollPosition() {
     }
 }
 
+let viewScrollResetToken = 0;
+
+function hasViewScrollMoved() {
+    const mainContent = document.getElementById('main-content');
+    return Math.max(
+        window.pageYOffset || 0,
+        document.documentElement.scrollTop || 0,
+        document.body.scrollTop || 0,
+        mainContent?.scrollTop || 0,
+    ) > 4;
+}
+
 function scheduleViewScrollReset() {
     // Gallery Comfort may be deliberately restoring a saved browse position on
     // this very view switch. This reset fires at 0/rAF/50/160/320/700ms, so it
@@ -493,12 +505,19 @@ function scheduleViewScrollReset() {
         window.GalleryComfort && typeof window.GalleryComfort.isRestoring === 'function'
         && window.GalleryComfort.isRestoring(),
     );
+    const token = ++viewScrollResetToken;
+    let resetApplied = false;
     if (restoring()) return;
     const resetUnlessRestoring = () => {
-        if (restoring()) return;
+        if (token !== viewScrollResetToken || restoring()) return;
+        if (resetApplied && hasViewScrollMoved()) {
+            viewScrollResetToken += 1;
+            return;
+        }
         resetViewScrollPosition();
+        resetApplied = true;
     };
-    resetViewScrollPosition();
+    resetUnlessRestoring();
     requestAnimationFrame(() => {
         resetUnlessRestoring();
         requestAnimationFrame(resetUnlessRestoring);

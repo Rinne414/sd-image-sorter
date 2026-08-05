@@ -4,6 +4,7 @@ Tests for WEBP fast metadata reading.
 Tests the new _load_webp_metadata_fast() path that directly parses
 RIFF chunks to extract EXIF/XMP metadata without Pillow overhead.
 """
+import json
 import os
 import struct
 from pathlib import Path
@@ -24,6 +25,20 @@ def _corrupt_exif_ifd_offset() -> bytes:
     payload += struct.pack("<HHI", 0x8769, 4, 1)
     payload += struct.pack("<I", 0xFFFFFFF0)
     payload += b"\x00\x00\x00\x00"
+    return payload
+
+
+def _descendant_value_overlaps_parent_next_ifd() -> bytes:
+    payload = b"MM\x00\x2a" + struct.pack(">I", 8)
+    payload += struct.pack(">H", 1)
+    payload += struct.pack(">HHI", 0x8769, 4, 1)
+    payload += struct.pack(">I", 32)
+    payload += b"ASCII\x00\x00\x00"
+    payload += b"\x00\x00"
+    payload += struct.pack(">H", 1)
+    payload += struct.pack(">HHI", 0x010E, 2, 8)
+    payload += struct.pack(">I", 22)
+    payload += struct.pack(">I", 0)
     return payload
 
 
@@ -263,9 +278,14 @@ class TestWebPIntegration:
         Every pre-existing WebP EXIF test wrote a well-formed terminator, which
         is why this shipped unnoticed. This one must NOT include it.
         """
-        nai_json = (
-            '{"Description": "1girl, solo, best quality", '
-            '"Comment": {"uc": "lowres, bad anatomy", "steps": 28}}'
+        nai_json = json.dumps(
+            {
+                "Description": "1girl, solo, best quality",
+                "Software": "NovelAI",
+                "Comment": json.dumps(
+                    {"uc": "lowres, bad anatomy", "steps": 28}
+                ),
+            }
         )
         usercomment = b"ASCII\x00\x00\x00" + nai_json.encode("utf-8")
 
@@ -286,7 +306,7 @@ class TestWebPIntegration:
         payload += struct.pack(">HHI", 0x8769, 4, 1)
         payload += struct.pack(">I", sub_ifd_offset)
         payload += struct.pack(">I", 0)  # IFD0 next-IFD = none
-        assert len(payload) + 6 - 6 == software_offset, "IFD0 layout drifted"
+        assert len(payload) == software_offset, "IFD0 layout drifted"
         payload += software
         payload += struct.pack(">H", 1)
         payload += struct.pack(">HHI", 0x9286, 7, len(usercomment))
@@ -302,7 +322,9 @@ class TestWebPIntegration:
         assert result.get("metadata_error") is None, (
             f"validator rejected a real NovelAI layout: {result.get('metadata_error')}"
         )
-        assert "1girl, solo, best quality" in str(result.get("prompt") or "")
+        assert result["generator"] == "nai"
+        assert result["prompt"] == "1girl, solo, best quality"
+        assert result["negative_prompt"] == "lowres, bad anatomy"
 
     def test_corrupt_exif_is_a_nonfatal_metadata_error(self, parser, tmp_path):
         image_path = _write_verified_webp(
@@ -338,6 +360,24 @@ class TestWebPIntegration:
         assert isinstance(metadata_error, str)
         assert metadata_error.startswith(WEBP_EXIF_ERROR_PREFIX)
         assert "offset 4294967280 is outside" in metadata_error
+
+    def test_descendant_value_does_not_mask_corrupt_parent_next_ifd(
+        self,
+        parser,
+        tmp_path,
+    ):
+        image_path = _write_verified_webp(
+            tmp_path / "overlapping-exif.webp",
+            _descendant_value_overlaps_parent_next_ifd(),
+        )
+
+        result = parser.parse(str(image_path), validate_image_data=True)
+
+        assert result["parse_error"] is None
+        metadata_error = result["metadata_error"]
+        assert isinstance(metadata_error, str)
+        assert metadata_error.startswith(WEBP_EXIF_ERROR_PREFIX)
+        assert "offset 1095975753 is outside" in metadata_error
 
     def test_webp_without_exif_has_no_metadata_error(self, parser, tmp_path):
         image_path = _write_verified_webp(tmp_path / "no-exif.webp", None)

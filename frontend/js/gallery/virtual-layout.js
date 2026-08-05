@@ -15,7 +15,9 @@ Object.assign(window.Gallery, {
         while (node) {
             const style = window.getComputedStyle(node);
             const canScroll = /(auto|scroll|overlay)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 4;
-            if (canScroll) {
+            // overflow-x: hidden makes #main-content compute overflow-y: auto,
+            // but that shell expands with Gallery content and the window scrolls.
+            if (canScroll && node.id !== 'main-content') {
                 return node;
             }
             node = node.parentElement;

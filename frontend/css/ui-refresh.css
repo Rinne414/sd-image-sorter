@@ -797,6 +797,10 @@ textarea:focus,
 
 .main-content {
     padding-bottom: 16px;
+    /* The fixed Gallery sidebar lives in this DOM tree. Prevent browser
+       visibility scrolling from turning the content shell into a horizontal
+       scroll container and moving the Gallery underneath the sidebar. */
+    overflow-x: clip;
 }
 
 .view.active {
@@ -929,6 +933,7 @@ textarea:focus,
     height: var(--ui-viewport-below-nav);
     max-height: var(--ui-viewport-below-nav);
     overflow: hidden;
+    z-index: 2;
     overscroll-behavior: contain;
     scrollbar-gutter: auto;
 }
@@ -4825,8 +4830,8 @@ textarea:focus,
  */
 @media (min-width: 1280px) and (max-height: 900px) {
     .filter-sidebar.selection-mode .filter-sidebar-footer {
-        flex: 0 1 auto;
-        max-height: min(38vh, 320px);
+        flex: 0 0 auto;
+        max-height: min(55vh, 360px);
         min-height: 0;
         overflow-x: hidden;
         overflow-y: auto;
