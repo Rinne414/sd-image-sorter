@@ -458,9 +458,8 @@ def test_download_model_pins_revision_and_safetensors_only(monkeypatch, tmp_path
         def snapshot_download(self, **kwargs):
             calls.append(kwargs)
             Path(kwargs["local_dir"]).mkdir(parents=True, exist_ok=True)
-            (Path(kwargs["local_dir"]) / "config.json").write_text(
-                "{}", encoding="utf-8"
-            )
+            for filename in tg.TORIIGATE_REQUIRED_FILES:
+                (Path(kwargs["local_dir"]) / filename).write_bytes(b"fixture")
             return kwargs["local_dir"]
 
     monkeypatch.setattr(tg, "hf_hub", _FakeHub())

@@ -77,6 +77,12 @@
     DM._exportDisabledReason = function () {
         const baseReason = this._baseExportDisabledReason();
         if (baseReason) return baseReason;
+        const subjectCropReason = this._subjectCropDisabledReason?.();
+        if (subjectCropReason) return subjectCropReason;
+        const bucketResizeReason = this._bucketResizeDisabledReason?.();
+        if (bucketResizeReason) return bucketResizeReason;
+        const watermarkRemovalReason = this._watermarkRemovalDisabledReason?.();
+        if (watermarkRemovalReason) return watermarkRemovalReason;
         return this._readinessExportDisabledReason?.() || '';
     };
 

@@ -14,6 +14,21 @@ _prepare_lock = threading.Lock()
 _prepared = False
 
 
+def _configure_onnxruntime_console_logging() -> None:
+    """Keep native ONNX Runtime diagnostics to actionable errors only."""
+    try:
+        import onnxruntime as ort
+    except (ImportError, OSError) as exc:
+        logger.debug("ONNX Runtime logging configuration skipped: %s", exc)
+        return
+
+    configure = getattr(ort, "set_default_logger_severity", None)
+    if not callable(configure):
+        logger.debug("ONNX Runtime does not expose set_default_logger_severity")
+        return
+    configure(3)
+
+
 def prepare_onnxruntime_environment() -> None:
     """Make NVIDIA CUDA/cuDNN wheel DLLs visible on Windows in every process."""
     global _prepared
@@ -21,6 +36,7 @@ def prepare_onnxruntime_environment() -> None:
         return
 
     if sys.platform != "win32":
+        _configure_onnxruntime_console_logging()
         _prepared = True
         return
 
@@ -64,4 +80,5 @@ def prepare_onnxruntime_environment() -> None:
                 except (AttributeError, OSError):
                     pass
 
+        _configure_onnxruntime_console_logging()
         _prepared = True

@@ -76,20 +76,38 @@ Do not use `sd-image-sorter-vX.X.X-linux.tar.gz` on macOS; its package manifest 
 
 ## Model Download Sources
 
-Models not bundled in the package will be downloaded automatically on first use.
+Every model is downloaded only after an explicit **Model Manager → Prepare /
+Download** action. No source, portable, patch, or Linux archive contains model
+weights, tokenizer files, CSV files, ONNX external data, or checkpoint files.
 
-- **Default**: Downloaded from [HuggingFace](https://huggingface.co)
-- **Can't access HuggingFace?**: Open **Setup Now** and switch **Download Source** to hf-mirror or ModelScope
-- **ModelScope**: Available for Artist ID and SAM3 features
+- **Default**: official [Hugging Face](https://huggingface.co), with the
+  configured `hf-mirror` fallback.
+- **Gated models**: the UI links to the official page and reports the required
+  terms/token step; it does not silently retry with an unauthenticated mirror.
+- **ModelScope**: used only by model-specific Artist/SAM3 download paths.
+- **Bulk selection**: the Model Manager preselects one complete model for each
+  core feature. Users can clear the defaults, select optional models, or select
+  all visible missing models in one confirmation.
+
+The launcher console stays open while downloads run. It prints per-file
+validation, endpoint, revision, size, failures, and an explicit restart notice
+when installing Python packages. After restarting, click Prepare / Download
+again to resume verification and any remaining files.
 
 ## Package Manifest Model Policy
 
-Every app package writes `update/package-manifest.json` with a `model_artifact_policy` block.
+Every app package writes `update/package-manifest.json` with a
+`model_artifact_policy` block whose delivery mode is
+`application_prepare_only`.
 
-- Default app packages do **not** manage model payload files under `models/`; they only include model README/docs.
-- Runtime model files live under package-local `data/models` via launcher environment variables.
-- Auto-download model paths and optional release model assets are declared in the manifest so update/package checks do not mistake a model-free app package for a complete model bundle.
-- If a future staging mistake drops model binaries into a default app package, the package manifest excludes them unless the builder explicitly opts into model payload management.
+- `models/` may contain documentation only; all model payload paths are
+  excluded from every archive and updater manifest.
+- `data/models/` is user state and is never copied, deleted, or managed by a
+  release package or the in-app updater.
+- The manifest lists model IDs that the application can prepare, plus explicit
+  forbidden model prefixes. It contains no “optional model asset” entries.
+- The release builder rejects an explicit request to include model payloads,
+  so a future packaging call cannot accidentally turn into redistribution.
 
 ## Manual App Updates
 
@@ -113,49 +131,14 @@ This is intentional and must stay that way.
 - If a new release manifest ever tries to manage protected runtime paths, the worker aborts the update before copying or deleting installed files
 - If an old installed manifest contains dirty entries for protected paths, the worker ignores those entries instead of treating user data as obsolete app files
 
-## Optional Assets
-
-### Higher-quality WD14 pack
-
-- `sd-image-sorter-vX.X.X-wd14-eva02-model.zip`
-
-Use this only if you want the heavier EVA02 tagger.
-
-### Artist packs
-
-- `sd-image-sorter-vX.X.X-artist-runtime.zip`
-- `sd-image-sorter-vX.X.X-kaloscope-checkpoint.zip.001`
-- `sd-image-sorter-vX.X.X-kaloscope-checkpoint.zip.002`
-
-Put all Kaloscope split files in one folder and extract the `.zip.001` file with 7-Zip.
-
-### SAM3 pack
-
-- `sd-image-sorter-vX.X.X-sam3-modelscope-sam3pt.zip.001`
-- `sd-image-sorter-vX.X.X-sam3-modelscope-sam3pt.zip.002`
-
-This is included for advanced GPU users only.
-In the current verified setup, SAM3 should be treated as CUDA-only. Windows and Linux launchers prepare the SAM3 Python runtime. macOS is not supported by this release line.
-
-## Why The Large Models Are Split
-
-GitHub release assets have practical per-file limits, while Kaloscope and SAM3 are multi-gigabyte files.
-Splitting them keeps the release downloadable without pretending they are "small normal zips".
-
-## Why Models Are Not Included In The Repository
+## Why Models Are Not Included In The Repository Or Packages
 
 1. **Copyright**: Some models have specific redistribution terms
 2. **Size**: Models range from 12 MB to 3.3 GB — too large for git
-3. **Auto-download**: The app automatically downloads needed models on first use
-4. **User choice**: Users only download what they actually need
-
-## Recommended Extraction Order
-
-1. Main app or portable core package
-2. Optional WD14 EVA02 pack
-3. Optional artist runtime pack
-4. Optional split Kaloscope checkpoint
-5. Optional split SAM3 checkpoint
+3. **Application download**: Model Manager downloads and verifies only what the
+   user selects.
+4. **User choice**: The bulk selector makes multi-model setup convenient
+   without forcing optional or gated models.
 
 ## After Extraction
 
@@ -164,3 +147,7 @@ The app itself will tell you what is ready:
 - `Similar` tab banner: local CLIP readiness
 - `Censor Edit` banner: recommended detection mode and default privacy model
 - `Artist ID` banner: Kaloscope runtime readiness
+- `Smart Tag` / `Dataset Maker`: Florence-2 and Lucida readiness, with their
+  exact missing-file guidance
+- `CL Tagger v2`: gated authorization guidance until the official terms/token
+  requirement is satisfied

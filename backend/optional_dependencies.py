@@ -62,6 +62,16 @@ OPTIONAL_DEPENDENCY_GROUPS: dict[str, tuple[str, ...]] = {
     "clip": ("fastembed>=0.4.0",),
     "aesthetic": ("torch>=2.0.0", "open-clip-torch>=2.24.0"),
     "artist": ("torch>=2.0.0", "transformers>=5.6.0", "timm>=0.9.0", "safetensors>=0.4.0"),
+    "lucida": (
+        "torch>=2.0.0",
+        "torchvision>=0.23.0",
+        "transformers>=5.6.0",
+        "timm>=0.9.0",
+        "safetensors>=0.4.0",
+        "huggingface-hub>=0.24.0",
+        "kornia==0.8.3",
+        "einops>=0.8.0",
+    ),
     "nudenet": ("nudenet>=3.0.0",),
     "yolo": ("torch>=2.0.0", "ultralytics>=8.4.0"),
     "sam3": (
@@ -71,11 +81,20 @@ OPTIONAL_DEPENDENCY_GROUPS: dict[str, tuple[str, ...]] = {
         "opencv-python>=4.9.0",
     ),
     "toriigate": ("torch>=2.0.0", "transformers>=5.6.0", "safetensors>=0.4.0"),
+    "florence2": (
+        "torch>=2.0.0",
+        "transformers>=5.6.0",
+        "timm>=0.9.0",
+        "einops>=0.8.0",
+        "safetensors>=0.4.0",
+        "huggingface-hub>=0.24.0",
+    ),
+    "cl-tagger-v2": ("huggingface-hub>=0.24.0",),
     "translation": ("translators==6.0.4",),
 }
 
 TORCH_DEPENDENCY_GROUPS: frozenset[str] = frozenset(
-    {"aesthetic", "artist", "sam3", "toriigate", "yolo"}
+    {"aesthetic", "artist", "florence2", "lucida", "sam3", "toriigate", "yolo"}
 )
 
 
@@ -138,10 +157,29 @@ GROUP_IMPORTS: dict[str, tuple[str, ...]] = {
     "clip": ("fastembed",),
     "aesthetic": ("torch", "open_clip"),
     "artist": ("torch", "transformers", "timm", "safetensors"),
+    "lucida": (
+        "torch",
+        "torchvision",
+        "transformers",
+        "timm",
+        "safetensors",
+        "huggingface_hub",
+        "kornia",
+        "einops",
+    ),
     "nudenet": ("nudenet",),
     "yolo": ("torch", "ultralytics"),
     "sam3": ("torch", "transformers", "safetensors", "cv2"),
     "toriigate": ("torch", "transformers", "safetensors"),
+    "florence2": (
+        "torch",
+        "transformers",
+        "timm",
+        "einops",
+        "safetensors",
+        "huggingface_hub",
+    ),
+    "cl-tagger-v2": ("huggingface_hub",),
     "translation": ("translators",),
 }
 

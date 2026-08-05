@@ -23,6 +23,7 @@ test.describe.configure({ mode: 'serial' })
 
 const EXPORT_PAYLOAD_KEYS = [
   'blacklist',
+  'bucket_resize',
   'caption_transforms',
   'common_tags',
   'content_mode',
@@ -40,6 +41,7 @@ const EXPORT_PAYLOAD_KEYS = [
   'output_mode',
   'overwrite_policy',
   'prefix',
+  'subject_crop',
   'template_options',
   'trainer_batch',
   'trainer_config',
@@ -47,6 +49,7 @@ const EXPORT_PAYLOAD_KEYS = [
   'trainer_repeats',
   'trainer_resolution',
   'trigger',
+  'watermark_removal',
 ].sort()
 
 // The pipeline preview reuses the export payload and adds a row cap.
@@ -91,6 +94,11 @@ async function seedDatasetQueue(page: Page) {
     (window as any).DatasetMaker?._trainerContractState?.status === 'ready')
 }
 
+async function openSubjectCropControls(page: Page) {
+  await page.locator('#dataset-tab-export').click()
+  await page.locator('#dataset-step-export details.dataset-advanced > summary').click()
+}
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('sd-image-sorter-lang', 'en')
@@ -104,6 +112,208 @@ test('export payload key set is pinned (the /api/dataset/export wire format)', a
     return Object.keys(payload).sort()
   })
   expect(keys).toEqual(EXPORT_PAYLOAD_KEYS)
+})
+
+test('subject crop controls emit one structured opt-in payload', async ({ page }) => {
+  await seedDatasetQueue(page)
+  await openSubjectCropControls(page)
+  const enabled = page.getByTestId('dataset-subject-crop-enabled')
+  await expect(enabled).not.toBeChecked()
+  await enabled.check()
+  await page.getByTestId('dataset-subject-crop-threshold').fill('24')
+  await page.getByTestId('dataset-subject-crop-padding').fill('15')
+  await page.locator(
+    '.dataset-custom-dropdown[data-select-id="dataset-subject-crop-background"] '
+      + '.dataset-custom-dropdown-display',
+  ).click()
+  await page.locator(
+    '.dataset-custom-dropdown-list:not([hidden]) '
+      + '.dataset-custom-dropdown-option[data-value="solid_color"]',
+  ).click()
+  await page.getByTestId('dataset-subject-crop-color').fill('#123abc')
+
+  const subjectCrop = await page.evaluate(() => (
+    (window as any).DatasetMaker._buildExportPayload().subject_crop
+  ))
+
+  expect(subjectCrop).toEqual({
+    enabled: true,
+    alpha_threshold: 24,
+    padding_percent: 15,
+    background_mode: 'solid_color',
+    solid_color: '#123ABC',
+  })
+})
+
+test('bucket controls emit a structured payload and expose 64-pixel resolution steps', async ({ page }) => {
+  await seedDatasetQueue(page)
+  await openSubjectCropControls(page)
+  const enabled = page.getByTestId('dataset-bucket-resize-enabled')
+  await expect(enabled).not.toBeChecked()
+  await enabled.check()
+  await page.getByTestId('dataset-bucket-resize-subject-aware').check()
+  await page.getByTestId('dataset-bucket-resize-threshold').fill('160')
+
+  const resolution = page.getByTestId('dataset-trainer-resolution')
+  await expect(resolution).toBeVisible()
+  await expect(resolution).toBeEnabled()
+  await expect(resolution).toHaveAttribute('min', '256')
+  await expect(resolution).toHaveAttribute('max', '4096')
+  await expect(resolution).toHaveAttribute('step', '64')
+  await resolution.fill('768')
+
+  const payload = await page.evaluate(() => (
+    (window as any).DatasetMaker._buildExportPayload()
+  ))
+  expect(payload.bucket_resize).toEqual({
+    enabled: true,
+    subject_aware: true,
+    alpha_threshold: 160,
+  })
+  expect(payload.trainer_config).toBe('none')
+  expect(payload.trainer_resolution).toBe(768)
+})
+
+test('watermark removal controls emit an explicit manual-region payload', async ({ page }) => {
+  await seedDatasetQueue(page)
+  await openSubjectCropControls(page)
+  await page.getByTestId('dataset-watermark-removal-enabled').check()
+  await page.getByTestId('dataset-watermark-x').fill('70')
+  await page.getByTestId('dataset-watermark-y').fill('80')
+  await page.getByTestId('dataset-watermark-width').fill('25')
+  await page.getByTestId('dataset-watermark-height').fill('15')
+  await page.getByTestId('dataset-watermark-padding').fill('2')
+  await page.getByTestId('dataset-watermark-radius').fill('4')
+  await page.locator(
+    '.dataset-custom-dropdown[data-select-id="dataset-watermark-method"] '
+      + '.dataset-custom-dropdown-display',
+  ).click()
+  await page.locator(
+    '.dataset-custom-dropdown-list:not([hidden]) '
+      + '.dataset-custom-dropdown-option[data-value="ns"]',
+  ).click()
+
+  const removal = await page.evaluate(() => (
+    (window as any).DatasetMaker._buildExportPayload().watermark_removal
+  ))
+
+  expect(removal).toEqual({
+    enabled: true,
+    method: 'ns',
+    radius: 4,
+    padding_percent: 2,
+    regions: [{ x: 7000, y: 8000, width: 2500, height: 1500 }],
+  })
+})
+
+test('bucket project settings restore the mode and generic resolution', async ({ page }) => {
+  await seedDatasetQueue(page)
+  await openSubjectCropControls(page)
+  await page.getByTestId('dataset-bucket-resize-enabled').check()
+  await page.getByTestId('dataset-bucket-resize-subject-aware').check()
+  await page.getByTestId('dataset-bucket-resize-threshold').fill('192')
+  await page.getByTestId('dataset-trainer-resolution').fill('1280')
+
+  const savedSettings = await page.evaluate(() => (
+    (window as any).DatasetMaker._serializeProjectSettings()
+  ))
+  await page.getByTestId('dataset-bucket-resize-enabled').uncheck()
+  await page.evaluate(async (settings) => {
+    const dm = (window as any).DatasetMaker
+    const prepared = await dm._prepareProjectSettingsRestore(settings)
+    prepared.apply()
+  }, savedSettings)
+
+  await expect(page.getByTestId('dataset-bucket-resize-enabled')).toBeChecked()
+  await expect(page.getByTestId('dataset-bucket-resize-subject-aware')).toBeChecked()
+  await expect(page.getByTestId('dataset-bucket-resize-threshold')).toHaveValue('192')
+  await expect(page.getByTestId('dataset-trainer-resolution')).toHaveValue('1280')
+  expect(await page.evaluate(() => (
+    (window as any).DatasetMaker._buildExportPayload().bucket_resize
+  ))).toEqual(savedSettings.bucket_resize)
+})
+
+test('watermark removal project settings restore the cleanup rectangle', async ({ page }) => {
+  await seedDatasetQueue(page)
+  await openSubjectCropControls(page)
+  await page.getByTestId('dataset-watermark-removal-enabled').check()
+  await page.getByTestId('dataset-watermark-x').fill('70')
+  await page.getByTestId('dataset-watermark-y').fill('80')
+  await page.getByTestId('dataset-watermark-width').fill('25')
+  await page.getByTestId('dataset-watermark-height').fill('15')
+  await page.getByTestId('dataset-watermark-padding').fill('2')
+  await page.getByTestId('dataset-watermark-radius').fill('4')
+  await page.locator(
+    '.dataset-custom-dropdown[data-select-id="dataset-watermark-method"] '
+      + '.dataset-custom-dropdown-display',
+  ).click()
+  await page.locator(
+    '.dataset-custom-dropdown-list:not([hidden]) '
+      + '.dataset-custom-dropdown-option[data-value="ns"]',
+  ).click()
+
+  const savedSettings = await page.evaluate(() => (
+    (window as any).DatasetMaker._serializeProjectSettings()
+  ))
+  await page.getByTestId('dataset-watermark-removal-enabled').uncheck()
+  await page.evaluate(async (settings) => {
+    const dm = (window as any).DatasetMaker
+    const prepared = await dm._prepareProjectSettingsRestore(settings)
+    prepared.apply()
+  }, savedSettings)
+
+  await expect(page.getByTestId('dataset-watermark-removal-enabled')).toBeChecked()
+  expect(await page.evaluate(() => (
+    (window as any).DatasetMaker._buildExportPayload().watermark_removal
+  ))).toEqual(savedSettings.watermark_removal)
+  await expect(page.getByTestId('dataset-watermark-method')).toHaveValue('ns')
+  await expect(page.getByTestId('dataset-watermark-x')).toHaveValue('70')
+  await expect(page.getByTestId('dataset-watermark-y')).toHaveValue('80')
+})
+
+test('subject crop project settings restore the custom dropdown state', async ({ page }) => {
+  await seedDatasetQueue(page)
+  await openSubjectCropControls(page)
+  await page.getByTestId('dataset-subject-crop-enabled').check()
+  await page.locator(
+    '.dataset-custom-dropdown[data-select-id="dataset-subject-crop-background"] '
+      + '.dataset-custom-dropdown-display',
+  ).click()
+  await page.locator(
+    '.dataset-custom-dropdown-list:not([hidden]) '
+      + '.dataset-custom-dropdown-option[data-value="solid_color"]',
+  ).click()
+  await page.getByTestId('dataset-subject-crop-color').fill('#123abc')
+
+  const savedSettings = await page.evaluate(() => (
+    (window as any).DatasetMaker._serializeProjectSettings()
+  ))
+  await page.getByTestId('dataset-subject-crop-enabled').uncheck()
+  await page.evaluate(async (settings) => {
+    const dm = (window as any).DatasetMaker
+    const prepared = await dm._prepareProjectSettingsRestore(settings)
+    prepared.apply()
+  }, savedSettings)
+
+  expect(await page.evaluate(() => (
+    (window as any).DatasetMaker._buildExportPayload().subject_crop
+  ))).toEqual(savedSettings.subject_crop)
+  await expect(page.locator(
+    '.dataset-custom-dropdown[data-select-id="dataset-subject-crop-background"] '
+      + '.dataset-custom-dropdown-display',
+  )).toHaveText('Composite on solid color')
+})
+
+test('subject crop keeps export disabled until a mask export format is selected', async ({ page }) => {
+  await seedDatasetQueue(page)
+  await openSubjectCropControls(page)
+  await page.locator('#dataset-output-folder').fill('C:/training/subject-crop-contract')
+  await page.getByTestId('dataset-subject-crop-enabled').check()
+
+  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
+  await expect(page.locator('#dataset-export-disabled-hint')).toHaveText(
+    'Choose a training-mask export format before enabling subject crop.',
+  )
 })
 
 test('export-preview request carries the pinned payload and renders SERVER output names', async ({ page }) => {

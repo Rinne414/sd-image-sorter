@@ -21,7 +21,7 @@ from services.smart_tag.results import (
     _assemble_result_dict,
     _persist_result,
 )
-from services.smart_tag.tagging import _toriigate_nl_text
+from services.smart_tag.tagging import _florence2_nl_text, _toriigate_nl_text
 from services.tag_training_filters import (
     format_trait_suppression_block,
     normalize_training_purpose,
@@ -41,12 +41,13 @@ class _CaptionPhase:
     nl_tagger: Any = None
     use_vlm: bool = False
     use_toriigate: bool = False
+    use_florence2: bool = False
     worker_count: int = 1
     include_tags_as_context: bool = True
 
     @property
     def nl_active(self) -> bool:
-        return self.use_vlm or self.use_toriigate
+        return self.use_vlm or self.use_toriigate or self.use_florence2
 
 
 def _resolve_vlm_prompts(
@@ -94,11 +95,17 @@ def _build_caption_phase(req: "SmartTagRequest", vlm_provider, nl_tagger) -> "_C
         and req.natural_language_mode == "toriigate"
         and nl_tagger is not None
     )
+    use_florence2 = bool(
+        req.enable_vlm
+        and req.natural_language_mode == "florence2"
+        and nl_tagger is not None
+    )
     ctx = _CaptionPhase(
         vlm_provider=vlm_provider,
         nl_tagger=nl_tagger,
         use_vlm=use_vlm,
         use_toriigate=use_toriigate,
+        use_florence2=use_florence2,
     )
     if use_vlm:
         config = vlm_provider.config
@@ -250,13 +257,13 @@ def _run_caption_phase(
         for source_key, image_id, path, partial in items:
             if job.cancel_requested:
                 break
-            if ctx.use_toriigate:
+            if ctx.use_toriigate or ctx.use_florence2:
                 captions_since_pressure_check += 1
                 if captions_since_pressure_check >= TORIIGATE_PRESSURE_CHECK_INTERVAL:
                     captions_since_pressure_check = 0
                     _relieve_caption_pressure(job, ctx.nl_tagger)
-            nl_text = (
-                _toriigate_nl_text(
+            if ctx.use_toriigate:
+                nl_text = _toriigate_nl_text(
                     ctx.nl_tagger,
                     path,
                     image_id,
@@ -267,9 +274,23 @@ def _run_caption_phase(
                         req.trigger_word,
                     ),
                 )
-                if ctx.use_toriigate
-                else ""
-            )
+            elif ctx.use_florence2:
+                try:
+                    nl_text = _florence2_nl_text(
+                        ctx.nl_tagger,
+                        path,
+                        image_id,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Florence-2 caption failed for image %s: %s",
+                        image_id or source_key,
+                        exc,
+                    )
+                    _record_required_caption_failure(job, source_key, exc)
+                    continue
+            else:
+                nl_text = ""
             _handle_caption_result(
                 job, req, source_key, image_id, path, partial, nl_text,
                 nl_active=ctx.nl_active,

@@ -50,6 +50,7 @@ function cancelledJob() {
       total_items: 1,
       items_truncated: false,
       error_messages: [],
+      warnings: [],
     },
     finished_at: 3,
   }

@@ -163,6 +163,21 @@
         };
     };
 
+    const parseExportWarning = (value, index) => {
+        const path = `job result.warnings[${index}]`;
+        const data = requireRecord(value, path);
+        if (data.code !== 'backup_cleanup_failed') {
+            throw invalidExportResponse(`${path}.code is not supported`);
+        }
+        return {
+            code: data.code,
+            message: requireString(data.message, `${path}.message`),
+            backup_path: requireString(data.backup_path, `${path}.backup_path`),
+            error_type: requireString(data.error_type, `${path}.error_type`),
+            error: requireString(data.error, `${path}.error`),
+        };
+    };
+
     const parseExportResult = value => {
         const data = requireRecord(value, 'job result');
         if (!DATASET_EXPORT_RESULT_STATUSES.has(data.status)) {
@@ -170,6 +185,9 @@
         }
         if (!Array.isArray(data.items)) {
             throw invalidExportResponse('job result.items must be an array');
+        }
+        if (!Array.isArray(data.warnings)) {
+            throw invalidExportResponse('job result.warnings must be an array');
         }
         return {
             status: data.status,
@@ -185,6 +203,7 @@
             total_items: requireNonNegativeSafeInteger(data.total_items, 'job result.total_items'),
             items_truncated: requireBoolean(data.items_truncated, 'job result.items_truncated'),
             error_messages: requireStringArray(data.error_messages, 'job result.error_messages'),
+            warnings: data.warnings.map(parseExportWarning),
         };
     };
 
@@ -774,15 +793,26 @@
         const errors = Number(data.error_count || (data.errorMessages?.length || 0));
         const skipped = Number(data.skipped || 0);
         const errorMessages = data.error_messages || data.errorMessages || [];
+        const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+        const detailMessages = [
+            ...warnings.map(warning => (
+                `Warning: ${warning.message} Backup: ${warning.backup_path}`
+            )),
+            ...errorMessages,
+        ];
 
         if (statusEl) {
             statusEl.className = `dataset-result-status ${resolved}`;
-            statusEl.textContent = resolved === 'ok' ? '✓' : (resolved === 'partial' ? '⚠' : (resolved === 'cancelled' ? '!' : '✕'));
+            statusEl.textContent = resolved === 'ok' && warnings.length > 0
+                ? '!'
+                : (resolved === 'ok' ? '✓' : (resolved === 'partial' ? '⚠' : (resolved === 'cancelled' ? '!' : '✕')));
         }
         if (titleEl) {
             const map = { ok: 'dataset.resultOk', partial: 'dataset.resultPartial', failed: 'dataset.resultFailed', cancelled: 'dataset.resultCancelled' };
             const def = { ok: 'Done!', partial: 'Partial success', failed: 'Export failed', cancelled: 'Export cancelled' };
-            titleEl.textContent = this._t(map[resolved], def[resolved]);
+            titleEl.textContent = resolved === 'ok' && warnings.length > 0
+                ? this._t('dataset.resultOkWarnings', 'Done with warnings')
+                : this._t(map[resolved], def[resolved]);
         }
         if (detailEl) {
             // escapeHtml is the shared helper defined at the top of this IIFE.
@@ -810,12 +840,12 @@
             detailEl.innerHTML = html;
         }
         if (errorsBox && errorsList) {
-            if (errorMessages.length === 0) {
+            if (detailMessages.length === 0) {
                 errorsBox.hidden = true;
                 errorsList.innerHTML = '';
             } else {
                 errorsBox.hidden = false;
-                errorsList.innerHTML = errorMessages.map(m => `<li>${String(m).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</li>`).join('');
+                errorsList.innerHTML = detailMessages.map(m => `<li>${String(m).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</li>`).join('');
             }
         }
         if (openFolderBtn) {

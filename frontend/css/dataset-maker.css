@@ -1329,6 +1329,49 @@
     margin-right: 4px;
 }
 
+#view-dataset .dataset-subject-crop-panel,
+#view-dataset .dataset-bucket-resize-panel {
+    display: grid;
+    min-width: 0;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 10px 0 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#view-dataset .dataset-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+#view-dataset .dataset-subject-crop-settings,
+#view-dataset .dataset-bucket-resize-settings {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    min-width: 0;
+}
+
+#view-dataset .dataset-bucket-resize-settings {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+#view-dataset .dataset-subject-crop-settings[hidden],
+#view-dataset .dataset-subject-crop-color[hidden],
+#view-dataset .dataset-bucket-resize-settings[hidden],
+#view-dataset .dataset-trainer-settings > [hidden] {
+    display: none;
+}
+
+#view-dataset .dataset-subject-crop-color input[type="color"] {
+    width: 44px;
+    height: 32px;
+    padding: 2px;
+}
+
 #view-dataset .dataset-trainer-package-panel {
     display: grid;
     min-width: 0;

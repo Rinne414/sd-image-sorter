@@ -250,6 +250,7 @@ def test_thresholds_partial_override_fills_only_the_unset_side() -> None:
 def test_thresholds_concrete_registry_cells_for_non_wd_models() -> None:
     assert resolve_request_thresholds("pixai-tagger-v0.9", None, None) == (0.45, 0.85)
     assert resolve_request_thresholds("oppai-oracle-v1.1", None, None) == (0.7927, 1.0)
+    assert resolve_request_thresholds("cl-tagger-v2", None, None) == (0.55, 0.55)
     assert resolve_request_thresholds("toriigate-0.5", None, None) == (1.0, 1.0)
 
 
@@ -605,6 +606,11 @@ def test_tagger_models_catalog_derived_role_and_prepare_fields() -> None:
     assert catalog["oppai-oracle-v1.1"]["smart_tag_role"] == "booru"
     assert catalog["oppai-oracle-v1.1"]["prepare_model_id"] == "oppai-oracle"
     assert catalog["oppai-oracle-v1.1"]["custom_profile_supported"] is False
+
+    assert catalog["cl-tagger-v2"]["smart_tag_role"] == "booru"
+    assert catalog["cl-tagger-v2"]["prepare_model_id"] == "cl-tagger-v2"
+    assert catalog["cl-tagger-v2"]["custom_profile_supported"] is False
+    assert catalog["cl-tagger-v2"]["custom_tags_file_hint"] == "model_vocabulary.json"
 
     assert catalog["wd-swinv2-tagger-v3"]["smart_tag_role"] == "booru"
     assert catalog["wd-swinv2-tagger-v3"]["prepare_model_id"] == "wd14"

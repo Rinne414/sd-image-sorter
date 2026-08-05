@@ -20,6 +20,9 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
+
+from model_download_sources import log_model_artifact_status
 
 
 def _svc():
@@ -125,6 +128,27 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
             "paths": {"model_dir": resolved_dir},
         }, dependency_result)
 
+    if normalized_model_id == "florence2":
+        dependency_result = _svc().ensure_group("florence2")
+        restart_result = _svc()._dependency_restart_result(
+            normalized_model_id,
+            dependency_result,
+        )
+        if restart_result:
+            return restart_result
+
+        from florence2_captioner import prepare_checkpoint
+
+        checkpoint_path = prepare_checkpoint()
+        return _svc()._with_dependency_result({
+            "status": "ok",
+            "model_id": normalized_model_id,
+            "message": (
+                "Florence-2 Base runtime and pinned model files are ready."
+            ),
+            "paths": {"checkpoint_path": checkpoint_path},
+        }, dependency_result)
+
     if normalized_model_id == "oppai-oracle":
         # OppaiOracle V1.1 ONNX (~947 MB) is downloaded by the dedicated
         # OppaiOracleTagger class. No extra Python dependencies are needed
@@ -153,14 +177,22 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
         restart_result = _svc()._dependency_restart_result(normalized_model_id, dependency_result)
         if restart_result:
             return restart_result
-        from similarity import ensure_clip_model_ready
+        from similarity import ensure_clip_model_ready, get_clip_text_local_model_path
 
         model_path = ensure_clip_model_ready()
+        text_model_path = get_clip_text_local_model_path()
+        if not text_model_path:
+            raise RuntimeError(
+                "CLIP text-query model is incomplete after Prepare / Download."
+            )
         return _svc()._with_dependency_result({
             "status": "ok",
             "model_id": normalized_model_id,
-            "message": "CLIP model is ready.",
-            "paths": {"model_path": model_path},
+            "message": "CLIP vision and text-query models are ready.",
+            "paths": {
+                "vision_model_path": model_path,
+                "text_model_path": text_model_path,
+            },
         }, dependency_result)
 
     if normalized_model_id == "artist":
@@ -182,6 +214,63 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
                 "checkpoint_path": str(Path(prepared["checkpoint_path"]).resolve()),
                 "class_mapping_path": str(Path(prepared["class_mapping_path"]).resolve()),
             },
+        }, dependency_result)
+
+    if normalized_model_id == "lucida":
+        dependency_result = _svc().ensure_group("lucida")
+        restart_result = _svc()._dependency_restart_result(normalized_model_id, dependency_result)
+        if restart_result:
+            return restart_result
+
+        from lucida_matting import prepare_checkpoint
+
+        checkpoint_path = prepare_checkpoint()
+        return _svc()._with_dependency_result({
+            "status": "ok",
+            "model_id": normalized_model_id,
+            "message": "Lucida runtime and pinned model files are ready.",
+            "paths": {"checkpoint_path": checkpoint_path},
+        }, dependency_result)
+
+    if normalized_model_id == "cl-tagger-v2":
+        dependency_result = _svc().ensure_group("cl-tagger-v2")
+        restart_result = _svc()._dependency_restart_result(
+            normalized_model_id,
+            dependency_result,
+        )
+        if restart_result:
+            return restart_result
+
+        import config
+        from cl_tagger_v2 import CLTaggerV2AuthRequiredError, prepare_checkpoint
+
+        try:
+            checkpoint_path = prepare_checkpoint()
+        except CLTaggerV2AuthRequiredError as exc:
+            target_dir = (
+                Path(config.get_cl_tagger_v2_model_dir()) / "cl-tagger-v2"
+            )
+            raise _svc().ExternalAuthRequiredError({
+                "type": "ExternalAuthRequired",
+                "provider": "Hugging Face",
+                "message": str(exc),
+                "manual_steps": [
+                    "Open the official CL Tagger v2 Hugging Face page and accept the model terms.",
+                    "Sign in with the Hugging Face account that has access to the gated repository.",
+                    "Configure a Hugging Face token for this user account if the Hub requests authentication.",
+                    "Return to Model Manager and retry Prepare / Download for CL Tagger v2.",
+                ],
+                "target_dir": str(target_dir.resolve()),
+                "external_url": "https://huggingface.co/cella110n/cl_tagger_v2",
+            }) from exc
+        return _svc()._with_dependency_result({
+            "status": "ok",
+            "model_id": normalized_model_id,
+            "message": (
+                "CL Tagger v2 runtime and pinned files are ready. "
+                "The gated checkpoint was fetched from official Hugging Face."
+            ),
+            "paths": {"checkpoint_path": checkpoint_path},
         }, dependency_result)
 
     if normalized_model_id == "censor-nudenet":
@@ -280,7 +369,8 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
         # who already have the giant model.safetensors don't redownload it
         # just to backfill the small config / tokenizer files.
         errors: List[str] = []
-        for filename, url in _svc()._sam3_download_urls():
+        download_pairs = _svc()._sam3_download_urls()
+        for filename, url in download_pairs:
             dest = sam3_dir / filename
             if dest.exists() and dest.stat().st_size > 0:
                 continue
@@ -292,9 +382,24 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
                     "SAM3 file download failed: %s -> %s: %s", url, dest, exc
                 )
 
+        endpoint = "unknown"
+        if download_pairs:
+            parsed_endpoint = urlsplit(download_pairs[0][1])
+            endpoint = f"{parsed_endpoint.scheme}://{parsed_endpoint.netloc}".rstrip("/")
+        missing = log_model_artifact_status(
+            _model_logger,
+            model_id="facebook/sam3",
+            revision=None,
+            endpoint=endpoint,
+            model_dir=sam3_dir,
+            required_files=_svc()._SAM3_DOWNLOAD_FILES,
+        )
+
         refreshed_path = _svc().get_sam3_checkpoint_path()
         if not refreshed_path:
             detail = "; ".join(errors) if errors else "no completed downloads"
+            if missing:
+                detail += "; missing artifacts: " + ", ".join(missing)
             raise RuntimeError(
                 f"Could not assemble SAM3 checkpoint ({detail}). "
                 f"You can manually download files from {_svc().SAM3_MODELSCOPE_URL} and place them in {sam3_dir}"
@@ -324,7 +429,13 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
         restart_result = _svc()._dependency_restart_result(normalized_model_id, dependency_result)
         if restart_result:
             return restart_result
-        from aesthetic import _ensure_loaded, _get_models_dir, is_available
+        from aesthetic import (
+            _ensure_loaded,
+            _get_models_dir,
+            get_aesthetic_backbone_path,
+            is_available,
+            is_fully_ready,
+        )
 
         head_path = _get_models_dir() / "sa_0_4_vit_l_14_linear.pth"
         if not head_path.exists():
@@ -333,16 +444,30 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
 
         if is_available():
             _ensure_loaded()
+            backbone_path = get_aesthetic_backbone_path()
+            if not is_fully_ready():
+                raise RuntimeError(
+                    "Aesthetic predictor loaded without a verifiable local CLIP backbone. "
+                    "Retry Prepare / Download."
+                )
             return _svc()._with_dependency_result({
                 "status": "ok",
                 "model_id": normalized_model_id,
-                "message": "Aesthetic predictor is ready.",
-                "paths": {"head_path": str(head_path)},
+                "message": "Aesthetic predictor CLIP backbone and linear head are ready.",
+                "paths": {
+                    "head_path": str(head_path),
+                    "backbone_path": str(backbone_path or "in-memory"),
+                },
             }, dependency_result)
         return _svc()._with_dependency_result({
-            "status": "ok",
+            "status": "needs_runtime",
             "model_id": normalized_model_id,
-            "message": "Linear head downloaded. CLIP model will download on first scoring run.",
+            "ready": False,
+            "message": (
+                "Aesthetic linear head is present, but the CLIP runtime could not be loaded. "
+                "Restart SD Image Sorter if dependencies were just installed, then run "
+                "Prepare / Download again."
+            ),
             "paths": {"head_path": str(head_path)},
         }, dependency_result)
 

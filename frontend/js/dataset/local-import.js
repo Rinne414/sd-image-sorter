@@ -1290,6 +1290,15 @@
         if (typeof this._trainerExportFields !== 'function') {
             throw new TypeError('Dataset export requires DatasetMaker._trainerExportFields');
         }
+        if (typeof this._subjectCropExportSettings !== 'function') {
+            throw new TypeError('Dataset export requires DatasetMaker._subjectCropExportSettings');
+        }
+        if (typeof this._bucketResizeExportSettings !== 'function') {
+            throw new TypeError('Dataset export requires DatasetMaker._bucketResizeExportSettings');
+        }
+        if (typeof this._watermarkRemovalExportSettings !== 'function') {
+            throw new TypeError('Dataset export requires DatasetMaker._watermarkRemovalExportSettings');
+        }
         const trainerFields = this._trainerExportFields();
 
         return {
@@ -1312,6 +1321,9 @@
             image_overrides,
             image_types,
             image_nl_overrides,
+            subject_crop: this._subjectCropExportSettings(),
+            bucket_resize: this._bucketResizeExportSettings(),
+            watermark_removal: this._watermarkRemovalExportSettings(),
             ...trainerFields,
         };
     };

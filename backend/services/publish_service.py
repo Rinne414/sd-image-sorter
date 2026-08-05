@@ -26,6 +26,8 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from services.watermark_service import TextWatermarkConfig, WatermarkServiceError, write_text_watermarked_copy
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_CENSOR_SUFFIX = "_censored"
@@ -215,6 +217,7 @@ def export_set(
     caption_text: str = "",
     censor_suffix: Optional[str] = None,
     overwrite: bool = False,
+    watermark: Optional[TextWatermarkConfig] = None,
 ) -> Dict[str, Any]:
     """Copy the ordered set into ``output_folder`` with sequential names.
 
@@ -265,8 +268,15 @@ def export_set(
                 skipped_existing.append({"image_id": image_id, "output_name": output_name})
                 continue
             try:
-                shutil.copy2(source["path"], destination)
-            except OSError as exc:
+                if watermark is not None and watermark.enabled:
+                    write_text_watermarked_copy(
+                        source["path"],
+                        str(destination),
+                        watermark,
+                    )
+                else:
+                    shutil.copy2(source["path"], destination)
+            except (OSError, WatermarkServiceError) as exc:
                 logger.warning("Publish export copy failed for %s: %s", source["path"], exc)
                 errors.append({"image_id": image_id, "error": f"Copy failed: {exc}"})
                 continue

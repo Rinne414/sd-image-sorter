@@ -126,7 +126,7 @@ class SmartTagRequest:
     character_threshold: float = 0.85
     copyright_threshold: float = 0.35
     max_tags_per_image: int = 0
-    natural_language_mode: str = "vlm"  # vlm | toriigate
+    natural_language_mode: str = "vlm"  # vlm | toriigate | florence2
     caption_profile: Optional[SmartTagCaptionProfile] = None
     # v3.2.2 T-power-PR2 (D): multi-tagger consensus.
     # When ``taggers`` is non-empty, the orchestrator runs each one
@@ -324,11 +324,12 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
         if nl_mode_value is None
         else str(nl_mode_value).strip().lower()
     )
-    nl_mode_normalized = (
-        "toriigate"
-        if nl_mode_raw in {"toriigate", "torii", "toriigate-0.5"}
-        else "vlm"
-    )
+    if nl_mode_raw in {"toriigate", "torii", "toriigate-0.5"}:
+        nl_mode_normalized = "toriigate"
+    elif nl_mode_raw in {"vlm", "florence2"}:
+        nl_mode_normalized = nl_mode_raw
+    else:
+        nl_mode_normalized = nl_mode_raw
     caption_profile = _coerce_caption_profile(payload.get("caption_profile"))
     if caption_profile is not None and not enable_vlm_flag:
         raise ValueError(
@@ -341,6 +342,11 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
             "caption_profile requires natural_language_mode='vlm'; received "
             f"natural_language_mode={nl_mode_raw!r}. Remove caption_profile "
             "or select VLM natural-language captioning."
+        )
+    if nl_mode_normalized not in {"vlm", "toriigate", "florence2"}:
+        raise ValueError(
+            "natural_language_mode must be 'vlm', 'toriigate', or 'florence2'; "
+            f"received {nl_mode_raw!r}."
         )
     if enable_vlm_flag and nl_mode_normalized == "vlm":
         try:

@@ -33,8 +33,14 @@ from config import (
 )
 from image_fingerprint import compute_image_content_fingerprint
 from metadata_parser import verify_image_readable
-from model_health import get_clip_local_model_path
-from model_download_sources import apply_hf_endpoint_monkeypatch, endpoint_label, get_hf_endpoint_order
+from model_health import get_clip_local_model_path, get_clip_text_local_model_path
+from model_download_sources import (
+    apply_hf_endpoint_monkeypatch,
+    endpoint_label,
+    get_hf_endpoint_order,
+    log_model_artifact_status,
+)
+from model_health_paths import CLIP_TEXT_REQUIRED_FILES, CLIP_VISION_REQUIRED_FILES
 from utils.source_paths import resolve_existing_indexed_image_path
 from ai_runtime_guard import exclusive_ai_runtime
 import similarity_ann
@@ -153,23 +159,53 @@ def _get_embed_model():
     return _embed_model
 
 
-def ensure_clip_model_ready() -> Optional[str]:
-    """Trigger FastEmbed model initialization/download and return the local model path if available."""
-    model = _get_embed_model()
-    # Try the standard health-check path first
-    local_path = get_clip_local_model_path()
-    if local_path:
-        return local_path
-    # FastEmbed loaded successfully but the file isn't at the canonical path.
-    # Try to extract the actual model directory from the loaded model object.
+def _loaded_fastembed_model_dir(model: object) -> Optional[str]:
+    """Return the backing directory exposed by a loaded FastEmbed wrapper."""
     try:
-        model_dir = getattr(model, "model_dir", None) or getattr(model.model, "_model_dir", None)
+        wrapped = getattr(model, "model", None)
+        model_dir = getattr(model, "model_dir", None) or getattr(wrapped, "_model_dir", None)
         if model_dir:
             return str(model_dir)
     except Exception:
         logger.debug("Could not introspect FastEmbed model directory", exc_info=True)
-    # Model is loaded in memory — return a sentinel so callers know it works
-    return "fastembed:in-memory"
+    return None
+
+
+def ensure_clip_model_ready() -> str:
+    """Prepare and validate both CLIP towers used by similarity search."""
+    vision_model = _get_embed_model()
+    text_model = _get_text_embed_model()
+    vision_path = get_clip_local_model_path() or _loaded_fastembed_model_dir(vision_model)
+    text_path = get_clip_text_local_model_path() or _loaded_fastembed_model_dir(text_model)
+    if not vision_path or not text_path:
+        raise RuntimeError(
+            "CLIP Prepare completed without both local model directories: "
+            f"vision={vision_path!r}, text={text_path!r}. Retry Prepare / Download."
+        )
+    endpoint = get_hf_endpoint_order(model_name="CLIP Similarity")[0]
+    vision_missing = log_model_artifact_status(
+        logger,
+        model_id=CLIP_MODEL_NAME,
+        revision=None,
+        endpoint=endpoint,
+        model_dir=Path(vision_path),
+        required_files=CLIP_VISION_REQUIRED_FILES,
+    )
+    text_missing = log_model_artifact_status(
+        logger,
+        model_id=CLIP_TEXT_MODEL_NAME,
+        revision=None,
+        endpoint=endpoint,
+        model_dir=Path(text_path),
+        required_files=CLIP_TEXT_REQUIRED_FILES,
+    )
+    if vision_missing or text_missing:
+        raise RuntimeError(
+            "CLIP Prepare completed with missing runtime artifacts: "
+            f"vision={list(vision_missing)}, text={list(text_missing)}. "
+            "Retry Prepare / Download."
+        )
+    return vision_path
 
 
 _text_embed_model = None
@@ -187,21 +223,30 @@ def _get_text_embed_model():
                 try:
                     from fastembed import TextEmbedding  # type: ignore
 
-                    endpoint = get_hf_endpoint_order(model_name="CLIP Similarity")[0]
-                    apply_hf_endpoint_monkeypatch(endpoint, purpose="CLIP text tower / FastEmbed")
-                    with exclusive_ai_runtime("clip-text-load"):
-                        _text_embed_model = TextEmbedding(
-                            model_name=CLIP_TEXT_MODEL_NAME,
-                            cache_dir=get_clip_model_dir(),
+                    local_model_path = get_clip_text_local_model_path()
+                    model_kwargs = {
+                        "model_name": CLIP_TEXT_MODEL_NAME,
+                        "cache_dir": get_clip_model_dir(),
+                    }
+                    if local_model_path:
+                        model_kwargs.update(
+                            {
+                                "local_files_only": True,
+                                "specific_model_path": local_model_path,
+                            }
                         )
+                    if not local_model_path:
+                        endpoint = get_hf_endpoint_order(model_name="CLIP Similarity")[0]
+                        apply_hf_endpoint_monkeypatch(endpoint, purpose="CLIP text tower / FastEmbed")
+                    with exclusive_ai_runtime("clip-text-load"):
+                        _text_embed_model = TextEmbedding(**model_kwargs)
                 except ImportError:
                     raise RuntimeError(
                         "fastembed not installed. Run: pip install fastembed"
                     )
                 except Exception as exc:
                     raise RuntimeError(
-                        "CLIP text model is not ready yet — it downloads on first "
-                        "use (~65 MB). Check the network / model mirror settings. "
+                        "CLIP text model is not ready. Run Prepare / Download in Model Manager. "
                         f"Error: {exc}"
                     ) from exc
     return _text_embed_model

@@ -160,6 +160,100 @@ def _validate_template_options_contract(
     return request
 
 
+class DatasetSubjectCropSettings(BaseModel):
+    """One explicit, backward-compatible mask-driven crop configuration."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    enabled: bool = Field(strict=True)
+    alpha_threshold: int = Field(strict=True, ge=1, le=255)
+    padding_percent: int = Field(strict=True, ge=0, le=100)
+    background_mode: Literal[
+        "keep_background",
+        "transparent_rgba",
+        "solid_color",
+    ]
+    solid_color: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+
+
+def disabled_subject_crop_settings() -> DatasetSubjectCropSettings:
+    """Return the neutral settings used when an older client omits the field."""
+    return DatasetSubjectCropSettings(
+        enabled=False,
+        alpha_threshold=1,
+        padding_percent=0,
+        background_mode="keep_background",
+        solid_color="#000000",
+    )
+
+
+class DatasetBucketResizeSettings(BaseModel):
+    """One explicit, backward-compatible bucket preprocessing configuration."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    enabled: bool = Field(strict=True)
+    subject_aware: bool = Field(strict=True)
+    alpha_threshold: int = Field(strict=True, ge=1, le=255)
+
+
+def disabled_bucket_resize_settings() -> DatasetBucketResizeSettings:
+    """Return neutral bucket settings when an older client omits the field."""
+    return DatasetBucketResizeSettings(
+        enabled=False,
+        subject_aware=False,
+        alpha_threshold=128,
+    )
+
+
+class DatasetWatermarkRegion(BaseModel):
+    """One normalized watermark rectangle in basis points of the image."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    x: int = Field(strict=True, ge=0, le=10000)
+    y: int = Field(strict=True, ge=0, le=10000)
+    width: int = Field(strict=True, gt=0, le=10000)
+    height: int = Field(strict=True, gt=0, le=10000)
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "DatasetWatermarkRegion":
+        if self.x + self.width > 10000 or self.y + self.height > 10000:
+            raise ValueError("watermark removal region must stay within 0..10000")
+        return self
+
+
+class DatasetWatermarkRemovalSettings(BaseModel):
+    """Explicit CPU inpainting settings for Dataset export copies."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    enabled: bool = Field(default=False, strict=True)
+    method: Literal["telea", "ns"] = "telea"
+    radius: int = Field(default=3, strict=True, ge=1, le=20)
+    padding_percent: int = Field(default=0, strict=True, ge=0, le=10)
+    regions: List[DatasetWatermarkRegion] = Field(default_factory=list, max_length=8)
+
+    @model_validator(mode="after")
+    def validate_regions(self) -> "DatasetWatermarkRemovalSettings":
+        if self.enabled and not self.regions:
+            raise ValueError(
+                "watermark_removal.regions requires at least one region when enabled"
+            )
+        return self
+
+
+def disabled_watermark_removal_settings() -> DatasetWatermarkRemovalSettings:
+    """Return neutral settings for clients that do not request cleanup."""
+    return DatasetWatermarkRemovalSettings(
+        enabled=False,
+        method="telea",
+        radius=3,
+        padding_percent=0,
+        regions=[],
+    )
+
+
 class DatasetExportRequest(BaseModel):
     """Request schema for ``POST /api/dataset/export``.
 
@@ -234,6 +328,16 @@ class DatasetExportRequest(BaseModel):
     # Anima use different names and directories, so their modes are distinct.
     mask_export: str = Field(default="none", max_length=16)
 
+    subject_crop: DatasetSubjectCropSettings = Field(
+        default_factory=disabled_subject_crop_settings
+    )
+    bucket_resize: DatasetBucketResizeSettings = Field(
+        default_factory=disabled_bucket_resize_settings
+    )
+    watermark_removal: DatasetWatermarkRemovalSettings = Field(
+        default_factory=disabled_watermark_removal_settings
+    )
+
     # Optional pinned trainer handoff. Kohya and Anima use distinct verified
     # TOML schemas and incompatible mask layouts; "none" writes no config.
     trainer_config: str = Field(default="none", max_length=16)
@@ -305,6 +409,17 @@ class DatasetExportPreviewRequest(BaseModel):
     annotation_selections: Dict[str, DatasetAnnotationSelection] = Field(
         default_factory=dict,
     )
+    mask_export: str = Field(default="none", max_length=16)
+    subject_crop: DatasetSubjectCropSettings = Field(
+        default_factory=disabled_subject_crop_settings
+    )
+    bucket_resize: DatasetBucketResizeSettings = Field(
+        default_factory=disabled_bucket_resize_settings
+    )
+    watermark_removal: DatasetWatermarkRemovalSettings = Field(
+        default_factory=disabled_watermark_removal_settings
+    )
+    trainer_resolution: int = Field(default=1024, ge=256, le=4096)
     limit: int = Field(default=72, ge=1, le=500)
 
     @model_validator(mode="after")
@@ -322,6 +437,16 @@ class DatasetExportItemResult(BaseModel):
     error: Optional[str] = None
 
 
+class DatasetExportWarning(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    code: Literal["backup_cleanup_failed"]
+    message: str
+    backup_path: str
+    error_type: str
+    error: str
+
+
 class DatasetExportResponse(BaseModel):
     status: str  # "ok" | "partial" | "failed" | "cancelled"
     exported: int
@@ -336,6 +461,7 @@ class DatasetExportResponse(BaseModel):
     total_items: int = 0
     items_truncated: bool = False
     error_messages: List[str]
+    warnings: List[DatasetExportWarning] = Field(default_factory=list)
     package_status: Literal["not_requested", "complete", "incomplete"] = "not_requested"
     package_run_id: Optional[str] = None
     package_manifest_path: Optional[str] = None

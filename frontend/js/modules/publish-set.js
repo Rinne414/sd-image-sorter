@@ -62,6 +62,14 @@
             }
             if (typeof saved.suffix === 'string' && saved.suffix) $('pub-suffix').value = saved.suffix;
             $('pub-overwrite').checked = !!saved.overwrite;
+            $('pub-watermark-enabled').checked = !!saved.watermarkEnabled;
+            if (typeof saved.watermarkText === 'string') $('pub-watermark-text').value = saved.watermarkText;
+            if (typeof saved.watermarkPosition === 'string') $('pub-watermark-position').value = saved.watermarkPosition;
+            if (Number.isFinite(saved.watermarkOpacity)) $('pub-watermark-opacity').value = String(saved.watermarkOpacity);
+            if (Number.isFinite(saved.watermarkSize)) $('pub-watermark-size').value = String(saved.watermarkSize);
+            if (Number.isFinite(saved.watermarkMargin)) $('pub-watermark-margin').value = String(saved.watermarkMargin);
+            if (typeof saved.watermarkColor === 'string') $('pub-watermark-color').value = saved.watermarkColor;
+            syncWatermarkControls();
         } catch (err) { /* corrupted settings are non-fatal */ }
     }
 
@@ -74,6 +82,13 @@
                 pad: $('pub-pad').value,
                 suffix: $('pub-suffix').value,
                 overwrite: $('pub-overwrite').checked,
+                watermarkEnabled: $('pub-watermark-enabled').checked,
+                watermarkText: $('pub-watermark-text').value,
+                watermarkPosition: $('pub-watermark-position').value,
+                watermarkOpacity: Number($('pub-watermark-opacity').value),
+                watermarkSize: Number($('pub-watermark-size').value),
+                watermarkMargin: Number($('pub-watermark-margin').value),
+                watermarkColor: $('pub-watermark-color').value,
             }));
         } catch (err) { /* storage full/blocked is non-fatal */ }
     }
@@ -85,6 +100,43 @@
     function currentSuffix() {
         const raw = ($('pub-suffix').value || '').trim();
         return raw || '_censored';
+    }
+
+    function readWatermarkInteger(id, minimum, maximum) {
+        const value = Number($(id).value);
+        if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
+            throw new Error(`${id} must be an integer from ${minimum} to ${maximum}`);
+        }
+        return value;
+    }
+
+    function currentWatermark() {
+        const enabled = $('pub-watermark-enabled').checked;
+        const config = {
+            enabled,
+            text: $('pub-watermark-text').value || '',
+            position: $('pub-watermark-position').value,
+            opacity: readWatermarkInteger('pub-watermark-opacity', 1, 100),
+            size_percent: readWatermarkInteger('pub-watermark-size', 1, 20),
+            margin_percent: readWatermarkInteger('pub-watermark-margin', 0, 10),
+            color: $('pub-watermark-color').value,
+        };
+        if (enabled && !config.text.trim()) {
+            throw new Error(t('pub.watermarkTextRequired', 'Enter watermark text first'));
+        }
+        return config;
+    }
+
+    function syncWatermarkControls() {
+        const enabled = $('pub-watermark-enabled')?.checked === true;
+        const panel = $('pub-watermark-panel');
+        if (panel) panel.open = enabled;
+        [
+            'pub-watermark-text', 'pub-watermark-position', 'pub-watermark-opacity',
+            'pub-watermark-size', 'pub-watermark-margin', 'pub-watermark-color',
+        ].forEach((id) => {
+            if ($(id)) $(id).disabled = !enabled;
+        });
     }
 
     async function fetchPairs(ids) {
@@ -367,6 +419,15 @@
             return;
         }
         saveSettings();
+        let watermark;
+        try {
+            watermark = currentWatermark();
+        } catch (err) {
+            showToast(t('pub.exportFailed', 'Export failed: {error}', {
+                error: String(err && err.message || err),
+            }), 'warning');
+            return;
+        }
         STATE.exporting = true;
         renderStatus();
         const button = $('btn-pub-export');
@@ -387,6 +448,7 @@
                     caption_text: $('pub-caption').value || '',
                     censor_suffix: currentSuffix(),
                     overwrite: $('pub-overwrite').checked,
+                    watermark,
                 }),
             });
             if (!response.ok) {
@@ -481,6 +543,15 @@
         ['pub-folder', 'pub-prefix', 'pub-overwrite'].forEach((id) => {
             $(id)?.addEventListener('change', saveSettings);
         });
+        $('pub-watermark-enabled')?.addEventListener('change', () => {
+            syncWatermarkControls();
+            saveSettings();
+        });
+        [
+            'pub-watermark-text', 'pub-watermark-position', 'pub-watermark-opacity',
+            'pub-watermark-size', 'pub-watermark-margin', 'pub-watermark-color',
+        ].forEach((id) => $(id)?.addEventListener('change', saveSettings));
+        syncWatermarkControls();
     }
 
     if (document.readyState === 'loading') {

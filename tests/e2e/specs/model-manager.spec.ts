@@ -574,6 +574,149 @@ test.describe('Model Manager', () => {
     expect(progressCalls).toBe(0)
   })
 
+  test('bulk gated failure opens the actionable authorization guide', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await mockMinimalModelStatus(page)
+    await page.route('**/api/disk/cache-status', async (route) => {
+      await route.fulfill({ json: diskUsagePayload() })
+    })
+    await page.route('**/api/models/bulk-bundle', async (route) => {
+      await route.fulfill({
+        json: {
+          items: [
+            {
+              id: 'cl-tagger-v2',
+              name: 'CL Tagger v2',
+              label: 'CL Tagger v2',
+              group: 'Tagging',
+              size_bytes: 2048,
+              status: 'missing',
+              default_selected: false,
+              gated_download: true,
+              requires_auth: true,
+              auth_url: 'https://huggingface.co/cella110n/cl_tagger_v2',
+            },
+          ],
+          pending_total_bytes: 2048,
+          all_total_bytes: 2048,
+          excluded: [],
+        },
+      })
+    })
+    await page.route('**/api/models/prepare', async (route) => {
+      await route.fulfill({
+        json: {
+          status: 'downloading',
+          model_id: 'cl-tagger-v2',
+          message: 'Download started in background.',
+        },
+      })
+    })
+    await page.route('**/api/models/download-progress', async (route) => {
+      await route.fulfill({
+        json: {
+          active: false,
+          prepare_result: {
+            active: false,
+            model_id: 'cl-tagger-v2',
+            status: 'error',
+            message: 'Accept the official Hugging Face terms and sign in.',
+            provider: 'Hugging Face',
+            target_dir: '/tmp/sd-image-sorter/models/cl-tagger-v2',
+            external_url: 'https://huggingface.co/cella110n/cl_tagger_v2',
+            manual_steps: [
+              'Open the official model page.',
+              'Accept the model terms and sign in with huggingface-cli login.',
+              'Click Download again.',
+            ],
+          },
+        },
+      })
+    })
+    await page.addInitScript(() => {
+      ;(window as Window & { __bulkOpenedUrl?: string }).__bulkOpenedUrl = ''
+      window.open = ((url?: string | URL) => {
+        ;(window as Window & { __bulkOpenedUrl?: string }).__bulkOpenedUrl = String(url || '')
+        return null
+      }) as typeof window.open
+    })
+
+    await openModelManager(page)
+    await page.locator('#btn-bulk-download-models').click()
+    await page.getByTestId('bulk-download-select-cl-tagger-v2').check()
+    await page.locator('#btn-confirm-ok').click()
+
+    const guide = page.locator('#model-setup-guide-backdrop')
+    await expect(guide).toBeVisible({ timeout: 10_000 })
+    await expect(guide).toContainText('Accept the official Hugging Face terms and sign in.')
+    await expect(guide).toContainText('huggingface-cli login')
+    await page.locator('#model-setup-guide-open').click()
+    await expect.poll(() => page.evaluate(
+      () => (window as Window & { __bulkOpenedUrl?: string }).__bulkOpenedUrl,
+    )).toBe('https://huggingface.co/cella110n/cl_tagger_v2')
+    await expect(page.locator('#bulk-download-progress-banner')).toContainText(
+      /cl-tagger-v2: Accept the official Hugging Face terms/i,
+    )
+    await expect(page.locator('#btn-bulk-download-models')).toBeEnabled()
+  })
+
+  test('bulk polling stops after bounded status failures and restores controls', async ({ page }) => {
+    test.setTimeout(20_000)
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await mockMinimalModelStatus(page)
+    await page.route('**/api/disk/cache-status', async (route) => {
+      await route.fulfill({ json: diskUsagePayload() })
+    })
+    await page.route('**/api/models/bulk-bundle', async (route) => {
+      await route.fulfill({
+        json: {
+          items: [
+            {
+              id: 'wd14',
+              name: 'WD14 Tagger',
+              label: 'WD14 Tagger',
+              group: 'Tagging',
+              size_bytes: 1024,
+              status: 'missing',
+              default_selected: true,
+            },
+          ],
+          pending_total_bytes: 1024,
+          all_total_bytes: 1024,
+          excluded: [],
+        },
+      })
+    })
+    await page.route('**/api/models/prepare', async (route) => {
+      await route.fulfill({
+        json: {
+          status: 'downloading',
+          model_id: 'wd14',
+          message: 'Download started in background.',
+        },
+      })
+    })
+    let progressCalls = 0
+    await page.route('**/api/models/download-progress', async (route) => {
+      progressCalls += 1
+      await route.abort('failed')
+    })
+
+    await openModelManager(page)
+    await page.locator('#btn-bulk-download-models').click()
+    await page.locator('#btn-confirm-ok').click()
+
+    await expect(page.locator('#bulk-download-progress-banner')).toContainText(
+      /Status checks failed 3 times for WD14 Tagger/i,
+      { timeout: 10_000 },
+    )
+    await expect(page.locator('#bulk-download-progress-banner')).toContainText(
+      /starter console.*reopen Model Manager/i,
+    )
+    await expect(page.locator('#btn-bulk-download-models')).toBeEnabled()
+    expect(progressCalls).toBe(3)
+  })
+
   test('Kaloscope prepare completes and changes Artist ID from Missing to Ready', async ({ page, request }) => {
     test.setTimeout(90_000)
     await openModelManager(page)

@@ -576,6 +576,68 @@ def test_migration_034_creates_complete_annotation_ledger(tmp_path: Path) -> Non
         conn.close()
 
 
+def test_migration_039_materializes_neutral_subject_crop_settings(tmp_path: Path) -> None:
+    db_path = tmp_path / "images-v38-subject-crop.db"
+    _build_versioned_snapshot(db_path, 38)
+    migration = next(item for item in migrations.get_migrations() if item.version == 39)
+    conn = sqlite3.connect(db_path)
+    try:
+        project_id = int(
+            conn.execute(
+                "INSERT INTO dataset_projects (name, name_key) VALUES (?, ?)",
+                ("Legacy crop settings", "legacy crop settings"),
+            ).lastrowid
+        )
+
+        assert migration.apply(conn) is True
+        assert migration.apply(conn) is False
+        settings_json = str(
+            conn.execute(
+                "SELECT settings_json FROM dataset_projects WHERE id = ?",
+                (project_id,),
+            ).fetchone()[0]
+        )
+        assert json.loads(settings_json)["subject_crop"] == {
+            "enabled": False,
+            "alpha_threshold": 1,
+            "padding_percent": 0,
+            "background_mode": "keep_background",
+            "solid_color": "#000000",
+        }
+    finally:
+        conn.close()
+
+
+def test_migration_040_materializes_neutral_bucket_resize_settings(tmp_path: Path) -> None:
+    db_path = tmp_path / "images-v39-bucket-resize.db"
+    _build_versioned_snapshot(db_path, 39)
+    migration = next(item for item in migrations.get_migrations() if item.version == 40)
+    conn = sqlite3.connect(db_path)
+    try:
+        project_id = int(
+            conn.execute(
+                "INSERT INTO dataset_projects (name, name_key) VALUES (?, ?)",
+                ("Legacy bucket settings", "legacy bucket settings"),
+            ).lastrowid
+        )
+
+        assert migration.apply(conn) is True
+        assert migration.apply(conn) is False
+        settings_json = str(
+            conn.execute(
+                "SELECT settings_json FROM dataset_projects WHERE id = ?",
+                (project_id,),
+            ).fetchone()[0]
+        )
+        assert json.loads(settings_json)["bucket_resize"] == {
+            "enabled": False,
+            "subject_aware": False,
+            "alpha_threshold": 128,
+        }
+    finally:
+        conn.close()
+
+
 def test_migration_034_rejects_partial_annotation_schema(tmp_path: Path) -> None:
     db_path = tmp_path / "images-v33-partial-annotations.db"
     _build_versioned_snapshot(db_path, 33)

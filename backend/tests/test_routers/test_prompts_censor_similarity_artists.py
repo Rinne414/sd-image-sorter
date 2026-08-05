@@ -3162,18 +3162,37 @@ class TestArtistsRouterValidation:
         assert "items" in data
         item_ids = {item["id"] for item in data["items"]}
         # Must be present
-        assert {"wd14", "censor-nudenet", "clip", "aesthetic", "artist", "sam3"}.issubset(item_ids)
+        assert {
+            "wd14",
+            "censor-nudenet",
+            "clip",
+            "aesthetic",
+            "artist",
+            "sam3",
+            "florence2",
+            "lucida",
+            "cl-tagger-v2",
+        }.issubset(item_ids)
         # Must NOT be present (per user spec)
         assert "censor-legacy" not in item_ids
         assert "toriigate" not in item_ids
         # WD14 entry pins the default variant
         wd14 = next(it for it in data["items"] if it["id"] == "wd14")
         assert wd14["variant"] == "wd-swinv2-tagger-v3"
+        assert wd14["recommended"] is True
+        assert wd14["default_selected"] is True
+        cl_tagger = next(it for it in data["items"] if it["id"] == "cl-tagger-v2")
+        assert cl_tagger["recommended"] is False
+        assert cl_tagger["default_selected"] is False
+        assert cl_tagger["gated_download"] is True
+        assert cl_tagger["requires_auth"] is True
         # Excluded list documents the rationale
         excluded_ids = {e["id"] for e in data.get("excluded", [])}
         assert {"censor-legacy", "toriigate"}.issubset(excluded_ids)
         # Total bytes reported
         assert isinstance(data.get("pending_total_bytes"), int)
+        assert isinstance(data.get("recommended_pending_total_bytes"), int)
+        assert isinstance(data.get("optional_pending_total_bytes"), int)
         assert isinstance(data.get("all_total_bytes"), int)
         assert data["all_total_bytes"] > 0
 

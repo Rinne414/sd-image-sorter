@@ -44,6 +44,8 @@
         }
         const settingsBtn = smartTag$('#btn-smart-tag-vlm-settings');
         if (settingsBtn) settingsBtn.disabled = !naturalEnabled || nlMode !== 'vlm';
+        const vlmGroundingOption = smartTag$('#smart-tag-vlm-grounding-option');
+        if (vlmGroundingOption) vlmGroundingOption.hidden = nlMode !== 'vlm';
         const toriiOptions = smartTag$('#smart-tag-torii-options');
         if (toriiOptions) toriiOptions.hidden = nlMode !== 'toriigate';
     }

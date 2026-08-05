@@ -10981,6 +10981,23 @@ html.lang-zh #view-censor .queue-action-btn span {
 .mask-brush-size input[type="range"] {
     width: 110px;
 }
+.mask-auto-engine {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary, #aeb6cc);
+}
+.mask-auto-engine select {
+    min-width: 156px;
+}
+.mask-lucida-license {
+    margin: 0 0 8px;
+    color: var(--text-secondary, #aeb6cc);
+}
+.mask-lucida-license[hidden] {
+    display: none;
+}
 .mask-editor-canvas-wrap {
     overflow: auto;
     max-height: min(64vh, 900px);

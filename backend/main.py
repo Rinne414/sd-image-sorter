@@ -44,6 +44,7 @@ from config import (
     validate_config,
     ensure_directories,
 )
+from model_console_logging import StarterConsoleFilter, StarterConsoleFormatter
 
 # Configure logging
 def configure_console_logging() -> None:
@@ -52,7 +53,17 @@ def configure_console_logging() -> None:
     log_format = "%(asctime)s %(levelname)s [%(name)s] %(message)s"
     formatter = logging.Formatter(log_format, datefmt="%H:%M:%S")
     logging.basicConfig(level=level, format=log_format, datefmt="%H:%M:%S")
-    logging.getLogger().setLevel(level)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+    console_formatter = StarterConsoleFormatter()
+    console_filter = StarterConsoleFilter()
+    for handler in root_logger.handlers:
+        if isinstance(handler, logging.StreamHandler) and not isinstance(
+            handler,
+            RotatingFileHandler,
+        ):
+            handler.setFormatter(console_formatter)
+            handler.addFilter(console_filter)
     logging.getLogger("uvicorn.access").setLevel(
         logging.INFO if LOG_ACCESS_ENABLED else logging.WARNING
     )
@@ -63,7 +74,7 @@ def configure_console_logging() -> None:
     log_path = Path(LOG_FILE_PATH)
     existing_paths = {
         str(getattr(handler, "baseFilename", ""))
-        for handler in logging.getLogger().handlers
+        for handler in root_logger.handlers
         if isinstance(handler, RotatingFileHandler)
     }
     if str(log_path) in existing_paths:
@@ -79,7 +90,7 @@ def configure_console_logging() -> None:
         )
         file_handler.setLevel(level)
         file_handler.setFormatter(formatter)
-        logging.getLogger().addHandler(file_handler)
+        root_logger.addHandler(file_handler)
     except OSError as exc:
         logging.getLogger("sd-image-sorter").warning(
             "Could not initialize file log at %s: %s",

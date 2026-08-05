@@ -68,6 +68,25 @@ type DatasetProjectSettings = {
     resolution: number
     keep_tokens: number
   }
+  subject_crop: {
+    enabled: boolean
+    alpha_threshold: number
+    padding_percent: number
+    background_mode: 'keep_background' | 'transparent_rgba' | 'solid_color'
+    solid_color: string
+  }
+  bucket_resize: {
+    enabled: boolean
+    subject_aware: boolean
+    alpha_threshold: number
+  }
+  watermark_removal: {
+    enabled: boolean
+    method: 'telea' | 'ns'
+    radius: number
+    padding_percent: number
+    regions: Array<{ x: number; y: number; width: number; height: number }>
+  }
   planning: {
     epochs: number
   }
@@ -140,6 +159,25 @@ function defaultProjectSettings(): DatasetProjectSettings {
       batch: 2,
       resolution: 1024,
       keep_tokens: 0,
+    },
+    subject_crop: {
+      enabled: false,
+      alpha_threshold: 1,
+      padding_percent: 0,
+      background_mode: 'keep_background',
+      solid_color: '#000000',
+    },
+    bucket_resize: {
+      enabled: false,
+      subject_aware: false,
+      alpha_threshold: 128,
+    },
+    watermark_removal: {
+      enabled: false,
+      method: 'telea',
+      radius: 3,
+      padding_percent: 0,
+      regions: [],
     },
     planning: { epochs: 10 },
   }
@@ -895,6 +933,25 @@ test('Save As persists settings v1 and loading restores the exact export configu
       batch: 3,
       resolution: 768,
       keep_tokens: 4,
+    },
+    subject_crop: {
+      enabled: false,
+      alpha_threshold: 1,
+      padding_percent: 0,
+      background_mode: 'keep_background',
+      solid_color: '#000000',
+    },
+    bucket_resize: {
+      enabled: false,
+      subject_aware: false,
+      alpha_threshold: 128,
+    },
+    watermark_removal: {
+      enabled: false,
+      method: 'telea',
+      radius: 3,
+      padding_percent: 0,
+      regions: [],
     },
     planning: { epochs: 8 },
   }

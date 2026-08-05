@@ -670,7 +670,7 @@ def test_coerce_max_tags_clamps() -> None:
     assert negative.max_tags_per_image == 0
 
 
-def test_coerce_natural_language_mode_aliases_and_junk() -> None:
+def test_coerce_natural_language_mode_aliases_and_rejects_junk() -> None:
     for alias in ("torii", "TORII", "toriigate-0.5"):
         req = _coerce_request(
             {
@@ -681,14 +681,14 @@ def test_coerce_natural_language_mode_aliases_and_junk() -> None:
         )
         assert req.natural_language_mode == "toriigate", alias
 
-    junk = _coerce_request(
-        {
-            "image_ids": [1],
-            "enable_vlm": False,
-            "natural_language_mode": "banana",
-        }
-    )
-    assert junk.natural_language_mode == "vlm"
+    with pytest.raises(ValueError, match="natural_language_mode must be"):
+        _coerce_request(
+            {
+                "image_ids": [1],
+                "enable_vlm": False,
+                "natural_language_mode": "banana",
+            }
+        )
 
 
 # ===========================================================================

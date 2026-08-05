@@ -127,6 +127,7 @@ class TestShapeConstants:
             "total_items",
             "items_truncated",
             "error_messages",
+            "warnings",
         }
 
     def test_export_item_model_fields_are_pinned(self):

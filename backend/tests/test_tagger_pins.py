@@ -28,6 +28,7 @@ import pytest
 from PIL import Image
 
 import tagger as tagger_module
+import tagger_download
 from tagger import WD14Tagger
 
 
@@ -117,6 +118,15 @@ def _bare(**attrs: Any) -> WD14Tagger:
     return tagger
 
 
+class _FakeHub:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def hf_hub_download(self, **kwargs: object) -> str:
+        self.calls.append(dict(kwargs))
+        return str(kwargs["local_dir"])
+
+
 # ===========================================================================
 # 1. Lazy-import family (facade-critical)
 # ===========================================================================
@@ -142,6 +152,67 @@ def test_ort_is_read_as_a_defining_module_global(monkeypatch):
     monkeypatch.setattr(tagger_module, "ort", _FakeOrt)
     options = _bare()._build_session_options(gpu_enabled=True)
     assert isinstance(options, _FakeSessionOptions)
+
+
+def test_download_with_fallback_passes_optional_pinned_revision(monkeypatch):
+    hub = _FakeHub()
+    monkeypatch.setattr(tagger_module, "hf_hub", hub)
+    monkeypatch.setattr(
+        "tagger_download.get_hf_endpoint_order",
+        lambda model_name: ["https://huggingface.co"],
+    )
+
+    result = _bare(model_name="wd-swinv2-tagger-v3")._download_with_fallback(
+        repo_id="SmilingWolf/wd-swinv2-tagger-v3",
+        filename="model.onnx",
+        local_dir="C:/models/wd-swinv2-tagger-v3",
+        revision="627aef95638667ddcaa3ac8ae625e88ea5b02f51",
+    )
+
+    assert result == "C:/models/wd-swinv2-tagger-v3"
+    assert hub.calls == [{
+        "repo_id": "SmilingWolf/wd-swinv2-tagger-v3",
+        "filename": "model.onnx",
+        "local_dir": "C:/models/wd-swinv2-tagger-v3",
+        "endpoint": "https://huggingface.co",
+        "revision": "627aef95638667ddcaa3ac8ae625e88ea5b02f51",
+    }]
+
+
+def test_download_with_fallback_omits_revision_when_unpinned(monkeypatch):
+    hub = _FakeHub()
+    monkeypatch.setattr(tagger_module, "hf_hub", hub)
+    monkeypatch.setattr(
+        "tagger_download.get_hf_endpoint_order",
+        lambda model_name: ["https://huggingface.co"],
+    )
+
+    _bare(model_name="wd-eva02-large-tagger-v3")._download_with_fallback(
+        repo_id="SmilingWolf/wd-eva02-large-tagger-v3",
+        filename="selected_tags.csv",
+        local_dir="C:/models/wd-eva02-large-tagger-v3",
+        revision=None,
+    )
+
+    assert "revision" not in hub.calls[0]
+
+
+@pytest.mark.parametrize(
+    ("revision", "error_type"),
+    (
+        ("main", ValueError),
+        (123, TypeError),
+    ),
+)
+def test_model_revision_rejects_non_commit_values_before_download(
+    revision: object,
+    error_type: type[Exception],
+) -> None:
+    with pytest.raises(error_type, match="40-character commit hash"):
+        tagger_download._validated_model_revision(
+            "wd-test",
+            {"revision": revision},
+        )
 
 
 # ===========================================================================

@@ -78,7 +78,16 @@ def test_model_inventory_flags_recommended_essentials(monkeypatch):
     for item in inventory:
         assert item["recommended"] == (item["id"] in model_service.RECOMMENDED_MODEL_IDS)
     recommended_ids = {item["id"] for item in inventory if item["recommended"]}
-    assert {"wd14", "censor-nudenet", "clip", "aesthetic", "artist", "sam3"} == recommended_ids
+    assert {
+        "wd14",
+        "censor-nudenet",
+        "clip",
+        "aesthetic",
+        "artist",
+        "sam3",
+        "florence2",
+        "lucida",
+    } == recommended_ids
     # Optional/advanced models must NOT be flagged as essentials.
     assert not any(item["recommended"] for item in inventory if item["id"] in {"toriigate", "oppai-oracle", "censor-legacy"})
 
@@ -89,8 +98,11 @@ def test_recommended_ids_match_bulk_bundle():
     # two cannot silently drift.
     from routers.models import BULK_MODEL_BUNDLE
 
-    bundle_ids = {item["id"] for item in BULK_MODEL_BUNDLE}
+    bundle_ids = {
+        item["id"] for item in BULK_MODEL_BUNDLE if item.get("recommended")
+    }
     assert bundle_ids == set(model_service.RECOMMENDED_MODEL_IDS)
+    assert any(item["id"] == "cl-tagger-v2" and not item["recommended"] for item in BULK_MODEL_BUNDLE)
 
 
 def test_prepare_wd14_repairs_windows_onnx_runtime(monkeypatch):
@@ -623,6 +635,42 @@ def test_prepare_router_marks_runtime_gap_as_warning(monkeypatch):
         assert models_router._prepare_result["message"] == "runtime missing"
 
 
+def test_prepare_router_logs_compact_external_auth_guidance(caplog):
+    from routers import models as models_router
+
+    payload = {
+        "type": "ExternalAuthRequired",
+        "provider": "Hugging Face",
+        "message": "request-id-heavy gated failure",
+        "manual_steps": ["Accept terms", "Configure token"],
+        "target_dir": "C:/models/cl-tagger-v2",
+        "external_url": "https://huggingface.co/cella110n/cl_tagger_v2",
+    }
+
+    class FakeService:
+        def prepare_model(self, model_id, source=None, variant=None):
+            raise model_service.ExternalAuthRequiredError(payload)
+
+    with caplog.at_level("WARNING", logger=models_router.__name__):
+        models_router._run_prepare_blocking(
+            FakeService(),
+            "cl-tagger-v2",
+            None,
+            None,
+        )
+
+    record = next(
+        record
+        for record in caplog.records
+        if record.message.startswith("[MODEL] prepare_failed")
+    )
+    assert record.starter_console_message == (
+        "[MODEL] prepare_failed model_id=cl-tagger-v2 "
+        "error_type=ExternalAuthRequired provider=Hugging Face "
+        "action=follow Model Manager recovery steps and retry"
+    )
+
+
 def test_prepare_toriigate_returns_restart_hint_when_runtime_installed(monkeypatch):
     installed_groups = []
 
@@ -882,7 +930,8 @@ def test_toriigate_download_uses_shared_hf_endpoint_order(monkeypatch, tmp_path)
         def snapshot_download(self, **kwargs):
             calls.append(kwargs)
             Path(kwargs["local_dir"]).mkdir(parents=True, exist_ok=True)
-            (Path(kwargs["local_dir"]) / "config.json").write_text("{}", encoding="utf-8")
+            for filename in toriigate_tagger.TORIIGATE_REQUIRED_FILES:
+                (Path(kwargs["local_dir"]) / filename).write_bytes(b"fixture")
             return kwargs["local_dir"]
 
     monkeypatch.setattr(toriigate_tagger, "hf_hub", FakeHub())

@@ -16,6 +16,9 @@
     const TRAINER_CONFIGS = Object.freeze(['none', 'kohya_toml', 'anima_lora_toml']);
     const MASK_EXPORTS = Object.freeze(['none', 'onetrainer', 'kohya', 'anima_lora']);
     const GENERIC_MASK_EXPORTS = Object.freeze(['none', 'onetrainer', 'kohya']);
+    const SUBJECT_CROP_BACKGROUND_MODES = Object.freeze([
+        'keep_background', 'transparent_rgba', 'solid_color',
+    ]);
     const MAX_TEXT_LENGTH = 4096;
     const MAX_TRIGGER_LENGTH = 100;
     const MAX_TAG_LENGTH = 500;
@@ -57,6 +60,25 @@
             batch: 2,
             resolution: 1024,
             keep_tokens: 0,
+        }),
+        subject_crop: Object.freeze({
+            enabled: false,
+            alpha_threshold: 1,
+            padding_percent: 0,
+            background_mode: 'keep_background',
+            solid_color: '#000000',
+        }),
+        bucket_resize: Object.freeze({
+            enabled: false,
+            subject_aware: false,
+            alpha_threshold: 128,
+        }),
+        watermark_removal: Object.freeze({
+            enabled: false,
+            method: 'telea',
+            radius: 3,
+            padding_percent: 0,
+            regions: Object.freeze([]),
         }),
         planning: Object.freeze({ epochs: 10 }),
     });
@@ -253,7 +275,7 @@
         });
     }
 
-    function parseTrainer(value, output) {
+    function parseTrainer(value, output, bucketResize) {
         const record = requireRecord(value, 'settings.trainer', [
             'config', 'contract_version', 'mask_export', 'repeats', 'batch',
             'resolution', 'keep_tokens',
@@ -295,12 +317,29 @@
             record.keep_tokens, 'settings.trainer.keep_tokens', 0, 50,
         );
         if (
-            (config === 'none' || config === 'anima_lora_toml')
+            ((config === 'none' && !bucketResize.enabled) || config === 'anima_lora_toml')
             && (resolution !== 1024 || keepTokens !== 0)
         ) {
             throw new RangeError(
                 `${config} requires trainer.resolution=1024 and trainer.keep_tokens=0.`,
             );
+        }
+        if (bucketResize.enabled) {
+            if (config !== 'none') {
+                throw new RangeError(
+                    'settings.bucket_resize is not supported by verified trainer packages.',
+                );
+            }
+            if (resolution % 64 !== 0) {
+                throw new RangeError(
+                    'settings.trainer.resolution must be a multiple of 64 for bucket resize.',
+                );
+            }
+            if (output.mode !== 'folder' || output.image_op !== 'copy') {
+                throw new RangeError(
+                    'settings.bucket_resize requires folder output with the copy image operation.',
+                );
+            }
         }
         return Object.freeze({
             config,
@@ -313,15 +352,170 @@
         });
     }
 
+    function parseSubjectCrop(value) {
+        const record = requireRecord(value, 'settings.subject_crop', [
+            'enabled', 'alpha_threshold', 'padding_percent',
+            'background_mode', 'solid_color',
+        ]);
+        if (typeof record.enabled !== 'boolean') {
+            throw new TypeError('settings.subject_crop.enabled must be a boolean.');
+        }
+        const solidColor = requireString(
+            record.solid_color, 'settings.subject_crop.solid_color', false, 7,
+        ).toUpperCase();
+        if (!/^#[0-9A-F]{6}$/.test(solidColor)) {
+            throw new TypeError('settings.subject_crop.solid_color must be #RRGGBB.');
+        }
+        return Object.freeze({
+            enabled: record.enabled,
+            alpha_threshold: requireInteger(
+                record.alpha_threshold, 'settings.subject_crop.alpha_threshold', 1, 255,
+            ),
+            padding_percent: requireInteger(
+                record.padding_percent, 'settings.subject_crop.padding_percent', 0, 100,
+            ),
+            background_mode: requireLiteral(
+                record.background_mode,
+                'settings.subject_crop.background_mode',
+                SUBJECT_CROP_BACKGROUND_MODES,
+            ),
+            solid_color: solidColor,
+        });
+    }
+
+    function parseBucketResize(value) {
+        const record = requireRecord(value, 'settings.bucket_resize', [
+            'enabled', 'subject_aware', 'alpha_threshold',
+        ]);
+        return Object.freeze({
+            enabled: requireBoolean(record.enabled, 'settings.bucket_resize.enabled'),
+            subject_aware: requireBoolean(
+                record.subject_aware,
+                'settings.bucket_resize.subject_aware',
+            ),
+            alpha_threshold: requireInteger(
+                record.alpha_threshold,
+                'settings.bucket_resize.alpha_threshold',
+                1,
+                255,
+            ),
+        });
+    }
+
+    function parseWatermarkRemoval(value) {
+        const record = requireRecord(value, 'settings.watermark_removal', [
+            'enabled', 'method', 'radius', 'padding_percent', 'regions',
+        ]);
+        if (!Array.isArray(record.regions) || record.regions.length > 1) {
+            throw new RangeError(
+                'settings.watermark_removal.regions must contain zero or one region.',
+            );
+        }
+        const regions = record.regions.map((region, index) => {
+            const parsed = requireRecord(region, `settings.watermark_removal.regions[${index}]`, [
+                'x', 'y', 'width', 'height',
+            ]);
+            const result = {
+                x: requireInteger(
+                    parsed.x,
+                    `settings.watermark_removal.regions[${index}].x`,
+                    0,
+                    10000,
+                ),
+                y: requireInteger(
+                    parsed.y,
+                    `settings.watermark_removal.regions[${index}].y`,
+                    0,
+                    10000,
+                ),
+                width: requireInteger(
+                    parsed.width,
+                    `settings.watermark_removal.regions[${index}].width`,
+                    1,
+                    10000,
+                ),
+                height: requireInteger(
+                    parsed.height,
+                    `settings.watermark_removal.regions[${index}].height`,
+                    1,
+                    10000,
+                ),
+            };
+            if (result.x + result.width > 10000 || result.y + result.height > 10000) {
+                throw new RangeError(
+                    `settings.watermark_removal.regions[${index}] must stay within 0..10000.`,
+                );
+            }
+            return Object.freeze(result);
+        });
+        const enabled = requireBoolean(
+            record.enabled,
+            'settings.watermark_removal.enabled',
+        );
+        if (enabled && regions.length === 0) {
+            throw new RangeError(
+                'settings.watermark_removal.regions must contain one region when enabled.',
+            );
+        }
+        return Object.freeze({
+            enabled,
+            method: requireLiteral(
+                record.method,
+                'settings.watermark_removal.method',
+                ['telea', 'ns'],
+            ),
+            radius: requireInteger(
+                record.radius,
+                'settings.watermark_removal.radius',
+                1,
+                20,
+            ),
+            padding_percent: requireInteger(
+                record.padding_percent,
+                'settings.watermark_removal.padding_percent',
+                0,
+                10,
+            ),
+            regions: Object.freeze(regions),
+        });
+    }
+
     function parseProjectSettings(value) {
-        const record = requireRecord(value, 'settings', [
+        const compatibleValue = isRecord(value)
+            ? {
+                ...value,
+                subject_crop: Object.hasOwn(value, 'subject_crop')
+                    ? value.subject_crop
+                    : DEFAULT_SETTINGS_SOURCE.subject_crop,
+                bucket_resize: Object.hasOwn(value, 'bucket_resize')
+                    ? value.bucket_resize
+                    : DEFAULT_SETTINGS_SOURCE.bucket_resize,
+                watermark_removal: Object.hasOwn(value, 'watermark_removal')
+                    ? value.watermark_removal
+                    : DEFAULT_SETTINGS_SOURCE.watermark_removal,
+            }
+            : value;
+        const record = requireRecord(compatibleValue, 'settings', [
             'settings_version', 'target_model', 'caption_render', 'naming',
-            'output', 'trainer', 'planning',
+            'output', 'trainer', 'subject_crop', 'bucket_resize',
+            'watermark_removal', 'planning',
         ]);
         if (record.settings_version !== SETTINGS_VERSION) {
             throw new RangeError(`settings.settings_version must be ${SETTINGS_VERSION}.`);
         }
         const output = parseOutput(record.output);
+        const bucketResize = parseBucketResize(record.bucket_resize);
+        const watermarkRemoval = parseWatermarkRemoval(record.watermark_removal);
+        const trainer = parseTrainer(record.trainer, output, bucketResize);
+        if (watermarkRemoval.enabled && (
+            output.mode !== 'folder'
+            || output.image_op !== 'copy'
+            || trainer.config !== 'none'
+        )) {
+            throw new RangeError(
+                'settings.watermark_removal requires folder output, Copy, and no verified trainer package.',
+            );
+        }
         const planning = requireRecord(record.planning, 'settings.planning', ['epochs']);
         return Object.freeze({
             settings_version: SETTINGS_VERSION,
@@ -331,7 +525,10 @@
             caption_render: parseCaptionRender(record.caption_render),
             naming: parseNaming(record.naming),
             output,
-            trainer: parseTrainer(record.trainer, output),
+            trainer,
+            subject_crop: parseSubjectCrop(record.subject_crop),
+            bucket_resize: bucketResize,
+            watermark_removal: watermarkRemoval,
             planning: Object.freeze({
                 epochs: requireInteger(
                     planning.epochs, 'settings.planning.epochs', 1, 1000,
@@ -354,6 +551,198 @@
 
     function splitList(value) {
         return value.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
+    }
+
+    function readSubjectCropControls() {
+        return {
+            enabled: requireElement('dataset-subject-crop-enabled').checked,
+            alpha_threshold: Number(requireElement('dataset-subject-crop-threshold').value),
+            padding_percent: Number(requireElement('dataset-subject-crop-padding').value),
+            background_mode: requireElement('dataset-subject-crop-background').value,
+            solid_color: requireElement('dataset-subject-crop-color').value.toUpperCase(),
+        };
+    }
+
+    function readBucketResizeControls() {
+        return {
+            enabled: requireElement('dataset-bucket-resize-enabled').checked,
+            subject_aware: requireElement('dataset-bucket-resize-subject-aware').checked,
+            alpha_threshold: Number(
+                requireElement('dataset-bucket-resize-threshold').value
+            ),
+        };
+    }
+
+    function readWatermarkRemovalControls() {
+        const enabled = requireElement('dataset-watermark-removal-enabled').checked;
+        if (!enabled) {
+            return {
+                enabled: false,
+                method: 'telea',
+                radius: 3,
+                padding_percent: 0,
+                regions: [],
+            };
+        }
+        const readPercent = (id, label, minimum, maximum) => requireInteger(
+            Number(requireElement(id).value), label, minimum, maximum,
+        );
+        const x = readPercent('dataset-watermark-x', 'watermark left percentage', 0, 100);
+        const y = readPercent('dataset-watermark-y', 'watermark top percentage', 0, 100);
+        const width = readPercent('dataset-watermark-width', 'watermark width percentage', 1, 100);
+        const height = readPercent('dataset-watermark-height', 'watermark height percentage', 1, 100);
+        if (x + width > 100 || y + height > 100) {
+            throw new RangeError('Watermark removal rectangle must stay within the image bounds.');
+        }
+        return {
+            enabled: true,
+            method: requireLiteral(
+                requireElement('dataset-watermark-method').value,
+                'watermark removal method',
+                ['telea', 'ns'],
+            ),
+            radius: readPercent('dataset-watermark-radius', 'watermark repair radius', 1, 20),
+            padding_percent: readPercent(
+                'dataset-watermark-padding', 'watermark padding percentage', 0, 10,
+            ),
+            regions: [{
+                x: x * 100,
+                y: y * 100,
+                width: width * 100,
+                height: height * 100,
+            }],
+        };
+    }
+
+    function syncSubjectCropControls() {
+        const enabled = requireElement('dataset-subject-crop-enabled').checked;
+        const settings = requireElement('dataset-subject-crop-settings');
+        settings.hidden = !enabled;
+        const backgroundMode = requireElement('dataset-subject-crop-background').value;
+        const colorLabel = requireElement('dataset-subject-crop-color-label');
+        colorLabel.hidden = !enabled || backgroundMode !== 'solid_color';
+    }
+
+    function syncBucketResizeControls() {
+        const enabled = requireElement('dataset-bucket-resize-enabled').checked;
+        requireElement('dataset-bucket-resize-settings').hidden = !enabled;
+        const subjectAware = requireElement('dataset-bucket-resize-subject-aware').checked;
+        requireElement('dataset-bucket-resize-threshold').disabled = (
+            !enabled || !subjectAware
+        );
+    }
+
+    function syncWatermarkRemovalControls() {
+        const enabled = requireElement('dataset-watermark-removal-enabled').checked;
+        requireElement('dataset-watermark-removal-settings').hidden = !enabled;
+    }
+
+    function subjectCropDisabledReason(dm) {
+        if (!requireElement('dataset-subject-crop-enabled').checked) return '';
+        if (dm._outputMode?.() !== 'folder') {
+            return dm._t(
+                'dataset.subjectCropRequiresFolder',
+                'Subject crop requires folder export.',
+            );
+        }
+        if (requireElement('dataset-image-op').value !== 'copy') {
+            return dm._t(
+                'dataset.subjectCropRequiresCopy',
+                'Subject crop requires Copy so source images remain untouched.',
+            );
+        }
+        if (requireElement('dataset-mask-export').value === 'none') {
+            return dm._t(
+                'dataset.subjectCropRequiresMaskExport',
+                'Choose a training-mask export format before enabling subject crop.',
+            );
+        }
+        if (requireElement('dataset-trainer-package').value !== 'none') {
+            return dm._t(
+                'dataset.subjectCropNoPackage',
+                'Subject crop is not available with verified trainer packages yet.',
+            );
+        }
+        const hasLocalItems = (dm.imageIds || []).some((imageId) => dm.isLocalId?.(imageId));
+        const hasScanTokens = (dm._getDatasetScanTokenSources?.() || []).length > 0;
+        if (hasLocalItems || hasScanTokens) {
+            return dm._t(
+                'dataset.subjectCropRequiresLibrary',
+                'Subject crop requires indexed Library images with stored training masks.',
+            );
+        }
+        return '';
+    }
+
+    function bucketResizeDisabledReason(dm) {
+        if (!requireElement('dataset-bucket-resize-enabled').checked) return '';
+        if (dm._outputMode?.() !== 'folder') {
+            return dm._t(
+                'dataset.bucketResizeRequiresFolder',
+                'Bucket preprocessing requires folder export.',
+            );
+        }
+        if (requireElement('dataset-image-op').value !== 'copy') {
+            return dm._t(
+                'dataset.bucketResizeRequiresCopy',
+                'Bucket preprocessing requires Copy so source images remain untouched.',
+            );
+        }
+        if (requireElement('dataset-trainer-package').value !== 'none') {
+            return dm._t(
+                'dataset.bucketResizeNoPackage',
+                'Bucket preprocessing is not available with verified trainer packages.',
+            );
+        }
+        const hasLocalItems = (dm.imageIds || []).some((imageId) => dm.isLocalId?.(imageId));
+        const hasScanTokens = (dm._getDatasetScanTokenSources?.() || []).length > 0;
+        if (hasLocalItems || hasScanTokens) {
+            return dm._t(
+                'dataset.bucketResizeRequiresLibrary',
+                'Bucket preprocessing requires indexed Library images.',
+            );
+        }
+        const resolution = Number(requireElement('dataset-trainer-resolution').value);
+        if (
+            !Number.isSafeInteger(resolution)
+            || resolution < 256
+            || resolution > 4096
+            || resolution % 64 !== 0
+        ) {
+            return dm._t(
+                'dataset.bucketResizeResolutionInvalid',
+                'Bucket resolution must be a whole multiple of 64 from 256 to 4096.',
+            );
+        }
+        return '';
+    }
+
+    function watermarkRemovalDisabledReason(dm) {
+        if (!requireElement('dataset-watermark-removal-enabled').checked) return '';
+        if (dm._outputMode?.() !== 'folder') {
+            return dm._t(
+                'dataset.watermarkRemovalRequiresFolder',
+                'Watermark removal requires folder export.',
+            );
+        }
+        if (requireElement('dataset-image-op').value !== 'copy') {
+            return dm._t(
+                'dataset.watermarkRemovalRequiresCopy',
+                'Watermark removal requires Copy so source images remain safe.',
+            );
+        }
+        if (requireElement('dataset-trainer-package').value !== 'none') {
+            return dm._t(
+                'dataset.watermarkRemovalNoPackage',
+                'Watermark removal is not available with verified trainer packages.',
+            );
+        }
+        try {
+            readWatermarkRemovalControls();
+        } catch (error) {
+            return error instanceof Error ? error.message : String(error);
+        }
+        return '';
     }
 
     function selectedTrainerContract(dm, config) {
@@ -408,6 +797,9 @@
                 resolution: Number(requireElement('dataset-trainer-resolution').value),
                 keep_tokens: Number(requireElement('dataset-trainer-keep-tokens').value),
             },
+            subject_crop: readSubjectCropControls(),
+            bucket_resize: readBucketResizeControls(),
+            watermark_removal: readWatermarkRemovalControls(),
             planning: {
                 epochs: Number(requireElement('dataset-est-epochs').value),
             },
@@ -428,7 +820,9 @@
         const bounds = contract?.bounds || {
             repeats: { minimum: 1, maximum: 1000 },
             batchSize: { minimum: 1, maximum: 64 },
-            resolution: { minimum: 1024, maximum: 1024 },
+            resolution: settings.bucket_resize.enabled
+                ? { minimum: 256, maximum: 4096 }
+                : { minimum: 1024, maximum: 1024 },
             keepTokens: { minimum: 0, maximum: 0 },
         };
         if (contract && contract.contractVersion !== trainer.contract_version) {
@@ -472,7 +866,17 @@
             'dataset-naming-pattern', 'dataset-output-folder', 'dataset-image-op',
             'dataset-overwrite', 'dataset-trainer-package', 'dataset-mask-export',
             'dataset-est-repeats', 'dataset-est-batch', 'dataset-trainer-resolution',
-            'dataset-trainer-keep-tokens', 'dataset-est-epochs',
+            'dataset-trainer-keep-tokens', 'dataset-subject-crop-enabled',
+            'dataset-subject-crop-settings', 'dataset-subject-crop-threshold',
+            'dataset-subject-crop-padding', 'dataset-subject-crop-background',
+            'dataset-subject-crop-color-label', 'dataset-subject-crop-color',
+            'dataset-bucket-resize-enabled', 'dataset-bucket-resize-settings',
+            'dataset-bucket-resize-subject-aware', 'dataset-bucket-resize-threshold',
+            'dataset-watermark-removal-enabled', 'dataset-watermark-removal-settings',
+            'dataset-watermark-x', 'dataset-watermark-y', 'dataset-watermark-width',
+            'dataset-watermark-height', 'dataset-watermark-padding',
+            'dataset-watermark-method', 'dataset-watermark-radius',
+            'dataset-est-epochs',
         ]) requireElement(id);
     }
 
@@ -508,10 +912,55 @@
         requireElement('dataset-trainer-resolution').value = String(trainer.resolution);
         requireElement('dataset-trainer-keep-tokens').value = String(trainer.keep_tokens);
         requireElement('dataset-est-epochs').value = String(settings.planning.epochs);
+        requireElement('dataset-bucket-resize-enabled').checked = settings.bucket_resize.enabled;
+        requireElement('dataset-bucket-resize-subject-aware').checked = (
+            settings.bucket_resize.subject_aware
+        );
+        requireElement('dataset-bucket-resize-threshold').value = String(
+            settings.bucket_resize.alpha_threshold
+        );
+        syncBucketResizeControls();
         dm._installTrainerContractOptions(trainer.config);
         requireElement('dataset-trainer-package').value = trainer.config;
         dm._applyTrainerSelection(false);
         requireElement('dataset-mask-export').value = trainer.mask_export;
+        requireElement('dataset-subject-crop-enabled').checked = settings.subject_crop.enabled;
+        requireElement('dataset-subject-crop-threshold').value = String(
+            settings.subject_crop.alpha_threshold,
+        );
+        requireElement('dataset-subject-crop-padding').value = String(
+            settings.subject_crop.padding_percent,
+        );
+        const subjectCropBackground = requireElement('dataset-subject-crop-background');
+        subjectCropBackground.value = settings.subject_crop.background_mode;
+        subjectCropBackground.dispatchEvent(new Event('dataset:select-sync'));
+        requireElement('dataset-subject-crop-color').value = (
+            settings.subject_crop.solid_color.toLowerCase()
+        );
+        syncSubjectCropControls();
+        const watermarkRemoval = settings.watermark_removal;
+        requireElement('dataset-watermark-removal-enabled').checked = watermarkRemoval.enabled;
+        requireElement('dataset-watermark-method').value = watermarkRemoval.method;
+        requireElement('dataset-watermark-method').dispatchEvent(new Event('dataset:select-sync'));
+        requireElement('dataset-watermark-radius').value = String(watermarkRemoval.radius);
+        requireElement('dataset-watermark-padding').value = String(
+            watermarkRemoval.padding_percent,
+        );
+        const watermarkRegion = watermarkRemoval.regions[0] || {
+            x: 7300,
+            y: 7500,
+            width: 2400,
+            height: 1800,
+        };
+        requireElement('dataset-watermark-x').value = String(Math.round(watermarkRegion.x / 100));
+        requireElement('dataset-watermark-y').value = String(Math.round(watermarkRegion.y / 100));
+        requireElement('dataset-watermark-width').value = String(
+            Math.round(watermarkRegion.width / 100),
+        );
+        requireElement('dataset-watermark-height').value = String(
+            Math.round(watermarkRegion.height / 100),
+        );
+        syncWatermarkRemovalControls();
         window.TargetModel?.refresh?.();
         window.DatasetEstimator?.refresh?.();
         dm._onPresetChange?.();
@@ -564,6 +1013,10 @@
             'dataset-output-folder', 'dataset-overwrite', 'dataset-trainer-package',
             'dataset-mask-export', 'dataset-est-repeats', 'dataset-est-batch',
             'dataset-trainer-resolution', 'dataset-trainer-keep-tokens',
+            'dataset-subject-crop-enabled', 'dataset-subject-crop-threshold',
+            'dataset-subject-crop-padding', 'dataset-subject-crop-background',
+            'dataset-subject-crop-color', 'dataset-bucket-resize-enabled',
+            'dataset-bucket-resize-subject-aware', 'dataset-bucket-resize-threshold',
             'dataset-est-epochs',
         ];
         const persist = (event) => {
@@ -597,6 +1050,61 @@
                 : 'input';
             element.addEventListener(eventName, persist);
         }
+        const refreshSubjectCropState = () => {
+            syncSubjectCropControls();
+            dm._markReadinessStale?.();
+            dm._renderReadiness?.();
+            dm._updateExportEnabled?.();
+        };
+        for (const id of [
+            'dataset-subject-crop-enabled', 'dataset-subject-crop-threshold',
+            'dataset-subject-crop-padding', 'dataset-subject-crop-background',
+            'dataset-subject-crop-color',
+        ]) {
+            const element = requireElement(id);
+            const eventName = element.tagName.toLowerCase() === 'select'
+                || element.type === 'checkbox'
+                || element.type === 'color'
+                ? 'change'
+                : 'input';
+            element.addEventListener(eventName, refreshSubjectCropState);
+        }
+        syncSubjectCropControls();
+        const refreshBucketResizeState = () => {
+            syncBucketResizeControls();
+            dm._markReadinessStale?.();
+            dm._applyTrainerSelection?.(false);
+        };
+        for (const id of [
+            'dataset-bucket-resize-enabled', 'dataset-bucket-resize-subject-aware',
+            'dataset-bucket-resize-threshold',
+        ]) {
+            const element = requireElement(id);
+            element.addEventListener(
+                element.type === 'number' ? 'input' : 'change',
+                refreshBucketResizeState,
+            );
+        }
+        syncBucketResizeControls();
+        const refreshWatermarkRemovalState = () => {
+            syncWatermarkRemovalControls();
+            dm._markReadinessStale?.();
+            dm._renderReadiness?.();
+            dm._updateExportEnabled?.();
+        };
+        for (const id of [
+            'dataset-watermark-removal-enabled', 'dataset-watermark-x',
+            'dataset-watermark-y', 'dataset-watermark-width', 'dataset-watermark-height',
+            'dataset-watermark-padding', 'dataset-watermark-method',
+            'dataset-watermark-radius',
+        ]) {
+            const element = requireElement(id);
+            element.addEventListener(
+                element.type === 'number' ? 'input' : 'change',
+                refreshWatermarkRemovalState,
+            );
+        }
+        refreshWatermarkRemovalState();
         for (const name of [
             'dataset-naming-preset', 'dataset-output-mode', 'dataset-image-op-radio',
         ]) {
@@ -631,6 +1139,30 @@
 
         _serializeProjectSettings() {
             return serializeCurrentProjectSettings(this);
+        },
+
+        _subjectCropExportSettings() {
+            return parseSubjectCrop(readSubjectCropControls());
+        },
+
+        _subjectCropDisabledReason() {
+            return subjectCropDisabledReason(this);
+        },
+
+        _bucketResizeExportSettings() {
+            return parseBucketResize(readBucketResizeControls());
+        },
+
+        _bucketResizeDisabledReason() {
+            return bucketResizeDisabledReason(this);
+        },
+
+        _watermarkRemovalExportSettings() {
+            return readWatermarkRemovalControls();
+        },
+
+        _watermarkRemovalDisabledReason() {
+            return watermarkRemovalDisabledReason(this);
         },
 
         _serializeDatasetDraftSettings() {

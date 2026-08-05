@@ -54,6 +54,19 @@ def _resolve_tagger(req: SmartTagRequest):
             use_gpu=req.use_gpu,
             force_reload=False,
         )
+    if TAGGER_MODELS.get(name, {}).get("runtime_backend") == "cl-tagger-v2":
+        from cl_tagger_v2 import get_cl_tagger_v2_tagger
+
+        return get_cl_tagger_v2_tagger(
+            model_name=req.tagger_model,
+            model_path=None,
+            tags_path=None,
+            threshold=req.general_threshold,
+            character_threshold=req.character_threshold,
+            copyright_threshold=req.copyright_threshold,
+            use_gpu=req.use_gpu,
+            force_reload=False,
+        )
     from tagger import get_tagger
     return get_tagger(
         model_name=req.tagger_model or None,
@@ -89,6 +102,19 @@ def _resolve_tagger_by_model(
             model_name=model_name,
             threshold=general_threshold,
             character_threshold=character_threshold,
+            use_gpu=use_gpu,
+            force_reload=False,
+        )
+    if TAGGER_MODELS.get(name, {}).get("runtime_backend") == "cl-tagger-v2":
+        from cl_tagger_v2 import get_cl_tagger_v2_tagger
+
+        return get_cl_tagger_v2_tagger(
+            model_name=model_name,
+            model_path=None,
+            tags_path=None,
+            threshold=general_threshold,
+            character_threshold=character_threshold,
+            copyright_threshold=copyright_threshold,
             use_gpu=use_gpu,
             force_reload=False,
         )
@@ -306,6 +332,21 @@ def _toriigate_nl_text(
         return ""
 
 
+def _florence2_nl_text(
+    nl_captioner,
+    image_path: str,
+    image_id: int,
+) -> str:
+    """Run one required Florence-2 prose caption without fallback."""
+    nl_text = str(nl_captioner.caption(image_path)).strip()
+    if not nl_text:
+        raise RuntimeError(
+            "Florence-2 returned an empty natural-language caption for "
+            f"image {image_id or image_path!r}."
+        )
+    return nl_text
+
+
 def _release_booru_sessions(taggers: List[Any]) -> None:
     """Release booru ONNX sessions (and CUDA cache) before ToriiGate loads.
 
@@ -355,3 +396,29 @@ def _load_toriigate_for_phase2(job: SmartTagJobState, req: "SmartTagRequest"):
     if hasattr(nl_tagger, "load"):
         nl_tagger.load()
     return nl_tagger
+
+
+def _load_florence2_for_phase2(job: SmartTagJobState, req: "SmartTagRequest"):
+    """Load Florence-2 after the booru phase with explicit device policy."""
+    from model_health import get_torch_onnx_runtime_health
+
+    runtime_health = get_torch_onnx_runtime_health()
+    compatibility_error = runtime_health.get("runtime_compatibility_error")
+    if compatibility_error:
+        raise RuntimeError(compatibility_error)
+    if req.use_gpu and runtime_health.get("torch_cuda_available") is not True:
+        raise RuntimeError(
+            "Florence-2 CUDA runtime is not ready. Open Model Manager, run "
+            "Prepare / Download, then restart the app or explicitly disable GPU. "
+            "No automatic CPU fallback was used."
+        )
+
+    from florence2_captioner import get_florence2_captioner
+
+    job.message = "Loading Florence-2 Base natural-language model..."
+    nl_captioner = get_florence2_captioner(
+        use_gpu=req.use_gpu,
+        force_reload=False,
+    )
+    nl_captioner.load()
+    return nl_captioner

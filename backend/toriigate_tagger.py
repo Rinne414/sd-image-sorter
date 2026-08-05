@@ -13,13 +13,19 @@ import logging
 import os
 import re
 import threading
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from PIL import Image
 
 from config import TAGGER_MODELS, get_toriigate_model_dir, read_float_env
 from ai_runtime_guard import cuda_has_headroom, exclusive_ai_runtime
-from model_download_sources import endpoint_label, get_hf_endpoint_order
+from model_download_sources import (
+    endpoint_label,
+    get_hf_endpoint_order,
+    log_model_artifact_status,
+    missing_model_artifacts,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +33,16 @@ logger = logging.getLogger(__name__)
 # snapshot_download() fetches from a remote repo; without a pinned commit, a
 # compromised or hijacked repo could serve malicious model files.
 TORIIGATE_COMMIT_HASH = "667e771497abcfa38637e1d308cb495beb68d803"
+TORIIGATE_REQUIRED_FILES = (
+    "config.json",
+    "model.safetensors",
+    "preprocessor_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.json",
+    "merges.txt",
+    "chat_template.jinja",
+)
 
 torch = None
 hf_hub = None
@@ -210,10 +226,13 @@ class ToriiGateTagger(_CaptionParsingMixin):
         local_dir = os.path.join(self.model_dir, self.model_name)
         os.makedirs(local_dir, exist_ok=True)
 
-        if not os.path.exists(os.path.join(local_dir, "config.json")):
+        model_dir_path = Path(local_dir)
+        missing_before = missing_model_artifacts(model_dir_path, TORIIGATE_REQUIRED_FILES)
+        if missing_before:
             logger.info("Downloading ToriiGate model %s ...", self.model_name)
             assert hf_hub is not None
             last_error: Optional[Exception] = None
+            selected_endpoint = ""
             for endpoint in get_hf_endpoint_order(model_name="ToriiGate 0.5"):
                 try:
                     logger.info("Downloading ToriiGate from %s via %s", config["repo_id"], endpoint_label(endpoint))
@@ -230,6 +249,7 @@ class ToriiGateTagger(_CaptionParsingMixin):
                         ],
                         endpoint=endpoint,
                     )
+                    selected_endpoint = endpoint
                     break
                 except Exception as exc:
                     last_error = exc
@@ -237,6 +257,29 @@ class ToriiGateTagger(_CaptionParsingMixin):
             else:
                 assert last_error is not None
                 raise last_error
+            missing_after = log_model_artifact_status(
+                logger,
+                model_id=self.model_name,
+                revision=TORIIGATE_COMMIT_HASH,
+                endpoint=selected_endpoint or "unknown",
+                model_dir=model_dir_path,
+                required_files=TORIIGATE_REQUIRED_FILES,
+            )
+            if missing_after:
+                raise RuntimeError(
+                    "ToriiGate download completed without required runtime files: "
+                    + ", ".join(missing_after)
+                    + ". Re-run Prepare / Download."
+                )
+        else:
+            log_model_artifact_status(
+                logger,
+                model_id=self.model_name,
+                revision=TORIIGATE_COMMIT_HASH,
+                endpoint="local",
+                model_dir=model_dir_path,
+                required_files=TORIIGATE_REQUIRED_FILES,
+            )
         return local_dir
 
     def _pick_torch_dtype(self):

@@ -34,6 +34,9 @@ def _svc():
 def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
     censor = health["censor"]
     artist = health["artist"]
+    lucida = health.get("lucida", {})
+    florence2 = health.get("florence2", {})
+    cl_tagger_v2 = health.get("cl_tagger_v2", {})
     installed_wd14 = [item["name"] for item in health["wd14"]["installed_models"] if item["available"]]
     wd14_primary_path = None
     if installed_wd14:
@@ -45,16 +48,39 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
     aesthetic_available = False
     aesthetic_message = "Aesthetic predictor dependencies are not installed"
     aesthetic_head_path = str(_svc().PROJECT_ROOT / "models" / "aesthetic" / "sa_0_4_vit_l_14_linear.pth")
-    aesthetic_head_exists = Path(aesthetic_head_path).exists()
+    aesthetic_head_exists = (
+        Path(aesthetic_head_path).is_file()
+        and Path(aesthetic_head_path).stat().st_size > 0
+    )
     aesthetic_runtime_ready = (
         importlib.util.find_spec("torch") is not None
         and importlib.util.find_spec("open_clip") is not None
     )
-    aesthetic_available = bool(aesthetic_head_exists and aesthetic_runtime_ready)
+    aesthetic_backbone_path = None
+    aesthetic_loaded = False
+    try:
+        from aesthetic import get_aesthetic_backbone_path, is_predictor_loaded
+
+        resolved_backbone = get_aesthetic_backbone_path()
+        aesthetic_backbone_path = (
+            str(resolved_backbone) if resolved_backbone is not None else None
+        )
+        aesthetic_loaded = is_predictor_loaded()
+    except (ImportError, OSError):
+        aesthetic_backbone_path = None
+        aesthetic_loaded = False
+    aesthetic_available = bool(
+        aesthetic_head_exists
+        and aesthetic_runtime_ready
+        and (aesthetic_loaded or aesthetic_backbone_path)
+    )
     if aesthetic_available:
         aesthetic_message = "Aesthetic predictor is ready (CLIP + linear head)."
     elif aesthetic_head_exists:
-        aesthetic_message = "Linear head downloaded but CLIP dependencies missing (torch/open_clip)."
+        aesthetic_message = (
+            "Aesthetic linear head is present, but the CLIP backbone or runtime is missing. "
+            "Run Prepare / Download; first scoring will not download silently."
+        )
 
     def with_status(*, is_ready: bool, is_downloaded: bool) -> Dict[str, str]:
         if is_ready:
@@ -76,6 +102,13 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
     toriigate_available = bool(toriigate.get("available"))
     toriigate_dir = toriigate.get("model_dir") or str(Path(_svc().get_toriigate_model_dir()) / "toriigate-0.5")
 
+    if florence2.get("available"):
+        florence2_message_key = "models.florence2.ready"
+    elif florence2.get("missing_dependencies"):
+        florence2_message_key = "models.florence2.missingDeps"
+    else:
+        florence2_message_key = "models.florence2.missing"
+
     # -- OppaiOracle --
     oppai_oracle = health.get("oppai_oracle", {})
     oppai_oracle_available = bool(oppai_oracle.get("available"))
@@ -84,12 +117,22 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
     # -- CLIP --
     clip_health = health["clip"]
     clip_runtime_loaded = clip_health.get("runtime_loaded", False)
-    clip_available = clip_health["available"] or clip_runtime_loaded
-    if clip_runtime_loaded and not clip_health["available"]:
+    clip_text_runtime_loaded = clip_health.get("text_runtime_loaded", False)
+    clip_available = bool(
+        clip_health.get(
+            "feature_ready",
+            clip_health["available"] or clip_runtime_loaded,
+        )
+        or (clip_runtime_loaded and clip_text_runtime_loaded)
+    )
+    if clip_runtime_loaded and clip_text_runtime_loaded and not clip_health.get("feature_ready"):
         clip_message_key = "models.clip.loaded"
-        clip_message = "CLIP model is loaded and ready."
-    elif clip_health["available"]:
+        clip_message = "CLIP vision and text models are loaded and ready."
+    elif clip_health.get("feature_ready", clip_health["available"]):
         clip_message_key = "models.clip.ready"
+        clip_message = clip_health["message"]
+    elif clip_health.get("model_downloaded") and not clip_health.get("text_model_downloaded"):
+        clip_message_key = "models.clip.missingText"
         clip_message = clip_health["message"]
     elif clip_health["model_path"]:
         clip_message_key = "models.clip.missingRuntime"
@@ -113,6 +156,20 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
         artist_message_key = "models.artist.noSource"
     else:
         artist_message_key = "models.artist.missing"
+
+    if lucida.get("available"):
+        lucida_message_key = "models.lucida.ready"
+    elif lucida.get("missing_dependencies"):
+        lucida_message_key = "models.lucida.missingDeps"
+    else:
+        lucida_message_key = "models.lucida.missing"
+
+    if cl_tagger_v2.get("available"):
+        cl_tagger_v2_message_key = "models.clTaggerV2.ready"
+    elif cl_tagger_v2.get("missing_dependencies"):
+        cl_tagger_v2_message_key = "models.clTaggerV2.missingDeps"
+    else:
+        cl_tagger_v2_message_key = "models.clTaggerV2.missing"
 
     # -- Censor Legacy --
     legacy = censor["legacy"]
@@ -206,6 +263,51 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
             ],
         },
         {
+            "id": "florence2",
+            "name": "Florence-2 Base",
+            "group": "Tagging",
+            "group_key": "models.group.tagging",
+            "available": bool(florence2.get("available")),
+            **with_status(
+                is_ready=bool(florence2.get("available")),
+                is_downloaded=bool(florence2.get("checkpoint_path")),
+            ),
+            "message": (
+                florence2.get("message")
+                or "Florence-2 Base setup is incomplete."
+            ),
+            "message_key": florence2_message_key,
+            "message_params": {
+                "deps": ", ".join(florence2.get("missing_dependencies") or []),
+            },
+            "path": (
+                florence2.get("checkpoint_path")
+                or florence2.get("expected_path", "")
+            ),
+            "download_supported": True,
+            "default_variant": "base",
+            "default_model": "florence-community/Florence-2-base",
+            "recommended": True,
+            "note": (
+                "Native Transformers local natural-language captioner. It is not a "
+                "booru tagger and does not participate in tag voting."
+            ),
+            "setup_steps": [
+                "Click Prepare / Download to install the Florence-2 runtime if needed.",
+                "Restart SD Image Sorter if Python packages were installed.",
+                "Click Prepare / Download again to fetch the commit-pinned model.",
+            ],
+            "external_links": [
+                {
+                    "label": "HuggingFace",
+                    "url": (
+                        "https://huggingface.co/"
+                        "florence-community/Florence-2-base"
+                    ),
+                },
+            ],
+        },
+        {
             "id": "oppai-oracle",
             "name": "OppaiOracle V1.1",
             "group": "Tagging",
@@ -226,6 +328,49 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
             ],
         },
         {
+            "id": "cl-tagger-v2",
+            "name": "CL Tagger v2",
+            "group": "Tagging",
+            "group_key": "models.group.tagging",
+            "available": bool(cl_tagger_v2.get("available")),
+            **with_status(
+                is_ready=bool(cl_tagger_v2.get("available")),
+                is_downloaded=bool(cl_tagger_v2.get("checkpoint_path")),
+            ),
+            "message": (
+                cl_tagger_v2.get("message")
+                or "CL Tagger v2 setup is incomplete."
+            ),
+            "message_key": cl_tagger_v2_message_key,
+            "message_params": {
+                "deps": ", ".join(cl_tagger_v2.get("missing_dependencies") or []),
+            },
+            "path": (
+                cl_tagger_v2.get("checkpoint_path")
+                or cl_tagger_v2.get("expected_path", "")
+            ),
+            "download_supported": True,
+            "default_variant": "v2_00",
+            "default_model": "cella110n/cl_tagger_v2:v2_00",
+            "gated_download": True,
+            "requires_auth": True,
+            "note": (
+                "Gated model. The portable package contains no weights; Prepare / Download "
+                "fetches the user-authorized checkpoint only from the official Hugging Face repository."
+            ),
+            "setup_steps": [
+                "Accept the cl_tagger_v2 model terms on the official Hugging Face page and configure a token if the repository requests one.",
+                "Click Prepare / Download to install the small runtime group and fetch the pinned v2_00 files.",
+                "Restart SD Image Sorter if Python packages were installed, then run Prepare / Download again if the first attempt requested it.",
+            ],
+            "external_links": [
+                {
+                    "label": "HuggingFace",
+                    "url": "https://huggingface.co/cella110n/cl_tagger_v2",
+                },
+            ],
+        },
+        {
             "id": "clip",
             "name": "CLIP Similarity",
             "group": "Search",
@@ -238,11 +383,13 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
             "message": clip_message,
             "message_key": clip_message_key,
             "path": clip_health["model_path"] or clip_health.get("expected_path", ""),
+            "text_path": clip_health.get("text_model_path") or clip_health.get("expected_text_path", ""),
             "download_supported": True,
             "setup_steps": [
                 "Click Prepare to install fastembed Python package (restart required after install).",
-                "Click Prepare again after restart to download the CLIP ViT-B/32 ONNX model (~335 MB).",
-                "Manual: place model.onnx + config.json in " + clip_health.get("expected_path", "data/models/clip/Qdrant-clip-ViT-B-32-vision"),
+                "Click Prepare again after restart to download and verify both CLIP ViT-B/32 ONNX towers (~600 MB total).",
+                "Vision requires model.onnx + config.json + preprocessor_config.json in " + clip_health.get("expected_path", "data/models/clip/Qdrant-clip-ViT-B-32-vision"),
+                "Text queries require model.onnx + config.json + tokenizer.json + tokenizer_config.json + special_tokens_map.json in " + clip_health.get("expected_text_path", "data/models/clip/Qdrant-clip-ViT-B-32-text"),
             ],
         },
         {
@@ -256,7 +403,8 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
             "message_key": aesthetic_msg_key,
             "path": aesthetic_head_path if aesthetic_head_exists else None,
             "download_supported": True,
-            "note": "Uses CLIP ViT-L/14 + LAION linear head (~3KB). CLIP model (~400MB) downloads on first use via open_clip.",
+            "note": "Uses CLIP ViT-L/14 + the LAION linear head. Prepare / Download validates both before reporting ready.",
+            "backbone_path": aesthetic_backbone_path,
         },
         {
             "id": "artist",
@@ -286,6 +434,46 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "Manual: put best_checkpoint.pth in " + str(Path(_svc().get_artist_model_dir()) / "kaloscope2.0" / "448-90.13"),
                 "Manual: put class_mapping.csv in " + str(Path(_svc().get_artist_model_dir()) / "kaloscope2.0"),
                 "Manual: the LSNet runtime (lsnet_model/) goes in " + str(Path(_svc().get_artist_model_dir()) / "comfyui-lsnet-runtime"),
+            ],
+        },
+        {
+            "id": "lucida",
+            "name": "Lucida",
+            "group": "Training Masks",
+            "group_key": "models.group.trainingMasks",
+            "available": bool(lucida.get("available")),
+            **with_status(
+                is_ready=bool(lucida.get("available")),
+                is_downloaded=bool(lucida.get("checkpoint_path")),
+            ),
+            "message": lucida.get("message") or "Lucida setup is incomplete.",
+            "message_key": lucida_message_key,
+            "message_params": {
+                "deps": ", ".join(lucida.get("missing_dependencies") or []),
+            },
+            "path": lucida.get("checkpoint_path") or lucida.get("expected_path", ""),
+            "download_supported": True,
+            "default_variant": "pinned",
+            "default_model": "egeorcun/lucida",
+            "recommended": True,
+            "note": (
+                "MIT-licensed weights. Training data includes research-only datasets; "
+                "commercial users should make their own assessment."
+            ),
+            "setup_steps": [
+                "Click Prepare / Download to install the Lucida runtime if needed.",
+                "Restart SD Image Sorter if Python packages were installed.",
+                "Click Prepare / Download again to fetch the commit-pinned Lucida checkpoint (~885 MB).",
+            ],
+            "external_links": [
+                {
+                    "label": "HuggingFace",
+                    "url": "https://huggingface.co/egeorcun/lucida",
+                },
+                {
+                    "label": "GitHub",
+                    "url": "https://github.com/egeorcun/lucida",
+                },
             ],
         },
         {
@@ -319,10 +507,15 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
             "name": "NudeNet v3",
             "group": "Censor",
             "group_key": "models.group.censor",
+            # ``available`` is the runtime-installation signal exposed by the
+            # health contract.  A detector is not usable until its 320n.onnx
+            # weights are also present, so bulk-download readiness must use
+            # the complete artifact state instead of the runtime alone.
             "available": nudenet["available"],
+            "runtime_available": bool(nudenet["available"]),
             **with_status(
-                is_ready=bool(nudenet["available"]),
-                is_downloaded=bool(nudenet["model_downloaded"] or nudenet["available"]),
+                is_ready=bool(nudenet["available"] and nudenet.get("model_downloaded")),
+                is_downloaded=bool(nudenet.get("model_downloaded")),
             ),
             "message": nudenet["message"],
             "message_key": nudenet_key,

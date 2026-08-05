@@ -282,6 +282,77 @@ def _plan_mask_destination(
     )
 
 
+def _plan_single_training_pair(
+    record: Dict[str, Any],
+    *,
+    output_folder: Path,
+    pattern: str,
+    trigger: str,
+    overwrite_policy: str,
+    caption_extension: str,
+    mask_export_mode: str,
+    index: int,
+    used_image_paths: set[str],
+    used_caption_paths: set[str],
+    used_mask_paths: set[str],
+) -> Tuple[Optional[Path], Optional[Path], Optional[str]]:
+    """Plan one image/caption/mask stem under a shared collision policy."""
+    while True:
+        image_path, caption_path, pair_error = _plan_single_pair(
+            record,
+            output_folder=output_folder,
+            pattern=pattern,
+            trigger=trigger,
+            overwrite_policy=overwrite_policy,
+            caption_extension=caption_extension,
+            index=index,
+            used_image_paths=used_image_paths,
+            used_caption_paths=used_caption_paths,
+        )
+        if pair_error is not None or image_path is None or caption_path is None:
+            return image_path, caption_path, pair_error
+        if mask_export_mode == "none":
+            return image_path, caption_path, None
+
+        mask_path, mask_error = _plan_mask_destination(
+            mask_export_mode,
+            image_path,
+            output_folder,
+        )
+        if mask_error is not None or mask_path is None:
+            return None, None, mask_error or "Mask destination is missing"
+        mask_key = str(mask_path.resolve(strict=False))
+        mask_exists = os.path.lexists(mask_path)
+        mask_conflicts = mask_key in used_mask_paths or (
+            mask_exists and overwrite_policy != "overwrite"
+        )
+        if not mask_conflicts:
+            used_mask_paths.add(mask_key)
+            return image_path, caption_path, None
+        if overwrite_policy == "overwrite":
+            used_mask_paths.add(mask_key)
+            return image_path, caption_path, None
+        if overwrite_policy == "skip":
+            return None, None, "mask_destination_collision"
+
+        used_caption_paths.discard(str(caption_path))
+
+
+def _paths_share_file_identity(source: Path, target: Path) -> bool:
+    """Return whether two paths resolve to the same file or filesystem identity."""
+    try:
+        if source.exists() and os.path.lexists(target):
+            return os.path.samefile(source, target)
+        source_key = os.path.normcase(str(source.resolve(strict=False)))
+        target_key = os.path.normcase(str(target.resolve(strict=False)))
+    except OSError as exc:
+        raise ValueError(
+            "Dataset transform could not compare source and destination safely: "
+            f"source={source}, destination={target}, error={exc}"
+        ) from exc
+    return source_key == target_key
+
+
 def _plan_single_rename(
     record: Dict[str, Any],
     *,

@@ -23,6 +23,7 @@ CUSTOM_PROFILE_ALIASES = {
     "pixai-tagger-v0.9": "pixai-tagger-v0.9",
     "toriigate-0.5": "toriigate-0.5",
     "oppai-oracle-v1.1": "oppai-oracle-v1.1",
+    "cl-tagger-v2": "cl-tagger-v2",
 }
 CUSTOM_ONNX_PROFILE_NAMES = {
     "wd14",
@@ -155,6 +156,20 @@ TAGGER_MODEL_HINTS = {
         "speed_score": 2,
         "stability_score": 4,
     },
+    "cl-tagger-v2": {
+        "summary": "Gated SigLIP2 multi-label tagger with a modern vocabulary and explicit category metadata. Download is opt-in from the official Hugging Face repository; review its output before using it for training captions.",
+        "speed": "Medium-slow",
+        "memory": "High",
+        "best_for": "Modern tag vocabulary / optional quality comparison",
+        "safe_mode_note": "Uses the fixed 384x384 official preprocessing contract and a 0.55 default threshold. The model is optional and is never included in the portable package.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "gpu_locked": False,
+        "runtime_note": "Runs through the dedicated CL Tagger v2 ONNX backend. The gated checkpoint is downloaded only after the user explicitly prepares it.",
+        "quality_score": 4,
+        "speed_score": 2,
+        "stability_score": 3,
+    },
 }
 
 
@@ -222,6 +237,8 @@ class CatalogMixin:
                     if config.get("runtime_backend") == "toriigate"
                     else "oppai-oracle"
                     if config.get("runtime_backend") == "oppai-oracle"
+                    else "cl-tagger-v2"
+                    if config.get("runtime_backend") == "cl-tagger-v2"
                     else "wd14"
                 ),
                 "runtime_safety_tier": config.get("runtime_safety_tier", "balanced"),
@@ -238,10 +255,12 @@ class CatalogMixin:
                 "custom_profile_supported": str(
                     config.get("runtime_backend", "wd14")
                 ).lower()
-                not in {"toriigate", "oppai-oracle"},
+                not in {"toriigate", "oppai-oracle", "cl-tagger-v2"},
                 "custom_metadata_format": config.get("metadata_format", "wd14_csv"),
                 "custom_tags_file_hint": ".json metadata"
                 if config.get("metadata_format") == "camie_v2"
+                else "model_vocabulary.json"
+                if config.get("metadata_format") == "cl_tagger_v2"
                 else "selected_tags.csv",
             }
             for name, config in TAGGER_MODELS.items()

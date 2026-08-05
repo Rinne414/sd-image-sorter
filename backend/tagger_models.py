@@ -28,6 +28,7 @@ TAGGER_MODELS: dict = {
     "wd-swinv2-tagger-v3": {
         "writer_family": "wd14",
         "repo_id": "SmilingWolf/wd-swinv2-tagger-v3",
+        "revision": "627aef95638667ddcaa3ac8ae625e88ea5b02f51",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
         "runtime_safety_tier": "balanced",
@@ -201,5 +202,32 @@ TAGGER_MODELS: dict = {
         # the existing tagging service shape working without forcing
         # character-tag splits that the model cannot supply.
         "default_character_threshold": 1.0,
+    },
+    "cl-tagger-v2": {
+        "writer_family": "cl_tagger_v2",
+        "repo_id": "cella110n/cl_tagger_v2",
+        "revision": "b57909b8e9c63f71e208a26473e7aabdf45ed6b6",
+        "model_file": "v2_00/model.onnx",
+        "tags_file": "v2_00/model_vocabulary.json",
+        "external_data_files": [
+            "v2_00/model.onnx.data",
+            "v2_00/model_metadata.json",
+            "v2_00/model_tag_metrics.npz",
+        ],
+        "runtime_backend": "cl-tagger-v2",
+        "runtime_safety_tier": "heavy",
+        "metadata_format": "cl_tagger_v2",
+        "input_layout": "nchw",
+        "input_normalization": "minus_one_to_one",
+        "resize_mode": "stretch",
+        "image_size": 384,
+        "output_activation": "sigmoid",
+        "default_threshold": 0.55,
+        "default_character_threshold": 0.55,
+        "default_copyright_threshold": 0.55,
+        "default_max_tags_per_image": 80,
+        "supports_rating": True,
+        "gated_download": True,
+        "official_download_only": True,
     },
 }

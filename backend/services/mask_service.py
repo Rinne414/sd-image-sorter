@@ -9,11 +9,9 @@ train, black = ignore). This service owns those masks:
   (the trainers' own default), so absence is never an error.
 * manual editing — the frontend canvas sends a data URL; we decode,
   convert to L and write atomically (tmp + os.replace).
-* auto generation — rembg (u2net) subject extraction, an OPT-IN
-  dependency: ONNX Runtime is already bundled, but rembg itself is not,
-  so a missing install raises a clear bilingual error with the exact
-  pip command instead of a stack trace. The generated mask is returned
-  to the caller for review — nothing is saved until the user says so.
+* auto generation — rembg (u2net) or the opt-in Lucida subject-matting
+  model. The generated mask is returned to the caller for review; nothing
+  is saved until the user says so.
 
 Export-side naming (OneTrainer ``<stem>-masklabel.png`` beside the image,
 kohya ``mask/<stem>.png`` conditioning folder) lives in
@@ -43,7 +41,7 @@ MAX_MASK_BYTES = 32 * 1024 * 1024
 
 _DATA_URL_RE = re.compile(r"^data:image/(png|webp|jpeg);base64,(?P<body>[A-Za-z0-9+/=\s]+)$")
 
-VALID_AUTO_METHODS = ("rembg",)
+VALID_AUTO_METHODS = ("rembg", "lucida")
 
 
 class MaskError(ValueError):
@@ -155,23 +153,32 @@ def generate_auto_mask(image_id: int, method: str = "rembg") -> Dict[str, Any]:
     if not src_path or not os.path.exists(src_path):
         raise MaskError(f"Source image missing on disk: {src_path!r}")
 
-    os.environ.setdefault("U2NET_HOME", _rembg_session_home())
-    try:
-        from rembg import remove  # noqa: PLC0415 - heavy opt-in dependency
-    except ImportError as exc:
-        raise MaskError(
-            "rembg is not installed. Install it into the backend environment "
-            "with: pip install rembg  (ONNX Runtime is already bundled; the "
-            "u2net model (~170 MB) downloads on first use.) / 未安装 rembg。"
-            "请在后端环境执行 pip install rembg（首次使用会自动下载 u2net 模型，约 170 MB）。"
-        ) from exc
-
     with Image.open(src_path) as source:
         rgb = source.convert("RGB")
-    result = remove(rgb)
-    if result.mode != "RGBA":
-        result = result.convert("RGBA")
-    mask = result.split()[-1].convert("L")
+
+    if method == "lucida":
+        try:
+            from lucida_matting import LucidaError, generate_subject_mask
+
+            mask = generate_subject_mask(rgb, use_gpu=config.LUCIDA_USE_GPU)
+        except LucidaError as exc:
+            raise MaskError(str(exc)) from exc
+    else:
+        os.environ.setdefault("U2NET_HOME", _rembg_session_home())
+        try:
+            from rembg import remove  # noqa: PLC0415 - heavy opt-in dependency
+        except ImportError as exc:
+            raise MaskError(
+                "rembg is not installed. Install it into the backend environment "
+                "with: pip install rembg  (ONNX Runtime is already bundled; the "
+                "u2net model (~170 MB) downloads on first use.) / 未安装 rembg。"
+                "请在后端环境执行 pip install rembg（首次使用会自动下载 u2net 模型，约 170 MB）。"
+            ) from exc
+
+        result = remove(rgb)
+        if result.mode != "RGBA":
+            result = result.convert("RGBA")
+        mask = result.split()[-1].convert("L")
 
     buffer = io.BytesIO()
     mask.save(buffer, format="PNG")

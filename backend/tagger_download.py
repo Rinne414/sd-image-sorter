@@ -12,10 +12,15 @@ logger keeps the original "tagger" channel.
 
 import logging
 import os
-from typing import Optional, Tuple
+from pathlib import Path
+from typing import Mapping, Optional, Tuple
 
 from config import TAGGER_MODELS as MODELS
-from model_download_sources import endpoint_label, get_hf_endpoint_order
+from model_download_sources import (
+    endpoint_label,
+    get_hf_endpoint_order,
+    log_model_artifact_status,
+)
 
 logger = logging.getLogger("tagger")
 
@@ -32,6 +37,29 @@ def _svc():
     return tagger
 
 
+def _validated_model_revision(
+    model_name: str,
+    config: Mapping[str, object],
+) -> Optional[str]:
+    """Return one optional commit pin and reject ambiguous revisions."""
+    revision = config.get("revision")
+    if revision is None:
+        return None
+    if not isinstance(revision, str):
+        raise TypeError(
+            f"Tagger model {model_name!r} revision must be a 40-character commit hash"
+        )
+    normalized = revision.strip().lower()
+    if len(normalized) != 40 or any(
+        character not in "0123456789abcdef" for character in normalized
+    ):
+        raise ValueError(
+            f"Tagger model {model_name!r} revision must be a 40-character commit hash: "
+            f"received {revision!r}"
+        )
+    return normalized
+
+
 class _DownloadMixin:
     """Endpoint-fallback HF downloads (network; never exercised by unit suites)."""
 
@@ -44,6 +72,7 @@ class _DownloadMixin:
 
         config = MODELS[self.model_name]
         repo_id = config["repo_id"]
+        revision = _validated_model_revision(self.model_name, config)
 
         model_path = os.path.join(self.model_dir, self.model_name, config["model_file"])
         tags_path = os.path.join(self.model_dir, self.model_name, config["tags_file"])
@@ -74,6 +103,7 @@ class _DownloadMixin:
                     repo_id=repo_id,
                     filename=config["model_file"],
                     local_dir=os.path.join(self.model_dir, self.model_name),
+                    revision=revision,
                 )
 
                 # Validate after download
@@ -85,19 +115,48 @@ class _DownloadMixin:
                 logger.error(f"Error downloading model: {e}")
                 raise
 
-        if not os.path.exists(tags_path):
+        if not os.path.exists(tags_path) or not self._validate_tag_file(tags_path):
             logger.info("Downloading tags file...")
             assert _svc().hf_hub is not None
             tags_path = self._download_with_fallback(
                 repo_id=repo_id,
                 filename=config["tags_file"],
                 local_dir=os.path.join(self.model_dir, self.model_name),
+                revision=revision,
+            )
+
+        local_root = Path(self.model_dir) / self.model_name
+        missing = log_model_artifact_status(
+            logger,
+            model_id=self.model_name,
+            revision=revision,
+            endpoint="local",
+            model_dir=local_root,
+            required_files=(config["model_file"], config["tags_file"]),
+        )
+        if missing:
+            raise RuntimeError(
+                f"WD14 model {self.model_name!r} is incomplete after download: "
+                + ", ".join(missing)
+                + ". Re-run Prepare / Download."
             )
 
         return model_path, tags_path
 
+    @staticmethod
+    def _validate_tag_file(path: str) -> bool:
+        """Return whether a WD14 tag table is a non-empty regular file."""
+        try:
+            return Path(path).is_file() and Path(path).stat().st_size > 0
+        except OSError:
+            return False
+
     def _download_with_fallback(
-        self, repo_id: str, filename: str, local_dir: str
+        self,
+        repo_id: str,
+        filename: str,
+        local_dir: str,
+        revision: Optional[str],
     ) -> str:
         assert _svc().hf_hub is not None
         endpoints = get_hf_endpoint_order(model_name=f"WD14 {self.model_name}")
@@ -122,7 +181,18 @@ class _DownloadMixin:
                     "local_dir": local_dir,
                     "endpoint": endpoint,
                 }
-                return _svc().hf_hub.hf_hub_download(**kwargs)
+                if revision is not None:
+                    kwargs["revision"] = revision
+                resolved_path = _svc().hf_hub.hf_hub_download(**kwargs)
+                log_model_artifact_status(
+                    logger,
+                    model_id=self.model_name,
+                    revision=revision,
+                    endpoint=endpoint,
+                    model_dir=Path(local_dir),
+                    required_files=(filename,),
+                )
+                return resolved_path
             except Exception as exc:
                 last_error = exc
                 logger.warning(

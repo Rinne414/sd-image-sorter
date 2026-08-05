@@ -87,6 +87,42 @@ function _modelPrepareConflictMessage(requestedModelId, activeModelId) {
     );
 }
 
+function _bulkModelGuidance(item, prepareResult) {
+    if (!prepareResult || typeof prepareResult !== 'object' || Array.isArray(prepareResult)) {
+        return null;
+    }
+    const manualSteps = Array.isArray(prepareResult.manual_steps)
+        ? prepareResult.manual_steps.filter((step) => typeof step === 'string' && step.trim())
+        : [];
+    const resultUrl = typeof prepareResult.external_url === 'string'
+        ? prepareResult.external_url.trim()
+        : '';
+    const itemUrl = typeof item?.auth_url === 'string' ? item.auth_url.trim() : '';
+    const externalUrl = /^https:\/\//i.test(resultUrl)
+        ? resultUrl
+        : /^https:\/\//i.test(itemUrl)
+            ? itemUrl
+            : '';
+    if (manualSteps.length === 0 && !externalUrl) {
+        return null;
+    }
+    return {
+        provider: typeof prepareResult.provider === 'string' ? prepareResult.provider : '',
+        message: typeof prepareResult.message === 'string'
+            ? prepareResult.message
+            : appT('models.prepareFailed', 'Model setup failed'),
+        target_dir: typeof prepareResult.target_dir === 'string' ? prepareResult.target_dir : '',
+        external_url: externalUrl,
+        manual_steps: manualSteps,
+    };
+}
+
+function _bulkFailureSummary(failures) {
+    return failures
+        .map((failure) => `${failure.id}: ${failure.message}`)
+        .join('; ');
+}
+
 async function promptBulkDownloadModels() {
     let bundle;
     try {
@@ -96,78 +132,137 @@ async function promptBulkDownloadModels() {
         return;
     }
 
-    const items = Array.isArray(bundle?.items) ? bundle.items : [];
-    if (items.length === 0) {
-        showToast(appT('models.bulkEmpty', 'No models are configured for bulk download.'), 'warning');
-        return;
-    }
-    const pendingItems = items.filter((it) => it.status !== 'ready');
+    const rawItems = Array.isArray(bundle?.items) ? bundle.items : [];
+    const items = rawItems.filter((item) => item && typeof item.id === 'string' && item.id.trim());
+    const pendingItems = items.filter((item) => item.status !== 'ready' && item.download_supported !== false);
     if (pendingItems.length === 0) {
-        showToast(appT('models.bulkAllReady', 'All recommended models are already downloaded.'), 'success');
+        showToast(items.length
+            ? appT('models.bulkAllReady', 'All recommended models are already downloaded.')
+            : appT('models.bulkEmpty', 'No models are configured for bulk download.'), 'success');
         return;
     }
-    const pendingTotalBytes = Number(bundle.pending_total_bytes) || pendingItems.reduce((s, it) => s + (Number(it.size_bytes) || 0), 0);
 
-    // Build the confirmation HTML. We can't use showConfirm() directly
-    // because it only takes plain text — we want a checklist with sizes.
-    const listHtml = items.map((it) => {
-        const isReady = it.status === 'ready';
+    // Older backend responses treated every missing item as recommended. New
+    // responses carry default_selected so gated optional models stay off.
+    const defaultSelectedIds = new Set(
+        pendingItems
+            .filter((item) => item.default_selected === true
+                || (item.default_selected == null && item.recommended !== false && !item.gated_download && !item.requires_auth))
+            .map((item) => item.id),
+    );
+    const featureLabel = (item) => {
+        const labels = {
+            tagging: appT('models.bulkFeatureTagging', 'Tagging'),
+            censor: appT('models.bulkFeatureCensor', 'Censor'),
+            similarity: appT('models.bulkFeatureSimilarity', 'Similarity'),
+            scoring: appT('models.bulkFeatureScoring', 'Scoring'),
+            artist_id: appT('models.bulkFeatureArtist', 'Artist ID'),
+            segmentation: appT('models.bulkFeatureSegmentation', 'Segmentation'),
+            natural_language_caption: appT('models.bulkFeatureCaption', 'Natural-language captions'),
+            training_masks: appT('models.bulkFeatureMasks', 'Training masks'),
+        };
+        return labels[item.feature_key] || item.group || appT('models.groupFallback', 'Feature');
+    };
+
+    const listHtml = items.map((item) => {
+        const isReady = item.status === 'ready';
+        const selectable = !isReady && item.download_supported !== false;
+        const selected = selectable && defaultSelectedIds.has(item.id);
         const cls = isReady ? 'is-ready' : 'is-pending';
-        const sizeText = _formatBulkBytes(it.size_bytes);
         const pillText = isReady
             ? appT('models.bulkAlreadyReady', 'already ready')
-            : appT('models.bulkWillDownload', 'will download');
-        const safeLabel = escapeHtml(it.label || it.name || it.id);
+            : item.gated_download || item.requires_auth
+                ? appT('models.bulkAuthRequired', 'HF authorization required')
+                : appT('models.bulkWillDownload', 'will download');
+        const authUrl = typeof item.auth_url === 'string' && /^https:\/\//i.test(item.auth_url)
+            ? `<a class="bulk-download-auth-link" href="${escapeHtml(item.auth_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(appT('models.bulkAuthLink', 'Open authorization page'))}</a>`
+            : '';
+        const authNote = item.gated_download || item.requires_auth
+            ? `<span class="bulk-download-auth-note">${escapeHtml(appT('models.bulkAuthNote', 'Accept the official Hugging Face terms first.'))} ${authUrl}</span>`
+            : '';
         return `
-            <div class="bulk-download-row ${cls}">
-                <span class="bulk-download-name">${safeLabel}</span>
+            <div class="bulk-download-row ${cls}${selectable ? '' : ' is-disabled'}" data-model-id="${escapeHtml(item.id)}">
+                <label class="bulk-download-select">
+                    <input type="checkbox" class="bulk-download-checkbox" data-model-id="${escapeHtml(item.id)}" data-testid="bulk-download-select-${escapeHtml(item.id)}"${selected ? ' checked' : ''}${selectable ? '' : ' disabled'}>
+                    <span class="bulk-download-name"><strong>${escapeHtml(item.label || item.name || item.id)}</strong><small>${escapeHtml(featureLabel(item))}</small>${authNote}</span>
+                </label>
                 <span class="bulk-download-pill">${escapeHtml(pillText)}</span>
-                <span class="bulk-download-size">~${escapeHtml(sizeText)}</span>
+                <span class="bulk-download-size">~${escapeHtml(_formatBulkBytes(item.size_bytes))}</span>
             </div>
         `;
     }).join('');
 
-    const totalText = _formatBulkBytes(pendingTotalBytes);
     const excludedItems = Array.isArray(bundle.excluded) ? bundle.excluded : [];
     const excludedHtml = excludedItems.length ? `
         <p class="model-card-hint" style="margin-top:8px;">
             ${escapeHtml(appT('models.bulkExcludedNote', 'Skipped:'))} ${
-                excludedItems.map(e => escapeHtml(e.id)).join(', ')
+                excludedItems.map((item) => escapeHtml(item.id)).join(', ')
             }
         </p>
     ` : '';
-
     const bodyHtml = `
         <p>${escapeHtml(appT(
             'models.bulkConfirmIntro',
-            'About to download {count} model(s). Estimated disk space needed: {size}.',
-            { count: pendingItems.length, size: totalText }
+            'Select the models to download. Recommended models are selected for you; optional models stay off until you choose them.',
         ))}</p>
-        <div class="bulk-download-list" role="list">${listHtml}</div>
-        <div class="bulk-download-summary">
-            <span>${escapeHtml(appT('models.bulkConfirmTotalLabel', 'Total to download'))}</span>
-            <span>${escapeHtml(totalText)}</span>
+        <div class="bulk-download-selection-controls" role="group" aria-label="${escapeHtml(appT('models.bulkSelectionLabel', 'Bulk model selection'))}">
+            <button type="button" class="btn btn-ghost btn-small" id="bulk-select-recommended">${escapeHtml(appT('models.bulkSelectRecommended', 'Select recommended'))}</button>
+            <button type="button" class="btn btn-ghost btn-small" id="bulk-select-all">${escapeHtml(appT('models.bulkSelectAll', 'Select all'))}</button>
+            <button type="button" class="btn btn-ghost btn-small" id="bulk-clear-selection">${escapeHtml(appT('models.bulkClearSelection', 'Clear'))}</button>
         </div>
+        <div class="bulk-download-list" role="list">${listHtml}</div>
+        <div class="bulk-download-summary" id="bulk-download-selection-summary"></div>
         ${excludedHtml}
         <p class="model-card-hint" style="margin-top:10px;">${escapeHtml(appT(
             'models.bulkConfirmNote',
-            'Sizes are estimates. Some models also install Python packages on first run; restart the app if the progress text mentions a Python install. Downloads run sequentially and you can close this dialog to leave them running in the background.'
+            'Sizes are estimates. Python packages may be installed before model files; restart the app when the result says so, then resume the remaining selections.',
         ))}</p>
     `;
 
-    // Re-use the existing #confirm-modal but inject HTML message. Bypass
-    // showConfirm()'s plain-text content path — its lock means we have
-    // to set message innerHTML manually after it opens.
+    const getSelectedItems = () => {
+        const selectedIds = new Set(
+            Array.from(document.querySelectorAll('#confirm-message .bulk-download-checkbox:checked'))
+                .map((input) => input.dataset.modelId)
+                .filter(Boolean),
+        );
+        return pendingItems.filter((item) => selectedIds.has(item.id));
+    };
+    let selectedItems = [];
+    const updateSelectionUi = () => {
+        const selected = getSelectedItems();
+        selectedItems = selected;
+        const totalBytes = selected.reduce((total, item) => total + (Number(item.size_bytes) || 0), 0);
+        const summary = document.getElementById('bulk-download-selection-summary');
+        if (summary) {
+            summary.textContent = appT(
+                'models.bulkSelectionSummary',
+                '{count} model(s) selected · estimated download {size}',
+                { count: selected.length, size: _formatBulkBytes(totalBytes) },
+            );
+        }
+        const okButton = document.getElementById('btn-confirm-ok');
+        if (okButton) {
+            okButton.disabled = selected.length === 0;
+            okButton.textContent = appT('models.bulkConfirmOk', 'Download {count} model(s) (~{size})', {
+                count: selected.length,
+                size: _formatBulkBytes(totalBytes),
+            });
+        }
+    };
+
     showConfirm(
-        appT('models.bulkConfirmTitle', 'Are you sure? Download all recommended models'),
+        appT('models.bulkConfirmTitle', 'Choose models to download'),
         '',
         async () => {
             unlockDynamicI18nText('#btn-confirm-ok', 'modal.yes', 'Yes, proceed');
-            await runBulkDownload(pendingItems);
+            const selected = selectedItems.slice();
+            if (selected.length === 0) {
+                showToast(appT('models.bulkNoSelection', 'Select at least one missing model.'), 'warning');
+                return;
+            }
+            await runBulkDownload(selected);
         },
         () => {
-            // Cancel: restore the OK button to its default "Yes" text so
-            // the next showConfirm() user gets the right wording.
             unlockDynamicI18nText('#btn-confirm-ok', 'modal.yes', 'Yes, proceed');
             const messageEl = document.getElementById('confirm-message');
             if (messageEl) {
@@ -175,31 +270,40 @@ async function promptBulkDownloadModels() {
                 messageEl.style.overflowY = '';
                 messageEl.style.textAlign = '';
             }
-        }
+        },
     );
 
     const messageEl = document.getElementById('confirm-message');
     if (messageEl) {
-        // innerHTML sink: callers MUST pass pre-escaped/safe HTML. `bodyHtml`
-        // is built above with escapeHtml() around every interpolated value
-        // (model labels, sizes, excluded ids, and all appT() strings); appT()
-        // does NOT escape its params, so unescaped user text here would be XSS.
+        // All dynamic registry values are escaped before entering this sink.
         messageEl.innerHTML = bodyHtml;
         messageEl.style.maxHeight = '60vh';
         messageEl.style.overflowY = 'auto';
         messageEl.style.textAlign = 'left';
-    }
-    // Lock the OK button text so the global i18n auto-retranslate
-    // (which honours data-i18n="modal.yes") doesn't overwrite our
-    // dynamic "Download N model(s) (~X GB)" label.
-    lockDynamicI18nText('#btn-confirm-ok', 'modal.yes');
-    const okBtn = document.getElementById('btn-confirm-ok');
-    if (okBtn) {
-        okBtn.textContent = appT('models.bulkConfirmOk', 'Download {count} model(s) (~{size})', {
-            count: pendingItems.length,
-            size: totalText,
+        messageEl.querySelectorAll('.bulk-download-checkbox').forEach((input) => {
+            input.addEventListener('change', updateSelectionUi);
+        });
+        messageEl.querySelector('#bulk-select-recommended')?.addEventListener('click', () => {
+            messageEl.querySelectorAll('.bulk-download-checkbox').forEach((input) => {
+                input.checked = defaultSelectedIds.has(input.dataset.modelId);
+            });
+            updateSelectionUi();
+        });
+        messageEl.querySelector('#bulk-select-all')?.addEventListener('click', () => {
+            messageEl.querySelectorAll('.bulk-download-checkbox:not(:disabled)').forEach((input) => {
+                input.checked = true;
+            });
+            updateSelectionUi();
+        });
+        messageEl.querySelector('#bulk-clear-selection')?.addEventListener('click', () => {
+            messageEl.querySelectorAll('.bulk-download-checkbox').forEach((input) => {
+                input.checked = false;
+            });
+            updateSelectionUi();
         });
     }
+    lockDynamicI18nText('#btn-confirm-ok', 'modal.yes');
+    updateSelectionUi();
 }
 
 async function runBulkDownload(items) {
@@ -258,7 +362,6 @@ async function runBulkDownload(items) {
                 message,
             })));
             completed += blockedItems.length;
-            showToast(message, 'warning');
             break;
         }
 
@@ -267,6 +370,8 @@ async function runBulkDownload(items) {
         // the per-card prepare buttons drive.
         let finished = false;
         let safetyTicks = 0;
+        let pollErrorStreak = 0;
+        const maxPollErrorStreak = 3;
         while (!finished) {
             await new Promise(r => setTimeout(r, 1500));
             safetyTicks += 1;
@@ -278,12 +383,20 @@ async function runBulkDownload(items) {
             }
             try {
                 const p = await API.get('/api/models/download-progress');
+                pollErrorStreak = 0;
                 const pr = p?.prepare_result;
                 if (pr && !pr.active && pr.model_id === item.id && pr.status) {
                     finished = true;
-                    if (pr.restart_recommended) needsRestart = true;
+                    if (pr.restart_recommended || pr.status === 'needs_restart') {
+                        needsRestart = true;
+                        break;
+                    }
                     if (pr.status !== 'done' && pr.status !== 'ready' && pr.status !== 'warning') {
-                        failures.push({ id: item.id, message: pr.message || pr.error || pr.status });
+                        failures.push({
+                            id: item.id,
+                            message: pr.message || pr.error || pr.status,
+                            guidance: _bulkModelGuidance(item, pr),
+                        });
                     }
                     break;
                 }
@@ -294,10 +407,37 @@ async function runBulkDownload(items) {
                     button.innerHTML = `<span aria-hidden="true">⏳</span> <span>${escapeHtml(detail)}</span>`;
                 }
             } catch (err) {
-                // Network blip — just retry the poll.
+                pollErrorStreak += 1;
+                if (pollErrorStreak < maxPollErrorStreak) {
+                    updateBanner(appT(
+                        'models.bulkPollRetry',
+                        'Status check failed for {name}; retrying ({attempt}/{limit})...',
+                        {
+                            name: item.name || item.id,
+                            attempt: pollErrorStreak,
+                            limit: maxPollErrorStreak,
+                        },
+                    ));
+                    continue;
+                }
+                const message = appT(
+                    'models.bulkPollFailed',
+                    'Status checks failed {count} times for {name}. Check the starter console, then reopen Model Manager to resume.',
+                    {
+                        count: pollErrorStreak,
+                        name: item.name || item.id,
+                    },
+                );
+                failures.push({ id: item.id, message, guidance: null });
+                finished = true;
+                showToast(message, 'error');
             }
         }
         completed += 1;
+        if (needsRestart) {
+            showToast(appT('models.bulkNeedsRestart', 'Restart required — close and reopen the app, then resume the remaining selections.'), 'warning');
+            break;
+        }
         // Notify per-model completion so user knows progress even if modal is closed
         if (failures.length === 0 || failures[failures.length - 1]?.id !== item.id) {
             showToast(appT('models.bulkItemDone', '✓ {name} ({index}/{total})', { name: item.name || item.id, index: completed, total }), 'success');
@@ -318,15 +458,22 @@ async function runBulkDownload(items) {
     if (button) {
         button.disabled = false;
         button.innerHTML = originalLabel
-            || `<span aria-hidden="true">⬇️</span> <span>${escapeHtml(appT('models.bulkDownload', 'Download all recommended models'))}</span>`;
+            || `<span aria-hidden="true">⬇️</span> <span>${escapeHtml(appT('models.bulkDownload', 'Download selected models'))}</span>`;
     }
+
+    const actionableFailure = failures.find((failure) => failure.guidance);
+    if (actionableFailure) {
+        showModelSetupGuide(actionableFailure.guidance);
+    }
+
+    const failureSummary = _bulkFailureSummary(failures);
 
     // Update banner with final result
     if (banner) {
         if (needsRestart) {
             banner.style.borderColor = 'var(--color-warning, #f59e0b)';
             banner.style.background = 'rgba(245, 158, 11, 0.1)';
-            banner.innerHTML = `<strong>${escapeHtml(appT('models.bulkNeedsRestart', '⚠️ Restart required'))}</strong><br>${escapeHtml(appT('models.bulkRestartExplain', 'Some features installed Python packages. Close and restart the app, then click "Download all" again to finish downloading model files.'))}`;
+            banner.innerHTML = `<strong>${escapeHtml(appT('models.bulkNeedsRestart', '⚠️ Restart required'))}</strong><br>${escapeHtml(appT('models.bulkRestartExplain', 'A feature installed Python packages. Close and restart the app, then reopen the model selector to continue the remaining downloads.'))}`;
         } else if (failures.length === 0) {
             banner.style.borderColor = 'var(--color-success, #22c55e)';
             banner.style.background = 'rgba(34, 197, 94, 0.1)';
@@ -334,7 +481,7 @@ async function runBulkDownload(items) {
             setTimeout(() => { if (banner.parentNode) banner.remove(); }, 10000);
         } else {
             banner.style.borderColor = 'var(--color-danger, #ef4444)';
-            banner.textContent = appT('models.bulkDoneMixed', 'Downloaded {ok}/{total}. Failed: {failed}.', { ok: total - failures.length, total, failed: failures.map(f => f.id).join(', ') });
+            banner.textContent = appT('models.bulkDoneMixed', 'Downloaded {ok}/{total}. Failed: {failed}.', { ok: total - failures.length, total, failed: failureSummary });
         }
     }
 
@@ -344,12 +491,10 @@ async function runBulkDownload(items) {
         showToast(appT('models.bulkNeedsRestart', '⚠️ Restart required — close and reopen the app, then click Download again.'), 'warning');
     } else {
         const okCount = total - failures.length;
-        const failedIds = failures.map(f => f.id).join(', ');
         showToast(appT(
             'models.bulkDoneMixed',
             'Downloaded {ok}/{total}. Failed: {failed}. Open each model card to retry the failed ones.',
-            { ok: okCount, total, failed: failedIds }
+            { ok: okCount, total, failed: failureSummary }
         ), 'warning');
     }
 }
-

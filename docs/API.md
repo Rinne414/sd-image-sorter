@@ -615,7 +615,7 @@ Return `{ "active", "job_id", "job" }` for the running metadata re-parse (if any
 Resolve censored variants for a publish set (v3.5.0). Body: `{ "image_ids": [int, ...], "censor_suffix": "_censored" }` (suffix optional, sanitized to `[A-Za-z0-9_-]`). For each image, probes `{stem}{suffix}.{png|jpg|jpeg|webp}` — first next to the original on disk (`censored_source: "disk"`), then anywhere in the library by exact filename, newest indexed copy first (`censored_source: "library"`). Response preserves request order (duplicates removed): `{ "pairs": [{ "image_id", "missing", "filename", "path", "width", "height", "file_size", "found", "censored_path", "censored_filename", "censored_source" }], "total", "found_count", "censor_suffix" }`. Unknown ids come back with `missing: true`.
 
 #### POST /api/publish/export
-Export an ordered publish set with sequential platform-style names (v3.5.0). Body: `{ "items": [{ "image_id", "use_censored" }], "output_folder", "name_prefix": "", "start_index": 1, "pad_width": 1-4 (default 2), "caption_text": "", "censor_suffix": "_censored", "overwrite": false }`. Item position defines the publish index: each file is copied to `{name_prefix}{number:0{pad}}{ext}` (source extension kept, e.g. `01.png`, `02.jpg`); numbering stays stable across retries because it is positional. Items requesting `use_censored` FAIL (per-item error) when no censored variant resolves — the uncensored original is never silently substituted. Existing files are skipped unless `overwrite`. Non-empty `caption_text` is written to `caption.txt`. Output folder is validated against traversal and created if needed (400 on invalid). Returns `{ "success", "exported": [{ "index", "output_name", "image_id", "used_censored", "source_path" }], "skipped_existing", "errors", "caption_file", "output_folder" }`.
+Export an ordered publish set with sequential platform-style names (v3.5.0). Body: `{ "items": [{ "image_id", "use_censored" }], "output_folder", "name_prefix": "", "start_index": 1, "pad_width": 1-4 (default 2), "caption_text": "", "censor_suffix": "_censored", "overwrite": false, "watermark": { "enabled": false, "text": "", "position": "bottom_right", "opacity": 80, "size_percent": 8, "margin_percent": 2, "color": "#FFFFFF" } }`. Item position defines the publish index: each file is copied to `{name_prefix}{number:0{pad}}{ext}` (source extension kept, e.g. `01.png`, `02.jpg`); numbering stays stable across retries because it is positional. Items requesting `use_censored` FAIL (per-item error) when no censored variant resolves — the uncensored original is never silently substituted. Existing files are skipped unless `overwrite`. When `watermark.enabled` is true, the selected source is rendered with the configured text into the export copy only; gallery and training sources are untouched. Non-empty `caption_text` is written to `caption.txt`. Output folder is validated against traversal and created if needed (400 on invalid). Returns `{ "success", "exported": [{ "index", "output_name", "image_id", "used_censored", "source_path" }], "skipped_existing", "errors", "caption_file", "output_folder" }`.
 
 #### GET /api/tags/suggest
 Type-ahead tag suggestions for autocomplete inputs (v3.5.0). Query params: `q=<partial token>`, `limit=<1..50, default 20>`. Merges the user's library tags (frequency-ranked, `source: "library"`) with the bundled danbooru vocabulary `backend/assets/danbooru_tags.csv` (popularity-ranked, alias-aware, `source: "danbooru"`). Each suggestion carries a 14-category `category` (same palette as Dataset Maker tag pills) and an optional `zh` display string. CJK queries fuzzy-match Chinese aliases when the optional `danbooru_zh.csv` drop-in is present (see `backend/assets/README.md`). Returns `{ "suggestions": [{ "tag", "count", "source", "category", "zh" }], "danbooru_loaded", "zh_loaded" }`. Empty `q` returns the library's most frequent tags.
@@ -661,7 +661,7 @@ Remove the stored mask (the image reverts to fully trained). Returns `{removed, 
 Which of these images carry a stored mask. Body: `{image_ids: [..]}`. Returns `{masks: {"<id>": true|false}}` — queue badge data for the Dataset Maker.
 
 #### POST /api/masks/{image_id}/auto
-Generate a subject mask for canvas preview — NOT saved until the user saves the edited result. Body: `{method: "rembg"}` (the only method today; ClipSeg is a planned addition). rembg is an opt-in dependency: ONNX Runtime is already bundled, but rembg itself must be installed into the backend environment (`pip install rembg`; the u2net model, ~170 MB, downloads on first use into `DATA_DIR/models/rembg`). Missing install returns 400 with a bilingual hint. Returns `{image_id, method, width, height, data_url, saved: false}`.
+Generate a subject mask for canvas preview — NOT saved until the user saves the edited result. Body: `{method: "rembg" | "lucida"}`; omitted `method` defaults to `rembg`. rembg is an opt-in dependency: ONNX Runtime is already bundled, but rembg itself must be installed into the backend environment (`pip install rembg`; the u2net model, ~170 MB, downloads on first use into `DATA_DIR/models/rembg`). Lucida returns a soft-alpha grayscale mask and must first be downloaded from Model Manager at the application-pinned revision. A missing runtime/checkpoint or failed inference returns 400 with an actionable bilingual error. Returns `{image_id, method, width, height, data_url, saved: false}`.
 
 #### GET /api/prompts/library
 Get prompt token library. Optional query params: `q=<text>`, `limit=<n>`. Search runs across the full prompt-token index before applying `limit`.
@@ -673,7 +673,7 @@ Get LoRA library. Optional query params: `q=<text>`, `limit=<n>`. Search runs ac
 Get the checkpoint (base model) library for the Library tab's Checkpoints facet. Returns `{ "checkpoints": [{ "name", "count" }], "total" }` aggregated across the full indexed library.
 
 #### GET /api/tagger/models
-Get available tagger models and runtime guidance. Each model item includes default thresholds, GPU/runtime guidance, and Custom profile metadata such as `custom_profile_supported`, `custom_metadata_format`, and `custom_tags_file_hint`. v3.5.0: each item also carries `captioner_only` — `true` marks caption-only models (ToriiGate) that stay in the catalog for Smart Tag and model downloads but are hidden from the gallery tagger dropdown and rejected by `/api/tag` with a 400.
+Get available tagger models and runtime guidance. Each model item includes default thresholds, GPU/runtime guidance, and Custom profile metadata such as `custom_profile_supported`, `custom_metadata_format`, and `custom_tags_file_hint`. v3.5.0: each item also carries `captioner_only` — `true` marks caption-only models (ToriiGate) that stay in the catalog for Smart Tag and model downloads but are hidden from the gallery tagger dropdown and rejected by `/api/tag` with a 400. Florence-2 Base is a separate Smart Tag local captioner and is intentionally absent from this booru tagger endpoint. `cl-tagger-v2` is an optional gated booru tagger exposed here; its fixed revision is downloaded only after explicit user preparation from official Hugging Face and its weights are never bundled in portable releases.
 
 #### POST /api/tag/start
 Start background tagging (alias for POST /api/tag).
@@ -689,7 +689,7 @@ Start background tagging.
 | `threshold` | float | 0.35 | Threshold for general tags after score normalization |
 | `character_threshold` | float | 0.85 | Threshold for character tags after score normalization |
 | `retag_all` | bool | false | Re-tag already tagged images when no explicit `image_ids` are supplied |
-| `model_name` | string \| null | default tagger | Built-in tagger model name, or the selected Custom profile when `model_path` is used. Captioner-only models (`toriigate-0.5`) are rejected with 400 — caption with Smart Tag's natural-language mode instead (v3.5.0 owner decision) |
+| `model_name` | string \| null | default tagger | Built-in tagger model name, or the selected Custom profile when `model_path` is used. Captioner-only models (`toriigate-0.5`) are rejected with 400 — caption with Smart Tag's natural-language mode instead (v3.5.0 owner decision). `cl-tagger-v2` is a dedicated downloaded model and does not accept the Custom ONNX path |
 | `model_path` | string \| null | null | Local Custom ONNX model path; must exist and end in `.onnx`. User-supplied files are never deleted or re-downloaded by the repair path |
 | `tags_path` | string \| null | null | Optional local tag metadata path for Custom ONNX only; requires `model_path`. If supplied, it must exist and match the selected profile extension. If omitted, the tagger auto-detects profile-specific metadata next to the model: WD14/PixAI use `selected_tags.csv`; Camie uses `camie-tagger-v2-metadata.json` or `metadata.json` |
 | `custom_profile` | string \| null | null | Custom ONNX profile: `wd14`, `camie-tagger-v2`, or `pixai-tagger-v0.9`. `toriigate-0.5` is rejected because ToriiGate is not ONNX |
@@ -948,12 +948,17 @@ Set the download mirror preference (auto, hf-mirror, modelscope).
 Get active model download progress (bytes downloaded, total size).
 
 #### GET /api/models/bulk-bundle
-Inventory of models that the "Download all recommended models" button covers.
+Inventory of models available to the selectable bulk-download flow. Florence-2
+Base and Lucida are recommended defaults for local captions and training masks;
+CL Tagger v2 is listed as optional and is never selected by default because its
+official Hugging Face repository is gated.
 
 Returns each model with its current ready/missing status and estimated
-download size, plus the total bytes the button would fetch if pressed
-right now. The frontend uses this to render the confirmation dialog
-showing how much disk space is needed before bulk download.
+download size, recommendation/default-selection flags, feature key, and
+restart/auth requirements. `pending_total_bytes` includes all missing entries;
+`recommended_pending_total_bytes` and `optional_pending_total_bytes` split the
+estimate for the initial selection. The frontend uses these fields to render a
+checkbox confirmation dialog before sequential preparation.
 
 Response shape:
 
@@ -967,12 +972,42 @@ Response shape:
       "status": "ready",
       "name": "WD14 Tagger",
       "group": "tagger",
-      "variant": "wd-swinv2-tagger-v3"
+      "variant": "wd-swinv2-tagger-v3",
+      "feature_key": "tagging",
+      "recommended": true,
+      "optional": false,
+      "default_selected": true,
+      "gated_download": false,
+      "requires_auth": false,
+      "restart_after_install": false
+    },
+    {
+      "id": "cl-tagger-v2",
+      "label": "CL Tagger v2 (gated optional tagger)",
+      "size_bytes": 2899102924,
+      "status": "missing",
+      "name": "CL Tagger v2",
+      "group": "Tagging",
+      "variant": "v2_00",
+      "feature_key": "tagging",
+      "recommended": false,
+      "optional": true,
+      "default_selected": false,
+      "gated_download": true,
+      "requires_auth": true,
+      "auth_url": "https://huggingface.co/cella110n/cl_tagger_v2",
+      "restart_after_install": true
     }
   ],
   "pending_total_bytes": 7807402393,
-  "ready_count": 1,
-  "pending_count": 5
+  "recommended_pending_total_bytes": 4964309469,
+  "optional_pending_total_bytes": 2899102924,
+  "all_total_bytes": 10712412393,
+  "excluded": [
+    {"id": "censor-legacy", "reason": "Privacy YOLO remains opt-in."},
+    {"id": "toriigate", "reason": "Heavy alternative captioner."},
+    {"id": "oppai-oracle", "reason": "Alternative tagger."}
+  ]
 }
 ```
 
@@ -1514,6 +1549,8 @@ Return one persistent Dataset Maker project, including its current revision, sta
 
 Replace an active project's name, items, and settings using the required `expected_revision`. Stale revisions fail with HTTP 409 instead of overwriting newer edits.
 
+`settings.watermark_removal` is persisted with Dataset Project settings. It uses the same `{enabled, method, radius, padding_percent, regions}` shape as Dataset export; existing projects receive the disabled default through migration 041. Enabled cleanup is restricted to folder + copy output without a verified trainer package, and source images are never modified.
+
 #### POST /api/dataset/projects/{project_id}/archive
 
 Archive an active project using the required `expected_revision` and return the incremented project revision.
@@ -1549,6 +1586,14 @@ Restore a selected immutable revision as the subject's active caption using proj
 #### POST /api/dataset/export
 Combined image-and-caption export for LoRA training datasets. Renames every image according to the supplied pattern, copies (or moves) it to the output folder, and writes the matching `.txt` caption sidecar with the same stem. Optional `mask_export` (`"none"` default | `"onetrainer"` | `"kohya"`, v3.5.x Phase 4): also exports stored training masks — OneTrainer writes `<stem>-masklabel.png` beside each exported image, kohya writes `mask/<stem>.png` (a `conditioning_data_dir` layout). Images without a stored mask count in `masks_missing`, never fail (no mask = train the whole image); successful copies count in `masks_written`. Both counters ride the response. Optional `trainer_config: "kohya_toml"` (+ `trainer_repeats` 1-1000 default 10, `trainer_batch` 1-64 default 2, `trainer_resolution` 256-4096 default 1024) drops a ready `dataset_config.toml` into the output folder — one subset with explicit `num_repeats` (kohya's config method ignores folder-name repeats, per `docs/config_README-en.md`), `caption_extension` matching the export, `class_tokens` from the trigger, and `conditioning_data_dir = <output>/mask` when kohya-style masks were written (`docs/masked_loss_README.md`). Optional `trainer_keep_tokens` (0-50, default 0) additionally emits `shuffle_caption = true` + `keep_tokens = N` on the subset (official config example) so the trigger and leading common tags stay first while the rest shuffle. `trainer_config_path` rides the response; folder mode only.
 
+Optional `subject_crop` is one structured object: `{enabled, alpha_threshold, padding_percent, background_mode, solid_color}`. Omitting it is identical to `enabled=false` and preserves the byte-for-byte copy path. When enabled, `alpha_threshold` (1-255) determines only the subject bounding box, `padding_percent` (0-100) expands each side and clamps to the source, and the exported mask retains its original soft alpha values. `background_mode` is `keep_background`, `transparent_rgba`, or `solid_color`; transparent output is restricted to PNG, WebP, and TIFF, so JPEG fails explicitly. The exact crop box is applied to both image and mask before either image or caption is written. This opt-in mode requires folder output, `image_op="copy"`, positive indexed Library image IDs, a readable non-empty size-matching stored mask, `mask_export != "none"`, and `trainer_config="none"`. Local paths, scan tokens, beside-image output, moves, missing/empty/mismatched masks, and verified trainer packages fail explicitly instead of falling back or skipping. Source files are never modified.
+
+Optional `bucket_resize` is `{enabled, subject_aware, alpha_threshold}` and defaults to `{false, false, 128}`. When enabled, `trainer_resolution` becomes the bucket base resolution and must be a multiple of 64 from 256 through 4096. The exporter scales the canonical SDXL 1024 bucket table, chooses the closest aspect ratio deterministically, center-crops by default, and resizes with LANCZOS. `subject_aware=true` instead positions the crop from stored training-mask pixels whose alpha is at least `alpha_threshold`; lower soft-alpha noise is ignored only for bounding-box planning, while the exported soft mask remains unchanged. The exporter normalizes EXIF Orientation and applies the same geometry to the stored mask. Any exported mask receives the exact same crop and target size as its image. Transformed image, caption, and optional mask files are fully encoded before their final paths are published, with existing files restored if row publication fails. This preprocessing is optional and is not required for Kohya, which already performs aspect-ratio bucketing during training; its added value is producing pre-sized pixels and mask-aware framing before training. Bucket preprocessing requires folder output, `image_op="copy"`, positive indexed Library image IDs, `trainer_config="none"`, and no scan-token/local-path sources. Verified Package v2, beside-image output, and moves fail before outputs are written. Source files and caption text remain unchanged.
+
+Optional `watermark_removal` is `{enabled, method, radius, padding_percent, regions}` and defaults to `{enabled: false, method: "telea", radius: 3, padding_percent: 0, regions: []}`. It is a manual, CPU-only inpainting step: each region is `{x, y, width, height}` in basis points of the visual image (`0..10000`), with at most eight rectangles. The exporter applies the selected OpenCV method after EXIF orientation normalization and before subject crop or bucket geometry, and writes only the copied output image. The `watermark` tag is metadata and is never treated as a pixel mask. Enabling this option requires folder output, `image_op="copy"`, and `trainer_config="none"`; missing OpenCV/NumPy or an invalid region fails the row with an actionable error. It does not claim to detect arbitrary watermarks automatically.
+
+`DatasetExportResponse.warnings` is always an array. A completed overwrite whose obsolete backup could not be deleted returns a structured `backup_cleanup_failed` warning with `{code, message, backup_path, error_type, error}`. The exported row remains valid; the retained backup path is shown so the user can verify the new output and remove that backup manually. This condition is never hidden as a log-only success.
+
 Pattern variables: `{filename}`, `{index}`, `{index:03d}` (0-padded counter), `{trigger}`, `{generator}`, `{ext}`, `{date}`.
 
 Accepts either gallery-source items (`image_ids`), small-gallery local items (`image_paths`), or both. `image_overrides` keys may be either `str(image_id)` or absolute paths; both forms map to per-image caption overrides.
@@ -1570,7 +1615,11 @@ Body:
   "normalize_tag_underscores": true,
   "image_overrides": {"42": "user-edited caption for this image", "C:/dataset/local_001.png": "caption for the local item"},
   "image_types": {"42": "both", "7": "nl"},
-  "image_nl_overrides": {"42": "a girl stands in a sunny field"}
+  "image_nl_overrides": {"42": "a girl stands in a sunny field"},
+  "subject_crop": {"enabled": false, "alpha_threshold": 1, "padding_percent": 0, "background_mode": "keep_background", "solid_color": "#000000"},
+  "bucket_resize": {"enabled": true, "subject_aware": true, "alpha_threshold": 128},
+  "watermark_removal": {"enabled": false, "method": "telea", "radius": 3, "padding_percent": 0, "regions": []},
+  "trainer_resolution": 1024
 }
 ```
 
@@ -1583,6 +1632,8 @@ Returns `{status, exported, skipped, error_count, output_folder, items[], total_
 Preview Dataset Maker export sidecars without writing files. Runs the same caption-assembly engine as `/api/dataset/export` (blacklist removal, common-tag injection, trigger-word prepend, underscore normalization, per-image overrides) but returns the preview rows in-memory instead of touching disk. Used by the Dataset Maker Step C "preview" pane and the renamed-pair chip.
 
 Body matches `/api/dataset/export` minus `image_op` (the preview never moves/copies files); it additionally accepts `limit` (1–500, default 72) bounding how many rows are returned. The same `dataset_scan_tokens` source is supported, so large folder previews page through the manifest the same way export does.
+
+The preview wire contract also accepts and echoes the same validated `subject_crop`, `bucket_resize`, and `watermark_removal` settings through the shared payload model, but it does not transform or write pixels.
 
 Returns `{total, returned, items_truncated, content_mode, output_mode, sidecar_extension, items[]}`. Each `items[]` entry carries `{index, image_id, abs_path, filename, thumbnail_url, output_image_name, output_caption_name, output_image_path, output_caption_path, caption, ai_caption, nl_caption, skipped_reason, error}`. `caption` is the fully-rendered booru-tag line; `nl_caption` is the raw natural-language sentence for the two-box editor. `output_image_path` / `output_caption_path` are empty strings when no output folder is supplied.
 
@@ -1735,7 +1786,7 @@ Supported external provider names (`*_free` aliases and spelling variants accept
 
 #### POST /api/smart-tag/start
 
-"Smart Tag" wizard: runs a local tagger (WD14 / OppaiOracle / Camie / PixAI) and a VLM in one pipeline, strips noise tags (`masterpiece` / `score_9` / `anime` / ...), and writes a clean LoRA-ready caption per image. Returns immediately with the job snapshot; progress is polled via `/api/smart-tag/progress`.
+"Smart Tag" wizard: runs a local tagger (WD14 / OppaiOracle / Camie / PixAI) and a natural-language captioner in one pipeline, strips noise tags (`masterpiece` / `score_9` / `anime` / ...), and writes a clean LoRA-ready caption per image. Returns immediately with the job snapshot; progress is polled via `/api/smart-tag/progress`.
 
 Body:
 ```json
@@ -1750,12 +1801,21 @@ Body:
   "skip_existing": true,
   "enable_wd14": true,
   "enable_vlm": true,
+  "natural_language_mode": "vlm",
   "tagger_model": "",
   "use_gpu": true,
   "general_threshold": 0.35,
   "character_threshold": 0.85
 }
 ```
+
+`natural_language_mode` accepts `vlm` (the configured API/local LLM),
+`toriigate` (the local ToriiGate captioner), or `florence2` (the optional local
+Florence-2 Base captioner). Florence-2 is not a booru tagger, is never
+included in tag voting, and must be prepared from the application-pinned
+Hugging Face revision in Model Manager. Local captioner modes run after the
+booru phase and fail explicitly if their required caption cannot be generated;
+they do not silently fall back to another caption source.
 
 `training_purpose` accepts `style` / `character` / `general` / `concept` (plus aliases `style_lora` / `character_lora` / `concept_lora` / `nsfw` / `nsfw_lora`). Each picks a different VLM prompt: STYLE describes medium / lighting / composition only, CHARACTER describes pose / framing / mood and explicitly avoids hair / eye / signature outfit, GENERAL covers full subject / pose / clothing / scene.
 

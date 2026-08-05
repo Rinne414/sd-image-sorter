@@ -27,7 +27,11 @@ if TYPE_CHECKING:  # pragma: no cover - type-only
     import onnxruntime as ort  # type: ignore
 
 from config import TAGGER_MODELS
-from model_download_sources import endpoint_label, get_hf_endpoint_order
+from model_download_sources import (
+    endpoint_label,
+    get_hf_endpoint_order,
+    log_model_artifact_status,
+)
 
 logger = logging.getLogger("oppai_oracle_tagger")
 
@@ -94,12 +98,21 @@ class _LoaderMixin:
                     "Downloading %s from %s via %s",
                     filename, repo_id, endpoint_label(endpoint),
                 )
-                return _svc().hf_hub.hf_hub_download(
+                resolved_path = _svc().hf_hub.hf_hub_download(
                     repo_id=repo_id,
                     filename=filename,
                     local_dir=local_dir,
                     endpoint=endpoint,
                 )
+                log_model_artifact_status(
+                    logger,
+                    model_id=self.model_name,
+                    revision=None,
+                    endpoint=endpoint,
+                    model_dir=Path(local_dir),
+                    required_files=(filename,),
+                )
+                return resolved_path
             except Exception as exc:
                 last_error = exc
                 logger.warning(
@@ -141,9 +154,25 @@ class _LoaderMixin:
             if not self._validate_model_file(model_path):
                 raise RuntimeError("Downloaded OppaiOracle model file is invalid.")
 
-        if not os.path.exists(tags_path):
+        if not os.path.isfile(tags_path) or os.path.getsize(tags_path) <= 0:
             tags_path = self._download_with_fallback(
                 repo_id=repo_id, filename=_hf_filename(tags_file), local_dir=local_dir,
+            )
+
+        required_files = (_hf_filename(model_file), _hf_filename(tags_file))
+        missing = log_model_artifact_status(
+            logger,
+            model_id=self.model_name,
+            revision=None,
+            endpoint="local",
+            model_dir=Path(local_dir),
+            required_files=required_files,
+        )
+        if missing:
+            raise RuntimeError(
+                "OppaiOracle download completed without required runtime files: "
+                + ", ".join(missing)
+                + ". Re-run Prepare / Download."
             )
 
         # Pull the small companion files too so health / debug pages can show

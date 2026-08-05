@@ -4,10 +4,10 @@ Thin wrapper over ``services.publish_service``: censored-variant pairing and
 the sequential-name export. Ordering lives entirely in the frontend
 workbench; the request body's item order IS the publish order.
 """
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from services import publish_service
 
@@ -27,6 +27,28 @@ class PublishExportItem(BaseModel):
     use_censored: bool = False
 
 
+class PublishWatermarkSettings(BaseModel):
+    """Optional text watermark rendered only into the publish copy."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    enabled: bool = False
+    text: str = Field(default="", max_length=200)
+    position: Literal[
+        "top_left", "top_right", "bottom_left", "bottom_right", "center",
+    ] = "bottom_right"
+    opacity: int = Field(default=80, strict=True, ge=1, le=100)
+    size_percent: int = Field(default=8, strict=True, ge=1, le=20)
+    margin_percent: int = Field(default=2, strict=True, ge=0, le=10)
+    color: str = Field(default="#FFFFFF", pattern=r"^#[0-9A-Fa-f]{6}$")
+
+    @model_validator(mode="after")
+    def validate_enabled_text(self) -> "PublishWatermarkSettings":
+        if self.enabled and not self.text.strip():
+            raise ValueError("watermark.text is required when watermark.enabled is true")
+        return self
+
+
 class PublishExportRequest(BaseModel):
     items: List[PublishExportItem] = Field(default_factory=list, description="Ordered set; position = publish index")
     output_folder: str
@@ -36,6 +58,7 @@ class PublishExportRequest(BaseModel):
     caption_text: str = ""
     censor_suffix: Optional[str] = None
     overwrite: bool = False
+    watermark: PublishWatermarkSettings = Field(default_factory=PublishWatermarkSettings)
 
 
 @router.post(
@@ -77,6 +100,7 @@ def export_publish_set(request: PublishExportRequest):
             caption_text=request.caption_text,
             censor_suffix=request.censor_suffix,
             overwrite=request.overwrite,
+            watermark=publish_service.TextWatermarkConfig(**request.watermark.model_dump()),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from services import publish_service as ps
+from services.watermark_service import TextWatermarkConfig
 
 
 def _insert_image(conn, image_id, path, filename, *, width=512, height=512, size=1000):
@@ -189,3 +190,32 @@ def test_export_clamps_pad_and_start_and_sanitizes_prefix(pub_env):
     assert entry["index"] == 7
     # pad clamps to 4; sanitize_filename replaces OS-illegal chars with "_"
     assert entry["output_name"] == "se_t______0007.png"
+
+
+def test_export_adds_text_watermark_to_copy_and_preserves_source(pub_env):
+    from PIL import Image
+
+    source = pub_env["originals"] / "alpha.png"
+    Image.new("RGB", (512, 512), (35, 55, 75)).save(source)
+    before = source.read_bytes()
+    out = pub_env["tmp"] / "publish-watermark"
+    result = ps.export_set(
+        items=[{"image_id": 1}],
+        output_folder=str(out),
+        watermark=TextWatermarkConfig(
+            enabled=True,
+            text="artist",
+            position="bottom_right",
+            opacity=90,
+            size_percent=8,
+            margin_percent=2,
+            color="#FFFFFF",
+        ),
+    )
+
+    assert result["success"] is True
+    assert source.read_bytes() == before
+    with Image.open(out / "01.png") as exported:
+        assert exported.size == (512, 512)
+        assert exported.mode in {"RGB", "RGBA"}
+    assert (out / "01.png").read_bytes() != before

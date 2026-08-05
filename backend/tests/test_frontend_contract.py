@@ -2068,6 +2068,8 @@ def test_dataset_trainer_selector_replaces_legacy_kohya_checkbox_and_loads_once(
     assert 'id="dataset-trainer-package"' in html
     assert 'data-testid="dataset-trainer-contract-retry"' in html
     assert 'id="dataset-trainer-resolution"' in html
+    assert 'data-testid="dataset-bucket-resize-enabled"' in html
+    assert 'data-testid="dataset-bucket-resize-subject-aware"' in html
     assert 'id="dataset-trainer-toml"' not in html
     assert core.count("/static/js/dataset/trainer-selector.js") == 1
     assert core.index("/static/js/dataset/output-naming.js") < core.index(
@@ -2078,7 +2080,9 @@ def test_dataset_trainer_selector_replaces_legacy_kohya_checkbox_and_loads_once(
     )
     assert "this._initTrainerSelector?.();" in core
     assert "this._trainerExportFields()" in local_import
+    assert "this._bucketResizeExportSettings()" in local_import
     assert "trainer_resolution" in trainer_selector
+    assert "GENERIC_BUCKET_BOUNDS" in trainer_selector
 
 
 def test_review_cockpit_loads_typed_issue_queue_without_replacing_tag_tools():

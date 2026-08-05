@@ -4698,6 +4698,137 @@
                                             <option value="skip" data-i18n="dataset.overwriteSkip">Skip</option>
                                         </select>
                                     </label>
+                                    <section class="dataset-subject-crop-panel"
+                                             data-testid="dataset-subject-crop-panel"
+                                             aria-labelledby="dataset-subject-crop-label">
+                                        <label class="dataset-checkbox-row">
+                                            <input type="checkbox" id="dataset-subject-crop-enabled"
+                                                   data-testid="dataset-subject-crop-enabled">
+                                            <span id="dataset-subject-crop-label"
+                                                  data-i18n="dataset.subjectCropEnabled">Crop around stored mask subject</span>
+                                        </label>
+                                        <p class="dataset-help" data-i18n="dataset.subjectCropHint">
+                                            Folder + Copy only. Requires indexed Library images, a stored mask, and mask export. Verified trainer packages are not supported yet.
+                                        </p>
+                                        <div class="dataset-subject-crop-settings" id="dataset-subject-crop-settings" hidden>
+                                            <label class="form-label">
+                                                <span data-i18n="dataset.subjectCropThreshold">Mask alpha threshold for bounding box</span>
+                                                <input type="number" id="dataset-subject-crop-threshold"
+                                                       data-testid="dataset-subject-crop-threshold"
+                                                       class="form-input" min="1" max="255" step="1" value="1">
+                                            </label>
+                                            <label class="form-label">
+                                                <span data-i18n="dataset.subjectCropPadding">Padding per side (%)</span>
+                                                <input type="number" id="dataset-subject-crop-padding"
+                                                       data-testid="dataset-subject-crop-padding"
+                                                       class="form-input" min="0" max="100" step="1" value="0">
+                                            </label>
+                                            <label class="form-label">
+                                                <span data-i18n="dataset.subjectCropBackground">Background outside soft mask</span>
+                                                <select id="dataset-subject-crop-background"
+                                                        data-testid="dataset-subject-crop-background"
+                                                        class="form-input">
+                                                    <option value="keep_background" data-i18n="dataset.subjectCropKeepBackground">Keep cropped background</option>
+                                                    <option value="transparent_rgba" data-i18n="dataset.subjectCropTransparent">Transparent (PNG/WebP/TIFF only)</option>
+                                                    <option value="solid_color" data-i18n="dataset.subjectCropSolid">Composite on solid color</option>
+                                                </select>
+                                            </label>
+                                            <label class="form-label dataset-subject-crop-color" id="dataset-subject-crop-color-label" hidden>
+                                                <span data-i18n="dataset.subjectCropColor">Solid background color</span>
+                                                <input type="color" id="dataset-subject-crop-color"
+                                                       data-testid="dataset-subject-crop-color"
+                                                       value="#000000">
+                                            </label>
+                                        </div>
+                                    </section>
+                                    <section class="dataset-bucket-resize-panel"
+                                             data-testid="dataset-bucket-resize-panel"
+                                             aria-labelledby="dataset-bucket-resize-label">
+                                        <label class="dataset-checkbox-row">
+                                            <input type="checkbox" id="dataset-bucket-resize-enabled"
+                                                   data-testid="dataset-bucket-resize-enabled">
+                                            <span id="dataset-bucket-resize-label"
+                                                  data-i18n="dataset.bucketResizeEnabled">Pre-crop exports to SDXL buckets</span>
+                                        </label>
+                                        <p class="dataset-help" data-i18n="dataset.bucketResizeHint">
+                                            Kohya already buckets during training. Use this only to pre-size exported pixels or keep a masked subject inside the crop.
+                                        </p>
+                                        <div class="dataset-bucket-resize-settings"
+                                             id="dataset-bucket-resize-settings" hidden>
+                                            <label class="dataset-checkbox-row">
+                                                <input type="checkbox" id="dataset-bucket-resize-subject-aware"
+                                                       data-testid="dataset-bucket-resize-subject-aware">
+                                                <span data-i18n="dataset.bucketResizeSubjectAware">Position crop from stored subject mask</span>
+                                            </label>
+                                            <label class="form-label">
+                                                <span data-i18n="dataset.bucketResizeThreshold">Mask alpha threshold for subject framing</span>
+                                                <input type="number" id="dataset-bucket-resize-threshold"
+                                                       data-testid="dataset-bucket-resize-threshold"
+                                                       class="form-input" min="1" max="255" step="1" value="128">
+                                            </label>
+                                            <p class="dataset-help" data-i18n="dataset.bucketResizeSubjectAwareHint">
+                                                Subject-aware mode requires indexed Library images with stored training masks. Values below the threshold are ignored only when finding the crop; the exported soft mask stays unchanged.
+                                            </p>
+                                        </div>
+                                    </section>
+                                    <section class="dataset-watermark-removal-panel"
+                                             data-testid="dataset-watermark-removal-panel"
+                                             aria-labelledby="dataset-watermark-removal-label">
+                                        <label class="dataset-checkbox-row">
+                                            <input type="checkbox" id="dataset-watermark-removal-enabled"
+                                                   data-testid="dataset-watermark-removal-enabled">
+                                            <span id="dataset-watermark-removal-label"
+                                                  data-i18n="dataset.watermarkRemovalEnabled">Remove a watermark from exported training copies</span>
+                                        </label>
+                                        <p class="dataset-help" data-i18n="dataset.watermarkRemovalHint">
+                                            Manual rectangle only: CPU inpainting changes the export copy, never the source. The watermark tag is not used as a pixel mask.
+                                        </p>
+                                        <div class="dataset-watermark-removal-settings"
+                                             id="dataset-watermark-removal-settings" hidden>
+                                            <div class="dataset-watermark-grid">
+                                                <label class="form-label">
+                                                    <span data-i18n="dataset.watermarkX">Left (%)</span>
+                                                    <input type="number" id="dataset-watermark-x" class="form-input"
+                                                           data-testid="dataset-watermark-x" min="0" max="99" step="1" value="73">
+                                                </label>
+                                                <label class="form-label">
+                                                    <span data-i18n="dataset.watermarkY">Top (%)</span>
+                                                    <input type="number" id="dataset-watermark-y" class="form-input"
+                                                           data-testid="dataset-watermark-y" min="0" max="99" step="1" value="75">
+                                                </label>
+                                                <label class="form-label">
+                                                    <span data-i18n="dataset.watermarkWidth">Width (%)</span>
+                                                    <input type="number" id="dataset-watermark-width" class="form-input"
+                                                           data-testid="dataset-watermark-width" min="1" max="100" step="1" value="24">
+                                                </label>
+                                                <label class="form-label">
+                                                    <span data-i18n="dataset.watermarkHeight">Height (%)</span>
+                                                    <input type="number" id="dataset-watermark-height" class="form-input"
+                                                           data-testid="dataset-watermark-height" min="1" max="100" step="1" value="18">
+                                                </label>
+                                            </div>
+                                            <div class="dataset-watermark-grid">
+                                                <label class="form-label">
+                                                    <span data-i18n="dataset.watermarkPadding">Extra padding (%)</span>
+                                                    <input type="number" id="dataset-watermark-padding" class="form-input"
+                                                           data-testid="dataset-watermark-padding" min="0" max="10" step="1" value="1">
+                                                </label>
+                                                <label class="form-label">
+                                                    <span data-i18n="dataset.watermarkMethod">Inpainting method</span>
+                                                    <select id="dataset-watermark-method" class="form-input"
+                                                            data-testid="dataset-watermark-method">
+                                                        <option value="telea" data-i18n="dataset.watermarkTelea">Telea (faster)</option>
+                                                        <option value="ns" data-i18n="dataset.watermarkNs">Navier-Stokes (detail)</option>
+                                                    </select>
+                                                </label>
+                                                <label class="form-label">
+                                                    <span data-i18n="dataset.watermarkRadius">Repair radius (px)</span>
+                                                    <input type="number" id="dataset-watermark-radius" class="form-input"
+                                                           data-testid="dataset-watermark-radius" min="1" max="20" step="1" value="3">
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </section>
                                     <section class="dataset-trainer-package-panel" id="dataset-trainer-package-panel"
                                              aria-labelledby="dataset-trainer-package-label">
                                         <label class="form-label">
@@ -4733,13 +4864,13 @@
                                             </select>
                                         </label>
                                         <div class="dataset-trainer-settings" id="dataset-trainer-settings" hidden>
-                                            <label class="form-label">
+                                            <label class="form-label" id="dataset-trainer-resolution-field">
                                                 <span data-i18n="dataset.trainerResolutionLabel">Training resolution</span>
                                                 <input type="number" id="dataset-trainer-resolution" class="form-input"
                                                        data-testid="dataset-trainer-resolution"
                                                        min="256" max="4096" step="1" value="1024">
                                             </label>
-                                            <label class="form-label">
+                                            <label class="form-label" id="dataset-trainer-keep-tokens-field">
                                                 <span data-i18n="dataset.trainerKeepTokensLabel">Keep first N caption tokens fixed</span>
                                                 <input type="number" id="dataset-trainer-keep-tokens" class="form-input"
                                                        min="0" max="50" step="1" value="0">
@@ -4788,10 +4919,19 @@
                                 </label>
                                 <button type="button" class="btn btn-ghost btn-small" id="mask-tool-invert" data-i18n="dataset.maskToolInvert">⇄ Invert</button>
                                 <button type="button" class="btn btn-ghost btn-small" id="mask-tool-fill" data-i18n="dataset.maskToolFill">Reset (all trained)</button>
+                                <label class="mask-auto-engine" for="mask-auto-method">
+                                    <span data-i18n="dataset.maskAutoEngine">Engine</span>
+                                    <select id="mask-auto-method">
+                                        <option value="rembg" data-i18n="dataset.maskAutoRemBg">rembg (U2Net)</option>
+                                        <option value="lucida" data-i18n="dataset.maskAutoLucida">Lucida (soft alpha)</option>
+                                    </select>
+                                </label>
                                 <button type="button" class="btn btn-ghost btn-small" id="mask-tool-auto"
-                                        data-i18n="dataset.maskToolAuto" title="rembg subject extraction (opt-in install)"
+                                        data-i18n="dataset.maskToolAuto" title="Generate a subject mask with the selected engine"
                                         data-i18n-title="dataset.maskToolAutoTip">🤖 Auto subject</button>
                             </div>
+                            <p class="mask-lucida-license helper-text" id="mask-lucida-license"
+                               data-i18n="dataset.maskLucidaLicense" hidden>Lucida weights are MIT; its training data includes research-only datasets. Commercial users should make their own assessment.</p>
                             <div class="mask-editor-canvas-wrap" id="mask-editor-canvas-wrap">
                                 <canvas id="mask-editor-canvas"></canvas>
                             </div>
@@ -4878,7 +5018,7 @@
                             <h3 id="dataset-result-title" class="dataset-modal-title"></h3>
                             <p class="dataset-result-detail" id="dataset-result-detail"></p>
                             <details class="dataset-result-errors" id="dataset-result-errors" hidden>
-                                <summary data-i18n="dataset.resultShowErrors">Show error details</summary>
+                                <summary data-i18n="dataset.resultShowErrors">Show details</summary>
                                 <ul id="dataset-result-error-list"></ul>
                             </details>
                             <div class="dataset-modal-actions">
@@ -5095,11 +5235,11 @@
                 <div data-settings-panel="models" hidden>
                 <div class="model-manager-summary" id="model-manager-summary"></div>
                 <div class="model-manager-bulk-actions" id="model-manager-bulk-actions">
-                    <button class="btn btn-primary btn-bulk-download" id="btn-bulk-download-models" type="button" data-i18n="models.bulkDownload" data-i18n-title="models.bulkDownloadTitle" title="Download all recommended models in one go (skips Wenaka Privacy YOLO and ToriiGate; uses default WD14 only)">
+                    <button class="btn btn-primary btn-bulk-download" id="btn-bulk-download-models" type="button" data-i18n="models.bulkDownload" data-i18n-title="models.bulkDownloadTitle" title="Choose recommended models and optional gated models to download">
                         <span aria-hidden="true">⬇️</span>
-                        <span data-i18n="models.bulkDownload">Download all recommended models</span>
+                        <span data-i18n="models.bulkDownload">Download selected models</span>
                     </button>
-                    <span class="model-manager-bulk-help" data-i18n="models.bulkDownloadHelp">Pulls every Setup-required model the app uses (default WD14 tagger, NudeNet, CLIP, Aesthetic, Artist ID, SAM3). Skips the Wenaka Privacy YOLO and the heavy ToriiGate alternative tagger. You will see disk-space estimate before anything starts.</span>
+                    <span class="model-manager-bulk-help" data-i18n="models.bulkDownloadHelp">Select recommended defaults for tagging, censoring, similarity, scoring, artist ID, segmentation, local captions, and training masks. CL Tagger v2 is optional and stays unchecked until authorized.</span>
                 </div>
                 <!-- Manual-upgrade safety hint: downloaded models live in data/models.
                      Users who unzip a new release into a fresh folder leave their
@@ -6596,6 +6736,49 @@
                         </label>
                         <button class="btn btn-primary" id="btn-pub-export" type="button" data-i18n="pub.export">Export set</button>
                     </div>
+                    <details class="pub-watermark-panel" id="pub-watermark-panel">
+                        <summary>
+                            <label class="pub-watermark-toggle">
+                                <input type="checkbox" id="pub-watermark-enabled">
+                                <span data-i18n="pub.watermarkEnabled">Add a text watermark to exported copies</span>
+                            </label>
+                        </summary>
+                        <p class="pub-watermark-hint" data-i18n="pub.watermarkHint">
+                            Only the exported publish copy is changed; gallery and training sources stay untouched.
+                        </p>
+                        <div class="pub-watermark-grid" id="pub-watermark-settings">
+                            <label class="pub-field">
+                                <span data-i18n="pub.watermarkText">Watermark text</span>
+                                <input type="text" id="pub-watermark-text" class="input-field" maxlength="200" autocomplete="off">
+                            </label>
+                            <label class="pub-field">
+                                <span data-i18n="pub.watermarkPosition">Position</span>
+                                <select id="pub-watermark-position" class="input-field">
+                                    <option value="top_left" data-i18n="pub.watermarkTopLeft">Top left</option>
+                                    <option value="top_right" data-i18n="pub.watermarkTopRight">Top right</option>
+                                    <option value="bottom_left" data-i18n="pub.watermarkBottomLeft">Bottom left</option>
+                                    <option value="bottom_right" selected data-i18n="pub.watermarkBottomRight">Bottom right</option>
+                                    <option value="center" data-i18n="pub.watermarkCenter">Center</option>
+                                </select>
+                            </label>
+                            <label class="pub-field">
+                                <span data-i18n="pub.watermarkOpacity">Opacity (%)</span>
+                                <input type="number" id="pub-watermark-opacity" class="input-field" min="1" max="100" step="1" value="80">
+                            </label>
+                            <label class="pub-field">
+                                <span data-i18n="pub.watermarkSize">Size (%)</span>
+                                <input type="number" id="pub-watermark-size" class="input-field" min="1" max="20" step="1" value="8">
+                            </label>
+                            <label class="pub-field">
+                                <span data-i18n="pub.watermarkMargin">Margin (%)</span>
+                                <input type="number" id="pub-watermark-margin" class="input-field" min="0" max="10" step="1" value="2">
+                            </label>
+                            <label class="pub-field pub-watermark-color-field">
+                                <span data-i18n="pub.watermarkColor">Color</span>
+                                <input type="color" id="pub-watermark-color" value="#FFFFFF">
+                            </label>
+                        </div>
+                    </details>
                     <div class="pub-result" id="pub-result" hidden></div>
                 </div>
             </div>
@@ -7911,9 +8094,10 @@
                             <select id="smart-tag-nl-mode" class="form-input">
                                 <option value="vlm" selected data-i18n="smartTag.nlSourceVlm">API / Local LLM from VLM Settings</option>
                                 <option value="toriigate" data-i18n="smartTag.nlSourceTorii">ToriiGate local model</option>
+                                <option value="florence2" data-i18n="smartTag.nlSourceFlorence2">Florence-2 Base local model</option>
                             </select>
                         </label>
-                        <label class="checkbox-label smart-tag-inline-toggle">
+                        <label class="checkbox-label smart-tag-inline-toggle" id="smart-tag-vlm-grounding-option">
                             <input type="checkbox" id="smart-tag-use-gpu" checked>
                             <span data-i18n="smartTag.useGpu">Use GPU for local models if available</span>
                         </label>

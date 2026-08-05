@@ -11,6 +11,7 @@ import base64
 import io as _io
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
@@ -113,6 +114,67 @@ class TestAutoMask:
         image_id, _ = staged_image
         response = test_client.post(f"/api/masks/{image_id}/auto", json={"method": "clipseg"})
         assert response.status_code == 400
+
+    def test_lucida_returns_soft_preview_without_saving(
+        self, test_client, staged_image, masks_dir, monkeypatch
+    ):
+        image_id, _ = staged_image
+        calls = []
+
+        def generate_subject_mask(image, use_gpu):
+            calls.append({"size": image.size, "use_gpu": use_gpu})
+            return Image.new("L", image.size, color=96)
+
+        monkeypatch.setattr(mask_service.config, "LUCIDA_USE_GPU", False, raising=False)
+        monkeypatch.setitem(
+            sys.modules,
+            "lucida_matting",
+            SimpleNamespace(
+                LucidaError=RuntimeError,
+                generate_subject_mask=generate_subject_mask,
+            ),
+        )
+
+        response = test_client.post(f"/api/masks/{image_id}/auto", json={"method": "lucida"})
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["method"] == "lucida"
+        assert body["saved"] is False
+        assert calls == [{"size": (32, 32), "use_gpu": False}]
+        payload = base64.b64decode(body["data_url"].split(",", 1)[1])
+        preview = Image.open(_io.BytesIO(payload))
+        assert preview.mode == "L"
+        assert preview.getpixel((0, 0)) == 96
+        assert not mask_service.has_mask(image_id)
+
+    def test_unprepared_lucida_yields_actionable_400(
+        self, test_client, staged_image, masks_dir, monkeypatch
+    ):
+        image_id, _ = staged_image
+
+        class _LucidaUnavailable(RuntimeError):
+            pass
+
+        def generate_subject_mask(_image, use_gpu):
+            del use_gpu
+            raise _LucidaUnavailable(
+                "Lucida model files are missing. Run Prepare / Download."
+            )
+
+        monkeypatch.setitem(
+            sys.modules,
+            "lucida_matting",
+            SimpleNamespace(
+                LucidaError=_LucidaUnavailable,
+                generate_subject_mask=generate_subject_mask,
+            ),
+        )
+
+        response = test_client.post(f"/api/masks/{image_id}/auto", json={"method": "lucida"})
+
+        assert response.status_code == 400
+        assert "Prepare / Download" in response.json()["error"]
 
     def test_auto_returns_preview_without_saving(self, test_client, staged_image, masks_dir, monkeypatch):
         """Stub rembg to prove the wiring: alpha channel becomes the L mask,

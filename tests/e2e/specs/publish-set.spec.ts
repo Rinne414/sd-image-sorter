@@ -220,6 +220,20 @@ test('workbench renders pairs, drag reorders, and exports through the UI', async
   // Position 1 exported the censored variant of pub-2 (master toggle default).
   const censoredSource = path.join(fixtureRoot, 'src', 'v350-pub-2_censored.png')
   expect(fsSync.readFileSync(path.join(outDir, 'set_01.png')).equals(fsSync.readFileSync(censoredSource))).toBe(true)
+
+  // Watermark is applied only to the publish copy, never to the selected
+  // library source. The interaction stays in the same workbench flow.
+  const watermarkOut = path.join(fixtureRoot, 'out-ui-watermark')
+  await page.locator('#pub-folder').fill(watermarkOut)
+  await page.locator('#pub-prefix').fill('wm_')
+  await page.locator('#pub-watermark-enabled').check()
+  await page.locator('#pub-watermark-text').fill('@artist')
+  await page.locator('#pub-watermark-opacity').fill('90')
+  await page.locator('#pub-overwrite').check()
+  await page.locator('#btn-pub-export').click()
+  await expect(page.locator('.pub-result-line.pub-result-ok')).toBeVisible()
+  await expect.poll(() => fsSync.existsSync(path.join(watermarkOut, 'wm_01.png'))).toBe(true)
+  expect(fsSync.readFileSync(path.join(watermarkOut, 'wm_01.png')).equals(fsSync.readFileSync(censoredSource))).toBe(false)
 })
 
 test('Escape closes the workbench and it reopens; the More-menu item is gone', async ({ page }) => {

@@ -273,3 +273,39 @@
 .pub-result-error {
     color: #ef4444;
 }
+
+.pub-watermark-panel {
+    border-top: 1px solid var(--surface-border, rgba(255, 255, 255, 0.10));
+    padding-top: 10px;
+}
+
+.pub-watermark-panel > summary {
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.pub-watermark-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+}
+
+.pub-watermark-hint {
+    margin: 8px 0;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+.pub-watermark-grid {
+    display: grid;
+    grid-template-columns: minmax(220px, 2fr) repeat(5, minmax(96px, 1fr));
+    gap: 10px;
+    align-items: end;
+}
+
+.pub-watermark-color-field input[type="color"] {
+    width: 100%;
+    min-height: 34px;
+    padding: 2px;
+}

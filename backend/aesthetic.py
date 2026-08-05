@@ -5,7 +5,9 @@ Uses CLIP ViT-L/14 embeddings + a tiny linear head trained on human aesthetic ra
 Outputs a score from ~1 to ~10. Model downloads automatically on first use (~400MB).
 """
 import logging
+import os
 import threading
+import warnings
 from typing import Optional
 from pathlib import Path
 
@@ -40,12 +42,85 @@ _availability_cache_lock = threading.Lock()
 _availability_warning_logged: bool = False
 
 _MIN_AESTHETIC_CUDA_FREE_MB = 3800
+_AESTHETIC_HEAD_FILENAME = "sa_0_4_vit_l_14_linear.pth"
+_AESTHETIC_BACKBONE_REPO_DIR = "models--timm--vit_large_patch14_clip_224.openai"
+_AESTHETIC_BACKBONE_FILENAMES = (
+    "open_clip_model.safetensors",
+    "pytorch_model.bin",
+    "ViT-L-14.pt",
+)
 
 
 def _get_models_dir() -> Path:
     models_dir = Path(__file__).parent.parent / "models" / "aesthetic"
     models_dir.mkdir(parents=True, exist_ok=True)
     return models_dir
+
+
+def _is_nonempty_file(path: Path) -> bool:
+    try:
+        return path.is_file() and path.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def _aesthetic_cache_roots() -> tuple[Path, ...]:
+    """Return deterministic cache roots used by open_clip and Hugging Face."""
+    roots: list[Path] = []
+    hf_home = str(os.environ.get("HF_HOME") or "").strip()
+    if hf_home:
+        roots.append(Path(hf_home) / "hub")
+    roots.append(Path.home() / ".cache" / "huggingface" / "hub")
+    torch_home = str(os.environ.get("TORCH_HOME") or "").strip()
+    if torch_home:
+        roots.append(Path(torch_home) / "checkpoints")
+    roots.extend(
+        (
+            Path.home() / ".cache" / "clip",
+            Path.home() / ".cache" / "torch" / "hub" / "checkpoints",
+        )
+    )
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        key = os.path.normcase(str(root.resolve(strict=False)))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(root)
+    return tuple(unique)
+
+
+def get_aesthetic_backbone_path() -> Optional[Path]:
+    """Return a non-empty local ViT-L/14 checkpoint used by open_clip."""
+    for cache_root in _aesthetic_cache_roots():
+        snapshot_root = cache_root / _AESTHETIC_BACKBONE_REPO_DIR / "snapshots"
+        if snapshot_root.is_dir():
+            for snapshot in sorted(snapshot_root.iterdir(), reverse=True):
+                for filename in _AESTHETIC_BACKBONE_FILENAMES[:2]:
+                    candidate = snapshot / filename
+                    if _is_nonempty_file(candidate):
+                        return candidate.resolve()
+        for filename in _AESTHETIC_BACKBONE_FILENAMES:
+            candidate = cache_root / filename
+            if _is_nonempty_file(candidate):
+                return candidate.resolve()
+    return None
+
+
+def is_predictor_loaded() -> bool:
+    """Return whether both predictor components are loaded in this process."""
+    return _predictor is not None and _clip_model is not None
+
+
+def is_fully_ready() -> bool:
+    """Return whether dependencies, head, and CLIP backbone are all ready."""
+    head_path = _get_models_dir() / _AESTHETIC_HEAD_FILENAME
+    return bool(
+        is_available()
+        and _is_nonempty_file(head_path)
+        and (is_predictor_loaded() or get_aesthetic_backbone_path() is not None)
+    )
 
 
 def _get_torch_module():
@@ -129,9 +204,21 @@ def _load_predictor(device: Optional[str] = None):
             endpoint = get_hf_endpoint_order(model_name="Aesthetic CLIP")[0]
             apply_hf_endpoint(endpoint, purpose="Aesthetic CLIP / open_clip")
             logger.info("open_clip aesthetic backbone will prefer %s.", endpoint_label(endpoint))
-            model, _, preprocess = open_clip.create_model_and_transforms(
-                "ViT-L-14", pretrained="openai", device=_device
-            )
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="QuickGELU mismatch.*",
+                    category=UserWarning,
+                    module=r"open_clip\.factory",
+                )
+                warnings.filterwarnings(
+                    "ignore",
+                    message="Warning: You are sending unauthenticated requests to the HF Hub.*",
+                    category=UserWarning,
+                )
+                model, _, preprocess = open_clip.create_model_and_transforms(
+                    "ViT-L-14", pretrained="openai", device=_device
+                )
             model.eval()
             _clip_model = model
             _clip_preprocess = preprocess
@@ -143,8 +230,8 @@ def _load_predictor(device: Optional[str] = None):
             _clip_preprocess = preprocess
 
         # Download and load aesthetic linear head
-        weights_path = _get_models_dir() / "sa_0_4_vit_l_14_linear.pth"
-        if not weights_path.exists():
+        weights_path = _get_models_dir() / _AESTHETIC_HEAD_FILENAME
+        if not _is_nonempty_file(weights_path):
             logger.info("Downloading aesthetic predictor weights...")
             from services.model_service import _direct_download_file
 

@@ -37,7 +37,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional, Tuple
 
 from app_info import APP_VERSION
-from config import TAGGER_MODELS, get_artist_model_dir, get_sam3_model_dir, get_toriigate_model_dir, get_wd14_model_dir, get_yolo_model_dir
+from config import TAGGER_MODELS, get_artist_model_dir, get_florence2_model_dir, get_sam3_model_dir, get_toriigate_model_dir, get_wd14_model_dir, get_yolo_model_dir
 from model_health import (
     get_model_health,
     get_sam3_checkpoint_path,
@@ -448,11 +448,10 @@ def _ensure_artist_runtime_direct() -> str:
 
 
 # MODELS-07: the "essentials" set surfaced first (with a Recommended badge) in
-# the Model Manager. These are the models a typical user should install — they
-# back the default pipeline (tagging, censor, similarity, scoring, artist ID,
-# segmentation). It MUST stay in sync with BULK_MODEL_BUNDLE in
-# routers/models.py (the "Download all recommended models" button); a unit test
-# asserts the two sets are equal so they cannot silently drift.
+# the Model Manager. These entries provide one usable model for each core
+# feature, including natural-language captions and persistent training masks.
+# It MUST stay in sync with the entries whose ``recommended`` flag is true in
+# routers/models.py; the focused tests compare both sets so they cannot drift.
 RECOMMENDED_MODEL_IDS = frozenset({
     "wd14",
     "censor-nudenet",
@@ -460,6 +459,8 @@ RECOMMENDED_MODEL_IDS = frozenset({
     "aesthetic",
     "artist",
     "sam3",
+    "florence2",
+    "lucida",
 })
 
 

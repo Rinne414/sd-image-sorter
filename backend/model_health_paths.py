@@ -27,6 +27,22 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+from model_download_sources import is_nonempty_model_file, missing_model_artifacts
+
+
+CLIP_VISION_REQUIRED_FILES = (
+    "config.json",
+    "model.onnx",
+    "preprocessor_config.json",
+)
+CLIP_TEXT_REQUIRED_FILES = (
+    "config.json",
+    "model.onnx",
+    "special_tokens_map.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+)
+
 
 def _svc():
     """Resolve facade-patched seams through model_health at call time.
@@ -242,12 +258,17 @@ def _list_yolo_model_files(directory: Path) -> List[Dict[str, Any]]:
             continue
         if path.suffix.lower() not in {".onnx", ".pt", ".pth", ".safetensors"}:
             continue
+        if not is_nonempty_model_file(path):
+            continue
         files.append(_svc()._describe_yolo_model(path))
     return files
 
 
-def get_clip_local_model_path() -> Optional[str]:
-    """Return the local FastEmbed-compatible CLIP model directory if present.
+def _get_fastembed_local_model_path(
+    model_name: str,
+    required_files: tuple[str, ...],
+) -> Optional[str]:
+    """Return a complete local FastEmbed model directory if present.
 
     Checks the canonical slug path first, then the huggingface_hub cache
     layout, then falls back to a deeper recursive scan. FastEmbed delegates
@@ -259,18 +280,18 @@ def get_clip_local_model_path() -> Optional[str]:
     clip_root = Path(_svc().get_clip_model_dir())
 
     # 1) Canonical slug path (most common when we stage the model ourselves).
-    repo_slug = _svc().CLIP_MODEL_NAME.replace("/", "-").replace("\\", "-")
+    repo_slug = model_name.replace("/", "-").replace("\\", "-")
     candidate = clip_root / repo_slug
-    if (candidate / "model.onnx").exists():
+    if not missing_model_artifacts(candidate, required_files):
         return str(candidate.resolve())
 
     # 2) huggingface_hub cache layout: models--{org}--{repo}/snapshots/{hash}/.
     #    Prefer the snapshot dir that actually contains model.onnx.
-    hub_dir_name = "models--" + _svc().CLIP_MODEL_NAME.replace("/", "--").replace("\\", "--")
+    hub_dir_name = "models--" + model_name.replace("/", "--").replace("\\", "--")
     hub_snapshots = clip_root / hub_dir_name / "snapshots"
     if hub_snapshots.is_dir():
         for snapshot in sorted(hub_snapshots.iterdir(), reverse=True):
-            if (snapshot / "model.onnx").exists():
+            if not missing_model_artifacts(snapshot, required_files):
                 return str(snapshot.resolve())
 
     # 3) Recursive fallback for any other FastEmbed/HF cache nesting. Bounded to
@@ -282,7 +303,11 @@ def get_clip_local_model_path() -> Optional[str]:
             # Skip obvious temp/cache directories
             if model_dir.name.startswith(".") or model_dir.name == "tmp":
                 continue
-            return str(model_dir.resolve())
+            if is_nonempty_model_file(match) and not missing_model_artifacts(
+                model_dir,
+                required_files,
+            ):
+                return str(model_dir.resolve())
 
     return None
 
@@ -301,11 +326,13 @@ def get_default_legacy_model_path() -> Optional[str]:
 
     for name in preferred_names:
         candidate = yolo_root / name
-        if candidate.exists():
+        if is_nonempty_model_file(candidate):
             return str(candidate.resolve())
 
     for suffix in (".onnx", ".pt", ".pth"):
-        matches = sorted(path for path in yolo_root.glob(f"*{suffix}") if path.is_file())
+        matches = sorted(
+            path for path in yolo_root.glob(f"*{suffix}") if is_nonempty_model_file(path)
+        )
         if matches:
             return str(matches[0].resolve())
     return None
@@ -324,13 +351,14 @@ def get_sam3_checkpoint_path() -> Optional[str]:
     direct ModelScope fetch — is still detected.
     """
     sam3_root = Path(_svc().get_sam3_model_dir())
+    required_files = tuple(_svc().SAM3_CHECKPOINT_REQUIRED_FILES)
     candidate_dirs = [
         sam3_root / "facebook-sam3-modelscope",
         sam3_root / "facebook-sam3",
         sam3_root,
     ]
     for candidate in candidate_dirs:
-        if (candidate / "config.json").exists() and (candidate / "model.safetensors").exists():
+        if not missing_model_artifacts(candidate, required_files):
             return str(candidate.resolve())
 
     # huggingface_hub cache layout: models--facebook--sam3/snapshots/{hash}/.
@@ -339,15 +367,71 @@ def get_sam3_checkpoint_path() -> Optional[str]:
         if not snapshots.is_dir():
             continue
         for snapshot in sorted(snapshots.iterdir(), reverse=True):
-            if (snapshot / "config.json").exists() and (snapshot / "model.safetensors").exists():
+            if not missing_model_artifacts(snapshot, required_files):
                 return str(snapshot.resolve())
 
     # Recursive fallback: any dir under sam3_root holding both required files.
     if sam3_root.is_dir():
         for config_file in sorted(sam3_root.rglob("config.json")):
             checkpoint_dir = config_file.parent
-            if (checkpoint_dir / "model.safetensors").exists():
+            if not missing_model_artifacts(checkpoint_dir, required_files):
                 return str(checkpoint_dir.resolve())
+    return None
+
+
+def get_clip_local_model_path() -> Optional[str]:
+    """Return the complete local FastEmbed CLIP vision directory, if present."""
+    return _get_fastembed_local_model_path(
+        _svc().CLIP_MODEL_NAME,
+        CLIP_VISION_REQUIRED_FILES,
+    )
+
+
+def get_clip_text_local_model_path() -> Optional[str]:
+    """Return the complete local FastEmbed CLIP text directory, if present."""
+    return _get_fastembed_local_model_path(
+        _svc().CLIP_TEXT_MODEL_NAME,
+        CLIP_TEXT_REQUIRED_FILES,
+    )
+
+
+def get_lucida_checkpoint_path() -> Optional[str]:
+    """Return the complete local Lucida remote-code checkpoint directory."""
+    lucida_root = Path(_svc().get_lucida_model_dir())
+    required_files = tuple(_svc().LUCIDA_REQUIRED_FILES)
+    try:
+        is_complete = not missing_model_artifacts(lucida_root, required_files)
+    except OSError:
+        is_complete = False
+    if is_complete:
+        return str(lucida_root.resolve())
+    return None
+
+
+def get_florence2_checkpoint_path() -> Optional[str]:
+    """Return the complete local Florence-2 remote-code checkpoint directory."""
+    model_dir = Path(_svc().get_florence2_model_dir())
+    required_files = tuple(_svc().FLORENCE2_REQUIRED_FILES)
+    try:
+        is_complete = not missing_model_artifacts(model_dir, required_files)
+    except OSError:
+        is_complete = False
+    if is_complete:
+        return str(model_dir.resolve())
+    return None
+
+
+def get_cl_tagger_v2_checkpoint_path() -> Optional[str]:
+    """Return the complete local CL Tagger v2 checkpoint directory."""
+    from cl_tagger_v2 import CL_TAGGER_V2_REQUIRED_FILES
+
+    model_root = Path(_svc().get_cl_tagger_v2_model_dir()) / "cl-tagger-v2"
+    try:
+        is_complete = not missing_model_artifacts(model_root, CL_TAGGER_V2_REQUIRED_FILES)
+    except OSError:
+        is_complete = False
+    if is_complete:
+        return str(model_root.resolve())
     return None
 
 
@@ -369,7 +453,7 @@ def _find_kaloscope_dir(artist_root: Path) -> Optional[Path]:
 
     # 1) Canonical lowercase layout.
     canonical = artist_root / "kaloscope2.0" / _svc().ARTIST_KALOSCOPE_CHECKPOINT
-    if canonical.is_file():
+    if is_nonempty_model_file(canonical):
         return canonical.parent
 
     # 2) Case-insensitive kaloscope* directory, checkpoint at the HF subpath.
@@ -379,12 +463,12 @@ def _find_kaloscope_dir(artist_root: Path) -> Optional[Path]:
         normalized = child.name.lower().replace("-", "").replace("_", "").replace(".", "")
         if normalized.startswith("kaloscope"):
             checkpoint = child / _svc().ARTIST_KALOSCOPE_CHECKPOINT
-            if checkpoint.is_file():
+            if is_nonempty_model_file(checkpoint):
                 return checkpoint.parent
 
     # 3) Recursive search by basename (any manual placement depth).
     for checkpoint in sorted(artist_root.rglob(checkpoint_basename)):
-        if checkpoint.is_file():
+        if is_nonempty_model_file(checkpoint):
             return checkpoint.parent
     return None
 
@@ -447,7 +531,7 @@ def get_artist_checkpoint_path() -> Optional[str]:
     if checkpoint_dir is None:
         return None
     candidate = checkpoint_dir / checkpoint_basename
-    if candidate.exists():
+    if is_nonempty_model_file(candidate):
         return str(candidate.resolve())
     return None
 
@@ -463,11 +547,11 @@ def get_artist_class_mapping_path() -> Optional[str]:
             checkpoint_dir / mapping_basename,
             checkpoint_dir.parent / mapping_basename,
         ):
-            if mapping_candidate.is_file():
+            if is_nonempty_model_file(mapping_candidate):
                 return str(mapping_candidate.resolve())
     # Last resort: any class_mapping.csv under the artist root.
     if artist_root.is_dir():
         for match in sorted(artist_root.rglob(mapping_basename)):
-            if match.is_file():
+            if is_nonempty_model_file(match):
                 return str(match.resolve())
     return None

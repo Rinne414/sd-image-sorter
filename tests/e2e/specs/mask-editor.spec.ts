@@ -108,3 +108,37 @@ test('auto subject surfaces the rembg install hint on 400', async ({ page }) => 
   await page.locator('#mask-tool-auto').click()
   await expect(page.locator('#mask-editor-status')).toContainText('pip install rembg')
 })
+
+test('Lucida engine selection is explicit and discloses research-only training data', async ({ page }) => {
+  await seedDatasetQueue(page)
+  await page.route('**/api/masks/701', async (route) => {
+    await route.fulfill({ status: 404, json: { error: 'no mask' } })
+  })
+
+  let autoBody: Record<string, unknown> | null = null
+  await page.route('**/api/masks/701/auto', async (route) => {
+    autoBody = route.request().postDataJSON() as Record<string, unknown>
+    await route.fulfill({
+      json: {
+        image_id: 701,
+        method: 'lucida',
+        width: 1,
+        height: 1,
+        data_url: `data:image/png;base64,${TINY_PNG.toString('base64')}`,
+        saved: false,
+      },
+    })
+  })
+
+  await page.locator('#btn-dataset-mask-edit').click()
+  const method = page.locator('#mask-auto-method')
+  await expect(method).toHaveValue('rembg')
+  await expect(page.locator('#mask-lucida-license')).toBeHidden()
+
+  await method.selectOption('lucida')
+  await expect(page.locator('#mask-lucida-license')).toBeVisible()
+  await expect(page.locator('#mask-lucida-license')).toContainText('research-only')
+  await page.locator('#mask-tool-auto').click()
+
+  expect(autoBody).toEqual({ method: 'lucida' })
+})

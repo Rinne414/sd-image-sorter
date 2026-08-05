@@ -33,6 +33,12 @@ This project now treats SQLite schema changes as versioned application code, not
   nullable draft of migration 035. Existing evidence is preserved only when
   complete; incomplete rows fail the migration explicitly instead of being
   deleted or guessed.
+- Migration 039 materializes disabled mask-driven subject-crop settings for
+  existing Dataset projects without changing their export behavior.
+- Migration 040 materializes disabled aspect-ratio bucket-resize settings for
+  existing Dataset projects without changing their export behavior.
+- Migration 041 materializes disabled watermark-removal settings for existing
+  Dataset projects without changing their export behavior.
 
 ## Downgrade Policy
 

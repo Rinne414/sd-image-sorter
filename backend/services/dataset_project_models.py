@@ -6,6 +6,14 @@ from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from services.dataset_export.models import (
+    DatasetBucketResizeSettings,
+    DatasetSubjectCropSettings,
+    DatasetWatermarkRemovalSettings,
+    disabled_bucket_resize_settings,
+    disabled_subject_crop_settings,
+    disabled_watermark_removal_settings,
+)
 from services.dataset_trigger import DatasetTrigger
 from utils.path_validation import normalize_user_path
 
@@ -118,6 +126,15 @@ class DatasetProjectSettingsV1(BaseModel):
     naming: DatasetProjectNamingSettings
     output: DatasetProjectOutputSettings
     trainer: DatasetProjectTrainerSettings
+    subject_crop: DatasetSubjectCropSettings = Field(
+        default_factory=disabled_subject_crop_settings
+    )
+    bucket_resize: DatasetBucketResizeSettings = Field(
+        default_factory=disabled_bucket_resize_settings
+    )
+    watermark_removal: DatasetWatermarkRemovalSettings = Field(
+        default_factory=disabled_watermark_removal_settings
+    )
     planning: DatasetProjectPlanningSettings
 
     @field_validator("settings_version", mode="before")
@@ -137,13 +154,39 @@ class DatasetProjectSettingsV1(BaseModel):
                 f"trainer.mask_export must be one of {expected_masks} "
                 f"when trainer.config is {trainer.config!r}"
             )
-        if trainer.config in _FIXED_NUMERIC_TRAINERS and (
+        fixed_numeric_settings = (
+            trainer.config == "anima_lora_toml"
+            or (trainer.config == "none" and not self.bucket_resize.enabled)
+        )
+        if fixed_numeric_settings and (
             trainer.resolution != 1024 or trainer.keep_tokens != 0
         ):
             raise ValueError(
                 "trainer.resolution must be 1024 and trainer.keep_tokens must be 0 "
                 f"when trainer.config is {trainer.config!r}"
             )
+        if self.bucket_resize.enabled:
+            if trainer.config != "none":
+                raise ValueError(
+                    "bucket_resize is not supported by verified trainer packages"
+                )
+            if trainer.resolution % 64 != 0:
+                raise ValueError(
+                    "trainer.resolution must be a multiple of 64 when bucket_resize is enabled"
+                )
+            if self.output.mode != "folder" or self.output.image_op != "copy":
+                raise ValueError(
+                    "bucket_resize requires output.mode='folder' and output.image_op='copy'"
+                )
+        if self.watermark_removal.enabled:
+            if trainer.config != "none":
+                raise ValueError(
+                    "watermark_removal is not supported by verified trainer packages"
+                )
+            if self.output.mode != "folder" or self.output.image_op != "copy":
+                raise ValueError(
+                    "watermark_removal requires output.mode='folder' and output.image_op='copy'"
+                )
         if trainer.config == "none":
             if trainer.contract_version is not None:
                 raise ValueError(

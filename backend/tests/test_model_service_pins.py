@@ -19,6 +19,7 @@ this file deliberately pins the surfaces that one does NOT, with no overlap.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import sys
 import zipfile
@@ -142,7 +143,16 @@ def test_project_root_anchors_at_repository_root():
 def test_recommended_model_ids_is_frozenset_with_exact_members():
     assert isinstance(model_service.RECOMMENDED_MODEL_IDS, frozenset)
     assert model_service.RECOMMENDED_MODEL_IDS == frozenset(
-        {"wd14", "censor-nudenet", "clip", "aesthetic", "artist", "sam3"}
+        {
+            "wd14",
+            "censor-nudenet",
+            "clip",
+            "aesthetic",
+            "artist",
+            "sam3",
+            "florence2",
+            "lucida",
+        }
     )
 
 
@@ -559,6 +569,7 @@ def test_inventory_clip_loaded_branch_uses_loaded_message_key(monkeypatch):
     health["clip"] = {
         "available": False,
         "runtime_loaded": True,
+        "text_runtime_loaded": True,
         "model_path": None,
         "message": "missing",
     }
@@ -622,6 +633,31 @@ def test_inventory_nudenet_installed_but_not_downloaded_branch(monkeypatch):
     nudenet = next(item for item in inventory if item["id"] == "censor-nudenet")
 
     assert nudenet["message_key"] == "models.censorNudenet.installed"
+    assert nudenet["available"] is True
+    assert nudenet["runtime_available"] is True
+    assert nudenet["status"] == "missing"
+    assert nudenet["status_label"] == "Missing"
+    assert nudenet["path"] == "/models/nudenet"
+
+
+def test_bulk_bundle_counts_nudenet_weights_when_runtime_only(monkeypatch):
+    health = _base_health()
+    health["censor"]["nudenet"] = {
+        "available": True,
+        "model_downloaded": False,
+        "model_path": "/models/nudenet",
+        "message": "installed",
+    }
+    monkeypatch.setattr(model_service, "get_model_health", lambda: health)
+
+    from routers.models import BULK_MODEL_BUNDLE, get_bulk_bundle
+
+    payload = asyncio.run(get_bulk_bundle(service=model_service.ModelService()))
+    nudenet_spec = next(item for item in BULK_MODEL_BUNDLE if item["id"] == "censor-nudenet")
+    nudenet_item = next(item for item in payload["items"] if item["id"] == "censor-nudenet")
+
+    assert nudenet_item["status"] == "missing"
+    assert payload["recommended_pending_total_bytes"] >= nudenet_spec["size_bytes"]
 
 
 def test_inventory_sam3_cpu_torch_branch(monkeypatch):
@@ -673,10 +709,13 @@ def test_get_status_wraps_inventory_and_health(monkeypatch):
     assert [item["id"] for item in status["models"]] == [
         "wd14",
         "toriigate",
+        "florence2",
         "oppai-oracle",
+        "cl-tagger-v2",
         "clip",
         "aesthetic",
         "artist",
+        "lucida",
         "censor-legacy",
         "censor-nudenet",
         "sam3",
@@ -817,14 +856,40 @@ def test_prepare_aesthetic_head_present_but_runtime_unavailable(monkeypatch, tmp
             reset_availability_cache=lambda: None,
             _ensure_loaded=lambda: None,
             _get_models_dir=lambda: head_dir,
+            get_aesthetic_backbone_path=lambda: None,
             is_available=lambda: False,
+            is_fully_ready=lambda: False,
         ),
     )
 
     result = model_service.ModelService().prepare_model("aesthetic")
 
+    assert result["status"] == "needs_runtime"
+    assert result["ready"] is False
+    assert "could not be loaded" in result["message"]
+
+
+def test_prepare_clip_initializes_vision_and_text_towers(monkeypatch):
+    calls: list[str] = []
+    similarity_module = SimpleNamespace(
+        ensure_clip_model_ready=lambda: calls.append("prepare") or "/models/vision",
+        get_clip_text_local_model_path=lambda: "/models/text",
+    )
+    monkeypatch.setitem(sys.modules, "similarity", similarity_module)
+    monkeypatch.setattr(
+        model_service,
+        "ensure_group",
+        lambda group: model_service.DependencyInstallResult(installed_packages=()),
+    )
+
+    result = model_service.ModelService().prepare_model("clip")
+
+    assert calls == ["prepare"]
     assert result["status"] == "ok"
-    assert "CLIP model will download on first scoring run" in result["message"]
+    assert result["paths"] == {
+        "vision_model_path": "/models/vision",
+        "text_model_path": "/models/text",
+    }
 
 
 def test_prepare_sam3_fresh_download_skips_existing_and_assembles(

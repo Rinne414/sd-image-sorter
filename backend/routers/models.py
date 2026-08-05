@@ -99,23 +99,100 @@ async def get_models_status(service: ModelService = Depends(get_model_service)):
     return service.get_status()
 
 
-# Models the "Download all" button in Feature Setup will fetch.
-# Intentionally excludes:
-#   - censor-legacy (Wenaka2004 Privacy YOLO) — user opt-in only
-#   - toriigate (~5 GB heavy alternative tagger; default WD14 covers tagging)
-#   - oppai-oracle (~947 MB alternative tagger; default WD14 covers tagging,
-#     and Model Manager surfaces a dedicated card for users who want it)
-# WD14 is downloaded with the default variant only (`wd-swinv2-tagger-v3`),
-# not the full tagger family.
-# Sizes are best-effort estimates (compressed download size) sourced from
-# README.md "模型体积" table. Tweak alongside that table when models change.
-BULK_MODEL_BUNDLE: list = [
-    {"id": "wd14", "variant": "wd-swinv2-tagger-v3", "size_bytes": 446 * 1024 * 1024, "label": "WD14 Tagger (default: wd-swinv2-tagger-v3)"},
-    {"id": "censor-nudenet", "size_bytes": 12 * 1024 * 1024, "label": "NudeNet 320n"},
-    {"id": "clip", "size_bytes": 335 * 1024 * 1024, "label": "CLIP ViT-B/32 (similarity search)"},
-    {"id": "aesthetic", "size_bytes": 400 * 1024 * 1024, "label": "Aesthetic predictor (CLIP ViT-L/14 + LAION head)"},
-    {"id": "artist", "size_bytes": int(2.8 * 1024 * 1024 * 1024), "label": "Kaloscope 2.0 (Artist ID)"},
-    {"id": "sam3", "size_bytes": int(3.3 * 1024 * 1024 * 1024), "label": "SAM 3 (text-guided segmentation)"},
+# Models exposed by the selectable bulk-download flow.  The eight recommended
+# entries provide at least one prepared model for every core feature; optional
+# alternatives remain available on their individual cards.  ``cl-tagger-v2``
+# is selectable but not preselected because Hugging Face terms/token access are
+# user-specific.  Estimates are compressed/download sizes, not VRAM usage.
+BULK_MODEL_BUNDLE: list[dict[str, object]] = [
+    {
+        "id": "wd14",
+        "variant": "wd-swinv2-tagger-v3",
+        "size_bytes": 446 * 1024 * 1024,
+        "label": "WD14 Tagger (default: wd-swinv2-tagger-v3)",
+        "feature_key": "tagging",
+        "recommended": True,
+        "default_selected": True,
+        "restart_after_install": False,
+    },
+    {
+        "id": "censor-nudenet",
+        "size_bytes": 12 * 1024 * 1024,
+        "label": "NudeNet 320n",
+        "feature_key": "censor",
+        "recommended": True,
+        "default_selected": True,
+        "restart_after_install": True,
+    },
+    {
+        "id": "clip",
+        "size_bytes": 600 * 1024 * 1024,
+        "label": "CLIP ViT-B/32 vision + text (similarity search)",
+        "feature_key": "similarity",
+        "recommended": True,
+        "default_selected": True,
+        "restart_after_install": True,
+    },
+    {
+        "id": "aesthetic",
+        "size_bytes": int(1.7 * 1024 * 1024 * 1024),
+        "label": "Aesthetic predictor (CLIP ViT-L/14 + LAION head)",
+        "feature_key": "scoring",
+        "recommended": True,
+        "default_selected": True,
+        "restart_after_install": True,
+    },
+    {
+        "id": "artist",
+        "size_bytes": int(2.8 * 1024 * 1024 * 1024),
+        "label": "Kaloscope 2.0 (Artist ID)",
+        "feature_key": "artist_id",
+        "recommended": True,
+        "default_selected": True,
+        "restart_after_install": True,
+    },
+    {
+        "id": "sam3",
+        "size_bytes": int(3.3 * 1024 * 1024 * 1024),
+        "label": "SAM 3 (text-guided segmentation)",
+        "feature_key": "segmentation",
+        "recommended": True,
+        "default_selected": True,
+        "restart_after_install": True,
+    },
+    {
+        "id": "florence2",
+        "size_bytes": 465 * 1024 * 1024,
+        "label": "Florence-2 Base (natural-language captions)",
+        "feature_key": "natural_language_caption",
+        "recommended": True,
+        "variant": "base",
+        "default_selected": True,
+        "restart_after_install": True,
+    },
+    {
+        "id": "lucida",
+        "size_bytes": 885 * 1024 * 1024,
+        "label": "Lucida (training-set subject masks)",
+        "feature_key": "training_masks",
+        "recommended": True,
+        "variant": "pinned",
+        "default_selected": True,
+        "restart_after_install": True,
+    },
+    {
+        "id": "cl-tagger-v2",
+        "size_bytes": int(2.7 * 1024 * 1024 * 1024),
+        "label": "CL Tagger v2 (gated optional tagger)",
+        "feature_key": "tagging",
+        "recommended": False,
+        "requires_auth": True,
+        "variant": "v2_00",
+        "default_selected": False,
+        "gated_download": True,
+        "auth_url": "https://huggingface.co/cella110n/cl_tagger_v2",
+        "restart_after_install": True,
+    },
 ]
 
 
@@ -134,6 +211,8 @@ async def get_bulk_bundle(service: ModelService = Depends(get_model_service)):
 
     items = []
     pending_total = 0
+    recommended_pending_total = 0
+    optional_pending_total = 0
     for spec in BULK_MODEL_BUNDLE:
         entry = by_id.get(spec["id"])
         status = (entry or {}).get("status", "missing")
@@ -146,15 +225,33 @@ async def get_bulk_bundle(service: ModelService = Depends(get_model_service)):
             "name": (entry or {}).get("name") or spec["id"],
             "group": (entry or {}).get("group") or "",
             "variant": spec.get("variant"),
+            "feature_key": spec.get("feature_key") or "",
+            "recommended": bool(spec.get("recommended")),
+            "optional": not bool(spec.get("recommended")),
+            "default_selected": bool(spec.get("default_selected")),
+            "requires_auth": bool(spec.get("requires_auth")),
+            "gated_download": bool(spec.get("gated_download")),
+            "auth_url": spec.get("auth_url"),
+            "restart_after_install": bool(spec.get("restart_after_install")),
+            "download_supported": bool((entry or {}).get("download_supported", True)),
         }
         items.append(item)
         if not is_ready:
-            pending_total += int(spec["size_bytes"])
+            size_bytes = int(spec["size_bytes"])
+            pending_total += size_bytes
+            if bool(spec.get("recommended")):
+                recommended_pending_total += size_bytes
+            else:
+                optional_pending_total += size_bytes
 
     return {
         "items": items,
         "pending_total_bytes": pending_total,
-        "all_total_bytes": sum(int(s["size_bytes"]) for s in BULK_MODEL_BUNDLE),
+        "recommended_pending_total_bytes": recommended_pending_total,
+        "optional_pending_total_bytes": optional_pending_total,
+        "all_total_bytes": sum(
+            int(s["size_bytes"]) for s in BULK_MODEL_BUNDLE
+        ),
         "excluded": [
             {"id": "censor-legacy", "reason": "Privacy YOLO (Wenaka2004) is opt-in for content-safety reasons."},
             {"id": "toriigate", "reason": "ToriiGate VLM is a ~5 GB alternative tagger; the default WD14 already covers tagging."},
@@ -164,10 +261,22 @@ async def get_bulk_bundle(service: ModelService = Depends(get_model_service)):
 
 
 def _run_prepare_blocking(service: ModelService, model_id: str, source: Optional[str], variant: Optional[str]) -> None:
+    _logger.info(
+        "[MODEL] prepare_start model_id=%s source=%s variant=%s",
+        model_id,
+        source or "auto",
+        variant or "default",
+    )
     try:
         result = service.prepare_model(model_id, source=source, variant=variant)
         result_status = str(result.get("status") or "ok")
-        prepare_status = "done" if result_status in {"ok", "ready"} else "warning"
+        prepare_status = (
+            "done"
+            if result_status in {"ok", "ready"}
+            else "needs_restart"
+            if result_status == "needs_restart"
+            else "warning"
+        )
         with _prepare_lock:
             _prepare_result.update(
                 status=prepare_status,
@@ -175,6 +284,20 @@ def _run_prepare_blocking(service: ModelService, model_id: str, source: Optional
                 error="",
                 restart_recommended=bool(result.get("restart_recommended")),
                 installed_packages=list(result.get("installed_packages") or []),
+            )
+        _logger.info(
+            "[MODEL] prepare_finished model_id=%s status=%s restart=%s packages=%s",
+            model_id,
+            prepare_status,
+            bool(result.get("restart_recommended")),
+            len(result.get("installed_packages") or []),
+        )
+        if bool(result.get("restart_recommended")) or result_status == "needs_restart":
+            packages = ",".join(result.get("installed_packages") or []) or "runtime"
+            _logger.warning(
+                "[MODEL] restart_required model_id=%s packages=%s action=close_and_restart_then_prepare_again",
+                model_id,
+                packages,
             )
     except (ExternalAuthRequiredError, ModelPreparationFailedError) as exc:
         # Forward the rich payload (manual_steps, external_url, target_dir,
@@ -191,6 +314,20 @@ def _run_prepare_blocking(service: ModelService, model_id: str, source: Optional
                 target_dir=str(exc.payload.get("target_dir") or ""),
                 external_url=str(exc.payload.get("external_url") or ""),
             )
+        _logger.warning(
+            "[MODEL] prepare_failed model_id=%s error_type=%s message=%s",
+            model_id,
+            exc.payload.get("type") or type(exc).__name__,
+            str(exc),
+            extra={
+                "starter_console_message": (
+                    f"[MODEL] prepare_failed model_id={model_id} "
+                    f"error_type={exc.payload.get('type') or type(exc).__name__} "
+                    f"provider={exc.payload.get('provider') or 'external'} "
+                    "action=follow Model Manager recovery steps and retry"
+                ),
+            },
+        )
     except UnsupportedOptionalDependencyError as exc:
         message = str(exc)
         normalized_model_id = model_id.strip().lower()
@@ -214,6 +351,12 @@ def _run_prepare_blocking(service: ModelService, model_id: str, source: Optional
                 provider="Torch / CUDA runtime",
                 manual_steps=manual_steps,
             )
+        _logger.warning(
+            "[MODEL] prepare_failed model_id=%s error_type=%s message=%s",
+            model_id,
+            "UnsupportedPlatformRuntime",
+            message,
+        )
     except UnsafeDependencyInstallError as exc:
         message = str(exc)
         with _prepare_lock:
@@ -230,13 +373,55 @@ def _run_prepare_blocking(service: ModelService, model_id: str, source: Optional
                     "If you intentionally manage your own Python, activate a virtual environment first or set SD_IMAGE_SORTER_ALLOW_SYSTEM_PIP_INSTALL=1.",
                 ],
             )
+        _logger.warning(
+            "[MODEL] prepare_failed model_id=%s error_type=%s message=%s",
+            model_id,
+            "UnsafeSystemPythonInstall",
+            message,
+        )
     except ValueError as exc:
         with _prepare_lock:
             _prepare_result.update(status="error", error=str(exc), message=str(exc))
+        _logger.warning(
+            "[MODEL] prepare_failed model_id=%s error_type=%s message=%s",
+            model_id,
+            type(exc).__name__,
+            str(exc),
+        )
     except Exception as exc:
-        _logger.exception("Model preparation failed for %s", model_id)
+        error_type = type(exc).__name__
+        error_message = str(exc)
+        _logger.exception(
+            "Model preparation failed for %s",
+            model_id,
+            extra={"starter_console_suppress": True},
+        )
         with _prepare_lock:
-            _prepare_result.update(status="error", error=str(exc), message=str(exc))
+            _prepare_result.update(
+                status="error",
+                error=error_message,
+                message=error_message,
+            )
+        if "This checkpoint is gated:" in error_message:
+            console_message = (
+                f"[MODEL] prepare_failed model_id={model_id} error_type={error_type} "
+                "action=accept Hugging Face terms, configure a token, then retry Prepare / Download"
+            )
+        else:
+            compact_message = " ".join(error_message.split())
+            if len(compact_message) > 320:
+                compact_message = compact_message[:317].rstrip() + "..."
+            console_message = (
+                f"[MODEL] prepare_failed model_id={model_id} error_type={error_type} "
+                f"message={compact_message}"
+            )
+        _logger.error(
+            "[MODEL] prepare_failed model_id=%s error_type=%s message=%s",
+            model_id,
+            error_type,
+            error_message,
+            extra={"starter_console_message": console_message},
+        )
     finally:
         with _prepare_lock:
             _prepare_result["active"] = False

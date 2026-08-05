@@ -60,6 +60,25 @@ def _default_project_settings() -> dict[str, object]:
             "resolution": 1024,
             "keep_tokens": 0,
         },
+        "subject_crop": {
+            "enabled": False,
+            "alpha_threshold": 1,
+            "padding_percent": 0,
+            "background_mode": "keep_background",
+            "solid_color": "#000000",
+        },
+        "bucket_resize": {
+            "enabled": False,
+            "subject_aware": False,
+            "alpha_threshold": 128,
+        },
+        "watermark_removal": {
+            "enabled": False,
+            "method": "telea",
+            "radius": 3,
+            "padding_percent": 0,
+            "regions": [],
+        },
         "planning": {"epochs": 10},
     }
 
@@ -168,10 +187,63 @@ def test_create_and_read_project_preserves_strict_settings(test_client):
         "resolution": 1024,
         "keep_tokens": 0,
     }
+    settings["subject_crop"] = {
+        "enabled": True,
+        "alpha_threshold": 24,
+        "padding_percent": 15,
+        "background_mode": "solid_color",
+        "solid_color": "#123ABC",
+    }
 
     created = test_client.post(
         "/api/dataset/projects",
         json={"name": "Strict settings", "items": [], "settings": settings},
+    )
+
+    assert created.status_code == 201
+    assert created.json()["settings"] == settings
+    fetched = test_client.get(f"/api/dataset/projects/{created.json()['id']}")
+    assert fetched.status_code == 200
+    assert fetched.json()["settings"] == settings
+
+
+def test_project_preserves_enabled_bucket_preprocessing_for_generic_export(test_client):
+    settings = _default_project_settings()
+    settings["trainer"] = {
+        **settings["trainer"],
+        "resolution": 512,
+    }
+    settings["bucket_resize"] = {
+        "enabled": True,
+        "subject_aware": True,
+        "alpha_threshold": 160,
+    }
+
+    created = test_client.post(
+        "/api/dataset/projects",
+        json={"name": "Bucket preprocessing", "items": [], "settings": settings},
+    )
+
+    assert created.status_code == 201
+    assert created.json()["settings"] == settings
+    fetched = test_client.get(f"/api/dataset/projects/{created.json()['id']}")
+    assert fetched.status_code == 200
+    assert fetched.json()["settings"] == settings
+
+
+def test_project_preserves_enabled_watermark_removal_for_generic_export(test_client):
+    settings = _default_project_settings()
+    settings["watermark_removal"] = {
+        "enabled": True,
+        "method": "ns",
+        "radius": 4,
+        "padding_percent": 2,
+        "regions": [{"x": 7000, "y": 8000, "width": 2500, "height": 1500}],
+    }
+
+    created = test_client.post(
+        "/api/dataset/projects",
+        json={"name": "Watermark cleanup", "items": [], "settings": settings},
     )
 
     assert created.status_code == 201

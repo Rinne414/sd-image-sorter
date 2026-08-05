@@ -80,6 +80,25 @@ def test_folder_export_writes_manifest(test_client, two_tagged_images, tmp_path:
     assert settings["naming_pattern"] == "train_{index:03d}"
     assert settings["trigger"] == "my_subject"
     assert settings["common_tags"] == ["masterpiece"]
+    assert settings["subject_crop"] == {
+        "enabled": False,
+        "alpha_threshold": 1,
+        "padding_percent": 0,
+        "background_mode": "keep_background",
+        "solid_color": "#000000",
+    }
+    assert settings["bucket_resize"] == {
+        "enabled": False,
+        "subject_aware": False,
+        "alpha_threshold": 128,
+    }
+    assert settings["watermark_removal"] == {
+        "enabled": False,
+        "method": "telea",
+        "radius": 3,
+        "padding_percent": 0,
+        "regions": [],
+    }
 
     # Counts must match the export result
     counts = manifest["counts"]

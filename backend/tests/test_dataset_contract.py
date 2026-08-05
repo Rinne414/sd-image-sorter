@@ -58,6 +58,7 @@ def contract_images(test_db, tmp_path: Path):
 EXPORT_RESPONSE_TOP_KEYS = {
     "status", "exported", "skipped", "error_count", "output_folder",
     "output_mode", "items", "total_items", "items_truncated", "error_messages",
+    "warnings",
     # Phase 4 masked training: mask sidecar counters (masks_missing is
     # informational — no mask means "train the whole image", never a failure).
     "masks_written", "masks_missing",

@@ -174,6 +174,7 @@ def _tagging_worker_main(
     from tagger import get_tagger
     from toriigate_tagger import get_toriigate_tagger
     from oppai_oracle_tagger import get_oppai_oracle_tagger
+    from cl_tagger_v2 import get_cl_tagger_v2_tagger
 
     request = TagRequest.model_validate(runtime_plan_payload.get("request", {}))
     effective_model_name = (
@@ -336,6 +337,27 @@ def _tagging_worker_main(
                     "running",
                     f"Loading OppaiOracle on {'GPU' if effective_use_gpu else 'CPU'}...",
                 )
+        elif runtime_backend == "cl-tagger-v2":
+            try:
+                from config import get_cl_tagger_v2_model_dir
+
+                cache_root = (
+                    Path(get_cl_tagger_v2_model_dir())
+                    / effective_model_name
+                )
+                already_cached = any(cache_root.rglob("model.onnx")) if cache_root.exists() else False
+            except OSError:
+                already_cached = False
+            if not already_cached:
+                send(
+                    "running",
+                    "First-time CL Tagger v2 download: the gated checkpoint will be fetched from official Hugging Face after authorization.",
+                )
+            else:
+                send(
+                    "running",
+                    f"Loading CL Tagger v2 on {'GPU' if effective_use_gpu else 'CPU'}...",
+                )
         elif effective_use_gpu:
             send("running", "Loading model on GPU...")
         else:
@@ -351,6 +373,8 @@ def _tagging_worker_main(
                 tagger_getter = get_toriigate_tagger
             elif runtime_backend == "oppai-oracle":
                 tagger_getter = get_oppai_oracle_tagger
+            elif runtime_backend == "cl-tagger-v2":
+                tagger_getter = get_cl_tagger_v2_tagger
             else:
                 tagger_getter = get_tagger
         effective_threshold, effective_character_threshold = resolve_request_thresholds(

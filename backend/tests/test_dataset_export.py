@@ -629,6 +629,7 @@ def test_background_export_queued_cancel_has_complete_result_and_reopens_slot(
         "total_items": 0,
         "items_truncated": False,
         "error_messages": [],
+        "warnings": [],
         "package_status": "not_requested",
         "package_run_id": None,
         "package_manifest_path": None,

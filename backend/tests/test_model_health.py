@@ -12,6 +12,46 @@ from model_health import (  # noqa: E402
     format_startup_readiness_report,
     get_startup_readiness,
 )
+from model_download_sources import log_model_artifact_status  # noqa: E402
+
+
+def test_model_artifact_status_logs_each_required_file_without_loading_models(
+    tmp_path,
+    caplog,
+):
+    import logging
+
+    root = tmp_path / "checkpoint"
+    root.mkdir()
+    (root / "ready.bin").write_bytes(b"weights")
+    (root / "empty.bin").write_bytes(b"")
+
+    with caplog.at_level(logging.INFO):
+        missing = log_model_artifact_status(
+            logging.getLogger("test-model-artifacts"),
+            model_id="fixture-model",
+            revision="deadbeef",
+            endpoint="https://huggingface.co",
+            model_dir=root,
+            required_files=("ready.bin", "empty.bin", "absent.bin"),
+        )
+
+    assert missing == ("empty.bin", "absent.bin")
+    records = [
+        record
+        for record in caplog.records
+        if record.message == "Model artifact validation"
+    ]
+    assert [record.artifact_file for record in records] == [
+        "ready.bin",
+        "empty.bin",
+        "absent.bin",
+    ]
+    assert records[0].status == "file_ready"
+    assert records[0].size_bytes == 7
+    assert records[1].status == "file_missing"
+    assert records[2].size_bytes == 0
+    assert all(record.model_id == "fixture-model" for record in records)
 
 
 def test_wenaka_filename_is_treated_as_privacy_detector_even_without_metadata():
@@ -56,6 +96,34 @@ def test_model_health_sam3_probe_does_not_import_torch_in_parent(monkeypatch):
     assert health["censor"]["sam3"]["torch_probe_source"] == "subprocess"
 
 
+def test_model_health_does_not_advertise_sam3_without_runtime_modules(monkeypatch, tmp_path):
+    import model_health
+
+    checkpoint = tmp_path / "sam3" / "model.safetensors"
+    checkpoint.parent.mkdir(parents=True)
+    checkpoint.write_bytes(b"model")
+
+    monkeypatch.setattr(model_health, "get_sam3_checkpoint_path", lambda: str(checkpoint))
+    monkeypatch.setattr(model_health, "_module_installed", lambda _module_name: True)
+    monkeypatch.setattr(model_health, "_sam3_runtime_import_ready", lambda: False)
+    monkeypatch.setattr(
+        model_health,
+        "_probe_torch_runtime",
+        lambda: {
+            "torch_version": "2.13.0+cu126",
+            "torch_cuda_build": "12.6",
+            "torch_cuda_available": True,
+            "torch_probe_error": None,
+            "torch_probe_source": "subprocess",
+        },
+    )
+
+    sam3 = model_health.get_model_health()["censor"]["sam3"]
+
+    assert sam3["available"] is False
+    assert "runtime modules are not importable" in sam3["message"]
+
+
 def test_model_health_blocks_toriigate_and_sam3_for_windows_cuda13(
     monkeypatch,
     tmp_path,
@@ -65,8 +133,8 @@ def test_model_health_blocks_toriigate_and_sam3_for_windows_cuda13(
     toriigate_root = tmp_path / "toriigate"
     toriigate_dir = toriigate_root / "toriigate-0.5"
     toriigate_dir.mkdir(parents=True)
-    (toriigate_dir / "config.json").write_text("{}", encoding="utf-8")
-    (toriigate_dir / "model.safetensors").write_bytes(b"model")
+    for filename in model_health.TORIIGATE_REQUIRED_FILES:
+        (toriigate_dir / filename).write_bytes(b"model")
     sam3_checkpoint = tmp_path / "sam3" / "model.safetensors"
     sam3_checkpoint.parent.mkdir(parents=True)
     sam3_checkpoint.write_bytes(b"model")
@@ -133,8 +201,8 @@ def test_model_health_keeps_non_windows_explicit_cpu_toriigate_available(
     toriigate_root = tmp_path / "toriigate"
     toriigate_dir = toriigate_root / "toriigate-0.5"
     toriigate_dir.mkdir(parents=True)
-    (toriigate_dir / "config.json").write_text("{}", encoding="utf-8")
-    (toriigate_dir / "model.safetensors").write_bytes(b"model")
+    for filename in model_health.TORIIGATE_REQUIRED_FILES:
+        (toriigate_dir / filename).write_bytes(b"model")
 
     monkeypatch.setattr(model_health.platform, "system", lambda: "Linux")
     monkeypatch.setattr(
@@ -265,6 +333,7 @@ def test_clip_detection_finds_huggingface_hub_cache_layout(tmp_path, monkeypatch
     snapshot.mkdir(parents=True)
     (snapshot / "model.onnx").write_bytes(b"onnx")
     (snapshot / "config.json").write_text("{}", encoding="utf-8")
+    (snapshot / "preprocessor_config.json").write_text("{}", encoding="utf-8")
 
     monkeypatch.setattr(model_health, "get_clip_model_dir", lambda: str(clip_root))
 
@@ -282,12 +351,62 @@ def test_clip_detection_still_finds_canonical_slug_layout(tmp_path, monkeypatch)
     canonical = clip_root / slug
     canonical.mkdir(parents=True)
     (canonical / "model.onnx").write_bytes(b"onnx")
+    (canonical / "config.json").write_text("{}", encoding="utf-8")
+    (canonical / "preprocessor_config.json").write_text("{}", encoding="utf-8")
 
     monkeypatch.setattr(model_health, "get_clip_model_dir", lambda: str(clip_root))
 
     found = model_health.get_clip_local_model_path()
     assert found is not None
     assert Path(found).resolve() == canonical.resolve()
+
+
+def test_clip_detection_ignores_zero_byte_model(tmp_path, monkeypatch):
+    import model_health
+    from config import CLIP_MODEL_NAME
+
+    clip_root = tmp_path / "clip"
+    canonical = clip_root / CLIP_MODEL_NAME.replace("/", "-").replace("\\", "-")
+    canonical.mkdir(parents=True)
+    (canonical / "model.onnx").write_bytes(b"")
+    monkeypatch.setattr(model_health, "get_clip_model_dir", lambda: str(clip_root))
+
+    assert model_health.get_clip_local_model_path() is None
+
+
+def test_clip_text_detection_requires_every_runtime_artifact(tmp_path, monkeypatch):
+    import model_health
+    from config import CLIP_TEXT_MODEL_NAME
+
+    clip_root = tmp_path / "clip"
+    canonical = clip_root / CLIP_TEXT_MODEL_NAME.replace("/", "-").replace("\\", "-")
+    canonical.mkdir(parents=True)
+    required = {
+        "config.json",
+        "model.onnx",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "special_tokens_map.json",
+    }
+    for filename in required:
+        (canonical / filename).write_bytes(b"ready")
+
+    monkeypatch.setattr(model_health, "get_clip_model_dir", lambda: str(clip_root))
+
+    assert model_health.get_clip_text_local_model_path() == str(canonical.resolve())
+    (canonical / "tokenizer.json").write_bytes(b"")
+    assert model_health.get_clip_text_local_model_path() is None
+
+
+def test_legacy_yolo_detection_ignores_zero_byte_model(tmp_path, monkeypatch):
+    import model_health
+
+    yolo_root = tmp_path / "yolo"
+    yolo_root.mkdir()
+    (yolo_root / "wenaka_yolov8s-seg.onnx").write_bytes(b"")
+    monkeypatch.setattr(model_health, "get_yolo_model_dir", lambda: str(yolo_root))
+
+    assert model_health.get_default_legacy_model_path() is None
 
 
 def test_artist_checkpoint_detected_in_mixed_case_git_clone_dir(tmp_path, monkeypatch):
@@ -358,8 +477,8 @@ def test_sam3_checkpoint_detected_in_huggingface_hub_cache_layout(tmp_path, monk
     # HF-hub style nested snapshot dir holding the transformers SAM3 files.
     snapshot = sam3_root / "models--facebook--sam3" / "snapshots" / "abc123"
     snapshot.mkdir(parents=True)
-    (snapshot / "config.json").write_text("{}", encoding="utf-8")
-    (snapshot / "model.safetensors").write_bytes(b"weights")
+    for filename in model_health.SAM3_CHECKPOINT_REQUIRED_FILES:
+        (snapshot / filename).write_bytes(b"weights")
 
     monkeypatch.setattr(model_health, "get_sam3_model_dir", lambda: str(sam3_root))
 

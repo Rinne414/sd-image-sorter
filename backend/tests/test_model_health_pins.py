@@ -54,9 +54,12 @@ _MODEL_DIR_GETTERS = (
     "get_yolo_model_dir",
     "get_nudenet_model_dir",
     "get_toriigate_model_dir",
+    "get_florence2_model_dir",
     "get_oppai_oracle_model_dir",
+    "get_cl_tagger_v2_model_dir",
     "get_sam3_model_dir",
     "get_artist_model_dir",
+    "get_lucida_model_dir",
 )
 
 
@@ -448,6 +451,8 @@ def test_clip_local_model_path_recursive_fallback_skips_dot_and_tmp_dirs(
     real = clip_root / "vendor" / "clip-weights"
     real.mkdir(parents=True)
     (real / "model.onnx").write_bytes(b"onnx")
+    (real / "config.json").write_text("{}", encoding="utf-8")
+    (real / "preprocessor_config.json").write_text("{}", encoding="utf-8")
     monkeypatch.setattr(model_health, "get_clip_model_dir", lambda: str(clip_root))
 
     found = model_health.get_clip_local_model_path()
@@ -485,7 +490,7 @@ def test_default_legacy_model_path_none_when_empty(monkeypatch, tmp_path):
     assert model_health.get_default_legacy_model_path() is None
 
 
-def test_sam3_checkpoint_requires_both_config_and_safetensors(monkeypatch, tmp_path):
+def test_sam3_checkpoint_requires_all_transformers_companions(monkeypatch, tmp_path):
     sam3_root = tmp_path / "sam3"
     canonical = sam3_root / "facebook-sam3-modelscope"
     canonical.mkdir(parents=True)
@@ -494,8 +499,9 @@ def test_sam3_checkpoint_requires_both_config_and_safetensors(monkeypatch, tmp_p
     monkeypatch.setattr(model_health, "get_sam3_model_dir", lambda: str(sam3_root))
     assert model_health.get_sam3_checkpoint_path() is None
 
-    # Add the weights — now the canonical dir resolves.
-    (canonical / "model.safetensors").write_bytes(b"w")
+    # Add the weights and processor/tokenizer companions — now it resolves.
+    for filename in model_health.SAM3_CHECKPOINT_REQUIRED_FILES:
+        (canonical / filename).write_bytes(b"w")
     resolved = model_health.get_sam3_checkpoint_path()
     assert resolved is not None
     assert Path(resolved).name == "facebook-sam3-modelscope"
@@ -616,8 +622,11 @@ def test_health_top_level_and_censor_key_sets(monkeypatch, tmp_path):
     assert set(health) == {
         "wd14",
         "toriigate",
+        "florence2",
         "oppai_oracle",
+        "cl_tagger_v2",
         "clip",
+        "lucida",
         "censor",
         "artist",
     }
@@ -630,8 +639,11 @@ def test_health_all_subsystems_unavailable_in_zero_model_state(monkeypatch, tmp_
 
     assert health["wd14"]["available"] is False
     assert health["toriigate"]["available"] is False
+    assert health["florence2"]["available"] is False
     assert health["oppai_oracle"]["available"] is False
+    assert health["cl_tagger_v2"]["available"] is False
     assert health["clip"]["available"] is False
+    assert health["lucida"]["available"] is False
     assert health["censor"]["legacy"]["available"] is False
     assert health["censor"]["nudenet"]["available"] is False
     assert health["censor"]["sam3"]["available"] is False
@@ -696,8 +708,8 @@ def test_health_sam3_available_requires_all_four_gates(monkeypatch, tmp_path):
     sam3_root = tmp_path / "sam3g"
     canonical = sam3_root / "facebook-sam3-modelscope"
     canonical.mkdir(parents=True)
-    (canonical / "config.json").write_text("{}", encoding="utf-8")
-    (canonical / "model.safetensors").write_bytes(b"w")
+    for filename in model_health.SAM3_CHECKPOINT_REQUIRED_FILES:
+        (canonical / filename).write_bytes(b"w")
 
     _wire_clean_state(
         monkeypatch,
@@ -734,6 +746,11 @@ def test_health_clip_downloaded_but_runtime_missing_message(monkeypatch, tmp_pat
     # Model files present, but fastembed absent -> "downloaded, runtime missing".
     monkeypatch.setattr(
         model_health, "get_clip_local_model_path", lambda: "/models/clip/x"
+    )
+    monkeypatch.setattr(
+        model_health,
+        "get_clip_text_local_model_path",
+        lambda: "/models/clip/text",
     )
     clip = model_health.get_model_health()["clip"]
     assert clip["model_downloaded"] is True

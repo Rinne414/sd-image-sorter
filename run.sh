@@ -5,6 +5,10 @@ echo "=========================================="
 echo "   SD Image Sorter - Starting..."
 echo "=========================================="
 echo
+echo "  Welcome. Model weights are never included in this package."
+echo "  Use Model Manager to select and download the features you need."
+echo "  Download progress, file checks, and restart notices stay in this window."
+echo
 
 # Change to script directory
 cd "$(dirname "$0")"
@@ -46,6 +50,9 @@ export SD_IMAGE_SORTER_ARTIST_MODEL_DIR="${MODELS_DIR}/artist"
 export SD_IMAGE_SORTER_SAM3_MODEL_DIR="${MODELS_DIR}/sam3"
 export SD_IMAGE_SORTER_NUDENET_MODEL_DIR="${MODELS_DIR}/nudenet"
 export SD_IMAGE_SORTER_TORIIGATE_MODEL_DIR="${MODELS_DIR}/toriigate"
+export SD_IMAGE_SORTER_FLORENCE2_MODEL_DIR="${MODELS_DIR}/florence2"
+export SD_IMAGE_SORTER_LUCIDA_MODEL_DIR="${MODELS_DIR}/lucida"
+export SD_IMAGE_SORTER_CL_TAGGER_V2_MODEL_DIR="${MODELS_DIR}/cl-tagger-v2"
 export SD_IMAGE_SORTER_CACHE_DIR="${CACHE_DIR}"
 export HF_HOME="${DATA_DIR}/hf"
 export TRANSFORMERS_CACHE="${DATA_DIR}/hf/transformers"
@@ -373,6 +380,7 @@ echo
 echo "  Opening browser to:"
 echo "    ${APP_URL}"
 echo
+echo "  Keep this terminal open while Model Manager downloads files."
 echo "  Press Ctrl+C to stop the server."
 echo "=========================================="
 echo

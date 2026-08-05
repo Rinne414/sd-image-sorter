@@ -68,8 +68,7 @@ def mask_status(request: MaskStatusRequest):
 
 @router.post("/masks/{image_id}/auto")
 def auto_mask(image_id: int, request: MaskAutoRequest):
-    """Generate a subject mask (rembg) for canvas preview — NOT saved until
-    the user saves the edited result."""
+    """Generate a subject-mask preview with the selected engine; do not save it."""
     from services import mask_service
 
     try:

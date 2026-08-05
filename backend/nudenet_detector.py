@@ -8,12 +8,15 @@ Requires: pip install nudenet
 """
 import logging
 import os
+import shutil
 import threading
+from pathlib import Path
 from typing import Dict, List
 
 from PIL import Image
 from config import get_nudenet_model_dir
 from ai_runtime_guard import exclusive_ai_runtime
+from model_download_sources import is_nonempty_model_file
 
 
 logger = logging.getLogger(__name__)
@@ -23,6 +26,63 @@ _detector = None
 _detector_lock = threading.Lock()
 
 
+def _resolve_app_model_path(package_module: object) -> str:
+    """Return the verified NudeNet model path owned by the application."""
+    model_dir = Path(get_nudenet_model_dir())
+    target = model_dir / "320n.onnx"
+    if is_nonempty_model_file(target):
+        return str(target)
+
+    package_file = getattr(package_module, "__file__", None)
+    if not isinstance(package_file, str) or not package_file.strip():
+        raise RuntimeError(
+            "NudeNet is installed but its package location is unavailable; "
+            "reinstall the nudenet runtime from Model Manager and retry."
+        )
+    package_model = Path(package_file).resolve().parent / "320n.onnx"
+    if not is_nonempty_model_file(package_model):
+        raise RuntimeError(
+            "NudeNet is installed but the official 320n.onnx artifact is missing "
+            f"from {package_model}. Reinstall the nudenet runtime from Model Manager "
+            "and retry."
+        )
+
+    model_dir.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(target.name + ".tmp")
+    try:
+        shutil.copyfile(package_model, temporary)
+        os.replace(temporary, target)
+    except OSError as exc:
+        raise RuntimeError(
+            "NudeNet could not materialize 320n.onnx into the application model "
+            f"directory {model_dir}: {exc}. Check write permission and retry."
+        ) from exc
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            logger.warning(
+                "NudeNet temporary artifact cleanup failed",
+                extra={"artifact_file": str(temporary)},
+            )
+
+    if not is_nonempty_model_file(target):
+        raise RuntimeError(
+            f"NudeNet model materialization finished without a usable artifact at {target}. "
+            "Retry Prepare / Download."
+        )
+    logger.info(
+        "NudeNet model artifact ready",
+        extra={
+            "model_id": "censor-nudenet",
+            "artifact_file": str(target),
+            "size_bytes": target.stat().st_size,
+            "source_file": str(package_model),
+        },
+    )
+    return str(target)
+
+
 def _get_nudenet():
     """Get or create NudeNet detector (singleton, thread-safe)."""
     global _detector
@@ -30,15 +90,16 @@ def _get_nudenet():
         with _detector_lock:
             if _detector is None:
                 try:
+                    import nudenet as nudenet_module  # type: ignore
                     from nudenet import NudeDetector  # type: ignore
                 except ImportError:
                     raise RuntimeError(
                         "nudenet not installed. Run: pip install nudenet"
                     )
                 logger.info("[NudeNet] Loading detector...")
-                local_model = os.path.join(get_nudenet_model_dir(), "320n.onnx")
+                local_model = _resolve_app_model_path(nudenet_module)
                 with exclusive_ai_runtime("nudenet-load"):
-                    _detector = NudeDetector(model_path=local_model if os.path.exists(local_model) else None)
+                    _detector = NudeDetector(model_path=local_model)
                 logger.info("[NudeNet] Detector loaded")
     return _detector
 

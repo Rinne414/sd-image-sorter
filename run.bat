@@ -5,6 +5,10 @@ echo ==========================================
 echo    SD Image Sorter - Starting...
 echo ==========================================
 echo.
+echo   Welcome. Model weights are never included in this package.
+echo   Use Model Manager to select and download the features you need.
+echo   Download progress, file checks, and restart notices stay in this window.
+echo.
 
 cd /d "%~dp0"
 set "ROOT_DIR=%CD%"
@@ -40,6 +44,9 @@ set "SD_IMAGE_SORTER_ARTIST_MODEL_DIR=%MODELS_DIR%\artist"
 set "SD_IMAGE_SORTER_SAM3_MODEL_DIR=%MODELS_DIR%\sam3"
 set "SD_IMAGE_SORTER_NUDENET_MODEL_DIR=%MODELS_DIR%\nudenet"
 set "SD_IMAGE_SORTER_TORIIGATE_MODEL_DIR=%MODELS_DIR%\toriigate"
+set "SD_IMAGE_SORTER_FLORENCE2_MODEL_DIR=%MODELS_DIR%\florence2"
+set "SD_IMAGE_SORTER_LUCIDA_MODEL_DIR=%MODELS_DIR%\lucida"
+set "SD_IMAGE_SORTER_CL_TAGGER_V2_MODEL_DIR=%MODELS_DIR%\cl-tagger-v2"
 set "SD_IMAGE_SORTER_CACHE_DIR=%CACHE_DIR%"
 set "HF_HOME=%DATA_DIR%\hf"
 set "TRANSFORMERS_CACHE=%DATA_DIR%\hf\transformers"
@@ -323,6 +330,7 @@ echo ==========================================
 echo   SD Image Sorter is running!
 echo.
 echo   Open browser: !APP_URL!
+echo   Keep this window open while Model Manager downloads files.
 echo   Press Ctrl+C to stop the server.
 echo ==========================================
 echo.

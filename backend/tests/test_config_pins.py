@@ -530,6 +530,7 @@ class TestTaggerModelsCatalog:
             "pixai-tagger-v0.9",
             "toriigate-0.5",
             "oppai-oracle-v1.1",
+            "cl-tagger-v2",
         }
         assert config.DEFAULT_TAGGER_MODEL == "wd-swinv2-tagger-v3"
         assert config.DEFAULT_TAGGER_MODEL in config.TAGGER_MODELS
@@ -544,6 +545,13 @@ class TestTaggerModelsCatalog:
         entry = config.TAGGER_MODELS[config.DEFAULT_TAGGER_MODEL]
         assert entry["model_file"] == "model.onnx"
         assert entry["tags_file"] == "selected_tags.csv"
+
+    def test_default_model_revision_is_pinned_to_a_commit(self):
+        revision = config.TAGGER_MODELS[config.DEFAULT_TAGGER_MODEL]["revision"]
+
+        assert revision == "627aef95638667ddcaa3ac8ae625e88ea5b02f51"
+        assert len(revision) == 40
+        int(revision, 16)
 
     def test_load_bearing_output_quirks_pinned(self):
         # These specific values decode the correct ONNX output head; wrong

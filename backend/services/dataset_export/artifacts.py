@@ -67,6 +67,154 @@ def _trainer_config_mode(request: Any) -> str:
     return str(getattr(request, "trainer_config", "none") or "none").strip().lower()
 
 
+def _validate_subject_crop_request(
+    request: DatasetExportRequest,
+    *,
+    output_mode: str,
+    mask_export_mode: str,
+    trainer_config_mode: str,
+) -> None:
+    settings = request.subject_crop
+    if not settings.enabled:
+        return
+    if output_mode != "folder":
+        raise HTTPException(
+            status_code=400,
+            detail="subject_crop requires output_mode='folder'; beside-image export is unsupported",
+        )
+    if request.image_op != "copy":
+        raise HTTPException(
+            status_code=400,
+            detail="subject_crop requires image_op='copy'; source images are never moved",
+        )
+    if request.image_paths:
+        raise HTTPException(
+            status_code=400,
+            detail="subject_crop requires stored masks keyed by library image_ids; local image_paths are unsupported",
+        )
+    if request.dataset_scan_tokens:
+        raise HTTPException(
+            status_code=400,
+            detail="subject_crop does not support dataset_scan_tokens; select indexed library images",
+        )
+    if not request.image_ids or any(int(image_id) <= 0 for image_id in request.image_ids):
+        raise HTTPException(
+            status_code=400,
+            detail="subject_crop requires every item to have a positive library image_id",
+        )
+    if mask_export_mode == "none":
+        raise HTTPException(
+            status_code=400,
+            detail="subject_crop requires mask_export to preserve the aligned cropped mask",
+        )
+    if trainer_config_mode != "none":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "subject_crop currently requires trainer_config='none'; verified Package v2 "
+                "transforms need a separate fingerprint and resume contract"
+            ),
+        )
+
+
+def _validate_bucket_resize_request(
+    request: DatasetExportRequest,
+    *,
+    output_mode: str,
+    trainer_config_mode: str,
+) -> None:
+    settings = request.bucket_resize
+    if not settings.enabled:
+        return
+    if output_mode != "folder":
+        raise HTTPException(
+            status_code=400,
+            detail="bucket_resize requires output_mode='folder'; beside-image export is unsupported",
+        )
+    if request.image_op != "copy":
+        raise HTTPException(
+            status_code=400,
+            detail="bucket_resize requires image_op='copy'; source images are never moved",
+        )
+    if request.image_paths:
+        raise HTTPException(
+            status_code=400,
+            detail="bucket_resize requires indexed library image_ids; local image_paths are unsupported",
+        )
+    if request.dataset_scan_tokens:
+        raise HTTPException(
+            status_code=400,
+            detail="bucket_resize does not support dataset_scan_tokens; select indexed library images",
+        )
+    if not request.image_ids or any(int(image_id) <= 0 for image_id in request.image_ids):
+        raise HTTPException(
+            status_code=400,
+            detail="bucket_resize requires every item to have a positive library image_id",
+        )
+    if trainer_config_mode != "none":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "bucket_resize is not supported by Verified Package v2; "
+                "transforms need a separate fingerprint and resume contract"
+            ),
+        )
+    if request.trainer_resolution % 64 != 0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "bucket_resize requires trainer_resolution to be a multiple of 64; "
+                f"received={request.trainer_resolution}"
+            ),
+        )
+
+
+def _validate_watermark_removal_request(
+    request: DatasetExportRequest,
+    *,
+    output_mode: str,
+    trainer_config_mode: str,
+) -> None:
+    settings = request.watermark_removal
+    if not settings.enabled:
+        return
+    try:
+        import cv2  # noqa: F401
+        import numpy  # noqa: F401
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "watermark_removal requires OpenCV and NumPy. "
+                "Prepare the censor/OpenCV dependencies, then retry."
+            ),
+        ) from exc
+    if output_mode != "folder":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "watermark_removal requires output_mode='folder'; "
+                "beside-image export cannot rewrite image pixels"
+            ),
+        )
+    if request.image_op != "copy":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "watermark_removal requires image_op='copy'; "
+                "source images are never moved"
+            ),
+        )
+    if trainer_config_mode != "none":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "watermark_removal is not supported by Verified Package v2; "
+                "export a normal folder first"
+            ),
+        )
+
+
 def _file_identity(stat_result: os.stat_result) -> Tuple[int, int, int, int]:
     return (
         int(stat_result.st_dev),
@@ -257,6 +405,22 @@ def _validate_export_request_read_only(request: DatasetExportRequest) -> Optiona
             detail=f"Invalid trainer_config: {getattr(request, 'trainer_config', None)!r} "
                    f"(expected one of {', '.join(VALID_TRAINER_CONFIGS)})",
         )
+    _validate_subject_crop_request(
+        request,
+        output_mode=output_mode,
+        mask_export_mode=mask_export_mode,
+        trainer_config_mode=trainer_config_mode,
+    )
+    _validate_bucket_resize_request(
+        request,
+        output_mode=output_mode,
+        trainer_config_mode=trainer_config_mode,
+    )
+    _validate_watermark_removal_request(
+        request,
+        output_mode=output_mode,
+        trainer_config_mode=trainer_config_mode,
+    )
     if package_requested(request) and request.image_op != "copy":
         raise HTTPException(
             status_code=400,
@@ -284,6 +448,14 @@ def _validate_export_request_read_only(request: DatasetExportRequest) -> Optiona
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     if request.image_op not in VALID_IMAGE_OPS:
         raise HTTPException(status_code=400, detail=f"Invalid image_op: {request.image_op!r}")
+    if mask_export_mode != "none" and request.image_op != "copy":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "mask_export requires image_op='copy'; moving a source while publishing "
+                "a stored training mask cannot be committed as one atomic row"
+            ),
+        )
     if request.overwrite_policy not in VALID_OVERWRITE_POLICIES:
         raise HTTPException(status_code=400, detail=f"Invalid overwrite_policy: {request.overwrite_policy!r}")
     if str(request.content_mode or "template").strip().lower() not in VALID_CONTENT_MODES:
@@ -378,6 +550,10 @@ def _build_export_manifest(
             "normalize_tag_underscores": bool(request.normalize_tag_underscores),
             "common_tags": list(request.common_tags or []),
             "blacklist": list(request.blacklist or []),
+            "subject_crop": request.subject_crop.model_dump(mode="json"),
+            "bucket_resize": request.bucket_resize.model_dump(mode="json"),
+            "watermark_removal": request.watermark_removal.model_dump(mode="json"),
+            "trainer_resolution": request.trainer_resolution,
         },
         "counts": {
             "total": total_items,

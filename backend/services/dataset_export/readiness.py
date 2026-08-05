@@ -10,6 +10,17 @@ from typing import Callable, Dict, List, Literal, Optional, Tuple
 
 import database as db
 from PIL import Image, UnidentifiedImageError
+from services.dataset_bucket_service import (
+    BucketTransformError,
+    plan_center_bucket_resize,
+    plan_subject_aware_bucket_resize,
+)
+from services.dataset_crop_service import SubjectCropError, compute_subject_crop_box
+from services.dataset_image_geometry import (
+    normalize_mask_orientation,
+    normalized_exif_size,
+    read_exif_orientation,
+)
 from services.dataset_export._constants import DATASET_EXPORT_DB_CHUNK_SIZE
 from services.dataset_export.artifacts import (
     _mask_export_mode,
@@ -42,9 +53,10 @@ from services.dataset_export.planning import (
     _iter_requested_scan_paths,
     _iter_unique_image_ids,
     _output_mode,
+    _paths_share_file_identity,
     _plan_mask_destination,
     _plan_beside_image_sidecar,
-    _plan_single_pair,
+    _plan_single_training_pair,
     _requested_item_count,
     _resolve_dataset_image_path,
 )
@@ -207,8 +219,14 @@ def _inspect_source(
                     )
                 digest.update(chunk)
         with Image.open(resolved) as image:
-            width, height = image.size
+            raw_width, raw_height = image.size
             image.verify()
+        with Image.open(resolved) as image:
+            orientation = read_exif_orientation(image)
+        width, height = normalized_exif_size(
+            (raw_width, raw_height),
+            orientation,
+        )
         if width <= 0 or height <= 0:
             return None
         stat = Path(resolved).stat()
@@ -271,6 +289,12 @@ def run_dataset_readiness(
     output_folder = Path(normalize_user_path(request.output_folder))
     caption_extension = _dataset_sidecar_extension(request.content_mode)
     mask_export_mode = _mask_export_mode(request)
+    subject_crop_enabled = request.subject_crop.enabled
+    bucket_resize_enabled = request.bucket_resize.enabled
+    watermark_removal_enabled = request.watermark_removal.enabled
+    pixel_transform_enabled = (
+        subject_crop_enabled or bucket_resize_enabled or watermark_removal_enabled
+    )
     trainer_config_mode = _trainer_config_mode(request)
     anima_mask_required = (
         trainer_config_mode == "anima_lora_toml"
@@ -301,6 +325,7 @@ def run_dataset_readiness(
     export_index = 0
     used_image_paths: set[str] = set()
     used_caption_paths: set[str] = set()
+    used_mask_paths: set[str] = set()
     seen_virtual_paths: set[str] = set()
     input_hasher = hashlib.sha256(
         bytes.fromhex(dataset_readiness_fingerprint(request))
@@ -362,7 +387,9 @@ def run_dataset_readiness(
             and not isinstance(raw_image_id, bool)
             else 0
         )
-        source_path, source_size, source_mtime_ns, source_digest, width, height = source_identity
+        source_path, source_size, source_mtime_ns, source_digest, width, height = (
+            source_identity
+        )
         annotation_key = str(image_id) if image_id > 0 else source_path
         annotation: ResolvedAnnotationSelection | None = resolved_annotations.get(
             annotation_key
@@ -409,16 +436,18 @@ def run_dataset_readiness(
                 used_caption_paths=used_caption_paths,
             )
         else:
-            output_image_path, output_caption_path, skip_reason = _plan_single_pair(
+            output_image_path, output_caption_path, skip_reason = _plan_single_training_pair(
                 normalized_record,
                 output_folder=output_folder,
                 pattern=request.naming_pattern,
                 trigger=request.trigger,
                 overwrite_policy=request.overwrite_policy,
                 caption_extension=caption_extension,
+                mask_export_mode=mask_export_mode,
                 index=export_index,
                 used_image_paths=used_image_paths,
                 used_caption_paths=used_caption_paths,
+                used_mask_paths=used_mask_paths,
             )
         if output_caption_path is None:
             update_input("planned_pair", {
@@ -432,7 +461,11 @@ def run_dataset_readiness(
             })
             issue_code = (
                 skip_reason
-                if skip_reason in {"caption_destination_collision", "unpaired_sidecar"}
+                if skip_reason in {
+                    "caption_destination_collision",
+                    "mask_destination_collision",
+                    "unpaired_sidecar",
+                }
                 else "unpaired_output"
             )
             add_issue(_make_issue(
@@ -459,6 +492,45 @@ def run_dataset_readiness(
             "output_caption_path": str(output_caption_path),
             "skip_reason": skip_reason,
         })
+
+        if output_mode == "folder" and output_image_path is not None:
+            try:
+                same_source = _paths_share_file_identity(
+                    Path(source_path),
+                    output_image_path,
+                )
+            except ValueError as exc:
+                same_source = True
+                alias_error = str(exc)
+            else:
+                alias_error = (
+                    "planned image output resolves to the source file"
+                    if same_source
+                    else ""
+                )
+            if same_source:
+                issue_code = (
+                    "transform_source_destination_alias"
+                    if pixel_transform_enabled
+                    else "source_destination_alias"
+                )
+                add_issue(_make_issue(
+                    severity="blocker",
+                    code=issue_code,
+                    message=(
+                        f"Dataset export cannot write {output_image_path!s}: "
+                        f"{alias_error}"
+                    ),
+                    image_id=image_id if image_id > 0 else None,
+                    source_path=source_path,
+                    destination=str(output_image_path),
+                    observed=alias_error,
+                    expected="an export destination that is not the source file or an alias",
+                    action="Choose a different output folder or naming pattern, then run readiness again.",
+                ))
+                processed += 1
+                emit_progress()
+                return
 
         if strict_annotations and annotation is None:
             add_issue(_make_issue(
@@ -581,21 +653,99 @@ def run_dataset_readiness(
                 action="Review and edit this caption before export.",
             ))
 
-        if mask_export_mode != "none":
+        bucket_mask_required = bucket_resize_enabled and (
+            request.bucket_resize.subject_aware or mask_export_mode != "none"
+        )
+        stored_mask_required = (
+            mask_export_mode != "none"
+            or subject_crop_enabled
+            or bucket_mask_required
+        )
+        stored_mask: Optional[Path] = None
+        mask_identity: Optional[Dict[str, object]] = None
+        mask_destination: Optional[Path] = None
+        mask_plan_error: Optional[str] = None
+        mask_image: Optional[Image.Image] = None
+        mask_read_error: Optional[str] = None
+        source_size = (width, height)
+        raw_source_size = source_size
+        source_orientation = 1
+
+        if stored_mask_required:
             from services import mask_service
 
+            try:
+                with Image.open(source_path) as source_image:
+                    raw_source_size = source_image.size
+                    source_orientation = read_exif_orientation(source_image)
+            except (OSError, UnidentifiedImageError, ValueError) as exc:
+                mask_read_error = (
+                    "source EXIF orientation could not be inspected for mask geometry: "
+                    f"{exc}"
+                )
+
             stored_mask = mask_service.get_mask_file(image_id) if image_id > 0 else None
-            mask_image_path = output_image_path or Path(source_path)
-            mask_destination, mask_plan_error = _plan_mask_destination(
-                mask_export_mode,
-                mask_image_path,
-                output_folder if output_mode == "folder" else None,
-            )
+            if mask_export_mode != "none":
+                mask_image_path = output_image_path or Path(source_path)
+                mask_destination, mask_plan_error = _plan_mask_destination(
+                    mask_export_mode,
+                    mask_image_path,
+                    output_folder if output_mode == "folder" else None,
+                )
             mask_identity = (
                 _inspect_auxiliary_file(stored_mask, cancellation_requested)
                 if stored_mask is not None
                 else None
             )
+            alias_pairs = (
+                (source_path, output_image_path, "image"),
+                (source_path, mask_destination, "mask"),
+                (stored_mask, output_image_path, "image"),
+                (stored_mask, mask_destination, "mask"),
+            )
+            for alias_source, alias_target, target_label in alias_pairs:
+                if alias_source is None or alias_target is None:
+                    continue
+                try:
+                    aliases_source = _paths_share_file_identity(
+                        Path(alias_source),
+                        Path(alias_target),
+                    )
+                except ValueError as exc:
+                    aliases_source = True
+                    alias_error = str(exc)
+                else:
+                    alias_error = (
+                        "planned destination resolves to a source file"
+                        if aliases_source
+                        else ""
+                    )
+                if not aliases_source:
+                    continue
+                source_label = (
+                    "stored training mask"
+                    if alias_source == stored_mask
+                    else "source image"
+                )
+                add_issue(_make_issue(
+                    severity="blocker",
+                    code=(
+                        "mask_source_destination_alias"
+                        if source_label == "stored training mask"
+                        else "source_destination_alias"
+                    ),
+                    message=(
+                        f"Dataset {target_label} destination aliases the {source_label}: "
+                        f"{alias_error}"
+                    ),
+                    image_id=image_id if image_id > 0 else None,
+                    source_path=source_path,
+                    destination=str(alias_target),
+                    observed=alias_error,
+                    expected="a destination that is distinct from every source and stored mask",
+                    action="Choose a different output folder or naming pattern, then run readiness again.",
+                ))
+                break
             update_input("requested_mask", {
                 "image_id": image_id,
                 "stored_mask": mask_identity,
@@ -604,33 +754,164 @@ def run_dataset_readiness(
                 ),
                 "plan_error": mask_plan_error,
             })
-            if (anima_mask_required or kohya_mask_required) and mask_identity is None:
-                issue_prefix = "anima" if anima_mask_required else "kohya"
-                trainer_name = "Anima" if anima_mask_required else "Kohya"
-                mask_name = "loss" if anima_mask_required else "conditioning"
-                missing_code = (
-                    f"{issue_prefix}_mask_missing"
-                    if stored_mask is None
-                    else f"{issue_prefix}_mask_unreadable"
+            if mask_read_error is not None:
+                pass
+            elif stored_mask is None:
+                mask_read_error = "stored training mask is missing"
+            elif mask_identity is None:
+                mask_read_error = "stored training mask is unreadable"
+            elif int(mask_identity["size"]) <= 0:
+                mask_read_error = "stored training mask is empty"
+            else:
+                try:
+                    with Image.open(stored_mask) as opened_mask:
+                        opened_mask.load()
+                        mask_image = opened_mask.copy()
+                    if mask_image.size != raw_source_size:
+                        raise BucketTransformError(
+                            f"mask size {mask_image.size!r} does not match source raw pixel "
+                            f"size {raw_source_size!r} before EXIF orientation"
+                        )
+                    mask_image = normalize_mask_orientation(
+                        mask_image,
+                        source_orientation,
+                    )
+                except (
+                    OSError,
+                    UnidentifiedImageError,
+                    BucketTransformError,
+                    ValueError,
+                ) as exc:
+                    mask_read_error = str(exc)
+
+        working_size = source_size
+        working_mask = mask_image
+        subject_crop_error: Optional[str] = None
+        if subject_crop_enabled:
+            if mask_read_error is not None:
+                subject_crop_error = mask_read_error
+            elif (
+                request.subject_crop.background_mode == "transparent_rgba"
+                and output_image_path is not None
+                and output_image_path.suffix.lower()
+                not in {".png", ".tif", ".tiff", ".webp"}
+            ):
+                subject_crop_error = (
+                    "transparent_rgba requires a PNG, WebP, or TIFF output image"
                 )
+            elif working_mask is None:
+                subject_crop_error = "stored training mask is unavailable"
+            else:
+                try:
+                    subject_box = compute_subject_crop_box(
+                        working_mask,
+                        alpha_threshold=request.subject_crop.alpha_threshold,
+                        padding_percent=request.subject_crop.padding_percent,
+                    )
+                    working_mask = working_mask.crop(subject_box)
+                    working_size = working_mask.size
+                except (SubjectCropError, ValueError) as exc:
+                    subject_crop_error = str(exc)
+            if subject_crop_error is not None:
                 add_issue(_make_issue(
                     severity="blocker",
-                    code=missing_code,
+                    code="subject_crop_mask_invalid",
                     message=(
-                        f"{trainer_name} {mask_name} mask is missing or "
-                        f"unreadable for {source_path!r}"
+                        f"Subject crop cannot use the stored mask for {source_path!r}: "
+                        f"{subject_crop_error}"
                     ),
-                    image_id=image_id if image_id > 0 else None,
+                    image_id=image_id,
                     source_path=source_path,
                     destination=(
                         str(mask_destination) if mask_destination is not None else None
                     ),
-                    observed="no readable stored mask is available for this image",
+                    observed=subject_crop_error,
                     expected=(
-                        f"one stored {mask_name} mask for every exported image"
+                        "a non-empty readable stored mask matching the source dimensions "
+                        "with subject pixels above alpha_threshold"
                     ),
-                    action="Create or import the mask, then run readiness again.",
+                    action="Repair or regenerate the stored training mask, then run readiness again.",
                 ))
+
+        if bucket_resize_enabled and subject_crop_error is None:
+            bucket_error: Optional[str] = None
+            try:
+                if request.bucket_resize.subject_aware:
+                    if mask_read_error is not None:
+                        raise BucketTransformError(mask_read_error)
+                    if working_mask is None:
+                        raise BucketTransformError(
+                            "stored training mask is unavailable"
+                        )
+                    bucket_size, bucket_crop_box = plan_subject_aware_bucket_resize(
+                        working_size,
+                        working_mask,
+                        alpha_threshold=request.bucket_resize.alpha_threshold,
+                        trainer_resolution=request.trainer_resolution,
+                    )
+                else:
+                    if mask_export_mode != "none" and mask_read_error is not None:
+                        raise BucketTransformError(mask_read_error)
+                    bucket_size, bucket_crop_box = plan_center_bucket_resize(
+                        working_size,
+                        trainer_resolution=request.trainer_resolution,
+                    )
+                update_input("bucket_resize", {
+                    "image_id": image_id,
+                    "source_size": working_size,
+                    "bucket_size": bucket_size,
+                    "crop_box": bucket_crop_box,
+                    "subject_aware": request.bucket_resize.subject_aware,
+                    "alpha_threshold": request.bucket_resize.alpha_threshold,
+                })
+            except (BucketTransformError, ValueError) as exc:
+                bucket_error = str(exc)
+            if bucket_error is not None:
+                add_issue(_make_issue(
+                    severity="blocker",
+                    code="bucket_resize_mask_invalid",
+                    message=(
+                        f"Bucket preprocessing cannot plan {source_path!r}: "
+                        f"{bucket_error}"
+                    ),
+                    image_id=image_id,
+                    source_path=source_path,
+                    destination=(
+                        str(output_image_path) if output_image_path is not None else None
+                    ),
+                    observed=bucket_error,
+                    expected=(
+                        "a legal SDXL bucket and, when required, a readable mask whose subject "
+                        "fits without clipping"
+                    ),
+                    action="Repair the mask or disable subject-aware bucket preprocessing, then run readiness again.",
+                ))
+
+        if (anima_mask_required or kohya_mask_required) and mask_identity is None:
+            issue_prefix = "anima" if anima_mask_required else "kohya"
+            trainer_name = "Anima" if anima_mask_required else "Kohya"
+            mask_name = "loss" if anima_mask_required else "conditioning"
+            missing_code = (
+                f"{issue_prefix}_mask_missing"
+                if stored_mask is None
+                else f"{issue_prefix}_mask_unreadable"
+            )
+            add_issue(_make_issue(
+                severity="blocker",
+                code=missing_code,
+                message=(
+                    f"{trainer_name} {mask_name} mask is missing or "
+                    f"unreadable for {source_path!r}"
+                ),
+                image_id=image_id if image_id > 0 else None,
+                source_path=source_path,
+                destination=(
+                    str(mask_destination) if mask_destination is not None else None
+                ),
+                observed="no readable stored mask is available for this image",
+                expected=f"one stored {mask_name} mask for every exported image",
+                action="Create or import the mask, then run readiness again.",
+            ))
 
         trainable_pairs += 1
         if len(sample_pairs) < DATASET_READINESS_PAIR_SAMPLE_LIMIT:

@@ -111,6 +111,12 @@
         resolution: freezeBounds(1024, 1024, 1024),
         keepTokens: freezeBounds(0, 0, 0),
     });
+    const GENERIC_BUCKET_BOUNDS = Object.freeze({
+        repeats: GENERIC_BOUNDS.repeats,
+        batchSize: GENERIC_BOUNDS.batchSize,
+        resolution: freezeBounds(256, 4096, 1024),
+        keepTokens: GENERIC_BOUNDS.keepTokens,
+    });
 
     function requireRecord(value, label) {
         if (value === null || Array.isArray(value) || typeof value !== 'object') {
@@ -389,11 +395,11 @@
         select.dispatchEvent(new Event('dataset:select-sync'));
     }
 
-    function applyInputBounds(input, bounds, resetToDefault, disabled) {
+    function applyInputBounds(input, bounds, resetToDefault, disabled, step) {
         if (!input) throw new Error('Dataset trainer selector is missing a numeric input');
         input.min = String(bounds.minimum);
         input.max = String(bounds.maximum);
-        input.step = '1';
+        input.step = String(step);
         const current = Number(input.value);
         const currentValid = Number.isSafeInteger(current) &&
             current >= bounds.minimum && current <= bounds.maximum;
@@ -425,9 +431,14 @@
         return state.contracts.find((contract) => contract.wireValue === value) || null;
     }
 
+    function bucketResizeEnabled() {
+        return document.getElementById('dataset-bucket-resize-enabled')?.checked === true;
+    }
+
     function buildTrainerExportFields(dm, state) {
         const contract = selectedContract(dm);
-        const bounds = contract?.bounds || GENERIC_BOUNDS;
+        const bucketEnabled = bucketResizeEnabled();
+        const bounds = contract?.bounds || (bucketEnabled ? GENERIC_BUCKET_BOUNDS : GENERIC_BOUNDS);
         const maskExport = document.getElementById('dataset-mask-export')?.value || '';
         const allowedMasks = contract?.maskExportModes || GENERIC_MASK_WIRES;
         if (!allowedMasks.includes(maskExport)) {
@@ -442,14 +453,20 @@
         if (contract && imageOperation !== 'copy') {
             throw new RangeError('Verified trainer packages require image_op="copy"');
         }
+        const resolution = contract || bucketEnabled
+            ? readBoundedInteger('dataset-trainer-resolution', bounds.resolution, 'resolution')
+            : GENERIC_BOUNDS.resolution.default;
+        if (bucketEnabled && resolution % 64 !== 0) {
+            throw new RangeError(
+                `Bucket resize resolution must be a multiple of 64; received=${resolution}`,
+            );
+        }
         return Object.freeze({
             mask_export: maskExport,
             trainer_config: contract?.wireValue || 'none',
             trainer_repeats: readBoundedInteger('dataset-est-repeats', bounds.repeats, 'repeats'),
             trainer_batch: readBoundedInteger('dataset-est-batch', bounds.batchSize, 'batch size'),
-            trainer_resolution: contract
-                ? readBoundedInteger('dataset-trainer-resolution', bounds.resolution, 'resolution')
-                : GENERIC_BOUNDS.resolution.default,
+            trainer_resolution: resolution,
             trainer_keep_tokens: contract
                 ? readBoundedInteger('dataset-trainer-keep-tokens', bounds.keepTokens, 'keep_tokens')
                 : GENERIC_BOUNDS.keepTokens.default,
@@ -584,6 +601,7 @@
 
     DM._applyTrainerSelection = function (resetContractValues) {
         const contract = selectedContract(this);
+        const bucketEnabled = bucketResizeEnabled();
         const mask = document.getElementById('dataset-mask-export');
         const settings = document.getElementById('dataset-trainer-settings');
         const pin = document.getElementById('dataset-trainer-pin');
@@ -591,6 +609,8 @@
         const batch = document.getElementById('dataset-est-batch');
         const resolution = document.getElementById('dataset-trainer-resolution');
         const keepTokens = document.getElementById('dataset-trainer-keep-tokens');
+        const resolutionField = document.getElementById('dataset-trainer-resolution-field');
+        const keepTokensField = document.getElementById('dataset-trainer-keep-tokens-field');
         if (!mask || !settings || !pin) {
             throw new Error('Dataset trainer selector settings are incomplete');
         }
@@ -600,22 +620,27 @@
             contract?.maskExportModes || GENERIC_MASK_WIRES,
             preferredMask,
         );
-        const bounds = contract?.bounds || GENERIC_BOUNDS;
-        applyInputBounds(repeats, bounds.repeats, false, false);
-        applyInputBounds(batch, bounds.batchSize, false, false);
+        const bounds = contract?.bounds || (bucketEnabled ? GENERIC_BUCKET_BOUNDS : GENERIC_BOUNDS);
+        applyInputBounds(repeats, bounds.repeats, false, false, 1);
+        applyInputBounds(batch, bounds.batchSize, false, false, 1);
         applyInputBounds(
             resolution,
             bounds.resolution,
             resetContractValues,
-            !contract || bounds.resolution.minimum === bounds.resolution.maximum,
+            (!contract && !bucketEnabled)
+                || bounds.resolution.minimum === bounds.resolution.maximum,
+            bucketEnabled && !contract ? 64 : 1,
         );
         applyInputBounds(
             keepTokens,
             bounds.keepTokens,
             resetContractValues,
             !contract || bounds.keepTokens.minimum === bounds.keepTokens.maximum,
+            1,
         );
-        settings.hidden = !contract;
+        settings.hidden = !contract && !bucketEnabled;
+        if (resolutionField) resolutionField.hidden = !contract && !bucketEnabled;
+        if (keepTokensField) keepTokensField.hidden = !contract;
         pin.hidden = !contract;
         pin.textContent = contract
             ? this._t(

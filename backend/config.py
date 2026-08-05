@@ -334,9 +334,21 @@ TORIIGATE_MODEL_DIR: str = os.environ.get(
     "SD_IMAGE_SORTER_TORIIGATE_MODEL_DIR",
     str(DATA_DIR / "models" / "toriigate")
 )
+FLORENCE2_MODEL_DIR: str = os.environ.get(
+    "SD_IMAGE_SORTER_FLORENCE2_MODEL_DIR",
+    str(DATA_DIR / "models" / "florence2")
+)
 OPPAI_ORACLE_MODEL_DIR: str = os.environ.get(
     "SD_IMAGE_SORTER_OPPAI_ORACLE_MODEL_DIR",
     str(DATA_DIR / "models" / "oppai-oracle")
+)
+LUCIDA_MODEL_DIR: str = os.environ.get(
+    "SD_IMAGE_SORTER_LUCIDA_MODEL_DIR",
+    str(DATA_DIR / "models" / "lucida")
+)
+CL_TAGGER_V2_MODEL_DIR: str = os.environ.get(
+    "SD_IMAGE_SORTER_CL_TAGGER_V2_MODEL_DIR",
+    str(DATA_DIR / "models" / "cl-tagger-v2")
 )
 
 
@@ -366,6 +378,10 @@ TAGGER_USE_GPU: bool = os.environ.get(
 # CPU is ~2x slower than GPU for Kaloscope (benchmarked) but stable.
 ARTIST_USE_GPU: bool = os.environ.get(
     "SD_IMAGE_SORTER_ARTIST_USE_GPU",
+    "true"
+).lower() in ("true", "1", "yes")
+LUCIDA_USE_GPU: bool = os.environ.get(
+    "SD_IMAGE_SORTER_LUCIDA_USE_GPU",
     "true"
 ).lower() in ("true", "1", "yes")
 
@@ -687,9 +703,30 @@ def get_toriigate_model_dir() -> str:
     return str(model_dir)
 
 
+def get_florence2_model_dir() -> str:
+    """Get the native Florence-2 Base model directory, creating it if necessary."""
+    model_dir = Path(FLORENCE2_MODEL_DIR)
+    model_dir.mkdir(parents=True, exist_ok=True)
+    return str(model_dir)
+
+
 def get_oppai_oracle_model_dir() -> str:
     """Get the OppaiOracle model directory, creating it if necessary."""
     model_dir = Path(OPPAI_ORACLE_MODEL_DIR)
+    model_dir.mkdir(parents=True, exist_ok=True)
+    return str(model_dir)
+
+
+def get_lucida_model_dir() -> str:
+    """Get the Lucida model directory, creating it if necessary."""
+    model_dir = Path(LUCIDA_MODEL_DIR)
+    model_dir.mkdir(parents=True, exist_ok=True)
+    return str(model_dir)
+
+
+def get_cl_tagger_v2_model_dir() -> str:
+    """Get the CL Tagger v2 model directory, creating it if necessary."""
+    model_dir = Path(CL_TAGGER_V2_MODEL_DIR)
     model_dir.mkdir(parents=True, exist_ok=True)
     return str(model_dir)
 
@@ -721,6 +758,9 @@ def ensure_directories():
     get_sam3_model_dir()
     get_nudenet_model_dir()
     get_toriigate_model_dir()
+    get_florence2_model_dir()
+    get_lucida_model_dir()
+    get_cl_tagger_v2_model_dir()
 
     # Cache directory
     Path(DEFAULT_CACHE_DIR).mkdir(parents=True, exist_ok=True)

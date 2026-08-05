@@ -166,6 +166,10 @@ def test_release_skip_rules_drop_hidden_and_docs_files():
     assert release_builder.should_skip_path(Path("update") / "downloads" / "patch.zip") is True
     assert release_builder.should_skip_path(Path("coverage.xml")) is True
     assert release_builder.should_skip_path(Path("backend") / "coverage.xml") is True
+    assert release_builder.should_skip_path(Path("backend") / "images.db-wal") is True
+    assert release_builder.should_skip_path(Path("backend") / "images.db-shm") is True
+    assert release_builder.should_skip_path(Path("backend") / "images.db-journal") is True
+    assert release_builder.should_prune_directory(Path("metadata missing")) is True
     assert release_builder.should_prune_directory(Path("htmlcov")) is True
     assert release_builder.should_prune_directory(Path("backend") / "htmlcov") is True
     assert release_builder.should_skip_path(Path(".env.example")) is False
@@ -231,11 +235,15 @@ def test_release_copy_project_prunes_excluded_directory_trees(monkeypatch, tmp_p
         "models/yolo/README.md": "model docs\n",
         "models/yolo/model.onnx": "model payload\n",
         "backend/venv/Lib/site-packages/huge.py": "must not copy\n",
+        "metadata missing/private-sample.png": "must not copy\n",
         "artifacts/release/staging/recursive.txt": "must not copy\n",
         "data/images.db": "must not copy\n",
         "update/downloads/patch.zip": "must not copy\n",
         "coverage.xml": "must not copy\n",
         "backend/coverage.xml": "must not copy\n",
+        "backend/images.db-wal": "must not copy\n",
+        "backend/images.db-shm": "must not copy\n",
+        "backend/images.db-journal": "must not copy\n",
         "htmlcov/index.html": "must not copy\n",
         "backend/htmlcov/index.html": "must not copy\n",
         ".git/config": "must not copy\n",
@@ -255,11 +263,15 @@ def test_release_copy_project_prunes_excluded_directory_trees(monkeypatch, tmp_p
     assert (stage_root / "models/yolo/README.md").exists()
     assert not (stage_root / "models/yolo/model.onnx").exists()
     assert not (stage_root / "backend/venv/Lib/site-packages/huge.py").exists()
+    assert not (stage_root / "metadata missing/private-sample.png").exists()
     assert not (stage_root / "artifacts/release/staging/recursive.txt").exists()
     assert not (stage_root / "data/images.db").exists()
     assert not (stage_root / "update/downloads/patch.zip").exists()
     assert not (stage_root / "coverage.xml").exists()
     assert not (stage_root / "backend/coverage.xml").exists()
+    assert not (stage_root / "backend/images.db-wal").exists()
+    assert not (stage_root / "backend/images.db-shm").exists()
+    assert not (stage_root / "backend/images.db-journal").exists()
     assert not (stage_root / "htmlcov/index.html").exists()
     assert not (stage_root / "backend/htmlcov/index.html").exists()
     assert not (stage_root / ".git/config").exists()
@@ -571,6 +583,10 @@ def test_write_package_manifest_declares_model_artifact_policy(tmp_path):
         "backend/main.py": "print('ok')\n",
         "models/README.md": "models docs\n",
         "models/wd14-tagger/wd-swinv2-tagger-v3/model.onnx": "model\n",
+        "models/florence2/model.safetensors": "florence\n",
+        "models/lucida/model.safetensors": "lucida\n",
+        "models/cl_tagger_v2/v2_00/model.onnx": "cl-tag\n",
+        "data/models/cl-tagger-v2/v2_00/model.onnx.data": "external\n",
     }
     for relative_path, content in staged_files.items():
         target = tmp_path / relative_path
@@ -581,19 +597,32 @@ def test_write_package_manifest_declares_model_artifact_policy(tmp_path):
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     policy = payload["model_artifact_policy"]
 
-    assert policy["version"] == release_builder.MODEL_ARTIFACT_POLICY_VERSION
+    assert policy["version"] == 2
+    assert policy["delivery"] == "application_prepare_only"
     assert policy["default_packages_include_model_payloads"] is False
     assert policy["runtime_model_root"] == "data/models"
     assert "models/README.md" in payload["managed_paths"]
-    assert "models/wd14-tagger/wd-swinv2-tagger-v3/model.onnx" not in payload["managed_paths"]
-    assert "models/wd14-tagger/wd-swinv2-tagger-v3/model.onnx" in policy["auto_download_model_paths"]
+    for model_path in staged_files:
+        if model_path.startswith(("models/", "data/models/")) and model_path != "models/README.md":
+            assert model_path not in payload["managed_paths"]
+    assert policy["auto_download_model_paths"] == []
     assert policy["managed_model_payload_paths"] == []
-    assert {asset["name"] for asset in policy["optional_release_assets"]} >= {
-        "wd14-eva02-model",
-        "artist-runtime",
-        "kaloscope-checkpoint",
-        "sam3-modelscope-sam3pt",
-    }
+    assert policy["optional_release_assets"] == []
+    assert policy["forbidden_model_prefixes"] == ["models/", "data/models/"]
+    assert "florence2" in policy["download_model_ids"]
+    assert "lucida" in policy["download_model_ids"]
+    assert "cl-tagger-v2" in policy["download_model_ids"]
+
+
+def test_model_payload_redistribution_is_rejected(tmp_path):
+    release_builder = load_release_builder()
+
+    with pytest.raises(ValueError, match="redistribution is disabled"):
+        release_builder.write_package_manifest(
+            tmp_path,
+            "9.9.9",
+            include_model_payloads=True,
+        )
 
 
 def test_write_package_manifest_filters_protected_runtime_paths_even_if_staged(tmp_path):
@@ -801,7 +830,6 @@ def test_runtime_requirements_keep_platform_specific_wheels_guarded():
     requirements_text = requirements_path.read_text(encoding="utf-8")
     for package_name in (
         "sam3==0.1.3",
-        "einops==",
         "hydra-core==",
         "omegaconf==",
         "pycocotools==",
@@ -812,6 +840,8 @@ def test_runtime_requirements_keep_platform_specific_wheels_guarded():
     assert "transformers==" in requirements_text
     assert "safetensors==" in requirements_text
     assert "opencv-python==" in requirements_text
+    assert "einops==0.8.2" in requirements_text
+    assert "kornia==0.8.3" in requirements_text
 
 
 def test_core_requirements_exclude_heavy_ai_packages():

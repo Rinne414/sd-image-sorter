@@ -95,6 +95,7 @@ function successfulExportJob(jobId: string) {
       total_items: 2,
       items_truncated: false,
       error_messages: [],
+      warnings: [],
     },
     created_at: 1,
     started_at: 2,
@@ -125,6 +126,7 @@ function failedExportJobWithWrittenImage(jobId: string) {
       }],
       total_items: 1,
       error_messages: ['Caption write failed after copying the image'],
+      warnings: [],
     },
   }
 }
@@ -561,6 +563,7 @@ test('partial, mask-only, and config-only export results invalidate Readiness', 
           masks_written: current.masksWritten,
           trainer_config_path: current.trainerConfigPath,
           error_messages: current.jobStatus === 'error' ? ['Export artifact write failed'] : [],
+          warnings: [],
         },
       },
     }))

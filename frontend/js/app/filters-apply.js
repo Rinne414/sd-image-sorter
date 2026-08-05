@@ -525,6 +525,7 @@ function renderFeatureAvailabilityNotice() {
         appT('features.prepare.artist', 'Artist ID: installs torch/transformers/timm/safetensors/triton and downloads Kaloscope files'),
         appT('features.prepare.censorAi', 'AI censor detectors: NudeNet / Privacy YOLO / SAM3 install their own runtimes and model files'),
         appT('features.prepare.toriigate', 'ToriiGate VLM tagging: heavy PyTorch runtime + about 5 GB model download on first use'),
+        appT('features.prepare.florence2', 'Florence-2 Base local captioning: installs the local runtime and downloads the pinned model on first use'),
         appT('features.prepare.vlm', 'VLM natural language captioning: requires API keys (OpenAI/Anthropic/Gemini) or local Ollama'),
     ];
 

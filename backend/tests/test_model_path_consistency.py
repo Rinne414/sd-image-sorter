@@ -4,8 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from config import get_oppai_oracle_model_dir
-from oppai_oracle_tagger import DEFAULT_MODEL, OppaiOracleTagger
-from model_health import get_model_health
+from oppai_oracle_tagger import OppaiOracleTagger
 
 
 def test_oppai_expected_paths_align_with_health_layout(tmp_path, monkeypatch):

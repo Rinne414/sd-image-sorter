@@ -34,10 +34,14 @@ from config import (
     ARTIST_KALOSCOPE_CLASS_MAPPING,
     ARTIST_LSNET_CODE_PATH,
     CLIP_MODEL_NAME,
+    CLIP_TEXT_MODEL_NAME,
     DEFAULT_TAGGER_MODEL,
     TAGGER_MODELS,
     get_artist_model_dir,
+    get_cl_tagger_v2_model_dir,
     get_clip_model_dir,
+    get_florence2_model_dir,
+    get_lucida_model_dir,
     get_nudenet_model_dir,
     get_toriigate_model_dir,
     get_oppai_oracle_model_dir,
@@ -47,6 +51,10 @@ from config import (
 )
 from hardware_monitor import get_system_info, recommend_tagger_config
 from ai_runtime_guard import exclusive_ai_runtime
+from model_download_sources import is_nonempty_model_file, missing_model_artifacts
+from florence2_captioner import FLORENCE2_REQUIRED_FILES
+from lucida_matting import LUCIDA_REQUIRED_FILES
+from cl_tagger_v2 import CL_TAGGER_V2_REQUIRED_MODULES
 
 from censor import canonicalize_class_name as _canonicalize_yolo_class_name
 
@@ -79,8 +87,12 @@ from model_health_paths import (
     _resolve_artist_runtime_path,
     get_artist_checkpoint_path,
     get_artist_class_mapping_path,
+    get_cl_tagger_v2_checkpoint_path,
     get_clip_local_model_path,
+    get_clip_text_local_model_path,
     get_default_legacy_model_path,
+    get_florence2_checkpoint_path,
+    get_lucida_checkpoint_path,
     get_sam3_checkpoint_path,
 )
 
@@ -102,6 +114,49 @@ SAM3_REQUIRED_MODULES = (
 )
 
 SAM3_IMPORT_TO_PACKAGE = dict(SAM3_REQUIRED_MODULES)
+
+LUCIDA_REQUIRED_MODULES = (
+    "torch",
+    "torchvision",
+    "transformers",
+    "timm",
+    "safetensors",
+    "kornia",
+    "einops",
+)
+
+FLORENCE2_REQUIRED_MODULES = (
+    "torch",
+    "transformers",
+    "timm",
+    "einops",
+    "safetensors",
+    "huggingface_hub",
+)
+
+# These are the files consumed by the actual local loaders. Keep optional Hub
+# metadata out of readiness so a usable checkpoint is not reported missing.
+SAM3_CHECKPOINT_REQUIRED_FILES = (
+    "config.json",
+    "model.safetensors",
+    "processor_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.json",
+    "merges.txt",
+    "special_tokens_map.json",
+)
+TORIIGATE_REQUIRED_FILES = (
+    "config.json",
+    "model.safetensors",
+    "preprocessor_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.json",
+    "merges.txt",
+    "chat_template.jinja",
+)
+OPPAI_ORACLE_REQUIRED_FILES = ("model.onnx", "selected_tags.csv")
 
 
 class TorchOnnxRuntimeHealth(TypedDict):
@@ -168,6 +223,29 @@ def _sam3_supported_on_platform() -> bool:
     return sys.platform != "darwin"
 
 
+def _sam3_runtime_import_ready() -> bool:
+    """Check the concrete SAM3 modules used by the segmenter without loading them."""
+    required_modules = (
+        "transformers.models.sam3.modeling_sam3",
+        "transformers.models.sam3.image_processing_sam3",
+        "transformers.models.sam3.processing_sam3",
+    )
+    try:
+        return all(importlib.util.find_spec(module_name) is not None for module_name in required_modules)
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
+
+
+def _clip_text_model_loaded() -> bool:
+    """Check whether the FastEmbed CLIP text singleton is loaded in memory."""
+    try:
+        from similarity import _text_embed_model
+
+        return _text_embed_model is not None
+    except Exception:
+        return False
+
+
 def _format_sam3_readiness_message(
     *,
     checkpoint_path: Optional[str],
@@ -203,20 +281,45 @@ def _format_sam3_readiness_message(
 def get_model_health() -> Dict[str, Any]:
     """Return a machine-readable summary of local model readiness."""
     clip_model_path = get_clip_local_model_path()
+    clip_text_model_path = get_clip_text_local_model_path()
     default_tagger_dir = Path(get_wd14_model_dir()) / DEFAULT_TAGGER_MODEL
     default_tagger_model = default_tagger_dir / TAGGER_MODELS[DEFAULT_TAGGER_MODEL]["model_file"]
     default_tagger_tags = default_tagger_dir / TAGGER_MODELS[DEFAULT_TAGGER_MODEL]["tags_file"]
     toriigate_dir = Path(get_toriigate_model_dir()) / "toriigate-0.5"
+    florence2_checkpoint = get_florence2_checkpoint_path()
     oppai_oracle_root = Path(get_oppai_oracle_model_dir()) / "oppai-oracle-v1.1" / "V1.1_onnx"
     oppai_oracle_model = oppai_oracle_root / "model.onnx"
     oppai_oracle_tags = oppai_oracle_root / "selected_tags.csv"
     legacy_model_path = get_default_legacy_model_path()
     nudenet_model = Path(get_nudenet_model_dir()) / "320n.onnx"
     sam3_checkpoint = get_sam3_checkpoint_path()
+    lucida_checkpoint = get_lucida_checkpoint_path()
+    cl_tagger_v2_checkpoint = get_cl_tagger_v2_checkpoint_path()
     artist_runtime_path = _resolve_artist_runtime_path()
     artist_checkpoint = get_artist_checkpoint_path()
     artist_class_mapping = get_artist_class_mapping_path()
 
+    default_tagger_required_files = (
+        TAGGER_MODELS[DEFAULT_TAGGER_MODEL]["model_file"],
+        TAGGER_MODELS[DEFAULT_TAGGER_MODEL]["tags_file"],
+    )
+    default_tagger_missing = missing_model_artifacts(
+        default_tagger_dir,
+        default_tagger_required_files,
+    )
+    toriigate_missing = missing_model_artifacts(
+        toriigate_dir,
+        TORIIGATE_REQUIRED_FILES,
+    )
+    oppai_oracle_missing = missing_model_artifacts(
+        oppai_oracle_root,
+        OPPAI_ORACLE_REQUIRED_FILES,
+    )
+    nudenet_missing = (
+        ("320n.onnx",)
+        if not is_nonempty_model_file(nudenet_model)
+        else ()
+    )
     torch_state = get_torch_onnx_runtime_health()
     torch_version = torch_state.get("torch_version")
     torch_cuda_build = torch_state.get("torch_cuda_build")
@@ -235,6 +338,105 @@ def get_model_health() -> Dict[str, Any]:
             elif not _module_installed(module_name):
                 sam3_missing.append(module_name)
     sam3_missing_packages = _sam3_missing_dependency_packages(sam3_missing)
+    sam3_runtime_import_ready = _sam3_runtime_import_ready()
+    sam3_message = (
+        "SAM3 runtime modules are not importable in this Python environment. "
+        "Install transformers >=5.6 and restart the app."
+        if (
+            sam3_supported
+            and bool(sam3_checkpoint)
+            and not sam3_missing
+            and cuda_available
+            and runtime_compatible
+            and not sam3_runtime_import_ready
+        )
+        else _format_sam3_readiness_message(
+            checkpoint_path=sam3_checkpoint,
+            missing_packages=sam3_missing_packages,
+            cuda_available=cuda_available,
+            uses_cpu_only_torch=uses_cpu_only_torch,
+            supported_on_platform=sam3_supported,
+        )
+    )
+
+    lucida_missing = [
+        module_name
+        for module_name in LUCIDA_REQUIRED_MODULES
+        if not _module_installed(module_name)
+    ]
+    if runtime_compatibility_error:
+        lucida_message = runtime_compatibility_error
+    elif not lucida_checkpoint and lucida_missing:
+        lucida_message = (
+            "Lucida model files and runtime packages are missing: "
+            + ", ".join(lucida_missing)
+            + ". Run Prepare / Download."
+        )
+    elif not lucida_checkpoint:
+        lucida_message = "Lucida model files are missing. Run Prepare / Download in Model Manager."
+    elif lucida_missing:
+        lucida_message = (
+            "Lucida model files are installed, but runtime packages are missing: "
+            + ", ".join(lucida_missing)
+            + ". Run Prepare / Download, then restart the app."
+        )
+    else:
+        lucida_message = "Lucida pinned model files and runtime dependencies are ready."
+
+    florence2_missing = [
+        module_name
+        for module_name in FLORENCE2_REQUIRED_MODULES
+        if not _module_installed(module_name)
+    ]
+    if runtime_compatibility_error:
+        florence2_message = runtime_compatibility_error
+    elif not florence2_checkpoint and florence2_missing:
+        florence2_message = (
+            "Florence-2 Base model files and runtime packages are missing: "
+            + ", ".join(florence2_missing)
+            + ". Run Prepare / Download."
+        )
+    elif not florence2_checkpoint:
+        florence2_message = (
+            "Florence-2 Base model files are missing. Run Prepare / Download "
+            "in Model Manager."
+        )
+    elif florence2_missing:
+        florence2_message = (
+            "Florence-2 Base model files are installed, but runtime packages "
+            "are missing: "
+            + ", ".join(florence2_missing)
+            + ". Run Prepare / Download, then restart the app."
+        )
+    else:
+        florence2_message = (
+            "Florence-2 Base pinned model files and runtime dependencies are ready."
+        )
+
+    cl_tagger_v2_missing = [
+        module_name
+        for module_name in CL_TAGGER_V2_REQUIRED_MODULES
+        if not _module_installed(module_name)
+    ]
+    if not cl_tagger_v2_checkpoint and cl_tagger_v2_missing:
+        cl_tagger_v2_message = (
+            "CL Tagger v2 model files and runtime packages are missing: "
+            + ", ".join(cl_tagger_v2_missing)
+            + ". Run Prepare / Download."
+        )
+    elif not cl_tagger_v2_checkpoint:
+        cl_tagger_v2_message = (
+            "CL Tagger v2 model files are missing. Run Prepare / Download and accept "
+            "the official Hugging Face model terms."
+        )
+    elif cl_tagger_v2_missing:
+        cl_tagger_v2_message = (
+            "CL Tagger v2 files are installed, but runtime packages are missing: "
+            + ", ".join(cl_tagger_v2_missing)
+            + ". Run Prepare / Download, then restart the app."
+        )
+    else:
+        cl_tagger_v2_message = "CL Tagger v2 pinned files and ONNX Runtime are ready."
 
     artist_missing = []
     if not torch_version and not _module_installed("torch"):
@@ -260,27 +462,37 @@ def get_model_health() -> Dict[str, Any]:
     else:
         legacy_message = "No legacy YOLO model found in models/yolo."
 
+    def _tagger_model_root(model_config: Dict[str, Any]) -> Path:
+        base_dir = (
+            get_cl_tagger_v2_model_dir()
+            if model_config.get("runtime_backend") == "cl-tagger-v2"
+            else get_wd14_model_dir()
+        )
+        return Path(base_dir)
+
     health = {
         "wd14": {
             "default_model": DEFAULT_TAGGER_MODEL,
-            "available": default_tagger_model.exists() and default_tagger_tags.exists(),
-            "model_path": str(default_tagger_model.resolve()) if default_tagger_model.exists() else None,
-            "tags_path": str(default_tagger_tags.resolve()) if default_tagger_tags.exists() else None,
+            "available": not default_tagger_missing,
+            "model_path": str(default_tagger_model.resolve()) if is_nonempty_model_file(default_tagger_model) else None,
+            "tags_path": str(default_tagger_tags.resolve()) if is_nonempty_model_file(default_tagger_tags) else None,
             "installed_models": [
                 {
                     "name": model_name,
-                    "available": (
-                        (Path(get_wd14_model_dir()) / model_name / config["model_file"]).exists()
-                        and (Path(get_wd14_model_dir()) / model_name / config["tags_file"]).exists()
-                    ),
+                    "available": not missing_files,
                 }
                 for model_name, config in TAGGER_MODELS.items()
+                for missing_files in (
+                    missing_model_artifacts(
+                        _tagger_model_root(config) / model_name,
+                        (config["model_file"], config["tags_file"]),
+                    ),
+                )
             ],
         },
         "toriigate": {
             "available": (
-                (toriigate_dir / "config.json").exists()
-                and (toriigate_dir / "model.safetensors").exists()
+                not toriigate_missing
                 and _module_installed("transformers")
                 and (bool(torch_version) or _module_installed("torch"))
                 and runtime_compatible
@@ -298,59 +510,118 @@ def get_model_health() -> Dict[str, Any]:
                 or (
                     "ToriiGate runtime files are ready."
                     if (
-                        (toriigate_dir / "config.json").exists()
-                        and (toriigate_dir / "model.safetensors").exists()
+                        not toriigate_missing
                     )
                     else "ToriiGate files are not downloaded yet. The first run will need a large model download."
                 )
             ),
         },
+        "florence2": {
+            "available": (
+                bool(florence2_checkpoint)
+                and not florence2_missing
+                and runtime_compatible
+            ),
+            "model_name": "florence-community/Florence-2-base",
+            "checkpoint_path": florence2_checkpoint,
+            "expected_path": str(Path(get_florence2_model_dir())),
+            "missing_dependencies": florence2_missing,
+            "requires_gpu": False,
+            "cuda_available": cuda_available,
+            "torch_version": torch_version,
+            "torch_cuda_build": torch_cuda_build,
+            "runtime_compatible": runtime_compatible,
+            "runtime_compatibility_error": runtime_compatibility_error,
+            "message": florence2_message,
+        },
         "oppai_oracle": {
-            "available": oppai_oracle_model.exists() and oppai_oracle_tags.exists(),
+            "available": not oppai_oracle_missing,
             "model_name": "oppai-oracle-v1.1",
             "model_dir": str((Path(get_oppai_oracle_model_dir()) / "oppai-oracle-v1.1").resolve()),
-            "model_path": str(oppai_oracle_model.resolve()) if oppai_oracle_model.exists() else None,
-            "tags_path": str(oppai_oracle_tags.resolve()) if oppai_oracle_tags.exists() else None,
+            "model_path": str(oppai_oracle_model.resolve()) if is_nonempty_model_file(oppai_oracle_model) else None,
+            "tags_path": str(oppai_oracle_tags.resolve()) if is_nonempty_model_file(oppai_oracle_tags) else None,
             "requires_gpu": False,
             "expected_size_mb": 947,
             # P3-7: message_key lets the UI localize; English message stays fallback.
             "message_key": (
                 "models.oppai.ready"
-                if oppai_oracle_model.exists() and oppai_oracle_tags.exists()
+                if not oppai_oracle_missing
                 else "models.oppai.missing"
             ),
             "message": (
                 "OppaiOracle V1.1 ONNX bundle is ready."
-                if oppai_oracle_model.exists() and oppai_oracle_tags.exists()
+                if not oppai_oracle_missing
                 else "OppaiOracle V1.1 (~947 MB ONNX) is not downloaded yet."
             ),
         },
         "clip": {
             "available": bool(clip_model_path) and _module_installed("fastembed"),
             "model_downloaded": bool(clip_model_path),
+            "feature_ready": (
+                bool(clip_model_path)
+                and bool(clip_text_model_path)
+                and _module_installed("fastembed")
+            ),
+            "text_model_downloaded": bool(clip_text_model_path),
             "runtime_available": _module_installed("fastembed"),
             "runtime_loaded": _clip_model_loaded(),
+            "text_runtime_loaded": _clip_text_model_loaded(),
             "model_name": CLIP_MODEL_NAME,
             "model_path": clip_model_path,
+            "text_model_name": CLIP_TEXT_MODEL_NAME,
+            "text_model_path": clip_text_model_path,
             "expected_path": str(Path(get_clip_model_dir()) / CLIP_MODEL_NAME.replace("/", "-").replace("\\", "-")),
+            "expected_text_path": str(Path(get_clip_model_dir()) / CLIP_TEXT_MODEL_NAME.replace("/", "-").replace("\\", "-")),
             "message_key": (
                 "models.clip.ready"
-                if clip_model_path and _module_installed("fastembed")
+                if clip_model_path and clip_text_model_path and _module_installed("fastembed")
                 else (
                     "models.clip.missingRuntime"
-                    if clip_model_path
-                    else "models.clip.missingModel"
+                    if clip_model_path and clip_text_model_path
+                    else (
+                        "models.clip.missingText"
+                        if clip_model_path
+                        else "models.clip.missingModel"
+                    )
                 )
             ),
             "message": (
-                "Local CLIP model ready."
-                if clip_model_path and _module_installed("fastembed")
+                "Local CLIP vision and text models are ready."
+                if clip_model_path and clip_text_model_path and _module_installed("fastembed")
                 else (
                     "CLIP model files are downloaded, but the FastEmbed runtime is missing."
-                    if clip_model_path
-                    else "Local CLIP model is missing. Similar search will need a first-run download."
+                    if clip_model_path and clip_text_model_path
+                    else (
+                        "CLIP vision files are ready, but the text-query model is incomplete. Run Prepare / Download."
+                        if clip_model_path
+                        else "Local CLIP model is missing. Run Prepare / Download before using similarity search."
+                    )
                 )
             ),
+        },
+        "lucida": {
+            "available": bool(lucida_checkpoint) and not lucida_missing and runtime_compatible,
+            "checkpoint_path": lucida_checkpoint,
+            "expected_path": str(Path(get_lucida_model_dir())),
+            "missing_dependencies": lucida_missing,
+            "cuda_available": cuda_available,
+            "requires_gpu": False,
+            "runtime_compatible": runtime_compatible,
+            "runtime_compatibility_error": runtime_compatibility_error,
+            "message": lucida_message,
+        },
+        "cl_tagger_v2": {
+            "available": bool(cl_tagger_v2_checkpoint) and not cl_tagger_v2_missing,
+            "model_name": "cl-tagger-v2",
+            "checkpoint_path": cl_tagger_v2_checkpoint,
+            "expected_path": str(
+                Path(get_cl_tagger_v2_model_dir()) / "cl-tagger-v2"
+            ),
+            "missing_dependencies": cl_tagger_v2_missing,
+            "requires_gpu": False,
+            "gated_download": True,
+            "official_download_only": True,
+            "message": cl_tagger_v2_message,
         },
         "censor": {
             "legacy": {
@@ -374,11 +645,11 @@ def get_model_health() -> Dict[str, Any]:
             },
             "nudenet": {
                 "available": _module_installed("nudenet"),
-                "model_downloaded": nudenet_model.exists(),
-                "model_path": str(nudenet_model.resolve()) if nudenet_model.exists() else None,
+                "model_downloaded": not nudenet_missing,
+                "model_path": str(nudenet_model.resolve()) if not nudenet_missing else None,
                 "message": (
                     "NudeNet runtime is ready."
-                    if _module_installed("nudenet") and nudenet_model.exists()
+                    if _module_installed("nudenet") and not nudenet_missing
                     else (
                         "NudeNet runtime is installed. The detector can still prepare/download its model on first use."
                         if _module_installed("nudenet")
@@ -402,6 +673,7 @@ def get_model_health() -> Dict[str, Any]:
                     sam3_supported
                     and bool(sam3_checkpoint)
                     and not sam3_missing
+                    and sam3_runtime_import_ready
                     and cuda_available
                     and runtime_compatible
                 ),
@@ -418,13 +690,7 @@ def get_model_health() -> Dict[str, Any]:
                 "runtime_compatibility_error": runtime_compatibility_error,
                 "message": (
                     runtime_compatibility_error
-                    or _format_sam3_readiness_message(
-                        checkpoint_path=sam3_checkpoint,
-                        missing_packages=sam3_missing_packages,
-                        cuda_available=cuda_available,
-                        uses_cpu_only_torch=uses_cpu_only_torch,
-                        supported_on_platform=sam3_supported,
-                    )
+                    or sam3_message
                 ),
                 "runtime_note": (
                     "SAM3 is currently only prepared on Windows/Linux CUDA environments."

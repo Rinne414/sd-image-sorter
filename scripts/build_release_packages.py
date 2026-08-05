@@ -113,7 +113,22 @@ DOC_FILES = {
     "models/yolo/README.md",
     "models/artist/README.md",
 }
-MODEL_ARTIFACT_POLICY_VERSION = 1
+MODEL_ARTIFACT_POLICY_VERSION = 2
+MODEL_DOWNLOAD_IDS = (
+    "wd14",
+    "censor-nudenet",
+    "clip",
+    "aesthetic",
+    "artist",
+    "sam3",
+    "florence2",
+    "lucida",
+    "cl-tagger-v2",
+)
+FORBIDDEN_MODEL_PREFIXES = (
+    "models/",
+    "data/models/",
+)
 
 EXCLUDED_PREFIXES = (
     ".git",
@@ -125,6 +140,7 @@ EXCLUDED_PREFIXES = (
     # first build, caught by the pre-release package QA. (Prefixes match
     # whole path segments; loose root files go in EXCLUDED_FILES below.)
     "design_handoff_extract",
+    "metadata missing",
     "artifacts",
     "data",
     "backend/data",
@@ -168,6 +184,9 @@ EXCLUDED_SUFFIXES = {
     ".pyc",
     ".pyo",
     ".log",
+    ".db-wal",
+    ".db-shm",
+    ".db-journal",
 }
 
 EXCLUDED_FILES = {
@@ -279,34 +298,22 @@ def is_model_payload_path(relative_path: str | Path) -> bool:
 
 
 def build_model_artifact_policy(managed_paths: Iterable[str], *, include_model_payloads: bool = False) -> dict:
-    """Describe release model delivery so packages do not pretend bundled models exist."""
+    """Describe the application-only model delivery contract."""
+    if include_model_payloads:
+        raise ValueError(
+            "Model payload redistribution is disabled; models must be downloaded by the app."
+        )
     managed_model_paths = sorted(path for path in managed_paths if is_model_payload_path(path))
     return {
         "version": MODEL_ARTIFACT_POLICY_VERSION,
+        "delivery": "application_prepare_only",
         "default_packages_include_model_payloads": bool(include_model_payloads),
         "runtime_model_root": "data/models",
         "managed_model_payload_paths": managed_model_paths,
-        "auto_download_model_paths": sorted(path for path in CORE_MODEL_FILES if is_model_payload_path(path)),
-        "optional_release_assets": [
-            {
-                "name": "wd14-eva02-model",
-                "paths": sorted(path for path in EVA_MODEL_FILES if is_model_payload_path(path)),
-            },
-            {
-                "name": "artist-runtime",
-                "paths": sorted(path for path in ARTIST_RUNTIME_FILES if is_model_payload_path(path)),
-            },
-            {
-                "name": "kaloscope-checkpoint",
-                "paths": [LARGE_MODEL_FILES["kaloscope"]],
-                "split": True,
-            },
-            {
-                "name": "sam3-modelscope-sam3pt",
-                "paths": [LARGE_MODEL_FILES["sam3"]],
-                "split": True,
-            },
-        ],
+        "download_model_ids": list(MODEL_DOWNLOAD_IDS),
+        "auto_download_model_paths": [],
+        "optional_release_assets": [],
+        "forbidden_model_prefixes": list(FORBIDDEN_MODEL_PREFIXES),
     }
 
 
@@ -601,6 +608,10 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             "echo    SD Image Sorter - Portable Launch\n"
             "echo ==========================================\n"
             "echo.\n"
+            "echo   Welcome. This portable package contains no model weights.\n"
+            "echo   Use Model Manager to select and download models from official sources.\n"
+            "echo   This window shows download progress, file checks, and restart notices.\n"
+            "echo.\n"
             "\n"
             "set \"ROOT_DIR=%~dp0\"\n"
             "cd /d \"!ROOT_DIR!\"\n"
@@ -633,6 +644,9 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             "set \"SD_IMAGE_SORTER_SAM3_MODEL_DIR=!MODELS_DIR!\\sam3\"\n"
             "set \"SD_IMAGE_SORTER_NUDENET_MODEL_DIR=!MODELS_DIR!\\nudenet\"\n"
             "set \"SD_IMAGE_SORTER_TORIIGATE_MODEL_DIR=!MODELS_DIR!\\toriigate\"\n"
+            "set \"SD_IMAGE_SORTER_FLORENCE2_MODEL_DIR=!MODELS_DIR!\\florence2\"\n"
+            "set \"SD_IMAGE_SORTER_LUCIDA_MODEL_DIR=!MODELS_DIR!\\lucida\"\n"
+            "set \"SD_IMAGE_SORTER_CL_TAGGER_V2_MODEL_DIR=!MODELS_DIR!\\cl-tagger-v2\"\n"
             "set \"SD_IMAGE_SORTER_CACHE_DIR=!CACHE_DIR!\"\n"
             "set \"HF_HOME=!DATA_DIR!\\hf\"\n"
             "set \"TRANSFORMERS_CACHE=!DATA_DIR!\\hf\\transformers\"\n"
@@ -839,6 +853,7 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             "echo   SD Image Sorter is starting!\n"
             "echo.\n"
             "echo   Open browser: !APP_URL!\n"
+            "echo   Keep this window open while Model Manager downloads files.\n"
             "echo   Press Ctrl+C to stop the server.\n"
             "echo ==========================================\n"
             "echo.\n"
@@ -955,6 +970,9 @@ export SD_IMAGE_SORTER_ARTIST_MODEL_DIR="$MODELS_DIR/artist"
 export SD_IMAGE_SORTER_SAM3_MODEL_DIR="$MODELS_DIR/sam3"
 export SD_IMAGE_SORTER_NUDENET_MODEL_DIR="$MODELS_DIR/nudenet"
 export SD_IMAGE_SORTER_TORIIGATE_MODEL_DIR="$MODELS_DIR/toriigate"
+export SD_IMAGE_SORTER_FLORENCE2_MODEL_DIR="$MODELS_DIR/florence2"
+export SD_IMAGE_SORTER_LUCIDA_MODEL_DIR="$MODELS_DIR/lucida"
+export SD_IMAGE_SORTER_CL_TAGGER_V2_MODEL_DIR="$MODELS_DIR/cl-tagger-v2"
 export SD_IMAGE_SORTER_CACHE_DIR="$CACHE_DIR"
 export HF_HOME="$DATA_DIR/hf"
 export TRANSFORMERS_CACHE="$DATA_DIR/hf/transformers"
@@ -966,6 +984,10 @@ export TMPDIR="$TMP_DIR"
 echo "=========================================="
 echo "   SD Image Sorter - Portable Launch (Linux)"
 echo "=========================================="
+echo
+echo "  Welcome. This portable package contains no model weights."
+echo "  Use Model Manager to select and download models from official sources."
+echo "  This terminal shows download progress, file checks, and restart notices."
 echo
 
 PYTHON_DIR="$ROOT_DIR/python"
@@ -1106,6 +1128,7 @@ cat <<EOF
   SD Image Sorter is starting!
 
   Open browser: $APP_URL
+  Keep this terminal open while Model Manager downloads files.
   Press Ctrl+C to stop the server.
 ==========================================
 EOF

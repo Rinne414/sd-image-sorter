@@ -48,6 +48,7 @@ from services.smart_tag.sources import _iter_request_source_chunks, _iter_window
 from services.smart_tag.tagging import (
     SMART_TAG_TAG_BATCH_SIZE,
     _apply_memory_pressure,
+    _load_florence2_for_phase2,
     _load_toriigate_for_phase2,
     _recommended_tag_batch_size,
     _release_booru_sessions,
@@ -73,6 +74,7 @@ SMART_TAG_FINISHED_JOBS_KEPT = 5
 # moving, while still giving the GPU a full batch and the VLM up to
 # `concurrent_requests` parallel calls per window.
 SMART_TAG_PIPELINE_WINDOW = 64
+LOCAL_CAPTION_MODES = frozenset({"toriigate", "florence2"})
 
 
 _jobs_lock = threading.Lock()
@@ -236,7 +238,7 @@ def _persist_booru_only(
     pending_items: List[Tuple[str, int, str, Dict[str, Any]]],
 ) -> None:
     """Persist tag-only captions for items whose NL phase could not run, so a
-    failed ToriiGate load doesn't throw away a completed booru pass."""
+    failed local-captioner load doesn't throw away a completed booru pass."""
     ctx = _build_caption_phase(req, None, None)
     for win_start in range(0, len(pending_items), SMART_TAG_PIPELINE_WINDOW):
         _run_caption_phase(
@@ -247,23 +249,45 @@ def _persist_booru_only(
         )
 
 
-def _run_two_phase_toriigate_pipeline(
+def _local_captioner_label(req: "SmartTagRequest") -> str:
+    if req.natural_language_mode == "toriigate":
+        return "ToriiGate"
+    if req.natural_language_mode == "florence2":
+        return "Florence-2 Base"
+    raise ValueError(
+        "Local caption pipeline requires natural_language_mode 'toriigate' "
+        f"or 'florence2'; received {req.natural_language_mode!r}."
+    )
+
+
+def _load_local_captioner_for_phase2(
+    job: SmartTagJobState,
+    req: "SmartTagRequest",
+):
+    if req.natural_language_mode == "toriigate":
+        return _load_toriigate_for_phase2(job, req)
+    if req.natural_language_mode == "florence2":
+        return _load_florence2_for_phase2(job, req)
+    raise ValueError(
+        "Unsupported local caption mode: "
+        f"{req.natural_language_mode!r}."
+    )
+
+
+def _run_two_phase_local_captioner_pipeline(
     job: SmartTagJobState,
     req: "SmartTagRequest",
     *,
     tagger,
 ) -> None:
-    """Two-phase Smart Tag for the local ToriiGate mode (v3.4.3).
+    """Two-phase Smart Tag for a local natural-language captioner.
 
     Phase 1 tags EVERY window with the booru tagger, then the booru session is
-    fully released; only then is ToriiGate loaded for phase 2 captions. The
-    old single-pass pipeline kept WD14 (ONNX) and ToriiGate (a ~9.6 GB torch
-    model) co-resident for the whole job — on midrange machines that ended in
-    a GPU driver reset, or in a ~20 GB fp32 CPU fallback that exhausted system
-    RAM ("black screen" reports). The window structure is for the cloud-VLM
-    mode, which is just an HTTP client and keeps the interleaved pipeline.
+    fully released; only then is the selected local captioner loaded for phase
+    2. The cloud-VLM mode remains interleaved because it is only an HTTP client.
     Sets the terminal job status itself.
     """
+    captioner_label = _local_captioner_label(req)
     booru_batch_size = (
         _recommended_tag_batch_size(
             getattr(tagger, "model_name", "") or req.tagger_model or "", req.use_gpu
@@ -318,7 +342,7 @@ def _run_two_phase_toriigate_pipeline(
         job.message = "Cancelled by user."
         return
 
-    # Residency handoff: booru session out BEFORE ToriiGate hauls its weights in.
+    # Residency handoff: booru session out before the local captioner loads.
     if tagger is not None:
         _release_booru_sessions([tagger])
 
@@ -326,19 +350,22 @@ def _run_two_phase_toriigate_pipeline(
     job.processed = job.skipped
     job.phase_completion = 0.0
     try:
-        nl_tagger = _load_toriigate_for_phase2(job, req)
+        nl_tagger = _load_local_captioner_for_phase2(job, req)
     except Exception as exc:  # noqa: BLE001
-        logger.error("ToriiGate load failed after the booru phase: %s", exc)
+        logger.error("%s load failed after the booru phase: %s", captioner_label, exc)
         _persist_booru_only(job, req, pending_items)
         job.status = "failed"
         job.message = (
-            "Booru tags were saved, but the ToriiGate caption phase could not "
+            f"Booru tags were saved, but the {captioner_label} caption phase could not "
             f"start: {exc}"
         )
         return
 
     ctx = _build_caption_phase(req, None, nl_tagger)
-    job.message = f"Phase 2/2: captioning {len(pending_items)} image(s) with ToriiGate..."
+    job.message = (
+        f"Phase 2/2: captioning {len(pending_items)} image(s) "
+        f"with {captioner_label}..."
+    )
     for win_start in range(0, len(pending_items), SMART_TAG_PIPELINE_WINDOW):
         if job.cancel_requested:
             break
@@ -350,6 +377,18 @@ def _run_two_phase_toriigate_pipeline(
         )
 
     job.status, job.message = _terminal_job_outcome(job, req)
+
+
+def _run_two_phase_toriigate_pipeline(
+    job: SmartTagJobState,
+    req: "SmartTagRequest",
+    *,
+    tagger,
+) -> None:
+    """Compatibility wrapper for the historical ToriiGate test seam."""
+    if req.natural_language_mode != "toriigate":
+        raise ValueError("ToriiGate pipeline requires natural_language_mode='toriigate'.")
+    _run_two_phase_local_captioner_pipeline(job, req, tagger=tagger)
 
 
 def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
@@ -382,12 +421,15 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                 if hasattr(tagger, "load"):
                     tagger.load()
         if req.enable_vlm:
-            if req.natural_language_mode == "toriigate":
+            if req.natural_language_mode in LOCAL_CAPTION_MODES:
                 # v3.4.3 two-phase contract: ToriiGate (~9.6 GB) loads only
                 # AFTER the booru phase finishes and its session is released —
                 # never alongside WD14. See _run_two_phase_toriigate_pipeline /
                 # _load_toriigate_for_phase2. nl_tagger stays None here.
-                job.message = "ToriiGate will load after the booru tagging phase..."
+                captioner_label = _local_captioner_label(req)
+                job.message = (
+                    f"{captioner_label} will load after the booru tagging phase..."
+                )
             else:
                 job.message = "Loading VLM provider..."
                 try:
@@ -541,19 +583,24 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                 # Two-phase residency contract (v3.4.3): the booru sessions go
                 # out before ToriiGate loads; a failed load still persists the
                 # finished booru pass instead of discarding it.
-                if req.enable_vlm and req.natural_language_mode == "toriigate":
+                if req.enable_vlm and req.natural_language_mode in LOCAL_CAPTION_MODES:
                     _release_booru_sessions(used_taggers)
                     job.stage = "vlm"
                     job.processed = job.skipped
                     job.phase_completion = 0.0
                     try:
-                        nl_tagger = _load_toriigate_for_phase2(job, req)
+                        nl_tagger = _load_local_captioner_for_phase2(job, req)
                     except Exception as exc:  # noqa: BLE001
-                        logger.error("ToriiGate load failed after the booru phase: %s", exc)
+                        captioner_label = _local_captioner_label(req)
+                        logger.error(
+                            "%s load failed after the booru phase: %s",
+                            captioner_label,
+                            exc,
+                        )
                         _persist_booru_only(job, req, pending_items)
                         job.status = "failed"
                         job.message = (
-                            "Booru tags were saved, but the ToriiGate caption "
+                            f"Booru tags were saved, but the {captioner_label} caption "
                             f"phase could not start: {exc}"
                         )
                         return
@@ -583,6 +630,8 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
             # booru session → load ToriiGate → caption all) so the two heavy
             # models are never resident together. Sets terminal status itself.
             _run_two_phase_toriigate_pipeline(job, req, tagger=tagger)
+        elif req.enable_vlm and req.natural_language_mode == "florence2":
+            _run_two_phase_local_captioner_pipeline(job, req, tagger=tagger)
         else:
             # Single-tagger / no-tagger path: GPU-batched booru tagging +
             # concurrent VLM captioning (see _run_windowed_pipeline). It sets

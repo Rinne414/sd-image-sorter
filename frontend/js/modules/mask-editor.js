@@ -5,9 +5,8 @@
  * white = train, black = ignore. This modal edits that mask on a canvas:
  * the stored mask (or a fresh all-white one) renders as a red overlay on
  * the EXCLUDED regions, include/exclude brushes paint white/black, and
- * "auto subject" asks the backend's rembg endpoint for a starting mask
- * (opt-in dependency — errors surface verbatim, including the install
- * hint). Nothing persists until Save (PUT /api/masks/{id}).
+ * "auto subject" asks the selected rembg or Lucida backend for a starting
+ * mask. Nothing persists until Save (PUT /api/masks/{id}).
  *
  * Entry point: the 🎭 button in the Dataset Maker editor pane, shown for
  * gallery images only (local imports have no stored masks). Wired through
@@ -21,6 +20,21 @@
             const lang = window.I18n?.getLang?.() || document.documentElement.lang || '';
             return String(lang).toLowerCase().startsWith('zh') ? zh : en;
         } catch (_) { return en; }
+    }
+
+    function selectedAutoMethod() {
+        const select = document.getElementById('mask-auto-method');
+        const method = String(select?.value || '').trim().toLowerCase();
+        if (method !== 'rembg' && method !== 'lucida') {
+            throw new Error(`Unsupported auto-mask engine: ${method || '(empty)'}`);
+        }
+        return method;
+    }
+
+    function syncLucidaLicense() {
+        const license = document.getElementById('mask-lucida-license');
+        if (!license) return;
+        license.hidden = document.getElementById('mask-auto-method')?.value !== 'lucida';
     }
 
     const MaskEditor = {
@@ -54,6 +68,8 @@
             document.getElementById('mask-tool-invert')?.addEventListener('click', () => this._invert());
             document.getElementById('mask-tool-fill')?.addEventListener('click', () => this._fillWhite());
             document.getElementById('mask-tool-auto')?.addEventListener('click', () => this._autoMask());
+            document.getElementById('mask-auto-method')?.addEventListener('change', syncLucidaLicense);
+            syncLucidaLicense();
             const size = document.getElementById('mask-brush-size');
             size?.addEventListener('input', () => {
                 this._brushSize = Number(size.value) || 40;
@@ -115,6 +131,7 @@
             if (!modal) return;
             this._imageId = imageId;
             this._dirty = false;
+            syncLucidaLicense();
             modal.hidden = false;
             this._status(t('Loading image…', '加载图片中…'));
             try {
@@ -267,15 +284,25 @@
 
         async _autoMask() {
             if (!this._imageId) return;
+            let method;
+            try {
+                method = selectedAutoMethod();
+            } catch (e) {
+                this._status(String(e.message || e));
+                return;
+            }
             const button = document.getElementById('mask-tool-auto');
             if (button) button.disabled = true;
-            this._status(t('Generating subject mask (first run downloads the u2net model)…',
-                '生成主体遮罩中（首次会下载 u2net 模型）…'));
+            this._status(method === 'lucida'
+                ? t('Generating Lucida subject mask with the prepared model…',
+                    '正在使用已准备的 Lucida 模型生成主体遮罩…')
+                : t('Generating subject mask (first run downloads the u2net model)…',
+                    '生成主体遮罩中（首次会下载 u2net 模型）…'));
             try {
                 const response = await fetch(`/api/masks/${this._imageId}/auto`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ method: 'rembg' }),
+                    body: JSON.stringify({ method }),
                 });
                 const body = await response.json().catch(() => ({}));
                 if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
