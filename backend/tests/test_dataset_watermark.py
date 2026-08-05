@@ -75,7 +75,14 @@ def test_dataset_request_defaults_watermark_removal_to_disabled() -> None:
     }
 
 
-def test_dataset_watermark_removal_requires_folder_copy(tmp_path: Path, test_db) -> None:
+def test_dataset_watermark_removal_requires_folder_copy(
+    tmp_path: Path,
+    test_db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Validation checks OpenCV availability before output_mode. Stub cv2 so
+    # runners without opencv-python still pin the folder-mode contract.
+    _install_fake_cv2(monkeypatch)
     image_id, _source = _stage_image(tmp_path)
     request = DatasetExportRequest.model_validate({
         "image_ids": [image_id],
@@ -85,6 +92,25 @@ def test_dataset_watermark_removal_requires_folder_copy(tmp_path: Path, test_db)
     })
 
     with pytest.raises(HTTPException, match="output_mode='folder'"):
+        _validate_export_request_read_only(request)
+
+
+def test_dataset_watermark_removal_requires_opencv(
+    tmp_path: Path,
+    test_db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Force the dependency gate regardless of whether the host has OpenCV.
+    monkeypatch.setitem(sys.modules, "cv2", None)
+    image_id, _source = _stage_image(tmp_path)
+    request = DatasetExportRequest.model_validate({
+        "image_ids": [image_id],
+        "output_folder": str(tmp_path / "out"),
+        "image_op": "copy",
+        "watermark_removal": _removal_settings(),
+    })
+
+    with pytest.raises(HTTPException, match="OpenCV and NumPy"):
         _validate_export_request_read_only(request)
 
 
