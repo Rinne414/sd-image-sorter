@@ -1,8 +1,12 @@
 """CPU-only tests for deterministic watermark transforms."""
 from __future__ import annotations
 
-from PIL import Image, ImageChops, ImageDraw
+import sys
+from types import SimpleNamespace
+
+import numpy as np
 import pytest
+from PIL import Image, ImageChops, ImageDraw
 
 from services.watermark_service import (
     TextWatermarkConfig,
@@ -12,6 +16,31 @@ from services.watermark_service import (
     apply_text_watermark,
     apply_watermark_removal,
 )
+
+
+def _install_fake_cv2(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub OpenCV so runners without opencv-python still exercise removal logic."""
+
+    def rectangle(mask, pt1, pt2, color, thickness=-1):  # noqa: ARG001
+        x1, y1 = pt1
+        x2, y2 = pt2
+        mask[y1 : y2 + 1, x1 : x2 + 1] = color
+
+    def inpaint(src, mask, radius, flags):  # noqa: ARG001
+        out = np.array(src, copy=True)
+        out[mask == 255] = (10, 20, 30)
+        return out
+
+    monkeypatch.setitem(
+        sys.modules,
+        "cv2",
+        SimpleNamespace(
+            INPAINT_NS=1,
+            INPAINT_TELEA=0,
+            rectangle=rectangle,
+            inpaint=inpaint,
+        ),
+    )
 
 
 def _text_config() -> TextWatermarkConfig:
@@ -78,7 +107,10 @@ def test_watermark_removal_requires_at_least_one_region_when_enabled() -> None:
         )
 
 
-def test_watermark_removal_changes_only_requested_region() -> None:
+def test_watermark_removal_changes_only_requested_region(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_cv2(monkeypatch)
     source = Image.new("RGB", (180, 120), (120, 120, 120))
     draw = ImageDraw.Draw(source)
     draw.rectangle((132, 90, 174, 111), fill=(255, 255, 255))

@@ -1,8 +1,11 @@
 """CPU-only Dataset export tests for explicit watermark cleanup."""
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
+import numpy as np
 import pytest
 from PIL import Image, ImageDraw
 from fastapi import HTTPException
@@ -14,6 +17,31 @@ from services.dataset_export.models import DatasetExportRequest
 
 
 pytestmark = pytest.mark.usefixtures("authorize_legacy_dataset_exports")
+
+
+def _install_fake_cv2(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub OpenCV so CI runners without opencv-python stay green."""
+
+    def rectangle(mask, pt1, pt2, color, thickness=-1):  # noqa: ARG001
+        x1, y1 = pt1
+        x2, y2 = pt2
+        mask[y1 : y2 + 1, x1 : x2 + 1] = color
+
+    def inpaint(src, mask, radius, flags):  # noqa: ARG001
+        out = np.array(src, copy=True)
+        out[mask == 255] = (10, 20, 30)
+        return out
+
+    monkeypatch.setitem(
+        sys.modules,
+        "cv2",
+        SimpleNamespace(
+            INPAINT_NS=1,
+            INPAINT_TELEA=0,
+            rectangle=rectangle,
+            inpaint=inpaint,
+        ),
+    )
 
 
 def _removal_settings() -> dict[str, object]:
@@ -47,7 +75,7 @@ def test_dataset_request_defaults_watermark_removal_to_disabled() -> None:
     }
 
 
-def test_dataset_watermark_removal_requires_folder_copy(tmp_path: Path) -> None:
+def test_dataset_watermark_removal_requires_folder_copy(tmp_path: Path, test_db) -> None:
     image_id, _source = _stage_image(tmp_path)
     request = DatasetExportRequest.model_validate({
         "image_ids": [image_id],
@@ -60,7 +88,12 @@ def test_dataset_watermark_removal_requires_folder_copy(tmp_path: Path) -> None:
         _validate_export_request_read_only(request)
 
 
-def test_dataset_watermark_removal_writes_copy_and_keeps_source(tmp_path: Path) -> None:
+def test_dataset_watermark_removal_writes_copy_and_keeps_source(
+    tmp_path: Path,
+    test_db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_cv2(monkeypatch)
     image_id, source = _stage_image(tmp_path)
     before = source.read_bytes()
     output = tmp_path / "output"
@@ -83,7 +116,12 @@ def test_dataset_watermark_removal_writes_copy_and_keeps_source(tmp_path: Path) 
     assert exported.read_bytes() != before
 
 
-def test_dataset_watermark_removal_keeps_missing_mask_non_fatal(tmp_path: Path) -> None:
+def test_dataset_watermark_removal_keeps_missing_mask_non_fatal(
+    tmp_path: Path,
+    test_db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_cv2(monkeypatch)
     image_id, _source = _stage_image(tmp_path)
     output = tmp_path / "output-with-mask"
     request = DatasetExportRequest.model_validate({

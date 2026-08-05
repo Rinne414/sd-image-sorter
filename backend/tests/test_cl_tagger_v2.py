@@ -194,7 +194,10 @@ def test_prepare_route_maps_gated_download_to_external_auth_guidance(
     assert payload["type"] == "ExternalAuthRequired"
     assert payload["provider"] == "Hugging Face"
     assert payload["external_url"] == "https://huggingface.co/cella110n/cl_tagger_v2"
-    assert payload["target_dir"].endswith("models\\cl-tagger-v2")
+    # Path separators differ on Windows vs POSIX runners — compare as Path.
+    target_dir = Path(payload["target_dir"])
+    assert target_dir.name == "cl-tagger-v2"
+    assert target_dir.parent.name == "models"
     assert any("terms" in step.lower() for step in payload["manual_steps"])
     assert any("token" in step.lower() for step in payload["manual_steps"])
 

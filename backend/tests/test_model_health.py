@@ -103,6 +103,9 @@ def test_model_health_does_not_advertise_sam3_without_runtime_modules(monkeypatc
     checkpoint.parent.mkdir(parents=True)
     checkpoint.write_bytes(b"model")
 
+    # Force the non-macOS readiness path so this pin stays portable across
+    # darwin/linux/windows runners (real product code still disables SAM3 on macOS).
+    monkeypatch.setattr(model_health, "_sam3_supported_on_platform", lambda: True)
     monkeypatch.setattr(model_health, "get_sam3_checkpoint_path", lambda: str(checkpoint))
     monkeypatch.setattr(model_health, "_module_installed", lambda _module_name: True)
     monkeypatch.setattr(model_health, "_sam3_runtime_import_ready", lambda: False)

@@ -408,20 +408,36 @@ def test_embed_batch_already_running_guard(tmp_path, monkeypatch):
 
 
 def test_ensure_clip_model_ready_returns_local_path(monkeypatch):
+    # Dual-tower prepare must never import fastembed / download models in CI.
     monkeypatch.setattr(similarity_module, "_get_embed_model", lambda: object())
+    monkeypatch.setattr(similarity_module, "_get_text_embed_model", lambda: object())
     monkeypatch.setattr(
         similarity_module, "get_clip_local_model_path", lambda: "/models/clip/x"
+    )
+    monkeypatch.setattr(
+        similarity_module, "get_clip_text_local_model_path", lambda: "/models/clip/text"
+    )
+    monkeypatch.setattr(
+        similarity_module, "get_hf_endpoint_order", lambda **_kwargs: ["https://hf.example"]
+    )
+    monkeypatch.setattr(
+        similarity_module, "log_model_artifact_status", lambda *_args, **_kwargs: []
     )
 
     assert similarity_module.ensure_clip_model_ready() == "/models/clip/x"
 
 
-def test_ensure_clip_model_ready_in_memory_sentinel(monkeypatch):
+def test_ensure_clip_model_ready_requires_both_local_paths(monkeypatch):
     monkeypatch.setattr(similarity_module, "_get_embed_model", lambda: object())
-    monkeypatch.setattr(similarity_module, "get_clip_local_model_path", lambda: None)
+    monkeypatch.setattr(similarity_module, "_get_text_embed_model", lambda: object())
+    monkeypatch.setattr(
+        similarity_module, "get_clip_local_model_path", lambda: "/models/clip/x"
+    )
+    monkeypatch.setattr(similarity_module, "get_clip_text_local_model_path", lambda: None)
+    monkeypatch.setattr(similarity_module, "_loaded_fastembed_model_dir", lambda _model: None)
 
-    # No local path + a model object with no introspectable dir → sentinel.
-    assert similarity_module.ensure_clip_model_ready() == "fastembed:in-memory"
+    with pytest.raises(RuntimeError, match="both local model directories"):
+        similarity_module.ensure_clip_model_ready()
 
 
 # ===========================================================================
