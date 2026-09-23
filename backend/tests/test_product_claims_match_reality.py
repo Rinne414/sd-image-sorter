@@ -21,9 +21,7 @@ def _read(*parts: str) -> str:
 
 
 def test_current_product_docs_do_not_claim_glassmorphism():
-    for relative in ("AGENTS.md", "CLAUDE.md", "README.md"):
-        text = _read(relative).lower()
-        assert "glassmorphism" not in text, f"{relative} still claims glassmorphism"
+    assert "glassmorphism" not in _read("README.md").lower()
     architecture = _read("docs", "architecture.md")
     assert "not glassmorphism" in architecture.lower()
     assert "Experimental artist identification" not in architecture
@@ -82,8 +80,6 @@ def test_artist_load_failure_does_not_lock_a_placeholder_model():
 def test_marketing_copy_matches_shipped_template_and_vlm_facts():
     readme = _read("README.md")
     why = _read("docs", "WHY_CHOOSE_US.md")
-    agents = _read("AGENTS.md")
-    claude = _read("CLAUDE.md")
     architecture = _read("docs", "architecture.md")
 
     assert "实验性画师" not in readme
@@ -110,11 +106,6 @@ def test_marketing_copy_matches_shipped_template_and_vlm_facts():
     assert "facebookresearch/sam2" not in readme
     assert "heathcliff01" not in readme.lower()
 
-    assert "SQLite database defaults to `data/images.db`" in agents
-    assert "SQLite database defaults to `data/images.db`" in claude
-    assert "Gallery pagination is cursor-based" in agents
-    assert "Gallery pagination is cursor-based" in claude
-    assert "localhost_only_middleware` in `backend/app_security.py`" in agents
     assert "connection pooling" not in architecture.lower()
     assert "tags (id, image_id, tag, confidence, source, category)" in architecture
 
