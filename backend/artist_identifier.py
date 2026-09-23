@@ -66,10 +66,12 @@ logger = logging.getLogger("sd-image-sorter.artist")
 # are intentional re-exports (pyproject per-file F401 ignore).
 # ---------------------------------------------------------------------------
 from artist.assets import (
+    ARTIST_NOT_PREPARED_ERROR,
     _ensure_kaloscope_hf_files,
     _ensure_kaloscope_modelscope_files,
     _locate_existing_kaloscope_files,
     prepare_artist_assets,
+    require_local_artist_assets,
 )
 from artist.device import _onnx_providers_for, _resolve_artist_device
 from artist.downloads import (
@@ -329,16 +331,7 @@ class ArtistIdentifier:
     def _load_kaloscope_runtime_modules(self):
         runtime_path = _resolve_lsnet_runtime_path()
         if not runtime_path:
-            try:
-                runtime_path = _ensure_comfyui_lsnet_runtime()
-            except Exception as exc:
-                raise RuntimeError(
-                    "Kaloscope2.0 requires the LSNet runtime code.\n"
-                    "Automatic download of comfyui-lsnet failed.\n"
-                    "Clone either https://github.com/spawner1145/comfyui-lsnet or "
-                    "https://github.com/spawner1145/lsnet-test and set "
-                    "SD_IMAGE_SORTER_LSNET_CODE_PATH to that repository root."
-                ) from exc
+            raise RuntimeError(ARTIST_NOT_PREPARED_ERROR)
 
         if runtime_path not in sys.path:
             sys.path.insert(0, runtime_path)
@@ -461,10 +454,58 @@ class ArtistIdentifier:
         self._backend = "unloaded"
         self._load_error = str(error)
 
+    def _resolve_local_class_mapping(self, checkpoint_path: str) -> Optional[str]:
+        """Find class_mapping.csv beside a local .pth or one directory up.
+
+        HuggingFace ships ``448-90.13/best_checkpoint.pth`` with the CSV in the
+        parent folder. Looking only next to the checkpoint missed it and sent
+        the .pth down the ONNX fallback.
+        """
+        checkpoint = Path(checkpoint_path)
+        mapping_name = Path(str(ARTIST_KALOSCOPE_CLASS_MAPPING).replace("\\", "/")).name
+        for folder in (checkpoint.parent, checkpoint.parent.parent):
+            candidate = folder / mapping_name
+            if candidate.is_file():
+                return str(candidate.resolve())
+        return None
+
+    def _load_generic_torch_checkpoint(self, path: str) -> None:
+        import torch
+
+        # Safety-first: weights_only=True uses the restricted unpickler.
+        # Only if that fails (pickled config classes) do we fall back to the
+        # legacy unsafe full unpickle, with a visible WARNING.
+        with exclusive_ai_runtime("artist-torch-load"):
+            try:
+                loaded = torch.load(path, map_location="cpu", weights_only=True)
+            except Exception as safe_exc:
+                logger.warning(
+                    "Safe load (weights_only=True) failed for artist model "
+                    "%s: %s. Falling back to an UNSAFE full unpickle "
+                    "(weights_only=False). This can execute arbitrary code "
+                    "if the file is untrusted — only use artist .pth files "
+                    "from sources you trust.",
+                    path,
+                    safe_exc,
+                )
+                loaded = torch.load(path, map_location="cpu", weights_only=False)
+        if not hasattr(loaded, "eval"):
+            raise RuntimeError(
+                f"Local file '{path}' is a PyTorch checkpoint, not an ONNX model, "
+                "and it is not a ready-to-run nn.Module. Place class_mapping.csv "
+                "beside or above a Kaloscope .pth, or export an .onnx. / "
+                "这是 PyTorch .pth，不是 ONNX。请把 class_mapping.csv 放在 Kaloscope "
+                "权重旁边（或上一层），或改用 .onnx。"
+            )
+        self._model = loaded
+        self._model.eval()
+        self._backend = "torch-generic"
+
     def _load_local_model(self, path: str):
         """Load model from local file."""
         try:
-            if path.endswith('.onnx'):
+            ext = Path(path).suffix.lower()
+            if ext == ".onnx":
                 import onnxruntime as ort  # type: ignore
                 with exclusive_ai_runtime("artist-onnx-load"):
                     self._session = ort.InferenceSession(
@@ -472,59 +513,17 @@ class ArtistIdentifier:
                     )
                 self._model = "onnx"
                 self._backend = "onnx"
-            else:
-                class_mapping_path = os.path.join(os.path.dirname(path), ARTIST_KALOSCOPE_CLASS_MAPPING)
-                if os.path.exists(class_mapping_path):
+            elif ext in {".pth", ".pt"}:
+                class_mapping_path = self._resolve_local_class_mapping(path)
+                if class_mapping_path:
                     self._initialize_kaloscope(path, class_mapping_path)
                 else:
-                    # Try generic PyTorch model as legacy fallback. Pass
-                    # ``weights_only=False`` because PyTorch 2.6 flipped the
-                    # default to ``True`` and most user-supplied artist .pth
-                    # files contain pickled config classes outside the safe
-                    # globals allowlist; without this override they would
-                    # silently fall through to the ONNX path (which fails on
-                    # .pth) and leave the identifier unloaded. The file is
-                    # user-placed inside the artist model directory, so we
-                    # treat it as a trusted source.
-                    try:
-                        import torch
-                        # Safety-first: weights_only=True uses the restricted
-                        # unpickler and cannot execute arbitrary code. A full
-                        # state_dict-only checkpoint loads fine this way. Only if
-                        # that fails (e.g. the .pth pickles config classes outside
-                        # torch's safe-globals allowlist) do we fall back to the
-                        # legacy unsafe full unpickle, and we log a visible WARNING
-                        # because weights_only=False on an attacker-controlled file
-                        # enables arbitrary code execution during deserialization.
-                        with exclusive_ai_runtime("artist-torch-load"):
-                            try:
-                                self._model = torch.load(
-                                    path, map_location='cpu', weights_only=True
-                                )
-                            except Exception as safe_exc:
-                                logger.warning(
-                                    "Safe load (weights_only=True) failed for artist model "
-                                    "%s: %s. Falling back to an UNSAFE full unpickle "
-                                    "(weights_only=False). This can execute arbitrary code "
-                                    "if the file is untrusted — only use artist .pth files "
-                                    "from sources you trust.",
-                                    path,
-                                    safe_exc,
-                                )
-                                self._model = torch.load(
-                                    path, map_location='cpu', weights_only=False
-                                )
-                        self._model.eval()
-                        self._backend = "torch-generic"
-                    except Exception:
-                        # Fall back to ONNX runtime
-                        import onnxruntime as ort  # type: ignore
-                        with exclusive_ai_runtime("artist-onnx-load"):
-                            self._session = ort.InferenceSession(
-                                path, providers=_onnx_providers_for(ort, use_gpu=self.use_gpu)
-                            )
-                        self._model = "onnx"
-                        self._backend = "onnx"
+                    self._load_generic_torch_checkpoint(path)
+            else:
+                raise RuntimeError(
+                    f"Unsupported local artist model '{path}'. Use a .onnx file, "
+                    "or a Kaloscope .pth/.pt with class_mapping.csv beside it."
+                )
             self._load_error = None
             logger.info(f"Loaded model from: {path}")
         except Exception as e:
@@ -538,9 +537,9 @@ class ArtistIdentifier:
 
             logger.info(f"Loading from HuggingFace: {model_name}")
             if _is_kaloscope_model_id(model_name):
-                prepared = prepare_artist_assets("auto")
-                checkpoint_path = prepared["checkpoint_path"]
-                class_mapping_path = prepared["class_mapping_path"]
+                local = require_local_artist_assets()
+                checkpoint_path = local["checkpoint_path"]
+                class_mapping_path = local["class_mapping_path"]
                 self._initialize_kaloscope(checkpoint_path, class_mapping_path)
             else:
                 from transformers import AutoImageProcessor, AutoModelForImageClassification
@@ -567,8 +566,8 @@ class ArtistIdentifier:
         """Load model from ModelScope."""
         try:
             logger.info("Loading from ModelScope")
-            prepared = prepare_artist_assets("modelscope")
-            self._initialize_kaloscope(prepared["checkpoint_path"], prepared["class_mapping_path"])
+            local = require_local_artist_assets()
+            self._initialize_kaloscope(local["checkpoint_path"], local["class_mapping_path"])
             self._load_error = None
         except Exception as e:
             logger.warning(f"ModelScope load failed: {e}")
@@ -641,8 +640,7 @@ class ArtistIdentifier:
         if not self._has_live_model():
             result["error"] = (
                 self._load_error
-                or "Artist model is not loaded. Prepare Kaloscope from Setup / Download, then identify. / "
-                   "画师模型尚未加载。请先在设置里准备 Kaloscope，再开始识别。"
+                or ARTIST_NOT_PREPARED_ERROR
             )
             return result
 

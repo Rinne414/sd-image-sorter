@@ -74,7 +74,7 @@ def test_huggingface_load_failure_does_not_lock_placeholder(monkeypatch):
         calls["n"] += 1
         raise RuntimeError("checkpoint missing")
 
-    monkeypatch.setattr(ai, "prepare_artist_assets", boom)
+    monkeypatch.setattr(ai, "require_local_artist_assets", boom)
 
     ident.load()
     assert ident._model is None

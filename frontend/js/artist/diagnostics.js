@@ -87,15 +87,15 @@ Object.assign(window.ArtistIdent, {
 
             const title = result.available
                 ? this.tText('Style Finder is ready', '画师识别已就绪')
-                : this.tText('Style Finder downloads on first use', '第一次识别时会下载画师模型');
+                : this.tText('Style Finder is not prepared', '画师识别尚未准备');
             const summary = result.available
                 ? this.tText(
                     'You can start identification now, then review the strongest matches in the center panel.',
                     '现在可以开始识别，然后在中间结果区查看最强匹配。'
                 )
                 : this.tText(
-                    'Click Identify to download Kaloscope (about 2.8 GB) with a progress overlay. You can also open Setup / Download.',
-                    '点「识别」会下载 Kaloscope（约 2.8 GB）并显示安装进度。也可以打开设置 / 下载。'
+                    'Open Setup / Download and Prepare Artist Identify (~2.8 GB). Identify will not download automatically.',
+                    '请先在设置里准备 Artist Identify（约 2.8 GB）。识别不会自动下载。'
                 );
             const detailItems = [];
             if (result.message) detailItems.push(this.localizeDiagnosticsMessage(result.message));
@@ -131,7 +131,7 @@ Object.assign(window.ArtistIdent, {
             banner.className = 'model-health-banner is-visible model-health-banner-warning';
             banner.innerHTML = `
                 <div class="model-health-copy">
-                    <span class="model-health-title">${this._escapeHtml(this.tText('Style Finder downloads on first use', '第一次识别时会下载画师模型'))}</span>
+                    <span class="model-health-title">${this._escapeHtml(this.tText('Style Finder is not prepared', '画师识别尚未准备'))}</span>
                     <span>${this._escapeHtml(this.tText('Artist runtime status could not be loaded.', '画师识别运行状态无法加载。'))}</span>
                     <button type="button" class="btn btn-secondary btn-small model-health-setup-btn" data-action="open-model-guidance">
                         <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg> ${this._escapeHtml(this.tText('Open Setup / Download', '打开设置 / 下载模型'))}

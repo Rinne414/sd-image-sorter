@@ -191,6 +191,34 @@ def _ensure_kaloscope_modelscope_files() -> Tuple[str, str]:
     return str(local_checkpoint.resolve()), str(local_mapping.resolve())
 
 
+ARTIST_NOT_PREPARED_ERROR = (
+    "Artist Identify is not prepared on this machine. Open Model Setup and Prepare "
+    "Artist Identify (~2.8 GB) first. Identify does not download automatically. / "
+    "画师识别尚未在本机准备。请先在模型设置里准备 Artist Identify（约 2.8 GB）。识别不会自动下载。"
+)
+
+
+def require_local_artist_assets() -> Dict[str, str]:
+    """Locate already-downloaded Kaloscope + LSNet files. Never downloads.
+
+    Identify / ``load()`` must use this. ``prepare_artist_assets`` remains the
+    only path that fetches the ~2.8 GB pack after the user confirms Prepare.
+    """
+    existing = _facade()._locate_existing_kaloscope_files()
+    if not existing:
+        raise RuntimeError(ARTIST_NOT_PREPARED_ERROR)
+    runtime_path = _facade()._resolve_lsnet_runtime_path()
+    if not runtime_path:
+        raise RuntimeError(ARTIST_NOT_PREPARED_ERROR)
+    checkpoint_path, class_mapping_path = existing
+    return {
+        "runtime_path": runtime_path,
+        "checkpoint_path": checkpoint_path,
+        "class_mapping_path": class_mapping_path,
+        "source": "local",
+    }
+
+
 def prepare_artist_assets(preferred_source: str = "auto") -> Dict[str, str]:
     """Ensure runtime + artist files exist, trying mirrors/fallbacks when needed."""
     runtime_path = _facade()._resolve_lsnet_runtime_path() or _facade()._ensure_comfyui_lsnet_runtime()
