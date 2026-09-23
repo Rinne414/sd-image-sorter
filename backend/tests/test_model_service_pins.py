@@ -466,6 +466,48 @@ def test_dependency_restart_result_reports_needs_restart_when_installed():
     assert "torch>=2.0.0" in result["message"]
 
 
+def test_inventory_does_not_keep_ready_after_prepare_needs_restart(monkeypatch):
+    monkeypatch.setattr(model_service, "_pending_process_restart", set())
+    monkeypatch.setattr(
+        model_service,
+        "_build_inventory",
+        lambda _health: [
+            {
+                "id": "tipo",
+                "status": "ready",
+                "status_label": "Ready",
+                "available": True,
+            }
+        ],
+    )
+    monkeypatch.setattr(model_service, "get_model_health", lambda: {})
+    model_service.note_prepare_needs_restart("tipo")
+
+    card = model_service.ModelService().build_model_inventory()[0]
+
+    assert card["status"] == "needs_restart"
+    assert card["available"] is False
+    assert card["status_label"] == "Restart required"
+
+
+def test_prepare_model_notes_restart_so_status_cannot_stay_ready(monkeypatch):
+    monkeypatch.setattr(model_service, "_pending_process_restart", set())
+    monkeypatch.setattr(
+        model_service,
+        "_prepare_model",
+        lambda *_args, **_kwargs: {
+            "status": "needs_restart",
+            "restart_recommended": True,
+            "message": "Installed torch. Restart.",
+        },
+    )
+
+    result = model_service.ModelService().prepare_model("clip")
+
+    assert result["status"] == "needs_restart"
+    assert model_service.model_needs_process_restart("clip") is True
+
+
 def test_dependency_restart_result_lets_prepare_continue_when_no_restart_is_needed():
     # Packages were installed, but optional_dependencies proved they import in
     # this process. Returning None is what lets the same click go on to

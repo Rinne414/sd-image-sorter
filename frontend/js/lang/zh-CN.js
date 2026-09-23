@@ -2697,6 +2697,7 @@ window.I18nLang_zhCN = {
     'models.total': '功能项总数',
     'models.readyBadge': '已就绪',
     'models.missingBadge': '缺失',
+    'models.restartRequiredBadge': '需要重启',
     'models.prepare': '立即准备',
     'models.repair': '重新检查',
     'models.installedVariants': '已安装变体',

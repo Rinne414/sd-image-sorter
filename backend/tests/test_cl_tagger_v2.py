@@ -165,6 +165,48 @@ def test_download_reports_gated_huggingface_access(monkeypatch, tmp_path):
     assert "token" in message or "accept" in message
 
 
+def test_download_maps_raw_hf_401_without_response_object(monkeypatch, tmp_path):
+    """A Hub 401 with no .response must become AuthRequired, not a raw dump."""
+
+    class _Raw401(RuntimeError):
+        pass
+
+    monkeypatch.setattr(
+        cl_tagger_v2,
+        "hf_hub",
+        SimpleNamespace(
+            hf_hub_download=lambda **_kwargs: (_ for _ in ()).throw(
+                _Raw401(
+                    "401 Client Error: Invalid username or password. for url: "
+                    "https://huggingface.co/cella110n/cl_tagger_v2/resolve/main/v2_00/model.onnx "
+                    '{"error":"Invalid credentials"}'
+                )
+            )
+        ),
+    )
+    tagger = cl_tagger_v2.CLTaggerV2Tagger(
+        model_name="cl-tagger-v2",
+        model_path=None,
+        tags_path=None,
+        model_dir=str(tmp_path / "models"),
+        threshold=0.55,
+        character_threshold=0.55,
+        copyright_threshold=0.55,
+        use_gpu=False,
+    )
+
+    with pytest.raises(cl_tagger_v2.CLTaggerV2AuthRequiredError) as error:
+        tagger._download_model()
+
+    message = str(error.value)
+    lowered = message.lower()
+    assert "401" in lowered
+    assert "gated" in lowered
+    assert "token" in lowered or "accept" in lowered
+    assert "Invalid username or password" not in message
+    assert "Invalid credentials" not in message
+
+
 def test_prepare_route_maps_gated_download_to_external_auth_guidance(
     monkeypatch,
     tmp_path,

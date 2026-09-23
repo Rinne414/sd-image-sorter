@@ -70,13 +70,28 @@ class SingleImageTagRequest(BaseModel):
     use_gpu: bool = True
 
 
-def _load_tagger(**kwargs: Any):
-    """Resolve the configured WD14 tagger singleton.
+def _is_oppai_oracle(model_name: str) -> bool:
+    return model_name.strip().lower().startswith("oppai-oracle")
 
-    Tests monkeypatch THIS function: everything above it needs ~450 MB of ONNX
-    weights, everything below it is pure response shaping. The import is lazy
-    because ``tagger`` pulls onnxruntime.
+
+def _load_tagger(**kwargs: Any):
+    """Resolve the tagger singleton for the requested model.
+
+    OppaiOracle has its own loader. Sending its name through WD14 hit
+    HuggingFace as a WD14 repo and returned Hub 503. Tests monkeypatch THIS
+    function: everything above it needs hundreds of MB of ONNX weights,
+    everything below it is pure response shaping. The imports are lazy
+    because both backends pull onnxruntime.
     """
+    model_name = str(kwargs.get("model_name") or "")
+    if _is_oppai_oracle(model_name):
+        from oppai_oracle_tagger import get_oppai_oracle_tagger  # noqa: PLC0415
+
+        return get_oppai_oracle_tagger(
+            model_name=model_name.strip(),
+            use_gpu=bool(kwargs.get("use_gpu", True)),
+        )
+
     import tagger  # noqa: PLC0415 - heavy optional runtime
 
     return tagger.get_tagger(**kwargs)
@@ -145,9 +160,15 @@ def tag_single_image(request: SingleImageTagRequest) -> Dict[str, Any]:
     started = time.perf_counter()
     try:
         tagger = _load_tagger(**loader_kwargs)
-        result = tagger.tag(
-            str(source), priority=PRIORITY_INTERACTIVE, **_thresholds(request)
-        )
+        thresholds = _thresholds(request)
+        if _is_oppai_oracle(model_name):
+            # OppaiOracle.tag() takes no priority and has no copyright head.
+            thresholds.pop("copyright_threshold", None)
+            result = tagger.tag(str(source), **thresholds)
+        else:
+            result = tagger.tag(
+                str(source), priority=PRIORITY_INTERACTIVE, **thresholds
+            )
     except HTTPException:
         raise
     except AiRuntimeBusyError:
@@ -165,7 +186,7 @@ def tag_single_image(request: SingleImageTagRequest) -> Dict[str, Any]:
             status_code=503,
             detail=(
                 f"The tagger could not run: {exc} "
-                "/ 打标模型无法运行，请在模型中心检查 WD14 是否就绪。"
+                "/ 打标模型无法运行，请在模型中心检查所选模型是否就绪。"
             ),
         ) from exc
     elapsed_ms = int((time.perf_counter() - started) * 1000)

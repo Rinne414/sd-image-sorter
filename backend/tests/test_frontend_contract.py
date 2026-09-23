@@ -2930,6 +2930,23 @@ def test_tipo_card_states_keep_the_lists_the_backend_passes():
             )
 
 
+def test_model_card_does_not_keep_the_ready_badge_when_restart_is_required():
+    repo_root = Path(__file__).resolve().parents[2]
+    render = (
+        repo_root / "frontend" / "js" / "app" / "model-manager-render.js"
+    ).read_text(encoding="utf-8")
+    ensure = (repo_root / "frontend" / "js" / "app" / "ensure-model.js").read_text(
+        encoding="utf-8"
+    )
+    packs = _locale_pack_sources(repo_root)
+
+    assert "needs_restart" in render
+    assert "restartRequiredBadge" in render
+    assert "needs_restart" in ensure
+    for pack_name, source in packs.items():
+        assert "models.restartRequiredBadge" in source, pack_name
+
+
 def test_the_tag_popover_reads_every_field_tag_info_returns():
     """``/api/tags/info`` gathers the facts a popover exists to show.
 

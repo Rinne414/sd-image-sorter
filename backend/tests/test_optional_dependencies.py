@@ -278,6 +278,29 @@ def test_toriigate_requires_transformers_version_with_qwen35_support(monkeypatch
     assert result.restart_recommended is False
 
 
+def test_ensure_group_keeps_newer_compatible_transformers(monkeypatch):
+    """A 5.7.x install already meets transformers>=5.6.0 — do not downgrade."""
+    installed = []
+
+    monkeypatch.setattr(optional_dependencies.importlib.util, "find_spec", lambda module: object())
+    monkeypatch.setattr(optional_dependencies.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        optional_dependencies.importlib.metadata,
+        "version",
+        lambda package: "5.7.0" if package == "transformers" else _release_locked_version(package),
+    )
+    monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
+    monkeypatch.setattr(
+        optional_dependencies, "_restart_reason_after_install", lambda **kwargs: ""
+    )
+
+    result = optional_dependencies.ensure_group("toriigate")
+
+    assert installed == []
+    assert result.installed_packages == ()
+    assert result.restart_recommended is False
+
+
 def test_ensure_group_skips_already_satisfied_packages(monkeypatch):
     installed = []
 

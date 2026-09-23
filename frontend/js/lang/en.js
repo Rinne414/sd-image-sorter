@@ -2521,6 +2521,7 @@ window.I18nLang_en = {
     'models.total': 'Total feature items',
     'models.readyBadge': 'Ready',
     'models.missingBadge': 'Missing',
+    'models.restartRequiredBadge': 'Restart required',
     'models.prepare': 'Set Up Now',
     'models.repair': 'Check Again',
     'models.installedVariants': 'Installed variants',

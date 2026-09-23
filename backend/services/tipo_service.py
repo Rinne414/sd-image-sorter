@@ -144,6 +144,17 @@ MODEL_SPECS: Dict[str, TipoModelSpec] = {
 }
 
 
+def preferred_tipo_variant(installed: List[str]) -> str:
+    """Picker default: keep v2.1 when it is on disk, else a ready selectable."""
+    selectable = {item["id"] for item in selectable_tipo_variants()}
+    have = [key for key in installed if key in selectable]
+    if DEFAULT_MODEL_KEY in have:
+        return DEFAULT_MODEL_KEY
+    if have:
+        return have[0]
+    return DEFAULT_MODEL_KEY
+
+
 def selectable_tipo_variants() -> List[Dict[str, str]]:
     """The two variants the UI offers: v2.1 (quality) and 200m-ft (lighter).
 
@@ -399,7 +410,7 @@ def probe_tipo_installation() -> Dict[str, Any]:
         "broken_variants": broken,
         "missing_dependencies": missing_dependencies,
         "model_dir": resolved_dir,
-        "default_variant": DEFAULT_MODEL_KEY,
+        "default_variant": preferred_tipo_variant(installed),
         "selectable_variants": selectable_tipo_variants(),
         "message": message,
     }

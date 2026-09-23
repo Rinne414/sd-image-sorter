@@ -69,6 +69,7 @@ function prepareSpecForTagger(modelName) {
 
 function _featureCardIsReady(card, variant) {
     if (!card) return false;
+    if (card.status === 'needs_restart') return false;
     if (variant && Array.isArray(card.installed_variants)) {
         return card.installed_variants.includes(variant);
     }

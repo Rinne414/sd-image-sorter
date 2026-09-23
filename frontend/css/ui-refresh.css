@@ -2575,6 +2575,11 @@ textarea:focus,
     color: #E5C6A2;
 }
 
+.model-card-status.is-needs-restart {
+    background: rgba(var(--warning-rgb, 214, 158, 46), 0.16);
+    color: #F3D39A;
+}
+
 .model-card-message,
 .model-card-path,
 .model-card-hint {

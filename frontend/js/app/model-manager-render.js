@@ -71,10 +71,14 @@ function renderModelManager(models = []) {
     const renderModelCard = (model) => {
         const safeId = escapeHtml(model.id);
         const status = model.status || (model.available ? 'ready' : 'missing');
-        const statusClass = status === 'ready' ? 'is-ready' : 'is-missing';
+        const statusClass = status === 'ready'
+            ? 'is-ready'
+            : (status === 'needs_restart' ? 'is-needs-restart' : 'is-missing');
         const statusLabel = status === 'ready'
             ? appT('models.readyBadge', 'Ready')
-            : appT('models.missingBadge', 'Missing');
+            : (status === 'needs_restart'
+                ? appT('models.restartRequiredBadge', 'Restart required')
+                : appT('models.missingBadge', 'Missing'));
         const sourceOptions = Array.isArray(model.sources) ? model.sources.map((source) => `
             <option value="${escapeHtml(source)}">${escapeHtml(source)}</option>
         `).join('') : '';

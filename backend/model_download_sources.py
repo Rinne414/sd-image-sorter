@@ -241,6 +241,10 @@ def hf_error_metadata(error: BaseException) -> dict[str, object]:
         normalized_status: int | None = int(status_code) if status_code is not None else None
     except (TypeError, ValueError):
         normalized_status = None
+    if normalized_status is None:
+        status_from_text = re.search(r"\b(401|403|404)\b", str(error))
+        if status_from_text:
+            normalized_status = int(status_from_text.group(1))
 
     error_type = type(error).__name__
     raw_detail = str(error)
@@ -257,7 +261,14 @@ def hf_error_metadata(error: BaseException) -> dict[str, object]:
     lowered = f"{error_type} {raw_detail}".lower()
     gated = normalized_status in {401, 403} or any(
         marker in lowered
-        for marker in ("gated", "access denied", "unauthorized", "authorization", "accept the terms")
+        for marker in (
+            "gated",
+            "access denied",
+            "unauthorized",
+            "authorization",
+            "accept the terms",
+            "invalid username or password",
+        )
     )
     not_found = normalized_status == 404 or "not found" in lowered or "repositorynotfound" in lowered
     return {
@@ -284,6 +295,11 @@ def format_hf_download_error(
         action = (
             "This checkpoint is gated: accept its terms on the official Hugging Face page "
             "and configure a Hugging Face token, then retry Prepare / Download."
+        )
+        # Do not paste the raw Hub 401/403 body into the UI — it is not actionable.
+        return (
+            f"Hugging Face download failed{status_text} for repo {model_id!r} at revision "
+            f"{revision!r} via {endpoint_label(endpoint)}. {action}"
         )
     elif metadata["not_found"]:
         action = (

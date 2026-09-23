@@ -15,7 +15,7 @@ import sys
 import logging
 import platform
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from typing import Iterable, Optional, Sequence
 
 from packaging.markers import InvalidMarker, Marker
 from packaging.requirements import InvalidRequirement, Requirement
@@ -277,6 +277,21 @@ def _load_requirement_version_map() -> dict[str, str]:
 
     _REQUIREMENTS_CACHE = mapping
     return mapping
+
+
+def _resolved_install_spec(module_name: str, declared_spec: str) -> Optional[str]:
+    """Pip spec to install, or None when the installed version is new enough.
+
+    The release lock (``name==X`` in requirements.txt) is a floor, not a pin:
+    an older install is raised to the lock (torch 2.10 -> the 2.13.0 security
+    lock), but a newer compatible one (transformers 5.7.x over a 5.6.2 lock)
+    is never downgraded. A declared exact pin with no lock entry stays exact.
+    """
+    locked = _lock_package_spec(declared_spec)
+    check = locked if locked == declared_spec else locked.replace("==", ">=", 1)
+    if not _needs_install(module_name, check):
+        return None
+    return locked
 
 
 def _lock_package_spec(package_spec: str) -> str:
@@ -853,9 +868,9 @@ def _ensure_tipo_group() -> DependencyInstallResult:
     packages_to_install: list[str] = []
     modules_to_verify: list[str] = []
     for module_name, package in zip(imports, packages):
-        locked_package = _lock_package_spec(package)
-        if _needs_install(module_name, locked_package) and locked_package not in packages_to_install:
-            packages_to_install.append(locked_package)
+        to_install = _resolved_install_spec(module_name, package)
+        if to_install and to_install not in packages_to_install:
+            packages_to_install.append(to_install)
             modules_to_verify.append(module_name)
     # llama_cpp is deliberately absent: _import_optional_package above already
     # proved it imports both here and in a clean interpreter.
@@ -883,9 +898,9 @@ def ensure_imports(module_names: Iterable[str]) -> DependencyInstallResult:
     modules_to_verify = []
     for module_name in module_names:
         package_spec = IMPORT_TO_PACKAGE_HINT.get(module_name, module_name)
-        locked_package = _lock_package_spec(package_spec)
-        if _needs_install(module_name, locked_package) and locked_package not in packages:
-            packages.append(locked_package)
+        to_install = _resolved_install_spec(module_name, package_spec)
+        if to_install and to_install not in packages:
+            packages.append(to_install)
             modules_to_verify.append(module_name)
     preloaded_modules = tuple(name for name in modules_to_verify if name in sys.modules)
     dll_locked = install_packages(packages)
@@ -916,9 +931,9 @@ def ensure_group(group: str) -> DependencyInstallResult:
     packages_to_install = []
     modules_to_verify = []
     for module_name, package in zip(imports, packages):
-        locked_package = _lock_package_spec(package)
-        if _needs_install(module_name, locked_package) and locked_package not in packages_to_install:
-            packages_to_install.append(locked_package)
+        to_install = _resolved_install_spec(module_name, package)
+        if to_install and to_install not in packages_to_install:
+            packages_to_install.append(to_install)
             modules_to_verify.append(module_name)
 
     # Captured before pip runs: once a module is in sys.modules, replacing the
@@ -959,8 +974,8 @@ def ensure_group_with_soft_deps(group: str) -> DependencyInstallResult:
     soft_installed: list[str] = []
     soft_restart_reason = ""
     for module_name, package_spec in soft_entries:
-        locked_package = _lock_package_spec(package_spec)
-        if not _needs_install(module_name, locked_package):
+        locked_package = _resolved_install_spec(module_name, package_spec)
+        if not locked_package:
             continue
         preloaded = (module_name,) if module_name in sys.modules else ()
         try:

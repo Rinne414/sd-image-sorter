@@ -96,6 +96,15 @@
                     const stored = localStorage.getItem('sd-tipo-model-v1');
                     if (stored === 'v2.1' || stored === '200m-ft') tipoModel.value = stored;
                 } catch (_error) { /* keep the HTML default */ }
+                fetch('/api/models/status').then((response) => response.json()).then((payload) => {
+                    // A stored pick that is not on disk yields to the backend's
+                    // ready default (e.g. a leftover 200m-ft GGUF).
+                    const card = (payload?.models || []).find((item) => item?.id === 'tipo');
+                    const installed = card?.installed_variants || [];
+                    if (installed.length && !installed.includes(tipoModel.value) && card.default_variant) {
+                        tipoModel.value = card.default_variant;
+                    }
+                }).catch(() => {});
                 tipoModel.addEventListener('change', () => {
                     try { localStorage.setItem('sd-tipo-model-v1', tipoModel.value); } catch (_error) {}
                     const other = document.getElementById('reverse-tipo-model');

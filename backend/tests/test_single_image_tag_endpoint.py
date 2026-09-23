@@ -163,6 +163,64 @@ def test_thresholds_reach_the_tagger_instead_of_being_accepted_and_dropped(
     assert call["copyright_threshold"] == pytest.approx(0.6)
 
 
+def test_oppai_oracle_does_not_go_through_wd14_hub(test_client, monkeypatch, tmp_path):
+    """OppaiOracle is a dedicated ONNX backend. WD14's HF loader returned Hub 503."""
+    image = _png(tmp_path / "oppai.png")
+    wd14_calls: list = []
+
+    class _Oppai:
+        model_name = "oppai-oracle-v1.1"
+
+        def tag(self, image_path, *, threshold=None, character_threshold=None):
+            return _fake_result()
+
+    monkeypatch.setattr(
+        "oppai_oracle_tagger.get_oppai_oracle_tagger",
+        lambda **_kwargs: _Oppai(),
+    )
+
+    import tagger
+
+    def _wd14_hub(**kwargs):
+        wd14_calls.append(kwargs)
+        raise AssertionError("WD14 must not load OppaiOracle from HuggingFace")
+
+    monkeypatch.setattr(tagger, "get_tagger", _wd14_hub)
+
+    response = test_client.post(
+        "/api/tag/single",
+        json={"image_path": str(image), "tagger_model": "oppai-oracle-v1.1"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert wd14_calls == []
+    assert response.json()["model"] == "oppai-oracle-v1.1"
+    assert response.json()["stored"] is False
+
+
+def test_oppai_oracle_alias_routes_to_dedicated_loader(monkeypatch):
+    seen: dict = {}
+
+    monkeypatch.setattr(
+        "oppai_oracle_tagger.get_oppai_oracle_tagger",
+        lambda **kwargs: seen.update(kwargs) or _StubTagger(),
+    )
+    import tagger
+
+    monkeypatch.setattr(
+        tagger,
+        "get_tagger",
+        lambda **_k: (_ for _ in ()).throw(AssertionError("WD14")),
+    )
+
+    loaded = single_image_tag_service._load_tagger(
+        model_name="oppai-oracle", use_gpu=False
+    )
+    assert isinstance(loaded, _StubTagger)
+    assert seen["model_name"] == "oppai-oracle"
+    assert seen["use_gpu"] is False
+
+
 def test_requested_tagger_model_is_reported_back(test_client, monkeypatch, tmp_path):
     image = _png(tmp_path / "model.png")
     seen: dict = {}

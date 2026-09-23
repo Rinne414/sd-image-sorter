@@ -123,6 +123,45 @@ def _with_dependency_result(result: Dict[str, Any], install_result: DependencyIn
     }
 
 
+# Prepare can install native wheels that this process cannot load yet. The
+# inventory must not keep saying Ready for those cards until the app restarts
+# (the set is process-local and empty after relaunch).
+_pending_process_restart: set[str] = set()
+
+
+def _normalize_model_id(model_id: str) -> str:
+    return str(model_id or "").strip().lower()
+
+
+def note_prepare_needs_restart(model_id: str) -> None:
+    normalized = _normalize_model_id(model_id)
+    if normalized:
+        _pending_process_restart.add(normalized)
+
+
+def model_needs_process_restart(model_id: str) -> bool:
+    return _normalize_model_id(model_id) in _pending_process_restart
+
+
+def _apply_pending_restart_status(card: Dict[str, Any]) -> Dict[str, Any]:
+    if not model_needs_process_restart(str(card.get("id") or "")):
+        return card
+    if str(card.get("status") or "") != "ready":
+        return card
+    updated = dict(card)
+    updated["status"] = "needs_restart"
+    updated["status_label"] = "Restart required"
+    updated["available"] = False
+    return updated
+
+
+def _note_restart_from_prepare_result(model_id: str, result: Dict[str, Any]) -> None:
+    if not isinstance(result, dict):
+        return
+    if result.get("restart_recommended") or str(result.get("status") or "") == "needs_restart":
+        note_prepare_needs_restart(model_id)
+
+
 def _repair_wd14_onnxruntime_if_possible() -> Dict[str, Any]:
     # Windows AND Linux: Linux requirements pin the CPU-only onnxruntime, so
     # NVIDIA Linux users need this Prepare-time swap to onnxruntime-gpu just
@@ -506,7 +545,7 @@ class ModelService:
 
     def build_model_inventory(self) -> List[Dict[str, Any]]:
         health = get_model_health()
-        return _build_inventory(health)
+        return [_apply_pending_restart_status(card) for card in _build_inventory(health)]
 
     def download_privacy_yolo_bundle(self) -> Dict[str, str]:
         target_dir = Path(get_yolo_model_dir())
@@ -643,7 +682,9 @@ class ModelService:
         }
 
     def prepare_model(self, model_id: str, *, source: Optional[str] = None, variant: Optional[str] = None) -> Dict[str, Any]:
-        return _prepare_model(self, model_id, source=source, variant=variant)
+        result = _prepare_model(self, model_id, source=source, variant=variant)
+        _note_restart_from_prepare_result(model_id, result)
+        return result
 
 
 _default_model_service = ModelService()

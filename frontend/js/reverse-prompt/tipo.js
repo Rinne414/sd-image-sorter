@@ -86,8 +86,20 @@ Object.assign(window.ReversePrompt, {
         });
     },
 
-    _hydrateTipoModelSelect() {
-        this._applyTipoModel(this._tipoStoredModel());
+    /**
+     * A stored pick that is not on disk yields to the backend's ready default,
+     * so a leftover 200m-ft GGUF is used instead of forcing a 1.1 GB fetch.
+     */
+    async _hydrateTipoModelSelect() {
+        const stored = this._tipoStoredModel();
+        let card = null;
+        try {
+            const payload = await window.App.API.get('/api/models/status');
+            card = (payload?.models || []).find((item) => item?.id === 'tipo') || null;
+        } catch (_error) { /* keep the stored picker value */ }
+        const installed = card?.installed_variants || [];
+        const useDefault = installed.length && !installed.includes(stored) && card.default_variant;
+        this._applyTipoModel(useDefault ? card.default_variant : stored);
     },
 
     renderTipo() {

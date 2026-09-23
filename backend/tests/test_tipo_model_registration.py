@@ -151,7 +151,7 @@ def test_get_model_health_exposes_the_tipo_probe(tipo_dir, monkeypatch):
 
     assert health["tipo"]["weight_state"] == "ready"
     assert health["tipo"]["installed_variants"] == ["200m-ft"]
-    assert health["tipo"]["default_variant"] == "v2.1"
+    assert health["tipo"]["default_variant"] == "200m-ft"
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +245,25 @@ def test_inventory_registers_a_tipo_card_the_owner_can_find(monkeypatch):
     assert card["installed_variants"] == ["v2.1"]
     assert card["default_variant"] == "v2.1"
     assert card["selectable_variants"] == tipo_service.selectable_tipo_variants()
+
+
+def test_inventory_tipo_card_offers_ready_200m_ft(monkeypatch):
+    card = _tipo_card(
+        {
+            "available": True,
+            "weight_state": "ready",
+            "installed_variants": ["200m-ft"],
+            "broken_variants": [],
+            "missing_dependencies": [],
+            "model_dir": "/m/tipo",
+            "default_variant": "200m-ft",
+            "message": "TIPO is ready.",
+        },
+        monkeypatch,
+    )
+
+    assert card["default_variant"] == "200m-ft"
+    assert card["installed_variants"] == ["200m-ft"]
 
 
 def test_inventory_tipo_card_reports_a_broken_install_distinctly(monkeypatch):
@@ -367,6 +386,10 @@ def test_v21_revision_is_a_commit_pin():
         {"id": "200m-ft", "size_hint": tipo_service.LIGHT_WEIGHT_SIZE_HINT},
     ]
     assert "100m" not in {item["id"] for item in tipo_service.selectable_tipo_variants()}
+    assert tipo_service.preferred_tipo_variant(["200m-ft"]) == "200m-ft"
+    assert tipo_service.preferred_tipo_variant(["200m-ft", "v2.1"]) == "v2.1"
+    assert tipo_service.preferred_tipo_variant(["100m"]) == "v2.1"
+    assert tipo_service.preferred_tipo_variant([]) == "v2.1"
 
 
 def test_v21_download_requests_the_pinned_commit(tipo_dir, monkeypatch):

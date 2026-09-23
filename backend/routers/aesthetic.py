@@ -76,7 +76,12 @@ def score_single_image(
     """Score a single image by database ID."""
     with gallery_job_activity("aesthetic"):
         try:
-            from aesthetic import predict_score
+            from aesthetic import is_available, predict_score
+            if not is_available():
+                raise HTTPException(
+                    status_code=503,
+                    detail="Aesthetic predictor dependencies not installed or runtime is broken",
+                )
         except (ImportError, OSError) as exc:
             _log_router_warning_once("score", "Aesthetic predictor torch import failed", exc)
             raise HTTPException(status_code=503, detail="Aesthetic predictor dependencies not installed or runtime is broken")
