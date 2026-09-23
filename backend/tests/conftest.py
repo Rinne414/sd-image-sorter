@@ -86,6 +86,21 @@ def _isolate_ai_job_queue_state(tmp_path, monkeypatch):
     monkeypatch.setattr(ai_job_queue_store, "get_queue_state_path", lambda: path)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_prepare_restart_marks(monkeypatch):
+    """Give each test its own "restart required" set.
+
+    Prepare records models that need an app restart in a process-wide set, so a
+    test that prepares a model would otherwise leave that card reporting
+    "Restart required" for every test that runs after it.
+    """
+    try:
+        from services import model_service
+    except Exception:
+        return
+    monkeypatch.setattr(model_service, "_pending_process_restart", set())
+
+
 # ============================================================================
 # Test Database Fixture
 # ============================================================================
