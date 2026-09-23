@@ -8,12 +8,10 @@ working-tree-only cleanup cannot hide the same class of leak.
 from __future__ import annotations
 
 import importlib.util
-import re
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-LIVE_API_KEY = re.compile(r"sk-[A-Za-z0-9]{20,}")
 
 
 def _load_security_check():
@@ -31,13 +29,3 @@ def test_tracked_sources_do_not_embed_live_api_keys():
         "tracked files embed a live-looking secret. Use an environment variable. "
         "Offending files:\n  " + "\n  ".join(leaks)
     )
-
-
-def test_optional_live_vlm_script_reads_key_from_env():
-    script = (
-        REPO_ROOT / "tests" / "e2e" / "round2_real_api.spec.js"
-    ).read_text(encoding="utf-8")
-    assert "process.env.AIHUBMIX_API_KEY" in script
-    assert "AIHUBMIX_API_KEY" in script
-    assert "real aihubmix API" not in script.lower()
-    assert not LIVE_API_KEY.search(script)

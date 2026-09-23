@@ -363,16 +363,6 @@ def _run_ci(
         ),
     ]
 
-    # Checks that are allowed to fail without blocking the CI pipeline.
-    #
-    # The dependency security audit is now BLOCKING: scripts/security_check.py
-    # scans the full resolved dependency tree and explicitly allowlists the
-    # advisories we have reviewed and accepted (IGNORED_VULN_IDS). Any NEW,
-    # un-reviewed advisory will fail CI on purpose. To accept a new advisory,
-    # add its id to IGNORED_VULN_IDS with a documented rationale; do not move the
-    # audit back to non-blocking.
-    non_blocking_checks: set[str] = set()
-
     all_ok = True
     passed_checks: set[str] = set()
     for name, command, cwd in checks:
@@ -411,11 +401,8 @@ def _run_ci(
             env.update(env_values)
         result = subprocess.run(command, cwd=cwd, env=env)
         if result.returncode != 0:
-            if name in non_blocking_checks:
-                print(f"[CI] WARNING (non-blocking): {name}")
-            else:
-                print(f"[CI] FAILED: {name}")
-                all_ok = False
+            print(f"[CI] FAILED: {name}")
+            all_ok = False
         else:
             print(f"[CI] PASSED: {name}")
             passed_checks.add(name)

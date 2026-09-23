@@ -1475,7 +1475,8 @@ def test_release_ci_keeps_security_audit_and_windows_linux_guardrails():
     # and is blocking, with reviewed advisories explicitly allowlisted in source.
     assert "--ignore-vuln" in security_check
     assert "IGNORED_VULN_IDS" in security_check
-    assert "non_blocking_checks: set[str] = set()" in run_ci
+    # Every CI stage blocks; there is no non-blocking escape hatch.
+    assert "non_blocking" not in run_ci
     assert "ubuntu-latest" in workflow
     assert "windows-latest" in workflow
     assert "macos-latest" in workflow
@@ -1513,7 +1514,8 @@ def test_release_ci_runs_runtime_dependency_check_as_a_blocking_step():
         run_ci,
         re.DOTALL,
     )
-    assert "non_blocking_checks: set[str] = set()" in run_ci
+    # Every CI stage blocks; there is no non-blocking escape hatch.
+    assert "non_blocking" not in run_ci
 
 
 def test_playwright_specs_are_not_an_empty_ci_shell():

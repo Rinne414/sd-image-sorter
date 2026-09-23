@@ -48,7 +48,6 @@ update/
 CLAUDE.md
 backend/lora_debug.txt
 example/
-models/nudenet/
 
 # Test images and personal folders (may contain personal images)
 testimage/
@@ -69,7 +68,6 @@ backend/*.webp
 
 # Debug and log files
 *.log
-backend/lora_debug.txt
 
 # IDE files
 .vscode/
@@ -140,14 +138,6 @@ reference/
 # Claude Code internal
 .claude/
 .worktrees/
-
-# Kiro CLI state. The whole directory is ignored further down, matching how
-# AGENTS.md / CLAUDE.md are treated: agent instructions stay local and out of
-# the public repo. (An earlier comment here claimed .kiro/steering/ was
-# committed on purpose, but it never was.)
-.kiro/agents/
-.kiro/sessions/
-.kiro/cache/
 
 # Local dev screenshots / probe artifacts dropped at repo root
 /batch_export_modal.png

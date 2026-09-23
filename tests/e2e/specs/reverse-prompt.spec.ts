@@ -42,13 +42,9 @@ type ReverseWindow = typeof window & {
 
 // Ships in the repo and carries a real ComfyUI workflow in its PNG text chunks.
 const RECORDED_PNG = path.resolve(__dirname, '../../../backend/favorites/ComfyUI_00208_.png')
-// Also ships in the repo, and is a UI screenshot: decodable, and recording no
-// prompt at all (verified: generator "unknown", prompt length 0). Using a real
-// committed file keeps a binary fixture blob out of this spec.
-const NO_METADATA_PNG = path.resolve(
-  __dirname,
-  '../../../docs/screenshots/caption_editor_fullscreen.png',
-)
+// A plain UI screenshot: decodable, and recording no prompt at all
+// (generator "unknown", prompt length 0).
+const NO_METADATA_PNG = path.resolve(__dirname, '../fixtures/no-metadata-screenshot.png')
 
 const TAGGER_RESPONSE = {
   image_path: 'stub',
