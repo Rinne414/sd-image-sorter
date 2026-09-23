@@ -3050,7 +3050,7 @@ li > .icon {
 }
 .folder-browser-item-icon { flex-shrink: 0; font-size: 0.9rem; width: 20px; text-align: center; }
 .folder-browser-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.folder-browser-item-arrow { flex-shrink: 0; font-size: 0.7rem; color: var(--muted); opacity: 0.6; }
+.folder-browser-item-arrow { flex-shrink: 0; font-size: var(--fs-footnote); color: var(--muted); opacity: 0.6; }
 .folder-browser-empty,
 .folder-browser-loading { padding: 20px 12px; text-align: center; color: var(--muted); font-size: var(--fs-label); }
 .folder-browser-error { padding: 12px; text-align: center; color: var(--danger); font-size: var(--fs-label); }

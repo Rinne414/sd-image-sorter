@@ -50,7 +50,7 @@
 }
 
 .obfuscate-drop-hint {
-    font-size: 0.75rem;
+    font-size: var(--fs-label);
     color: var(--text-muted, rgba(255, 255, 255, 0.4));
 }
 
@@ -106,7 +106,7 @@
 
 .obfuscate-advanced-settings small {
     color: var(--text-muted);
-    font-size: 0.8rem;
+    font-size: var(--fs-body);
     line-height: 1.4;
 }
 
@@ -217,7 +217,7 @@
 }
 
 .obfuscate-item-name-input {
-    font-size: 0.82rem;
+    font-size: var(--fs-body);
     background: transparent;
     border: 1px solid transparent;
     border-radius: 4px;
@@ -239,7 +239,7 @@
 }
 
 .obfuscate-item-status {
-    font-size: 0.75rem;
+    font-size: var(--fs-label);
     color: var(--text-muted);
 }
 

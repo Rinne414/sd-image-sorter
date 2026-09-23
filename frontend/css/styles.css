@@ -4585,7 +4585,7 @@ body::before {
 .queue-status {
     display: flex;
     gap: 5px;
-    font-size: 0.7rem;
+    font-size: var(--fs-footnote);
 }
 
 .status-badge {
@@ -4679,7 +4679,7 @@ body::before {
     justify-content: space-between;
     align-items: center;
     padding: 0 20px;
-    font-size: 0.8rem;
+    font-size: var(--fs-body);
     color: var(--text-300);
 }
 
@@ -7463,7 +7463,7 @@ input[type="radio"] {
     white-space: nowrap;
 }
 .modal-file-path {
-    font-size: 0.74rem;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     overflow: hidden;
     white-space: normal;
@@ -7481,7 +7481,7 @@ input[type="radio"] {
     gap: 6px;
     align-items: baseline;
     min-width: 0;
-    font-size: 0.75rem;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     flex-wrap: wrap;
 }
@@ -7641,7 +7641,7 @@ input[type="radio"] {
     cursor: pointer;
     display: flex;
     font: inherit;
-    font-size: 0.8rem;
+    font-size: var(--fs-body);
     gap: 7px;
     min-height: 30px;
     padding: 6px 8px;
@@ -7731,7 +7731,7 @@ input[type="radio"] {
     color: var(--accent-secondary);
     text-transform: uppercase;
     letter-spacing: 0.12em;
-    font-size: 0.78rem;
+    font-size: var(--fs-label);
     font-weight: 800;
 }
 
@@ -7856,7 +7856,7 @@ input[type="radio"] {
 .health-kpi-card span {
     display: block;
     color: var(--text-muted);
-    font-size: 0.82rem;
+    font-size: var(--fs-body);
     margin-bottom: 10px;
 }
 
@@ -7894,7 +7894,7 @@ input[type="radio"] {
 
 .health-panel-header span {
     color: var(--text-muted);
-    font-size: 0.78rem;
+    font-size: var(--fs-label);
     text-align: right;
 }
 
@@ -7986,7 +7986,7 @@ input[type="radio"] {
     background: rgba(255, 255, 255, 0.035);
     border: 1px solid rgba(var(--accent-rgb), 0.08);
     color: var(--text-secondary);
-    font-size: 0.84rem;
+    font-size: var(--fs-body);
 }
 
 .health-folder-row {
@@ -8253,7 +8253,7 @@ input[type="radio"] {
 .bracket-fighter .bchip,
 .cull-caption .bchip,
 #cull-meta .bchip {
-    font-size: 10.5px;
+    font-size: var(--fs-footnote);
     line-height: 1.4;
     padding: 2px 7px;
     border-radius: var(--radius-full);
@@ -8346,7 +8346,7 @@ input[type="radio"] {
 }
 .bracket-diff[hidden] { display: none; }
 .bracket-diff .bd-label {
-    font-size: 10.5px;
+    font-size: var(--fs-footnote);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--accent-secondary);

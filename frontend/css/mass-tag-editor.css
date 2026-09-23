@@ -30,7 +30,7 @@
 .mass-tag-scope-title {
     margin-bottom: 8px;
     color: var(--text-muted);
-    font-size: 0.78rem;
+    font-size: var(--fs-label);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -81,7 +81,7 @@
 
 .mass-tag-scope-card-body small {
     color: var(--text-muted);
-    font-size: 0.76rem;
+    font-size: var(--fs-label);
 }
 
 /* ---- Operation tabs -------------------------------------------------- */
@@ -109,7 +109,7 @@
     color: var(--text-secondary);
     font-family: inherit;
     font-weight: 600;
-    font-size: 0.82rem;
+    font-size: var(--fs-body);
     cursor: pointer;
     transition: var(--transition-fast);
 }
@@ -167,7 +167,7 @@
 .mass-tag-result-samples summary {
     cursor: pointer;
     color: var(--text-secondary);
-    font-size: 0.82rem;
+    font-size: var(--fs-body);
 }
 
 .mass-tag-result-samples pre {
@@ -230,7 +230,7 @@
 
 .mass-tag-confirm-note {
     color: rgba(var(--danger-rgb), 0.85);
-    font-size: 0.82rem;
+    font-size: var(--fs-body);
     line-height: 1.5;
     margin-top: 8px;
 }

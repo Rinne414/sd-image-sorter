@@ -1,5 +1,5 @@
 /* VLM Captioning UI — status chips use the Aurora semantic tokens. */
-.vlm-status { padding: 6px 10px; border-radius: 6px; font-size: 0.82rem; margin-top: 6px; }
+.vlm-status { padding: 6px 10px; border-radius: 6px; font-size: var(--fs-body); margin-top: 6px; }
 .vlm-status-success { background: rgba(var(--success-rgb), 0.12); color: var(--success); }
 .vlm-status-error { background: rgba(var(--danger-rgb), 0.12); color: var(--danger); }
 .vlm-status-warning { background: rgba(var(--warning-rgb), 0.12); color: var(--warning); }
@@ -69,7 +69,7 @@
 
 .vlm-model-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .vlm-model-item {
-    padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; cursor: pointer;
+    padding: 4px 10px; border-radius: 6px; font-size: var(--fs-body); cursor: pointer;
     background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
     color: var(--text-primary); transition: background 0.15s;
 }
@@ -82,17 +82,17 @@
 }
 .vlm-model-card.installed { border-color: rgba(var(--success-rgb), 0.3); }
 .vlm-model-card-header { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
-.vlm-model-card-meta { font-size: 0.75rem; color: var(--text-secondary); margin: 4px 0; }
+.vlm-model-card-meta { font-size: var(--fs-label); color: var(--text-secondary); margin: 4px 0; }
 .vlm-model-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .vlm-model-card-actions .btn { flex: 1 1 96px; min-width: 0; }
 .vlm-model-card-actions .btn.danger { color: var(--accent-danger, var(--danger)); }
 
-.vlm-badge-nsfw { font-size: 0.7rem; padding: 1px 5px; border-radius: 4px; background: rgba(var(--danger-rgb), 0.15); color: #E58884; }
-.vlm-badge-installed { font-size: 0.7rem; padding: 1px 5px; border-radius: 4px; background: rgba(var(--success-rgb), 0.15); color: var(--success); }
+.vlm-badge-nsfw { font-size: var(--fs-footnote); padding: 1px 5px; border-radius: 4px; background: rgba(var(--danger-rgb), 0.15); color: #E58884; }
+.vlm-badge-installed { font-size: var(--fs-footnote); padding: 1px 5px; border-radius: 4px; background: rgba(var(--success-rgb), 0.15); color: var(--success); }
 
-.vlm-error-list { max-height: 150px; overflow-y: auto; margin-top: 8px; font-size: 0.78rem; }
+.vlm-error-list { max-height: 150px; overflow-y: auto; margin-top: 8px; font-size: var(--fs-label); }
 .vlm-error-row { padding: 3px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
-.vlm-error-type { color: var(--text-secondary); font-size: 0.72rem; }
+.vlm-error-type { color: var(--text-secondary); font-size: var(--fs-label); }
 
 .vlm-ollama-install, .vlm-ollama-start { padding: 10px; border-radius: 8px; background: rgba(var(--warning-rgb), 0.08); margin-bottom: 8px; }
 .vlm-ollama-start { display: flex; align-items: center; gap: 12px; }
@@ -171,7 +171,7 @@
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
 }
 .vlm-banner-current {
-    font-size: 0.8rem;
+    font-size: var(--fs-body);
     color: var(--text-muted);
     font-style: italic;
 }
@@ -582,7 +582,7 @@
     border-radius: var(--radius-sm);
     padding: 8px 10px;
     font-family: var(--font-mono);
-    font-size: 0.8rem;
+    font-size: var(--fs-body);
     line-height: 1.5;
     resize: vertical;
     transition: var(--transition-fast);
@@ -603,7 +603,7 @@
     background: rgba(var(--accent-secondary-rgb), 0.05);
 }
 .export-preview-edited-badge {
-    font-size: 0.7rem;
+    font-size: var(--fs-footnote);
     padding: 2px 8px;
     border-radius: var(--radius-xs);
     background: rgba(var(--accent-secondary-rgb), 0.15);
@@ -714,7 +714,7 @@
     top: 4px;
     padding: 1px 5px;
     border-radius: var(--radius-xs);
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     line-height: 1.4;
     background: rgba(var(--accent-secondary-rgb), 0.9);
     color: var(--accent-contrast, #161616);
@@ -834,7 +834,7 @@
 
 .export-preview-stat span {
     color: var(--text-muted);
-    font-size: 10px;
+    font-size: var(--fs-footnote);
 }
 
 .export-preview-stat strong {
@@ -1151,7 +1151,7 @@
 
 .tagger-model-current-kicker {
     color: var(--accent-secondary);
-    font-size: 10.5px;
+    font-size: var(--fs-footnote);
     font-weight: 800;
     letter-spacing: 0;
     text-transform: uppercase;
@@ -1299,7 +1299,7 @@
     border-radius: 999px;
     background: rgba(var(--accent-secondary-rgb), 0.13);
     color: var(--accent-secondary);
-    font-size: 10.5px;
+    font-size: var(--fs-footnote);
     font-weight: 700;
     line-height: 1.25;
 }

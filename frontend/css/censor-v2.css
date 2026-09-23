@@ -1039,7 +1039,7 @@ button.censor-batch-outcome-badge:focus-visible {
 
 .censor-side-small-label {
     display: block;
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     font-weight: 700;
     margin-bottom: 6px;
     color: rgba(255, 255, 255, 0.55);
@@ -1106,7 +1106,7 @@ button.censor-batch-outcome-badge:focus-visible {
 }
 
 .sidebar-filter-item label {
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     color: rgba(255, 255, 255, 0.58);
     font-weight: 600;
 }
@@ -1817,7 +1817,7 @@ button.censor-batch-outcome-badge:focus-visible {
     border-radius: 6px;
     background: rgba(0, 0, 0, 0.7);
     color: var(--text-secondary);
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     font-weight: 700;
     padding: 0 4px;
 }

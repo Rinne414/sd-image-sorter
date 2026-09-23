@@ -61,7 +61,7 @@
 }
 
 .dup-scan-progress-text {
-    font-size: 0.8rem;
+    font-size: var(--fs-body);
     color: var(--text-muted);
     white-space: nowrap;
     max-width: 40%;
@@ -186,7 +186,7 @@
     top: 10px;
     right: 10px;
     z-index: 2;
-    font-size: 0.72rem;
+    font-size: var(--fs-label);
     font-weight: 700;
     padding: 2px 8px;
     border-radius: 999px;
@@ -199,14 +199,14 @@
 }
 
 .dup-member-name {
-    font-size: 0.78rem;
+    font-size: var(--fs-label);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .dup-member-facts {
-    font-size: 0.74rem;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
 }

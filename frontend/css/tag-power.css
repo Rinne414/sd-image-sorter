@@ -23,7 +23,7 @@
 .tag-power-summary-hint {
     margin-left: auto;
     color: var(--text-muted, #A6A6A6);
-    font-size: 0.78rem;
+    font-size: var(--fs-label);
 }
 
 .tag-power-card[open] {

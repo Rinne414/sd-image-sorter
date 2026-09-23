@@ -106,7 +106,7 @@
 .reader-drop-zone .drop-icon { margin-bottom: 10px; opacity: 0.7; line-height: 1; }
 .reader-drop-zone .drop-icon svg { display: block; }
 .reader-drop-zone .drop-text { font-size: 0.95rem; color: var(--text-muted); }
-.reader-drop-zone .drop-hint { font-size: 0.78rem; color: var(--text-muted); opacity: 0.5; margin-top: 4px; }
+.reader-drop-zone .drop-hint { font-size: var(--fs-label); color: var(--text-muted); opacity: 0.5; margin-top: 4px; }
 
 /* Paste button inside drop zone */
 .reader-paste-btn {
@@ -119,7 +119,7 @@
     border: 1px solid rgba(var(--accent-primary-rgb), 0.35);
     background: rgba(var(--accent-primary-rgb), 0.12);
     color: var(--accent-tertiary);
-    font-size: 0.82rem;
+    font-size: var(--fs-body);
     font-weight: 600;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -136,7 +136,7 @@
 .reader-paste-hint {
     margin-top: 6px !important;
     opacity: 0.4 !important;
-    font-size: 0.72rem !important;
+    font-size: var(--fs-label) !important;
 }
 
 /* Image preview */
@@ -187,7 +187,7 @@
     display: inline-block;
     padding: 3px 8px;
     border-radius: 4px;
-    font-size: 0.7rem;
+    font-size: var(--fs-footnote);
     font-weight: 700;
     text-transform: uppercase;
     background: var(--gen-unknown, #666);
@@ -203,7 +203,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 0.82rem;
+    font-size: var(--fs-body);
     color: var(--text-muted);
 }
 
@@ -218,7 +218,7 @@
     color: var(--text-secondary);
     cursor: pointer;
     display: inline-flex;
-    font-size: 0.78rem;
+    font-size: var(--fs-label);
     font-weight: 700;
     gap: 6px;
     min-height: 32px;
@@ -258,7 +258,7 @@
     color: var(--text-secondary);
     cursor: pointer;
     font: inherit;
-    font-size: 0.78rem;
+    font-size: var(--fs-label);
     padding: 7px 8px;
     text-align: left;
     white-space: nowrap;
@@ -303,7 +303,7 @@
 
 .reader-quick-fact-value {
     color: var(--text-primary);
-    font-size: 0.76rem;
+    font-size: var(--fs-label);
     font-weight: 650;
     max-width: min(26ch, 34vw);
     min-width: 0;
@@ -340,7 +340,7 @@
 }
 
 .reader-section-title {
-    font-size: 0.72rem;
+    font-size: var(--fs-label);
     font-weight: 700;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -348,7 +348,7 @@
 }
 
 .reader-section-hint {
-    font-size: 0.72rem;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     opacity: 0.7;
     margin-top: 2px;
@@ -392,7 +392,7 @@
 }
 
 .reader-editor-field span {
-    font-size: 0.72rem;
+    font-size: var(--fs-label);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -434,7 +434,7 @@
 
 .reader-editor-note {
     margin: 0;
-    font-size: 0.78rem;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-muted);
 }
@@ -446,7 +446,7 @@
     background: rgba(var(--accent-primary-rgb), 0.12);
     border: 1px solid rgba(var(--accent-primary-rgb), 0.22);
     color: var(--accent-tertiary);
-    font-size: 0.8rem;
+    font-size: var(--fs-body);
     line-height: 1.5;
 }
 
@@ -462,7 +462,7 @@
     color: var(--text-muted);
     padding: 3px 8px;
     border-radius: 6px;
-    font-size: 0.7rem;
+    font-size: var(--fs-footnote);
     cursor: pointer;
     transition: all 0.15s;
     white-space: nowrap;
@@ -526,7 +526,7 @@
     color: var(--purple);
     padding: 4px 8px;
     border-radius: 999px;
-    font-size: 0.78rem;
+    font-size: var(--fs-label);
     margin: 3px 4px 0 0;
     max-width: 100%;
     overflow-wrap: anywhere;
@@ -552,8 +552,8 @@ a.reader-lora-tag:hover { opacity: 0.8; text-decoration: underline; }
     border: 1px solid rgba(var(--accent-rgb), 0.04);
 }
 
-.reader-param-key { font-size: 0.7rem; color: var(--text-muted); }
-.reader-param-val { font-size: 0.78rem; font-weight: 500; overflow-wrap: anywhere; }
+.reader-param-key { font-size: var(--fs-footnote); color: var(--text-muted); }
+.reader-param-val { font-size: var(--fs-label); font-weight: 500; overflow-wrap: anywhere; }
 
 .reader-model-assets-grid {
     display: grid;
@@ -572,14 +572,14 @@ a.reader-lora-tag:hover { opacity: 0.8; text-decoration: underline; }
 }
 
 .reader-model-asset-title {
-    font-size: 0.72rem;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
 
 .reader-model-asset-value {
-    font-size: 0.8rem;
+    font-size: var(--fs-body);
     line-height: 1.45;
     overflow-wrap: anywhere;
 }
@@ -597,12 +597,12 @@ a.reader-lora-tag:hover { opacity: 0.8; text-decoration: underline; }
     border-radius: 999px;
     background: rgba(120, 120, 120, 0.16);
     color: var(--text-secondary);
-    font-size: 0.74rem;
+    font-size: var(--fs-label);
     max-width: 100%;
     overflow-wrap: anywhere;
 }
 
-.reader-hash-row { margin-top: 4px; font-size: 0.78rem; }
+.reader-hash-row { margin-top: 4px; font-size: var(--fs-label); }
 
 .reader-hash-entry {
     display: flex;
@@ -617,8 +617,8 @@ a.reader-lora-tag:hover { opacity: 0.8; text-decoration: underline; }
     flex-wrap: wrap;
 }
 
-.reader-hash-name { font-size: 0.7rem; color: var(--text-muted); white-space: nowrap; }
-.reader-hash-value { font-size: 0.78rem; font-family: var(--font-mono); color: var(--accent-primary, #DDB586); text-decoration: none; }
+.reader-hash-name { font-size: var(--fs-footnote); color: var(--text-muted); white-space: nowrap; }
+.reader-hash-value { font-size: var(--fs-label); font-family: var(--font-mono); color: var(--accent-primary, #DDB586); text-decoration: none; }
 .reader-hash-value:hover { text-decoration: underline; }
 .reader-hash-badge { font-size: 0.6rem; font-family: var(--font-mono); color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 1px 3px; border-radius: 3px; margin-left: 3px; }
 
@@ -649,7 +649,7 @@ a.reader-lora-tag:hover { opacity: 0.8; text-decoration: underline; }
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(var(--accent-rgb), 0.05);
     color: var(--text-secondary);
-    font-size: 0.75rem;
+    font-size: var(--fs-label);
 }
 
 .reader-color-swatch .swatch-dot {

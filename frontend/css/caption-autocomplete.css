@@ -35,7 +35,7 @@
 
 .caption-autocomplete-name {
     font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-    font-size: 0.84rem;
+    font-size: var(--fs-body);
     color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -43,7 +43,7 @@
 }
 
 .caption-autocomplete-count {
-    font-size: 0.74rem;
+    font-size: var(--fs-label);
     color: var(--text-muted, #A6A6A6);
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
@@ -70,7 +70,7 @@
 
 .caption-autocomplete-zh,
 .caption-autocomplete-copy {
-    font-size: 0.78rem;
+    font-size: var(--fs-label);
     color: var(--text-secondary, #CCCCCC);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -151,7 +151,7 @@
     border-radius: var(--radius-md, 4px);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
     overflow-y: auto;
-    font-size: 0.82rem;
+    font-size: var(--fs-body);
     color: var(--text, #E8E8EA);
 }
 
@@ -174,7 +174,7 @@
 
 .cap-ac-info-zh {
     color: var(--text-secondary, #A6A6AB);
-    font-size: 0.78rem;
+    font-size: var(--fs-label);
 }
 
 .cap-ac-info-close {
@@ -185,7 +185,7 @@
     border-radius: var(--radius-sm, 4px);
     background: transparent;
     color: var(--text-muted, #8A8A90);
-    font-size: 0.78rem;
+    font-size: var(--fs-label);
     line-height: 1;
     cursor: pointer;
 }
@@ -216,7 +216,7 @@
 .cap-ac-info-label {
     flex: 0 0 108px;
     color: var(--text-muted, #8A8A90);
-    font-size: 0.76rem;
+    font-size: var(--fs-label);
 }
 
 .cap-ac-info-value {
@@ -231,7 +231,7 @@
     padding-top: 8px;
     border-top: 1px solid var(--hairline-2, #26262A);
     color: var(--text-muted, #8A8A90);
-    font-size: 0.74rem;
+    font-size: var(--fs-label);
     line-height: 1.45;
 }
 

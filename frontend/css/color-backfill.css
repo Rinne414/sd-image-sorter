@@ -50,7 +50,7 @@
 
 .color-backfill-banner-detail {
     color: var(--text-secondary);
-    font-size: 0.82rem;
+    font-size: var(--fs-body);
     line-height: 1.45;
 }
 
@@ -110,7 +110,7 @@
 
 .filter-color-backfill-hint {
     color: var(--text-secondary);
-    font-size: 0.8rem;
+    font-size: var(--fs-body);
     line-height: 1.45;
     margin: 0;
 }
@@ -223,14 +223,14 @@
     display: flex;
     justify-content: space-between;
     margin-top: 8px;
-    font-size: 0.78rem;
+    font-size: var(--fs-label);
     color: var(--text-secondary);
 }
 
 .color-progress-toast-current {
     margin-top: 6px;
     color: var(--text-muted);
-    font-size: 0.76rem;
+    font-size: var(--fs-label);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

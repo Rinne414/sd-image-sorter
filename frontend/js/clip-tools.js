@@ -56,7 +56,7 @@
         .clip-tools-card .meta{padding:6px 8px;display:flex;align-items:center;justify-content:space-between;gap:6px;}
         .clip-tools-card .pct{font-weight:800;font-size:13px;color:var(--accent-primary,#E2C099);}
         .clip-tools-card .cmp{appearance:none;border:none;background:rgba(255,255,255,0.08);
-            color:var(--text-secondary,#D6D6D6);border-radius:6px;font-size:10px;padding:2px 6px;cursor:pointer;}
+            color:var(--text-secondary,#D6D6D6);border-radius:6px;font-size:var(--fs-footnote,11px);padding:2px 6px;cursor:pointer;}
         .clip-tools-card .cmp:hover{background:var(--accent-primary,#E2C099);color:#fff;}
         .clip-tools-note{color:var(--text-secondary,#A6A6A6);font-size:12px;margin:0 0 12px;}
         .clip-tools-empty{color:var(--text-secondary,#A6A6A6);text-align:center;padding:28px 8px;}

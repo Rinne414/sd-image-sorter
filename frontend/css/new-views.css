@@ -1187,7 +1187,7 @@
 }
 
 .artist-image-action {
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     line-height: 1;
     padding: 4px 6px;
     border-radius: 999px;

@@ -518,7 +518,7 @@ body::after {
 }
 
 .nav-bar.nav-tabs-compact-labels .brand-version {
-    font-size: 10px;
+    font-size: var(--fs-footnote);
 }
 
 .nav-bar.nav-tabs-compact-labels .nav-tabs {
@@ -2442,7 +2442,7 @@ textarea:focus,
     margin-left: 6px;
     padding: 1px 8px;
     border-radius: 999px;
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     font-weight: 700;
     letter-spacing: 0.02em;
     text-transform: none;
@@ -3514,7 +3514,7 @@ textarea:focus,
 .promptlab-affix-example {
     margin: 0;
     color: var(--text-secondary);
-    font-size: 0.82rem;
+    font-size: var(--fs-body);
     line-height: 1.45;
 }
 
@@ -3525,7 +3525,7 @@ textarea:focus,
     border-radius: 999px;
     background: rgba(var(--accent-primary-rgb), 0.14);
     color: #ECD6BC;
-    font-size: 0.72rem;
+    font-size: var(--fs-label);
     font-weight: 700;
     letter-spacing: 0.02em;
     text-transform: uppercase;
@@ -3545,7 +3545,7 @@ textarea:focus,
 
 .promptlab-affix-field label {
     color: var(--text-secondary);
-    font-size: 0.78rem;
+    font-size: var(--fs-label);
     font-weight: 700;
 }
 
@@ -4300,7 +4300,7 @@ textarea:focus,
 .promptlab-admin-section h5 {
     margin: 0;
     color: var(--text-secondary);
-    font-size: 0.78rem;
+    font-size: var(--fs-label);
     font-weight: 700;
 }
 
@@ -4346,14 +4346,14 @@ textarea:focus,
 
 .promptlab-resource-title {
     color: var(--text-primary);
-    font-size: 0.82rem;
+    font-size: var(--fs-body);
     font-weight: 700;
 }
 
 .promptlab-resource-meta,
 .promptlab-resource-empty {
     color: var(--text-muted);
-    font-size: 0.75rem;
+    font-size: var(--fs-label);
 }
 
 .artist-main {
@@ -4526,7 +4526,7 @@ textarea:focus,
 .scan-diagnostics-meta dt {
     margin: 0 0 3px;
     color: var(--text-muted, #A5A5A5);
-    font-size: 0.74rem;
+    font-size: var(--fs-label);
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
@@ -5084,7 +5084,7 @@ textarea:focus,
 
 .filter-presets-title {
     color: var(--text-muted);
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -5140,7 +5140,7 @@ textarea:focus,
 
 .filter-stat-label {
     color: var(--text-muted);
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -6843,7 +6843,7 @@ html.lang-zh #detect-modal .censor-detect-section-title {
 }
 
 #view-censor .queue-action-btn span {
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     font-weight: 700;
     letter-spacing: 0.02em;
 }
@@ -7175,7 +7175,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 .selection-panel-disclosure-summary::after {
     content: '▾';
     color: rgba(255, 255, 255, 0.46);
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     transition: transform 0.16s ease;
 }
 
@@ -7403,7 +7403,7 @@ html:not(.lang-zh) .filter-sidebar .btn-ghost.full-width {
 
 .reconnect-result-path span {
     color: rgba(255, 255, 255, 0.48);
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -7413,7 +7413,7 @@ html:not(.lang-zh) .filter-sidebar .btn-ghost.full-width {
     background: rgba(0, 0, 0, 0.2);
     border-radius: 7px;
     color: rgba(255, 255, 255, 0.76);
-    font-size: 10.5px;
+    font-size: var(--fs-footnote);
     line-height: 1.35;
     overflow-wrap: anywhere;
     padding: 5px 6px;
@@ -7941,7 +7941,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     border-radius: 10px;
     padding: 7px 12px;
     cursor: pointer;
-    font-size: 0.8rem;
+    font-size: var(--fs-body);
     font-weight: 700;
     white-space: nowrap;
     transition: background 0.15s;
@@ -8890,7 +8890,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     margin-left: 6px;
     padding: 1px 7px;
     border-radius: 999px;
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -8908,7 +8908,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     margin-left: auto;
     padding: 1px 7px;
     border-radius: 999px;
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -9046,7 +9046,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 .audit-summary-badge {
     padding: 1px 8px;
     border-radius: 999px;
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -9179,7 +9179,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 .collections-section-title {
     color: var(--text-secondary);
-    font-size: 0.72rem;
+    font-size: var(--fs-label);
     font-weight: 600;
     letter-spacing: 0.08em;
     margin: 0;
@@ -9195,7 +9195,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 .collections-empty {
     color: var(--text-muted);
-    font-size: 0.8rem;
+    font-size: var(--fs-body);
     line-height: 1.4;
     margin: 2px 0;
     padding: 6px 8px;
@@ -9230,7 +9230,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     display: flex;
     flex: 1 1 auto;
     font: inherit;
-    font-size: 0.84rem;
+    font-size: var(--fs-body);
     gap: 8px;
     min-width: 0;
     padding: 7px 6px;
@@ -9261,7 +9261,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     border-radius: 999px;
     color: var(--text-muted);
     flex: 0 0 auto;
-    font-size: 0.72rem;
+    font-size: var(--fs-label);
     min-width: 22px;
     padding: 1px 7px;
     text-align: center;
@@ -9287,7 +9287,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     border-radius: 7px;
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 0.82rem;
+    font-size: var(--fs-body);
     line-height: 1;
     padding: 5px 6px;
     transition: background 0.15s ease, color 0.15s ease;
@@ -9316,7 +9316,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 .collections-browsing-label {
     color: var(--text-primary);
-    font-size: 0.78rem;
+    font-size: var(--fs-label);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -9329,7 +9329,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     color: var(--text-secondary);
     cursor: pointer;
     flex: 0 0 auto;
-    font-size: 0.8rem;
+    font-size: var(--fs-body);
     line-height: 1;
     padding: 4px 6px;
     transition: background 0.15s ease, color 0.15s ease;
@@ -9370,7 +9370,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     cursor: pointer;
     display: flex;
     font: inherit;
-    font-size: 0.84rem;
+    font-size: var(--fs-body);
     gap: 8px;
     min-width: 0;
     padding: 7px 8px;
@@ -9401,7 +9401,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     border-radius: 999px;
     color: var(--text-muted);
     flex: 0 0 auto;
-    font-size: 0.72rem;
+    font-size: var(--fs-label);
     min-width: 22px;
     padding: 1px 7px;
     text-align: center;
@@ -9412,7 +9412,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     color: var(--text-muted);
     cursor: pointer;
     font: inherit;
-    font-size: 0.76rem;
+    font-size: var(--fs-label);
     padding: 5px 8px;
     text-align: left;
     transition: color 0.15s ease;
@@ -9478,14 +9478,14 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 .sidebar-section-caret {
     flex: 0 0 auto;
-    font-size: 0.7rem;
+    font-size: var(--fs-footnote);
     transition: transform 0.15s ease;
 }
 .sidebar-section.is-collapsed .sidebar-section-caret {
     transform: rotate(-90deg);
 }
 .sidebar-section-title {
-    font-size: 0.72rem;
+    font-size: var(--fs-label);
     font-weight: 600;
     letter-spacing: 0.08em;
     margin: 0;
@@ -9520,7 +9520,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 .folder-tree-empty {
     color: var(--text-muted);
-    font-size: 0.78rem;
+    font-size: var(--fs-label);
     margin: 2px 0;
 }
 .folder-row {
@@ -9590,7 +9590,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 .folder-row-name {
     flex: 1 1 auto;
-    font-size: 0.82rem;
+    font-size: var(--fs-body);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -9606,7 +9606,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 .folder-tree-browsing-label {
     color: var(--text-primary);
-    font-size: 0.76rem;
+    font-size: var(--fs-label);
     line-height: 1.35;
     min-width: 0;
     overflow-wrap: anywhere;
@@ -9643,14 +9643,14 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 .library-root-path {
     color: var(--text-primary);
-    font-size: 0.82rem;
+    font-size: var(--fs-body);
     font-weight: 600;
     overflow-wrap: anywhere;
     word-break: break-all;
 }
 .library-root-meta {
     color: var(--text-muted);
-    font-size: 0.72rem;
+    font-size: var(--fs-label);
 }
 .library-root-actions {
     display: flex;
@@ -9662,7 +9662,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 .library-roots-empty {
     color: var(--text-muted);
-    font-size: 0.82rem;
+    font-size: var(--fs-body);
     padding: 18px 4px;
     text-align: center;
 }
@@ -9686,7 +9686,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 .collections-picker-header {
     color: var(--text-muted);
-    font-size: 0.7rem;
+    font-size: var(--fs-footnote);
     font-weight: 600;
     letter-spacing: 0.06em;
     padding: 4px 10px 8px;
@@ -9729,7 +9729,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 .tag-category-copy-section-title {
     margin: 6px 4px 2px;
     color: var(--text-muted);
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     font-weight: 800;
     letter-spacing: 0;
     text-transform: uppercase;
@@ -10131,7 +10131,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     box-shadow: inset 0 0 0 1px rgba(var(--accent-primary-rgb), 0.12);
 }
 .nav-tools-caret {
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     opacity: 0.7;
     transition: transform var(--transition-normal);
 }
@@ -10173,7 +10173,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 .nav-tools-badge {
     margin-left: auto;
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     font-weight: 600;
     padding: 1px 7px;
     border-radius: 8px;
@@ -10672,7 +10672,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     border-radius: 4px;
     background: rgba(var(--accent-rgb), 0.14);
     color: #E6C675;
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     text-transform: uppercase;
 }
 .sepcon-issue-severity.is-high {
@@ -10711,7 +10711,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     min-width: 0;
     overflow: hidden;
     color: var(--text-secondary, #BDBDBD);
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -10802,7 +10802,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 .sepcon-intrinsic {
     flex-shrink: 0;
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     padding: 1px 5px;
     border-radius: 999px;
     background: rgba(var(--accent-rgb), 0.16);
@@ -12112,7 +12112,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     background: rgba(var(--blue-rgb), 0.22);
     border: 1px solid rgba(var(--blue-rgb), 0.55);
     color: var(--text);
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     font-weight: 700;
     line-height: 1;
     flex: 0 0 auto;

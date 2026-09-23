@@ -243,7 +243,7 @@ body.entry-active {
     align-items: center;
     gap: 18px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     color: rgba(var(--accent-rgb), 0.45);
 }
 
@@ -292,7 +292,7 @@ body.entry-active {
 /* Tier labels — structure stated in words, not in size jitter (FB-2). */
 .entry-eyebrow {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     font-weight: 600;
     letter-spacing: 2.4px;
     text-transform: uppercase;
@@ -358,7 +358,7 @@ body.entry-active {
 
 .entry-tile .tile-steps {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     color: rgba(var(--accent-rgb), 0.5);
 }
 
@@ -384,7 +384,7 @@ body.entry-active {
     align-items: center;
     gap: 9px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-footnote);
 }
 
 .entry-resume .resume-badge {
@@ -451,7 +451,7 @@ body.entry-active {
     align-items: center;
     gap: 10px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-footnote);
 }
 
 .entry-anchor .anchor-badge {
@@ -859,7 +859,7 @@ body.entry-active {
 
 .catalog-group-title {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     font-weight: 700;
     letter-spacing: 2px;
     text-transform: uppercase;
@@ -1018,7 +1018,7 @@ body.entry-active {
     row-gap: 6px;
     width: 100%;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-footnote);
     color: rgba(var(--accent-rgb), 0.45);
 }
 
