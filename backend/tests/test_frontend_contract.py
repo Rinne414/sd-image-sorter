@@ -4114,7 +4114,7 @@ def _hex_rgb(css_block: str, token: str) -> tuple[int, int, int]:
     return int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16)
 
 
-THEME_IDS = ("graphite", "ink")
+THEME_IDS = ("graphite", "ink", "dusk")
 THEME_LOCALE_KEYS = (
     "theme.open",
     "theme.openTooltip",
@@ -4124,16 +4124,18 @@ THEME_LOCALE_KEYS = (
     "theme.graphiteHint",
     "theme.ink",
     "theme.inkHint",
+    "theme.dusk",
+    "theme.duskHint",
 )
 
 
 def test_the_theme_picker_offers_only_palettes_that_are_actually_styled():
-    """Both offered palettes must be dark, because only dark ones are finished.
+    """Every offered palette must be dark, because only dark ones are finished.
 
     A light palette needs every sheet to flip, not just ``tokens.css``: the
     other 21 stylesheets hold ~1,570 rules with hardcoded dark values and no
     ``data-theme`` selector, so a white canvas would show black holes in
-    Censor and Dataset. Graphite and ink are both dark, so they are safe to
+    Censor and Dataset. Graphite, ink and dusk are all dark, so they are safe to
     offer; ``paper`` is deliberately absent and this test keeps it absent
     until those sheets are converged.
     """
@@ -4153,6 +4155,7 @@ def test_the_theme_picker_offers_only_palettes_that_are_actually_styled():
     for theme_id in THEME_IDS:
         assert f'data-theme-id="{theme_id}"' in index
     assert 'html[data-theme="ink"]' in tokens
+    assert 'html[data-theme="dusk"]' in tokens
 
     # The unshipped light palette must not be reachable from any surface.
     assert 'data-theme-id="paper"' not in index
@@ -4161,7 +4164,7 @@ def test_the_theme_picker_offers_only_palettes_that_are_actually_styled():
     assert 'data-theme-swatch="paper"' not in tokens
     assert "'paper'" not in theme_js
 
-    assert "var THEMES = ['graphite', 'ink']" in theme_js
+    assert "var THEMES = ['graphite', 'ink', 'dusk']" in theme_js
     assert "DEFAULT_THEME = 'graphite'" in theme_js
     assert "if (!allowed(id)) id = DEFAULT_THEME" in theme_js
 

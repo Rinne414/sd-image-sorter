@@ -1,5 +1,5 @@
 /**
- * Color themes — Graphite (default) and Black + Blue.
+ * Color themes — Graphite (default), Black + Blue and Dusk.
  *
  * Both are dark on purpose. tokens.css is an override layer over 21 sheets
  * that still hardcode dark values with no data-theme selector, so a light
@@ -14,7 +14,7 @@
     'use strict';
 
     var STORAGE_KEY = 'sd-image-sorter-theme';
-    var THEMES = ['graphite', 'ink'];
+    var THEMES = ['graphite', 'ink', 'dusk'];
     var DEFAULT_THEME = 'graphite';
 
     function allowed(id) {

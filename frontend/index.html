@@ -6,7 +6,7 @@
         /* Apply the saved palette before CSS so the first paint is the chosen theme. */
         (function () {
             var KEY = 'sd-image-sorter-theme';
-            var ALLOWED = { graphite: 1, ink: 1 };
+            var ALLOWED = { graphite: 1, ink: 1, dusk: 1 };
             var theme = 'graphite';
             try {
                 var saved = localStorage.getItem(KEY);
@@ -622,6 +622,10 @@
                             <span class="theme-swatch" data-theme-swatch="ink" aria-hidden="true"></span>
                             <span data-i18n="theme.ink">Black + Blue</span>
                         </button>
+                        <button class="btn btn-ghost full-width theme-choice" type="button" data-theme-id="dusk">
+                            <span class="theme-swatch" data-theme-swatch="dusk" aria-hidden="true"></span>
+                            <span data-i18n="theme.dusk">Dusk</span>
+                        </button>
                         <button class="btn btn-ghost full-width" id="mobile-btn-language" aria-label="Switch language" data-i18n-aria="lang.switchLabel">
                             <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg></span>
                             <span data-i18n="lang.toggle">中文</span>
@@ -698,6 +702,13 @@
                 <span class="theme-choice-copy">
                     <span data-i18n="theme.ink">Black + Blue</span>
                     <span class="theme-choice-hint" data-i18n="theme.inkHint">True black, steel blue</span>
+                </span>
+            </button>
+            <button type="button" class="theme-choice" role="option" data-theme-id="dusk" aria-selected="false">
+                <span class="theme-swatch" data-theme-swatch="dusk" aria-hidden="true"></span>
+                <span class="theme-choice-copy">
+                    <span data-i18n="theme.dusk">Dusk</span>
+                    <span class="theme-choice-hint" data-i18n="theme.duskHint">Plum base, peach and periwinkle</span>
                 </span>
             </button>
         </div>
@@ -5443,13 +5454,14 @@
                     <div class="settings-row">
                         <div class="settings-row-copy">
                             <strong data-i18n="theme.settingsTitle">Color theme</strong>
-                            <span data-i18n="theme.settingsBody">Both palettes are dark; only the accent and surface depth change</span>
+                            <span data-i18n="theme.settingsBody">All dark; the base and accent colours differ</span>
                         </div>
                         <label class="settings-inline-control">
                             <span data-i18n="theme.open">Color theme</span>
                             <select id="settings-theme" class="input-field">
                                 <option value="graphite" data-i18n="theme.graphite" selected>Graphite</option>
                                 <option value="ink" data-i18n="theme.ink">Black + Blue</option>
+                                <option value="dusk" data-i18n="theme.dusk">Dusk</option>
                             </select>
                         </label>
                     </div>

@@ -2959,11 +2959,13 @@ window.I18nLang_zhCN = {
     'theme.open': '配色',
     'theme.openTooltip': '选择界面配色',
     'theme.settingsTitle': '界面配色',
-    'theme.settingsBody': '两套都是深色，只有强调色和底色深浅不同',
+    'theme.settingsBody': '都是深色，底色和强调色不同',
     'theme.graphite': '石墨',
     'theme.graphiteHint': '深灰底，琥珀色强调',
     'theme.ink': '黑 + 蓝',
     'theme.inkHint': '纯黑底，钢蓝强调',
+    'theme.dusk': '暮色',
+    'theme.duskHint': '紫调底色，蜜桃与长春花蓝',
 
     // ========================
     // Scan Validation Feedback

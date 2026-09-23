@@ -2792,11 +2792,13 @@ window.I18nLang_en = {
     'theme.open': 'Color theme',
     'theme.openTooltip': 'Choose a color theme',
     'theme.settingsTitle': 'Color theme',
-    'theme.settingsBody': 'Both palettes are dark; only the accent and surface depth change',
+    'theme.settingsBody': 'All dark; the base and accent colours differ',
     'theme.graphite': 'Graphite',
     'theme.graphiteHint': 'Dark grey, amber accent',
     'theme.ink': 'Black + Blue',
     'theme.inkHint': 'True black, steel blue',
+    'theme.dusk': 'Dusk',
+    'theme.duskHint': 'Plum base, peach and periwinkle',
 
     // ========================
     // Scan Validation Feedback

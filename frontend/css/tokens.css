@@ -3082,3 +3082,109 @@ li > .icon {
         scroll-behavior: auto !important;
     }
 }
+
+/* Dusk — derived from the owner's own library (2026-09-24).
+   2,500 images sampled from the main library (L:/Pictures/AAA Reference):
+   lit areas lean warm (skin / coral / peach, hue 0-60 = 42% of the colour),
+   shadows lean violet (dark neutrals ~hue 315; periwinkle 240-285 = 26%),
+   green and cyan are almost absent (<1.5%). The palette keeps that split:
+   plum-ink surfaces from the shadows, warm text from the highlights, a peach
+   accent for actions and a periwinkle accent for selection. */
+html[data-theme="dusk"] {
+    color-scheme: dark;
+    --bg: #100D13;
+    --surface-1: #18141B;
+    --surface-2: #211C24;
+    --surface-3: #2B252F;
+    --stage: #09060B;
+    --border: #322C37;
+    --border-strong: #443D48;
+    --hairline-1: #1D1821;
+    --hairline-2: #251F29;
+    --scrim: rgba(9, 6, 11, 0.76);
+    --text: #F0E7E5;
+    --text-2: #C4B7B4;
+    --muted: #9F949E;
+    --text-disabled: #5F5663;
+
+    /* warm light: actions */
+    --accent: #F3A582;
+    --accent-rgb: 243, 165, 130;
+    --accent-bright: #FEB38F;
+    --accent-deep: #DE8D6C;
+    --accent-soft: rgba(243, 165, 130, 0.13);
+    --accent-line: rgba(243, 165, 130, 0.48);
+    --on-accent: #26120C;
+
+    /* cool shadow: what the user picked */
+    --pink: #96A7E7;
+    --pink-rgb: 150, 167, 231;
+    --pink-hover: #A9B8F0;
+    --pink-active: #8194D9;
+    /* AI output: the library's pink family */
+    --purple: #ECA7BD;
+    --purple-rgb: 236, 167, 189;
+    --purple-hover: #F3B9CB;
+    --purple-active: #DC93AB;
+
+    --success: #8EC899;
+    --success-rgb: 142, 200, 153;
+    --warning: #E8C270;
+    --warning-rgb: 232, 194, 112;
+    --danger: #E1556F;
+    --danger-rgb: 225, 85, 111;
+    --danger-ink: #FFB8C4;
+    --danger-ink-hover: #FFD2DA;
+
+    --control-bg: #140F17;
+    --control-bg-hover: #1B161F;
+    --tag-chip-bg: rgba(240, 231, 229, 0.055);
+    --wash-faint: rgba(240, 231, 229, 0.02);
+    --wash: rgba(240, 231, 229, 0.035);
+    --wash-hover: rgba(240, 231, 229, 0.065);
+    --wash-strong: rgba(240, 231, 229, 0.09);
+    --ink-faint: rgba(240, 231, 229, 0.22);
+    --scrollbar-thumb: rgba(240, 231, 229, 0.14);
+    --scrollbar-thumb-hover: rgba(240, 231, 229, 0.24);
+    --chrome-float: rgba(33, 28, 36, 0.95);
+    --chrome-float-deep: rgba(16, 13, 19, 0.95);
+    --chrome-on-image: rgba(16, 13, 19, 0.72);
+    --chrome-sidebar: rgba(24, 20, 27, 0.93);
+    --chrome-sidebar-soft: rgba(24, 20, 27, 0.74);
+    --chrome-zen: rgba(16, 13, 19, 0.84);
+    --progress-track: rgba(240, 231, 229, 0.08);
+    --shadow-modal: 0 16px 48px rgba(6, 3, 9, 0.62), 0 0 0 1px rgba(240, 231, 229, 0.06);
+    --shadow-float: 0 8px 24px rgba(6, 3, 9, 0.52), 0 0 0 1px rgba(240, 231, 229, 0.05);
+
+    /* cut corners (Blue Archive / Arknights / Star Rail share them) */
+    --cut: 7px;
+    --cut-sm: 5px;
+}
+
+/* Shapes: a cut top-left + bottom-right on primary actions, one small cut on
+   ordinary buttons, an octagon on chips. Browsers without corner-shape fall
+   back to the same radii as ordinary rounded corners. */
+html[data-theme="dusk"] .btn {
+    border-radius: var(--cut-sm) 3px 3px 3px;
+    corner-shape: bevel round round round;
+}
+html[data-theme="dusk"] .btn-primary {
+    border-radius: var(--cut) 3px;
+    corner-shape: bevel round;
+}
+html[data-theme="dusk"] :is(.gallery-chip, .aspect-quick-btn, .gen-tab) {
+    border-radius: var(--cut-sm);
+    corner-shape: bevel;
+}
+html[data-theme="dusk"] .nav-tab {
+    border-radius: 3px;
+}
+html[data-theme="dusk"] :is(.nav-tab, .gen-tab)[aria-selected="true"] {
+    border-radius: var(--cut) 3px;
+    corner-shape: bevel round;
+}
+
+.theme-swatch[data-theme-swatch="dusk"] {
+    background: linear-gradient(135deg, #100D13 0 55%, #211C24 55% 100%);
+    box-shadow: inset 0 0 0 2px #F3A582, inset 0 0 0 4px #96A7E7;
+}
