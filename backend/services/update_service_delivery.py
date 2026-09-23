@@ -52,6 +52,16 @@ _HTTP_HEADERS = {
 _DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
 
+def _github_api_error_payload(payload: dict[str, Any]) -> bool:
+    """True for a GitHub API error object (rate limit, not found) served as JSON."""
+    if not str(payload.get("message") or "").strip():
+        return False
+    if payload.get("tag_name") or isinstance(payload.get("assets"), list):
+        return False
+    status = str(payload.get("status") or "")
+    return bool(payload.get("documentation_url") or status in {"401", "403", "404"})
+
+
 def _normalize_version(text: Optional[str]) -> str:
     return str(text or "").strip().lstrip("vV")
 
@@ -167,6 +177,8 @@ class _UpdateDeliveryMixin:
         payload = json.loads(raw.decode("utf-8"))
         if not isinstance(payload, dict):
             raise RuntimeError("Update API returned an unexpected payload")
+        if _github_api_error_payload(payload):
+            raise RuntimeError("Update API returned an error instead of a release")
         return payload
 
     def _read_release_manifest(self, manifest_url: str) -> dict[str, Any]:

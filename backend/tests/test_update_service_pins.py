@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import json
 import sys
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -352,6 +353,21 @@ def test_read_release_json_rejects_non_dict_payload(monkeypatch, tmp_path: Path)
         service._read_release_json()
 
 
+def test_read_release_json_rejects_github_rate_limit_object(monkeypatch, tmp_path: Path):
+    _point_channel_at_tmp(monkeypatch, tmp_path)
+    service = UpdateService()
+    payload = json.dumps(
+        {
+            "message": "API rate limit exceeded for 1.2.3.4",
+            "documentation_url": "https://docs.github.com/rest",
+            "status": "403",
+        }
+    ).encode("utf-8")
+    monkeypatch.setattr(us.urllib.request, "urlopen", _fake_urlopen(payload))
+    with pytest.raises(RuntimeError, match="error instead of a release"):
+        service._read_release_json()
+
+
 def test_read_release_manifest_rejects_non_dict_payload(monkeypatch):
     service = UpdateService()
     monkeypatch.setattr(us.urllib.request, "urlopen", _fake_urlopen(b"[1, 2, 3]"))
@@ -407,6 +423,18 @@ def test_build_status_passes_release_body_verbatim(monkeypatch, tmp_path: Path):
     # Envelope always carries the updater/channel scaffolding.
     for key in ("updater_enabled", "channel_name", "current_version", "checked_at"):
         assert key in status
+
+
+@pytest.mark.parametrize("code", [401, 403])
+def test_format_update_error_does_not_echo_github_refusal(code):
+    service = UpdateService()
+    exc = urllib.error.HTTPError(
+        "https://api.github.com/repos/x/y/releases/latest", code, "Forbidden", {}, None
+    )
+    message = service._format_update_error(exc)
+    assert str(code) not in message
+    assert "Forbidden" not in message
+    assert "GitHub temporarily refused" in message
 
 
 def test_get_status_caches_within_ttl_and_force_refetches(monkeypatch, tmp_path: Path):

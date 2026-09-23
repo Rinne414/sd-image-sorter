@@ -270,6 +270,11 @@ class _UpdateChannelMixin:
 
     def _format_update_error(self, exc: Exception) -> str:
         detail = str(exc).strip() or exc.__class__.__name__
+        if getattr(exc, "code", None) in (401, 403):
+            return (
+                "GitHub temporarily refused the update check. "
+                "Try again later, or set an update proxy if GitHub is blocked."
+            )
         if self._is_default_github_channel():
             return (
                 f"Failed to reach the default GitHub update channel: {detail}. "
