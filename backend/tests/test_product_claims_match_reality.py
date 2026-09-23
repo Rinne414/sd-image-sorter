@@ -67,6 +67,10 @@ def test_marketing_tagger_count_matches_the_catalog():
     assert f"{tagger_count} local tagger" in why
     assert f"{tagger_count} 个本地打标" in readme
     assert f"{tagger_count} local tagger" in readme
+    assert "OppaiOracle" in readme
+    assert "CL Tagger v2" in readme
+    assert "OppaiOracle" in why
+    assert "CL Tagger v2" in why
     assert "ToriiGate captioner" in why
     assert "ToriiGate 描述器" in readme
 

@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed / 修复
+- **Separate libraries no longer mix All counts / 独立图库不再混用 All 数量**: switching to an empty library zeros generator/tag/folder stats, gallery filters, and selection for that workspace. Mass Tag, including a queued Mass Tag, lists and tags only the images of the library it was started in, and library-health totals follow the current library.
+  - 切到空图库时，All / 生成器 / 标签 / 文件夹数字只算当前库；筛选条件和选择不会从上一库带过来；批量打标（包括排队中的批量打标）只处理启动时所在图库的图片。
+- **Similar / Collections / Dataset stay inside a library / Similar、收藏、Dataset 不再串库**: similarity search, duplicate scans, collection lists, Dataset projects, prompt insights, aesthetic/artist/entry counts, and color backfill only see the current workspace. Switching libraries refreshes those panels. Upgrading keeps every existing collection and its images, and the main library keeps its existing similarity index.
+  - Similar 搜索、重复图、收藏夹、Dataset 项目、提示词统计、美学分 / 画师 / 入口页计数、颜色回填都只看当前库；切库会刷新这些面板。升级时现有收藏夹和其中的图片都会保留，主图库沿用原有的相似度索引。
+- **Entry overlay no longer steals clicks / 入口页不再挡住点击**: decorative veils and the overflowing identity footer pass clicks through to mosaic tiles; Check for Updates on the entry page opens the version popup instead of instantly closing it.
+  - 装饰层与溢出的身份区块不再抢走磁贴点击；入口页「检查更新」会打开版本弹窗，而不是立刻关掉。
+- **Import toast dismiss / 导入提示可关掉**: toast cards accept clicks again, so the post-import hint can be dismissed.
+  - 导入后的 toast 可以点掉。
+- **Detail modal × closes / 详情 × 可关闭**: the image preview close button stays above the info column, so clicking it closes the modal like Escape does.
+  - 详情弹窗的 × 不再被右侧信息栏挡住，点击即可关闭，和 Escape 一样。
+- **No first-run Welcome back toast / 首次进入不再欢迎回来**: Entry → Library restores scroll quietly; the greeting only appears for a resume from a previous browser session.
+  - 从入口进图库只静默恢复滚动；「欢迎回来」只在上一次浏览器会话留下位置时出现。
+- **VLM caption job toast / VLM 标注完成会提示**: finishing or failing a caption batch now shows a global toast, not only the hidden NL-tagger status line.
+  - 批量标注完成或启动失败会弹出 toast，不再只写在可能被收起的状态行里。
+- **Sidecar tags in gallery index / sidecar 标签进入图库索引**: a Danbooru-style ``.txt`` next to an image is indexed into the ``tags`` table (source=sidecar) on scan, so the gallery tag cloud and filters can see it. Manual and tagger tags are kept; an unchanged sidecar writes nothing on rescan.
+  - 扫描时会把图旁的标签列表 sidecar 写入标签表，图库标签云和筛选看得到；手动与打标器标签保留，sidecar 没变时重扫不会重写。
+- **Spaced Dataset trigger / 空格触发词不再挡导出**: a trigger such as ``long hair girl`` is accepted. Plain spaces are allowed; commas, line breaks, tabs, and other control whitespace still fail.
+  - ``long hair girl`` 这类带普通空格的触发词可以通过校验，不再挡住 Dataset 导出；逗号、换行、制表符等仍会被拒绝。
+- **Combined export uses DATA_DIR / 合并导出写入 DATA_DIR**: the one-file combined tag export lands in ``DATA_DIR/combined-exports``, including portable and env-overridden data roots, not ``backend/data``.
+  - 合并导出改写到 ``DATA_DIR/combined-exports``，不再固定落在 ``backend/data``。
+- **Folder-scan reports file size / 文件夹扫描回报文件大小**: Dataset folder import with thumbnails off fills file size and modified time from the directory scan instead of 0, without opening every image.
+  - Dataset 文件夹扫描即使不内嵌缩略图也会回报文件大小和修改时间，不再全是 0，也不会逐张打开图片。
+- **Aesthetic missing-torch is 503 / 缺少 torch 时美学分返回 503**: scoring one image when torch/open_clip is missing now returns 503 instead of a generic 500.
+  - 单张美学分在依赖未装时改为 503，不再冒成未处理的 500。
+- **Artist Identify no silent 2.8 GB download / 画师识别不再偷偷下载**: Identify only loads local Kaloscope + LSNet files. Missing assets return 503 and tell the user to Prepare (~2.8 GB). Prepare still downloads after confirm.
+  - 识别只读本机已准备的文件；缺模型回 503 并提示先 Prepare，不再在识别时自动拉约 2.8 GB。
+- **Local .pth is not ONNX / 本地 .pth 不再当 ONNX**: a Kaloscope ``.pth`` is loaded as PyTorch/Kaloscope. Mapping may sit one folder up. Torch checkpoints never fall through to onnxruntime.
+  - 本地 ``.pth`` 按 PyTorch/Kaloscope 加载，不再误走 ONNX；``class_mapping.csv`` 可以在上一层目录。
+- **TIPO uses a ready 200m-ft / TIPO 会选用已就绪的 200m-ft**: if only 200m-ft is on disk, both TIPO pickers default to it instead of pushing a 1.1 GB v2.1 download. A saved choice that is installed is kept.
+  - 本机只有 200m-ft 时，两个 TIPO 选单都默认用它，不再只推 1.1 GB 的 v2.1；已安装的已存选择保持不变。
+- **``/api/tag/single`` honors OppaiOracle / 单张打标认 OppaiOracle**: ``tagger_model=oppai-oracle-v1.1`` uses the dedicated ONNX loader instead of WD14's HuggingFace Hub path (which returned 503).
+  - 单张打标选 OppaiOracle 时走专用后端，不再误走 WD14 去 HuggingFace 然后 503。
+- **Prepare restart is not Ready / 需要重启时不再显示已就绪**: after Prepare installs packages that this process cannot load, the model card says Restart required instead of Ready.
+  - Prepare 装了本进程还加载不了的包时，卡片显示「需要重启」，不再标成已就绪。
+- **Prepare keeps newer transformers / Prepare 不再降级 transformers**: the release lock is a floor. An older install is still raised to the lock (torch 2.10 to the 2.13.0 security lock), but a newer compatible one such as transformers 5.7.x is left in place, so ToriiGate is not broken by a downgrade.
+  - 发布锁定版本是下限：较旧的安装仍会升到锁定版本（torch 2.10 升到 2.13.0 安全版本），较新的兼容版本（如 transformers 5.7.x）不会被降级。
+- **Duplicate scan names missing embeddings / 查重不再把 0 组当成全库结论**: when CLIP coverage is incomplete, the toast and summary say how many images were actually compared instead of “finished, 0 groups”.
+  - 没有向量或只扫到一部分时，会写明已索引张数，不再只报「完成、0 组」。
+- **Duplicates panel unlocks at 12/12 / 12/12 不再卡在索引中**: a finished embed snapshot no longer keeps the panel on “embeddings still running”.
+  - 进度已是 12/12 时，不再假装还在跑 embeddings。
+- **CL Tagger v2 gated 401 is not a raw Hub dump / CL Tagger v2 的 401 不再原文甩出**: a Hugging Face 401/403 becomes the existing token/terms guidance instead of the Hub HTML or JSON body.
+  - Hugging Face 401/403 会改成「接受条款 + 配置 token」的说明，不再把 Hub 原文堆到界面上。
+- **Dataset project 400/409 copy / 项目契约错误会显示**: create, delete, and export show the API ``code`` / ``message`` (name conflict, invalid source, not found) instead of the fetch wrapper or raw JSON.
+  - 建立、删除、导出失败会显示对应说明，不再把 HTTP 包装字串或 JSON 原文丢到 toast / 结果框。
+- **Export preview waits for caption versions / 导出预览不再闪「未加载」**: while annotation heads are loading, preview stays on “Refreshing preview...” and retries when history is ready.
+  - 打开项目时预览会等版本历史，不再先闪「Saved caption versions are not loaded」。
+- **Gallery send to Reader / Reverse / Privacy / 图库可送到读图、反推、隐私处理**: the More menu and context menu hand selected images to those tools, matching Censor and Dataset Maker. Privacy Tools receives every selected image.
+  - 选中图片后可送到读图、反推提示词、隐私处理，不必再只靠拖放；隐私处理会收到全部选中的图片。
+- **README lists all 9 local taggers / README 写全 9 个本地打标**: the feature list, runtime tables, and credits name OppaiOracle and CL Tagger v2, matching the catalog count.
+  - 功能列表与致谢不再只写 WD14 / Camie / PixAI，和「9 个本地打标」对得上。
+- **Update check hides GitHub 403 / 更新检查不再显示 GitHub 403 原文**: a GitHub 401/403 on the update check shows a short “GitHub temporarily refused” message instead of the raw HTTP error, and a GitHub error object is no longer read as a release.
+  - 检查更新遇到 GitHub 401/403 时显示简短说明，不再显示 HTTP 错误原文；GitHub 的错误物件也不会被当成版本资讯。
+
 ## [3.5.0-beta.6] - 2026-08-25
 
 ComfyUI / WebUI / WebP embedded prompts recover more reliably (UI workflow, Get/Set, Flux t5xxl, EXIF `Workflow:`, UTF-16, NovelAI stealth WebP). Existing library rows need a re-scan to refresh stored prompt fields.
