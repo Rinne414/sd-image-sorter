@@ -177,6 +177,58 @@ function addSelectionToCollectionPicker() {
     });
 }
 
+function resolveGallerySendIds() {
+    const explicit = getSelectedGalleryIds();
+    if (explicit.length) return explicit;
+    if (!getActiveSelectionTokenForActions()) return [];
+    return normalizeSelectionImageIds((AppState.images || []).map((image) => image?.id));
+}
+
+function galleryFilenameForId(imageId) {
+    const match = (AppState.images || []).find((image) => Number(image.id) === Number(imageId));
+    return match?.filename || '';
+}
+
+async function sendSelectionToReader() {
+    const ids = resolveGallerySendIds();
+    if (!ids.length) {
+        showToast(appT('selection.emptyHint', 'Select images, or choose all current filter matches.'), 'info');
+        return;
+    }
+    const imageId = ids[ids.length - 1];
+    const ok = await openReaderFromImage(imageId, galleryFilenameForId(imageId));
+    if (ok) clearGallerySelectionAfterBulkAction();
+}
+
+async function sendSelectionToReversePrompt() {
+    const ids = resolveGallerySendIds();
+    if (!ids.length) {
+        showToast(appT('selection.emptyHint', 'Select images, or choose all current filter matches.'), 'info');
+        return;
+    }
+    const imageId = ids[ids.length - 1];
+    const ok = await openReversePromptFromImage(imageId, galleryFilenameForId(imageId));
+    if (ok) {
+        if (ids.length > 1) {
+            showToast(
+                appT('selection.sendToReverseOne', 'Reverse Prompt opened the last selected image.'),
+                'info',
+            );
+        }
+        clearGallerySelectionAfterBulkAction();
+    }
+}
+
+async function sendSelectionToPrivacy() {
+    const ids = resolveGallerySendIds();
+    if (!ids.length) {
+        showToast(appT('selection.emptyHint', 'Select images, or choose all current filter matches.'), 'info');
+        return;
+    }
+    const ok = await openPrivacyFromImages(ids);
+    if (ok) clearGallerySelectionAfterBulkAction();
+}
+
 async function sendSelectionToDatasetMaker() {
     const ids = getSelectedGalleryIds();
     const hasFilteredToken = Boolean(getActiveSelectionTokenForActions());

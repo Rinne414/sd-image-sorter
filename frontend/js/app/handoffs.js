@@ -86,6 +86,43 @@ async function openReaderFromImage(imageId, filename = '') {
     return false;
 }
 
+async function openReversePromptFromImage(imageId, filename = '') {
+    const normalizedId = Number(imageId);
+    if (!Number.isFinite(normalizedId) || normalizedId <= 0) {
+        return false;
+    }
+
+    switchView('reverse');
+    if (typeof window.initReversePrompt === 'function') {
+        window.initReversePrompt();
+    }
+    if (typeof window.ReversePrompt?.openLibraryImage === 'function') {
+        return window.ReversePrompt.openLibraryImage(normalizedId, filename);
+    }
+    return false;
+}
+
+async function openPrivacyFromImages(imageIds = []) {
+    const ids = Array.from(
+        new Set(
+            (Array.isArray(imageIds) ? imageIds : [imageIds])
+                .map((value) => Number(value))
+                .filter((value) => Number.isFinite(value) && value > 0)
+        )
+    );
+    if (!ids.length) {
+        return false;
+    }
+
+    switchView('reader');
+    window.ImageReader?._switchWorkspaceTool?.('obfuscation');
+    window.ImageObfuscator?.init?.();
+    if (typeof window.ImageObfuscator?.addLibraryImages === 'function') {
+        return window.ImageObfuscator.addLibraryImages(ids);
+    }
+    return false;
+}
+
 
 async function openSimilarFromImage(imageId) {
     const normalizedId = Number(imageId);

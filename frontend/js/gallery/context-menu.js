@@ -108,6 +108,8 @@ Object.assign(window.Gallery, {
                 : null,
             { label: t('gallery.contextPromptHelper', 'Prompt Helper'), icon: '\u{1F9EA}', action: () => app.openPromptBuildFromImage?.(image.id) },
             { label: t('gallery.contextReadMetadata', 'Metadata / Info'), icon: '\u{1F4D6}', action: () => app.openReaderFromImage?.(image.id, image.filename || '') },
+            { label: t('gallery.contextReversePrompt', 'Send to Reverse Prompt'), icon: '\u{1F504}', action: () => app.openReversePromptFromImage?.(image.id, image.filename || '') },
+            { label: labelWithScope('gallery.contextPrivacy', 'Send to Privacy Tools'), icon: '\u{1F6E1}', action: () => app.openPrivacyFromImages?.(actionImageIds) },
             checkpointFilterValue ? { label: t('gallery.contextFilterCheckpoint', 'Filter by Checkpoint'), icon: '\u{1F50D}', action: () => {
                 if (app.AppState) {
                     app.updateFilters?.((filters) => {

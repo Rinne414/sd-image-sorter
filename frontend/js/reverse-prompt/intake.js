@@ -32,6 +32,38 @@ Object.assign(window.ReversePrompt, {
         });
     },
 
+    async openLibraryImage(imageId, filename = '') {
+        const id = Number(imageId);
+        if (!Number.isFinite(id) || id <= 0) {
+            return false;
+        }
+        try {
+            const response = await fetch(`/api/image-file/${id}`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const blob = await response.blob();
+            const ext = (blob.type || 'image/png').split('/').pop() || 'png';
+            const safeFilename = filename || `image-${id}.${ext}`;
+            const file = new File([blob], safeFilename, {
+                type: blob.type || 'image/png',
+                lastModified: Date.now(),
+            });
+            await this._handleFile(file);
+            return true;
+        } catch (error) {
+            window.App?.showToast?.(
+                this._t(
+                    'reverse.loadLibraryFailed',
+                    'Could not open this image in Reverse Prompt',
+                    '无法在反推页打开这张图片',
+                ),
+                'error',
+            );
+            return false;
+        }
+    },
+
     /** The receiver `_setupDropZone` calls. Same signature, this page's flow. */
     async _handleFile(file) {
         if (!file || !String(file.type || '').startsWith('image/')) {

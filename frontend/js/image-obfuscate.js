@@ -249,6 +249,40 @@
             if (panel && panel.style.display === 'none') panel.style.display = 'flex';
         },
 
+        async addLibraryImages(imageIds) {
+            const ids = Array.from(
+                new Set(
+                    (Array.isArray(imageIds) ? imageIds : [imageIds])
+                        .map((value) => Number(value))
+                        .filter((value) => Number.isFinite(value) && value > 0)
+                )
+            );
+            if (!ids.length) {
+                return false;
+            }
+            this.init();
+            const files = [];
+            for (const id of ids) {
+                const response = await fetch(`/api/image-file/${id}`);
+                if (!response.ok) continue;
+                const blob = await response.blob();
+                const ext = (blob.type || 'image/png').split('/').pop() || 'png';
+                files.push(new File([blob], `image-${id}.${ext}`, {
+                    type: blob.type || 'image/png',
+                    lastModified: Date.now(),
+                }));
+            }
+            if (!files.length) {
+                window.App?.showToast?.(
+                    this._t('tools.loadLibraryFailed', 'Could not add library images'),
+                    'error',
+                );
+                return false;
+            }
+            this._addFiles(files);
+            return true;
+        },
+
         _addFiles(files) {
             const imageFiles = files.filter((file) => file && String(file.type || '').startsWith('image/'));
             if (!imageFiles.length) {

@@ -208,6 +208,8 @@ function buildAppContext() {
         addToDatasetMaker,
         openPromptBuildFromImage,
         openReaderFromImage,
+        openReversePromptFromImage,
+        openPrivacyFromImages,
         openSimilarFromImage,
         deleteGalleryImagesByIds,
         removeGalleryImagesByIds,

@@ -57,6 +57,9 @@ function initBootListenersGallery() {
     // Color analysis is still available via the Tag Images modal's Color
     // tab, where most users actually trigger it.
     $('#btn-send-selection-to-dataset-maker')?.addEventListener('click', sendSelectionToDatasetMaker);
+    $('#btn-send-selection-to-reader')?.addEventListener('click', sendSelectionToReader);
+    $('#btn-send-selection-to-reverse')?.addEventListener('click', sendSelectionToReversePrompt);
+    $('#btn-send-selection-to-privacy')?.addEventListener('click', sendSelectionToPrivacy);
     // v3.4.3 P4: batch "add to collection" from the selection panel. Filtered
     // "Select all matching" selections pass their token so the backend expands
     // the ids server-side instead of shipping tens of thousands of ids.
