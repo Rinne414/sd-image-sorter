@@ -7,6 +7,7 @@ shared facet-search ranking helpers.
 Imports only from db_core / db_helpers / db_images_write / utils / stdlib to
 avoid an import cycle with the ``database`` facade.
 """
+import re
 import sqlite3
 import time
 from contextlib import contextmanager
@@ -26,6 +27,7 @@ from db_helpers import (
     escape_like_pattern,
     _rows_to_dicts,
 )
+from caption_format import CAPTION_FORMAT_TAGS, caption_format_for_storage
 from db_images_write import _mark_image_tagged
 from db_tag_scores import replace_scores_in_cursor
 from tag_writer_provenance import (
@@ -148,12 +150,26 @@ def _replace_tag_rows(
         incoming rows that would duplicate a surviving manual tag are
         dropped (the user's row wins). This is the F5 fix: re-tagging no
         longer destroys manually added tags.
+      * ``"sidecar"`` — replace only ``source='sidecar'`` rows written from
+        a ``.txt`` tag list. Manual / tagger / VLM rows survive; incoming
+        names that already exist on the image are skipped.
     """
     if replace_scope == "pipeline":
         placeholders = ",".join("?" * len(PIPELINE_TAG_SOURCES))
         cursor.execute(
             f"DELETE FROM tags WHERE image_id = ? AND (source IN ({placeholders}) OR source IS NULL)",
             (image_id, *PIPELINE_TAG_SOURCES),
+        )
+        surviving = {
+            str(row[0]).lower()
+            for row in cursor.execute(
+                "SELECT tag FROM tags WHERE image_id = ?", (image_id,)
+            )
+        }
+    elif replace_scope == "sidecar":
+        cursor.execute(
+            "DELETE FROM tags WHERE image_id = ? AND source = 'sidecar'",
+            (image_id,),
         )
         surviving = {
             str(row[0]).lower()
@@ -176,6 +192,66 @@ def _replace_tag_rows(
             "INSERT INTO tags (image_id, tag, confidence, source, category) VALUES (?, ?, ?, ?, ?)",
             tag_values,
         )
+
+
+# The same separators caption_format uses to classify a tag list.
+_SIDECAR_TAG_SPLIT_RE = re.compile("[,;，、]+")
+
+
+def split_tag_list_items(text: object) -> list[str]:
+    """Enumerate the parts of a caption already classified as a tag list.
+
+    Empty parts and case-insensitive duplicates are skipped so the index
+    stays unique per ``(image_id, tag)``.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return []
+    items: list[str] = []
+    seen: set[str] = set()
+    for raw_line in text.splitlines():
+        for raw in _SIDECAR_TAG_SPLIT_RE.split(raw_line):
+            tag = raw.strip()
+            key = tag.lower()
+            if not tag or key in seen:
+                continue
+            seen.add(key)
+            items.append(tag)
+    return items
+
+
+def sync_sidecar_tags_in_cursor(
+    cursor: sqlite3.Cursor,
+    image_id: int,
+    sidecar_caption: Any,
+    sidecar_caption_format: Optional[str] = None,
+) -> None:
+    """Index a tag-list sidecar into ``tags`` without touching other sources.
+
+    Natural-language / mixed captions are not enumerated. Does not set
+    ``tagged_at`` — a sidecar is not a WD14 run, and untagged-only jobs
+    must still see these images. Runs on every scan upsert, so an unchanged
+    sidecar (or none, with no old sidecar rows) writes nothing.
+    """
+    fmt = sidecar_caption_format or caption_format_for_storage(sidecar_caption)
+    items = split_tag_list_items(sidecar_caption) if fmt == CAPTION_FORMAT_TAGS else []
+    existing = {
+        str(row[0])
+        for row in cursor.execute(
+            "SELECT tag FROM tags WHERE image_id = ? AND source = 'sidecar'",
+            (image_id,),
+        )
+    }
+    if set(items) == existing:
+        return
+    rows = [{"tag": tag, "confidence": 1.0, "source": "sidecar"} for tag in items]
+    _replace_tag_rows(
+        cursor,
+        image_id,
+        rows,
+        default_source="sidecar",
+        replace_scope="sidecar",
+    )
+    _sync_ai_rating(cursor, image_id)
 
 
 def _has_tagger_rows(cursor: sqlite3.Cursor, image_id: int) -> bool:

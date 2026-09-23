@@ -431,6 +431,15 @@ def _upsert_image_record(
         record.get("prompt"),
         extra_text=character_prompt_search_text(record.get("metadata_json")),
     )
+    # Sidecar tag lists live in sidecar_caption, but the gallery index
+    # reads the tags table. Index here so scan/reparse stay in one write.
+    from db_tags import sync_sidecar_tags_in_cursor
+    sync_sidecar_tags_in_cursor(
+        cursor,
+        image_id,
+        record.get("sidecar_caption"),
+        record.get("sidecar_caption_format"),
+    )
     return image_id, write_status
 
 def _mark_image_tagged(
@@ -750,8 +759,10 @@ def update_reparsed_sidecar_caption(image_id: int, sidecar_caption: str) -> None
     token index is untouched, and ``raw_metadata_gz`` is KEPT so a future
     parser upgrade can still try to find a real prompt in the same bytes.
     """
+    stored_format = caption_format_for_storage(sidecar_caption)
     with get_db() as conn:
-        conn.execute(
+        cursor = conn.cursor()
+        cursor.execute(
             """
             UPDATE images
             SET sidecar_caption = ?,
@@ -759,8 +770,11 @@ def update_reparsed_sidecar_caption(image_id: int, sidecar_caption: str) -> None
                 indexed_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
-            (sidecar_caption, caption_format_for_storage(sidecar_caption), image_id),
+            (sidecar_caption, stored_format, image_id),
         )
+        from db_tags import sync_sidecar_tags_in_cursor
+        sync_sidecar_tags_in_cursor(cursor, image_id, sidecar_caption, stored_format)
+    _invalidate_tags_cache()
 
 # --- Split re-exports (2026-07) --------------------------------------------
 # Deliberately at the BOTTOM: the sibling modules from-import the shared
