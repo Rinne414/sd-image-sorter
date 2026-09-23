@@ -552,7 +552,7 @@
                     status: 'failed',
                     stale_job_id: false,
                     error_samples: [this._t('dataset.exportJobTimeout',
-                        'The export job did not finish within the polling timeout. Check the output folder, then re-run the export if files are missing.')],
+                        'Stopped waiting because the export didn\'t finish in time. Check the output folder and export again if files are missing.')],
                 };
             }
             let progress;
@@ -567,7 +567,7 @@
                             status: 'failed',
                             stale_job_id: true,
                             error_samples: [this._t('dataset.exportJobLost',
-                                'The export job no longer exists on the backend (it may have restarted). Check the output folder, then re-run the export if files are missing.')],
+                                'The export job is gone; the app may have restarted. Check the output folder and export again if files are missing.')],
                         };
                     }
                     await new Promise(resolve => setTimeout(resolve, delayMs));
@@ -719,7 +719,7 @@
         const jobId = this._activeExportJobId || null;
         if (!jobId) {
             this._toast(this._t('dataset.exportJobLost',
-                'The export job no longer exists on the backend (it may have restarted). Check the output folder, then re-run the export if files are missing.'), 'error', 5000);
+                'The export job is gone; the app may have restarted. Check the output folder and export again if files are missing.'), 'error', 5000);
             return;
         }
         this._exportCancelRequested = true;

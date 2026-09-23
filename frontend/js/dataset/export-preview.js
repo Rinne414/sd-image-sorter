@@ -51,7 +51,7 @@
         if (items.length === 0) {
             list.innerHTML = `<span class="dataset-export-preview-empty">${DM._t?.(
                 'dataset.exportPreviewNoLoadedItems',
-                '{count} images are in the dataset manifest, but no previews are loaded in the browser yet.',
+                '{count} images are in the dataset, but no previews are loaded yet.',
                 { count: logicalCount }
             ) || `${logicalCount} images are in the dataset manifest, but no previews are loaded in the browser yet.`}</span>`;
             return;
@@ -97,7 +97,7 @@
                 note.className = 'dataset-export-preview-summary';
                 note.textContent = DM._t?.(
                     'dataset.exportPreviewManifestNote',
-                    'Export will include every manifest image. File-name preview, duplicate checks, caption status, and thumbnail rows below cover loaded previews only.'
+                    'Export includes every image in the dataset. The file names, name-clash check and caption status below only cover the previews loaded so far.'
                 ) || 'Export will include every manifest image. Preview rows below cover loaded previews only.';
                 list.appendChild(note);
             }
@@ -277,7 +277,7 @@
             list,
             DM._t?.(
                 'dataset.exportPreviewBuilderMissing',
-                'Preview unavailable: the export payload builder did not load. Hard-refresh the page (Ctrl+F5); if it persists this is a bug.'
+                'Preview failed to load. Hard-refresh with Ctrl+F5; if it keeps happening, it\'s a bug.'
             ) || 'Preview unavailable: the export payload builder did not load.'
         );
     }

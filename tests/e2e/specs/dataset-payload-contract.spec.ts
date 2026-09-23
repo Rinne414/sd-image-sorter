@@ -360,7 +360,7 @@ test('missing payload builder shows an error instead of an offline preview (FE-4
   })
   await page.evaluate(() => (window as any).DatasetMaker._refreshExportPreview())
   const list = page.locator('#dataset-export-preview-list')
-  await expect(list).toContainText('Preview unavailable')
+  await expect(list).toContainText('Preview failed to load')
   // No synthesized filename rows — the old fallback rendered .png/.txt pairs.
   await expect(list.locator('.dataset-export-preview-pair')).toHaveCount(0)
   await page.evaluate(() => {

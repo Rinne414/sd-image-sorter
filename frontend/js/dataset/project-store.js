@@ -452,7 +452,7 @@
                 this._t('dataset.projectDraftWarningTitle', 'Browser draft stays local'),
                 this._t(
                     'dataset.projectDraftWarning',
-                    '{details} remain only in this browser draft and are not saved in the named project. Continue?',
+                    '{details} only exist in this browser\'s draft and won\'t be saved to the project. Continue?',
                     { details },
                 ),
             );
@@ -517,7 +517,7 @@
                 ? ''
                 : this._t(
                     'dataset.projectMissing',
-                    'Project source issues: {issues}. Save is disabled to prevent accidental removal.',
+                    'Project source problems: {issues}. Saving is off so nothing gets removed by mistake.',
                     { issues: issues.join('; ') },
                 );
         },
@@ -1132,7 +1132,7 @@
                 this._t('dataset.projectDelete', 'Delete'),
                 this._t(
                     'dataset.projectDeleteConfirm',
-                    'Permanently delete project "{name}"? Library images and local files will not be deleted.',
+                    'Delete project "{name}" for good? Your library and image files are not affected.',
                     { name: active.name },
                 ),
             );

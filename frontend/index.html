@@ -3896,14 +3896,14 @@
                                 <div class="dataset-large-import-reminder" role="note">
                                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg></span>
                                     <span data-i18n="dataset.largeImportReminder">
-                                        For 100k+ images, use the folder path bar. Browser drag/drop and ZIP import must enumerate files in the browser first and can be slow or memory-heavy.
+                                        For 100k+ images, use the folder path bar. Drag-and-drop and ZIP go through the browser first, which gets slow and memory-hungry with many files.
                                     </span>
                                 </div>
                                 <div class="dataset-sidecar-import-notice" id="dataset-sidecar-import-notice" role="note">
                                     <strong data-i18n="dataset.sidecarNoticeTitle">Same-name .txt beside original files</strong>
                                     <ul>
-                                        <li data-i18n="dataset.sidecarNoticeGalleryFolder">Supported when images come from Gallery or the folder path scan above.</li>
-                                        <li data-i18n="dataset.sidecarNoticeCacheOnly">Drag/drop images, dropped folders, ZIP, and RAR also write the .txt next to the imported copy in the app data directory.</li>
+                                        <li data-i18n="dataset.sidecarNoticeGalleryFolder">Images from the Gallery or the folder path above: the .txt goes beside the original.</li>
+                                        <li data-i18n="dataset.sidecarNoticeCacheOnly">Dropped images and folders, ZIP and RAR: the .txt goes beside the imported copy in the app's data folder.</li>
                                         <li data-i18n="dataset.sidecarNoticeRar">RAR needs the optional 'rarfile' Python package and a system 'unrar' binary; if missing, extract to a folder or convert to ZIP first.</li>
                                     </ul>
                                 </div>
@@ -3993,17 +3993,17 @@
                                     <div class="dataset-editor-help-body">
                                         <strong data-i18n="dataset.helpTitle">What makes a good caption?</strong>
                                         <p id="dataset-caption-help-intro" data-i18n="dataset.helpIntro">
-                                            For LoRA training each .txt should describe what's in the image with a few short tags. The trainer learns to associate your trigger word with everything those tags share across images.
+                                            Each .txt describes what's in the image with a few short tags. Training links your trigger word to what the images have in common.
                                         </p>
                                         <ul>
-                                            <li id="dataset-caption-help-rule-1" data-i18n="dataset.helpRule1">DO include character / subject features (hair color, clothes, pose, scene).</li>
-                                            <li id="dataset-caption-help-rule-2" data-i18n="dataset.helpRule2">DO include your trigger word once (use Workbench "Common tags" so it lands in every caption).</li>
-                                            <li id="dataset-caption-help-rule-3" data-i18n="dataset.helpRule3">DON'T describe things that are constant across all images — that's what your trigger word is for.</li>
-                                            <li id="dataset-caption-help-rule-4" data-i18n="dataset.helpRule4">DON'T leave .txt files empty — empty captions teach the model nothing.</li>
+                                            <li id="dataset-caption-help-rule-1" data-i18n="dataset.helpRule1">DO describe the character or subject: hair color, clothes, pose, scene.</li>
+                                            <li id="dataset-caption-help-rule-2" data-i18n="dataset.helpRule2">DO include your trigger word once. Put it in "Common tags" in Workbench and every caption gets it.</li>
+                                            <li id="dataset-caption-help-rule-3" data-i18n="dataset.helpRule3">DON'T describe what every image has in common; that's what the trigger word learns.</li>
+                                            <li id="dataset-caption-help-rule-4" data-i18n="dataset.helpRule4">DON'T leave a .txt empty; an empty caption teaches the model nothing.</li>
                                         </ul>
                                         <p id="dataset-caption-help-shortcut"
                                            class="dataset-help-shortcut" data-i18n="dataset.helpShortcut">
-                                            Shortcut: click "Tag all images" in Step A and you're done — the WD14 tagger writes a perfectly serviceable starter caption per image.
+                                            Short on time? Click "Tag all images" under Generate captions; WD14 writes a usable first caption for every image.
                                         </p>
                                     </div>
                                 </details>
@@ -4150,7 +4150,7 @@
                                     </summary>
                                     <div class="dataset-confidence-body">
                                         <p class="dataset-confidence-help"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
-                                            <span data-i18n="dataset.confidenceHelp">Each pill shows the local tagger's confidence. Use the remove button on a pill to drop that tag from the active caption.</span>
+                                            <span data-i18n="dataset.confidenceHelp">The number on each tag is the tagger's confidence. Click the × on a tag to drop it from the caption.</span>
                                         </p>
                                         <div class="dataset-confidence-pills" id="dataset-confidence-pills"></div>
                                     </div>
@@ -4231,7 +4231,7 @@
                                         </button>
                                     </div>
                                     <small class="dataset-field-hint" data-i18n="dataset.triggerCaptionHint">
-                                        Use one memorable token. It is used for renaming and, when added to Common tags, appears once in every caption.
+                                        One memorable token. It is used for renaming, and once added to Common tags it appears once in every caption.
                                     </small>
                                     <small class="dataset-preview-line" id="dataset-naming-preview" aria-live="polite"></small>
                                 </label>
@@ -4295,14 +4295,14 @@
                                     <span data-i18n="dataset.cardTagTitle">Generate captions</span>
                                 </h3>
                                 <p class="dataset-card-help" data-i18n="dataset.cardTagHelp">
-                                    Run Smart Tag after setup. It writes starter captions, then you review and edit each image in the center pane.
+                                    Run Smart Tag after setup. It writes first-draft captions; then check and edit each one in the middle pane.
                                 </p>
                                 <button class="btn btn-primary full-width" id="btn-dataset-smart-tag" style="margin-top: 8px;">
                                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg></span>
                                     <span data-i18n="dataset.smartTag">Smart Tag (WD14 + VLM)</span>
                                 </button>
                                 <p class="dataset-card-help" data-i18n="dataset.smartTagHelp" style="margin-top: 6px; font-size: 12px; opacity: 0.75;">
-                                    Run one or two local taggers, optionally add a VLM sentence, clean noise tags, and write captions back to every image in this dataset.
+                                    Caption every image with a booru tagger, a natural-language captioner, or both, and clear out noise tags.
                                 </p>
                                 <details class="dataset-secondary-actions">
                                     <summary data-i18n="dataset.legacyTaggerToggle">Local tagger shortcut</summary>
@@ -4327,7 +4327,7 @@
                                     <span data-i18n="dataset.reviewTitle">Review captions</span>
                                 </h3>
                                 <p class="dataset-card-help" data-i18n="dataset.reviewHelp">
-                                    Pick an image on the left. Keep the image preview and caption editor together in the center pane while you fix tags, sentences, and caption type.
+                                    Pick an image on the left, then fix its tags, sentence and caption type in the middle, right next to the preview.
                                 </p>
                             </section>
 
@@ -4338,7 +4338,7 @@
                                     <span data-i18n="dataset.cardCaptionTitle">Clean captions before export</span>
                                 </summary>
                                 <p class="dataset-card-help" data-i18n="dataset.cardCaptionHelp">
-                                    Bulk-edit every caption: add common tags, remove tags you don't want, control underscore behavior.
+                                    Edit every caption at once: drop unwanted tags, choose how underscores are handled, and apply cleanup presets if you like.
                                 </p>
                                 <label class="form-label dataset-caption-scope-row">
                                     <span data-i18n="dataset.captionScopeLabel">Apply caption actions to</span>
@@ -4352,7 +4352,7 @@
                                     <span>
                                         <span data-i18n="dataset.blacklistLabel">Blacklist tags (removed from every caption)</span>
                                         <small class="form-hint" data-i18n="dataset.blacklistHint">
-                                            Tags to exclude. Separate multiple tags with line breaks (not commas). Spaces in tags are OK.
+                                            Tags to exclude, one per line (not commas). Spaces inside a tag are fine.
                                         </small>
                                     </span>
                                     <textarea id="dataset-blacklist" class="form-input" rows="3"
@@ -4372,7 +4372,7 @@
                                     </summary>
                                     <div class="dataset-vocab-body">
                                         <p class="dataset-vocab-help" data-i18n="dataset.vocabHelp">
-                                            This list is built from the current dataset captions. Use + for Common tags and - for Blacklist; click again to clear.
+                                            Built from this dataset's captions. + adds a tag to Common tags, - adds it to the blacklist; click again to undo.
                                         </p>
                                         <div class="dataset-vocab-controls">
                                             <input type="text" class="form-input dataset-vocab-search" id="dataset-vocab-search"
@@ -4500,7 +4500,7 @@
                                                 </div>
                                             </div>
                                             <small class="dataset-template-hint"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
-                                                <span data-i18n="dataset.templateHint">Tip: Use newlines for multi-line captions (e.g., {tags}\n{nl_caption})</span>
+                                                <span data-i18n="dataset.templateHint">Use a line break for multi-line captions, e.g. {tags}\n{nl_caption}</span>
                                             </small>
                                         </details>
                                         <textarea id="dataset-template-override" class="form-input" rows="3"
@@ -4551,7 +4551,7 @@
                                                 data-i18n="dataset.refreshZhAid">Refresh</button>
                                     </div>
                                     <p class="dataset-zh-aid-note" data-i18n="dataset.zhAidNote">
-                                        Reading aid only — the Chinese is shown next to each tag for easy reading and is never written into the exported captions.
+                                        The Chinese is only a reading aid; it never goes into exported captions.
                                     </p>
                                     <label class="form-label">
                                         <span data-i18n="dataset.translationProviderLabel">Chinese translation provider</span>
@@ -4683,7 +4683,7 @@
                                     </nav>
                                 </section>
                                 <section id="sepcon-tags-panel" role="tabpanel" aria-labelledby="sepcon-tab-tags">
-                                <p class="helper-text" data-i18n="dataset.separationConsoleHelp">Every tag across the queue: keep it promptable, or prune it so the trigger word absorbs it. Frequency is the evidence.</p>
+                                <p class="helper-text" data-i18n="dataset.separationConsoleHelp">Every tag in the queue. Keep a tag to control it in prompts later, or prune it so the trigger word absorbs it. Let the frequency decide.</p>
                                 <div class="sepcon-toolbar">
                                     <span id="sepcon-stats" class="sepcon-stats"></span>
                                     <button type="button" class="btn btn-ghost btn-small" id="sepcon-next-unseen"><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg> <span data-i18n="dataset.sepconNextUnseen">Next unreviewed</span></button>
@@ -4719,7 +4719,7 @@
                                     <div id="sepcon-health-results" class="sepcon-health-results" hidden></div>
                                 </div>
                                 <div class="sepcon-rethreshold">
-                                    <p class="helper-text"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg> <span data-i18n="dataset.sepconRtHelp">Re-threshold from stored scores — zero inference. Tags rebuild at the new cutoff; manual tags survive.</span></p>
+                                    <p class="helper-text"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg> <span data-i18n="dataset.sepconRtHelp">Change the threshold without re-running the model. Tags are rebuilt from saved scores; manual tags stay.</span></p>
                                     <div class="sepcon-health-bar">
                                         <select id="sepcon-rt-model" class="input-field"></select>
                                         <input type="range" id="sepcon-rt-threshold" min="0.15" max="0.95" step="0.01" value="0.35">
@@ -4739,7 +4739,7 @@
                                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></span>
                                     <span data-i18n="dataset.ccipTitle">Character Purity (CCIP)</span>
                                 </summary>
-                                <p class="helper-text" data-i18n="dataset.ccipHelp">Flags images that may show the wrong character: every image is compared against the set's most typical image (the medoid). Advisory only — nothing is moved or deleted. Multi-character images confuse the check, and chibi/style variance raises distances, so review flagged rows yourself and adjust the threshold as needed.</p>
+                                <p class="helper-text" data-i18n="dataset.ccipHelp">Flags images that may show the wrong character by comparing each one with the most typical image in the set. It only flags; nothing is moved or deleted. Group shots, chibi and style changes can throw it off, so check flagged images yourself and adjust the threshold if needed.</p>
                                 <div class="ccip-toolbar">
                                     <button type="button" class="btn btn-secondary btn-small" id="ccip-run"
                                             ><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg> <span data-i18n="dataset.ccipRun">Analyze character purity</span></button>
@@ -4902,7 +4902,7 @@
                                         <input type="radio" name="dataset-output-mode" value="beside_image">
                                         <span class="dataset-preset-label">
                                             <strong data-i18n="dataset.outputModeBesideTitle">Write same-name .txt beside original images</strong>
-                                            <small data-i18n="dataset.outputModeBesideHint">Only Gallery and folder path scan can use this. Drag/drop and ZIP are cached paths.</small>
+                                            <small data-i18n="dataset.outputModeBesideHint">Writes beside the original when there is one; drag-and-drop, ZIP and RAR imports write beside the app's copy.</small>
                                         </span>
                                     </label>
                                     <p class="dataset-warning-inline" id="dataset-beside-image-warning" hidden></p>
@@ -4935,7 +4935,7 @@
                                         <code class="dataset-pair-chip-png" id="dataset-pair-chip-png">your_lora_001.png</code>
                                         <span class="dataset-pair-chip-plus" aria-hidden="true">+</span>
                                         <code class="dataset-pair-chip-txt" id="dataset-pair-chip-txt">your_lora_001.txt</code>
-                                        <span class="dataset-pair-chip-suffix" data-i18n="dataset.pairChipSuffix">(LoRA trainers pair them by exact stem match)</span>
+                                        <span class="dataset-pair-chip-suffix" data-i18n="dataset.pairChipSuffix">(trainers pair files with the same name)</span>
                                     </div>
                                 </label>
 
@@ -4946,15 +4946,15 @@
                                     <label class="dataset-preset-row">
                                         <input type="radio" name="dataset-image-op-radio" value="copy" checked>
                                         <span class="dataset-preset-label">
-                                            <strong><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg> <span data-i18n="dataset.imageOpCopySafe">Copy (recommended) — originals stay safe</span></strong>
-                                            <small data-i18n="dataset.imageOpCopyHint">A duplicate of each image is written to the output folder.</small>
+                                            <strong><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg> <span data-i18n="dataset.imageOpCopySafe">Copy (recommended): originals stay put</span></strong>
+                                            <small data-i18n="dataset.imageOpCopyHint">Each image is copied to the output folder.</small>
                                         </span>
                                     </label>
                                     <label class="dataset-preset-row">
                                         <input type="radio" name="dataset-image-op-radio" value="move">
                                         <span class="dataset-preset-label">
-                                            <strong><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg> <span data-i18n="dataset.imageOpMoveTitle">Move — original images leave their current location</span></strong>
-                                            <small data-i18n="dataset.imageOpMoveHint">The image file is removed from its source folder and re-indexed at the new path. Use only when you're sure.</small>
+                                            <strong><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg> <span data-i18n="dataset.imageOpMoveTitle">Move: originals leave their current folder</span></strong>
+                                            <small data-i18n="dataset.imageOpMoveHint">The library is updated to the new location. Pick this only if you're sure.</small>
                                         </span>
                                     </label>
                                 </fieldset>
@@ -4980,7 +4980,7 @@
                                                   data-i18n="dataset.subjectCropEnabled">Crop around stored mask subject</span>
                                         </label>
                                         <p class="dataset-help" data-i18n="dataset.subjectCropHint">
-                                            Folder + Copy only. Requires indexed Library images, a stored mask, and mask export. Verified trainer packages are not supported yet.
+                                            Folder + Copy only. Needs Library images with a saved mask and mask export turned on. Verified trainer packages are not supported yet.
                                         </p>
                                         <div class="dataset-subject-crop-settings" id="dataset-subject-crop-settings" hidden>
                                             <label class="form-label">
@@ -5023,7 +5023,7 @@
                                                   data-i18n="dataset.bucketResizeEnabled">Pre-crop exports to SDXL buckets</span>
                                         </label>
                                         <p class="dataset-help" data-i18n="dataset.bucketResizeHint">
-                                            Kohya already buckets during training. Use this only to pre-size exported pixels or keep a masked subject inside the crop.
+                                            Kohya buckets on its own during training. Turn this on only to pre-size exported images or to keep a masked subject in frame.
                                         </p>
                                         <div class="dataset-bucket-resize-settings"
                                              id="dataset-bucket-resize-settings" hidden>
@@ -5039,7 +5039,7 @@
                                                        class="form-input" min="1" max="255" step="1" value="128">
                                             </label>
                                             <p class="dataset-help" data-i18n="dataset.bucketResizeSubjectAwareHint">
-                                                Subject-aware mode requires indexed Library images with stored training masks. Values below the threshold are ignored only when finding the crop; the exported soft mask stays unchanged.
+                                                Subject-aware mode needs Library images with saved training masks. Pixels below the threshold are ignored only when finding the crop; the exported soft mask stays the same.
                                             </p>
                                         </div>
                                     </section>
@@ -5053,7 +5053,7 @@
                                                   data-i18n="dataset.watermarkRemovalEnabled">Remove a watermark from exported training copies</span>
                                         </label>
                                         <p class="dataset-help" data-i18n="dataset.watermarkRemovalHint">
-                                            Manual rectangle only: CPU inpainting changes the export copy, never the source. The watermark tag is not used as a pixel mask.
+                                            Manual rectangles only. Inpainting changes the exported copy, never the original. The watermark tag is not used as a mask.
                                         </p>
                                         <div class="dataset-watermark-removal-settings"
                                              id="dataset-watermark-removal-settings" hidden>
@@ -5124,7 +5124,7 @@
                                         </div>
                                         <p class="dataset-help" id="dataset-trainer-package-hint"
                                            data-i18n="dataset.trainerPackageHint">
-                                            Verified packages include the pinned trainer config; repeats and batch use the estimator above.
+                                            Verified packages include a pinned trainer config; repeats and batch come from the estimator above.
                                         </p>
                                         <p class="dataset-trainer-pin" id="dataset-trainer-pin" hidden></p>
                                         <label class="form-label">
@@ -5176,7 +5176,7 @@
                             <h3 id="mask-editor-title" class="dataset-modal-title">
                                 <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></span>
                                 <span data-i18n="dataset.maskEditorTitle">Training mask</span>
-                                <small class="mask-editor-help" data-i18n="dataset.maskEditorHelp">Red overlay = ignored by the trainer; clear = trained.</small>
+                                <small class="mask-editor-help" data-i18n="dataset.maskEditorHelp">Red areas are ignored in training; the rest is trained.</small>
                             </h3>
                             <div class="mask-editor-toolbar">
                                 <button type="button" class="btn btn-secondary btn-small mask-tool is-active" id="mask-tool-include"
@@ -5203,7 +5203,7 @@
                                         data-i18n-title="dataset.maskToolAutoTip"><svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg> <span data-i18n="dataset.maskToolAuto">Auto subject</span></button>
                             </div>
                             <p class="mask-lucida-license helper-text" id="mask-lucida-license"
-                               data-i18n="dataset.maskLucidaLicense" hidden>Lucida weights are MIT; its training data includes research-only datasets. Commercial users should make their own assessment.</p>
+                               data-i18n="dataset.maskLucidaLicense" hidden>Lucida weights are MIT, but its training data includes research-only datasets. Commercial users should judge for themselves.</p>
                             <div class="mask-editor-canvas-wrap" id="mask-editor-canvas-wrap">
                                 <canvas id="mask-editor-canvas"></canvas>
                             </div>

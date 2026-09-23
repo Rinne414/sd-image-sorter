@@ -606,7 +606,7 @@
                 this._readinessSubmittedSignature = null;
                 this._setReadinessView({
                     state: 'lost',
-                    message: this._t('dataset.readinessLostDetail', 'The backend no longer has this readiness job. Run the check again.'),
+                    message: this._t('dataset.readinessLostDetail', 'This check can no longer be found. Run it again.'),
                     activeJobId: null, processed: 0, total: 0, report: null,
                 });
                 this._updateExportEnabled?.();

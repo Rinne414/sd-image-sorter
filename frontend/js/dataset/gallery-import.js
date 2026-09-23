@@ -151,7 +151,7 @@
             }
             if (dupCount > 0) {
                 this._toast(this._t('dataset.duplicateWarning',
-                    'Found {count} images with similar filenames. You may want to review for duplicates.',
+                    '{count} images have similar file names; some may be duplicates.',
                     { count: dupCount }), 'warning', 6000);
             }
         },
@@ -214,7 +214,7 @@
                     const reason = error instanceof Error ? error.message : String(error);
                     this._toast(this._t(
                         'dataset.clearPersistenceFailed',
-                        'Clear was cancelled because local caption ownership could not be saved: {reason} Free browser storage and try again.',
+                        'Clear was cancelled because local caption data could not be saved: {reason} Free up browser storage and try again.',
                         { reason },
                     ), 'error', 8000);
                     return;

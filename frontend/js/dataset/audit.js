@@ -149,7 +149,7 @@
                 removable: true,
                 truncated: auditIssueIsTruncated('missing', report),
                 nextCopy: t('dataset.auditNextMissing',
-                    'These files are missing or unreadable. Reconnect the source files, replace them, or remove them from the dataset before export.'),
+                    'These files are missing or unreadable. Before export, reconnect the source, replace them, or remove them from the dataset.'),
             },
             {
                 flag: 'untagged',
@@ -158,7 +158,7 @@
                 removable: true,
                 truncated: auditIssueIsTruncated('untagged', report),
                 nextCopy: t('dataset.auditNextUntagged',
-                    'These images will export blank .txt files. Go to Workbench and write captions, or select them and remove the ones you do not want in the dataset.'),
+                    'These images would export empty .txt files. Write captions in Workbench, or remove the ones you don\'t need.'),
             },
             {
                 flag: 'small',
@@ -167,7 +167,7 @@
                 removable: true,
                 truncated: auditIssueIsTruncated('small', report),
                 nextCopy: t('dataset.auditNextSmall',
-                    'Review these low-resolution images. Replace them with larger sources or remove them from the dataset before export.'),
+                    'These images are low resolution. Swap in larger versions where you can, and remove the ones not fit for training.'),
             },
             {
                 flag: 'low_quality',
@@ -184,7 +184,7 @@
                 count: dupes,
                 removable: false,
                 nextCopy: t('dataset.auditNextDuplicate',
-                    'Duplicate groups are selected for review. Keep the best image in each group, then manually remove the extras.'),
+                    'Duplicates are selected for you. Keep the best one in each group and remove the rest by hand.'),
             },
         ].filter((it) => Number(it.count || 0) > 0);
     }
@@ -241,7 +241,7 @@
         if (options.focus !== false) focusFirstAuditMatch(flag);
         renderAuditNextSteps();
         setStatus(DM._t('dataset.auditSelectedStatus',
-            'Selected {count} loaded matching images. Use Workbench to edit or remove them.',
+            'Selected {count} flagged images. Edit or remove them in Workbench.',
             { count: ids.length }));
         return ids;
     }
@@ -325,11 +325,11 @@
         clearAuditResultsAfterMutation();
         if (wasTruncated) {
             setStatus(DM._t('dataset.auditRemovedPartialStatus',
-                'Removed {count} returned matching images. Audit found {total}; run audit again to continue.',
+                'Removed {count} of the {total} images the audit found. Run the audit again for the rest.',
                 { count: stats.total, total: summaryCount }));
         } else {
             setStatus(DM._t('dataset.auditRemovedStatus',
-                'Removed {count} matching images from the dataset. Run audit again to verify the remaining set.',
+                'Removed {count} images from the dataset. Run the audit again to check what\'s left.',
                 { count: stats.total }));
         }
     }
@@ -398,7 +398,7 @@
             const warning = document.createElement('p');
             warning.className = 'dataset-audit-next-warning';
             warning.textContent = DM._t('dataset.auditNextTruncated',
-                'Audit found {count} matching images, but only {known} were returned for browser actions. Download the report or run removal in passes; this button only affects returned matches.',
+                'The audit found {count} images, but only {known} came back to this page, and this button only acts on those. Download the report or work in batches for the rest.',
                 {
                     count: issue.count,
                     known: knownAuditMatchCount(issue.flag),
@@ -512,7 +512,7 @@
             const limitBadge = document.createElement('span');
             limitBadge.className = 'dataset-audit-badge dataset-audit-badge-limited';
             limitBadge.title = t('dataset.auditLimitedTip',
-                'Near-duplicate detection was capped at {limit} images to keep the audit responsive. Run a smaller selection for a full near-duplicate pass.',
+                'The near-duplicate check stops at {limit} images to keep the audit fast. Audit a smaller selection for a full check.',
                 { limit: 5000 });
             limitBadge.textContent = t('dataset.auditLimitedBadge', 'Near-duplicate check capped');
             badges.appendChild(limitBadge);

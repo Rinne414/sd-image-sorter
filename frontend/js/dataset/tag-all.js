@@ -24,7 +24,7 @@
         const localSkipped = this.imageIds.length - galleryIds.length;
         if (galleryIds.length === 0) {
             this._toast(this._t('dataset.tagAllOnlyLocal',
-                'Tag all only works on gallery-source items. Use Smart Tag for folder-imported images, or scan the folder into the main library first.'),
+                '"Tag all images" only works on images from the Gallery. Use Smart Tag for folder-imported images, or scan the folder into the library first.'),
                 'warning', 6000);
             return;
         }
@@ -59,7 +59,7 @@
             let msg = this._t(startedKey, startedFb);
             if (localSkipped > 0) {
                 msg += ' ' + this._t('dataset.tagAllSkippedLocal',
-                    '{count} local-source images were skipped (use Smart Tag for those).',
+                    'Skipped {count} folder-imported images; use Smart Tag for those.',
                     { count: localSkipped });
             }
             this._toast(msg, 'success', 6000);

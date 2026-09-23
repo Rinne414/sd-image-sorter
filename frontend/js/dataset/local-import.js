@@ -1123,7 +1123,7 @@
             const text = empty.querySelector('.dataset-editor-empty-text');
             if (text && !hasPreview) {
                 text.textContent = this._t('dataset.previewPending',
-                    'Preview not loaded yet. Use "Load more previews" in Step 1 to hydrate this folder batch.');
+                    'Preview not loaded yet. Click "Load more previews" on the Import tab to see it.');
             }
         }
         if (filenameEl) filenameEl.textContent = `${filename}`;

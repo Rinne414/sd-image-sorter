@@ -685,7 +685,7 @@
         if (requireElement('dataset-image-op').value !== 'copy') {
             return dm._t(
                 'dataset.bucketResizeRequiresCopy',
-                'Bucket preprocessing requires Copy so source images remain untouched.',
+                'Bucket preprocessing needs Copy so the originals stay untouched.',
             );
         }
         if (requireElement('dataset-trainer-package').value !== 'none') {

@@ -130,7 +130,7 @@
                 if (!append && total > 0) {
                     status.textContent = this._folderScanHasMore
                         ? this._t('dataset.folderImportAddedManifest',
-                            'Added {count} images to the dataset. Previewed {loaded}/{total}; load more previews to continue.',
+                            'Added {count} images to the dataset. {loaded}/{total} previews loaded; load more when you need them.',
                             { count: total, loaded: previewed, total })
                         : this._t('dataset.folderImportAdded',
                             'Added {count} local images (not added to main gallery)',
@@ -138,7 +138,7 @@
                 } else {
                     status.textContent = this._folderScanHasMore
                         ? this._t('dataset.folderImportPreviewPage',
-                            'Loaded {count} more previews. {loaded}/{total} previews ready; all {total} images are already in the dataset.',
+                            'Loaded {count} more previews, now {loaded}/{total}. All {total} images are already in the dataset.',
                             { count: items.length, loaded: previewed, total })
                         : this._t('dataset.folderImportPreviewComplete',
                             'Loaded previews for all {total} dataset images.',
@@ -364,7 +364,7 @@
             }
             if (sawTruncated) {
                 DM._toast(DM._t('dataset.uploadTruncated',
-                    'Upload import was split into batches. Imported every returned image; use the folder path bar for very large folders.'),
+                    'The upload was split into batches and every image received was added. Use the folder path bar for very large folders.'),
                     'warning', 7000);
             }
             if (skippedUnreadable > 0) {

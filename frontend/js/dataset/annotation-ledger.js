@@ -53,7 +53,7 @@
         if (count === 0) return '';
         return datasetMaker._t(
             'dataset.projectManifestRevisionRequired',
-            'Click Save to materialize {count} manifest image(s) into a new Dataset Project revision before preview, Readiness, or export.',
+            'Click Save to store these {count} image(s) as a new project version before you preview, check or export.',
             { count },
         );
     }
@@ -356,14 +356,14 @@
             datasetMaker._setAnnotationStatus(
                 'conflict',
                 'dataset.annotationConflict',
-                'This caption changed elsewhere. Reload its history before saving.',
+                'This caption was changed elsewhere. Reload its history before saving.',
                 {},
             );
         }
         datasetMaker._toast(
             datasetMaker._t(
                 'dataset.annotationConflict',
-                'This caption changed elsewhere. Reload its history before saving.',
+                'This caption was changed elsewhere. Reload its history before saving.',
             ),
             'error',
             6000,
@@ -518,7 +518,7 @@
                 this._setAnnotationStatus(
                     'conflict',
                     'dataset.annotationConflict',
-                    'This caption changed elsewhere. Reload its history before saving.',
+                    'This caption was changed elsewhere. Reload its history before saving.',
                     {},
                 );
             } else if (this._hasAnnotationDraft(active)) {
@@ -744,7 +744,7 @@
                     this._setAnnotationStatus(
                         'conflict',
                         'dataset.annotationConflict',
-                        'This caption changed elsewhere. Reload its history before saving.',
+                        'This caption was changed elsewhere. Reload its history before saving.',
                         {},
                     );
                 }
@@ -914,7 +914,7 @@
                     this._setAnnotationStatus(
                         'conflict',
                         'dataset.annotationConflict',
-                        'This caption changed elsewhere. Reload its history before saving.',
+                        'This caption was changed elsewhere. Reload its history before saving.',
                         {},
                     );
                 }

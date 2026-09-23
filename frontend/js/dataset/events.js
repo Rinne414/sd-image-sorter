@@ -353,7 +353,7 @@
                     )
                 ) {
                     this._toast(this._t('dataset.cleanupTriggerProjectUnavailable',
-                        'Dataset project caption versions are unavailable. Reload the project before cleaning an old trigger.'),
+                        'Can\'t read the project\'s caption versions right now. Reload the project, then clean up the old trigger.'),
                     'error', 6000);
                     return;
                 }
@@ -380,7 +380,7 @@
                 );
                 if (currentContextSignature !== cleanupContextSignature) {
                     this._toast(this._t('dataset.cleanupTriggerSuperseded',
-                        'Dataset changed while the cleanup dialog was open. No trigger cleanup was applied; retry on the current project.'),
+                        'The dataset changed while the cleanup dialog was open, so nothing was cleaned. Try again.'),
                     'error', 7000);
                     return;
                 }
@@ -427,7 +427,7 @@
                 const blacklistChanged = nextBlacklist !== blacklist.value;
                 if (captionListLength(nextBlacklist) > 1000) {
                     this._toast(this._t('dataset.cleanupTriggerBlacklistLimit',
-                        'Old-trigger cleanup would exceed the blacklist limit of 1,000 entries. Remove another blacklist entry first; no captions were changed.'),
+                        'This would push the blacklist past its 1,000-entry limit. Remove some entries first; no captions were changed.'),
                     'error', 8000);
                     return;
                 }
@@ -440,7 +440,7 @@
                 } catch (error) {
                     const reason = error instanceof Error ? error.message : String(error);
                     this._toast(this._t('dataset.cleanupTriggerPersistenceFailed',
-                        'Could not remove the old trigger because local caption persistence failed: {reason} No captions or settings were changed.',
+                        'Couldn\'t save local captions, so the old trigger wasn\'t removed: {reason} No captions or settings were changed.',
                         { reason }), 'error', 8000);
                     return;
                 }
@@ -464,7 +464,7 @@
                 this._scheduleSaveSession?.();
                 this._refreshExportPreview?.();
                 this._toast(this._t('dataset.cleanupTriggerDone',
-                    'Removed old trigger "{trigger}" from Common tags and {count} captions, and blocked it from returning in hidden items.',
+                    'Removed old trigger "{trigger}" from Common tags and {count} captions. Items not loaded yet won\'t bring it back.',
                     { trigger: staleToken, count: changedCaptions }), 'success', 5000);
             });
             document.getElementById('btn-dataset-quickfill-trigger')?.addEventListener('click', async () => {
@@ -474,7 +474,7 @@
                 } catch (error) {
                     const reason = error instanceof Error ? error.message : String(error);
                     this._toast(this._t('dataset.quickfillTriggerFailed',
-                        'Could not refresh every generated caption: {reason} No quickfill changes were saved.',
+                        'Couldn\'t update every generated caption: {reason} Nothing was changed.',
                         { reason }), 'error', 8000);
                     this._syncTriggerQuickfillButton();
                     return;
@@ -497,7 +497,7 @@
                     }
                     this._syncTriggerQuickfillButton();
                     this._toast(this._t('dataset.quickfillTriggerInvalid',
-                        'Trigger word must be one token of 100 characters or fewer, cannot contain commas or line breaks, and cannot contain tabs or other control whitespace. Plain spaces are allowed.'),
+                        'The trigger word must be one token of up to 100 characters, with no commas, line breaks, tabs or other control characters. Plain spaces are fine.'),
                     'error', 6000);
                     return;
                 }
@@ -563,7 +563,7 @@
                     }
                     if (this._triggerQuickfillSignature(trigger, mergedCommonTags) !== captionOptionsSignature) {
                         this._toast(this._t('dataset.quickfillTriggerSuperseded',
-                            'Caption settings changed while the trigger was being applied. Your newer input was kept; click Add to captions again.'),
+                            'Caption settings changed while the trigger was being added. Your newer input was kept; click Add to captions again.'),
                         'error', 8000);
                         return;
                     }
@@ -589,14 +589,14 @@
                         return;
                     }
                     this._toast(this._t('dataset.quickfillTriggerDone',
-                        'Set "{trigger}" as the current caption trigger. It will appear exactly once in every caption .txt.',
+                        'Trigger set to "{trigger}". It appears once in every caption .txt.',
                         { trigger }), 'success', 4000);
                 } catch (error) {
                     restoreCaptionRefreshState(this, captionRefreshSnapshot);
                     if (ta.value === mergedCommonTags) ta.value = previousCommonTags;
                     const reason = error instanceof Error ? error.message : String(error);
                     this._toast(this._t('dataset.quickfillTriggerFailed',
-                        'Could not refresh every generated caption: {reason} No quickfill changes were saved.',
+                        'Couldn\'t update every generated caption: {reason} Nothing was changed.',
                         { reason }), 'error', 8000);
                 } finally {
                     button.removeAttribute('aria-busy');

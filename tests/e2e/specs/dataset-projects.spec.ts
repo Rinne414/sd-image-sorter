@@ -1920,14 +1920,14 @@ test('named project blocks preview readiness and export until a paged manifest i
     dm._updateExportEnabled()
   }, { projectValue: stored, token: scanToken, item: firstItem })
 
-  const blockedReason = 'Click Save to materialize 2 manifest image(s) into a new Dataset Project revision before preview, Readiness, or export.'
+  const blockedReason = 'Click Save to store these 2 image(s) as a new project version before you preview, check or export.'
   await expect(page.getByTestId('dataset-readiness-check')).toBeDisabled()
   await expect(page.getByTestId('dataset-readiness-check')).toHaveAttribute('title', blockedReason)
   await expect(page.locator('#btn-dataset-export')).toBeDisabled()
   await expect(page.locator('#dataset-export-disabled-hint')).toContainText(blockedReason)
   await expect(page.locator('#dataset-export-preview-list')).toContainText(blockedReason)
 
-  const chineseBlockedReason = '请点击“保存”，将 Manifest 中的 2 张图片写入新的数据集项目版本，再进行预览、完整性检查或导出。'
+  const chineseBlockedReason = '先点“保存”，把这 2 张图存进项目的新版本，才能预览、检查或导出。'
   await page.evaluate(() => {
     ;(window as any).I18n.setLang('zh-CN')
   })
@@ -3492,7 +3492,7 @@ test('restoring caption history appends a new active revision', async ({ page })
   await expect(page.getByTestId('dataset-annotation-status')).toHaveAttribute('data-state', 'conflict')
   await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
   await expect(page.getByTestId('dataset-annotation-status')).toHaveAttribute('data-state', 'conflict')
-  await expect(page.getByTestId('dataset-annotation-status')).toContainText('此 caption 已在其他位置改变')
+  await expect(page.getByTestId('dataset-annotation-status')).toContainText('这条 caption 在别处被改过了')
   await expect(page.getByTestId('dataset-annotation-provenance')).toContainText('从 #601 恢复')
   await expect(page.getByTestId('dataset-annotation-provenance')).toContainText('用户')
   const restoredHistoryRow = page.locator(
