@@ -5380,7 +5380,7 @@
                 <div class="modal-header">
                     <div>
                         <h2 id="model-manager-title" data-i18n="models.title">Settings & Models</h2>
-                        <p class="modal-description" data-i18n="models.description">Control app preferences, AI models, cache, and setup from one place.</p>
+                        <p class="modal-description" data-i18n="models.description">App settings, AI models, cache and setup, all in one place.</p>
                     </div>
                 </div>
                 <!-- v3.5.0 audit (design rule 6): the modal stacked settings +
@@ -5535,13 +5535,13 @@
                         <span aria-hidden="true">⬇️</span>
                         <span data-i18n="models.bulkDownload">Download selected models</span>
                     </button>
-                    <span class="model-manager-bulk-help" data-i18n="models.bulkDownloadHelp">Select recommended defaults for tagging, censoring, similarity, scoring, artist ID, segmentation, local captions, and training masks. CL Tagger v2 is optional and stays unchecked until authorized.</span>
+                    <span class="model-manager-bulk-help" data-i18n="models.bulkDownloadHelp">Pick the recommended models for tagging, censoring, similarity, scoring, artist ID, segmentation, local captions and training masks. CL Tagger v2 stays unchecked until you authorize its official Hugging Face download.</span>
                 </div>
                 <!-- Manual-upgrade safety hint: downloaded models live in data/models.
                      Users who unzip a new release into a fresh folder leave their
                      models (and library DB) behind in the old folder's data\ —
                      every model then shows "missing" even though nothing was lost. -->
-                <p class="model-manager-migrate-hint helper-text" data-i18n="models.manualUpgradeHint">Models suddenly missing after upgrading to a new folder? Your downloads live in the old folder's "data" directory — copy that whole folder into the new installation and restart.</p>
+                <p class="model-manager-migrate-hint helper-text" data-i18n="models.manualUpgradeHint">All models show as missing after upgrading to a new folder? They're still in the old folder's data directory. Copy that whole folder into the new install and restart.</p>
                 <div class="model-manager-grid" id="model-manager-grid"></div>
                 </div>
                 <div data-settings-panel="disk" hidden>

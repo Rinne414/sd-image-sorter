@@ -442,7 +442,7 @@ test.describe('Model Manager', () => {
     await prepareButton.click()
 
     await expect(page.locator('#toast-container .toast.error .toast-message').last()).toContainText(
-      /invalid response.*non-empty status and model_id/i,
+      /unexpected response.*restart the app/i,
     )
     await expect(prepareButton).toBeEnabled()
     await expect(prepareButton).toHaveText(originalLabel)

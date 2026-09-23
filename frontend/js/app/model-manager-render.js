@@ -35,7 +35,7 @@ function renderModelManager(models = []) {
         // every other model (WD14, ToriiGate, OppaiOracle, CLIP, Aesthetic)
         // is HuggingFace-only and uses hf-mirror under this setting.
         const labels = {
-            auto: appT('models.mirror.auto', 'Auto (HuggingFace → hf-mirror fallback)'),
+            auto: appT('models.mirror.auto', 'Auto (HuggingFace, hf-mirror as fallback)'),
             'hf-mirror': appT('models.mirror.hfMirror', 'hf-mirror.com (HF mirror)'),
             modelscope: appT('models.mirror.modelscope', 'ModelScope (Artist & SAM3 only; others use hf-mirror)'),
         };
@@ -135,7 +135,7 @@ function renderModelManager(models = []) {
                 ` : ''}
                 <div class="model-card-actions">
                     ${model.download_supported ? `<button class="btn btn-primary btn-prepare-model" data-model-id="${safeId}">${escapeHtml(status === 'ready' ? appT('models.repair', 'Recheck / Repair') : appT('models.prepare', 'Prepare / Download'))}</button>` : ''}
-                    ${!model.download_supported && status !== 'ready' ? `<span class="model-card-hint">${escapeHtml(appT('models.noAutoDownload', 'Automatic download not available — follow manual steps above'))}</span>` : ''}
+                    ${!model.download_supported && status !== 'ready' ? `<span class="model-card-hint">${escapeHtml(appT('models.noAutoDownload', 'Can\'t download automatically. Follow the manual steps above'))}</span>` : ''}
                     ${externalLinks}
                 </div>
             </article>
@@ -193,7 +193,7 @@ function renderModelManager(models = []) {
             } catch (_error) {
                 showToast(appT(
                     'models.invalidPrepareResponse',
-                    'Model setup returned an invalid response. Expected an object with non-empty status and model_id. Restart the app and try again.',
+                    'Model setup returned an unexpected response. Restart the app and try again.',
                 ), 'error');
                 button.disabled = false;
                 button.textContent = originalLabel;
@@ -341,7 +341,7 @@ function renderModelManager(models = []) {
                                 backgroundPollWarningShown = true;
                                 showToast(appT(
                                     'models.backgroundStatusUnavailable',
-                                    'Model setup is still running, but status checks are failing. We will keep checking in the background.',
+                                    'Model setup is still running, but its status can\'t be read right now. The app keeps checking in the background.',
                                 ), 'warning');
                             }
                         } else {

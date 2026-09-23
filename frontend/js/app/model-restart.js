@@ -122,7 +122,7 @@ function _bindPrepareRestartBanner(banner, items) {
                         )
                         : _prepareRestartT(
                             'models.restartUnsupported',
-                            'This session was not started from the launcher, so the app cannot restart itself. Close the window and run run.bat / run.sh; remaining downloads will continue afterwards.',
+                            'The app wasn\'t started from the launcher, so it can\'t restart itself. Close the window and run run.bat / run.sh; the remaining downloads continue after that.',
                         );
                 }
             });
@@ -158,7 +158,7 @@ function showPrepareRestartPrompt({ items, host } = {}) {
     const title = _prepareRestartT('models.bulkNeedsRestart', 'Restart required');
     const explain = _prepareRestartT(
         'models.bulkRestartExplain',
-        'A feature installed Python packages that this process cannot load yet. Restart now and the remaining downloads will continue afterwards.',
+        'Newly installed Python packages only load after a restart. Restart now and the remaining downloads continue automatically.',
     );
     banner.innerHTML = (
         `<div class="prepare-restart-banner-copy">`
@@ -224,7 +224,7 @@ async function requestAppRestartAndContinue({ reason, items } = {}) {
             showToast(
                 _prepareRestartT(
                     'models.restartUnsupported',
-                    'This session was not started from the launcher, so the app cannot restart itself. Close the window and run run.bat / run.sh; remaining downloads will continue afterwards.',
+                    'The app wasn\'t started from the launcher, so it can\'t restart itself. Close the window and run run.bat / run.sh; the remaining downloads continue after that.',
                 ),
                 'warning',
             );

@@ -86,7 +86,7 @@ function _parseModelPrepareStart(payload, requestedModelId) {
 function _modelPrepareConflictMessage(requestedModelId, activeModelId) {
     return appT(
         'models.prepareConflict',
-        'Cannot prepare {requested}: {active} is already being prepared. Wait for it to finish, then try again.',
+        '{active} is being prepared. Wait for it to finish, then prepare {requested}.',
         { requested: requestedModelId, active: activeModelId },
     );
 }
@@ -428,7 +428,7 @@ async function runBulkDownload(items) {
                 }
                 const message = appT(
                     'models.bulkPollFailed',
-                    'Status checks failed {count} times for {name}. Check the starter console, then reopen Model Manager to resume.',
+                    'Couldn\'t read the status of {name} {count} times in a row. Check the launcher console, then reopen Model Manager to resume.',
                     {
                         count: pollErrorStreak,
                         name: item.name || item.id,
@@ -445,7 +445,7 @@ async function runBulkDownload(items) {
             if (typeof showPrepareRestartPrompt === 'function') {
                 showPrepareRestartPrompt({ items: remaining });
             }
-            showToast(appT('models.bulkNeedsRestart', 'Restart required — click Restart now and continue, or close and reopen the app.'), 'warning');
+            showToast(appT('models.bulkNeedsRestart', 'Restart required. Click Restart now and continue, or close and reopen the app.'), 'warning');
             break;
         }
         // Notify per-model completion so user knows progress even if modal is closed

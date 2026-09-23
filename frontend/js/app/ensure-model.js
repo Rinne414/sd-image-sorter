@@ -194,7 +194,7 @@ function _showInstallRestartPrompt(spec, result) {
                         )
                         : featureInstallT(
                             'models.restartUnsupported',
-                            'This session was not started from the launcher, so the app cannot restart itself. Close the window and run run.bat / run.sh; remaining downloads will continue afterwards.',
+                            'The app wasn\'t started from the launcher, so it can\'t restart itself. Close the window and run run.bat / run.sh; the remaining downloads continue after that.',
                         );
                 }
             });
