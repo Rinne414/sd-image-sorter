@@ -777,11 +777,12 @@ def export_tags_batch_request(
 
 
 def _get_combined_export_dir() -> Path:
-    # Decomposition (2026-07): this function moved one level deeper
-    # (services/tag_export_service.py -> services/tag_export/sidecars.py),
-    # so the backend-root anchor is parents[2] instead of parent.parent.
-    # Target stays backend/data/combined-exports
-    target = Path(__file__).resolve().parents[2] / "data" / "combined-exports"
+    # Portable / env-overridden data root — not ``backend/data`` from __file__.
+    # DATA_DIR is imported at call time so tests and SD_IMAGE_SORTER_DATA_DIR
+    # can redirect without reloading this module.
+    from config import DATA_DIR
+
+    target = Path(DATA_DIR) / "combined-exports"
     target.mkdir(parents=True, exist_ok=True)
     return target
 

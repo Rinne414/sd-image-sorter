@@ -27,7 +27,7 @@ THE dominant decomposition hazard is the DOUBLE FACADE:
 Statefulness verdict: STATELESS. No ``global`` statements, no runtime-mutable
 module state, no caches. The only seams are the module-level ``db`` reference
 (monkeypatched by callers), the lazy in-function imports, and the
-``__file__``-derived combined-export directory. So the split pattern is
+DATA_DIR-based combined-export directory. So the split pattern is
 pure-helper-modules-behind-a-re-export-facade (much simpler than the dsexport
 job registry). Every pin here runs with no model load, no network, and no
 images.db writes (the single ``db`` seam is monkeypatched; the one combined

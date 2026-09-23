@@ -279,7 +279,7 @@
                             ? 'dataset.quickfillTriggerInvalid'
                             : 'dataset.quickfillTriggerInvalidEmpty';
                         const fallback = issue === 'format'
-                            ? 'Trigger word must be one token of 100 characters or fewer, cannot contain commas or line breaks, and cannot contain internal whitespace.'
+                            ? 'Trigger word must be one token of 100 characters or fewer, cannot contain commas or line breaks, and cannot contain tabs or other control whitespace. Plain spaces are allowed.'
                             : 'Trigger word must contain characters other than spaces or underscores.';
                         this._toast(this._t(key, fallback), 'error', 6000);
                         return;
@@ -497,7 +497,7 @@
                     }
                     this._syncTriggerQuickfillButton();
                     this._toast(this._t('dataset.quickfillTriggerInvalid',
-                        'Trigger word must be one token of 100 characters or fewer, cannot contain commas or line breaks, and cannot contain internal whitespace.'),
+                        'Trigger word must be one token of 100 characters or fewer, cannot contain commas or line breaks, and cannot contain tabs or other control whitespace. Plain spaces are allowed.'),
                     'error', 6000);
                     return;
                 }

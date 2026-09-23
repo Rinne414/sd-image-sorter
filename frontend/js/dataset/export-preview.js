@@ -58,6 +58,22 @@
         }
         list.innerHTML = `<span class="dataset-export-preview-empty">${DM._t?.('dataset.exportPreviewLoading', 'Refreshing preview...') || 'Refreshing preview...'}</span>`;
 
+        const captionVersionsPending = Boolean(
+            DM._activeProject
+            && typeof DM._annotationHeadsReadyForProject === 'function'
+            && !DM._annotationHeadsReadyForProject(DM._activeProject)
+            && (DM._annotationHeadsStatus === 'loading' || DM._annotationHeadsStatus === 'idle')
+        );
+        if (captionVersionsPending) {
+            const pending = DM._annotationHeadsReady;
+            if (pending && typeof pending.then === 'function') {
+                pending.finally(() => {
+                    if (requestSeq === previewRequestSeq) refreshExportPreview();
+                });
+            }
+            return;
+        }
+
         const renderCaptionReview = (data) => {
             if (requestSeq !== previewRequestSeq) return;
             list.innerHTML = '';

@@ -261,6 +261,8 @@ def test_scan_can_return_manifest_items_without_inline_thumbnails(folder_with_mi
         assert item["thumb_b64"] == ""
         assert item["width"] == 0
         assert item["height"] == 0
+        assert item["size"] > 0
+        assert item["mtime"] > 0
 
 
 # ============== upload_files_for_dataset ==============

@@ -611,6 +611,7 @@
                         const ta = document.getElementById('dataset-editor-textarea');
                         if (ta) ta.value = this._booruTextFor(this.activeId);
                     }
+                    this._refreshExportPreview?.();
                 }
             }
         },
@@ -1026,7 +1027,8 @@
             }
             throw error;
         }
-        await this._loadProjectAnnotationHeads(project);
+        this._annotationHeadsReady = this._loadProjectAnnotationHeads(project);
+        await this._annotationHeadsReady;
     };
 
     const originalReplaceQueueWithUnsavedDraft = DM._replaceQueueWithUnsavedDraft;

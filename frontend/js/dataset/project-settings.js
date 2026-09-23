@@ -24,7 +24,7 @@
     const MAX_TAG_LENGTH = 500;
     const MAX_LIST_LENGTH = 1000;
     const DATASET_TRIGGER_EDGE_WHITESPACE = /^[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+|[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$/gu;
-    const DATASET_TRIGGER_INTERNAL_WHITESPACE = /[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/u;
+    const DATASET_TRIGGER_INTERNAL_WHITESPACE = /[\u0009-\u000d\u001c-\u001f\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/u;
 
     const DEFAULT_SETTINGS_SOURCE = Object.freeze({
         settings_version: SETTINGS_VERSION,
@@ -118,7 +118,7 @@
 
     function canonicalDatasetTrigger(value) {
         if (typeof value !== 'string') throw new TypeError('Dataset trigger must be a string.');
-        return value.replace(DATASET_TRIGGER_EDGE_WHITESPACE, '');
+        return value.replace(DATASET_TRIGGER_EDGE_WHITESPACE, '').replace(/ {2,}/g, ' ');
     }
 
     function datasetTriggerIssue(value) {
@@ -140,7 +140,7 @@
         const issue = datasetTriggerIssue(rawTrigger);
         if (issue === 'format') {
             throw new RangeError(
-                `${label} cannot contain commas or line breaks, or internal whitespace.`,
+                `${label} cannot contain commas or line breaks, or control whitespace.`,
             );
         }
         if (issue === 'normalized-empty') {

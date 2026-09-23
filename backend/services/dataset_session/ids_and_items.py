@@ -100,7 +100,7 @@ def _manifest_item_for_path(path: Any, index: int) -> Dict[str, Any]:
 
     This intentionally avoids opening the image. It lets a 100k-image folder
     become 100k logical Dataset Maker items while thumbnails/dimensions are
-    hydrated page-by-page.
+    hydrated page-by-page. Size and mtime come from the directory scan.
     """
     if isinstance(path, dict):
         abs_path = str(path.get("path") or "").strip()

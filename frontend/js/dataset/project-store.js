@@ -297,6 +297,65 @@
         return isRecord(error.body.detail) ? error.body.detail : error.body;
     }
 
+    const PROJECT_CONTRACT_TOAST = Object.freeze({
+        dataset_project_revision_conflict: Object.freeze({
+            status: 'conflict',
+            statusKey: 'dataset.projectStatusConflict',
+            statusFallback: 'Reload required',
+            toastKey: 'dataset.projectConflict',
+            toastFallback: 'This project changed elsewhere. Reload it before saving again.',
+        }),
+        dataset_project_name_conflict: Object.freeze({
+            toastKey: 'dataset.projectNameConflict',
+            toastFallback: 'An active project already uses the name "{name}".',
+        }),
+        dataset_project_local_source_invalid: Object.freeze({
+            toastKey: 'dataset.projectSourceInvalid',
+            toastFallback: 'Local file cannot be used: {reason}',
+        }),
+        dataset_project_local_source_identity_conflict: Object.freeze({
+            toastKey: 'dataset.projectSourceIdentityConflict',
+            toastFallback: 'A local source file changed after import: {path}',
+        }),
+        dataset_project_state_conflict: Object.freeze({
+            toastKey: 'dataset.projectStateConflict',
+            toastFallback: 'This project cannot {action} while it is {state}.',
+        }),
+        dataset_project_not_found: Object.freeze({
+            toastKey: 'dataset.projectNotFound',
+            toastFallback: 'That Dataset project was not found.',
+        }),
+        dataset_project_images_not_found: Object.freeze({
+            toastKey: 'dataset.projectImagesNotFound',
+            toastFallback: 'One or more Library images were not found.',
+        }),
+    });
+
+    function contractToastParams(detail) {
+        if (!isRecord(detail)) return {};
+        return {
+            name: typeof detail.name === 'string' ? detail.name : '',
+            path: typeof detail.path === 'string' ? detail.path : '',
+            reason: typeof detail.reason === 'string' ? detail.reason : '',
+            action: typeof detail.action === 'string' ? detail.action : '',
+            state: typeof detail.state === 'string' ? detail.state : '',
+            message: typeof detail.message === 'string' ? detail.message : '',
+        };
+    }
+
+    function projectApiMessage(error) {
+        const detail = responseDetail(error);
+        if (isRecord(detail)) {
+            if (typeof detail.message === 'string' && detail.message.trim()) {
+                return detail.message.trim();
+            }
+            if (typeof detail.error === 'string' && detail.error.trim()) {
+                return detail.error.trim();
+            }
+        }
+        return '';
+    }
+
     Object.assign(DM, {
         _projects: [],
         _archivedProjects: [],
@@ -557,30 +616,38 @@
             this._syncOutputModeUi?.();
         },
 
-        _handleProjectRequestError(error) {
+        _handleProjectRequestError(error, action) {
             const detail = responseDetail(error);
-            if (error?.status === 409 && detail?.code === 'dataset_project_revision_conflict') {
+            const mapped = isRecord(detail) ? PROJECT_CONTRACT_TOAST[detail.code] : null;
+            if (mapped) {
                 this._setProjectStatus(
-                    'conflict',
-                    'dataset.projectStatusConflict',
-                    'Reload required',
+                    mapped.status || 'error',
+                    mapped.statusKey || 'dataset.projectStatusError',
+                    mapped.statusFallback || 'Project error',
                 );
                 this._toast(
                     this._t(
-                        'dataset.projectConflict',
-                        'This project changed elsewhere. Reload it before saving again.',
+                        mapped.toastKey,
+                        mapped.toastFallback,
+                        contractToastParams(detail),
                     ),
                     'error',
                     6000,
                 );
                 return;
             }
+            const failedKey = action === 'delete'
+                ? 'dataset.projectDeleteFailed'
+                : 'dataset.projectSaveFailed';
+            const failedFallback = action === 'delete'
+                ? 'Could not delete Dataset project: {error}'
+                : 'Could not save Dataset project: {error}';
             this._setProjectStatus('error', 'dataset.projectStatusError', 'Project error');
             this._toast(
                 this._t(
-                    'dataset.projectSaveFailed',
-                    'Could not save Dataset project: {error}',
-                    { error: String(error) },
+                    failedKey,
+                    failedFallback,
+                    { error: projectApiMessage(error) || String(error?.message || error) },
                 ),
                 'error',
                 6000,
@@ -1089,7 +1156,7 @@
                 await this._replaceQueueWithUnsavedDraft();
                 this._setProjectStatus('idle', 'dataset.projectStatusIdle', 'No saved project');
             } catch (error) {
-                this._handleProjectRequestError(error);
+                this._handleProjectRequestError(error, 'delete');
             } finally {
                 this._projectBusy = false;
                 this._renderProjectControls();

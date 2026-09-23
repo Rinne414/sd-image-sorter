@@ -33,6 +33,27 @@
 
     const invalidExportResponse = message => new Error(`Invalid dataset export API response: ${message}`);
 
+    function exportHttpErrorText(status, payload, rawText) {
+        const pick = (value) => {
+            if (typeof value === 'string' && value.trim()) return value.trim();
+            if (value && typeof value === 'object' && !Array.isArray(value)) {
+                if (typeof value.message === 'string' && value.message.trim()) return value.message.trim();
+                if (typeof value.error === 'string' && value.error.trim()) return value.error.trim();
+                if (typeof value.detail === 'string' && value.detail.trim()) return value.detail.trim();
+            }
+            return '';
+        };
+        const fromPayload = pick(payload) || pick(payload && payload.detail);
+        if (fromPayload) return fromPayload.slice(0, 400);
+        if (typeof rawText === 'string') {
+            const trimmed = rawText.trim();
+            if (trimmed && !trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+                return trimmed.slice(0, 400);
+            }
+        }
+        return `HTTP ${status}`;
+    }
+
     const requireRecord = (value, path) => {
         if (value === null || typeof value !== 'object' || Array.isArray(value)) {
             throw invalidExportResponse(`${path} must be an object`);
@@ -606,21 +627,23 @@
                 body: JSON.stringify(payload),
             });
             if (!r.ok) {
+                let rawText = '';
+                let payload = null;
+                try {
+                    rawText = await r.text();
+                    payload = rawText ? JSON.parse(rawText) : null;
+                } catch (_) {
+                    payload = null;
+                }
                 if (r.status === 409) {
-                    let conflictPayload = null;
-                    try {
-                        conflictPayload = await r.json();
-                    } catch (_) {
-                        conflictPayload = null;
-                    }
-                    const hasStructuredCode = conflictPayload
-                        && typeof conflictPayload === 'object'
-                        && !Array.isArray(conflictPayload)
-                        && Object.hasOwn(conflictPayload, 'code');
+                    const hasStructuredCode = payload
+                        && typeof payload === 'object'
+                        && !Array.isArray(payload)
+                        && Object.hasOwn(payload, 'code');
                     if (hasStructuredCode) {
                         this._readinessAcceptedSignature = null;
                         try {
-                            const conflict = parseReadinessConflict(conflictPayload);
+                            const conflict = parseReadinessConflict(payload);
                             const view = this._readinessView || {};
                             this._setReadinessView?.({
                                 ...view,
@@ -642,12 +665,16 @@
                         this._updateExportEnabled?.();
                         return;
                     }
-                    const body = JSON.stringify(conflictPayload ?? {});
-                    this._showResultModal('failed', { errorMessages: [body.slice(0, 400)], output_folder: folder });
+                    this._showResultModal('failed', {
+                        errorMessages: [exportHttpErrorText(r.status, payload, rawText)],
+                        output_folder: folder,
+                    });
                     return;
                 }
-                const body = await r.text();
-                this._showResultModal('failed', { errorMessages: [body.slice(0, 400)], output_folder: folder });
+                this._showResultModal('failed', {
+                    errorMessages: [exportHttpErrorText(r.status, payload, rawText)],
+                    output_folder: folder,
+                });
                 return;
             }
             const started = parseExportStartResponse(await r.json());

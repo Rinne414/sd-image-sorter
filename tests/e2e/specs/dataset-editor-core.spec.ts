@@ -998,7 +998,7 @@ test('trigger quickfill rejects multi-token input without changing captions', as
   })
 })
 
-test('trigger quickfill rejects internal whitespace without persisting or previewing it', async ({ page }) => {
+test('trigger quickfill rejects control whitespace without persisting or previewing it', async ({ page }) => {
   const previewBodies: Array<Record<string, unknown>> = []
   await page.route('**/api/tags/export-preview', async (route) => {
     previewBodies.push(route.request().postDataJSON() as Record<string, unknown>)
@@ -1012,7 +1012,6 @@ test('trigger quickfill rejects internal whitespace without persisting or previe
   await page.locator('#dataset-tab-workbench').click()
 
   const invalidTriggers = [
-    'Bad Trigger',
     'Bad\tTrigger',
     'Bad\u00a0Trigger',
     'Bad\u3000Trigger',
@@ -1020,7 +1019,7 @@ test('trigger quickfill rejects internal whitespace without persisting or previe
   for (const invalidTrigger of invalidTriggers) {
     await page.locator('#dataset-trigger').fill(invalidTrigger)
     await page.locator('#btn-dataset-quickfill-trigger').click()
-    await expect(page.locator('#toast-container .toast.error').last()).toContainText('internal whitespace')
+    await expect(page.locator('#toast-container .toast.error').last()).toContainText('whitespace')
     await expect(page.locator('#dataset-trigger')).toHaveValue('')
   }
 
@@ -1269,7 +1268,6 @@ test('Dataset Project trigger parsing matches the shared single-token contract',
       '___',
       'Bad,Trigger',
       'Bad\nTrigger',
-      'Bad Trigger',
       'Bad\tTrigger',
       'Bad\u00a0Trigger',
       'Bad\u3000Trigger',
@@ -1291,7 +1289,14 @@ test('Dataset Project trigger parsing matches the shared single-token contract',
   expect(errors[1]).toContain('other than spaces or underscores')
   expect(errors[2]).toContain('cannot contain commas or line breaks')
   expect(errors[3]).toContain('cannot contain commas or line breaks')
-  for (const error of errors.slice(4)) expect(error).toContain('internal whitespace')
+  for (const error of errors.slice(4)) expect(error).toContain('control whitespace')
+
+  expect(await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    const settings = structuredClone(dm._defaultProjectSettings())
+    settings.caption_render.trigger = 'long hair girl'
+    return dm._parseProjectSettings(settings).caption_render.trigger
+  })).toBe('long hair girl')
 })
 
 test('Dataset trigger canonicalizes Unicode edge whitespace in project and export payloads', async ({ page }) => {
@@ -2894,7 +2899,7 @@ test('opening Smart Tag from Dataset Maker rejects an invalid trigger', async ({
 
   await page.locator('#btn-dataset-smart-tag').click()
 
-  await expect(page.locator('#toast-container .toast.error')).toContainText('internal whitespace')
+  await expect(page.locator('#toast-container .toast.error')).toContainText('whitespace')
   await expect(page.locator('#smart-tag-modal')).not.toHaveClass(/visible/)
   await expect(page.locator('#smart-tag-trigger')).toHaveValue('unchanged_trigger')
   await expect(page.locator('#dataset-trigger')).toHaveValue('')

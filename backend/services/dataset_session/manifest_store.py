@@ -131,9 +131,18 @@ def _iter_folder_image_entries(base: Path, recursive: bool) -> Iterator[Dict[str
                         continue
                     if os.path.splitext(entry.name)[1].lower() not in ALLOWED_IMAGE_EXTENSIONS:
                         continue
+                    try:
+                        stat = entry.stat(follow_symlinks=True)
+                        size = int(stat.st_size)
+                        mtime = float(stat.st_mtime)
+                    except OSError:
+                        size = 0
+                        mtime = 0.0
                     yield {
                         "path": os.path.abspath(entry.path),
                         "filename": entry.name,
+                        "size": size,
+                        "mtime": mtime,
                     }
         except OSError as exc:
             logger.debug("dataset-session: cannot scan %s: %s", current, exc)

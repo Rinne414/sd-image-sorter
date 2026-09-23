@@ -424,7 +424,6 @@ def test_caption_tag_list_limits_match_project_preview_readiness_and_export() ->
         "___",
         "Bad,Trigger",
         "Bad\nTrigger",
-        "Bad Trigger",
         "Bad\tTrigger",
         "Bad\u00a0Trigger",
         "Bad\u3000Trigger",
@@ -450,6 +449,26 @@ def test_trigger_contract_rejects_invalid_single_tokens(
         DatasetExportRequest(trigger=invalid_trigger)
     with pytest.raises(ValidationError):
         TagExportPreviewRequest(trigger=invalid_trigger)
+
+
+@pytest.mark.parametrize(
+    "valid_trigger",
+    ("long_hair_girl", "long hair girl"),
+)
+def test_trigger_contract_accepts_space_or_underscore_spelling(
+    valid_trigger: str,
+) -> None:
+    settings = _project_settings_with(
+        ("caption_render", "trigger"),
+        valid_trigger,
+    )
+
+    project = DatasetProjectSettingsV1.model_validate(settings, strict=True)
+    assert project.caption_render.trigger == valid_trigger
+    assert DatasetExportPreviewRequest(trigger=valid_trigger).trigger == valid_trigger
+    assert DatasetReadinessRequest(trigger=valid_trigger).trigger == valid_trigger
+    assert DatasetExportRequest(trigger=valid_trigger).trigger == valid_trigger
+    assert TagExportPreviewRequest(trigger=valid_trigger).trigger == valid_trigger
 
 
 @pytest.mark.parametrize(

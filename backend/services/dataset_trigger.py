@@ -17,14 +17,21 @@ DATASET_TRIGGER_WHITESPACE = (
 )
 
 
+# A plain space is allowed inside a trigger (``long hair girl``). Other
+# whitespace stays forbidden so a trigger cannot smuggle line breaks or
+# invisible characters.
+_DATASET_TRIGGER_FORBIDDEN_WHITESPACE = DATASET_TRIGGER_WHITESPACE.replace(" ", "")
+
+
 def validate_dataset_trigger(value: str) -> str:
     trigger = value.strip(DATASET_TRIGGER_WHITESPACE)
     if "," in trigger or any(
-        character in DATASET_TRIGGER_WHITESPACE for character in trigger
+        character in _DATASET_TRIGGER_FORBIDDEN_WHITESPACE for character in trigger
     ):
         raise ValueError(
-            "trigger must be one token without commas, line breaks, or internal whitespace"
+            "trigger must be one token without commas, line breaks, or control whitespace"
         )
+    trigger = " ".join(trigger.split())
     if value and not trigger.replace("_", " ").strip():
         raise ValueError(
             "trigger must contain characters other than spaces or underscores"

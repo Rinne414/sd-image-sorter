@@ -1665,22 +1665,37 @@ def test_coerce_request_allows_vlm_disabled_without_endpoint(monkeypatch) -> Non
 
 
 # ---------------------------------------------------------------------------
-# Fix M3: trigger word with internal whitespace is rejected at validation time
+# Trigger word: plain spaces are allowed (``long hair girl``); control
+# whitespace and commas stay rejected.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
     "trigger",
     [
+        "long hair girl",
         "my lora trigger",
         "two words",
-        "leading_ok and_trailing_ok with space",
+    ],
+)
+def test_coerce_request_accepts_spaced_trigger_word(trigger) -> None:
+    req = _coerce_request({
+        "image_ids": [1],
+        "enable_vlm": False,
+        "trigger_word": trigger,
+    })
+    assert req.trigger_word == " ".join(trigger.split())
+
+
+@pytest.mark.parametrize(
+    "trigger",
+    [
         "tab\there",
         "zero\ufeffwidth",
         "next\u0085line",
     ],
 )
-def test_coerce_request_rejects_trigger_word_with_internal_whitespace(trigger) -> None:
+def test_coerce_request_rejects_trigger_word_with_control_whitespace(trigger) -> None:
     with pytest.raises(ValueError, match="one token"):
         _coerce_request({
             "image_ids": [1],
