@@ -7,7 +7,6 @@
  * - Space = light peek (hold); Enter still opens full modal (card handler)
  * - Action-bar magnetic enter animation
  * - Entry hero continuity into gallery stage
- * - Optional daily-loop chip (看图 → 选 → 标/分)
  *
  * Classic script; no module imports. Hooks existing events only.
  */
@@ -17,7 +16,6 @@
     const STORAGE_KEY = 'sd-gallery-comfort-v1';
     const HERO_ID_KEY = 'sd-gallery-comfort-hero-id';
     const SESSION_STARTED_KEY = 'sd-gallery-comfort-session-started';
-    const DAILY_LOOP_DISMISS_PREFIX = 'sd-gallery-daily-loop-dismissed-';
     const DAY_MS = 24 * 60 * 60 * 1000;
     const RESUME_MAX_AGE_MS = 14 * DAY_MS;
     const RESUME_TOAST_COOLDOWN_MS = 6 * 60 * 60 * 1000;
@@ -456,7 +454,6 @@
         if (view) view.classList.toggle('is-comfort-room', Boolean(active));
         if (active) {
             applyEntryHeroContinuity();
-            showDailyLoopChipIfNeeded();
             armActionBarMagnet();
         } else {
             hidePeek();
@@ -614,53 +611,6 @@
         try { localStorage.setItem(HERO_ID_KEY, String(id)); } catch (_e) { /* ignore */ }
     }
 
-    /* ---------- Comfort-2: Daily loop chip ---------- */
-
-    function showDailyLoopChipIfNeeded() {
-        const chip = document.getElementById('gallery-daily-loop');
-        if (!chip) return;
-        // De-AI default: coaching chips stay off. Opt-in via localStorage only.
-        let optedIn = false;
-        try {
-            optedIn = localStorage.getItem('sd-gallery-daily-loop-opt-in') === '1';
-        } catch (_e) {
-            optedIn = false;
-        }
-        if (!optedIn) {
-            chip.hidden = true;
-            chip.classList.remove('is-opted-in');
-            return;
-        }
-        const key = DAILY_LOOP_DISMISS_PREFIX + _todayKey();
-        try {
-            if (localStorage.getItem(key) === '1') {
-                chip.hidden = true;
-                chip.classList.remove('is-opted-in');
-                return;
-            }
-        } catch (_e) { /* keep evaluating */ }
-        const count = Array.isArray(_appState()?.images) ? _appState().images.length : 0;
-        const total = Number(_appState()?.pagination?.total || 0);
-        if (count <= 0 && total <= 0) {
-            chip.hidden = true;
-            chip.classList.remove('is-opted-in');
-            return;
-        }
-        chip.classList.add('is-opted-in');
-        chip.hidden = false;
-    }
-
-    function bindDailyLoopChip() {
-        const chip = document.getElementById('gallery-daily-loop');
-        if (!chip) return;
-        chip.querySelector('[data-daily-loop-dismiss]')?.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            try { localStorage.setItem(DAILY_LOOP_DISMISS_PREFIX + _todayKey(), '1'); } catch (_err) { /* ignore */ }
-            chip.hidden = true;
-        });
-    }
-
     /* ---------- Comfort-2: Action bar magnetic enter ---------- */
 
     function armActionBarMagnet() {
@@ -777,9 +727,7 @@
         });
 
         bindSpacePeek();
-        bindDailyLoopChip();
         applyEntryHeroContinuity();
-        showDailyLoopChipIfNeeded();
         armActionBarMagnet();
         _refreshRibbon();
     }

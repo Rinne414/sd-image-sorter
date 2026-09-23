@@ -21,7 +21,6 @@ function initAutoSeparate() {
     loadAutoSepConfigs();
     renderAutoSepConfigControls();
     updateAutoSepSummary();
-    updateAutoSepPreviewScopeSummary();
 
     // Edit Filters button - opens unified filter modal
     const filterBtn = $('#btn-autosep-filters');
@@ -155,13 +154,11 @@ function initAutoSeparate() {
     $('#autosep-config-select')?.addEventListener('change', renderAutoSepConfigControls);
     document.addEventListener('gallery-filters-changed', () => {
         updateAutoSepScopeStatus();
-        updateAutoSepPreviewScopeSummary();
     });
     document.addEventListener('languageChanged', () => {
         updateAutoSepSummary();
         updateAutoSepSettingsSummary();
         renderAutoSepConfigControls();
-        updateAutoSepPreviewScopeSummary();
         updateAutoSepActionUi();
     });
 

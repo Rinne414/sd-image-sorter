@@ -140,22 +140,6 @@ function getAutoSepScopeStatus() {
     };
 }
 
-function updateAutoSepPreviewScopeSummary() {
-    const summaryEl = document.getElementById('autosep-preview-scope-summary');
-    if (!summaryEl) return;
-
-    const status = getAutoSepScopeStatus();
-    const tool = getAutoSepToolLabel();
-    summaryEl.textContent = status.lastSyncedLabel && status.matchesGallery
-        ? _formatAutoSepI18n('scope.previewSynced', 'Preview uses {tool} filters copied from Gallery at {time}.', {
-            tool,
-            time: status.lastSyncedLabel,
-        })
-        : _formatAutoSepI18n('scope.previewSaved', 'Preview uses the saved {tool} filters shown here, not the live Gallery filters.', {
-            tool,
-        });
-}
-
 function updateAutoSepScopeStatus() {
     const card = document.getElementById('autosep-scope-status');
     const useBtn = document.getElementById('btn-autosep-use-gallery-scope');
@@ -199,7 +183,6 @@ function keepAutoSepSavedScope() {
     };
     saveAutoSepScopeMeta();
     updateAutoSepScopeStatus();
-    updateAutoSepPreviewScopeSummary();
     window.App?.showToast?.(
         _formatAutoSepI18n('scope.keptToast', 'Kept the saved {tool} scope.', {
             tool: getAutoSepToolLabel(),

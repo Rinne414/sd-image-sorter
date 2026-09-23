@@ -213,16 +213,16 @@
                         <span class="tile-title" data-i18n="entry.missionLoraTitle">LoRA Dataset</span>
                         <span class="tile-arrow" aria-hidden="true">→</span>
                     </span>
-                    <span class="tile-output" data-i18n="entry.missionLoraOutput">Output: a training set kohya can consume directly</span>
-                    <span class="tile-steps" data-i18n="entry.missionLoraSteps">Scan → Tag → Filter → Caption → Export</span>
+                    <span class="tile-output" data-i18n="entry.missionLoraOutput">A training set kohya can read as-is</span>
+                    <span class="tile-steps" data-i18n="entry.missionLoraSteps">Pick, tag, fix captions, export</span>
                 </button>
                 <button type="button" class="entry-tile entry-mission-organize" id="entry-mission-organize">
                     <span class="tile-head">
                         <span class="tile-title" data-i18n="entry.missionOrganizeTitle">Batch Organize</span>
                         <span class="tile-arrow" aria-hidden="true">→</span>
                     </span>
-                    <span class="tile-output" data-i18n="entry.missionOrganizeOutput">Output: folders that stop exploding</span>
-                    <span class="tile-steps" data-i18n="entry.missionOrganizeSteps">Scan → Auto-sort → WASD → Archive</span>
+                    <span class="tile-output" data-i18n="entry.missionOrganizeOutput">Sort a messy pile into folders</span>
+                    <span class="tile-steps" data-i18n="entry.missionOrganizeSteps">Auto-sort first, finish by hand with WASD</span>
                 </button>
             </div>
 
@@ -232,8 +232,8 @@
                         <span class="tile-title" data-i18n="entry.missionPixivTitle">Pixiv Set Publishing</span>
                         <span class="tile-arrow" aria-hidden="true">→</span>
                     </span>
-                    <span class="tile-output" data-i18n="entry.missionPixivOutput">Output: a publishable, censored image set</span>
-                    <span class="tile-steps" data-i18n="entry.missionPixivSteps">Pick → Censor → Rename → Export</span>
+                    <span class="tile-output" data-i18n="entry.missionPixivOutput">A censored, ordered set ready to upload</span>
+                    <span class="tile-steps" data-i18n="entry.missionPixivSteps">Pick, censor, order and rename, export</span>
                 </button>
             </div>
 
@@ -347,7 +347,7 @@
                 </div>
                 <div class="identity-stat identity-streak">
                     <span class="stat-num streak-num" id="entry-streak-num">–</span>
-                    <span class="stat-label streak-label" data-i18n="entry.streakDays">day streak of organizing</span>
+                    <span class="stat-label streak-label" data-i18n="entry.streakDays">days in a row</span>
                     <span class="streak-today" id="entry-streak-today" hidden></span>
                 </div>
             </div>
@@ -374,7 +374,7 @@
                     <button type="button" class="hero-mode-btn" data-mode="slideshow" data-i18n="entry.showModeSlideshow" title="Auto-rotating covers" data-i18n-title="entry.showModeSlideshowTip">Slideshow</button>
                     <button type="button" class="hero-mode-btn" data-mode="film" data-i18n="entry.showModeFilm" title="Rolling film strips" data-i18n-title="entry.showModeFilmTip">Film</button>
                 </span>
-                <span class="hero-local-note" data-i18n="entry.localNote">· Runs locally by default — cloud VLM captioning is opt-in and sends images to the provider you configure</span>
+                <span class="hero-local-note" data-i18n="entry.localNote">· Images stay on your computer. Only cloud VLM captioning sends them to the service you set up</span>
             </div>
         </footer>
     </section>
@@ -1008,7 +1008,7 @@
                             <button id="btn-random" class="btn btn-ghost btn-small btn-icon-only" title="Show a random image from current filter" aria-label="Show random image" data-i18n-title="gallery.randomTooltip" data-i18n-aria="gallery.random">
                                 <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-dice"/></svg></span>
                             </button>
-                            <button id="btn-reconnect-missing" class="btn btn-ghost btn-small btn-icon-only" title="Re-link images that were moved or renamed outside the app" aria-label="Find moved image files" data-i18n-title="reconnect.openTitle" data-i18n-aria="reconnect.openTitle">
+                            <button id="btn-reconnect-missing" class="btn btn-ghost btn-small btn-icon-only" title="Find images that were moved or renamed (your files are not touched)" aria-label="Find images that were moved or renamed (your files are not touched)" data-i18n-title="reconnect.openTitle" data-i18n-aria="reconnect.openTitle">
                                 <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></span>
                             </button>
                             <div class="divider-v" aria-hidden="true"></div>
@@ -1236,10 +1236,6 @@
                     </div>
                     <!-- Comfort-1: quiet status ribbon (resume / today stats). Hidden by default. -->
                     <div id="gallery-comfort-ribbon" class="gallery-comfort-ribbon" hidden role="status" aria-live="polite" title="Click to dismiss"></div>
-                    <div id="gallery-daily-loop" class="gallery-daily-loop" hidden role="note">
-                        <span class="gallery-daily-loop-text" data-i18n="gallery.comfort.dailyLoop">Today: browse → pick a few → tag or sort</span>
-                        <button type="button" class="gallery-daily-loop-dismiss" data-daily-loop-dismiss aria-label="Dismiss" data-i18n-aria="gallery.comfort.dailyLoopDismiss"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
-                    </div>
                     <div id="gallery-empty-state" style="display:none" role="status">
                         <div class="empty-state-card empty-state-onboarding">
                             <span class="empty-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></span>
@@ -1661,7 +1657,7 @@
                     <header class="autosep-shell-header">
                         <div class="autosep-shell-title-block">
                             <h2 class="panel-title" data-i18n="autosep.title">Auto-Separate Images</h2>
-                            <p class="panel-description" data-i18n="autosep.description">Move images matching your filters to a new folder automatically.</p>
+                            <p class="panel-description" data-i18n="autosep.description">Set the conditions, preview what goes where, then move them in one go.</p>
                         </div>
                         <div class="autosep-shell-header-actions">
                             <button class="btn btn-ghost btn-small" id="btn-autosep-settings" type="button"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg> <span data-i18n="common.settings">Settings</span></button>
@@ -1710,7 +1706,7 @@
                                     </div>
                                 </div>
 
-                                <p class="helper-text autosep-pane-helper" id="autosep-scope-note" data-i18n="autosep.scopeNote">Auto-Separate uses the filters shown below. Later Gallery filter changes are not copied automatically.</p>
+                                <p class="helper-text autosep-pane-helper" id="autosep-scope-note" data-i18n="autosep.scopeNote">These filters are separate from the Gallery; changing the Gallery does not change them.</p>
 
                                 <!-- Filter summary remains as the single source of truth for what will be matched.
                                      We move it from a horizontal strip to a vertical readable list inside the pane. -->
@@ -1740,11 +1736,9 @@
                                 </span>
                             </div>
                             <div class="autosep-pane-body autosep-pane-preview-body">
-                                <p class="helper-text autosep-pane-helper" id="autosep-preview-scope-summary" data-i18n="autosep.previewScopeSummary">Preview uses the Auto-Separate filters shown here, not the live Gallery filters.</p>
                                 <div class="autosep-preview-list" id="autosep-preview-list">
                                     <div class="autosep-preview-empty" data-i18n="autosep.previewEmpty">Click "Preview Results" to review matching images before moving them.</div>
                                 </div>
-                                <p class="autosep-preview-hint helper-text" data-i18n="autosep.previewHint">Preview now shows every match found by the current filters.</p>
                             </div>
                         </section>
 
@@ -2039,7 +2033,7 @@
                                 <button class="btn btn-secondary btn-small" id="btn-manual-sort-filters"><span><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></span>
                                     <span data-i18n="gallery.editFilters">Edit Filters</span></button>
                             </div>
-                            <div class="helper-text" id="manual-sort-scope-note" data-i18n="manual.scopeNote">Manual Sort uses the filters shown below. Later Gallery filter changes are not copied automatically.</div>
+                            <div class="helper-text" id="manual-sort-scope-note" data-i18n="manual.scopeNote">These filters are separate from the Gallery; changing the Gallery does not change them.</div>
                             <div class="scope-status-card" id="manual-sort-scope-status">
                                 <div class="scope-status-header">
                                     <span class="scope-status-badge" id="manual-sort-scope-badge">Manual Sort will use these saved filters</span>

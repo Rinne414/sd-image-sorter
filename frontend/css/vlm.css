@@ -2047,8 +2047,7 @@
     min-height: 220px;
 }
 
-.autosep-pane-preview-body .autosep-preview-empty,
-.autosep-pane-preview-body .autosep-preview-hint {
+.autosep-pane-preview-body .autosep-preview-empty {
     color: var(--text-muted);
     font-size: 12px;
 }

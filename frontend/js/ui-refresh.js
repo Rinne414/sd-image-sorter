@@ -247,7 +247,6 @@
             this._setText('#view-autosep .preview-section h4', 'autosep.preview');
             this._setText('#autosep-preview .stat-label', 'common.images', 'images');
             this._setText('#autosep-preview-list .autosep-preview-empty', 'autosep.previewEmpty');
-            this._setText('#view-autosep .autosep-preview-hint', 'autosep.previewHint');
             this._setButton('#btn-preview-autosep', 'autosep.previewBtn', null, 'autosep.previewBtn');
             this._setButton('#btn-execute-autosep', 'autosep.moveBtn', 'i-folder', 'autosep.moveBtn');
             window.updateAutoSepActionUi?.();

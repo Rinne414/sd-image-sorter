@@ -2020,52 +2020,6 @@ html.gallery-comfort-peeking {
     cursor: zoom-in;
 }
 
-/* Daily loop: opt-in only (default hidden). When shown, look like a status
-   line — not a purple product-coach chip. */
-.gallery-daily-loop {
-    display: none;
-    align-items: center;
-    gap: 10px;
-    margin: 0 0 10px;
-    padding: 4px 6px 4px 10px;
-    border-radius: 6px;
-    border: 1px solid var(--hairline-2);
-    background: transparent;
-    color: var(--muted);
-    font-size: 11px;
-    font-weight: 500;
-}
-
-/* Explicit opt-in class if a future setting re-enables the tip. */
-.gallery-daily-loop.is-opted-in:not([hidden]) {
-    display: inline-flex;
-}
-
-.gallery-daily-loop[hidden] {
-    display: none !important;
-}
-
-.gallery-daily-loop-text {
-    line-height: 1.35;
-}
-
-.gallery-daily-loop-dismiss {
-    border: none;
-    background: transparent;
-    color: var(--muted);
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    cursor: pointer;
-    font-size: 12px;
-    line-height: 1;
-}
-
-.gallery-daily-loop-dismiss:hover {
-    background: var(--wash-strong);
-    color: var(--text);
-}
-
 /* Selection action bar: short settle, neutral chrome (no pink glow brand). */
 #gallery-action-bar.is-magnet-in {
     animation: none;
@@ -2186,10 +2140,6 @@ html.comfort-zen #view-censor .censor-sidebar-v2,
 html.comfort-zen #view-censor .censor-sidebar-v2.right {
     background: var(--chrome-zen) !important;
     border-color: transparent !important;
-}
-
-html.comfort-zen .gallery-daily-loop {
-    display: none !important;
 }
 
 /* Exit chip — minimal, instrument-like (de-AI: no floating product mascot). */

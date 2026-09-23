@@ -99,16 +99,6 @@ test.describe('gallery comfort-1', () => {
     await page.evaluate(() => (window as any).GalleryComfort.hidePeek())
     await expect(page.locator('#gallery-comfort-peek')).toBeHidden()
 
-    // Daily loop is opt-in (de-AI default off); force opt-in class for the pin.
-    await page.evaluate(() => {
-      const chip = document.getElementById('gallery-daily-loop')
-      if (chip) {
-        chip.classList.add('is-opted-in')
-        chip.hidden = false
-      }
-    })
-    await expect(page.locator('#gallery-daily-loop')).toBeVisible()
-
     // Comfort-3 shell: zen + warmth APIs
     await page.waitForFunction(() => Boolean((window as any).ComfortApp), null, {
       timeout: 10000,

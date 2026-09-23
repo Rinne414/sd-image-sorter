@@ -1759,12 +1759,6 @@ body::before {
         flex: 1 1 auto;
     }
 
-    .autosep-preview-hint {
-        margin-bottom: 16px;
-        font-size: 12px;
-        color: var(--text-muted);
-    }
-
     .stat-number {
         font-family: var(--font-display);
         font-size: 48px;

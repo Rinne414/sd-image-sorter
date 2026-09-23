@@ -149,7 +149,6 @@ function updateAutoSepSummary() {
     }
 
     updateAutoSepScopeStatus();
-    updateAutoSepPreviewScopeSummary();
 }
 
 // Export for use by app.js filter modal
