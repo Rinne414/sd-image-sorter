@@ -153,7 +153,7 @@ Object.assign(window.PromptLab, {
 
         if (this.presets.length === 0) {
             container.innerHTML = `<div class="preset-empty">${this._escapeValue(
-                this._t('promptlab.noPresetsDetailed', 'No saved presets. Save your current configuration as a preset.')
+                this._t('promptlab.noPresetsDetailed', 'No presets yet. Save the current setup as a preset and it appears here.')
             )}</div>`;
             return;
         }

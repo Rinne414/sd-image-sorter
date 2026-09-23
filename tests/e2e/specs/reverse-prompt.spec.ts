@@ -140,7 +140,7 @@ test('a file that recorded its own prompt shows the record, and runs no inferenc
   expect(badge, 'the badge must claim a record').toMatch(/record/i)
   const note = await page.locator(`${recorded} .reverse-result-note`).innerText()
   expect(note, 'and the sentence must say it is a record, not a guess')
-    .toMatch(/record of what generated/i)
+    .toMatch(/original record/i)
   expect(note).toMatch(/not a guess/i)
   await expect(page.locator(`${recorded} .reverse-result-text`).first()).not.toBeEmpty()
 
@@ -161,7 +161,7 @@ test('a file that recorded nothing gets a guess, labelled as a guess', async ({ 
   await dropImage(page, NO_METADATA_PNG)
   await expect(page.locator(recorded)).toBeHidden()
   const why = await page.locator('#reverse-no-record').innerText()
-  expect(why, 'the page must say there is nothing to read').toMatch(/records no prompt/i)
+  expect(why, 'the page must say there is nothing to read').toMatch(/stores no prompt/i)
 
   await pickMode(page, 'tagger')
   await page.locator('#btn-reverse-run').click()
@@ -237,7 +237,7 @@ test('inference over a file that has a record is offered as a comparison, never 
 
   const compare = await page.locator(`${inferred} .reverse-result-compare`).innerText()
   expect(compare, 'the comparison note must say which one is real').toMatch(/comparison only/i)
-  expect(compare).toMatch(/the record is the true one/i)
+  expect(compare).toMatch(/trust the record above/i)
 })
 
 test('a refused lease on the shared runtime is explained, not reported as a broken model', async ({ page }) => {
@@ -454,7 +454,7 @@ test('TIPO warns about its download before spending it, and never offers a Prepa
   await page.locator('#btn-reverse-tipo').click()
   await expect(message).toBeVisible()
   await page.locator('#btn-confirm-ok').click()
-  await expect(page.locator('#reverse-tipo-results')).toContainText(/TIPO proposes 1 tag/i)
+  await expect(page.locator('#reverse-tipo-results')).toContainText(/TIPO suggests 1 tag/i)
   const box = page.locator('#reverse-tipo-results input[type="checkbox"]')
   await expect(box).toHaveCount(1)
   await expect(box).not.toBeChecked()

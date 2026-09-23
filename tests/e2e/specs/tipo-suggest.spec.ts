@@ -118,7 +118,7 @@ test('proposals render as an unchecked checklist; apply appends checked picks to
   await page.locator('#sepcon-tipo-suggest').click()
   const panel = page.locator('#sepcon-gaps')
   await expect(panel).toBeVisible()
-  await expect(panel).toContainText('TIPO proposes 3 tag(s)')
+  await expect(panel).toContainText('TIPO suggests 3 tag(s)')
 
   // Request carries the queue's tag frequency list, short target.
   expect(suggestCalls).toHaveLength(1)

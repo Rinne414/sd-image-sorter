@@ -5303,7 +5303,7 @@ test.describe('Smoke Tests', () => {
 
     await expect(categoriesEmpty).toContainText('No categories loaded')
     await expect(slotsEmpty).toContainText('Load categories first')
-    await expect(presetsEmpty).toContainText('Save your current configuration as a preset')
+    await expect(presetsEmpty).toContainText('Save the current setup as a preset')
 
     await page.waitForTimeout(700)
 
@@ -5311,7 +5311,7 @@ test.describe('Smoke Tests', () => {
     await expect(categoriesEmpty).not.toContainText('Loading categories')
     await expect(slotsEmpty).toContainText('Load categories first')
     await expect(slotsEmpty).not.toContainText('Loading slots')
-    await expect(presetsEmpty).toContainText('Save your current configuration as a preset')
+    await expect(presetsEmpty).toContainText('Save the current setup as a preset')
   })
 
   test('prompt lab should send selected slots to generation API and render the returned prompt', async ({ page }) => {

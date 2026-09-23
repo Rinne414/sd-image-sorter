@@ -1548,7 +1548,7 @@
                                             <input id="reader-edit-output-path" class="input-field" type="text" data-i18n-placeholder="reader.editOutputPlaceholder" placeholder="Enter the full save path">
                                         </label>
                                     </div>
-                                    <p id="reader-edit-output-hint" class="reader-editor-note" data-i18n="reader.editOutputHint">If the image came from the browser, the app does not know the original folder. Enter the full save path once, and it will remember the folder.</p>
+                                    <p id="reader-edit-output-hint" class="reader-editor-note" data-i18n="reader.editOutputHint">Images dragged in from a browser have no known folder. Enter the full save path once and it will be remembered.</p>
                                     <p id="reader-edit-format-warning" class="reader-editor-warning" hidden></p>
                                     <div class="reader-editor-actions">
                                         <button id="reader-save-metadata-as" class="btn btn-primary btn-sm" type="button" data-i18n="reader.saveAsNewImage">Save New Image</button>
@@ -3138,7 +3138,7 @@
                 <div class="reverse-container">
                     <header class="reverse-header">
                         <h2 class="view-title" data-i18n="reverse.title">Reverse Prompt</h2>
-                        <p class="reverse-lead" data-i18n="reverse.lead">Drop one image. If the file recorded its own prompt you get that record; if it did not, the AI guesses — and this page always tells you which one you are looking at.</p>
+                        <p class="reverse-lead" data-i18n="reverse.lead">Drop in an image. If the file stores its prompt, you get that; if not, the AI guesses. The page always says which one you are looking at.</p>
                     </header>
 
                     <div class="reverse-columns">
@@ -3147,7 +3147,7 @@
                                  aria-label="Drop one image here, or activate to browse" data-i18n-aria="reverse.dropAria">
                                 <span class="reverse-drop-icon" aria-hidden="true"><svg class="icon icon-20" aria-hidden="true"><use href="#i-image"/></svg></span>
                                 <span class="reverse-drop-title" data-i18n="reverse.dropTitle">Drop one image here</span>
-                                <span class="reverse-drop-hint" data-i18n="reverse.dropHint">Or click to browse. The file is read in place and never added to your library.</span>
+                                <span class="reverse-drop-hint" data-i18n="reverse.dropHint">Or click to browse.</span>
                             </div>
                             <input type="file" id="reverse-file-input" accept="image/*" hidden>
                             <img id="reverse-preview" class="reverse-preview" alt="" hidden>
@@ -3159,7 +3159,7 @@
                                     <input type="radio" name="reverse-mode" value="grounded" checked>
                                     <span class="reverse-mode-copy">
                                         <span class="reverse-mode-name" data-i18n="reverse.modeGrounded">Tagger, then the vision model</span>
-                                        <span class="reverse-mode-help" data-i18n="reverse.modeGroundedHelp">Tags the image first, then hands those tags and the image to the vision model together. Usually the best result.</span>
+                                        <span class="reverse-mode-help" data-i18n="reverse.modeGroundedHelp">Tags the image first, then gives the tags and the image to the vision model. Usually the best result.</span>
                                     </span>
                                 </label>
                                 <label class="reverse-mode-option">
@@ -3187,7 +3187,7 @@
                                     <option value="krea2">Krea 2</option>
                                     <option value="anima">Anima</option>
                                 </select>
-                                <span class="form-help" data-i18n="reverse.targetHelp">Only used to decide which prompt-shaping tools apply. Tag tools are switched off for a target documented to want natural language.</span>
+                                <span class="form-help" data-i18n="reverse.targetHelp">Only decides which prompt tools apply. Tag tools turn off for a target that wants natural language.</span>
                             </label>
 
                             <div class="reverse-actions">
@@ -3207,7 +3207,7 @@
 
                             <section class="reverse-draft-card">
                                 <h3 class="reverse-card-title" data-i18n="reverse.draftTitle">Your draft</h3>
-                                <p class="reverse-card-help" data-i18n="reverse.draftHelp">Yours to edit. Use as draft on a result above copies it here, and the prompt tools below work on this box only.</p>
+                                <p class="reverse-card-help" data-i18n="reverse.draftHelp">Yours to edit. Use as draft copies a result here, and the prompt tools below only work on this box.</p>
                                 <textarea id="reverse-draft" class="reverse-draft" rows="5" spellcheck="false"
                                           aria-label="Prompt draft" data-i18n-aria="reverse.draftAria"></textarea>
                             </section>
@@ -3227,7 +3227,7 @@
                                         <span data-i18n="reverse.tipoRun">Suggest missed tags</span>
                                     </button>
                                 </div>
-                                <p class="reverse-card-help" id="reverse-tipo-hw" data-i18n="reverse.tipoHardware">v2.1 and the older v2 1B model need the same RAM (about 1–2 GB). No dedicated GPU. 200M-ft is the light option.</p>
+                                <p class="reverse-card-help" id="reverse-tipo-hw" data-i18n="reverse.tipoHardware">v2.1 and the older v2 1B both need about 1–2 GB of RAM and no dedicated GPU. 200M-ft is the light option.</p>
                                 <div class="reverse-tipo-results" id="reverse-tipo-results" hidden></div>
                             </section>
                         </div>
@@ -3422,7 +3422,7 @@
                         <div class="modal-content modal-large">
                             <button class="modal-close" id="pl-image-picker-close" type="button" aria-label="Close image picker" data-i18n-aria="a11y.closeImagePicker"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
                             <h3 id="pl-image-picker-title" data-i18n="promptlab.pickImageTitle">Pick an Image</h3>
-                            <p class="modal-description" id="pl-image-picker-desc" data-i18n="promptlab.pickImageDesc">Pick by thumbnail instead of guessing from random file names.</p>
+                            <p class="modal-description" id="pl-image-picker-desc" data-i18n="promptlab.pickImageDesc">Pick by thumbnail instead of guessing from file names.</p>
                             <div class="promptlab-image-picker-toolbar">
                                 <input id="pl-image-picker-search" class="input-field" type="text" data-i18n-placeholder="promptlab.pickImageSearch" placeholder="Search filename, prompt, checkpoint...">
                                 <span id="pl-image-picker-count" class="promptlab-image-picker-count">0</span>
@@ -3438,14 +3438,14 @@
                             <div class="promptlab-category-board-head">
                                 <div>
                                     <h3 data-i18n="promptlab.categoryBoardTitle">Suggest Tag Categories</h3>
-                                    <p class="modal-description" data-i18n="promptlab.categoryBoardDesc">Drag tags into better categories, then submit to save local category overrides.</p>
+                                    <p class="modal-description" data-i18n="promptlab.categoryBoardDesc">Drag tags into better categories.</p>
                                 </div>
                                 <span id="promptlab-category-board-count" class="promptlab-category-board-total">0</span>
                             </div>
                             <div id="promptlab-category-board-status" class="promptlab-category-board-status"></div>
                             <div id="promptlab-category-board-columns" class="promptlab-category-board-columns"></div>
                             <div class="promptlab-category-board-footer">
-                                <span id="promptlab-category-board-note" data-i18n="promptlab.categoryBoardNote">Changes are saved only when submitted.</span>
+                                <span id="promptlab-category-board-note" data-i18n="promptlab.categoryBoardNote">Changes are saved only when you submit.</span>
                                 <div class="promptlab-category-board-actions">
                                     <button class="btn btn-secondary" id="promptlab-category-board-cancel" type="button" data-i18n="common.cancel">Cancel</button>
                                     <button class="btn btn-primary" id="promptlab-category-board-submit" type="button" data-i18n="promptlab.submitCategoryBoard">Submit Suggestions</button>
@@ -3532,7 +3532,7 @@
                                             <span class="promptlab-affix-badge" data-i18n="promptlab.affixBadge">Auto dedupe</span>
                                             <div>
                                                 <strong data-i18n="promptlab.affixTitle">Fixed tags before/after Generate</strong>
-                                                <p data-i18n="promptlab.affixHint">Write comma-separated tags here. Generate/Randomize will merge them with the result and remove duplicates automatically.</p>
+                                                <p data-i18n="promptlab.affixHint">Comma-separated tags, merged into the result when you Generate or Randomize.</p>
                                             </div>
                                         </div>
                                         <div class="promptlab-affix-row">

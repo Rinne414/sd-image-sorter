@@ -160,13 +160,13 @@ Object.assign(window.ReversePrompt, {
             generator
                 ? this._t(
                     'reverse.recordedNoteWithGenerator',
-                    'This is the prompt {generator} stored inside the image file. It is a record of what generated this picture, not a guess.',
+                    'This is the prompt {generator} stored in the image file: the original record, not a guess.',
                     '这是 {generator} 写进图片文件里的提示词。它是这张图如何生成的记录，不是推测。',
                     { generator }
                 )
                 : this._t(
                     'reverse.recordedNote',
-                    'This is the prompt stored inside the image file. It is a record of what generated this picture, not a guess.',
+                    'This is the prompt stored in the image file: the original record, not a guess.',
                     '这是图片文件里保存的提示词。它是这张图如何生成的记录，不是推测。'
                 )
         ));
@@ -224,7 +224,7 @@ Object.assign(window.ReversePrompt, {
             'reverse-result-note',
             this._t(
                 'reverse.inferredNote',
-                'The file records no prompt, so this was inferred from the picture ({method}). Check it before you use it.',
+                'The file stores no prompt, so this was inferred from the picture ({method}). Check it before you use it.',
                 '文件里没有写下提示词，所以这一份是从画面推测出来的（{method}）。使用前请先核对。',
                 { method }
             )
@@ -236,7 +236,7 @@ Object.assign(window.ReversePrompt, {
                 'reverse-result-compare',
                 this._t(
                     'reverse.compareNote',
-                    'For comparison only. The box above is the record the file itself carries of what generated this picture; this one was inferred from the pixels. They will not match, and the record is the true one.',
+                    'For comparison only: above is the record stored in the file, this one was inferred from the pixels. They will not match; trust the record above.',
                     '仅供对照。上面那一块是文件自身带着的、关于这张图如何生成的记录，这一块是从像素推测的。两者不会一致，真正作准的是上面那一份。'
                 )
             ));
@@ -284,7 +284,7 @@ Object.assign(window.ReversePrompt, {
             if (!noRecord.hidden) {
                 this._lockedText(noRecord, this._t(
                     'reverse.noRecordedPrompt',
-                    'This file records no prompt of its own, so there is nothing to read. Inference is the only option here.',
+                    'This file stores no prompt, so inference is the only option.',
                     '这个文件没有记录自己的提示词，所以没有可读的记录，这里只能依靠推测。'
                 ));
             }

@@ -120,18 +120,18 @@ Object.assign(window.ReversePrompt, {
             this._lockedText(note, naturalTarget
                 ? this._t(
                     'reverse.tipoDialectBlocked',
-                    'This target is documented to want natural-language prompts, and TIPO expands Booru tag lists, so it is switched off here.',
+                    'This target wants natural-language prompts and TIPO only expands Booru tags, so it is off here.',
                     '这个目标模型的文档要求自然语言提示词，而 TIPO 扩写的是 Booru 标签列表，所以在这里停用。'
                 )
                 : candidates.length === 0
                     ? this._t(
                         'reverse.tipoNeedsTags',
-                        'TIPO expands a Booru tag list. Put comma-separated tags in the draft box above to use it.',
+                        'TIPO expands Booru tag lists. Put comma-separated tags in the draft box above first.',
                         'TIPO 扩写的是 Booru 标签列表。请先在上面的草稿框里填入以逗号分隔的标签。'
                     )
                     : this._t(
                         'reverse.tipoHelp',
-                        'Suggests Booru tags the taggers never scored. Nothing is applied until you check it.',
+                        'Suggests Booru tags the taggers never scored. Only the ones you check are added.',
                         '推荐打标器从未评分的 Booru 标签。除非你勾选，否则不会应用任何内容。'
                     ));
         }
@@ -164,7 +164,7 @@ Object.assign(window.ReversePrompt, {
                 const ask = window.App?.showConfirm;
                 const message = this._t(
                     'reverse.tipoDownloadWarn',
-                    'This TIPO model is not downloaded yet. The first run fetches about {size} into your data folder, and nothing happens until that finishes. Download it now?',
+                    'This TIPO model is not downloaded yet. The first run downloads about {size} into your data folder, and results appear once that finishes. Download it now?',
                     '这个 TIPO 模型还没有下载。首次运行会把约 {size} 的文件下载到你的数据文件夹，下载完成之前不会有任何结果。现在下载吗？',
                     { size }
                 );
@@ -221,7 +221,7 @@ Object.assign(window.ReversePrompt, {
         if (proposals.length === 0) {
             host.appendChild(this._noteLine('reverse-tipo-line', this._t(
                 'reverse.tipoNone',
-                'TIPO found no in-vocabulary tags to add — the draft already covers its ideas.',
+                'TIPO found nothing to add; the draft already covers its suggestions.',
                 'TIPO 没有找到可补充的词表内标签 — 现有草稿已覆盖它的建议。'
             )));
             return;
@@ -229,7 +229,7 @@ Object.assign(window.ReversePrompt, {
 
         host.appendChild(this._noteLine('reverse-tipo-line', this._t(
             'reverse.tipoProposals',
-            'TIPO proposes {count} tag(s) the taggers never scored. Check the ones you want.',
+            'TIPO suggests {count} tag(s) the taggers never scored. Check the ones you want.',
             'TIPO 推荐了 {count} 个打标器从未评分的标签，请勾选你想要的。',
             { count: proposals.length }
         )));

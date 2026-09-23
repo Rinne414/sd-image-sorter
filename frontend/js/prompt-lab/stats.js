@@ -224,7 +224,7 @@ Object.assign(window.PromptLab, {
         // establish, which is the same overreach in a quieter form.
         const offer = known && stats?.checkpoint_empty_action === 'scan_generated_images_folder'
             ? this._t('promptlab.emptyScanGeneratedImages',
-                'If you do have a folder of your own generations, scanning it — or adding it as a separate library — is what fills these panels.')
+                'If you have a folder of your own generations, scan it or add it as a separate library to fill these panels.')
             : '';
         return `<div class="promptlab-empty-note">
             <span class="promptlab-empty-fact">${escapeHtml(fact)}</span>
