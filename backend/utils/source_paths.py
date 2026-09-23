@@ -357,19 +357,36 @@ def resolve_existing_indexed_image_path(
     allow_symlink: bool = False,
 ) -> Optional[str]:
     """Resolve an indexed image path to an existing absolute path."""
+
+    def accept(candidate: str) -> Optional[str]:
+        candidate_path = os.path.abspath(normalize_user_path(candidate))
+        if not os.path.exists(candidate_path):
+            return None
+        if not allow_symlink:
+            if os.path.islink(candidate_path):
+                return None
+            if not _paths_match_for_runtime(candidate_path, os.path.realpath(candidate_path)):
+                return None
+        return candidate_path
+
+    # The stored path is the first candidate and almost always still exists as
+    # written. Try it alone before building the case / drive / layout variants,
+    # which cost about 1 ms per image on every gallery page.
+    first = normalize_indexed_image_path(primary_path)
+    if first:
+        try:
+            found = accept(first)
+        except OSError:
+            found = None
+        if found:
+            return found
     for candidate in build_indexed_image_path_candidates(primary_path, backend_file=backend_file):
         try:
-            candidate_path = os.path.abspath(normalize_user_path(candidate))
-            if not os.path.exists(candidate_path):
-                continue
-            if not allow_symlink:
-                if os.path.islink(candidate_path):
-                    continue
-                if not _paths_match_for_runtime(candidate_path, os.path.realpath(candidate_path)):
-                    continue
-            return candidate_path
+            found = accept(candidate)
         except OSError:
             continue
+        if found:
+            return found
     return None
 
 
