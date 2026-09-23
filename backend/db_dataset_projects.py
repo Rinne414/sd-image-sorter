@@ -130,18 +130,31 @@ def _begin_write(conn: sqlite3.Connection) -> None:
     conn.execute("BEGIN IMMEDIATE")
 
 
+def _active_library_id() -> str:
+    from library_context import get_current_library_id
+
+    return get_current_library_id()
+
+
+def _library_clause(column: str = "library_id") -> tuple[str, tuple[str, ...]]:
+    from library_context import current_library_sql
+
+    return current_library_sql(column)
+
+
 def _read_project_row(
     conn: sqlite3.Connection,
     project_id: int,
 ) -> sqlite3.Row | None:
+    lib_sql, lib_params = _library_clause()
     return conn.execute(
-        """
+        f"""
         SELECT id, name, revision, archived_at, created_at, updated_at,
                settings_json
         FROM dataset_projects
-        WHERE id = ?
+        WHERE id = ? AND {lib_sql}
         """,
-        (project_id,),
+        (project_id, *lib_params),
     ).fetchone()
 
 
@@ -175,23 +188,24 @@ def _require_active_name_available(
     name_key: str,
     excluded_project_id: int | None,
 ) -> None:
+    lib_sql, lib_params = _library_clause()
     if excluded_project_id is None:
         row = conn.execute(
-            """
+            f"""
             SELECT id FROM dataset_projects
-            WHERE name_key = ? AND archived_at IS NULL
+            WHERE name_key = ? AND archived_at IS NULL AND {lib_sql}
             LIMIT 1
             """,
-            (name_key,),
+            (name_key, *lib_params),
         ).fetchone()
     else:
         row = conn.execute(
-            """
+            f"""
             SELECT id FROM dataset_projects
-            WHERE name_key = ? AND archived_at IS NULL AND id != ?
+            WHERE name_key = ? AND archived_at IS NULL AND id != ? AND {lib_sql}
             LIMIT 1
             """,
-            (name_key, excluded_project_id),
+            (name_key, excluded_project_id, *lib_params),
         ).fetchone()
     if row is not None:
         raise DatasetProjectNameConflictError(name)
@@ -207,9 +221,10 @@ def _require_images_exist(
     for start in range(0, len(image_ids), 500):
         chunk = image_ids[start:start + 500]
         placeholders = ",".join("?" for _image_id in chunk)
+        lib_sql, lib_params = _library_clause()
         rows = conn.execute(
-            f"SELECT id FROM images WHERE id IN ({placeholders})",
-            chunk,
+            f"SELECT id FROM images WHERE id IN ({placeholders}) AND {lib_sql}",
+            (*chunk, *lib_params),
         ).fetchall()
         found_ids.update(int(row[0]) for row in rows)
     missing_ids = [image_id for image_id in image_ids if image_id not in found_ids]
@@ -402,6 +417,7 @@ def list_dataset_project_records(
     archived: bool,
 ) -> list[DatasetProjectSummaryRecord]:
     archived_clause = "IS NOT NULL" if archived else "IS NULL"
+    lib_sql, lib_params = _library_clause("p.library_id")
     with get_db() as conn:
         rows = conn.execute(
             f"""
@@ -417,10 +433,11 @@ def list_dataset_project_records(
                        AS missing_image_count
             FROM dataset_projects p
             LEFT JOIN dataset_project_items i ON i.project_id = p.id
-            WHERE p.archived_at {archived_clause}
+            WHERE p.archived_at {archived_clause} AND {lib_sql}
             GROUP BY p.id
             ORDER BY p.updated_at DESC, p.id DESC
-            """
+            """,
+            lib_params,
         ).fetchall()
         return [
             {
@@ -471,10 +488,10 @@ def create_dataset_project_record(
         )
         cursor = conn.execute(
             """
-            INSERT INTO dataset_projects (name, name_key, settings_json)
-            VALUES (?, ?, ?)
+            INSERT INTO dataset_projects (name, name_key, settings_json, library_id)
+            VALUES (?, ?, ?, ?)
             """,
-            (name, name_key, settings_json),
+            (name, name_key, settings_json, _active_library_id()),
         )
         project_id = int(cursor.lastrowid)
         _replace_project_items(conn, project_id, items)

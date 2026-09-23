@@ -377,13 +377,26 @@ class SimilarityService:
 
     def get_stats(self) -> dict:
         """Get statistics about embeddings."""
+        from library_context import current_library_sql
+
+        lib_sql, lib_params = current_library_sql()
         with db.get_db() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM images WHERE COALESCE(is_readable, 1) = 1")
+            cursor.execute(
+                f"SELECT COUNT(*) FROM images WHERE COALESCE(is_readable, 1) = 1 AND {lib_sql}",
+                lib_params,
+            )
             total = cursor.fetchone()[0]
-            cursor.execute("SELECT COUNT(*) FROM images WHERE embedding IS NOT NULL AND COALESCE(is_readable, 1) = 1")
+            cursor.execute(
+                "SELECT COUNT(*) FROM images "
+                f"WHERE embedding IS NOT NULL AND COALESCE(is_readable, 1) = 1 AND {lib_sql}",
+                lib_params,
+            )
             embedded = cursor.fetchone()[0]
-            cursor.execute("SELECT COUNT(*) FROM images WHERE COALESCE(is_readable, 1) = 0")
+            cursor.execute(
+                f"SELECT COUNT(*) FROM images WHERE COALESCE(is_readable, 1) = 0 AND {lib_sql}",
+                lib_params,
+            )
             unreadable = cursor.fetchone()[0]
         return {
             "total_images": total,

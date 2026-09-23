@@ -35,6 +35,12 @@ from utils.source_paths import (
 )
 
 
+def _library_clause(column: str = "library_id"):
+    from library_context import current_library_sql
+
+    return current_library_sql(column)
+
+
 def get_images_in_folder_scope(folder_path: str, recursive: bool = True) -> List[Dict[str, Any]]:
     """Return lightweight image rows that fall under a scan root."""
     clause, params = _folder_scope_query_match_clause(folder_path)
@@ -124,9 +130,12 @@ def get_library_folders() -> List[str]:
     folders are synthesized client-side. Recomputed per call (cheap dirname
     derivation) so the tree stays fresh right after a scan.
     """
+    lib_sql, lib_params = _library_clause()
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT DISTINCT path FROM images WHERE COALESCE(is_readable, 1) != 0"
+            "SELECT DISTINCT path FROM images "
+            f"WHERE COALESCE(is_readable, 1) != 0 AND {lib_sql}",
+            lib_params,
         ).fetchall()
 
     folders: set[str] = set()
@@ -180,25 +189,28 @@ def get_image_by_id(image_id: int) -> Optional[Dict[str, Any]]:
 
 def get_images_missing_color_data(limit: int = 100) -> List[Dict[str, Any]]:
     """Find images that haven't had color analysis run yet (for lazy backfill)."""
+    lib_sql, lib_params = _library_clause()
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            """
+            f"""
             SELECT id, path FROM images
-            WHERE avg_brightness IS NULL AND is_readable = 1
+            WHERE avg_brightness IS NULL AND is_readable = 1 AND {lib_sql}
             LIMIT ?
             """,
-            (limit,),
+            (*lib_params, limit),
         )
         return [{"id": row[0], "path": row[1]} for row in cursor.fetchall()]
 
 
 def count_images_missing_color_data() -> int:
     """Count images still needing color analysis. Uses indexed column; constant memory."""
+    lib_sql, lib_params = _library_clause()
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT COUNT(*) FROM images WHERE avg_brightness IS NULL AND is_readable = 1"
+            f"SELECT COUNT(*) FROM images WHERE avg_brightness IS NULL AND is_readable = 1 AND {lib_sql}",
+            lib_params,
         )
         row = cursor.fetchone()
         return int(row[0] if row else 0)
@@ -270,11 +282,13 @@ def get_images_by_ids(image_ids: List[int]) -> Dict[int, Dict[str, Any]]:
 
 def get_untagged_images(limit: int = 100) -> List[Dict[str, Any]]:
     """Get images that haven't been tagged yet."""
+    lib_sql, lib_params = _library_clause()
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            f"SELECT {_IMAGE_COLUMNS_BARE} FROM images WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 LIMIT ?",
-            (limit,)
+            f"SELECT {_IMAGE_COLUMNS_BARE} FROM images "
+            f"WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 AND {lib_sql} LIMIT ?",
+            (*lib_params, limit),
         )
         return _rows_to_dicts(cursor.fetchall())
 
@@ -286,9 +300,13 @@ def get_all_image_ids() -> List[int]:
     memory at once. Callers fetch full rows in small batches.
     """
     image_ids: List[int] = []
+    lib_sql, lib_params = _library_clause()
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM images WHERE COALESCE(is_readable, 1) = 1 ORDER BY id")
+        cursor.execute(
+            f"SELECT id FROM images WHERE COALESCE(is_readable, 1) = 1 AND {lib_sql} ORDER BY id",
+            lib_params,
+        )
         while True:
             rows = cursor.fetchmany(1000)
             if not rows:
@@ -304,9 +322,14 @@ def get_untagged_image_ids() -> List[int]:
     full rows in small batches to avoid OOM on large libraries.
     """
     image_ids: List[int] = []
+    lib_sql, lib_params = _library_clause()
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM images WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 ORDER BY id")
+        cursor.execute(
+            "SELECT id FROM images "
+            f"WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 AND {lib_sql} ORDER BY id",
+            lib_params,
+        )
         while True:
             rows = cursor.fetchmany(1000)
             if not rows:
@@ -317,18 +340,23 @@ def get_untagged_image_ids() -> List[int]:
 
 def count_all_image_ids() -> int:
     """Count readable image IDs without materializing them."""
+    lib_sql, lib_params = _library_clause()
     with get_db() as conn:
         row = conn.execute(
-            "SELECT COUNT(*) FROM images WHERE COALESCE(is_readable, 1) = 1"
+            f"SELECT COUNT(*) FROM images WHERE COALESCE(is_readable, 1) = 1 AND {lib_sql}",
+            lib_params,
         ).fetchone()
         return int(row[0] or 0) if row else 0
 
 
 def count_untagged_image_ids() -> int:
     """Count readable untagged image IDs without materializing them."""
+    lib_sql, lib_params = _library_clause()
     with get_db() as conn:
         row = conn.execute(
-            "SELECT COUNT(*) FROM images WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1"
+            "SELECT COUNT(*) FROM images "
+            f"WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 AND {lib_sql}",
+            lib_params,
         ).fetchone()
         return int(row[0] or 0) if row else 0
 
@@ -336,9 +364,13 @@ def count_untagged_image_ids() -> int:
 def iter_all_image_id_chunks(chunk_size: int = 1000) -> Iterator[List[int]]:
     """Yield readable image IDs in database order using cursor.fetchmany()."""
     normalized_chunk_size = max(1, int(chunk_size or 1000))
+    lib_sql, lib_params = _library_clause()
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM images WHERE COALESCE(is_readable, 1) = 1 ORDER BY id")
+        cursor.execute(
+            f"SELECT id FROM images WHERE COALESCE(is_readable, 1) = 1 AND {lib_sql} ORDER BY id",
+            lib_params,
+        )
         while True:
             rows = cursor.fetchmany(normalized_chunk_size)
             if not rows:
@@ -349,9 +381,14 @@ def iter_all_image_id_chunks(chunk_size: int = 1000) -> Iterator[List[int]]:
 def iter_untagged_image_id_chunks(chunk_size: int = 1000) -> Iterator[List[int]]:
     """Yield readable untagged image IDs in database order using cursor.fetchmany()."""
     normalized_chunk_size = max(1, int(chunk_size or 1000))
+    lib_sql, lib_params = _library_clause()
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM images WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 ORDER BY id")
+        cursor.execute(
+            "SELECT id FROM images "
+            f"WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 AND {lib_sql} ORDER BY id",
+            lib_params,
+        )
         while True:
             rows = cursor.fetchmany(normalized_chunk_size)
             if not rows:
@@ -360,8 +397,9 @@ def iter_untagged_image_id_chunks(chunk_size: int = 1000) -> Iterator[List[int]]
 
 
 def get_image_count() -> int:
-    """Get total number of images in database."""
+    """Get total number of images in the active library workspace."""
+    lib_sql, lib_params = _library_clause()
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM images")
+        cursor.execute(f"SELECT COUNT(*) FROM images WHERE {lib_sql}", lib_params)
         return cursor.fetchone()[0]

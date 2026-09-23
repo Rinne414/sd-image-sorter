@@ -468,7 +468,7 @@ class TestLibraryHealthCache:
             ss.db, "get_library_health_report", lambda sample_limit: {"n": sample_limit}
         )
         ss._get_library_health_cached(4)
-        assert 4 in ss._LIBRARY_HEALTH_CACHE
+        assert any(key[1] == 4 for key in ss._LIBRARY_HEALTH_CACHE)
         ss.invalidate_library_health_cache()
         assert ss._LIBRARY_HEALTH_CACHE == {}
 

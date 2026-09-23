@@ -69,7 +69,8 @@ def _make_db(tmp_path, rows: Sequence[tuple]) -> _SqliteDb:
             filename TEXT,
             embedding BLOB,
             content_fingerprint TEXT,
-            is_readable INTEGER DEFAULT 1
+            is_readable INTEGER DEFAULT 1,
+            library_id TEXT NOT NULL DEFAULT 'main'
         )
         """
     )
@@ -202,6 +203,22 @@ def test_get_index_dir_reads_module_level_get_state_dir(tmp_path, monkeypatch):
     index = similarity_module.SimilarityIndex(_make_db(tmp_path, []))
 
     assert index._get_index_dir() == custom / "similarity-index"
+
+
+def test_library_index_dir_keeps_main_at_root_and_splits_others(tmp_path, monkeypatch):
+    """main reuses the pre-library cache dir; other libraries get a subdir."""
+    from library_context import reset_current_library_id, set_current_library_id
+
+    custom = tmp_path / "custom-state"
+    monkeypatch.setattr(similarity_module, "get_state_dir", lambda: str(custom))
+    index = similarity_module.SimilarityIndex(_make_db(tmp_path, []))
+
+    assert index._get_library_index_dir() == custom / "similarity-index"
+    token = set_current_library_id("lib_b")
+    try:
+        assert index._get_library_index_dir() == custom / "similarity-index" / "lib_b"
+    finally:
+        reset_current_library_id(token)
 
 
 def test_persist_writes_under_patched_state_dir(tmp_path, monkeypatch):
@@ -615,7 +632,7 @@ def test_invalidate_vector_cache_routes_to_similarity_ann_delete(tmp_path, monke
 
     index.invalidate_vector_cache()
 
-    assert calls == [index._get_index_dir()]
+    assert calls == [index._get_library_index_dir()]
     assert index._vector_cache is None
     assert index._ann is None
 

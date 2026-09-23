@@ -79,10 +79,14 @@ def _utc_sqlite_text(moment: datetime) -> str:
 
 
 def _pick_hero(conn, hero_seed: int) -> Optional[Dict[str, Any]]:
+    from library_context import current_library_sql
+
+    lib_sql, lib_params = current_library_sql()
     rows = conn.execute(
         "SELECT id, filename FROM images "
-        "WHERE user_rating = 5 AND COALESCE(is_readable, 1) = 1 "
-        "ORDER BY id"
+        f"WHERE user_rating = 5 AND COALESCE(is_readable, 1) = 1 AND {lib_sql} "
+        "ORDER BY id",
+        lib_params,
     ).fetchall()
     if not rows:
         return None
@@ -102,17 +106,20 @@ def get_hero_pool(limit: int = 60) -> Dict[str, Any]:
     Rows whose file no longer opens are excluded: the client turns each id
     straight into a background image, so a dead id renders as a black void.
     """
+    from library_context import current_library_sql
+
+    lib_sql, lib_params = current_library_sql()
     conn = db.get_connection()
     capped = max(1, min(int(limit or 60), 200))
     rows = conn.execute(
-        """
+        f"""
         SELECT id, (user_rating = 5) AS starred
         FROM images
-        WHERE COALESCE(is_readable, 1) = 1
+        WHERE COALESCE(is_readable, 1) = 1 AND {lib_sql}
         ORDER BY (user_rating = 5) DESC, indexed_at DESC, id DESC
         LIMIT ?
         """,
-        (capped,),
+        (*lib_params, capped),
     ).fetchall()
     ids = [int(row[0]) for row in rows]
     starred = sum(1 for row in rows if row[1])
@@ -126,13 +133,16 @@ def get_entry_summary(
     """Aggregate everything the entry page needs in one call."""
     conn = db.get_connection()
 
-    library_total = int(conn.execute("SELECT COUNT(*) FROM images").fetchone()[0])
+    from library_context import current_library_sql
+
+    lib_sql, lib_params = current_library_sql()
+    library_total = int(conn.execute(f"SELECT COUNT(*) FROM images WHERE {lib_sql}", lib_params).fetchone()[0])
 
     local_midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     added_today = int(
         conn.execute(
-            "SELECT COUNT(*) FROM images WHERE indexed_at >= ?",
-            (_utc_sqlite_text(local_midnight),),
+            f"SELECT COUNT(*) FROM images WHERE indexed_at >= ? AND {lib_sql}",
+            (_utc_sqlite_text(local_midnight), *lib_params),
         ).fetchone()[0]
     )
 
@@ -144,8 +154,8 @@ def get_entry_summary(
         try:
             unviewed = int(
                 conn.execute(
-                    "SELECT COUNT(*) FROM images WHERE indexed_at > ?",
-                    (str(last_seen)[:19],),
+                    f"SELECT COUNT(*) FROM images WHERE indexed_at > ? AND {lib_sql}",
+                    (str(last_seen)[:19], *lib_params),
                 ).fetchone()[0]
             )
         except Exception:  # noqa: BLE001 — malformed watermark is not an error

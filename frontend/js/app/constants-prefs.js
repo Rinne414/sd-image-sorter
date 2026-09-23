@@ -120,6 +120,26 @@ function formatGeneratorLabel(generator, fallbackUnknown = 'Unknown') {
 
 const GALLERY_VIEW_MODE_KEY = 'gallery-view-mode';
 const FILTER_STATE_KEY = 'sd-image-sorter-filter-state';
+const LIBRARY_WORKSPACE_STORAGE_KEY = 'sd-library-workspace-v1';
+
+function currentLibraryIdFromStorage() {
+    try {
+        const raw = localStorage.getItem(LIBRARY_WORKSPACE_STORAGE_KEY);
+        if (!raw) return 'main';
+        const parsed = JSON.parse(raw);
+        const id = parsed && parsed.currentId;
+        return (typeof id === 'string' && id.trim()) ? id.trim() : 'main';
+    } catch (_error) {
+        return 'main';
+    }
+}
+
+function filterStateStorageKey(libraryId) {
+    const id = libraryId || (typeof window.LibraryWorkspace?.getCurrentLibraryId === 'function'
+        ? window.LibraryWorkspace.getCurrentLibraryId()
+        : currentLibraryIdFromStorage());
+    return `${FILTER_STATE_KEY}:${id || 'main'}`;
+}
 const SCAN_ADVANCED_OPEN_KEY = 'sd-image-sorter-scan-advanced-open';
 const TAG_ADVANCED_OPEN_KEY = 'sd-image-sorter-tag-advanced-open';
 const UI_SCALE_STORAGE_KEY = 'ui_scale_v1';

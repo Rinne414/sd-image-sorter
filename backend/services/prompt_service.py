@@ -4,7 +4,7 @@ Prompt Lab service for category/tag-set/exclusion/preset/prompt workflows.
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException
 
@@ -62,10 +62,13 @@ def _is_useful_recipe_token(token: str) -> bool:
     return not any(excluded in text for excluded in _RECIPE_TOKEN_EXCLUDES)
 
 
-def _usable_clause(alias: str = "") -> str:
-    """SQL for "this image is usable" — the project-wide readability guard."""
+def _usable_clause(alias: str = "") -> Tuple[str, Tuple[str, ...]]:
+    """SQL + params for usable images in the active library workspace."""
+    from library_context import current_library_sql
+
     prefix = f"{alias}." if alias else ""
-    return f"COALESCE({prefix}is_readable, 1) = 1"
+    lib_sql, lib_params = current_library_sql(f"{prefix}library_id")
+    return f"COALESCE({prefix}is_readable, 1) = 1 AND {lib_sql}", lib_params
 
 
 def _column_exists(cursor: Any, table: str, column: str) -> bool:
@@ -78,9 +81,11 @@ def _text_length_stats(cursor: Any, column: str, *, scope: str) -> Dict[str, Any
     ``sample`` travels with the numbers so the reader can tell an average of
     two rows from an average of two thousand.
     """
+    usable, usable_params = _usable_clause()
     row = cursor.execute(
         f"SELECT COUNT(*), AVG(LENGTH({column})), MAX(LENGTH({column})), MIN(LENGTH({column})) "
-        f"FROM images WHERE {column} IS NOT NULL AND {column} != '' AND {_usable_clause()}"
+        f"FROM images WHERE {column} IS NOT NULL AND {column} != '' AND {usable}",
+        usable_params,
     ).fetchone()
     return {
         "avg": round(row[1] or 0),
@@ -434,9 +439,18 @@ class PromptService:
             effective_checkpoint_limit = max(checkpoint_limit, recipe_limit)
             effective_leader_limit = max(leader_limit, recipe_limit)
 
-            total = cursor.execute("SELECT COUNT(*) FROM images").fetchone()[0]
+            from library_context import current_library_sql
+
+            lib_sql, lib_params = current_library_sql()
+            usable, usable_params = _usable_clause()
+            usable_i, _ = _usable_clause("i")
+            total = cursor.execute(
+                f"SELECT COUNT(*) FROM images WHERE {lib_sql}",
+                lib_params,
+            ).fetchone()[0]
             usable_total = cursor.execute(
-                f"SELECT COUNT(*) FROM images WHERE {_usable_clause()}"
+                f"SELECT COUNT(*) FROM images WHERE {usable}",
+                usable_params,
             ).fetchone()[0]
 
             # Tagging never runs on a file that is gone, so a dead row can only
@@ -446,22 +460,24 @@ class PromptService:
             tagged_images = cursor.execute(
                 "SELECT COUNT(DISTINCT t.image_id) FROM tags t "
                 "INNER JOIN images i ON i.id = t.image_id "
-                f"WHERE {_usable_clause('i')}"
+                f"WHERE {usable_i}",
+                usable_params,
             ).fetchone()[0]
 
             top_tags_total = cursor.execute(
                 "SELECT COUNT(*) FROM ("
                 "SELECT t.tag FROM tags t INNER JOIN images i ON i.id = t.image_id "
-                f"WHERE {_usable_clause('i')} GROUP BY t.tag"
-                ")"
+                f"WHERE {usable_i} GROUP BY t.tag"
+                ")",
+                usable_params,
             ).fetchone()[0]
             top_tags = []
             for row in cursor.execute(
                 "SELECT t.tag, COUNT(*) as cnt FROM tags t "
                 "INNER JOIN images i ON i.id = t.image_id "
-                f"WHERE {_usable_clause('i')} "
+                f"WHERE {usable_i} "
                 "GROUP BY t.tag ORDER BY cnt DESC LIMIT ?",
-                (tag_limit,),
+                (*usable_params, tag_limit),
             ).fetchall():
                 top_tags.append({
                     "tag": row[0],
@@ -470,7 +486,8 @@ class PromptService:
                 })
 
             scored = cursor.execute(
-                "SELECT COUNT(*) FROM images WHERE aesthetic_score IS NOT NULL"
+                f"SELECT COUNT(*) FROM images WHERE aesthetic_score IS NOT NULL AND {lib_sql}",
+                lib_params,
             ).fetchone()[0]
 
             # Each example card renders a thumbnail and offers Build / Reader /
@@ -479,35 +496,39 @@ class PromptService:
             # reports every scored row on record.
             scored_available = cursor.execute(
                 "SELECT COUNT(*) FROM images "
-                f"WHERE aesthetic_score IS NOT NULL AND {_usable_clause()}"
+                f"WHERE aesthetic_score IS NOT NULL AND {usable}",
+                usable_params,
             ).fetchone()[0]
 
             checkpoints_any = cursor.execute(
                 "SELECT COUNT(*) FROM images "
-                "WHERE checkpoint_normalized IS NOT NULL AND TRIM(checkpoint_normalized) != ''"
+                f"WHERE checkpoint_normalized IS NOT NULL AND TRIM(checkpoint_normalized) != '' AND {lib_sql}",
+                lib_params,
             ).fetchone()[0]
             checkpoints_usable = cursor.execute(
                 "SELECT COUNT(*) FROM images "
                 "WHERE checkpoint_normalized IS NOT NULL AND TRIM(checkpoint_normalized) != '' "
-                f"AND {_usable_clause()}"
+                f"AND {usable}",
+                usable_params,
             ).fetchone()[0]
 
             top_checkpoints_total = cursor.execute(
                 "SELECT COUNT(*) FROM ("
                 "SELECT checkpoint_normalized FROM images "
                 "WHERE checkpoint_normalized IS NOT NULL AND TRIM(checkpoint_normalized) != '' "
-                f"AND {_usable_clause()} "
+                f"AND {usable} "
                 "GROUP BY checkpoint_normalized"
-                ")"
+                ")",
+                usable_params,
             ).fetchone()[0]
             top_checkpoints = []
             for row in cursor.execute(
                 "SELECT checkpoint_normalized, COUNT(*) as cnt FROM images "
                 "WHERE checkpoint_normalized IS NOT NULL AND TRIM(checkpoint_normalized) != '' "
-                f"AND {_usable_clause()} "
+                f"AND {usable} "
                 "GROUP BY checkpoint_normalized "
                 "ORDER BY cnt DESC, checkpoint_normalized COLLATE NOCASE ASC LIMIT ?",
-                (effective_checkpoint_limit,),
+                (*usable_params, effective_checkpoint_limit),
             ).fetchall():
                 checkpoint_name = str(row[0] or "").strip()
                 if not checkpoint_name:
@@ -518,23 +539,23 @@ class PromptService:
                 "SELECT COUNT(*) FROM ("
                 "SELECT checkpoint_normalized FROM images "
                 "WHERE checkpoint_normalized IS NOT NULL AND TRIM(checkpoint_normalized) != '' AND aesthetic_score IS NOT NULL "
-                f"AND {_usable_clause()} "
+                f"AND {usable} "
                 "GROUP BY checkpoint_normalized "
                 "HAVING COUNT(*) >= ?"
                 ")",
-                (MIN_SCORED_IMAGES_PER_CHECKPOINT,),
+                (*usable_params, MIN_SCORED_IMAGES_PER_CHECKPOINT),
             ).fetchone()[0]
             checkpoint_score_leaders = []
             for row in cursor.execute(
                 "SELECT checkpoint_normalized, AVG(aesthetic_score) as avg_score, COUNT(*) as cnt "
                 "FROM images "
                 "WHERE checkpoint_normalized IS NOT NULL AND TRIM(checkpoint_normalized) != '' AND aesthetic_score IS NOT NULL "
-                f"AND {_usable_clause()} "
+                f"AND {usable} "
                 "GROUP BY checkpoint_normalized "
                 "HAVING COUNT(*) >= ? "
                 "ORDER BY avg_score DESC, cnt DESC, checkpoint_normalized COLLATE NOCASE ASC "
                 "LIMIT ?",
-                (MIN_SCORED_IMAGES_PER_CHECKPOINT, effective_leader_limit),
+                (*usable_params, MIN_SCORED_IMAGES_PER_CHECKPOINT, effective_leader_limit),
             ).fetchall():
                 checkpoint_name = str(row[0] or "").strip()
                 if not checkpoint_name:
@@ -555,13 +576,15 @@ class PromptService:
                     "FROM tags t "
                     "INNER JOIN images i ON t.image_id = i.id "
                     "WHERE i.checkpoint_normalized = ? COLLATE NOCASE "
-                    f"AND {_usable_clause('i')} "
+                    f"AND {usable_i} "
                 )
                 if leader.get("avg_score") is not None:
                     tag_query += "AND i.aesthetic_score IS NOT NULL "
                 tag_query += "GROUP BY t.tag ORDER BY cnt DESC LIMIT ?"
 
-                for row in cursor.execute(tag_query, (leader["name"], recipe_limit)).fetchall():
+                for row in cursor.execute(
+                    tag_query, (leader["name"], *usable_params, recipe_limit)
+                ).fetchall():
                     if _is_useful_recipe_token(row[0]):
                         recipe_tags.append(row[0])
 
@@ -575,9 +598,9 @@ class PromptService:
                     for row in cursor.execute(
                         "SELECT prompt FROM images "
                         "WHERE checkpoint_normalized = ? COLLATE NOCASE "
-                        f"AND {_usable_clause()} "
+                        f"AND {usable} "
                         "AND prompt IS NOT NULL AND prompt != '' LIMIT 1000",
-                        (leader["name"],),
+                        (leader["name"], *usable_params),
                     ).fetchall():
                         for token in db.extract_prompt_tokens(row[0]):
                             if _is_useful_recipe_token(token):
@@ -610,7 +633,8 @@ class PromptService:
             prompt_length["sd_attributed_sample"] = cursor.execute(
                 "SELECT COUNT(*) FROM images "
                 "WHERE prompt IS NOT NULL AND prompt != '' "
-                f"AND {_usable_clause()} AND {_ATTRIBUTED_GENERATOR_CLAUSE}"
+                f"AND {usable} AND {_ATTRIBUTED_GENERATOR_CLAUSE}",
+                usable_params,
             ).fetchone()[0]
 
             # Whether ANY usable image came from a generator, prompt text or
@@ -618,7 +642,8 @@ class PromptService:
             # here" from "they are indexed and recorded no model name", and the
             # two deserve different offers.
             sd_attributed_images = cursor.execute(
-                f"SELECT COUNT(*) FROM images WHERE {_usable_clause()} AND {_ATTRIBUTED_GENERATOR_CLAUSE}"
+                f"SELECT COUNT(*) FROM images WHERE {usable} AND {_ATTRIBUTED_GENERATOR_CLAUSE}",
+                usable_params,
             ).fetchone()[0]
 
             # Migration 042 is additive and writes no row, so a database can
@@ -643,17 +668,18 @@ class PromptService:
                 "SELECT COUNT(*) FROM ("
                 "SELECT t.tag FROM tags t "
                 "INNER JOIN images i ON t.image_id = i.id "
-                f"WHERE i.aesthetic_score >= 7 AND {_usable_clause('i')} "
+                f"WHERE i.aesthetic_score >= 7 AND {usable_i} "
                 "GROUP BY t.tag"
-                ")"
+                ")",
+                usable_params,
             ).fetchone()[0]
             high_score_tags = []
             for row in cursor.execute(
                 "SELECT t.tag, COUNT(*) as cnt FROM tags t "
                 "INNER JOIN images i ON t.image_id = i.id "
-                f"WHERE i.aesthetic_score >= 7 AND {_usable_clause('i')} "
+                f"WHERE i.aesthetic_score >= 7 AND {usable_i} "
                 "GROUP BY t.tag ORDER BY cnt DESC LIMIT ?",
-                (high_tag_limit,),
+                (*usable_params, high_tag_limit),
             ).fetchall():
                 high_score_tags.append({"tag": row[0], "count": row[1]})
 
@@ -662,9 +688,9 @@ class PromptService:
                 "SELECT t.tag, COUNT(*) as cnt FROM tags t "
                 "INNER JOIN images i ON t.image_id = i.id "
                 "WHERE i.aesthetic_score IS NOT NULL AND i.aesthetic_score < 4 "
-                f"AND {_usable_clause('i')} "
+                f"AND {usable_i} "
                 "GROUP BY t.tag ORDER BY cnt DESC LIMIT ?",
-                (high_tag_limit,),
+                (*usable_params, high_tag_limit),
             ).fetchall():
                 low_score_tags.append({"tag": row[0], "count": row[1]})
 
@@ -672,10 +698,10 @@ class PromptService:
             for row in cursor.execute(
                 "SELECT id, filename, checkpoint, prompt, aesthetic_score "
                 "FROM images "
-                "WHERE aesthetic_score IS NOT NULL AND COALESCE(is_readable, 1) = 1 "
+                f"WHERE aesthetic_score IS NOT NULL AND {usable} "
                 "ORDER BY aesthetic_score DESC, id DESC "
                 "LIMIT ?",
-                (scored_limit,),
+                (*usable_params, scored_limit),
             ).fetchall():
                 top_scored_images.append({
                     "id": row[0],

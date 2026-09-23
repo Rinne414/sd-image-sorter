@@ -23,6 +23,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
+from library_context import normalize_library_id
 from services import ai_job_queue_store
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checkers only
@@ -77,6 +78,7 @@ def _serialize_queue_entry(entry: "_QueuedPipelineJob", *, running: bool) -> Dic
         "payload": _serialize_payload(entry.payload),
         "enqueued_at": entry.enqueued_at,
         "running": bool(running),
+        "library_id": entry.library_id,
     }
 
 
@@ -179,6 +181,7 @@ class _TaggingPipelinePersistenceMixin:
                 loop=None,
                 fingerprint=_svc()._fingerprint(kind, payload),
                 enqueued_at=enqueued_at,
+                library_id=normalize_library_id(data.get("library_id")),
             )
             return entry, seq
         except Exception as exc:  # noqa: BLE001 — one bad entry never blocks restore

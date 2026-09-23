@@ -62,7 +62,7 @@ class _VectorCacheMixin:
         # The ANN index is derived from the same vectors — invalidate it too.
         with self._ann_lock:
             self._ann = None
-        similarity_ann.delete_index(self._get_index_dir())
+        similarity_ann.delete_index(self._get_library_index_dir())
 
     # ------------------------------------------------------------------
     # On-disk persistence of the exact vector cache (v3.3.2 Phase 1)
@@ -85,10 +85,18 @@ class _VectorCacheMixin:
     def _get_index_dir(self) -> Path:
         return Path(_svc().get_state_dir()) / "similarity-index"  # decomposition: split-killer seam (conftest.py:66)
 
+    def _get_library_index_dir(self) -> Path:
+        """``main`` keeps the root dir so existing caches stay valid; others get a subdir."""
+        from library_context import MAIN_LIBRARY_ID, get_current_library_id
+
+        library_id = get_current_library_id()
+        index_dir = self._get_index_dir()
+        return index_dir if library_id == MAIN_LIBRARY_ID else index_dir / library_id
+
     def _persist_vector_cache(self, cache: Dict[str, Any]) -> None:
         """Best-effort write of the normalized matrix + parallel arrays to disk."""
         try:
-            index_dir = self._get_index_dir()
+            index_dir = self._get_library_index_dir()
             index_dir.mkdir(parents=True, exist_ok=True)
             tmp_matrix = index_dir / (self._PERSIST_MATRIX_NAME + ".tmp")
             tmp_ids = index_dir / (self._PERSIST_IDS_NAME + ".tmp")
@@ -128,7 +136,7 @@ class _VectorCacheMixin:
         a stale on-disk cache from a different library state simply ignored.
         """
         try:
-            index_dir = self._get_index_dir()
+            index_dir = self._get_library_index_dir()
             meta_path = index_dir / self._PERSIST_META_NAME
             matrix_path = index_dir / self._PERSIST_MATRIX_NAME
             ids_path = index_dir / self._PERSIST_IDS_NAME
@@ -163,6 +171,8 @@ class _VectorCacheMixin:
                 logger.debug("[Similarity] Persisted cache shape mismatch; ignoring.")
                 return None
 
+            from library_context import get_current_library_id
+
             return {
                 "matrix": np.ascontiguousarray(matrix, dtype=np.float32),
                 "ids": np.asarray(ids, dtype=np.int64),
@@ -170,6 +180,7 @@ class _VectorCacheMixin:
                 "filenames": list(filenames),
                 "dim": dim,
                 "signature": signature,
+                "library_id": get_current_library_id(),
             }
         except Exception as exc:
             logger.debug("[Similarity] Could not load persisted vector cache: %s", exc)
@@ -178,7 +189,7 @@ class _VectorCacheMixin:
     def _delete_persisted_vector_cache(self) -> None:
         """Best-effort removal of any persisted cache files (incl. temp writes)."""
         try:
-            index_dir = self._get_index_dir()
+            index_dir = self._get_library_index_dir()
             for name in (
                 self._PERSIST_MATRIX_NAME,
                 self._PERSIST_IDS_NAME,
@@ -203,13 +214,18 @@ class _VectorCacheMixin:
         try:
             with self.db.get_db() as conn:
                 cursor = conn.cursor()
+                from library_context import current_library_sql
+
+                lib_sql, lib_params = current_library_sql()
                 cursor.execute(
-                    """
+                    f"""
                     SELECT COUNT(*), COALESCE(MAX(id), 0)
                     FROM images
                     WHERE embedding IS NOT NULL
                       AND COALESCE(is_readable, 1) = 1
-                    """
+                      AND {lib_sql}
+                    """,
+                    lib_params,
                 )
                 row = cursor.fetchone()
         except Exception as exc:
@@ -233,17 +249,28 @@ class _VectorCacheMixin:
         if not _svc().SIMILARITY_VECTOR_CACHE_ENABLED:  # decomposition: patched on similarity
             return None
 
+        from library_context import get_current_library_id
+
+        library_id = get_current_library_id()
         signature = self._compute_embedding_signature()
         if signature is None or signature[0] == 0:
             return None
 
         cache = self._vector_cache
-        if cache is not None and cache.get("signature") == signature:
+        if (
+            cache is not None
+            and cache.get("signature") == signature
+            and cache.get("library_id") == library_id
+        ):
             return cache
 
         with self._vector_cache_lock:
             cache = self._vector_cache
-            if cache is not None and cache.get("signature") == signature:
+            if (
+                cache is not None
+                and cache.get("signature") == signature
+                and cache.get("library_id") == library_id
+            ):
                 return cache
 
             # Prefer a persisted matrix (exact, just deserialized) over re-reading
@@ -313,6 +340,8 @@ class _VectorCacheMixin:
                 skipped,
             )
 
+        from library_context import get_current_library_id
+
         return {
             "matrix": matrix,
             "ids": np.asarray(ids, dtype=np.int64),
@@ -320,6 +349,7 @@ class _VectorCacheMixin:
             "filenames": filenames,
             "dim": dim,
             "signature": signature,
+            "library_id": get_current_library_id(),
         }
 
     def _try_cached_ranked_candidates(

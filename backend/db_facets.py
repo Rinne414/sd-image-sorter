@@ -38,20 +38,30 @@ def _checkpoint_facet_filter(
         conditions.append(f"{value_expr} LIKE ? ESCAPE '\\'")
         where_params.append(f"%{escape_like_pattern(normalized_query)}%")
 
+    from library_context import current_library_sql
+
+    lib_sql, lib_params = current_library_sql()
+    conditions.append(lib_sql)
+    where_params.extend(lib_params)
+
     return normalized_query, " AND ".join(conditions), where_params
 
 
 def get_metadata_status_counts() -> Dict[str, int]:
     """Get image counts grouped by metadata parsing status."""
+    from library_context import current_library_sql
+
+    lib_sql, lib_params = current_library_sql()
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            """
+            f"""
             SELECT LOWER(COALESCE(metadata_status, 'complete')) AS status, COUNT(*) AS count
             FROM images
-            WHERE COALESCE(is_readable, 1) = 1
+            WHERE COALESCE(is_readable, 1) = 1 AND {lib_sql}
             GROUP BY LOWER(COALESCE(metadata_status, 'complete'))
-            """
+            """,
+            lib_params,
         )
         counts: Dict[str, int] = {}
         for row in cursor.fetchall():
@@ -528,9 +538,17 @@ def get_library_health_report(*, sample_limit: int = 8) -> Dict[str, Any]:
     )
     # Every reason an image needs attention, ORed so one row counts once. Rides
     # the same scan as the counters rather than adding a pass over the table.
+    from library_context import current_library_sql
+
+    lib_sql, lib_params = current_library_sql()
+    duplicate_member_sql = (
+        f"({_NAMED_SQL} AND LOWER(filename) IN ("
+        f"SELECT LOWER(filename) FROM images WHERE {_NAMED_SQL} AND {lib_sql} "
+        "GROUP BY LOWER(filename) HAVING COUNT(*) > 1))"
+    )
     actionable_union_sql = " OR ".join(
         [f"({spec.sql})" for spec in ISSUE_VOCABULARY if spec.feeds_actionable]
-        + [_DUPLICATE_FILENAME_MEMBER_SQL]
+        + [duplicate_member_sql]
     )
 
     with get_db() as conn:
@@ -548,7 +566,9 @@ def get_library_health_report(*, sample_limit: int = 8) -> Dict[str, Any]:
                 SUM(CASE WHEN {_READABLE_SQL} AND {_NO_CHECKPOINT_SQL} THEN 1 ELSE 0 END) AS stat_missing_checkpoint,
                 SUM(CASE WHEN {_READABLE_SQL} AND {NO_GENERATOR_RECORDED_SQL} THEN 1 ELSE 0 END) AS stat_unknown_generator
             FROM images
-            """
+            WHERE {lib_sql}
+            """,
+            (*lib_params, *lib_params),
         ).fetchone()
 
         def _count(column: str) -> int:
@@ -574,43 +594,44 @@ def get_library_health_report(*, sample_limit: int = 8) -> Dict[str, Any]:
         }
 
         duplicate_filename_rows = cursor.execute(
-            """
+            f"""
             SELECT filename, COUNT(*) AS count, SUM(COALESCE(file_size, 0)) AS total_size
             FROM images
-            WHERE filename IS NOT NULL AND TRIM(filename) != ''
+            WHERE filename IS NOT NULL AND TRIM(filename) != '' AND {lib_sql}
             GROUP BY LOWER(filename)
             HAVING COUNT(*) > 1
             ORDER BY count DESC, filename COLLATE NOCASE ASC
             LIMIT ?
             """,
-            (bounded_sample_limit,),
+            (*lib_params, bounded_sample_limit),
         ).fetchall()
         duplicate_filenames = [dict(row) for row in duplicate_filename_rows]
 
         duplicate_group_row = cursor.execute(
-            """
+            f"""
             SELECT COUNT(*) AS groups_count, COALESCE(SUM(count), 0) AS image_count
             FROM (
                 SELECT COUNT(*) AS count
                 FROM images
-                WHERE filename IS NOT NULL AND TRIM(filename) != ''
+                WHERE filename IS NOT NULL AND TRIM(filename) != '' AND {lib_sql}
                 GROUP BY LOWER(filename)
                 HAVING COUNT(*) > 1
             ) grouped
-            """
+            """,
+            lib_params,
         ).fetchone()
         duplicate_filename_groups = int(duplicate_group_row["groups_count"] or 0) if duplicate_group_row else 0
         duplicate_filename_images = int(duplicate_group_row["image_count"] or 0) if duplicate_group_row else 0
 
         oversized_rows = cursor.execute(
-            """
+            f"""
             SELECT id, filename, path, file_size, width, height, generator, checkpoint_normalized
             FROM images
-            WHERE COALESCE(is_readable, 1) = 1 AND COALESCE(file_size, 0) > 0
+            WHERE COALESCE(is_readable, 1) = 1 AND COALESCE(file_size, 0) > 0 AND {lib_sql}
             ORDER BY file_size DESC
             LIMIT ?
             """,
-            (bounded_sample_limit,),
+            (*lib_params, bounded_sample_limit),
         ).fetchall()
         largest_images = [dict(row) for row in oversized_rows]
 
@@ -632,12 +653,13 @@ def get_library_health_report(*, sample_limit: int = 8) -> Dict[str, Any]:
                            ELSE RTRIM(SUBSTR(REPLACE(path, '\\', '/'), 1, LENGTH(REPLACE(path, '\\', '/')) - LENGTH(filename)), '/')
                        END AS folder
                 FROM images
+                WHERE {lib_sql}
             ) foldered
             GROUP BY folder
             ORDER BY count DESC, folder COLLATE NOCASE ASC
             LIMIT ?
             """,
-            (bounded_sample_limit,),
+            (*lib_params, bounded_sample_limit),
         ).fetchall()
         top_folders = [dict(row) for row in folder_rows]
 
@@ -667,7 +689,7 @@ def get_library_health_report(*, sample_limit: int = 8) -> Dict[str, Any]:
                    prompt, sidecar_caption, checkpoint_normalized, width, height,
                    file_size, tagged_at
             FROM images
-            WHERE {sample_membership_sql}
+            WHERE ({sample_membership_sql}) AND {lib_sql}
             ORDER BY
                 CASE
                     {sample_rank_sql}
@@ -676,7 +698,7 @@ def get_library_health_report(*, sample_limit: int = 8) -> Dict[str, Any]:
                 id ASC
             LIMIT ?
             """,
-            (bounded_sample_limit,),
+            (*lib_params, bounded_sample_limit),
         ).fetchall()
         issue_samples = [dict(row) for row in issue_sample_rows]
 
@@ -848,9 +870,12 @@ def get_unreadable_images_with_user_work() -> List[Dict[str, Any]]:
 
     Ordered by path so the caller's grouping is stable between calls.
     """
+    from library_context import current_library_sql
+
+    lib_sql, lib_params = current_library_sql("i.library_id")
     with get_db() as conn:
         rows = conn.execute(
-            """
+            f"""
             SELECT i.id,
                    i.path,
                    i.filename,
@@ -866,8 +891,9 @@ def get_unreadable_images_with_user_work() -> List[Dict[str, Any]]:
                        WHERE dpi.source_image_id = i.id OR dpi.image_id = i.id
                    ) THEN 1 ELSE 0 END AS in_dataset
             FROM images i
-            WHERE COALESCE(i.is_readable, 1) = 0
+            WHERE COALESCE(i.is_readable, 1) = 0 AND {lib_sql}
             ORDER BY i.path COLLATE NOCASE ASC, i.id ASC
-            """
+            """,
+            lib_params,
         ).fetchall()
     return [dict(row) for row in rows]

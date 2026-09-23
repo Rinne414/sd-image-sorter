@@ -150,7 +150,7 @@ SCAN_UI_STALLED_SECONDS = max(
 # sizes get the right payload.
 _LIBRARY_HEALTH_CACHE_TTL_SECONDS = 60.0
 _LIBRARY_HEALTH_CACHE_LOCK = threading.Lock()
-_LIBRARY_HEALTH_CACHE: Dict[int, Tuple[float, Dict[str, Any]]] = {}
+_LIBRARY_HEALTH_CACHE: Dict[tuple, Tuple[float, Dict[str, Any]]] = {}
 
 
 def invalidate_library_health_cache() -> None:
@@ -174,9 +174,12 @@ def invalidate_library_health_cache() -> None:
 
 def _get_library_health_cached(sample_limit: int) -> Dict[str, Any]:
     sample_limit = max(1, min(int(sample_limit), 25))
+    from library_context import get_current_library_id
+
+    cache_key = (get_current_library_id(), sample_limit)
     now = time.time()
     with _LIBRARY_HEALTH_CACHE_LOCK:
-        cached = _LIBRARY_HEALTH_CACHE.get(sample_limit)
+        cached = _LIBRARY_HEALTH_CACHE.get(cache_key)
         if cached is not None and (now - cached[0]) < _LIBRARY_HEALTH_CACHE_TTL_SECONDS:
             return cached[1]
 
@@ -185,7 +188,7 @@ def _get_library_health_cached(sample_limit: int) -> Dict[str, Any]:
     # acceptable; whichever finishes last wins the cache slot.
     payload = db.get_library_health_report(sample_limit=sample_limit)
     with _LIBRARY_HEALTH_CACHE_LOCK:
-        _LIBRARY_HEALTH_CACHE[sample_limit] = (time.time(), payload)
+        _LIBRARY_HEALTH_CACHE[cache_key] = (time.time(), payload)
     return payload
 
 

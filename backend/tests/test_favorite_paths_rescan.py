@@ -4,6 +4,7 @@ path-resolved reads (get_favorite_source_ids / is_favorited / count / browse).
 """
 import database as db
 from db_collections import (
+    _favorite_image_ids_params,
     _favorite_image_ids_query,
     _promote_legacy_favorite_identities,
 )
@@ -309,7 +310,8 @@ def test_favorite_identity_query_uses_exact_and_casefold_path_indexes(test_db):
         plan_lines = [
             str(row[3])
             for row in conn.execute(
-                f"EXPLAIN QUERY PLAN {_favorite_image_ids_query()}"
+                f"EXPLAIN QUERY PLAN {_favorite_image_ids_query()}",
+                _favorite_image_ids_params(),
             )
         ]
 
@@ -342,7 +344,8 @@ def test_unicode_favorite_query_does_not_walk_unrelated_images(test_db):
         conn.set_progress_handler(count_progress_calls, 100)
         try:
             count = conn.execute(
-                f"SELECT COUNT(DISTINCT id) FROM ({_favorite_image_ids_query()})"
+                f"SELECT COUNT(DISTINCT id) FROM ({_favorite_image_ids_query()})",
+                _favorite_image_ids_params(),
             ).fetchone()[0]
         finally:
             conn.set_progress_handler(None, 0)

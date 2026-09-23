@@ -189,7 +189,10 @@
 
         // ---- Session persistence ----
         _datasetSessionKey(project) {
-            if (project === null) return DATASET_DRAFT_SESSION_KEY;
+            if (project === null) {
+                const lid = window.LibraryWorkspace?.getCurrentLibraryId?.() || 'main';
+                return `${DATASET_DRAFT_SESSION_KEY}:${lid}`;
+            }
             const projectId = Number(project?.id);
             const revision = Number(project?.revision);
             if (!Number.isSafeInteger(projectId) || projectId <= 0) {
@@ -301,6 +304,10 @@
             try { saved = localStorage.getItem(storageKey); } catch {}
             if (!saved) {
                 try { saved = sessionStorage.getItem(storageKey); } catch {}
+            }
+            // Drafts from before libraries existed used the bare key; they belong to main.
+            if (!saved && storageKey === `${DATASET_DRAFT_SESSION_KEY}:main`) {
+                try { saved = localStorage.getItem(DATASET_DRAFT_SESSION_KEY); } catch {}
             }
             if (!saved) return null;
             const session = JSON.parse(saved);

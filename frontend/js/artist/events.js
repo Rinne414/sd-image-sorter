@@ -49,6 +49,9 @@ Object.assign(window.ArtistIdent, {
         this.refreshVocabularyState();
         this.resumeBatchProgress();
         this.showFirstUseGuide();
+        window.addEventListener('library-workspace-changed', () => {
+            this.loadStats();
+        });
     },
 
     // ============== Event Binding ==============

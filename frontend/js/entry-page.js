@@ -902,6 +902,9 @@
         window.addEventListener('languageChanged', () => {
             if (state.visible) render();
         });
+        window.addEventListener('library-workspace-changed', () => {
+            if (state.visible) render();
+        });
 
         const swap = el('entry-hero-swap');
         if (swap) {

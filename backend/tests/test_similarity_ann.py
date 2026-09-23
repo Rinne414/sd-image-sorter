@@ -49,7 +49,8 @@ def _make_db(tmp_path, rows):
             path TEXT,
             filename TEXT,
             embedding BLOB,
-            is_readable INTEGER DEFAULT 1
+            is_readable INTEGER DEFAULT 1,
+            library_id TEXT NOT NULL DEFAULT 'main'
         )
         """
     )

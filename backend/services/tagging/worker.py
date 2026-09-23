@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 import config
 from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
 from image_fingerprint import compute_image_content_fingerprint
+from library_context import reset_current_library_id, set_current_library_id
 from metadata_parser import verify_image_readable
 from services import entry_stats_service
 from utils.reported_cause import describe_readability_failure
@@ -166,6 +167,23 @@ def _e2e_tagger_getter(**_kwargs: Any) -> _E2ETaggingStub:
 
 
 def _tagging_worker_main(
+    runtime_plan_payload: Dict[str, Any],
+    progress_queue: Any,
+    cancel_event: Any,
+) -> None:
+    """Spawn entry: bind the job's library before any image query runs.
+
+    The child process starts at the contextvar default (``main``), so without
+    this a Mass Tag started in library B would count and tag main's images.
+    """
+    token = set_current_library_id(runtime_plan_payload.get("library_id"))
+    try:
+        _tagging_worker_run(runtime_plan_payload, progress_queue, cancel_event)
+    finally:
+        reset_current_library_id(token)
+
+
+def _tagging_worker_run(
     runtime_plan_payload: Dict[str, Any],
     progress_queue: Any,
     cancel_event: Any,

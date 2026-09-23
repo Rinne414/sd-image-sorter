@@ -31,6 +31,17 @@ def get_current_library_id() -> str:
     return normalize_library_id(_current_library_id.get())
 
 
+def current_library_sql(column: str = "library_id") -> tuple[str, tuple[str, ...]]:
+    """Return ``COALESCE(column, 'main') = ?`` and the active library id.
+
+    Image listing already pins this filter. Aggregate helpers (counts, facets,
+    folders, mass-tag iterators) must use the same clause so switching to an
+    empty library cannot inherit another workspace's totals.
+    """
+    lid = get_current_library_id()
+    return f"COALESCE({column}, 'main') = ?", (lid,)
+
+
 def set_current_library_id(library_id: Optional[str]) -> Token:
     return _current_library_id.set(normalize_library_id(library_id))
 

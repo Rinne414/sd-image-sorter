@@ -525,10 +525,18 @@ class ArtistService:
         with db.get_db() as conn:
             cursor = conn.cursor()
 
-            cursor.execute("SELECT COUNT(*) FROM images")
+            from library_context import current_library_sql
+
+            lib_sql, lib_params = current_library_sql()
+            pred_lib_sql, pred_lib_params = current_library_sql("i.library_id")
+            cursor.execute(f"SELECT COUNT(*) FROM images WHERE {lib_sql}", lib_params)
             total_images = int(cursor.fetchone()[0] or 0)
 
-            cursor.execute("SELECT COUNT(*) FROM artist_predictions")
+            cursor.execute(
+                "SELECT COUNT(*) FROM artist_predictions ap "
+                f"INNER JOIN images i ON i.id = ap.image_id WHERE {pred_lib_sql}",
+                pred_lib_params,
+            )
             identified_images = int(cursor.fetchone()[0] or 0)
 
             # Rows split into three disjoint buckets that sum to
@@ -537,8 +545,10 @@ class ArtistService:
             # by the old un-tiered pipeline surface as low-confidence here
             # instead of continuing to pass as identified artists.
             cursor.execute(
-                "SELECT COUNT(*) FROM artist_predictions WHERE artist = 'undefined' OR confidence < ?",
-                (ARTIST_THRESHOLD_DEFAULT,),
+                "SELECT COUNT(*) FROM artist_predictions ap "
+                f"INNER JOIN images i ON i.id = ap.image_id "
+                f"WHERE (ap.artist = 'undefined' OR ap.confidence < ?) AND {pred_lib_sql}",
+                (ARTIST_THRESHOLD_DEFAULT, *pred_lib_params),
             )
             undefined_count = int(cursor.fetchone()[0] or 0)
 
@@ -549,14 +559,15 @@ class ArtistService:
             low_confidence_count = 0
 
             cursor.execute(
-                """
-                SELECT artist, COUNT(*) as count, AVG(confidence) as avg_confidence, MAX(confidence) as max_confidence
-                FROM artist_predictions
-                WHERE artist != 'undefined' AND confidence >= ?
-                GROUP BY artist
+                f"""
+                SELECT ap.artist, COUNT(*) as count, AVG(ap.confidence) as avg_confidence, MAX(ap.confidence) as max_confidence
+                FROM artist_predictions ap
+                INNER JOIN images i ON i.id = ap.image_id
+                WHERE ap.artist != 'undefined' AND ap.confidence >= ? AND {pred_lib_sql}
+                GROUP BY ap.artist
                 ORDER BY count DESC
                 """,
-                (ARTIST_CONFIDENT_THRESHOLD,),
+                (ARTIST_CONFIDENT_THRESHOLD, *pred_lib_params),
             )
             for row in cursor.fetchall():
                 artist = str(row[0] or "")
@@ -570,14 +581,15 @@ class ArtistService:
                 }
 
             cursor.execute(
-                """
-                SELECT artist, COUNT(*) as count
-                FROM artist_predictions
-                WHERE artist != 'undefined' AND confidence >= ? AND confidence < ?
-                GROUP BY artist
+                f"""
+                SELECT ap.artist, COUNT(*) as count
+                FROM artist_predictions ap
+                INNER JOIN images i ON i.id = ap.image_id
+                WHERE ap.artist != 'undefined' AND ap.confidence >= ? AND ap.confidence < ? AND {pred_lib_sql}
+                GROUP BY ap.artist
                 ORDER BY count DESC
                 """,
-                (ARTIST_THRESHOLD_DEFAULT, ARTIST_CONFIDENT_THRESHOLD),
+                (ARTIST_THRESHOLD_DEFAULT, ARTIST_CONFIDENT_THRESHOLD, *pred_lib_params),
             )
             for row in cursor.fetchall():
                 count = int(row[1] or 0)

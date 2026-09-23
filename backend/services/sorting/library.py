@@ -257,13 +257,21 @@ class LibraryMixin:
             cursor = conn.cursor()
 
             # Use the normalized image_loras table instead of full-table JSON scan
-            cursor.execute("""
-                SELECT lora_name AS lora, COUNT(*) as count
-                FROM image_loras
-                GROUP BY lora_name
+            from library_context import current_library_sql
+
+            lib_sql, lib_params = current_library_sql("i.library_id")
+            cursor.execute(
+                f"""
+                SELECT facet.lora_name AS lora, COUNT(*) as count
+                FROM image_loras AS facet
+                INNER JOIN images i ON i.id = facet.image_id
+                WHERE {lib_sql}
+                GROUP BY facet.lora_name
                 ORDER BY count DESC
                 LIMIT ?
-            """, (effective_limit,))
+                """,
+                (*lib_params, effective_limit),
+            )
             loras = [dict(row) for row in cursor.fetchall()]
 
             tags = db.search_tags(None, limit=effective_limit).get("tags", [])

@@ -43,12 +43,15 @@ def _normalize_indexed_image_path(path: Optional[str]) -> str:
 
 
 def _favorite_image_ids_query() -> str:
-    """Build indexed exact and canonical Favorites joins."""
-    return """
+    """Build indexed exact and canonical Favorites joins for the active library."""
+    from library_context import current_library_sql
+
+    lib_sql, _params = current_library_sql("i.library_id")
+    return f"""
         SELECT i.id, f.added_at
         FROM favorite_paths f
         CROSS JOIN images i
-        WHERE f.match_case = 1 AND i.path = f.path_key
+        WHERE f.match_case = 1 AND i.path = f.path_key AND {lib_sql}
         UNION ALL
         SELECT i.id, f.added_at
         FROM favorite_paths f
@@ -58,7 +61,16 @@ def _favorite_image_ids_query() -> str:
         WHERE f.match_case = 0
           AND p.path_key = f.path_key
           AND i.id = p.image_id
+          AND {lib_sql}
     """
+
+
+def _favorite_image_ids_params() -> tuple:
+    """Bind parameters for :func:`_favorite_image_ids_query` (one per UNION arm)."""
+    from library_context import current_library_sql
+
+    _sql, params = current_library_sql("i.library_id")
+    return params + params
 
 
 def _prefix_range_end(prefix: str) -> str:

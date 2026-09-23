@@ -37,16 +37,31 @@ function resetFilterModalController() {
 }
 
 // Load saved filter state from localStorage
-function loadSavedFilterState() {
+function loadSavedFilterState(libraryId) {
     try {
-        const saved = localStorage.getItem(FILTER_STATE_KEY);
-        if (saved) {
-            return JSON.parse(saved);
+        const keyed = localStorage.getItem(filterStateStorageKey(libraryId));
+        if (keyed) {
+            return JSON.parse(keyed);
+        }
+        const id = libraryId || currentLibraryIdFromStorage();
+        if (id === 'main') {
+            const legacy = localStorage.getItem(FILTER_STATE_KEY);
+            if (legacy) {
+                return JSON.parse(legacy);
+            }
         }
     } catch (e) {
         Logger.warn('Failed to load saved filter state:', e);
     }
     return null;
+}
+
+function replaceGalleryFiltersForLibrary(libraryId) {
+    const saved = loadSavedFilterState(libraryId);
+    setAppFilters(saved || createDefaultFilterState());
+    if (typeof updateFilterSummary === 'function') {
+        updateFilterSummary();
+    }
 }
 
 const savedFilters = cloneFilterState(loadSavedFilterState());

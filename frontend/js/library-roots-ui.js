@@ -74,6 +74,12 @@
 
             document.getElementById('library-roots-list')
                 ?.addEventListener('click', (event) => this._onListClick(event));
+            window.addEventListener('library-workspace-changed', () => {
+                const modal = document.getElementById('library-roots-modal');
+                if (modal && modal.classList.contains('visible')) {
+                    this.refresh();
+                }
+            });
         },
 
         isAutoRefreshEnabled() {

@@ -8,7 +8,7 @@
 (function () {
     'use strict';
 
-    const STORAGE_KEY = 'sd-library-workspace-v1';
+    const STORAGE_KEY = LIBRARY_WORKSPACE_STORAGE_KEY;
     const HEADER = 'X-SD-Library-Id';
     const DEFAULT_ID = 'main';
 
@@ -165,8 +165,27 @@
         }
     }
 
+    // Filters, selection and the folder tree belong to the library they were
+    // made in. Counts come from the awaited loadStats() below.
+    function applyIsolatedLibrarySwitch(nextId) {
+        replaceGalleryFiltersForLibrary(nextId);
+        setSelectionState({
+            selectionMode: false,
+            selectedIds: new Set(),
+            scope: 'visible',
+            filterKey: null,
+            selectionToken: null,
+            selectionTotal: 0,
+        });
+        window.FolderTreeUI?.refresh?.();
+    }
+
     async function setCurrentLibraryId(id, { reloadGallery } = { reloadGallery: true }) {
+        const prev = getCurrentLibraryId();
         const next = String(id || DEFAULT_ID);
+        if (prev !== next) {
+            saveFilterState();
+        }
         _writeLocal(next);
         if (_cache) _cache.currentId = next;
         refreshEntryHome();
@@ -176,14 +195,18 @@
             }));
         } catch (_e) { /* ignore */ }
 
+        if (prev !== next) {
+            applyIsolatedLibrarySwitch(next);
+        }
         // Force long-term library query scope (not process session).
         applyLibraryDefaultScope();
 
         if (reloadGallery && typeof window.loadImages === 'function') {
-            try { await window.loadImages(false, { coalesce: true }); } catch (_e) { /* ignore */ }
+            // coalesce:false cancels a load still running for the old library.
+            try { await window.loadImages(false, { coalesce: false }); } catch (_e) { /* ignore */ }
         }
         if (typeof window.loadStats === 'function') {
-            try { window.loadStats(); } catch (_e) { /* ignore */ }
+            try { await window.loadStats(); } catch (_e) { /* ignore */ }
         }
         return getCurrentLibrary();
     }

@@ -114,14 +114,18 @@ def _load_embeddings(handle) -> tuple:
     import database as db
     from similarity import bytes_to_embedding
 
+    from library_context import current_library_sql
+
+    lib_sql, lib_params = current_library_sql()
     handle.set_progress(processed=0, total=100, message="正在读取嵌入向量 / Loading embeddings")
     with db.get_db() as conn:
         rows = conn.execute(
-            """
+            f"""
             SELECT id, embedding FROM images
-            WHERE embedding IS NOT NULL AND COALESCE(is_readable, 1) = 1
+            WHERE embedding IS NOT NULL AND COALESCE(is_readable, 1) = 1 AND {lib_sql}
             ORDER BY id
-            """
+            """,
+            lib_params,
         ).fetchall()
     ids = [int(r[0]) for r in rows]
     if len(ids) < 2:
@@ -142,10 +146,13 @@ def _coverage_summary(embedded_count: int) -> Dict[str, Any]:
     False whenever readable images were left out of the comparison.
     """
     import database as db
+    from library_context import current_library_sql
 
+    lib_sql, lib_params = current_library_sql()
     with db.get_db() as conn:
         row = conn.execute(
-            "SELECT COUNT(*) FROM images WHERE COALESCE(is_readable, 1) = 1"
+            f"SELECT COUNT(*) FROM images WHERE COALESCE(is_readable, 1) = 1 AND {lib_sql}",
+            lib_params,
         ).fetchone()
     total = int(row[0] or 0) if row else 0
     pending = max(0, total - embedded_count)

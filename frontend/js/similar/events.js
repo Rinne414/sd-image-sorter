@@ -19,6 +19,15 @@ Object.assign(window.SimilarImages, {
         this.updateActionAvailability();
         this.refreshWorkflowStatus();
         this.showFirstUseGuide();
+        window.addEventListener('library-workspace-changed', () => {
+            this.searchResults = [];
+            this.duplicateResults = [];
+            this.currentSearchId = null;
+            this.currentSearchMode = null;
+            this.loadStats();
+            this.renderResults?.();
+            this.renderDuplicates?.();
+        });
     },
 
     bindEvents() {

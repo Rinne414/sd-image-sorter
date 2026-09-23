@@ -10,9 +10,9 @@ import sqlite3
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from config import FAVORITES_COLLECTION_SLUG
+from config import FAVORITES_COLLECTION_NAME, FAVORITES_COLLECTION_SLUG, FAVORITES_FOLDER_PATH
 from db_core import get_db
-from db_helpers import _favorite_image_ids_query, _row_to_dict
+from db_helpers import _favorite_image_ids_params, _favorite_image_ids_query, _row_to_dict
 from db_images_write import _compact_persisted_metadata_json
 from utils.source_paths import (
     indexed_image_path_casefold,
@@ -98,11 +98,51 @@ def _promote_legacy_favorite_identities(
         )
 
 
-def get_collection_by_slug(slug: str) -> Optional[Dict[str, Any]]:
-    """Get a collection by slug."""
+def _library_clause(column: str = "library_id"):
+    from library_context import current_library_sql
+
+    return current_library_sql(column)
+
+
+def ensure_favorites_collection() -> Dict[str, Any]:
+    """Return the Favorites collection for the active library, creating it if needed."""
+    existing = get_collection_by_slug(FAVORITES_COLLECTION_SLUG)
+    if existing:
+        return existing
+    lib_sql, lib_params = _library_clause()
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM collections WHERE slug = ?", (slug,))
+        cursor.execute(
+            "INSERT INTO collections (slug, name, folder_path, library_id) VALUES (?, ?, ?, ?)",
+            (
+                FAVORITES_COLLECTION_SLUG,
+                FAVORITES_COLLECTION_NAME,
+                FAVORITES_FOLDER_PATH,
+                lib_params[0],
+            ),
+        )
+        cursor.execute(
+            f"SELECT * FROM collections WHERE slug = ? AND {lib_sql}",
+            (FAVORITES_COLLECTION_SLUG, *lib_params),
+        )
+        row = cursor.fetchone()
+        return _row_to_dict(row) if row else {
+            "id": cursor.lastrowid,
+            "slug": FAVORITES_COLLECTION_SLUG,
+            "name": FAVORITES_COLLECTION_NAME,
+            "library_id": lib_params[0],
+        }
+
+
+def get_collection_by_slug(slug: str) -> Optional[Dict[str, Any]]:
+    """Get a collection by slug in the active library workspace."""
+    lib_sql, lib_params = _library_clause()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"SELECT * FROM collections WHERE slug = ? AND {lib_sql}",
+            (slug, *lib_params),
+        )
         row = cursor.fetchone()
         return _row_to_dict(row) if row else None
 
@@ -200,7 +240,8 @@ def get_favorite_source_ids() -> List[int]:
             FROM ({_favorite_image_ids_query()}) favorite_images
             GROUP BY id
             ORDER BY MAX(added_at) DESC, id DESC
-            """
+            """,
+            _favorite_image_ids_params(),
         )
         return [row[0] for row in cursor.fetchall()]
 
@@ -213,7 +254,8 @@ def get_favorites_count() -> int:
             f"""
             SELECT COUNT(DISTINCT id)
             FROM ({_favorite_image_ids_query()}) favorite_images
-            """
+            """,
+            _favorite_image_ids_params(),
         )
         return cursor.fetchone()[0]
 
@@ -229,8 +271,8 @@ def get_favorites_count() -> int:
 # want physical copies.
 # ---------------------------------------------------------------------------
 def get_favorites_collection_id() -> Optional[int]:
-    """Return the seeded Favorites collection id (or None if missing)."""
-    collection = get_collection_by_slug(FAVORITES_COLLECTION_SLUG)
+    """Return the Favorites collection id for the active library."""
+    collection = ensure_favorites_collection()
     return int(collection["id"]) if collection else None
 
 
@@ -323,18 +365,22 @@ def _slugify_collection_name(name: str) -> str:
 
 
 def list_collections() -> List[Dict[str, Any]]:
-    """List all collections with their item counts, newest first."""
+    """List collections in the active library with their item counts, newest first."""
+    ensure_favorites_collection()
+    lib_sql, lib_params = _library_clause("c.library_id")
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            """
+            f"""
             SELECT c.id, c.slug, c.name, c.folder_path, c.created_at,
                    COUNT(ci.id) AS item_count
             FROM collections c
             LEFT JOIN collection_items ci ON ci.collection_id = c.id
+            WHERE {lib_sql}
             GROUP BY c.id
             ORDER BY c.created_at DESC, c.id DESC
-            """
+            """,
+            lib_params,
         )
         collections = [_row_to_dict(row) for row in cursor.fetchall()]
     # Favorites is path-anchored (not a collection_items snapshot), so report its
@@ -358,15 +404,19 @@ def create_collection(name: str, folder_path: Optional[str] = None) -> Dict[str,
         # Ensure slug uniqueness by suffixing -2, -3, ... on collision.
         slug = base_slug
         suffix = 2
+        lib_sql, lib_params = _library_clause()
         while True:
-            cursor.execute("SELECT 1 FROM collections WHERE slug = ?", (slug,))
+            cursor.execute(
+                f"SELECT 1 FROM collections WHERE slug = ? AND {lib_sql}",
+                (slug, *lib_params),
+            )
             if cursor.fetchone() is None:
                 break
             slug = f"{base_slug}-{suffix}"
             suffix += 1
         cursor.execute(
-            "INSERT INTO collections (slug, name, folder_path) VALUES (?, ?, ?)",
-            (slug, clean_name, folder_path or ""),
+            "INSERT INTO collections (slug, name, folder_path, library_id) VALUES (?, ?, ?, ?)",
+            (slug, clean_name, folder_path or "", lib_params[0]),
         )
         new_id = cursor.lastrowid
         cursor.execute("SELECT * FROM collections WHERE id = ?", (new_id,))
@@ -380,9 +430,10 @@ def rename_collection(collection_id: int, name: str) -> bool:
         raise ValueError("Collection name is required")
     with get_db() as conn:
         cursor = conn.cursor()
+        lib_sql, lib_params = _library_clause()
         cursor.execute(
-            "UPDATE collections SET name = ? WHERE id = ?",
-            (clean_name, collection_id),
+            f"UPDATE collections SET name = ? WHERE id = ? AND {lib_sql}",
+            (clean_name, collection_id, *lib_params),
         )
         return cursor.rowcount > 0
 
@@ -391,7 +442,11 @@ def delete_collection(collection_id: int) -> bool:
     """Delete a collection and its items (the Favorites collection is protected)."""
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT slug FROM collections WHERE id = ?", (collection_id,))
+        lib_sql, lib_params = _library_clause()
+        cursor.execute(
+            f"SELECT slug FROM collections WHERE id = ? AND {lib_sql}",
+            (collection_id, *lib_params),
+        )
         row = cursor.fetchone()
         if row is None:
             return False
@@ -406,7 +461,11 @@ def collection_exists(collection_id: int) -> bool:
     """True when a collection with this id exists."""
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT 1 FROM collections WHERE id = ?", (collection_id,))
+        lib_sql, lib_params = _library_clause()
+        cursor.execute(
+            f"SELECT 1 FROM collections WHERE id = ? AND {lib_sql}",
+            (collection_id, *lib_params),
+        )
         return cursor.fetchone() is not None
 
 

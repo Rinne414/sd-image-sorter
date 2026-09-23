@@ -76,6 +76,9 @@
             // language switch or the built-in Favorites keeps showing the
             // previous language's name (QA P3-7c).
             document.addEventListener('languageChanged', () => this._renderList());
+            window.addEventListener('library-workspace-changed', () => {
+                this.refresh();
+            });
             await this.refresh();
         },
 

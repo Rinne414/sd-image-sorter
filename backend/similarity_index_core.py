@@ -247,13 +247,18 @@ class _IndexCoreMixin:
         """Find near-duplicate image pairs above similarity threshold."""
         with self.db.get_db() as conn:
             cursor = conn.cursor()
+            from library_context import current_library_sql
+
+            lib_sql, lib_params = current_library_sql()
             cursor.execute(
-                """
+                f"""
                 SELECT COUNT(*)
                 FROM images
                 WHERE embedding IS NOT NULL
                   AND COALESCE(is_readable, 1) = 1
-                """
+                  AND {lib_sql}
+                """,
+                lib_params,
             )
             embedded_count = int(cursor.fetchone()[0] or 0)
 
@@ -267,12 +272,14 @@ class _IndexCoreMixin:
                 )
 
             cursor.execute(
-                """
+                f"""
                 SELECT id, path, filename, embedding
                 FROM images
                 WHERE embedding IS NOT NULL
                   AND COALESCE(is_readable, 1) = 1
-                """
+                  AND {lib_sql}
+                """,
+                lib_params,
             )
             rows = cursor.fetchall()
 
@@ -412,11 +419,14 @@ class _IndexCoreMixin:
         """Yield readable embedding rows in DB-sized chunks without materializing all rows."""
         with self.db.get_db() as conn:
             cursor = conn.cursor()
-            params: Tuple[Any, ...] = ()
+            from library_context import current_library_sql
+
+            lib_sql, lib_params = current_library_sql()
             exclude_clause = ""
+            params: Tuple[Any, ...] = lib_params
             if exclude_id is not None:
                 exclude_clause = "AND id != ?"
-                params = (exclude_id,)
+                params = (*lib_params, exclude_id)
 
             cursor.execute(
                 f"""
@@ -424,6 +434,7 @@ class _IndexCoreMixin:
                 FROM images
                 WHERE embedding IS NOT NULL
                   AND COALESCE(is_readable, 1) = 1
+                  AND {lib_sql}
                   {exclude_clause}
                 ORDER BY id
                 """,

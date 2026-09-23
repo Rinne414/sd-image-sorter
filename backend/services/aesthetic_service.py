@@ -178,9 +178,13 @@ class AestheticService:
 
     def _scored_count(self) -> int:
         try:
+            from library_context import current_library_sql
+
+            lib_sql, lib_params = current_library_sql()
             with db.get_db() as conn:
                 row = conn.execute(
-                    "SELECT COUNT(*) FROM images WHERE aesthetic_score IS NOT NULL"
+                    f"SELECT COUNT(*) FROM images WHERE aesthetic_score IS NOT NULL AND {lib_sql}",
+                    lib_params,
                 ).fetchone()
                 return int(row[0] or 0)
         except Exception:
@@ -231,12 +235,19 @@ class AestheticService:
         return {"image_id": image_id, "aesthetic_score": score}
 
     def count_images_to_score(self, *, force: bool) -> int:
+        from library_context import current_library_sql
+
+        lib_sql, lib_params = current_library_sql()
         with db.get_db() as conn:
             if force:
-                row = conn.execute("SELECT COUNT(*) FROM images").fetchone()
+                row = conn.execute(
+                    f"SELECT COUNT(*) FROM images WHERE {lib_sql}",
+                    lib_params,
+                ).fetchone()
             else:
                 row = conn.execute(
-                    "SELECT COUNT(*) FROM images WHERE aesthetic_score IS NULL"
+                    f"SELECT COUNT(*) FROM images WHERE aesthetic_score IS NULL AND {lib_sql}",
+                    lib_params,
                 ).fetchone()
             return int(row[0] or 0)
 
@@ -273,16 +284,23 @@ class AestheticService:
         fetch_chunk = 500
 
         with db.get_db() as conn, db.get_db() as publication_conn:
-            query = "SELECT id, path FROM images" if force else "SELECT id, path FROM images WHERE aesthetic_score IS NULL"
-            count_query = "SELECT COUNT(*) FROM images" if force else "SELECT COUNT(*) FROM images WHERE aesthetic_score IS NULL"
-            count_row = conn.execute(count_query).fetchone()
+            from library_context import current_library_sql
+
+            lib_sql, lib_params = current_library_sql()
+            if force:
+                query = f"SELECT id, path FROM images WHERE {lib_sql}"
+                count_query = f"SELECT COUNT(*) FROM images WHERE {lib_sql}"
+            else:
+                query = f"SELECT id, path FROM images WHERE aesthetic_score IS NULL AND {lib_sql}"
+                count_query = f"SELECT COUNT(*) FROM images WHERE aesthetic_score IS NULL AND {lib_sql}"
+            count_row = conn.execute(count_query, lib_params).fetchone()
             total = int(count_row[0] or 0) if count_row else 0
             emit({"total": total})
 
             errors = 0
             completed = 0
 
-            cursor = conn.execute(f"{query} ORDER BY id")
+            cursor = conn.execute(f"{query} ORDER BY id", lib_params)
             publication_cursor = publication_conn.cursor()
             while True:
                 if self._cancel_requested:

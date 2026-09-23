@@ -40,6 +40,12 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, TYPE_CHE
 
 from fastapi import HTTPException
 
+from library_context import (
+    MAIN_LIBRARY_ID,
+    get_current_library_id,
+    reset_current_library_id,
+    set_current_library_id,
+)
 from services import ai_job_queue_store, smart_tag_service
 from services.gallery_job_gate import gallery_job_transition
 from services.service_provider import ServiceProvider
@@ -298,6 +304,9 @@ class _QueuedPipelineJob:
     loop: Any = None
     fingerprint: str = ""
     enqueued_at: str = field(default_factory=_utc_now_iso)
+    # The library the job was queued in. The dispatcher thread starts it long
+    # after that request's library binding is gone.
+    library_id: str = MAIN_LIBRARY_ID
 
 
 def _start_queued_vlm_batch(entry: _QueuedPipelineJob) -> None:
@@ -686,6 +695,13 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
             return None
 
     def _start_queued_entry(self, entry: _QueuedPipelineJob) -> None:
+        token = set_current_library_id(entry.library_id)
+        try:
+            self._start_queued_entry_in_library(entry)
+        finally:
+            reset_current_library_id(token)
+
+    def _start_queued_entry_in_library(self, entry: _QueuedPipelineJob) -> None:
         if entry.kind == KIND_GALLERY:
             if entry.legacy_service is None:
                 raise RuntimeError("Gallery tagging service unavailable for the queued start")
@@ -728,6 +744,7 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
             legacy_service=legacy_service,
             loop=loop,
             fingerprint=fingerprint,
+            library_id=get_current_library_id(),
         )
         self._queue.append(entry)
         position = len(self._queue)

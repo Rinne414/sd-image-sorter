@@ -12,6 +12,7 @@ from typing import Dict, Optional
 from fastapi import BackgroundTasks, HTTPException
 
 from config import TAGGER_MODELS
+from library_context import get_current_library_id
 from services.tagging.progress import _build_tag_progress_state
 from services.tagging.request import TagRequest
 from services.tagging.runtime_plan import TORIIGATE_LOAD_HEARTBEAT_SECONDS
@@ -46,7 +47,10 @@ class JobsMixin:
     """Job-supervision slice of TaggingService (assembled in services.tagging.service)."""
 
     def _run_tagging_job(
-        self, request: TagRequest, run_id: Optional[int] = None
+        self,
+        request: TagRequest,
+        run_id: Optional[int] = None,
+        library_id: Optional[str] = None,
     ) -> None:
         """Run a tagging job in an isolated worker process and mirror progress back to the API."""
         if run_id is None:
@@ -65,6 +69,9 @@ class JobsMixin:
         setup_stage = "building the runtime plan"
         try:
             runtime_plan = self._build_runtime_plan(request)
+            # A spawn child starts at the contextvar default ('main'). Hand it
+            # the library this job was started in.
+            runtime_plan["library_id"] = library_id or get_current_library_id()
             setup_stage = "creating the multiprocessing context"
             ctx = multiprocessing.get_context("spawn")
             setup_stage = "creating the worker progress queue"
@@ -292,7 +299,9 @@ class JobsMixin:
                 "running", message="Preparing tagger...", run_id=run_id
             )
         try:
-            background_tasks.add_task(self._run_tagging_job, request, run_id)
+            background_tasks.add_task(
+                self._run_tagging_job, request, run_id, get_current_library_id()
+            )
         except Exception as error:
             error_detail = str(error).strip() or type(error).__name__
             with self._lock:

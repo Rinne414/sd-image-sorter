@@ -43,7 +43,7 @@ function saveFilterState() {
             ...cloneFilterState(AppState.filters),
             promptMatchMode: normalizePromptMatchMode(AppState.filters.promptMatchMode),
         };
-        localStorage.setItem(FILTER_STATE_KEY, JSON.stringify(stateToSave));
+        localStorage.setItem(filterStateStorageKey(), JSON.stringify(stateToSave));
     } catch (e) {
         Logger.warn('Failed to save filter state:', e);
     }

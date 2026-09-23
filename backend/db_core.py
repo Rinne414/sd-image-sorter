@@ -51,26 +51,30 @@ sqlite3.register_adapter(datetime, _adapt_datetime_for_sqlite)
 _tags_cache_lock = threading.Lock()
 _tags_cache_data = None
 _tags_cache_timestamp = 0
+_tags_cache_library_id = None
 _TAGS_CACHE_TTL = 60  # seconds
 
 # ============== Facet Cache (generators) ==============
 _generators_cache_lock = threading.Lock()
 _generators_cache_data = None
 _generators_cache_timestamp = 0
+_generators_cache_library_id = None
 
 def _invalidate_facet_caches():
     """Clear facet caches when images are added/removed/modified."""
-    global _generators_cache_data, _generators_cache_timestamp
+    global _generators_cache_data, _generators_cache_timestamp, _generators_cache_library_id
     with _generators_cache_lock:
         _generators_cache_data = None
         _generators_cache_timestamp = 0
+        _generators_cache_library_id = None
 
 def _invalidate_tags_cache():
     """Clear the tags cache when tags are modified."""
-    global _tags_cache_data, _tags_cache_timestamp
+    global _tags_cache_data, _tags_cache_timestamp, _tags_cache_library_id
     with _tags_cache_lock:
         _tags_cache_data = None
         _tags_cache_timestamp = 0
+        _tags_cache_library_id = None
 
 
 _pragmas_initialized: set = set()

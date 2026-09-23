@@ -1143,6 +1143,22 @@
             void this._refreshProjectLists().catch((error) => {
                 window.Logger?.error?.('dataset_project_list_failed', { error: String(error) });
             });
+            window.addEventListener('library-workspace-changed', () => {
+                void this._onLibraryWorkspaceChanged();
+            });
+        },
+
+        async _onLibraryWorkspaceChanged() {
+            const activeId = this._activeProject ? Number(this._activeProject.id) : null;
+            // Keep unsaved caption edits in the open project's own browser
+            // draft before its queue can be replaced below.
+            if (activeId) this._flushProjectDraftPersistence();
+            await this._refreshProjectLists();
+            const stillHere = [...(this._projects || []), ...(this._archivedProjects || [])]
+                .some((project) => Number(project.id) === activeId);
+            if (activeId && !stillHere) {
+                await this._replaceQueueWithUnsavedDraft();
+            }
         },
     });
 })();

@@ -364,7 +364,8 @@ class _NoFetchAllCursor:
 
     def fetchmany(self, size):
         rows = []
-        excluded_id = self.params[0] if self.params else None
+        # The library id binds first; exclude_id is the last placeholder.
+        excluded_id = self.params[-1] if "id != ?" in self.last_query else None
         while self.position < len(self.rows) and len(rows) < size:
             row = self.rows[self.position]
             self.position += 1

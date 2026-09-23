@@ -496,30 +496,66 @@ def get_all_tags() -> List[Dict[str, Any]]:
     """Get all unique tags with their counts.
 
     Uses in-memory caching with TTL to reduce database load.
-    Cache is invalidated after 60 seconds or when tags are modified.
+    Cache is invalidated after 60 seconds or when tags are modified,
+    and is keyed by the active library so workspaces cannot share counts.
     """
+    from library_context import current_library_sql, get_current_library_id
+
     current_time = time.time()
+    library_id = get_current_library_id()
 
     # Check cache
     with _tags_cache_lock:
-        if db_core._tags_cache_data is not None and (current_time - db_core._tags_cache_timestamp) < _TAGS_CACHE_TTL:
+        if (
+            db_core._tags_cache_data is not None
+            and db_core._tags_cache_library_id == library_id
+            and (current_time - db_core._tags_cache_timestamp) < _TAGS_CACHE_TTL
+        ):
             return db_core._tags_cache_data
 
-    # Fetch from database
+    lib_sql, lib_params = current_library_sql()
+    foreign_sql, _ = current_library_sql("i.library_id")
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT tag, COUNT(*) as count
-            FROM tags
-            GROUP BY tag
-            ORDER BY count DESC
-        """)
+        # Usually one library holds every tag row. Then the plain covering
+        # index count is exact, and a ~5 ms probe proves it.
+        has_foreign_tags = cursor.execute(
+            f"""
+            SELECT 1 FROM images i
+            WHERE NOT ({foreign_sql})
+              AND EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id)
+            LIMIT 1
+            """,
+            lib_params,
+        ).fetchone()
+        if has_foreign_tags is None:
+            cursor.execute("""
+                SELECT tag, COUNT(*) as count
+                FROM tags
+                GROUP BY tag
+                ORDER BY count DESC
+            """)
+        else:
+            # ``+image_id`` keeps the tag-ordered covering scan (streaming
+            # GROUP BY) and probes the library's ids as one IN list, instead
+            # of a per-row lookup into the wide images table.
+            cursor.execute(
+                f"""
+                SELECT tag, COUNT(*) as count
+                FROM tags
+                WHERE +image_id IN (SELECT id FROM images WHERE {lib_sql})
+                GROUP BY tag
+                ORDER BY count DESC
+                """,
+                lib_params,
+            )
         result = _rows_to_dicts(cursor.fetchall())
 
     # Update cache
     with _tags_cache_lock:
         db_core._tags_cache_data = result
         db_core._tags_cache_timestamp = current_time
+        db_core._tags_cache_library_id = library_id
 
     return result
 
@@ -579,38 +615,43 @@ def search_tags(
             "sort": sort_by,
         }
 
-    value_expr = "REPLACE(LOWER(tag), '_', ' ')"
+    value_expr = "REPLACE(LOWER(t.tag), '_', ' ')"
     rank_sql = _facet_search_rank_sql(value_expr)
     match_pattern = f"%{escape_like_pattern(normalized_query)}%"
-    order_tail = "tag COLLATE NOCASE ASC" if sort_by == "alphabetical" else "count DESC, tag COLLATE NOCASE ASC"
+    order_tail = "t.tag COLLATE NOCASE ASC" if sort_by == "alphabetical" else "count DESC, t.tag COLLATE NOCASE ASC"
     params: List[Any] = [
         *_facet_search_rank_params(normalized_query),
         match_pattern,
     ]
 
+    from library_context import current_library_sql
+
+    lib_sql, lib_params = current_library_sql("i.library_id")
     with get_db() as conn:
         cursor = conn.cursor()
         total_row = cursor.execute(
             f"""
             SELECT COUNT(*) FROM (
-                SELECT tag
-                FROM tags
-                WHERE {value_expr} LIKE ? ESCAPE '\\'
-                GROUP BY tag
+                SELECT t.tag
+                FROM tags t
+                INNER JOIN images i ON i.id = t.image_id
+                WHERE {value_expr} LIKE ? ESCAPE '\\' AND {lib_sql}
+                GROUP BY t.tag
             )
             """,
-            (match_pattern,),
+            (match_pattern, *lib_params),
         ).fetchone()
         total = int(total_row[0] or 0) if total_row else 0
 
         query = f"""
-            SELECT tag, COUNT(*) AS count, {rank_sql} AS relevance
-            FROM tags
-            WHERE {value_expr} LIKE ? ESCAPE '\\'
-            GROUP BY tag
+            SELECT t.tag, COUNT(*) AS count, {rank_sql} AS relevance
+            FROM tags t
+            INNER JOIN images i ON i.id = t.image_id
+            WHERE {value_expr} LIKE ? ESCAPE '\\' AND {lib_sql}
+            GROUP BY t.tag
             ORDER BY relevance ASC, {order_tail}
         """
-        query, params = _append_optional_limit(query, params, limit)
+        query, params = _append_optional_limit(query, [*params, *lib_params], limit)
         cursor.execute(query, params)
         tags = [{"tag": row["tag"], "count": row["count"]} for row in cursor.fetchall()]
 
@@ -638,33 +679,39 @@ def _query_indexed_facet(
             f"_query_indexed_facet refusing unknown table/column pair: ({table!r}, {value_column!r})"
         )
 
+    from library_context import current_library_sql
+
     normalized_query = normalize_prompt_token(search_query or "")
-    value_expr = f"REPLACE(LOWER({value_column}), '_', ' ')"
-    where_clause = ""
-    where_params: list[Any] = []
+    value_expr = f"REPLACE(LOWER(facet.{value_column}), '_', ' ')"
+    lib_sql, lib_params = current_library_sql("i.library_id")
+    where_parts = [lib_sql]
+    where_params: list[Any] = list(lib_params)
     rank_select = ""
     rank_order = ""
 
     if normalized_query:
-        where_clause = f"WHERE {value_expr} LIKE ? ESCAPE '\\'"
+        where_parts.append(f"{value_expr} LIKE ? ESCAPE '\\'")
         where_params.append(f"%{escape_like_pattern(normalized_query)}%")
         rank_select = f", {_facet_search_rank_sql(value_expr)} AS relevance"
         rank_order = "relevance ASC, "
 
+    where_clause = "WHERE " + " AND ".join(where_parts)
+    from_sql = f"{table} AS facet INNER JOIN images i ON i.id = facet.image_id"
+
     with get_db() as conn:
         cursor = conn.cursor()
         total_row = cursor.execute(
-            f"SELECT COUNT(DISTINCT {value_column}) FROM {table} {where_clause}",
+            f"SELECT COUNT(DISTINCT facet.{value_column}) FROM {from_sql} {where_clause}",
             where_params,
         ).fetchone()
         total = int(total_row[0] or 0) if total_row else 0
 
         query = f"""
-            SELECT {value_column} AS {output_key}, COUNT(*) AS count{rank_select}
-            FROM {table}
+            SELECT facet.{value_column} AS {output_key}, COUNT(*) AS count{rank_select}
+            FROM {from_sql}
             {where_clause}
-            GROUP BY {value_column}
-            ORDER BY {rank_order}count DESC, {value_column} COLLATE NOCASE ASC
+            GROUP BY facet.{value_column}
+            ORDER BY {rank_order}count DESC, facet.{value_column} COLLATE NOCASE ASC
         """
         params: list[Any] = []
         if normalized_query:
@@ -702,21 +749,33 @@ def get_all_loras(*, limit: Optional[int] = None, search_query: Optional[str] = 
 
 def get_all_generators() -> List[Dict[str, Any]]:
     """Get all generators with their counts (cached with 60s TTL)."""
+    from library_context import current_library_sql, get_current_library_id
+
     now = time.time()
+    library_id = get_current_library_id()
     with _generators_cache_lock:
-        if db_core._generators_cache_data is not None and (now - db_core._generators_cache_timestamp) < _TAGS_CACHE_TTL:
+        if (
+            db_core._generators_cache_data is not None
+            and db_core._generators_cache_library_id == library_id
+            and (now - db_core._generators_cache_timestamp) < _TAGS_CACHE_TTL
+        ):
             return db_core._generators_cache_data
+    lib_sql, lib_params = current_library_sql()
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            f"""
             SELECT generator, COUNT(*) as count
             FROM images
-            WHERE COALESCE(is_readable, 1) = 1
+            WHERE COALESCE(is_readable, 1) = 1 AND {lib_sql}
             GROUP BY generator
             ORDER BY count DESC
-        """)
+            """,
+            lib_params,
+        )
         result = _rows_to_dicts(cursor.fetchall())
     with _generators_cache_lock:
         db_core._generators_cache_data = result
         db_core._generators_cache_timestamp = time.time()
+        db_core._generators_cache_library_id = library_id
     return result

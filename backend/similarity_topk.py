@@ -59,21 +59,34 @@ class _TopKMixin:
         if signature is None:
             return None
 
+        library_id = cache.get("library_id")
         ann = self._ann
-        if ann is not None and ann.signature == signature and ann.dim == cache["dim"]:
+        if (
+            ann is not None
+            and ann.signature == signature
+            and ann.dim == cache["dim"]
+            and getattr(self, "_ann_library_id", None) == library_id
+        ):
             return ann
 
         with self._ann_lock:
             ann = self._ann
-            if ann is not None and ann.signature == signature and ann.dim == cache["dim"]:
+            if (
+                ann is not None
+                and ann.signature == signature
+                and ann.dim == cache["dim"]
+                and getattr(self, "_ann_library_id", None) == library_id
+            ):
                 return ann
-            index_dir = self._get_index_dir()
+            index_dir = self._get_library_index_dir()
             loaded = similarity_ann.load_index(signature, index_dir)
             if loaded is not None and loaded.dim == cache["dim"]:
                 self._ann = loaded
+                self._ann_library_id = library_id
                 return loaded
             built = similarity_ann.build_index(cache["matrix"], signature, index_dir, persist=True)
             self._ann = built
+            self._ann_library_id = library_id
             return built
 
     def top_k_similar(

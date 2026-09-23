@@ -32,6 +32,7 @@ from db_helpers import (
     normalize_lora_name,
     normalize_checkpoint_name,
     extract_prompt_tokens,
+    _favorite_image_ids_params,
     _favorite_image_ids_query,
     _folder_scope_query_match_clause,
 )
@@ -757,6 +758,7 @@ def _apply_collection_filter(conditions: List[str], params: List[Any],
         ")"
     )
     params.append(cid)
+    params.extend(_favorite_image_ids_params())
     params.append(cid)
     return conditions, params
 

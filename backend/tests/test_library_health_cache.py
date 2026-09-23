@@ -66,7 +66,7 @@ def test_library_health_cache_invalidation(test_client, test_db_with_images):
     from services.sorting_service import invalidate_library_health_cache, _LIBRARY_HEALTH_CACHE
 
     test_client.get("/api/library-health?sample_limit=4")
-    assert 4 in _LIBRARY_HEALTH_CACHE
+    assert any(key[1] == 4 for key in _LIBRARY_HEALTH_CACHE)
 
     invalidate_library_health_cache()
     assert _LIBRARY_HEALTH_CACHE == {}
@@ -87,7 +87,7 @@ def test_clear_gallery_invalidates_library_health_cache(test_client, test_db_wit
     # Warm the cache against the seeded (non-empty) library.
     before = test_client.get("/api/library-health?sample_limit=4").json()
     assert before["summary"]["total_images"] > 0
-    assert 4 in _LIBRARY_HEALTH_CACHE  # now cached
+    assert any(key[1] == 4 for key in _LIBRARY_HEALTH_CACHE)  # now cached
 
     # Clearing the gallery must invalidate that cache as part of the operation.
     cleared = test_client.delete("/api/clear-gallery")
@@ -114,7 +114,7 @@ def test_remove_selected_images_invalidates_library_health_cache(test_client, te
     before = test_client.get("/api/library-health?sample_limit=4").json()
     total_before = before["summary"]["total_images"]
     assert total_before > 0
-    assert 4 in _LIBRARY_HEALTH_CACHE  # warm
+    assert any(key[1] == 4 for key in _LIBRARY_HEALTH_CACHE)  # warm
 
     from database import get_db
     with get_db() as conn:

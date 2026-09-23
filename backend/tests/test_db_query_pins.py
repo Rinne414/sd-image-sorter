@@ -86,7 +86,7 @@ from db_query import (
     _IMAGE_COLUMNS_BARE,
 )
 from db_core import PROMPT_MATCH_MODE_EXACT, PROMPT_MATCH_MODE_CONTAINS
-from db_helpers import _favorite_image_ids_query
+from db_helpers import _favorite_image_ids_params, _favorite_image_ids_query
 
 
 # ===========================================================================
@@ -706,7 +706,7 @@ class TestCollectionAndIdFilters:
             "JOIN collections c ON c.id = ? AND c.slug = 'favorites'"
             ")"
         ]
-        assert p == [5, 5]
+        assert p == [5, *_favorite_image_ids_params(), 5]
 
     def test_collection_filter_noop_for_none_and_non_positive(self):
         assert _apply_collection_filter([], [], None) == ([], [])

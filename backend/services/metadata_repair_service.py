@@ -94,8 +94,12 @@ def get_active_job_id() -> Optional[str]:
 def snapshot_missing_prompt_ids() -> List[int]:
     """Materialize the ids to retry before any mutation (bulk-job contract)."""
     with get_db() as conn:
+        from library_context import current_library_sql
+
+        lib_sql, lib_params = current_library_sql()
         rows = conn.execute(
-            f"SELECT id FROM images WHERE {_MISSING_PROMPT_WHERE} ORDER BY id"
+            f"SELECT id FROM images WHERE {_MISSING_PROMPT_WHERE} AND {lib_sql} ORDER BY id",
+            lib_params,
         ).fetchall()
     return [int(row["id"]) for row in rows]
 
@@ -120,6 +124,9 @@ def get_metadata_health() -> Dict[str, Any]:
     visible rather than silently missing. Whole-library composition, including
     unreadable rows, is what ``GET /api/library-health`` reports.
     """
+    from library_context import current_library_sql
+
+    lib_sql, lib_params = current_library_sql()
     with get_db() as conn:
         rows = conn.execute(
             f"""
@@ -129,13 +136,15 @@ def get_metadata_health() -> Dict[str, Any]:
                    SUM(CASE WHEN {MISSING_TEXT_SQL} THEN 1 ELSE 0 END) AS missing_text,
                    SUM(CASE WHEN raw_metadata_gz IS NOT NULL THEN 1 ELSE 0 END) AS with_raw
             FROM images
-            WHERE {_READABLE_WHERE}
+            WHERE {_READABLE_WHERE} AND {lib_sql}
             GROUP BY COALESCE(generator, 'unknown')
             ORDER BY total DESC
-            """
+            """,
+            lib_params,
         ).fetchall()
         excluded_row = conn.execute(
-            f"SELECT COUNT(*) AS excluded FROM images WHERE NOT ({_READABLE_WHERE})"
+            f"SELECT COUNT(*) AS excluded FROM images WHERE NOT ({_READABLE_WHERE}) AND {lib_sql}",
+            lib_params,
         ).fetchone()
     generators = [
         {
