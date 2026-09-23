@@ -135,7 +135,7 @@ function syncTaggerModelUi(options = {}) {
 
     if (runtimeDetail) {
         if (modelDisabled) {
-            runtimeDetail.textContent = appT('tagger.catalogOnlyDetail', 'This entry stays in the catalog so the planned integration is visible, but the current tagger runtime cannot execute it.');
+            runtimeDetail.textContent = appT('tagger.catalogOnlyDetail', 'This is a planned integration, listed for reference. It can\'t run yet.');
         } else if (hasLiveRuntime) {
             let detail = `Actual backend: ${liveActualBackend.toUpperCase()}.`;
             if (liveTargetBackend && liveTargetBackend !== liveActualBackend) {
@@ -152,20 +152,20 @@ function syncTaggerModelUi(options = {}) {
             runtimeDetail.textContent = getTaggerMinimumHardwareText(meta);
         } else if (isToriiGate) {
             runtimeDetail.textContent = gpuEnabled
-                ? appT('tagger.toriiGateGpuDetail', 'ToriiGate uses the multimodal PyTorch CUDA path. WD14 thresholds do not apply here.')
-                : appT('tagger.toriiGateCpuDetail', 'ToriiGate can run on CPU, but it is much slower than CUDA. WD14 thresholds do not apply here.');
+                ? appT('tagger.toriiGateGpuDetail', 'ToriiGate runs on PyTorch CUDA. WD14 thresholds don\'t apply.')
+                : appT('tagger.toriiGateCpuDetail', 'ToriiGate can run on CPU, but much slower than CUDA. WD14 thresholds don\'t apply.');
         } else if (isCustom) {
             runtimeDetail.textContent = onnxGpuAvailable
-                ? appT('tagger.customGpuAvailDetail', 'The final runtime path is decided when the custom ONNX session is created. GPU is available, but model stability still decides the final path.')
-                : appT('tagger.customCpuOnlyDetail', 'CUDAExecutionProvider is not available for the ONNX runtime path right now, so a custom model run will stay on CPU.');
+                ? appT('tagger.customGpuAvailDetail', 'A GPU is available, but whether this model runs stably on it is only known once it loads.')
+                : appT('tagger.customCpuOnlyDetail', 'ONNX Runtime can\'t use CUDA right now, so the custom model will run on CPU.');
         } else if (!hardwareProbeLoaded) {
-            runtimeDetail.textContent = appT('tagger.hardwarePendingDetail', 'Hardware probe is still loading. GPU stays enabled by default until the runtime check finishes.');
+            runtimeDetail.textContent = appT('tagger.hardwarePendingDetail', 'Still checking the hardware. GPU stays on until the check finishes.');
         } else if (providerState.hasCuda || providerState.hasDml) {
-            runtimeDetail.textContent = appT('tagger.cudaAvailDetail', 'CUDAExecutionProvider is available on this machine. If the session loads cleanly, the run should stay on GPU.');
+            runtimeDetail.textContent = appT('tagger.cudaAvailDetail', 'CUDA is available here. If the model loads cleanly, it runs on the GPU.');
         } else if (providerState.hasTorchCuda) {
-            runtimeDetail.textContent = appT('tagger.pytorchCudaOnlyDetail', 'PyTorch CUDA is available, but the ONNX runtime path is still CPU-only on this machine.');
+            runtimeDetail.textContent = appT('tagger.pytorchCudaOnlyDetail', 'PyTorch can use CUDA, but ONNX Runtime is still CPU-only on this computer.');
         } else {
-            runtimeDetail.textContent = appT('tagger.cpuOnlyDetail', 'The current ONNX runtime probe does not expose CUDAExecutionProvider, so this run will stay on CPU.');
+            runtimeDetail.textContent = appT('tagger.cpuOnlyDetail', 'ONNX Runtime didn\'t detect CUDA, so this run uses the CPU.');
         }
     }
 
@@ -217,7 +217,7 @@ function syncTaggerModelUi(options = {}) {
         if (gpuLocked) {
             runtimeAdvancedHint.textContent = appT('tagger.advHintStressTest', 'Optional. Change this only if you are stress-testing.');
         } else if (hardwareHighRisk && !gpuEnabled) {
-            runtimeAdvancedHint.textContent = appT('tagger.advHintHighRisk', 'Optional. This machine is marked high-risk for long GPU tagging.');
+            runtimeAdvancedHint.textContent = appT('tagger.advHintHighRisk', 'Optional. This computer is flagged as risky for long GPU tagging runs.');
         } else if (isCustom) {
             runtimeAdvancedHint.textContent = appT('tagger.advHintCustom', 'Optional. Change this only when troubleshooting a custom model.');
         } else if (gpuEnabled && !riskyGpu) {

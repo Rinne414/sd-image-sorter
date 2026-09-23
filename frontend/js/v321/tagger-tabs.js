@@ -197,25 +197,28 @@ Object.assign(window.V321Integration, {
             }
         }
 
-        // Tab description line below the tab row.
+        // Tab description line below the tab row. The Smart tab has none: its
+        // hero card right below already explains it.
         const desc = document.getElementById('tagger-tab-description');
         const modalDesc = document.querySelector('#tag-modal .modal-description');
         if (desc) {
             const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
             const map = {
-                smart: 'tagger.tabSmartDesc',
                 local: 'tagger.tabLocalDesc',
                 nl: 'tagger.tabNlDesc',
                 aesthetic: 'tagger.tabAestheticDesc',
                 color: 'tagger.tabColorDesc',
             };
-            desc.setAttribute('data-i18n', map[tab]);
-            desc.textContent = i18n(map[tab], '');
+            desc.hidden = !map[tab];
+            if (map[tab]) {
+                desc.setAttribute('data-i18n', map[tab]);
+                desc.textContent = i18n(map[tab], '');
+            }
         }
         if (modalDesc) {
             const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
             const map = {
-                smart: ['tagger.modalDescSmart', 'One guided pass: booru tags, optional caption, cleanup, and trigger word — recommended.'],
+                smart: ['tagger.modalDescSmart', 'Recommended. Tags, caption, cleanup and trigger word in one pass.'],
                 local: ['modal.tagDescription', 'Pick a supported tagger model and generate tags for images.'],
                 nl: ['tagger.modalDescNl', 'Choose a natural-language backend and caption selected images.'],
                 aesthetic: ['tagger.modalDescAesthetic', 'Score selected images with the local aesthetic model.'],
@@ -325,7 +328,7 @@ Object.assign(window.V321Integration, {
             }
             if (hint) {
                 hint.setAttribute('data-i18n', 'tagger.nlVlmApiHint');
-                hint.textContent = i18n('tagger.nlVlmApiHint', 'Send images to a remote VLM endpoint. Configure provider + model in VLM Settings.');
+                hint.textContent = i18n('tagger.nlVlmApiHint', 'Sends images to a remote VLM. Set the provider and model in VLM Settings first.');
             }
             if (vlmStatus) vlmStatus.style.display = '';
             if (startBtn && !startBtn.disabled) {
@@ -342,7 +345,7 @@ Object.assign(window.V321Integration, {
             }
             if (hint) {
                 hint.setAttribute('data-i18n', 'tagger.nlToriiHint');
-                hint.textContent = i18n('tagger.nlToriiHint', 'Heavy local captioner. Needs a one-time ~9.6 GB BF16 download from Model Manager.');
+                hint.textContent = i18n('tagger.nlToriiHint', 'Large local captioner. Needs a one-time ~9.6 GB BF16 download from Model Manager.');
             }
             if (vlmStatus) vlmStatus.style.display = 'none';
             if (startBtn && !startBtn.disabled) {

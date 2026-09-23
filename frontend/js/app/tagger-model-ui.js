@@ -391,7 +391,7 @@ function renderTaggerModelSnapshot(meta, options = {}) {
                 `<span class="tagger-model-badge">${escapeHtml(profileName)}</span>`,
                 `<span class="tagger-model-badge">${escapeHtml(appT('tagger.profileAwareBadge', 'Profile aware'))}</span>`,
             ].join('');
-            noteEl.textContent = appT('tagger.customProfileNote', "The app will use this profile's preprocessing, metadata parser, confidence normalization, and rating behavior.");
+            noteEl.textContent = appT('tagger.customProfileNote', "Preprocessing, metadata parsing, confidence normalization and rating handling all follow this profile.");
             return;
         }
         noteEl.textContent = appT('tagger.customNote', 'Start from one stable run first. Raise chunk size only after that.');
@@ -618,8 +618,8 @@ function syncTaggerRuntimeChunkUi(options = {}) {
 
     if (selectedChunk > recommendedChunk) {
         batchHelp.textContent = gpuEnabled
-            ? appT('tagger.chunkHelpOverGpu', 'You chose {chosen}, above the recommended {recommended}. Expect higher VRAM pressure and more crash risk.').replace('{chosen}', selectedChunk).replace('{recommended}', recommendedChunk)
-            : appT('tagger.chunkHelpOverCpu', 'You chose {chosen}, above the recommended {recommended}. This may help throughput, but it raises RAM pressure.').replace('{chosen}', selectedChunk).replace('{recommended}', recommendedChunk);
+            ? appT('tagger.chunkHelpOverGpu', 'You chose {chosen}, above the recommended {recommended}. Expect more VRAM use and a higher crash risk.').replace('{chosen}', selectedChunk).replace('{recommended}', recommendedChunk)
+            : appT('tagger.chunkHelpOverCpu', 'You chose {chosen}, above the recommended {recommended}. It may be faster but uses more RAM.').replace('{chosen}', selectedChunk).replace('{recommended}', recommendedChunk);
         return;
     }
 

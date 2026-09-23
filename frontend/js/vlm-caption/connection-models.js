@@ -213,7 +213,7 @@ Object.assign(window.VLMCaption, {
                     this._setVal('vlm-provider', 'openai_compat');
                     this._showStatus(
                         'vlm-status',
-                        this._t('vlmSettings.modelSelected', 'Selected {model} — endpoint set to Ollama')
+                        this._t('vlmSettings.modelSelected', 'Selected {model}; endpoint set to Ollama')
                             .replace('{model}', btn.dataset.vlmUse),
                         'success'
                     );

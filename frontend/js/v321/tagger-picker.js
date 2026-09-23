@@ -189,10 +189,10 @@ Object.assign(window.V321Integration, {
         const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
         const lower = String(value || '').toLowerCase();
         if (value === 'vlm') {
-            return i18n('tagger.nlVlmApiHint', 'Send images to a remote VLM endpoint. Configure provider + model in VLM Settings.');
+            return i18n('tagger.nlVlmApiHint', 'Sends images to a remote VLM. Set the provider and model in VLM Settings first.');
         }
         if (lower.includes('toriigate')) {
-            return i18n('tagger.nlToriiHint', 'Heavy local captioner. Needs a one-time ~9.6 GB BF16 download from Model Manager.');
+            return i18n('tagger.nlToriiHint', 'Large local captioner. Needs a one-time ~9.6 GB BF16 download from Model Manager.');
         }
         if (activeTab === 'local' && value === 'custom') {
             return i18n('tagger.customSubtitle', 'Custom local ONNX tagger with a selectable model profile.');

@@ -229,7 +229,7 @@
             populateSmartTaggerSelects();
             if (typeof window.showToast === 'function') {
                 window.showToast(
-                    smartTagT('smartTag.taggerLoadFailedToast', 'Failed to load Smart Tag tagger list. The backend default will be used.'),
+                    smartTagT('smartTag.taggerLoadFailedToast', 'Couldn\'t load the Smart Tag tagger list; the default model will be used.'),
                     'warning'
                 );
             }

@@ -6145,7 +6145,7 @@
                         <span data-i18n="tagger.tabColor">Color Analysis</span>
                     </button>
                 </div>
-                <p class="tagger-tab-description" id="tagger-tab-description" data-i18n="tagger.tabLocalDesc">WD14 / Camie / PixAI ONNX models — fast Danbooru-style tags.</p>
+                <p class="tagger-tab-description" id="tagger-tab-description" data-i18n="tagger.tabLocalDesc">Fast Danbooru-style tags from local WD14 / Camie / PixAI models.</p>
 
                 <!-- Aurora Phase 3: shown when the run is scoped to the Gallery
                      selection (opened via the batch action bar's Tag button). -->
@@ -6165,8 +6165,8 @@
                     <div class="tagger-smart-hero">
                         <span class="tagger-smart-hero-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg></span>
                         <div class="tagger-smart-hero-copy">
-                            <strong data-i18n="tagger.smartHeroTitle">One pass: tags + caption + trigger word, cleaned for training</strong>
-                            <p data-i18n="tagger.smartHeroBody">Runs one or two booru taggers (with optional voting), an optional natural-language caption, strips noise tags, and writes a clean training caption — choosing a training purpose auto-cleans artist/character tags and applies your trigger word.</p>
+                            <strong data-i18n="tagger.smartHeroTitle">Captions that are ready for training</strong>
+                            <p data-i18n="tagger.smartHeroBody">Runs one or two booru taggers (voting optional), adds an optional natural-language caption and strips noise tags. Pick a training purpose and it also cleans artist/character tags and adds your trigger word.</p>
                         </div>
                     </div>
                     <div class="tagger-smart-scope" id="tagger-smart-scope" role="status" aria-live="polite"></div>
@@ -6220,7 +6220,7 @@
 
                 <div class="tagger-nl-workflow-card tagger-nl-status-card" id="tagger-nl-workflow-card" data-tagger-shows="nl" style="display:none">
                     <span id="tagger-nl-workflow-title" data-i18n="tagger.nlToriiTitle">ToriiGate (local model)</span>
-                    <span id="tagger-nl-workflow-hint" class="tagger-nl-card-hint" data-i18n="tagger.nlToriiHint">Heavy local captioner. Needs a one-time ~9.6 GB BF16 download from Model Manager.</span>
+                    <span id="tagger-nl-workflow-hint" class="tagger-nl-card-hint" data-i18n="tagger.nlToriiHint">Large local captioner. Needs a one-time ~9.6 GB BF16 download from Model Manager.</span>
                     <span class="tagger-nl-workflow-status" id="vlm-banner-current" style="display:none">Not configured</span>
                     <div id="vlm-progress-container" style="display:none" class="progress-container tagger-nl-progress">
                         <div class="progress-bar"><div class="progress-fill" id="vlm-progress-fill"></div></div>
@@ -6238,7 +6238,7 @@
                         <span class="tagger-nl-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg></span>
                         <div>
                             <strong data-i18n="tagger.nlToriiTitle">ToriiGate (local model)</strong>
-                            <p class="tagger-nl-card-hint" data-i18n="tagger.nlToriiHint">Heavy local captioner. Needs a one-time ~9.6 GB BF16 download from Model Manager.</p>
+                            <p class="tagger-nl-card-hint" data-i18n="tagger.nlToriiHint">Large local captioner. Needs a one-time ~9.6 GB BF16 download from Model Manager.</p>
                         </div>
                     </div>
                     <div class="tagger-nl-card-actions"></div>
@@ -6250,7 +6250,7 @@
                         <span class="tagger-aesthetic-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg></span>
                         <div class="tagger-aesthetic-status-copy">
                             <strong id="tagger-aesthetic-status-title" data-i18n="tagger.aestheticReady">Aesthetic scoring is ready on this machine.</strong>
-                            <p class="tagger-aesthetic-status-hint" id="tagger-aesthetic-status-hint" data-i18n="tagger.tabAestheticDesc">Local CLIP + LAION head produces a 1–10 visual quality score.</p>
+                            <p class="tagger-aesthetic-status-hint" id="tagger-aesthetic-status-hint" data-i18n="tagger.tabAestheticDesc">CLIP + LAION scoring head, scores from 1 to 10.</p>
                         </div>
                     </div>
                     <div class="tagger-aesthetic-actions">
@@ -6274,8 +6274,8 @@
                     <div class="tagger-aesthetic-status-card">
                         <span class="tagger-aesthetic-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-palette"/></svg></span>
                         <div class="tagger-aesthetic-status-copy">
-                            <strong id="tagger-color-status-title" data-i18n="tagger.colorReady">Color analysis is ready on this machine.</strong>
-                            <p class="tagger-aesthetic-status-hint" id="tagger-color-status-hint" data-i18n="tagger.tabColorDesc">Extracts dominant colors, brightness, color temperature, and saturation. Required for the color sorts and filters.</p>
+                            <strong id="tagger-color-status-title" data-i18n="tagger.colorReady">All analyzed. Color sorts and filters are ready.</strong>
+                            <p class="tagger-aesthetic-status-hint" id="tagger-color-status-hint" data-i18n="tagger.tabColorDesc">Extracts dominant colors, brightness, color temperature and saturation.</p>
                             <p class="tagger-aesthetic-status-hint" id="tagger-color-status-counts" style="margin-top:6px"></p>
                         </div>
                     </div>
@@ -8317,7 +8317,7 @@
                 <span data-i18n="smartTag.title">Smart Tag (WD14 + VLM)</span>
             </h3>
             <p class="modal-description" data-i18n="smartTag.description">
-                Runs local taggers and an optional VLM sentence in one pass, then writes a clean LoRA-ready caption per image.
+                Build LoRA training captions from booru tags, natural-language descriptions, or both.
             </p>
 
             <div class="smart-tag-form">
@@ -8325,12 +8325,12 @@
                     <label class="form-label">
                         <span data-i18n="smartTag.trainingPurpose">Training purpose</span>
                         <select id="smart-tag-purpose" class="form-input">
-                            <option value="style" data-i18n="smartTag.purposeStyle">Style LoRA — describe content, omit style / artist labels</option>
-                            <option value="character" data-i18n="smartTag.purposeCharacter">Character LoRA — describe variation; trigger replaces character name</option>
-                            <option value="general" selected data-i18n="smartTag.purposeGeneral">General — full description: subject / pose / clothing / scene</option>
-                            <option value="concept" data-i18n="smartTag.purposeConcept">Concept LoRA — preserve context without guessing the target tag</option>
+                            <option value="style" data-i18n="smartTag.purposeStyle">Style LoRA: describe content, leave out style and artist tags</option>
+                            <option value="character" data-i18n="smartTag.purposeCharacter">Character LoRA: describe what varies; the trigger replaces the character name</option>
+                            <option value="general" selected data-i18n="smartTag.purposeGeneral">General: full description of subject, pose, clothing and scene</option>
+                            <option value="concept" data-i18n="smartTag.purposeConcept">Concept LoRA: keep the context, don't guess the target tag</option>
                         </select>
-                        <span class="form-help" data-i18n="smartTag.purposeHelp">Style removes detected style/artist tags. Character removes detected character names only when a trigger word is set. Other context is preserved.</span>
+                        <span class="form-help" data-i18n="smartTag.purposeHelp">Style removes detected style/artist tags. Character removes character names only when a trigger word is set. Everything else is kept.</span>
                     </label>
 
                     <label class="form-label">
@@ -8340,15 +8340,15 @@
                                data-i18n-placeholder="smartTag.triggerPlaceholder"
                                autocomplete="off">
                         <span class="form-help" data-i18n="smartTag.triggerHelp">
-                            Inserted at the front of every caption.
+                            Added to the front of every generated caption; skipped images are left alone. Must be one token: use underscores or camelCase, e.g. my_lora_trigger.
                         </span>
                     </label>
 
                     <label class="form-label">
                         <span data-i18n="smartTag.mergeStrategy">Existing captions</span>
                         <select id="smart-tag-merge" class="form-input">
-                            <option value="replace" selected data-i18n="smartTag.mergeReplace">Replace (recommended) — discard previous caption</option>
-                            <option value="append" data-i18n="smartTag.mergeAppend">Append — glue new caption onto previous</option>
+                            <option value="replace" selected data-i18n="smartTag.mergeReplace">Replace: write the new Smart Tag caption</option>
+                            <option value="append" data-i18n="smartTag.mergeAppend">Append: keep the old caption and add the new result</option>
                         </select>
                     </label>
                 </div>
@@ -8460,7 +8460,7 @@
                 </section>
 
                 <div class="smart-tag-safety-note" data-i18n="smartTag.executionNote">
-                    Smart Tag runs selected booru taggers one by one, then the natural-language captioner. It does not run multiple heavy models concurrently.
+                    Smart Tag runs the selected taggers one at a time, then the natural-language captioner. It never loads several heavy models at once.
                 </div>
 
                 <!-- Image count summary -->
@@ -8498,7 +8498,7 @@
         <div class="modal-content modal-large">
             <button class="modal-close" aria-label="Close VLM captioning settings" data-i18n-aria="a11y.closeVlmSettings"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
             <h3><svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg> <span data-i18n="vlmSettings.title">VLM Captioning Settings</span></h3>
-            <p class="modal-description" data-i18n="vlmSettings.description">Configure Vision Language Model for natural language captioning.</p>
+            <p class="modal-description" data-i18n="vlmSettings.description">Set up the vision language model (VLM) that writes natural-language captions.</p>
 
             <div class="form-group">
                 <label for="vlm-provider" data-i18n="vlmSettings.provider">Provider</label>
@@ -8524,7 +8524,7 @@
                 <label for="vlm-model" data-i18n="vlmSettings.model">Model Name</label>
                 <input type="text" id="vlm-model" class="input-field" placeholder="qwen2.5-vl:7b" list="vlm-model-suggestions" autocomplete="off">
                 <datalist id="vlm-model-suggestions"></datalist>
-                <small class="helper-text" data-i18n="vlmSettings.modelHelper">Pick a recommended model from the dropdown, type any model name directly, or click "Fetch" to list what your endpoint already has.</small>
+                <small class="helper-text" data-i18n="vlmSettings.modelHelper">Pick a recommended model, type any model name, or click "Fetch" to list what your endpoint has.</small>
                 <button class="btn btn-small btn-ghost" id="btn-vlm-fetch-models" style="margin-top:4px" data-i18n="vlmSettings.fetchModels">Fetch Available Models</button>
                 <div id="vlm-model-list-status" class="vlm-status" style="display:none"></div>
                 <div id="vlm-model-list" class="vlm-model-list"></div>
@@ -8547,7 +8547,7 @@
                     </button>
                 </div>
                 <small class="helper-text" data-i18n="vlmSettings.outputFormatHelper">
-                    NL caption writes to <code>ai_caption</code>. Tags writes danbooru-style entries to the tags table. Both uses a hybrid format.
+                    NL writes the sentence to <code>ai_caption</code> / <code>nl_caption</code>. Tags writes danbooru tags to the tags table. Both asks the model for JSON and splits it.
                 </small>
             </div>
 
@@ -8577,7 +8577,7 @@
                     <div class="form-group">
                         <label for="vlm-user-prompt" data-i18n="vlmSettings.userPrompt">User Prompt</label>
                         <textarea id="vlm-user-prompt" class="input-field" rows="4" placeholder="Describe this image..." data-i18n-placeholder="vlmSettings.userPromptPlaceholder"></textarea>
-                        <small class="helper-text" data-i18n="vlmSettings.userPromptHelper">Use {tags} placeholder to insert danbooru tags from the local tagger.</small>
+                        <small class="helper-text" data-i18n="vlmSettings.userPromptHelper">{tags} is replaced with the danbooru tags from the local tagger.</small>
                     </div>
                     <div class="form-group">
                         <label><input type="checkbox" id="vlm-include-tags" checked> <span data-i18n="vlmSettings.includeTags">Include danbooru tags as context</span></label>
@@ -8605,7 +8605,7 @@
                                     data-i18n-title="vlmSettings.probeConcurrentTitle"
                                     data-i18n="vlmSettings.probeConcurrent">Probe max</button>
                         </div>
-                        <small class="helper-text" data-i18n="vlmSettings.probeConcurrentHelper">Runs ramped concurrent health checks against your endpoint and fills the recommended value.</small>
+                        <small class="helper-text" data-i18n="vlmSettings.probeConcurrentHelper">Tests your endpoint with rising concurrency and fills in a recommended value.</small>
                     </div>
                     <div class="form-group">
                         <label for="vlm-caption-max-tokens" data-i18n="vlmSettings.captionMaxTokens">Caption max tokens</label>
@@ -8644,7 +8644,7 @@
                 </summary>
                 <div style="padding-top:8px">
                     <small class="helper-text" data-i18n="vlmSettings.proxyHelper">
-                        Route VLM API calls through a proxy. Useful when OpenAI / Anthropic / Gemini are blocked at your network. SOCKS overrides HTTP/HTTPS; install <code>httpx[socks]</code> first.
+                        Send VLM requests through a proxy when OpenAI / Anthropic / Gemini are blocked on your network. SOCKS overrides HTTP/HTTPS; install <code>httpx[socks]</code> first.
                     </small>
                     <div class="form-group">
                         <label for="vlm-http-proxy" data-i18n="vlmSettings.httpProxy">HTTP Proxy</label>
@@ -8668,7 +8668,7 @@
                 </summary>
                 <div style="padding-top:8px">
                     <small class="helper-text" data-i18n="vlmSettings.vertexHelper">
-                        Use Google Cloud Vertex AI instead of the public Gemini API key. Requires <code>google-auth</code>. Cached OAuth tokens last ~50 minutes.
+                        Use Google Cloud Vertex AI instead of a public Gemini API key. Needs <code>google-auth</code>. OAuth tokens are cached for about 50 minutes.
                     </small>
                     <div class="form-group">
                         <label><input type="checkbox" id="vlm-use-vertex"> <span data-i18n="vlmSettings.useVertex">Use Vertex AI (instead of public Gemini API key)</span></label>

@@ -341,7 +341,7 @@
             // feedback instead of watching the progress bar keep moving
             // for ~1s until the worker checks the cancel flag.
             if (cancelBtn) cancelBtn.disabled = true;
-            setProgressUI({ text: smartTagT('smartTag.cancellingKept', 'Cancelling — already-tagged results will be kept') });
+            setProgressUI({ text: smartTagT('smartTag.cancellingKept', 'Cancelling; results so far are kept') });
             if (typeof window.showToast === 'function') {
                 window.showToast(smartTagT('smartTag.cancelRequested', 'Smart Tag cancellation requested'), 'info');
             }

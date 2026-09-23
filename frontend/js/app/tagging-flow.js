@@ -677,7 +677,7 @@ async function pollTagProgress(retryCount = 0) {
         Logger.warn('Tag progress monitoring is temporarily unavailable:', error);
         const monitorText = appT(
             'tagger.progressMonitorUnavailable',
-            'Tagging status is temporarily unavailable. The task may still be queued or running; monitoring will keep trying.'
+            'Can\'t get tagging progress right now. The task may still be queued or running; the app keeps checking.'
         );
         if (!_tagProgressMonitorDegraded) {
             _tagProgressMonitorDegraded = true;
