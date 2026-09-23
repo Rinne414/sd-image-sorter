@@ -33,6 +33,8 @@ window.I18nLang_zhCN = {
     'dup.emptyIntro': '扫描整个图库，找出近似重复的图片分组。每组会给出建议保留的一张（优先看你的星级，其次美学分、分辨率、文件大小）——并排比较后，把其余的移入回收站。',
     'dup.needEmbeddings': '需要 CLIP 特征向量——如果扫描提示没有，请先在相似度工具里构建。',
     'dup.summary': '{groups} 组 · {redundant} 张冗余图片 · 约可释放 {bytes}',
+    'dup.summaryIncomplete': '{groups} 组来自已索引的 {embedded}/{total} 张图（覆盖 {coverage}%）。还有 {pending} 张没有 CLIP 向量——0 组不是全库结论。',
+    'dup.scanDoneIncomplete': '查重扫描结束，但只有 {embedded}/{total} 张图有 CLIP 向量。0 组不是全库结论——请先在相似工具里建立索引。',
     'dup.groupTitle': '{count} 张 · 相似度 ≥ {sim}%',
     'dup.keepBest': '保留最佳，清理其余',
     'dup.deleteChecked': '移入回收站…',

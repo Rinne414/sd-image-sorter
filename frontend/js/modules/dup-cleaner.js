@@ -133,7 +133,11 @@
                 setScanUiRunning(false);
                 if (job.status === 'done') {
                     await loadGroups(true);
-                    showToast(t('dup.scanDone', 'Duplicate scan finished'), 'success');
+                    if (scanCoverageIncomplete(STATE.summary)) {
+                        showToast(formatIncompleteScanToast(STATE.summary), 'warning');
+                    } else {
+                        showToast(t('dup.scanDone', 'Duplicate scan finished'), 'success');
+                    }
                 } else if (job.status === 'error') {
                     showToast(t('dup.scanFailed', 'Duplicate scan failed'), 'error');
                 }
@@ -208,18 +212,7 @@
         const s = data.summary || {};
         emptyBox.hidden = true;
         summaryBox.hidden = false;
-        const text = $('dup-summary-text');
-        if (text) {
-            text.textContent = t(
-                'dup.summary',
-                '{groups} groups · {redundant} redundant images · ~{bytes} reclaimable',
-                {
-                    groups: s.group_count ?? 0,
-                    redundant: s.redundant_count ?? 0,
-                    bytes: formatBytes(s.reclaimable_bytes),
-                },
-            );
-        }
+        writeSummaryText(s);
         const applyAll = $('btn-dup-apply-all');
         if (applyAll) applyAll.hidden = !(s.group_count > 0);
     }
@@ -444,22 +437,60 @@
         }
     }
 
+    function scanCoverageIncomplete(summary) {
+        const s = summary || {};
+        if (s.exact === false) return true;
+        const embedded = Number(s.embedded_count);
+        if (Number.isFinite(embedded) && embedded < 2) return true;
+        const pending = Number(s.pending_count);
+        return Number.isFinite(pending) && pending > 0;
+    }
+
+    function summaryParams(summary) {
+        const s = summary || {};
+        return {
+            groups: s.group_count ?? 0,
+            redundant: s.redundant_count ?? 0,
+            bytes: formatBytes(s.reclaimable_bytes),
+            embedded: s.embedded_count ?? 0,
+            total: s.total_images ?? 0,
+            pending: s.pending_count ?? 0,
+            coverage: s.coverage ?? 0,
+        };
+    }
+
+    function formatIncompleteScanToast(summary) {
+        return t(
+            'dup.scanDoneIncomplete',
+            'Duplicate scan finished, but only {embedded}/{total} images have CLIP embeddings. 0 groups is not a whole-library verdict — index embeddings in Similarity first.',
+            summaryParams(summary),
+        );
+    }
+
+    function writeSummaryText(summary) {
+        const text = $('dup-summary-text');
+        if (!text) return;
+        const s = summary || {};
+        if (scanCoverageIncomplete(s)) {
+            text.textContent = t(
+                'dup.summaryIncomplete',
+                '{groups} groups from {embedded}/{total} indexed images ({coverage}% coverage). {pending} images still need CLIP embeddings — 0 groups is not a whole-library verdict.',
+                summaryParams(s),
+            );
+            return;
+        }
+        text.textContent = t(
+            'dup.summary',
+            '{groups} groups · {redundant} redundant images · ~{bytes} reclaimable',
+            summaryParams(s),
+        );
+    }
+
     function adjustSummaryAfterDelete(removedCount) {
         if (!STATE.summary) return;
         STATE.summary.group_count = Math.max(0, (STATE.summary.group_count || 0) - 1);
         STATE.summary.redundant_count = Math.max(0, (STATE.summary.redundant_count || 0) - removedCount);
-        const text = $('dup-summary-text');
-        if (text) {
-            text.textContent = t(
-                'dup.summary',
-                '{groups} groups · {redundant} redundant images · ~{bytes} reclaimable',
-                {
-                    groups: STATE.summary.group_count,
-                    redundant: STATE.summary.redundant_count,
-                    bytes: formatBytes(STATE.summary.reclaimable_bytes),
-                },
-            );
-        }
+        writeSummaryText(STATE.summary);
     }
 
     // ------------------------------------------------------------------

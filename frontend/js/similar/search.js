@@ -40,7 +40,7 @@ Object.assign(window.SimilarImages, {
             await this.waitForEmbeddingStatusReady();
         }
 
-        if (this.isEmbedding || this.isCheckingEmbeddingStatus) {
+        if (this.isSimilarityIndexRunning()) {
             const message = this._t(
                 'similar.searchBlockedRunning',
                 'Embeddings are still running. Wait until indexing finishes before searching.'
@@ -116,7 +116,7 @@ Object.assign(window.SimilarImages, {
         if (this.isCheckingEmbeddingStatus) {
             await this.waitForEmbeddingStatusReady();
         }
-        if (this.isEmbedding || this.isCheckingEmbeddingStatus) {
+        if (this.isSimilarityIndexRunning()) {
             const message = this._t(
                 'similar.searchBlockedRunning',
                 'Embeddings are still running. Wait until indexing finishes before searching.'
@@ -194,7 +194,7 @@ Object.assign(window.SimilarImages, {
             await this.waitForEmbeddingStatusReady();
         }
 
-        if (this.isEmbedding || this.isCheckingEmbeddingStatus) {
+        if (this.isSimilarityIndexRunning()) {
             const message = this._t(
                 'similar.searchBlockedRunning',
                 'Embeddings are still running. Wait until indexing finishes before searching.'

@@ -20,6 +20,21 @@ Object.assign(window.SimilarImages, {
         return { total, embedded, pending, unreadable };
     },
 
+    /**
+     * True only while an embed job is actually in flight.
+     * A 12/12 progress snapshot must not keep the duplicates panel on
+     * "embeddings still running".
+     */
+    isSimilarityIndexRunning() {
+        const progress = this.embedProgress || {};
+        const total = Number(progress.total || 0);
+        const processed = Number(progress.processed || progress.current || 0);
+        if (total > 0 && processed >= total) {
+            return false;
+        }
+        return Boolean(this.isEmbedding || this.isCheckingEmbeddingStatus || progress.running);
+    },
+
     dismissFirstUseCard() {
         localStorage.setItem('similar-guide-seen', 'true');
         const card = document.getElementById('similar-start-card');
@@ -57,7 +72,7 @@ Object.assign(window.SimilarImages, {
         const view = document.getElementById('view-similar');
         const { total, embedded, pending } = this.getEmbeddingStats();
         const progress = this.embedProgress || {};
-        const running = Boolean(this.isEmbedding || this.isCheckingEmbeddingStatus || progress.running);
+        const running = this.isSimilarityIndexRunning();
         const modelReady = this.modelStatus ? this.modelStatus.available !== false : true;
         const phase = this.getSimilarPhase();
         const canUseSearch = phase === 'ready';
@@ -122,7 +137,7 @@ Object.assign(window.SimilarImages, {
 
         const { total, embedded, pending, unreadable } = this.getEmbeddingStats();
         const progress = this.embedProgress || {};
-        const running = Boolean(this.isEmbedding || this.isCheckingEmbeddingStatus || progress.running);
+        const running = this.isSimilarityIndexRunning();
         const modelReady = this.modelStatus ? this.modelStatus.available !== false : true;
         const skipped = Number(progress.skipped || 0);
         const failed = Number(progress.failed || progress.errors || 0);
@@ -228,8 +243,9 @@ Object.assign(window.SimilarImages, {
     updateActionAvailability() {
         const { embedded } = this.getEmbeddingStats();
         const modelReady = this.modelStatus ? this.modelStatus.available !== false : true;
-        const disableSearchActions = this.isEmbedding || this.isCheckingEmbeddingStatus || embedded === 0 || !modelReady;
-        const disableDuplicateActions = this.isEmbedding || this.isCheckingEmbeddingStatus || embedded < 2 || !modelReady;
+        const indexRunning = this.isSimilarityIndexRunning();
+        const disableSearchActions = indexRunning || embedded === 0 || !modelReady;
+        const disableDuplicateActions = indexRunning || embedded < 2 || !modelReady;
         const searchInput = document.getElementById('similar-search-id');
         const btnSearch = document.getElementById('btn-similar-search');
         const btnUpload = document.getElementById('btn-similar-upload');
@@ -240,7 +256,7 @@ Object.assign(window.SimilarImages, {
         // Building the index can start while CLIP is missing: first use
         // downloads it with a progress overlay. Search stays gated.
         const btnEmbed = document.getElementById('btn-similar-embed');
-        if (btnEmbed) btnEmbed.disabled = this.isEmbedding || this.isCheckingEmbeddingStatus;
+        if (btnEmbed) btnEmbed.disabled = indexRunning;
 
         if (searchInput) searchInput.disabled = disableSearchActions;
         if (btnSearch) btnSearch.disabled = disableSearchActions;

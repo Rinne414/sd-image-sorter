@@ -250,7 +250,10 @@ Object.assign(window.SimilarImages, {
             this.embedProgress = result;
             this.renderEmbeddingProgress(result);
 
-            if (result.running) {
+            const totalNow = Number(result.total || 0);
+            const processedNow = Number(result.processed || result.current || 0);
+            const stillRunning = Boolean(result.running) && !(totalNow > 0 && processedNow >= totalNow);
+            if (stillRunning) {
                 setTimeout(() => this.pollEmbedProgress(), 1000);
             } else {
                 this.isEmbedding = false;

@@ -31,6 +31,8 @@ window.I18nLang_en = {
     'dup.emptyIntro': 'Scan your whole library for near-duplicate groups. Each group gets a suggested keeper (your star rating first, then aesthetic score, resolution, file size) — review side by side and move the rest to the trash.',
     'dup.needEmbeddings': 'Requires CLIP embeddings — build them in Similarity tools if the scan reports none.',
     'dup.summary': '{groups} groups · {redundant} redundant images · ~{bytes} reclaimable',
+    'dup.summaryIncomplete': '{groups} groups from {embedded}/{total} indexed images ({coverage}% coverage). {pending} images still need CLIP embeddings — 0 groups is not a whole-library verdict.',
+    'dup.scanDoneIncomplete': 'Duplicate scan finished, but only {embedded}/{total} images have CLIP embeddings. 0 groups is not a whole-library verdict — index embeddings in Similarity first.',
     'dup.groupTitle': '{count} images · similarity ≥ {sim}%',
     'dup.keepBest': 'Keep best, trash rest',
     'dup.deleteChecked': 'Trash checked…',

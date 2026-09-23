@@ -38,7 +38,7 @@ Object.assign(window.SimilarImages, {
             await this.waitForEmbeddingStatusReady();
         }
 
-        if (this.isEmbedding || this.isCheckingEmbeddingStatus) {
+        if (this.isSimilarityIndexRunning()) {
             const message = this._t(
                 'similar.duplicatesBlockedRunning',
                 'Embeddings are still running. Wait until indexing finishes before checking duplicates.'
