@@ -518,8 +518,8 @@ test('findDuplicates renders the reason-specific empty message for insufficient_
     { width: 2560, height: 1440 },
   ]
   const expected = {
-    en: 'Quick duplicate checking supports up to 5000 indexed images; this library has 99999. Open Duplicate Cleanup to scan the full library in the background.',
-    'zh-CN': '快速查重最多支持 5000 张已建立索引的图片；当前图库有 99999 张。请打开「查重清理」，在后台扫描整个图库。',
+    en: 'Quick duplicate check handles up to 5000 indexed images; this library has 99999. Use Duplicate Cleanup to scan the whole library in the background.',
+    'zh-CN': '快速查重最多处理 5000 张建好索引的图，这个图库有 99999 张。请用「查重清理」在后台扫描整个图库。',
   }
   const tooManyResults: Array<{
     lang: keyof typeof expected

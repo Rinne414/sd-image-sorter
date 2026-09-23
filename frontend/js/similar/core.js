@@ -71,7 +71,7 @@ const SimilarImages = {
     _applyLocalizedDefaults() {
         this.searchEmptyMessage = this._t(
             'similar.defaultSearchEmpty',
-            'No similar images found. Try generating embeddings first.'
+            'No similar images found. Try building the index first.'
         );
         this.duplicateEmptyMessage = this._t(
             'similar.defaultDuplicateEmpty',

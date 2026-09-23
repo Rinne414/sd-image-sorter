@@ -129,7 +129,7 @@ Object.assign(window.SimilarImages, {
         const requestToken = this.beginSearchRequest();
         this.searchEmptyMessage = this._t(
             'similar.searchEmptyByText',
-            'No embedded images matched this description. Run Generate Embeddings first if the library is new.'
+            'No images match this description. If the library is new, click Build Similarity Index first.'
         );
         if (!append) {
             this.currentSearchOffset = 0;

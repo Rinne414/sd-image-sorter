@@ -143,7 +143,7 @@ Object.assign(window.SimilarImages, {
         const failed = Number(progress.failed || progress.errors || 0);
         const setupNeedsDetail = this._t(
             'similar.setupNeedsDetail',
-            'Click Generate Embeddings to download CLIP (about 580 MB) with install progress. Setup / Download is optional.'
+            'CLIP is about 580 MB and shows progress while it downloads. You can also install it first with Setup / Download.'
         );
         const issueBreakdown = this._t(
             'similar.statusIssueBreakdown',
@@ -296,8 +296,8 @@ Object.assign(window.SimilarImages, {
                 ? this._t('similar.setupReadyTitle', 'Similarity setup is ready')
                 : this._t('similar.setupNeedsTitle', 'CLIP will download when you start indexing');
             const description = result.available
-                ? this._t('similar.setupReadyDetail', 'You can search or rebuild the index any time after scanning more images.')
-                : this._t('similar.setupNeedsDetail', 'Click Generate Embeddings to download CLIP (about 580 MB) with install progress. Setup / Download is optional.');
+                ? this._t('similar.setupReadyDetail', 'Build the index below to start searching; rebuild any time after adding images.')
+                : this._t('similar.setupNeedsDetail', 'CLIP is about 580 MB and shows progress while it downloads. You can also install it first with Setup / Download.');
             const detailItems = [];
             if (result.message_key || result.message) {
                 // Prefer the backend's message_key so the tech detail is
