@@ -32,14 +32,18 @@ def get_current_library_id() -> str:
 
 
 def current_library_sql(column: str = "library_id") -> tuple[str, tuple[str, ...]]:
-    """Return ``COALESCE(column, 'main') = ?`` and the active library id.
+    """Return ``column = ?`` and the active library id.
 
     Image listing already pins this filter. Aggregate helpers (counts, facets,
     folders, mass-tag iterators) must use the same clause so switching to an
     empty library cannot inherit another workspace's totals.
+
+    library_id is ``NOT NULL DEFAULT 'main'`` on images, collections and
+    dataset_projects, so the bare column is exact. Wrapping it (as the old
+    ``COALESCE(column, 'main')`` did) stops SQLite from using any index on it.
     """
     lid = get_current_library_id()
-    return f"COALESCE({column}, 'main') = ?", (lid,)
+    return f"{column} = ?", (lid,)
 
 
 def set_current_library_id(library_id: Optional[str]) -> Token:

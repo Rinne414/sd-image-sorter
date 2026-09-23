@@ -23,11 +23,29 @@ _SYSTEM_INFO_CACHE_TTL_SECONDS = 30.0
 _SYSTEM_INFO_CACHE_LOCK = threading.Lock()
 _SYSTEM_INFO_CACHE: Dict[str, Any] = {"value": None, "timestamp": 0.0}
 
+# The installed video controllers do not change while the app runs, and the CIM
+# query spawns a hidden PowerShell (about half a second, and antivirus tools flag
+# repeated hidden PowerShell launches). Keep its raw output for the process;
+# free VRAM still comes from nvidia-smi on every probe.
+_CIM_VIDEO_CONTROLLERS: Dict[str, Optional[str]] = {"raw": None}
+
 
 def invalidate_system_info_cache() -> None:
     with _SYSTEM_INFO_CACHE_LOCK:
         _SYSTEM_INFO_CACHE["value"] = None
         _SYSTEM_INFO_CACHE["timestamp"] = 0.0
+        _CIM_VIDEO_CONTROLLERS["raw"] = None
+
+
+def _cim_video_controllers_json(command: List[str]) -> str:
+    with _SYSTEM_INFO_CACHE_LOCK:
+        cached = _CIM_VIDEO_CONTROLLERS["raw"]
+    if cached is not None:
+        return cached
+    raw = subprocess.check_output(command, text=True, timeout=10).strip()
+    with _SYSTEM_INFO_CACHE_LOCK:
+        _CIM_VIDEO_CONTROLLERS["raw"] = raw
+    return raw
 
 
 def _nvidia_smi_probe() -> List[Dict[str, Any]]:
@@ -101,7 +119,7 @@ def _detect_windows_gpu_devices() -> List[Dict[str, Any]]:
                 "Select-Object Name,AdapterRAM,PNPDeviceID | ConvertTo-Json -Compress"
             ),
         ]
-        raw = subprocess.check_output(command, text=True, timeout=10).strip()
+        raw = _cim_video_controllers_json(command)
         if not raw:
             return []
         # Guard against a pathologically large JSON blob (e.g. a wedged or

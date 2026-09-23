@@ -219,6 +219,26 @@ def get_similarity_service() -> SimilarityService:
     return _similarity_service
 
 
+def _warm_boot_caches(sorting_svc) -> None:
+    """Fill the caches the first page load reads, so the user does not wait on them.
+
+    The hardware probe, the runtime folder size and the library stats each cost
+    one to three seconds when cold; this runs them once, off the request path.
+    """
+    from hardware_monitor import get_system_info
+    from services import disk_service
+
+    for label, warm in (
+        ("hardware probe", get_system_info),
+        ("runtime size", disk_service.get_runtime_environment_status),
+        ("library stats", sorting_svc.get_stats),
+    ):
+        try:
+            warm()
+        except Exception as exc:
+            logger.warning("Boot cache warm-up skipped %s: %s", label, exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown handler."""
@@ -283,6 +303,14 @@ async def lifespan(app: FastAPI):
     similarity.set_similarity_service(similarity_svc)
 
     logger.info("Services initialized successfully")
+
+    if os.environ.get("SD_SORTER_TESTING") != "1":
+        threading.Thread(
+            target=_warm_boot_caches,
+            args=(sorting_svc,),
+            name="boot-cache-warmup",
+            daemon=True,
+        ).start()
 
     yield
     # Shutdown

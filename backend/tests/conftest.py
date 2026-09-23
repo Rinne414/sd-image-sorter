@@ -101,6 +101,21 @@ def _isolate_prepare_restart_marks(monkeypatch):
     monkeypatch.setattr(model_service, "_pending_process_restart", set())
 
 
+@pytest.fixture(autouse=True)
+def _isolate_hardware_probe_cache():
+    """Start every test from a cold hardware probe.
+
+    hardware_monitor keeps probe results (and the raw CIM video-controller list
+    for the whole process), so a mocked probe in one test would otherwise leak
+    into the next.
+    """
+    try:
+        import hardware_monitor
+    except Exception:
+        return
+    hardware_monitor.invalidate_system_info_cache()
+
+
 # ============================================================================
 # Test Database Fixture
 # ============================================================================

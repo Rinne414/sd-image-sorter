@@ -62,6 +62,10 @@ def apply(conn) -> bool:
     conn.execute("ALTER TABLE collections_v46 RENAME TO collections")
 
     if has_items:
+        # With foreign keys on, DROP TABLE already cascaded the items away; with
+        # them off (a plain sqlite3 connection) the old rows are still there.
+        # Clear either way so the restore below cannot collide on item ids.
+        conn.execute("DELETE FROM collection_items")
         # Rows are restored verbatim (same ids). Only an item whose image row
         # is already gone is left out: it would fail the images foreign key.
         conn.execute(

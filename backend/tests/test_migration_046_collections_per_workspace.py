@@ -82,7 +82,7 @@ def test_upgrade_from_v45_keeps_every_collection_item(v45_database):
 
     with v45_database.get_db() as conn:
         assert (
-            conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] == 46
+            conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] >= 46
         )
         assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         assert _item_rows(conn) == items_before

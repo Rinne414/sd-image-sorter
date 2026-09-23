@@ -779,7 +779,7 @@ def _apply_library_workspace_filter(
         lid = normalize_library_id(library_id if library_id is not None else get_current_library_id())
     except Exception:
         lid = str(library_id or "main").strip() or "main"
-    conditions.append("COALESCE(i.library_id, 'main') = ?")
+    conditions.append("i.library_id = ?")
     params.append(lid)
     return conditions, params
 

@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List
@@ -133,12 +134,33 @@ def _dir_size_bytes_limited_many(paths: List[Path]) -> tuple[int, bool]:
     return (total, complete)
 
 
+# The runtime folder (portable python/ or backend/venv, several GB) only changes
+# when Prepare installs packages, but summing it walks tens of thousands of files
+# (~1.9 s on every entry-page load). Keep each total for a few minutes.
+_RUNTIME_SIZE_TTL_SECONDS = 300.0
+_RUNTIME_SIZE_CACHE: Dict[tuple, tuple] = {}
+_RUNTIME_SIZE_LOCK = threading.Lock()
+
+
+def _runtime_size_bytes(paths: List[Path]) -> int:
+    key = tuple(str(path) for path in paths)
+    now = time.monotonic()
+    with _RUNTIME_SIZE_LOCK:
+        hit = _RUNTIME_SIZE_CACHE.get(key)
+    if hit is not None and now - hit[1] < _RUNTIME_SIZE_TTL_SECONDS:
+        return hit[0]
+    size = _dir_size_bytes_many(paths)
+    with _RUNTIME_SIZE_LOCK:
+        _RUNTIME_SIZE_CACHE[key] = (size, now)
+    return size
+
+
 def get_runtime_environment_status() -> Dict[str, Any]:
-    """Return local Python runtime state with an exact installed-size total."""
+    """Return local Python runtime state with an installed-size total (cached a few minutes)."""
     descriptor = _runtime_environment_descriptor()
     runtime_path: Path = descriptor["path"]
     marker_path = _venv_rebuild_marker_path()
-    size_bytes = _dir_size_bytes_many(descriptor["size_paths"])
+    size_bytes = _runtime_size_bytes(descriptor["size_paths"])
     backend_venv_path = _backend_venv_path()
     return {
         "runtime_kind": descriptor["kind"],
