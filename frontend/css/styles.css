@@ -3410,7 +3410,7 @@ body::before {
         display: flex;
         align-items: center;
         gap: 12px;
-        pointer-events: none;
+        pointer-events: auto;
     }
 
     @keyframes toastSlideIn {
@@ -6906,7 +6906,7 @@ input[type="radio"] {
 .toast {
     min-height: 44px;
     padding: 12px 20px;
-    pointer-events: none;
+    pointer-events: auto;
 }
 
 /* Selection mode indicator */

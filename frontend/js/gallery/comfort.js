@@ -16,6 +16,7 @@
 
     const STORAGE_KEY = 'sd-gallery-comfort-v1';
     const HERO_ID_KEY = 'sd-gallery-comfort-hero-id';
+    const SESSION_STARTED_KEY = 'sd-gallery-comfort-session-started';
     const DAILY_LOOP_DISMISS_PREFIX = 'sd-gallery-daily-loop-dismissed-';
     const DAY_MS = 24 * 60 * 60 * 1000;
     const RESUME_MAX_AGE_MS = 14 * DAY_MS;
@@ -32,6 +33,20 @@
     let _hoverImageId = null;
     let _peekOpen = false;
     let _spaceHeld = false;
+
+    function _sessionStartedAt() {
+        try {
+            let raw = sessionStorage.getItem(SESSION_STARTED_KEY);
+            if (!raw) {
+                raw = String(Date.now());
+                sessionStorage.setItem(SESSION_STARTED_KEY, raw);
+            }
+            const started = Number(raw);
+            return Number.isFinite(started) && started > 0 ? started : Date.now();
+        } catch (_e) {
+            return Date.now();
+        }
+    }
 
     function _todayKey() {
         const d = new Date();
@@ -313,7 +328,11 @@
         const signature = `${resume.savedAt}:${Math.round(target)}`;
         if (_resumeAnnouncedFor !== signature) {
             _resumeAnnouncedFor = signature;
-            const canToast = Date.now() - (state.lastResumeToastAt || 0) > RESUME_TOAST_COOLDOWN_MS;
+            // First paint / Entry → Library / a same-tab save must restore
+            // silently. "Welcome back" is only for a prior browser session.
+            const fromPriorSession = resume.savedAt < (_sessionStartedAt() - 1500);
+            const canToast = fromPriorSession
+                && Date.now() - (state.lastResumeToastAt || 0) > RESUME_TOAST_COOLDOWN_MS;
             if (canToast && typeof window.showToast === 'function') {
                 window.showToast(
                     _t('gallery.comfort.restored', 'Welcome back — restored where you left off'),
@@ -322,7 +341,9 @@
                 state.lastResumeToastAt = Date.now();
                 _write(state);
             }
-            _showRibbon('restored');
+            if (fromPriorSession) {
+                _showRibbon('restored');
+            }
         }
         return true;
     }

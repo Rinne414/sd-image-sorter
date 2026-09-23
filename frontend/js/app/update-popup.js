@@ -7,9 +7,14 @@
  * visible there. No behavior change intended.
  */
 function getUpdateActionButtons() {
-    return ['#btn-app-update', '#mobile-btn-app-update']
+    return ['#btn-app-update', '#mobile-btn-app-update', '#entry-update-btn']
         .map((selector) => $(selector))
         .filter(Boolean);
+}
+
+function isUpdateAnchorClick(target) {
+    if (!target) return false;
+    return getUpdateActionButtons().some((btn) => btn.contains(target));
 }
 
 function setUpdateButtonState(status = AppState.update.status, checking = false) {
@@ -143,8 +148,8 @@ async function applyAppUpdate(status = AppState.update.status) {
     }
 }
 
-async function handleAppUpdateButtonClick() {
-    const btn = document.getElementById('btn-app-update');
+async function handleAppUpdateButtonClick(event) {
+    const btn = event?.currentTarget || document.getElementById('btn-app-update');
     if (!btn) return;
     const existing = document.getElementById('update-popup');
     if (existing?.classList.contains('visible')) {
@@ -166,8 +171,8 @@ function _createUpdatePopup() {
 
     document.addEventListener('click', (e) => {
         if (_updatePopupEl?.classList.contains('visible') && !_updatePopupEl.contains(e.target)) {
-            const btn = document.getElementById('btn-app-update');
-            if (btn && !btn.contains(e.target)) _hideUpdatePopup();
+            if (isUpdateAnchorClick(e.target)) return;
+            _hideUpdatePopup();
         }
     });
     document.addEventListener('keydown', (e) => {
@@ -351,8 +356,7 @@ async function _showUpdatePopup(anchorBtn) {
             try {
                 await refreshUpdateStatus({ force: true, silent: false });
                 _hideUpdatePopup();
-                const btn2 = document.getElementById('btn-app-update');
-                if (btn2 && AppState.update.status) _showUpdatePopup(btn2);
+                if (AppState.update.status) _showUpdatePopup(anchorBtn);
             } catch (err) {
                 _hideUpdatePopup();
             }
@@ -372,8 +376,7 @@ async function _showUpdatePopup(anchorBtn) {
                 AppState.update.channelError = null;
                 showToast(successMessage, 'success');
                 _hideUpdatePopup();
-                const btn2 = document.getElementById('btn-app-update');
-                if (btn2) void _showUpdatePopup(btn2);
+                void _showUpdatePopup(anchorBtn);
             } catch (error) {
                 const message = formatUserError(error, appT('update.proxySaveFailed', 'Failed to save the update proxy'));
                 setUpdateChannelControlsBusy(popup, false);
@@ -389,8 +392,7 @@ async function _showUpdatePopup(anchorBtn) {
                 AppState.update.channelError = null;
                 showToast(appT('update.proxyReset', 'Update channel reset to official GitHub.'), 'success');
                 _hideUpdatePopup();
-                const btn2 = document.getElementById('btn-app-update');
-                if (btn2) void _showUpdatePopup(btn2);
+                void _showUpdatePopup(anchorBtn);
             } catch (error) {
                 const message = formatUserError(error, appT('update.proxySaveFailed', 'Failed to save the update proxy'));
                 setUpdateChannelControlsBusy(popup, false);

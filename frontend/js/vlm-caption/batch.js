@@ -141,7 +141,7 @@ Object.assign(window.VLMCaption, {
                     this.stopPolling();
                     this.isRunning = false;
                     this._showBatchUI(false, { keepPanel: true });
-                    this._showStatus('vlm-batch-status',
+                    this._announceBatch(
                         this._t('aiQueue.startFailed', 'Queued job failed to start: {error}')
                             .replace('{error}', String(startError.error || '')), 'error');
                     return;
@@ -216,7 +216,7 @@ Object.assign(window.VLMCaption, {
         this.lastProgress = data;
         this.lastFailedImageIds = this._extractFailedImageIds(data);
         const msg = `${this._t('vlm.summaryDone', 'Done')}! ${data.completed || 0} ${this._t('vlm.summaryCaptioned', 'captioned')}, ${data.failed || 0} ${this._t('vlm.summaryFailed', 'failed')}, ${data.tokens_used || 0} tokens. ${this._t('vlm.progressApi', 'API')}: ${this._formatApiStatus(data)}`;
-        this._showStatus('vlm-batch-status', msg, data.failed ? 'warning' : 'success');
+        this._announceBatch(msg, data.failed ? 'warning' : 'success');
 
         this._syncRetryFailedButton(data);
         if (data.errors?.length) {

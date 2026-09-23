@@ -206,12 +206,15 @@ function initBootListenersShell() {
             showToast(formatUserError(error, 'Failed to cancel'), 'error');
         }
     });
-    $('#btn-app-update')?.addEventListener('click', () => {
-        void handleAppUpdateButtonClick();
+    $('#btn-app-update')?.addEventListener('click', (e) => {
+        void handleAppUpdateButtonClick(e);
     });
-    $('#mobile-btn-app-update')?.addEventListener('click', () => {
+    $('#mobile-btn-app-update')?.addEventListener('click', (e) => {
         closeMobileMenu();
-        void handleAppUpdateButtonClick();
+        void handleAppUpdateButtonClick(e);
+    });
+    $('#entry-update-btn')?.addEventListener('click', (e) => {
+        void handleAppUpdateButtonClick(e);
     });
 
     // Modal backdrops

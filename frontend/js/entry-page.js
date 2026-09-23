@@ -889,13 +889,10 @@
                 if (proxy) proxy.click();
             });
         }
-        const updateBtn = el('entry-update-btn');
-        if (updateBtn) {
-            updateBtn.addEventListener('click', () => {
-                const proxy = document.getElementById('btn-app-update');
-                if (proxy) proxy.click();
-            });
-        }
+        // #entry-update-btn is bound in boot-listeners-shell.js as a first-class
+        // update-popup anchor. Do not proxy the gallery nav update control:
+        // that second click is outside the entry button, so the popup's
+        // document listener treats it as "click outside" and closes immediately.
 
         // Dynamic strings (credit line, tile subs, stats) re-render on
         // language switch; data-i18n nodes are handled by I18n.applyToDOM.

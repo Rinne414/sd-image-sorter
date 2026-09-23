@@ -46,6 +46,13 @@ const VLMCaption = {
         el.style.display = 'block';
     },
 
+    _announceBatch(message, type) {
+        this._showStatus('vlm-batch-status', message, type);
+        if (typeof window.showToast === 'function') {
+            window.showToast(message, type);
+        }
+    },
+
     _setVal(id, val) { const el = document.getElementById(id); if (el) el.value = val; },
     _getVal(id) { const el = document.getElementById(id); return el ? el.value : ''; },
     _setChecked(id, val) { const el = document.getElementById(id); if (el) el.checked = !!val; },

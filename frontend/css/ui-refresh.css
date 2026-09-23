@@ -5699,9 +5699,11 @@ textarea:focus,
 }
 
 #image-modal .modal-close {
+    position: absolute;
     top: 8px;
     right: 8px;
-    z-index: 20;
+    z-index: 40;
+    pointer-events: auto;
     background: rgba(0, 0, 0, 0.6);
     border-radius: 50%;
     width: 32px;
@@ -5724,6 +5726,11 @@ textarea:focus,
     overflow: hidden;
     padding: 0;
     background: rgba(255, 255, 255, 0.03);
+}
+
+#image-modal .modal-info-workspace {
+    position: relative;
+    z-index: 1;
 }
 
 #image-modal .modal-info-header {

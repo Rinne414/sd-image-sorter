@@ -186,6 +186,7 @@ body.entry-active {
     position: absolute;
     inset: 0;
     background: rgba(19, 19, 19, 0.06);
+    pointer-events: none;
 }
 
 .entry-veil-y {
@@ -194,6 +195,7 @@ body.entry-active {
     background: linear-gradient(0deg,
         rgba(19, 19, 19, 0.78) 0%,
         rgba(19, 19, 19, 0) 30%);
+    pointer-events: none;
 }
 
 .entry-prompt-texture {
@@ -951,6 +953,16 @@ body.entry-active {
     margin: -20px -26px -18px;
     border-radius: 22px;
     background: transparent;
+    /* Overflowing stats / hero-line at laptop widths used to sit on top of
+       the mosaic tiles and eat their clicks. The block is decorative except
+       for the cover-mode switch and swap link. */
+    pointer-events: none;
+}
+
+.entry-identity button,
+.entry-identity .hero-mode-switch,
+.entry-identity .hero-link {
+    pointer-events: auto;
 }
 
 .entry-identity .identity-greeting {
