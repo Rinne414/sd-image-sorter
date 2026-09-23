@@ -71,13 +71,13 @@ function refreshRenameSelectionUi() {
     checkbox.disabled = selectedCount === 0;
     if (selectedCount === 0) {
         checkbox.checked = false;
-        help.textContent = censorT('censor.renameWholeQueueHelp', null, 'Nothing is selected right now, so the whole queue will be renamed.');
+        help.textContent = censorT('censor.renameWholeQueueHelp', null, 'Nothing is selected, so the whole queue will be renamed.');
         return;
     }
 
     help.textContent = checkbox.checked
-        ? censorT('censor.renameSelectedOnlyHelp', { count: selectedCount }, 'Only the {count} selected queue item(s) will be renamed. The rest stay untouched.')
-        : censorT('censor.renameWholeQueueSelectedHelp', { count: selectedCount }, 'You have {count} selected item(s), but this preview is still targeting the whole queue.');
+        ? censorT('censor.renameSelectedOnlyHelp', { count: selectedCount }, 'Only the {count} selected item(s) will be renamed; the rest stay as they are.')
+        : censorT('censor.renameWholeQueueSelectedHelp', { count: selectedCount }, 'You have {count} selected, but this preview covers the whole queue.');
 }
 
 function updateRenamePreview() {
@@ -159,7 +159,7 @@ function updateRenamePreview() {
         previewAlert.textContent = censorT(
             'censor.renameDuplicateNamesPreview',
             { count: duplicateCount },
-            'Duplicate output names detected in this preview ({count} conflict group(s)). Fix the pattern before applying.'
+            '{count} group(s) of output names clash in this preview. Fix the pattern before renaming.'
         );
     } else {
         previewAlert.className = 'rename-preview-alert';

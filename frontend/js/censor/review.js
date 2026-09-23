@@ -262,7 +262,7 @@ async function censorReviewDetect() {
 
         setStatus(regions.length === 0
             ? censorT('censor.reviewNoRegions', null, 'No regions detected. Try a lower confidence or another model.')
-            : censorT('censor.reviewRegionsFound', { count: regions.length }, '{count} region(s) found — uncheck any to leave it uncensored'));
+            : censorT('censor.reviewRegionsFound', { count: regions.length }, '{count} region(s) found. Uncheck any you want to leave uncensored.'));
         if (detectionWarnings.length > 0) {
             window.App.showToast(detectionWarnings.join(' '), 'warning');
         }
@@ -318,7 +318,7 @@ async function censorReviewApprove() {
         // stay on this image so the user can retry with Box shape or the Brush tab.
         if (keptRaw.length > 0 && !didCensor) {
             window.App.showToast(
-                censorT('censor.reviewApproveNothingBaked', null, 'Could not censor the kept regions — nothing was changed. Try switching Shape to Box, or the Brush tab.'),
+                censorT('censor.reviewApproveNothingBaked', null, 'Couldn\'t censor the kept regions, so nothing changed. Try setting Shape to Box, or use the Brush tab.'),
                 'error'
             );
             return;
@@ -327,8 +327,8 @@ async function censorReviewApprove() {
         const count = keptRaw.length;
         window.App.showToast(
             count > 0
-                ? censorT('censor.reviewApproved', { count }, 'Approved {count} region(s) — moved to the next image')
-                : censorT('censor.reviewApprovedNone', null, 'Approved with nothing censored — moved on'),
+                ? censorT('censor.reviewApproved', { count }, 'Approved {count} region(s); moved to the next image')
+                : censorT('censor.reviewApprovedNone', null, 'Approved with nothing censored; moved on'),
             'success'
         );
 

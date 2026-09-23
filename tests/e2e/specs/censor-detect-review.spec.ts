@@ -601,7 +601,7 @@ test('review approve fails loud when kept regions cannot be baked (never-fallbac
 
   await page.locator('#btn-review-approve').click()
   await expect(
-    page.locator('#toast-container .toast', { hasText: 'Could not censor the kept regions' }).first()
+    page.locator('#toast-container .toast', { hasText: "Couldn't censor the kept regions" }).first()
   ).toBeVisible()
 
   // Fail-loud semantics: no advance, nothing marked processed, and the

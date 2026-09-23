@@ -104,7 +104,7 @@ async function loadCensorModelStatus() {
                 simpleGuide.textContent = legacy?.simple_user_advice || censorT(
                     'censor.keepRecommendedModeHelp',
                     null,
-                    'Keep the recommended mode and only touch custom paths if you know why.'
+                    'Stick with the recommended mode; only change custom paths if you know why.'
                 );
             }
             renderCensorCapabilityPanel();
@@ -194,11 +194,11 @@ function renderCensorCapabilityPanel(options = {}) {
             isLoading
                 ? [
                     censorT('censor.modelReadinessChecking', null, 'Checking local YOLO, NudeNet, and SAM3 availability...'),
-                    censorT('censor.modelReadinessPendingHint', null, 'The panel will fill in as soon as the backend responds.'),
+                    censorT('censor.modelReadinessPendingHint', null, 'Details appear here once the check finishes.'),
                 ]
                 : [
                     loadError || censorT('censor.modelReadinessLoadFailed', null, 'Model readiness could not be loaded right now.'),
-                    censorT('censor.modelReadinessReloadHint', null, 'You can reopen this dialog after the backend finishes loading.'),
+                    censorT('censor.modelReadinessReloadHint', null, 'Reopen this dialog once the app has finished loading.'),
                 ],
             ''
         );
@@ -316,17 +316,17 @@ function renderCensorCapabilityPanel(options = {}) {
 
     if (targetHelp) {
         if (modelType === 'both') {
-            targetHelp.textContent = censorT('censor.quickTargetsBothHelp', null, 'These quick privacy targets work across Wenaka and NudeNet family labels. They do not control generic COCO classes.');
+            targetHelp.textContent = censorT('censor.quickTargetsBothHelp', null, 'These quick targets apply to both Wenaka and NudeNet privacy classes, not to generic COCO classes.');
         } else if (modelType === 'nudenet') {
-            targetHelp.textContent = censorT('censor.quickTargetsNudenetHelp', null, 'NudeNet uses its own label system, but these quick privacy targets now map to the matching NudeNet families.');
+            targetHelp.textContent = censorT('censor.quickTargetsNudenetHelp', null, 'NudeNet has its own labels; these quick targets map onto them.');
         } else if (quickFilterEnabled) {
             if (modelType === 'legacy' && selectedLegacy?.profile !== 'privacy-censor' && quickAutoFallback.canAutoRestore) {
-                targetHelp.textContent = censorT('censor.quickTargetsFallbackHelp', null, 'These quick privacy targets stay active. When you run Quick Auto Censor, the app will switch back to the recommended privacy detector instead of using this general YOLO test model.');
+                targetHelp.textContent = censorT('censor.quickTargetsFallbackHelp', null, 'These quick targets still apply. Quick Auto Censor switches back to the recommended privacy detector instead of this general YOLO test model.');
             } else {
                 targetHelp.textContent = censorT('censor.quickTargetsLegacyHelp', null, 'These quick privacy targets map to the fixed privacy classes inside the current local model.');
             }
         } else {
-            targetHelp.textContent = censorT('censor.quickTargetsGeneralModelHelp', null, 'These quick privacy targets stay visible so you can see the normal workflow, but the current general segmentation model cannot map them. Switch back to the recommended privacy model or Both if you want clickable privacy presets.');
+            targetHelp.textContent = censorT('censor.quickTargetsGeneralModelHelp', null, 'The current general segmentation model can\'t use these quick targets. Switch back to the recommended privacy model or Both to use them.');
         }
     }
 
@@ -349,7 +349,7 @@ function renderCensorCapabilityPanel(options = {}) {
         segmentButton.disabled = !sam3?.available;
         segmentButton.title = sam3?.available
             ? ''
-            : (sam3?.message || censorT('censor.sam3UnavailableMessage', null, 'SAM3 is not set up on this machine. Open Model Center and Prepare SAM3 (CUDA).'));
+            : (sam3?.message || censorT('censor.sam3UnavailableMessage', null, 'SAM3 isn\'t set up on this computer. Prepare it in Model Center (needs CUDA).'));
     }
     if (batchRefineButton) {
         batchRefineButton.disabled = !sam3?.available;
@@ -360,17 +360,17 @@ function renderCensorCapabilityPanel(options = {}) {
 
     if (simpleGuide) {
         if (modelType === 'nudenet') {
-            simpleGuide.textContent = censorT('censor.simpleGuideNudenet', null, 'NudeNet is the simple path: no text prompt, no custom labels. Use it when you want quick NSFW/body-region boxes.');
+            simpleGuide.textContent = censorT('censor.simpleGuideNudenet', null, 'NudeNet is the easy option: no prompt, no custom labels. Good for quick NSFW and body-part boxes.');
         } else if (modelType === 'both') {
-            simpleGuide.textContent = censorT('censor.simpleGuideBoth', null, 'Recommended for most people: run NudeNet together with the auto-picked privacy model. If the local model has segmentation masks, the auto-censor path will use them.');
+            simpleGuide.textContent = censorT('censor.simpleGuideBoth', null, 'The right choice for most people: NudeNet runs together with the auto-picked privacy model. If the local model outputs segmentation masks, auto-censor follows them.');
         } else if (selectedLegacy?.profile === 'privacy-censor') {
-            simpleGuide.textContent = censorT('censor.simpleGuidePrivacyLegacy', null, 'This local model is the privacy-part route. It only understands its fixed privacy labels, but if it exposes segmentation masks the auto-censor path will use them instead of raw rectangles.');
+            simpleGuide.textContent = censorT('censor.simpleGuidePrivacyLegacy', null, 'This local model detects privacy parts and only knows its fixed labels. If it outputs segmentation masks, auto-censor follows them instead of plain rectangles.');
         } else if (selectedLegacy) {
             simpleGuide.textContent = quickAutoFallback.canAutoRestore
-                ? censorT('censor.simpleGuideAdvancedLegacyAutoRestore', { name: selectedLegacy.name }, '{name} is a general fixed-class segmentation model kept for advanced tests. Quick Auto Censor will automatically switch back to the recommended privacy route before it runs.')
-                : censorT('censor.simpleGuideAdvancedLegacy', { name: selectedLegacy.name }, '{name} is a general fixed-class segmentation model kept for advanced tests. It can segment its own built-in object classes, but it is not an open-text privacy detector.');
+                ? censorT('censor.simpleGuideAdvancedLegacyAutoRestore', { name: selectedLegacy.name }, '{name} is a general fixed-class segmentation model kept for advanced tests. Quick Auto Censor switches back to the recommended privacy detector when it runs.')
+                : censorT('censor.simpleGuideAdvancedLegacy', { name: selectedLegacy.name }, '{name} is a general fixed-class segmentation model kept for advanced tests. It segments its own built-in object classes; it can\'t find privacy parts from text.');
         } else {
-            simpleGuide.textContent = censorT('censor.simpleGuideDefault', null, 'Keep the recommended mode and leave custom paths blank unless you are doing advanced model experiments.');
+            simpleGuide.textContent = censorT('censor.simpleGuideDefault', null, 'Keep the recommended mode and leave custom paths blank unless you\'re experimenting with models.');
         }
     }
 }
@@ -408,8 +408,8 @@ function syncAdvancedLegacyModelUi(legacyModel) {
     }
 
     help.textContent = CensorState.showAdvancedLegacyModels
-        ? censorT('censor.advancedModelsVisible', { count: generalCount }, '{count} advanced fixed-class YOLO model(s) are visible below. They are for compatibility tests, not normal privacy censoring.')
-        : censorT('censor.advancedModelsHidden', { count: generalCount }, '{count} advanced fixed-class YOLO model(s) are hidden to keep the normal workflow simpler. Leave this off unless you intentionally want advanced fixed-class YOLO compatibility tests.');
+        ? censorT('censor.advancedModelsVisible', { count: generalCount }, '{count} advanced fixed-class YOLO model(s) are listed below. They\'re for compatibility and segmentation tests, not everyday censoring.')
+        : censorT('censor.advancedModelsHidden', { count: generalCount }, '{count} advanced fixed-class YOLO model(s) are hidden; everyday censoring doesn\'t need them. Only turn this on for compatibility tests.');
 }
 
 function updateSelectedLegacyModelHelp(legacyModel) {
@@ -419,14 +419,14 @@ function updateSelectedLegacyModelHelp(legacyModel) {
 
     const manualPath = String(document.getElementById('censor-model-path')?.value || '').trim();
     if (manualPath) {
-        help.textContent = censorT('censor.customPathActiveHelp', null, 'Custom path is active. Leave it blank if you want the app to auto-pick the recommended local privacy model.');
+        help.textContent = censorT('censor.customPathActiveHelp', null, 'A custom path is in use. Clear it to let the app pick the recommended local privacy model.');
         return;
     }
 
     const selectedPath = String(document.getElementById('censor-model-file')?.value || '').trim();
     const selectedFile = getLegacyModelRecordByPath(selectedPath) || getLegacyModelRecordByPath(legacyModel?.default_model_path);
     if (!selectedFile) {
-        help.textContent = censorT('censor.noLocalYoloFound', null, 'No local YOLO model was found. NudeNet can still work if it is installed.');
+        help.textContent = censorT('censor.noLocalYoloFound', null, 'No local YOLO model found. NudeNet still works if it\'s installed.');
         updateSelectedLegacyModelStatus(null);
         return;
     }

@@ -56,7 +56,7 @@ function initCensorEdit() {
     if (restoredCount > 0) {
         renderQueue();
         window.App?.showToast?.(
-            censorT('censor.queueRestored', { count: restoredCount }, 'Restored your last censor queue ({count} images). Canvas edits and processing state do not survive a reload.'),
+            censorT('censor.queueRestored', { count: restoredCount }, 'Restored your last censor queue ({count} images). Canvas edits and progress don\'t survive a page reload.'),
             'info'
         );
     }

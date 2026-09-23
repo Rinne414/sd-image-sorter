@@ -163,7 +163,7 @@ async function resolveQuickAutoCensorExecutionPlan(options = {}) {
                 message: censorT(
                     'censor.quickAutoNeedsPrivacyDetector',
                     null,
-                    'Quick Auto Censor needs a real privacy detector, but this machine does not have one ready yet.'
+                    'Quick Auto Censor needs a privacy detector, and none is set up on this computer yet.'
                 ),
             };
         }
@@ -191,7 +191,7 @@ async function resolveQuickAutoCensorExecutionPlan(options = {}) {
         switchMessage = censorT(
             'censor.quickAutoSwitchedRoute',
             { routeLabel },
-            'Quick Auto Censor switched back to {routeLabel} so the general YOLO test model will not blur unrelated parts of the image.'
+            'Quick Auto Censor switched back to {routeLabel} so the general YOLO test model doesn\'t blur unrelated areas.'
         );
 
         if (!silent && switchMessage) {
@@ -477,7 +477,7 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
         const segCapableModel = plan.modelType === 'legacy' || plan.modelType === 'both';
         if (!silent && !useBoxShape && segCapableModel && regions.length > 0 && !anyPolygon) {
             window.App.showToast(
-                censorT('censor.maskShapeBoxOnly', null, 'This YOLO model returns boxes only (not a segmentation model). Use a -seg model like Wenaka for precise shapes.'),
+                censorT('censor.maskShapeBoxOnly', null, 'This YOLO model only returns boxes. For precise shapes, use a -seg model such as Wenaka.'),
                 'info'
             );
         }
@@ -501,7 +501,7 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
             }
             if (regions.length === 0) {
                 window.App.showToast(
-                    censorT('censor.noMatchingRegionsHint', null, 'No matching regions were found. Try lowering confidence or changing the model.'),
+                    censorT('censor.noMatchingRegionsHint', null, 'No matching regions found. Try a lower confidence or another model.'),
                     'info'
                 );
             } else {
@@ -652,7 +652,7 @@ async function runDetectionForAll() {
     } else {
         showToast(
             executionPlan.switchMessage
-                ? censorT('censor.detectCompleteAutoRestored', { count, total }, 'Detection complete: {count}/{total} images processed. The app auto-restored the privacy detector first.')
+                ? censorT('censor.detectCompleteAutoRestored', { count, total }, 'Detection complete: {count}/{total} processed. The privacy detector was switched back on before starting.')
                 : censorT('censor.detectComplete', { count, total }, 'Detection complete: {count}/{total} images processed'),
             'success'
         );
@@ -688,7 +688,7 @@ async function runSam3BatchRefine() {
 
     if (batchItems.length === 0) {
         showToast(
-            censorT('censor.noDetectionBoxesFound', null, 'No detection boxes found. Run detection first, then use SAM3 to refine the masks.'),
+            censorT('censor.noDetectionBoxesFound', null, 'No detection boxes yet. Run detection first, then refine with SAM3.'),
             'warning'
         );
         return;

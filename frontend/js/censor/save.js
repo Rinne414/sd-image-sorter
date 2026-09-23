@@ -200,13 +200,13 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
         // Nothing was censored — say so plainly instead of a green "Saved 0".
         window.App.showToast(
             censorT('censor.saveNothingProcessed', { skipped: skippedCount },
-                'Nothing saved — none of the {skipped} queued image(s) are censored yet. Run auto-detect or draw a region first.'),
+                'Nothing saved: none of the {skipped} queued image(s) are censored yet. Run auto-detect or paint a region first.'),
             'warning'
         );
     } else if (skippedCount > 0) {
         window.App.showToast(
             censorT('censor.saveSkippedUnprocessed', { count, skipped: skippedCount },
-                'Saved {count} censored · skipped {skipped} un-censored image(s) (not exported).'),
+                'Saved {count} censored image(s); {skipped} uncensored image(s) were not exported.'),
             'warning'
         );
     } else {

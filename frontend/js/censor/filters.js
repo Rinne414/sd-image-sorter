@@ -333,7 +333,7 @@
 
         // Check canvas has actual content
         if (canvas.width === 0 || canvas.height === 0) {
-            window.App?.showToast?.(censorT('censor.canvasEmpty', null, 'Canvas is empty — load an image first'), 'warning');
+            window.App?.showToast?.(censorT('censor.canvasEmpty', null, 'Canvas is empty. Load an image first'), 'warning');
             return;
         }
 

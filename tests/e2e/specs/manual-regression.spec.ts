@@ -1519,7 +1519,7 @@ test('censor settings should open, explain model roles, and allow typing the pro
   await page.selectOption('#censor-model-file', String(generalModelPath))
   await expect(page.locator('#censor-simple-guide')).toContainText('general fixed-class segmentation model')
   await expect(page.locator('#censor-target-region-group')).toBeVisible()
-  await expect(page.locator('#censor-target-region-help')).toContainText(/switch back to the recommended privacy detector|Wenaka \/ NudeNet families|自动切回推荐的隐私检测路线/i)
+  await expect(page.locator('#censor-target-region-help')).toContainText(/switches back to the recommended privacy detector|Wenaka and NudeNet privacy classes|换回推荐的隐私检测模型/i)
   await expect(page.locator('.target-region-check').first()).toBeEnabled()
 })
 

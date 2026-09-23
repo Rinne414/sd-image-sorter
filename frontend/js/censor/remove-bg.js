@@ -25,7 +25,7 @@ async function showRemoveBackgroundPreview() {
                 </button>
                 <div class="modal-header">
                     <h2>${censorT('censor.removeBgTitle', null, 'Remove Background')}</h2>
-                    <p class="modal-description">${censorT('censor.removeBgDesc', null, 'Use AI to detect and remove the background from the image.')}</p>
+                    <p class="modal-description">${censorT('censor.removeBgDesc', null, 'Remove the image background with AI.')}</p>
                 </div>
                 <div class="modal-body">
                     <div class="form-group">

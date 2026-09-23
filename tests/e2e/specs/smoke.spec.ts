@@ -7233,7 +7233,7 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#censor-model-type-status')).toContainText('Use this file: yolo26s-seg.onnx')
     await expect(page.locator('#censor-simple-guide')).toContainText('general fixed-class segmentation model')
     await expect(page.locator('.target-region-check').first()).toBeEnabled()
-    await expect(page.locator('#censor-target-region-help')).toContainText(/switch back to the recommended privacy detector|Wenaka \/ NudeNet families|自动切回推荐的隐私检测路线/i)
+    await expect(page.locator('#censor-target-region-help')).toContainText(/switches back to the recommended privacy detector|Wenaka and NudeNet privacy classes|换回推荐的隐私检测模型/i)
   })
 
   test('quick auto censor should auto-restore the privacy detector when a general legacy model is selected', async ({ page }) => {

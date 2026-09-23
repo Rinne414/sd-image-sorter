@@ -2704,7 +2704,7 @@
                                     <option value="sam3" data-i18n="censor.sam3">SAM3</option>
                                     <option value="both" data-i18n="censor.both">Both</option>
                                 </select>
-                                <small class="helper-text" id="censor-model-type-help" data-i18n="censor.modelTypeHelp">YOLO uses the local file shown below. Both runs YOLO plus NudeNet together.</small>
+                                <small class="helper-text" id="censor-model-type-help" data-i18n="censor.modelTypeHelp">Both (recommended) runs privacy YOLO and NudeNet together for the widest coverage. YOLO alone uses the local file below; NudeNet and SAM3 need their own models. The app picks the best detector you have installed.</small>
                                 <small class="helper-text" id="censor-model-type-status" aria-live="polite"></small>
                                 <div class="censor-detect-actions-inline">
                                     <button class="btn btn-primary btn-small censor-detect-action" id="btn-auto-detect-current" title="Detect Current (D)" data-i18n-title="censor.detectCurrent"><svg class="icon" aria-hidden="true"><use href="#i-target"/></svg> <kbd>D</kbd></button>
@@ -2713,7 +2713,7 @@
                                 </div>
                             </div>
                             <div class="censor-side-row" id="censor-quick-auto-censor-row">
-                                <button class="btn btn-primary btn-small" id="btn-run-auto-censor" style="flex:1;" title="Use Wenaka / NudeNet for the normal privacy workflow." data-i18n-title="censor.quickAutoCensorHelp"><svg class="icon" aria-hidden="true"><use href="#i-zap"/></svg> <span data-i18n="censor.quickAutoCensor">Quick Auto Censor</span></button>
+                                <button class="btn btn-primary btn-small" id="btn-run-auto-censor" style="flex:1;" title="For everyday privacy censoring, use Wenaka / NudeNet." data-i18n-title="censor.quickAutoCensorHelp"><svg class="icon" aria-hidden="true"><use href="#i-zap"/></svg> <span data-i18n="censor.quickAutoCensor">Quick Auto Censor</span></button>
                             </div>
                             <div class="censor-side-row sam3-prompt-row" id="sam3-prompt-row" style="display:none">
                                 <input type="text" id="sam3-custom-prompt" class="input-field" placeholder="e.g. exposed breast, face, hands" style="flex:1;font-size:12px;padding:6px 8px;">
@@ -2730,11 +2730,11 @@
                                     <option value="box" data-i18n="censor.maskShapeBox">Box</option>
                                 </select>
                             </div>
-                            <small class="helper-text" id="censor-mask-shape-help" data-i18n="censor.maskShapeHelp">Precise traces the exact shape from the model mask (YOLO-seg / SAM3). Box censors a rectangle. Applies on the next detect.</small>
+                            <small class="helper-text" id="censor-mask-shape-help" data-i18n="censor.maskShapeHelp">Precise follows the exact shape from the model mask (YOLO-seg / SAM3); Box censors a rectangle. Takes effect on the next detect.</small>
                             <div class="censor-side-row" id="censor-sam3-refine-row">
                                 <button class="btn btn-secondary btn-small" id="btn-sam3-refine-all-sidebar" style="flex:1;"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg> <span data-i18n="censor.sam3RefineAllSidebar">Refine all with SAM3</span></button>
                             </div>
-                            <small class="helper-text" id="censor-sam3-refine-help" data-i18n="censor.sam3RefineAllHelp">Optional, after detecting: re-segments every detected box with SAM3. Slower &amp; GPU-heavy (one run per box) and not always sharper than YOLO — use only when a shape needs cleanup.</small>
+                            <small class="helper-text" id="censor-sam3-refine-help" data-i18n="censor.sam3RefineAllHelp">After detecting, re-segment every box with SAM3. It runs once per box, so it's slow and GPU-heavy, and not always sharper than YOLO. Use it when a shape needs fixing.</small>
                             <div class="censor-side-row" id="sam3-confidence-group" style="display:none;">
                                 <label class="censor-side-inline-label">SAM3: <span class="censor-side-value" id="sam3-confidence-value">0.50</span></label>
                                 <input type="range" id="sam3-confidence" class="slider-v2" min="0.0" max="1.0" step="0.05" value="0.5">
@@ -2820,7 +2820,7 @@
                                     <h4 class="censor-side-card-title"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> <span data-i18n="censor.reviewTitle">Review conveyor</span></h4>
                                     <span class="censor-review-progress" id="censor-review-progress">— / —</span>
                                 </div>
-                                <p class="helper-text censor-review-hint" data-i18n="censor.reviewHint">Detect → review → approve → next</p>
+                                <p class="helper-text censor-review-hint" data-i18n="censor.reviewHint">Detect first, then check which regions to censor.</p>
                                 <div class="censor-review-navrow">
                                     <button type="button" class="btn btn-ghost btn-small" id="btn-review-prev">◀ <span data-i18n="censor.reviewPrev">Prev</span></button>
                                     <button type="button" class="btn btn-ghost btn-small" id="btn-review-next"><span data-i18n="censor.reviewNext">Next</span> ▶</button>
@@ -2836,7 +2836,7 @@
                                     </button>
                                     <button type="button" class="btn btn-secondary btn-small" id="btn-review-skip"><span data-i18n="censor.reviewSkip">Skip</span></button>
                                 </div>
-                                <small class="helper-text" data-i18n="censor.reviewNote">Approve bakes the checked regions and moves to the next image. For fine touch-ups, use the Brush tab.</small>
+                                <small class="helper-text" data-i18n="censor.reviewNote">Approve censors the checked regions. For fine touch-ups, use the Brush tab.</small>
                             </div>
                         </div><!-- /review pane -->
 
@@ -2930,7 +2930,7 @@
                                 <svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg> <span data-i18n="censor.modelCapabilities">Model Details</span>
                             </summary>
                             <div id="censor-capability-panel" class="censor-capability-panel" style="margin-top:8px;"></div>
-                            <small class="helper-text" id="censor-target-region-help" data-i18n="censor.targetRegionHelp" style="display:block; margin-top:6px;">These target filters are for the built-in privacy models.</small>
+                            <small class="helper-text" id="censor-target-region-help" data-i18n="censor.targetRegionHelp" style="display:block; margin-top:6px;">These quick targets apply to Wenaka and NudeNet privacy classes, not to generic YOLO26 / YOLOv8 object classes.</small>
                         </details>
 
                         <!-- SECTION 3: Advanced model picker (collapsed) -->
@@ -2953,7 +2953,7 @@
                                     <span class="checkbox-custom"></span>
                                     <span class="checkbox-text" data-i18n="censor.showAdvancedModels">Show advanced legacy models (YOLO26 / generic YOLOv8)</span>
                                 </label>
-                                <small class="helper-text" id="censor-advanced-models-help" data-i18n="censor.advancedModelsHelp">Leave this off unless you are doing compatibility tests or know which fixed-class model you want.</small>
+                                <small class="helper-text" id="censor-advanced-models-help" data-i18n="censor.advancedModelsHelp">Leave this off unless you're experimenting with fixed-class segmentation.</small>
                             </div>
 
                             <div class="form-group">
@@ -2963,7 +2963,7 @@
                                         placeholder="Path to .pt or .onnx model (leave blank to use the built-in local model)" style="flex: 1;">
                                     <button class="btn btn-secondary" id="btn-browse-model" aria-label="Browse for a YOLO model file" data-i18n-aria="a11y.browseModelFile"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></button>
                                 </div>
-                                <small class="helper-text" data-i18n="censor.yoloModelPathHelp">Normal users can leave this empty. It is only for custom experiments.</small>
+                                <small class="helper-text" data-i18n="censor.yoloModelPathHelp">Leave blank unless you're running custom experiments.</small>
                             </div>
                         </details>
 

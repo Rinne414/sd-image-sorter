@@ -174,7 +174,7 @@ function maybeNotifyLowMemoryMode(item, pixelCount) {
     window.App?.showToast?.(
         censorT('censor.lowMemoryModeEnabled', {
             megaPixels,
-        }, 'Large image ({megaPixels} MP): proxy edit mode is on. Editing stays responsive, undo history is reduced, and Show Changes is disabled.'),
+        }, 'Large image ({megaPixels} MP): switched to low-memory editing. Editing stays smooth, but undo history is shorter and Show Changes is off.'),
         'info'
     );
 }
