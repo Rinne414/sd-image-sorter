@@ -488,7 +488,7 @@ Object.assign(window.V321Integration, {
         if (otherList) {
             if (editorOpen) {
                 // While editor is open, hint the user that edits live in the popup.
-                otherList.innerHTML = `<p style="padding:12px;text-align:center;color:var(--text-muted)">${this._i18n('batchExport.editorOpenHint', 'Editing in the Caption Editor window — close it to return.')}</p>`;
+                otherList.innerHTML = `<p style="padding:12px;text-align:center;color:var(--text-muted)">${this._i18n('batchExport.editorOpenHint', 'Editing in the Caption Editor window. Close it to come back.')}</p>`;
             } else {
                 otherList.innerHTML = '';
             }
@@ -514,7 +514,7 @@ Object.assign(window.V321Integration, {
         note.className = 'export-preview-save-note';
         note.textContent = this._i18n(
             'batchExport.previewTemporaryNote',
-            'Temporary edits: nothing is auto-saved to images or the database. Export / Copy / Download uses these edits.'
+            'Edits here are temporary. Nothing is saved to images or the database; they are only used when you export, copy or download.'
         );
         list.append(note, workbench);
 

@@ -354,7 +354,7 @@ function buildExportText(exportData, format) {
     if (previewOnly) {
         text = `${text}\n\n${appT(
             'export.previewLimited',
-            'Preview only shows the first {preview} of {total} selected images. Use "Same-name .txt" when you need one complete caption file per image.',
+            'The preview shows the first {preview} of {total} selected images. For one training .txt per image, use "Same-name .txt".',
             { preview: previewCount, total: totalSelected }
         )}`;
     }

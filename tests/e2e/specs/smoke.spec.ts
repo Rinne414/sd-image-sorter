@@ -3550,7 +3550,7 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#export-text')).toHaveValue(/filtered one/)
     await expect(page.locator('#export-text')).toHaveValue(/filtered three/)
     await expect(page.locator('#export-text')).not.toHaveValue(/filtered two/)
-    await expect(page.locator('#export-text')).toHaveValue(/Preview only shows the first 2 of 3 selected images/)
+    await expect(page.locator('#export-text')).toHaveValue(/preview shows the first 2 of 3 selected images/)
     await expect.poll(() => exportDataPayloads.length).toBe(1)
     expect(exportDataPayloads[0]).toMatchObject({
       selection_token: 'filtered-selection-token-minus-22',

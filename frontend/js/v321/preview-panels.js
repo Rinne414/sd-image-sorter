@@ -42,7 +42,7 @@ Object.assign(window.V321Integration, {
         helper.className = 'export-preview-editor-helper';
         helper.textContent = this._i18n(
             'batchExport.previewWorkbenchHelper',
-            'Edit this caption here. Queue items marked Edited are used only when you export, copy, or download.'
+            'Edit this caption here. Images you change are marked Edited in the list on the left.'
         );
 
         // Aurora #25c: live "what the export writes" text — created before the
