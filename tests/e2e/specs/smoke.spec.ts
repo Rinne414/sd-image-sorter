@@ -5890,7 +5890,7 @@ test.describe('Smoke Tests', () => {
     await expect(banner).toContainText('Saved session action mode: Copy and keep originals')
     await expect(banner).toContainText('A: C:/sorted/keep')
     await expect(banner).toContainText('D: C:/sorted/best')
-    await expect(banner).toContainText('Setup preferences here may differ from the active saved session.')
+    await expect(banner).toContainText('The settings here may differ from the saved session.')
 
     const layout = await page.evaluate(() => {
       const actions = document.getElementById('sort-setup-actions')

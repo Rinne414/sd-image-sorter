@@ -1760,7 +1760,7 @@
                                     <div id="autosep-destination-mru" class="autosep-destination-mru" hidden></div>
                                     <label class="autosep-action-block-label" for="autosep-split-by" style="margin-top:10px" data-i18n="autosep.splitBy">Split into subfolders</label>
                                     <select id="autosep-split-by" class="input-field" aria-describedby="autosep-split-by-help">
-                                        <option value="" data-i18n="autosep.splitByNone">None — all into one folder</option>
+                                        <option value="" data-i18n="autosep.splitByNone">None: everything in one folder</option>
                                         <option value="generator" data-i18n="autosep.splitByGenerator">By generator</option>
                                         <option value="checkpoint" data-i18n="autosep.splitByCheckpoint">By base model / checkpoint</option>
                                         <option value="rating" data-i18n="autosep.splitByRating">By user star rating</option>
@@ -1847,7 +1847,7 @@
                     <div class="mobile-warning-content">
                         <span class="mobile-warning-icon"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg></span>
                         <h3 data-i18n="manual.keyboardRequired">Keyboard Required</h3>
-                        <p data-i18n="manual.keyboardMsg">Manual Sort mode uses WASD keys for quick sorting. Please use a device with a keyboard for the best experience.</p>
+                        <p data-i18n="manual.keyboardMsg">Manual Sort uses the WASD keys for quick sorting, so you need a keyboard.</p>
                         <button class="btn btn-secondary" id="return-to-gallery-btn" data-i18n="manual.returnToGallery">Return to Gallery</button>
                     </div>
                 </div>
@@ -1912,7 +1912,7 @@
                                 </div>
                                 <div class="helper-text resume-operation"></div>
                                 <div class="helper-text resume-folders"></div>
-                                <div class="helper-text resume-note" data-i18n="manual.resumeBannerNote">Setup preferences here may differ from the active saved session.</div>
+                                <div class="helper-text resume-note" data-i18n="manual.resumeBannerNote">The settings here may differ from the saved session.</div>
                                 <div style="display:flex; gap:12px;">
                                 <button class="btn btn-primary" id="btn-resume-sorting" data-i18n="manual.resume">Resume</button>
                                 <button class="btn btn-secondary" id="btn-discard-session" data-i18n="manual.discard">Discard</button>
@@ -1927,7 +1927,7 @@
                         <div class="sort-setup-col sort-setup-col-main">
                         <!-- Shown only in A/B Showdown (bracket) mode -->
                         <div class="sort-bracket-intro sort-bracket-only" id="sort-bracket-intro" style="display:none;">
-                            <p data-i18n="manual.bracketIntro">Compare two images at a time and keep picking the winner to find the single best of a batch. Non-destructive: winners are not moved.</p>
+                            <p data-i18n="manual.bracketIntro">Compare two images at a time, keep picking the better one, and find the best of the batch. The winner is not moved.</p>
                         </div>
 
                         <!-- WB-S6: where the showdown winner goes (reference, non-destructive) -->
@@ -1938,7 +1938,7 @@
 
                         <!-- FF-1: shown only in 留/汰 Keep-Reject (cull) mode -->
                         <div class="sort-cull-intro sort-cull-only" id="sort-cull-intro" style="display:none;">
-                            <p data-i18n="manual.cullIntro">Go through one image at a time and keep or reject it. Non-destructive — kept and rejected images are routed to the collections you choose below.</p>
+                            <p data-i18n="manual.cullIntro">Go through images one at a time and keep or reject each. Nothing is moved; kept and rejected images go into the collections you choose.</p>
                         </div>
                         <div class="cull-dest-row sort-cull-only" id="cull-dest-row" style="display:none;">
                             <div class="cull-dest">

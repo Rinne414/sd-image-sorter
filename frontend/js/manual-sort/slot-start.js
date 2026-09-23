@@ -12,7 +12,7 @@
 async function confirmResumeSavedSessionFromStart(savedSession) {
     const body = formatManualSortI18n(
         'manual.resumeInsteadBody',
-        'An unfinished Manual Sort session is saved at image {index}/{total} with {remaining} remaining. Resume it instead of starting over. To start from the first matching image, discard the saved session first.',
+        'An unfinished Manual Sort is saved at image {index}/{total}, with {remaining} left. This picks up where you stopped. To start over, discard the saved session first.',
         {
             index: Number(savedSession.index ?? savedSession.challenger_index ?? 0) + 1,
             total: Number(savedSession.total || 0),
@@ -350,7 +350,7 @@ function updateFolderNames() {
             nameEl.textContent = `${label}`;
             nameEl.title = formatManualSortI18n(
                 'manual.collectHint',
-                'Adds to “{name}” by reference — the file is not moved.',
+                'Adds to “{name}”; the file is not moved.',
                 { name: label }
             );
             return;

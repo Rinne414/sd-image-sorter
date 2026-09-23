@@ -546,7 +546,7 @@ async function finishBracketSorting(result) {
         );
     } else if (winnerName) {
         showToast(
-            formatManualSortI18n('manual.bracketWinner', 'Showdown complete — winner: {name}', { name: winnerName }),
+            formatManualSortI18n('manual.bracketWinner', 'Showdown complete. Winner: {name}', { name: winnerName }),
             'success'
         );
     } else {

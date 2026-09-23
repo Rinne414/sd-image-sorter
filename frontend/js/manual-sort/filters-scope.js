@@ -301,7 +301,7 @@ function updateManualSortScopeStatus() {
     } else if (status.isAcknowledged) {
         detail.textContent = formatManualSortI18n(
             'scope.kept',
-            'Using the saved {tool} filters shown here. Current Gallery filters were not copied.',
+            'Keeping the saved {tool} filters shown here. Gallery filters were not copied.',
             { tool }
         );
     } else {

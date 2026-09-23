@@ -321,7 +321,7 @@ async function finishCullSorting(result) {
         showToast(
             formatManualSortI18n(
                 'manual.cullComplete',
-                'Cull complete — kept {kept}, rejected {rejected}.',
+                'Cull complete: kept {kept}, rejected {rejected}.',
                 { kept: keptCount, rejected: rejectedCount }
             ),
             'success'
