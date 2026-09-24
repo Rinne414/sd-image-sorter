@@ -633,6 +633,7 @@ def test_health_top_level_and_censor_key_sets(monkeypatch, tmp_path):
         "cl_tagger_v2",
         "clip",
         "lucida",
+        "rembg",
         "censor",
         "artist",
     }

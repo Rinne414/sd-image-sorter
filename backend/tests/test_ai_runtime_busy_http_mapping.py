@@ -167,3 +167,62 @@ def test_a_busy_error_without_a_blocker_still_answers_409(
     assert body["reason"] == reason
     assert body["blocker"] is None
     assert "AI runtime" in body["error"]
+
+
+def _unindexed_image(tmp_path: Path) -> int:
+    import database as db
+
+    image_path = _png(tmp_path / "unindexed.png")
+    return int(db.add_image(path=str(image_path), filename=image_path.name))
+
+
+def test_find_similar_on_an_unindexed_image_answers_409_when_the_runtime_is_busy(
+    test_client, monkeypatch, tmp_path
+):
+    """Embedding on the spot must not turn "AI is busy" into "CLIP could not read this image"."""
+    import similarity
+    from services import similarity_service
+
+    image_id = _unindexed_image(tmp_path)
+    monkeypatch.setattr(
+        similarity_service, "get_model_health", lambda: {"clip": {"available": True}}
+    )
+    monkeypatch.setattr(similarity, "_get_embed_model", lambda: object())
+
+    def _busy_lease(*_args, **_kwargs):
+        raise _busy()
+
+    monkeypatch.setattr(similarity, "exclusive_ai_runtime", _busy_lease)
+
+    response = test_client.get(f"/api/similarity/near/{image_id}?limit=5")
+
+    assert response.status_code == 409, response.text
+    assert response.json()["blocker"]["label"] == "gallery-tag"
+
+
+def test_find_similar_on_an_unindexed_image_never_starts_a_clip_download(
+    test_client, monkeypatch, tmp_path
+):
+    import similarity
+    from services import similarity_service
+
+    image_id = _unindexed_image(tmp_path)
+    monkeypatch.setattr(
+        similarity_service,
+        "get_model_health",
+        lambda: {"clip": {"available": False, "runtime_loaded": False}},
+    )
+
+    load_attempts = []
+
+    def _no_download():
+        load_attempts.append(True)
+        raise RuntimeError("would download CLIP")
+
+    monkeypatch.setattr(similarity, "_get_embed_model", _no_download)
+
+    response = test_client.get(f"/api/similarity/near/{image_id}?limit=5")
+
+    assert load_attempts == [], "a search request must not load or download CLIP"
+    assert response.status_code == 503, response.text
+    assert "not installed" in response.json()["error"]

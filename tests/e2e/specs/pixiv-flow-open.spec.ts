@@ -123,3 +123,29 @@ test('one clicked thumbnail does not narrow Batch Rename to that image', async (
   await page.locator('#btn-batch-rename').click()
   await expect(page.locator('#rename-only-selected')).not.toBeChecked()
 })
+
+test('images that load after a rename never reuse a name, even after one was removed', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => (window as any).App.switchView('censor'))
+  const names = await page.evaluate(() => {
+    const w = window as any
+    const state = w.__CENSOR_STATE__
+    state.queue = [1, 2].map((id) => ({ id, originalFilename: `a${id}.png`, outputFilename: `a${id}.png`, editOperations: [] }))
+    state.selectedItems.clear()
+    state.tokenQueueSource = {
+      selectionToken: 'token-e2e', total: 4, exactTotal: true, hasMore: true, nextOffset: 2,
+      loadedIds: new Set([1, 2]), loadedCount: 2, loading: false, visibleImageIds: [],
+    }
+    ;(document.getElementById('rename-use-original') as HTMLInputElement).checked = false
+    ;(document.getElementById('rename-only-selected') as HTMLInputElement).checked = false
+    ;(document.getElementById('rename-base') as HTMLInputElement).value = 'set'
+    ;(document.getElementById('rename-start') as HTMLInputElement).value = '1'
+    w.applyBatchRename()
+    // The user drops set_001 from the queue before the rest loads.
+    state.queue = state.queue.filter((item: any) => item.id !== 1)
+    w.appendCensorQueueImages([{ id: 3, filename: 'a3.png' }, { id: 4, filename: 'a4.png' }], { tokenSource: state.tokenQueueSource })
+    return state.queue.map((item: any) => item.outputFilename)
+  })
+  expect(names[0]).toBe('set_002.png')
+  expect(new Set(names.map((name: string) => name.toLowerCase())).size).toBe(names.length)
+})

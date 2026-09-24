@@ -242,6 +242,27 @@ Object.assign(window.SimilarImages, {
         }
     },
 
+    async _refreshStatsWhenJobEnds() {
+        if (this._statsRefreshPending) return;
+        this._statsRefreshPending = true;
+        try {
+            for (;;) {
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+                // A new run owns the progress display from here on.
+                if (this.isEmbedding) return;
+                const progress = await window.App.API.get('/api/similarity/progress');
+                if (!progress?.running) break;
+            }
+            this.loadStats();
+            this.refreshWorkflowStatus();
+        } catch (_error) {
+            // The progress endpoint is gone (server restarting); the next
+            // visit to this tab reads fresh counts anyway.
+        } finally {
+            this._statsRefreshPending = false;
+        }
+    },
+
     async pollEmbedProgress() {
         const progressBar = document.getElementById('similar-embed-progress');
 
@@ -302,6 +323,10 @@ Object.assign(window.SimilarImages, {
                     setTimeout(() => { progressBar.style.display = 'none'; }, 2000);
                 }
                 this.loadStats();
+                // Every image is processed but the backend may still be
+                // committing and writing the vector cache: the UI is done, and
+                // the counts are read once more when the job really ends.
+                if (result.running) this._refreshStatsWhenJobEnds();
                 if (total === 0) {
                     window.App.showToast(this._t('similar.embedNoPending', 'No pending images to index'), 'info');
                 } else if (errors > 0) {

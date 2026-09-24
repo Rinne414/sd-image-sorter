@@ -171,6 +171,17 @@ class SimilarityService:
         source = resolve_existing_indexed_image_path(row["path"] or "", backend_file=__file__)
         if not source:
             raise HTTPException(status_code=404, detail=f"Image {image_id} file is missing")
+        clip = get_model_health()["clip"]
+        if not (clip.get("available") or clip.get("runtime_loaded")):
+            # Never start the ~580 MB CLIP download inside a search request;
+            # installing asks first and shows progress (Model Center / Similar).
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    f"Image {image_id} is not in the similarity index and CLIP is not installed yet. "
+                    "Install CLIP in Model Center, or build the similarity index."
+                ),
+            )
         with Image.open(source) as src:
             src.load()
             pixels = src.convert("RGB")

@@ -47,12 +47,14 @@ def test_windows_cpu_torch_swap_for_toriigate_needs_a_restart(monkeypatch):
     assert deps.plan_group("toriigate")["restart_likely"] is True
 
 
-def test_plan_endpoint_reports_nothing_for_models_without_packages(test_client):
+def test_plan_endpoint_does_not_promise_no_restart_for_unplanned_models(test_client):
+    # WD14 has no dependency group, but its Prepare can still swap in the GPU
+    # ONNX runtime and recommend a restart, so the answer is "not known".
     response = test_client.get("/api/models/plan?model_id=wd14")
 
     assert response.status_code == 200
     assert response.json() == {
         "model_id": "wd14",
         "packages": [],
-        "restart_likely": False,
+        "restart_likely": None,
     }

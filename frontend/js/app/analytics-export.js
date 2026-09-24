@@ -15,25 +15,38 @@ function showConfirm(title, message, onOk, onCancel) {
     $('#confirm-title').textContent = title || appT('modal.confirm', 'Are you sure?');
     $('#confirm-message').textContent = message || appT('modal.confirmAction', 'This action cannot be undone.');
 
-    // Abort previous confirm listeners
+    // Each dialog answers exactly once. Anything but OK counts as Cancel:
+    // the Cancel button, the backdrop, Escape, or a newer dialog replacing
+    // this one. Callers wrap this in a promise that must always settle.
     if (_confirmAbort) _confirmAbort.abort();
     _confirmAbort = new AbortController();
     const signal = _confirmAbort.signal;
+    const modal = $('#confirm-modal');
+    let answered = false;
+    const answer = (confirmed, { hide = true } = {}) => {
+        if (answered) return;
+        answered = true;
+        if (hide) hideModal('confirm-modal');
+        if (confirmed) {
+            if (onOk) onOk();
+        } else if (onCancel) {
+            onCancel();
+        }
+    };
 
-    const okBtn = $('#btn-confirm-ok');
-    okBtn.addEventListener('click', () => {
-        hideModal('confirm-modal');
-        if (onOk) onOk();
-    }, { signal });
+    $('#btn-confirm-ok').addEventListener('click', () => answer(true), { signal });
+    $('#btn-confirm-cancel')?.addEventListener('click', () => answer(false), { signal });
 
-    // Handle cancel callback if provided
-    const cancelBtn = $('#btn-confirm-cancel');
-    if (cancelBtn) {
-        cancelBtn.addEventListener('click', () => {
-            hideModal('confirm-modal');
-            if (onCancel) onCancel();
-        }, { signal });
-    }
+    // Closed some other way (backdrop, Escape): the dialog is already hidden.
+    const closeWatcher = new MutationObserver(() => {
+        if (!modal.classList.contains('visible')) answer(false, { hide: false });
+    });
+    closeWatcher.observe(modal, { attributes: true, attributeFilter: ['class'] });
+    // Replaced by a newer dialog: cancel this one without hiding the new one.
+    signal.addEventListener('abort', () => {
+        closeWatcher.disconnect();
+        answer(false, { hide: false });
+    });
 
     showModal('confirm-modal');
 }
@@ -452,6 +465,15 @@ async function loadFullExportData() {
             offset = next;
         }
     } else {
+        if (AppState.selectionScope === 'filtered' && AppState.selectionToken) {
+            // "Select all matching" whose token is still refreshing or no longer
+            // matches the filters: there are no ids to fall back to, and an
+            // empty file must never look like a finished download.
+            throw new Error(appT(
+                'export.selectionChanged',
+                'The selection is still updating, or the filters changed. Select again, then download.',
+            ));
+        }
         const ids = getSelectedGalleryIds();
         for (let start = 0; start < ids.length; start += pageSize) {
             const page = await loadSelectionData(ids.slice(start, start + pageSize));

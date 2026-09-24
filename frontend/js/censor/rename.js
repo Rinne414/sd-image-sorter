@@ -69,12 +69,30 @@ function readRenameStartNumber() {
     return Number.isFinite(value) && value >= 0 ? value : 1;
 }
 
+// Names already used by the queue, lower-cased, for applyRenamePlan callers
+// that name several late images in one pass.
+function censorQueueOutputNames() {
+    return new Set(CensorState.queue.map((entry) => String(entry.outputFilename || '').toLowerCase()));
+}
+
 // Name an image that joins the queue order after a whole-queue rename (a
 // token-backed image loaded or saved later) by its position in that order.
-function applyRenamePlan(item, position) {
+// Positions shift when an image is removed, so a name that is already taken
+// moves on to the next free number (or gets _2, _3 when the pattern has no
+// number) instead of overwriting another export.
+function applyRenamePlan(item, position, takenNames = censorQueueOutputNames()) {
     const plan = CensorState.renamePlan;
     if (!plan || !item) return;
-    item.outputFilename = buildRenameFilename(item, position, plan);
+    const first = buildRenameFilename(item, position, plan);
+    const numbersVary = buildRenameFilename(item, position + 1, plan).toLowerCase() !== first.toLowerCase();
+    let name = first;
+    for (let step = 1; takenNames.has(name.toLowerCase()); step += 1) {
+        name = numbersVary
+            ? buildRenameFilename(item, position + step, plan)
+            : first.replace(/\.png$/i, `_${step + 1}.png`);
+    }
+    takenNames.add(name.toLowerCase());
+    item.outputFilename = name;
 }
 
 function refreshRenameSelectionUi() {

@@ -14,7 +14,7 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-async function stubPlan(page: Page, plan: { packages: string[]; restart_likely: boolean }) {
+async function stubPlan(page: Page, plan: { packages: string[]; restart_likely: boolean | null }) {
   await page.route('**/api/models/plan**', (route) => route.fulfill({ json: { model_id: 'clip', ...plan } }))
 }
 
@@ -106,6 +106,26 @@ test('a large download that needs no restart says it is ready once downloaded', 
 
   await page.locator('#btn-confirm-ok').click()
   expect(await ensured).toMatchObject({ ok: true })
+})
+
+test('when the plan cannot tell, the confirm does not promise there is no restart', async ({ page }) => {
+  await stubSilentInstall(page, 0)
+  await page.unroute('**/api/models/plan**')
+  await stubPlan(page, { packages: [], restart_likely: null })
+  await page.goto('/')
+  await expect.poll(() => page.evaluate(() => typeof (window as any).ensureFeatureModel)).toBe('function')
+
+  const ensured = page.evaluate(() => (window as any).ensureFeatureModel('clip', {
+    label: 'CLIP', sizeHint: '~580 MB', confirmBytes: 580 * 1024 * 1024,
+  }))
+  const message = page.locator('#confirm-message')
+  await expect(message).toBeVisible()
+  await expect(message).toContainText('580 MB')
+  await expect(message).not.toContainText('no restart')
+  await expect(message).not.toContainText('needs one restart')
+
+  await page.locator('#btn-confirm-cancel').click()
+  expect(await ensured).toMatchObject({ ok: false })
 })
 
 test('a gated model that needs the user to accept its terms opens the setup guide', async ({ page }) => {

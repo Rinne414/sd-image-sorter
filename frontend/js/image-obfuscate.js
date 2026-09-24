@@ -261,26 +261,48 @@
                 return false;
             }
             this.init();
-            const files = [];
+            // The queue fills at once with thumbnails; each original is fetched
+            // when that image is processed (_ensureSourceFile). Downloading every
+            // original up front filled tab memory before anything showed up.
             for (const id of ids) {
-                const response = await fetch(`/api/image-file/${id}`);
-                if (!response.ok) continue;
-                const blob = await response.blob();
-                const ext = (blob.type || 'image/png').split('/').pop() || 'png';
-                files.push(new File([blob], `image-${id}.${ext}`, {
-                    type: blob.type || 'image/png',
-                    lastModified: Date.now(),
-                }));
+                this._queue.push({
+                    file: null,
+                    libraryImageId: id,
+                    name: `image-${id}.png`,
+                    status: 'pending',
+                    mode: null,
+                    compatMode: null,
+                    previewUrl: `/api/image-thumbnail/${id}?size=256`,
+                    resultBlob: null,
+                    resultUrl: '',
+                    resultName: '',
+                });
             }
-            if (!files.length) {
-                window.App?.showToast?.(
-                    this._t('tools.loadLibraryFailed', 'Could not add library images'),
-                    'error',
-                );
-                return false;
-            }
-            this._addFiles(files);
+            this._renderQueue();
+            window.App?.showToast?.(
+                this._t('tools.addedImages', `Added ${ids.length} image(s)`, { count: ids.length }),
+                'success'
+            );
             return true;
+        },
+
+        async _ensureSourceFile(item) {
+            if (item.resultBlob || item.file || !item.libraryImageId) return;
+            const response = await fetch(`/api/image-file/${item.libraryImageId}`);
+            if (!response.ok) {
+                throw new Error(this._t(
+                    'tools.loadLibraryImageFailed',
+                    `Could not read image ${item.libraryImageId} from the library`,
+                    { id: item.libraryImageId },
+                ));
+            }
+            const blob = await response.blob();
+            const ext = (blob.type || 'image/png').split('/').pop() || 'png';
+            item.name = `image-${item.libraryImageId}.${ext}`;
+            item.file = new File([blob], item.name, {
+                type: blob.type || 'image/png',
+                lastModified: Date.now(),
+            });
         },
 
         _addFiles(files) {
@@ -577,7 +599,7 @@
                     this._renderQueue();
 
                     try {
-                        // Determine source URL for processing
+                        await this._ensureSourceFile(item);
                         const sourceBlob = item.resultBlob || item.file;
 
                         if (hasEngine) {
@@ -628,6 +650,9 @@
 
                         item.status = 'done';
                         completed += 1;
+                        // A library original can be fetched again; the result
+                        // is what later steps read, so let the original go.
+                        if (item.libraryImageId) item.file = null;
                     } catch (error) {
                         item.status = 'error';
                         window.App?.showToast?.(String(error.message || this._t('tools.processingFailed', 'Processing failed')), 'error');

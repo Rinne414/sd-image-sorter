@@ -46,7 +46,8 @@ function _setupConfirmMessage(modelId, sizeHint, plan) {
     if (plan?.restart_likely === true) {
         lines.push(featureInstallT('featureInstall.confirmRestart',
             'After installing, the app needs one restart (about 20 seconds, one click) and then continues here.'));
-    } else if (plan) {
+    } else if (plan?.restart_likely === false) {
+        // null = the backend cannot tell; say nothing rather than promise.
         lines.push(featureInstallT('featureInstall.confirmNoRestart', 'It is ready to use once downloaded; no restart.'));
     }
     const gpuNote = FEATURE_GPU_NOTES[modelId];

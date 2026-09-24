@@ -122,13 +122,16 @@ async def get_model_plan(model_id: str):
     """
     normalized = str(model_id or "").strip().lower()
     group = MODEL_DEPENDENCY_GROUPS.get(normalized)
+    # restart_likely None = "not known": the confirm then says nothing about a
+    # restart instead of promising none (WD14's Prepare can swap in the GPU
+    # ONNX runtime and ask for one).
     if group is None:
-        return {"model_id": normalized, "packages": [], "restart_likely": False}
+        return {"model_id": normalized, "packages": [], "restart_likely": None}
     try:
         plan = await asyncio.to_thread(plan_group, group)
     except Exception as exc:
         _logger.warning("Could not plan setup for %s: %s", normalized, exc)
-        return {"model_id": normalized, "packages": [], "restart_likely": False}
+        return {"model_id": normalized, "packages": [], "restart_likely": None}
     return {"model_id": normalized, "packages": plan["packages"], "restart_likely": plan["restart_likely"]}
 
 

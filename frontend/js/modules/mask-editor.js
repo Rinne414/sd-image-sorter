@@ -31,6 +31,10 @@
         return method;
     }
 
+    // Consecutive failed status polls (400 ms apart) before the auto-mask-all
+    // wait gives up with an error instead of polling a dead server forever.
+    const AUTO_MASK_MAX_FAILED_POLLS = 25;
+
     // First use of an engine sets it up (confirm, download, progress) instead
     // of failing with "model files are missing".
     const AUTO_MASK_ENGINE_SETUP = {
@@ -373,13 +377,22 @@
                 const jobId = startBody.job_id || startBody.id;
                 let body = startBody;
                 // Poll until the job ends: a large set can take far longer
-                // than any fixed number of polls.
+                // than any fixed number of polls. Only a server that keeps
+                // failing (~10 s of errors in a row) ends the wait early.
+                let failedPolls = 0;
                 for (;;) {
-                    const polled = await fetch(`/api/bulk-jobs/${jobId}`);
-                    body = await polled.json().catch(() => ({}));
+                    const polled = await fetch(`/api/bulk-jobs/${jobId}`).catch(() => null);
+                    body = polled ? await polled.json().catch(() => ({})) : {};
                     if (state && body.message) state.textContent = body.message;
                     if (['done', 'error', 'cancelled'].includes(String(body.status || ''))) break;
-                    if (polled.status === 404) break;
+                    if (polled?.status === 404) break;
+                    failedPolls = polled?.ok && body.status ? 0 : failedPolls + 1;
+                    if (failedPolls >= AUTO_MASK_MAX_FAILED_POLLS) {
+                        throw new Error(t(
+                            'Lost contact with the auto-mask job. Check the launcher window, then try again.',
+                            '和批量遮罩任务失去联系。请看一下启动器窗口，再试一次。',
+                        ));
+                    }
                     await new Promise((resolve) => setTimeout(resolve, 400));
                 }
                 if (body.status !== 'done') {

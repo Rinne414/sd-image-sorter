@@ -179,3 +179,27 @@ test('Lucida missing: auto mask offers the download before running', async ({ pa
   await expect(message).toBeHidden()
   expect(autoCalls).toBe(0)
 })
+
+test('auto-mask-all stops waiting when the job status keeps failing', async ({ page }) => {
+  test.setTimeout(60000)
+  await markModelsReady(page, ['rembg'])
+  await seedDatasetQueue(page)
+  await page.route('**/api/masks/auto-batch', async (route) => {
+    await route.fulfill({ json: { job_id: 'job-lost', status: 'running' } })
+  })
+  let statusPolls = 0
+  await page.route('**/api/bulk-jobs/job-lost', async (route) => {
+    statusPolls += 1
+    await route.fulfill({ status: 500, contentType: 'text/html', body: '<h1>Internal Server Error</h1>' })
+  })
+
+  const button = page.locator('#btn-dataset-mask-auto-all')
+  await button.click()
+  await expect(button).toBeDisabled()
+  // The button comes back and the user is told, instead of polling forever.
+  await expect(button).toBeEnabled({ timeout: 30000 })
+  await expect(page.locator('.toast').filter({ hasText: 'Lost contact with the auto-mask job' })).toBeVisible()
+  const pollsAtStop = statusPolls
+  await page.waitForTimeout(1500)
+  expect(statusPolls).toBe(pollsAtStop)
+})

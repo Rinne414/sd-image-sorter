@@ -99,3 +99,25 @@ test('exporting with nothing selected offers the current filter results', async 
   await expect(page.locator('#confirm-modal.visible')).toBeVisible()
   await expect(page.locator('#confirm-message')).toContainText('Nothing is selected')
 })
+
+test('the full download refuses a stale select-all instead of saving an empty file', async ({ page }) => {
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+  const outcome = await page.evaluate(async () => {
+    ;(window as any).App.setSelectionState({
+      selectionMode: true,
+      selectedIds: new Set(),
+      scope: 'filtered',
+      filterKey: 'filters-before-the-change',
+      selectionToken: 'token-for-old-filters',
+      selectionTotal: 40,
+    })
+    try {
+      const data = await (window as any).loadFullExportData()
+      return { images: data.images.length }
+    } catch (error) {
+      return { error: String((error as Error).message) }
+    }
+  })
+  expect(outcome).toEqual({ error: expect.stringContaining('Select again') })
+})

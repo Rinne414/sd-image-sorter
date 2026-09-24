@@ -91,6 +91,7 @@ function buildCensorQueueItemFromImage(image) {
 function appendCensorQueueImages(images = [], { tokenSource = null } = {}) {
     const queueIds = new Set(CensorState.queue.map((item) => item.id));
     const nextItems = [];
+    const takenNames = censorQueueOutputNames();
 
     (Array.isArray(images) ? images : []).forEach((image) => {
         const item = buildCensorQueueItemFromImage(image);
@@ -100,7 +101,7 @@ function appendCensorQueueImages(images = [], { tokenSource = null } = {}) {
         }
 
         queueIds.add(item.id);
-        applyRenamePlan(item, CensorState.queue.length + nextItems.length);
+        applyRenamePlan(item, CensorState.queue.length + nextItems.length, takenNames);
         nextItems.push(item);
         if (tokenSource?.loadedIds) tokenSource.loadedIds.add(item.id);
     });
@@ -476,6 +477,8 @@ function _summarizeBatchDetections(items = CensorState.queue) {
 
 async function processCensorBatchItems(handler, { pageSize = CENSOR_TOKEN_QUEUE_WINDOW_SIZE } = {}) {
     const seenIds = new Set();
+    // Late (token) images are named against every name in this save.
+    const takenNames = censorQueueOutputNames();
     let completed = 0;
     let total = getCensorQueueWorkCount();
 
@@ -508,7 +511,7 @@ async function processCensorBatchItems(handler, { pageSize = CENSOR_TOKEN_QUEUE_
                 const existingItem = CensorState.queue.find((entry) => entry.id === id);
                 const item = existingItem || buildCensorQueueItemFromImage(image);
                 if (!item) continue;
-                if (!existingItem) applyRenamePlan(item, completed);
+                if (!existingItem) applyRenamePlan(item, completed, takenNames);
 
                 seenIds.add(id);
                 await handler(item, {

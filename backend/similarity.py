@@ -46,6 +46,7 @@ from utils.source_paths import resolve_existing_indexed_image_path
 from ai_runtime_guard import (
     PRIORITY_BATCH,
     PRIORITY_INTERACTIVE,
+    AiRuntimeBusyError,
     exclusive_ai_runtime,
 )
 import similarity_ann
@@ -319,14 +320,18 @@ def embed_image_pil(pil_image: Image.Image) -> Optional[np.ndarray]:
             tmp.write(buf.getvalue())
             tmp_path = tmp.name
 
-        # Only reached by SimilarityIndex.search_by_upload (Find Similar on an
-        # uploaded file), so the lane is safe to declare here.
+        # Interactive lane: an uploaded file, or one library image that is
+        # not indexed yet (find-near / compare).
         with exclusive_ai_runtime(
             "clip-similarity-upload", priority=PRIORITY_INTERACTIVE
         ):
             embeddings = list(model.embed([tmp_path]))
         if embeddings:
             return np.array(embeddings[0], dtype=np.float32)
+    except AiRuntimeBusyError:
+        # Another AI job holds the runtime: main.py answers 409 naming it.
+        # Swallowing it read as "CLIP could not read this image".
+        raise
     except Exception as e:
         logger.error("[Similarity] Error embedding PIL image: %s", e)
     finally:

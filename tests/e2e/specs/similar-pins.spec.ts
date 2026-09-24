@@ -771,3 +771,42 @@ test('after init, clicking the Duplicates sub-tab toggles panels + active state 
   expect(afterSearch.search).toBe('block')
   expect(afterSearch.duplicates).toBe('none')
 })
+
+test('a finished snapshot while the job is still committing re-reads the counts once it ends', async ({ page }) => {
+  const events: string[] = []
+  let progressCalls = 0
+  await page.route('**/api/similarity/progress', (route) => {
+    progressCalls += 1
+    // First answer: every image processed, backend still committing.
+    const running = progressCalls <= 2
+    events.push(running ? 'progress:running' : 'progress:ended')
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ running, processed: 5, total: 5, embedded: 5, errors: 0 }),
+    })
+  })
+  await page.route('**/api/similarity/stats', (route) => {
+    events.push('stats')
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ total_images: 5, embedded_count: 5, pending_count: 0, unreadable_count: 0 }),
+    })
+  })
+  await page.route('**/api/similarity/model-status', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ available: true }) }))
+
+  await page.evaluate(async () => {
+    const S = (window as any).SimilarImages
+    S.isEmbedding = true
+    await S.pollEmbedProgress()
+  })
+  // The UI treats the finished snapshot as done right away...
+  expect(await page.evaluate(() => (window as any).SimilarImages.isEmbedding)).toBe(false)
+  // ...and reads the counts again after the backend reports the job ended.
+  await expect.poll(() => {
+    const ended = events.indexOf('progress:ended')
+    return ended >= 0 && events.slice(ended + 1).includes('stats')
+  }, { timeout: 10000 }).toBe(true)
+})
