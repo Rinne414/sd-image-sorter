@@ -309,9 +309,9 @@ class TestBulkAddModelContracts:
         with pytest.raises(ValidationError):
             tb.BulkAddRequest(image_ids=[1], tags=["  ", ""])
 
-    def test_tags_over_200_rejected(self):
+    def test_tags_over_the_cap_rejected(self):
         with pytest.raises(ValidationError):
-            tb.BulkAddRequest(image_ids=[1], tags=[f"t{i}" for i in range(201)])
+            tb.BulkAddRequest(image_ids=[1], tags=[f"t{i}" for i in range(tb.BULK_TAG_MAX_TAGS + 1)])
 
     def test_defaults(self):
         request = tb.BulkAddRequest(image_ids=[1], tags=["a"])
@@ -352,9 +352,14 @@ class TestCleanupModelContracts:
 
 
 class TestFilterContractContracts:
-    def test_random_sort_rejected_for_bulk_scope(self):
-        with pytest.raises(ValidationError, match="random sort cannot"):
-            tb.BulkTagFilterContract(sortBy="random")
+    def test_random_sort_scopes_like_newest_for_bulk_edits(self):
+        # A bulk edit touches the whole scope, so the gallery's random order
+        # must not block it; the scope resolves in a stable order instead.
+        assert tb.BulkTagFilterContract(sortBy="random").sortBy == "newest"
+
+    def test_bulk_add_accepts_more_than_200_tags(self):
+        tags = [f"tag_{index}" for index in range(500)]
+        assert len(tb.BulkAddRequest(image_ids=[1], tags=tags).tags) == 500
 
     def test_invalid_sort_rejected(self):
         with pytest.raises(ValidationError, match="Invalid sortBy"):
@@ -569,7 +574,7 @@ HTTP_VALIDATION_CASES = [
     (
         "oversized tags list (add)",
         "/api/tags/bulk/add",
-        {"image_ids": [1], "tags": [f"t{i}" for i in range(201)]},
+        {"image_ids": [1], "tags": [f"t{i}" for i in range(tb.BULK_TAG_MAX_TAGS + 1)]},
     ),
     (
         "empty tags list (remove)",

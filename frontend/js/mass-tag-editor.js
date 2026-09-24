@@ -582,14 +582,14 @@
             if (this.activeTab === "add" && (!body.tags || body.tags.length === 0)) {
                 return this.t("Enter at least one tag to add.", "请输入至少一个要添加的标签。");
             }
-            if (this.activeTab === "add" && body.tags.length > 200) {
-                return this.t("Too many tags — 200 max per request.", "标签太多 — 每次最多 200 个。");
+            if (this.activeTab === "add" && body.tags.length > 2000) {
+                return this.t("Too many tags: up to 2,000 per run.", "标签太多了：每次最多 2000 个。");
             }
             if (this.activeTab === "remove" && (!body.tags || body.tags.length === 0)) {
                 return this.t("Enter at least one tag to remove.", "请输入至少一个要删除的标签。");
             }
-            if (this.activeTab === "remove" && body.tags.length > 200) {
-                return this.t("Too many tags — 200 max per request.", "标签太多 — 每次最多 200 个。");
+            if (this.activeTab === "remove" && body.tags.length > 2000) {
+                return this.t("Too many tags: up to 2,000 per run.", "标签太多了：每次最多 2000 个。");
             }
             return null;
         },

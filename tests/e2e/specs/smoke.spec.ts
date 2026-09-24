@@ -6683,7 +6683,7 @@ test.describe('Smoke Tests', () => {
     }, { timeout: 10000 }).toBeTruthy()
   })
 
-  test('low-memory censor mode should load safely and block diff mode', async ({ page }) => {
+  test('low-memory censor mode should load safely and confirm before a large diff', async ({ page }) => {
     await page.addInitScript(() => {
       ;(window as Window & { __SD_SORTER_TEST_FLAGS__?: Record<string, number> }).__SD_SORTER_TEST_FLAGS__ = {
         censorLowMemoryPixelThreshold: 1,
@@ -6740,8 +6740,15 @@ test.describe('Smoke Tests', () => {
     const initialSnapshot = await getActiveCensorCanvasSnapshot(page)
     expect(initialSnapshot).not.toBeNull()
 
+    // A large image makes the comparison slow, not impossible: it asks once,
+    // then runs.
     await page.locator('#btn-show-changes').click()
-    await expect(page.locator('#toast-container')).toContainText(/disabled for large images|大图已禁用 Diff 对比/i)
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    await expect(page.locator('#confirm-message')).toContainText(/large|很大/i)
+    await page.locator('#btn-confirm-ok').click()
+    await expect.poll(() => page.evaluate(() => {
+      return Boolean((window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__?.showingChanges)
+    }), { timeout: 10000 }).toBe(true)
   })
 
   test('large-image proxy mode should save censor edits through save-operations instead of save-data', async ({ page }) => {

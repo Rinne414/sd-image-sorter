@@ -34,6 +34,9 @@ BulkWarningCode = Literal[
 ]
 
 
+# Tags added or removed in one bulk request (the scope can be any size).
+BULK_TAG_MAX_TAGS = 2000
+
 class BulkOperationWarning(TypedDict):
     code: BulkWarningCode
     message: str
@@ -102,7 +105,9 @@ class BulkTagFilterContract(BaseModel):
         if sort_by not in db.VALID_SORT_OPTIONS:
             raise ValueError("Invalid sortBy value")
         if sort_by == "random":
-            raise ValueError("random sort cannot use bulk tag filter scope")
+            # A bulk tag edit touches the whole scope; order does not matter,
+            # so the gallery's random order simply scopes like newest-first.
+            sort_by = "newest"
         self.sortBy = sort_by
 
         if self.aspectRatio == "":
@@ -148,7 +153,7 @@ class FindReplaceRequest(BulkTagScopeRequest):
 
 
 class BulkAddRequest(BulkTagScopeRequest):
-    tags: List[str] = Field(min_length=1, max_length=200)
+    tags: List[str] = Field(min_length=1, max_length=BULK_TAG_MAX_TAGS)
     confidence: float = 0.85
     dry_run: bool = False
 
@@ -170,7 +175,7 @@ class BulkAddRequest(BulkTagScopeRequest):
 
 
 class BulkRemoveRequest(BulkTagScopeRequest):
-    tags: List[str] = Field(min_length=1, max_length=200)
+    tags: List[str] = Field(min_length=1, max_length=BULK_TAG_MAX_TAGS)
     case_sensitive: bool = False
     dry_run: bool = False
 

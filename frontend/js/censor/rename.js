@@ -34,7 +34,7 @@ function getRenameTargetItems() {
 function buildRenameFilename(item, index, options = {}) {
     const useOriginal = Boolean(options.useOriginal);
     const base = options.base || 'Image';
-    const start = Number(options.start || 1);
+    const start = Number.isFinite(Number(options.start)) ? Number(options.start) : 1;
     const pattern = String(options.pattern || '').trim();
     const dateStr = options.dateStr || '';
     const timeStr = options.timeStr || '';
@@ -62,6 +62,13 @@ function buildRenameFilename(item, index, options = {}) {
     return `${base}_${num}.png`;
 }
 
+// 0 is a valid first number (001 vs 000 is the user's call); only an empty or
+// unreadable field falls back to 1.
+function readRenameStartNumber() {
+    const value = parseInt(document.getElementById('rename-start')?.value, 10);
+    return Number.isFinite(value) && value >= 0 ? value : 1;
+}
+
 function refreshRenameSelectionUi() {
     const checkbox = document.getElementById('rename-only-selected');
     const help = document.getElementById('rename-selection-help');
@@ -83,7 +90,7 @@ function refreshRenameSelectionUi() {
 function updateRenamePreview() {
     const useOriginal = document.getElementById('rename-use-original')?.checked || false;
     const base = document.getElementById('rename-base')?.value || 'Image';
-    const start = parseInt(document.getElementById('rename-start')?.value, 10) || 1;
+    const start = readRenameStartNumber();
     const patternEl = document.getElementById('rename-pattern');
     const pattern = patternEl ? patternEl.value.trim() : '';
     const previewSummary = document.getElementById('rename-preview-summary');
@@ -170,7 +177,7 @@ function updateRenamePreview() {
 async function applyBatchRename() {
     const useOriginal = document.getElementById('rename-use-original')?.checked || false;
     const base = document.getElementById('rename-base')?.value || 'Image';
-    const start = parseInt(document.getElementById('rename-start')?.value, 10) || 1;
+    const start = readRenameStartNumber();
     const patternEl = document.getElementById('rename-pattern');
     const pattern = patternEl ? patternEl.value.trim() : '';
     const targets = getRenameTargetItems();

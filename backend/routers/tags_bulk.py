@@ -70,6 +70,7 @@ BULK_TAG_ID_CHUNK_SIZE = 500
 # eager import here.
 from routers.tags_bulk_models import (
     BULK_TAG_MAX_IMAGE_IDS,
+    BULK_TAG_MAX_TAGS,
     VALID_PROMPT_MATCH_MODES,
     BulkAddRequest,
     BulkOperationWarning,

@@ -447,21 +447,28 @@ function urlToDataUrl(url) {
         }));
 }
 
-function toggleShowChanges() {
+function toggleShowChanges(options = {}) {
+    // A large image makes the diff slow, not impossible: ask once per session.
+    if (!CensorState.showingChanges && !options.largeConfirmed && !CensorState.largeDiffConfirmed
+        && CensorState.activeImagePixels > getCensorShowChangesPixelThreshold()) {
+        window.App.showConfirm(
+            censorT('censor.showChangesLargeTitle', null, 'Compare a large image?'),
+            censorT('censor.showChangesLargeBody', null,
+                'This image is large, so the comparison can take a few seconds and use a lot of memory.'),
+            () => {
+                CensorState.largeDiffConfirmed = true;
+                toggleShowChanges({ largeConfirmed: true });
+            },
+        );
+        return;
+    }
+
     const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
     const ctx = canvas.getContext('2d');
     const btn = document.getElementById('btn-show-changes');
 
     if (!CensorState.activeId || !CensorState.originalImage) {
         window.App.showToast(censorT('censor.noImageToCompare', null, 'No image to compare'), 'error');
-        return;
-    }
-
-    if (CensorState.activeImagePixels > getCensorShowChangesPixelThreshold()) {
-        window.App.showToast(
-            censorT('censor.showChangesDisabledLargeImage', null, 'Show Changes is disabled for large images to avoid browser freezes'),
-            'warning'
-        );
         return;
     }
 

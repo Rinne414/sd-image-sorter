@@ -7603,7 +7603,7 @@
 
                     <div class="form-group">
                         <label data-i18n="rename.startingNumber">Starting Number</label>
-                        <input type="number" id="rename-start" class="input-field" min="1" value="1">
+                        <input type="number" id="rename-start" class="input-field" min="0" value="1">
                         <small class="helper-text" data-i18n="rename.startingNumberHelper">Images will be numbered sequentially from this number</small>
                     </div>
 
@@ -7842,6 +7842,7 @@
     <!-- Core modules used by app.js. Keep these before the main application script. -->
     <script src="/static/js/modules/core/storage-utils.js"></script>
     <script src="/static/js/modules/core/request-manager.js"></script>
+    <script src="/static/js/modules/core/path-input.js"></script>
     <!-- Non-conflicting utility modules -->
     <script src="/static/js/modules/utils/click-guard.js"></script>
     <script src="/static/js/modules/utils/dom.js"></script>
@@ -8793,7 +8794,7 @@
 
             <section class="mass-tag-panel" data-panel="add" role="tabpanel" hidden>
                 <div class="form-group">
-                    <label for="mass-tag-add-tags" data-i18n="massTag.addTagsLabel">Tags to add (comma-separated, max 200)</label>
+                    <label for="mass-tag-add-tags" data-i18n="massTag.addTagsLabel">Tags to add (comma-separated)</label>
                     <textarea id="mass-tag-add-tags" class="input-field" rows="3" placeholder="masterpiece, best_quality, 1girl"></textarea>
                 </div>
                 <div class="form-group">
@@ -8805,7 +8806,7 @@
 
             <section class="mass-tag-panel" data-panel="remove" role="tabpanel" hidden>
                 <div class="form-group">
-                    <label for="mass-tag-remove-tags" data-i18n="massTag.removeTagsLabel">Tags to remove (comma-separated, max 200)</label>
+                    <label for="mass-tag-remove-tags" data-i18n="massTag.removeTagsLabel">Tags to remove (comma-separated)</label>
                     <textarea id="mass-tag-remove-tags" class="input-field" rows="3" placeholder="lowres, worst_quality, blurry"></textarea>
                 </div>
                 <div class="form-group">
