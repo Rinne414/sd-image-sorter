@@ -1144,6 +1144,9 @@ Response shape:
 }
 ```
 
+#### GET /api/models/plan
+Read-only preview of what preparing a model would install. Query: `model_id`. Returns `{model_id, packages, restart_likely}`: `packages` lists the Python requirements still missing for that model's feature; `restart_likely` is true when one of them is already imported in this process or when Windows will swap torch for its CUDA build (ToriiGate, SAM3). Models without an optional dependency group return an empty list. Nothing is installed or downloaded; the first-use confirm uses it to say "ready once downloaded" or "one restart afterwards".
+
 #### POST /api/models/prepare
 Starts model/runtime preparation in a background worker.
 

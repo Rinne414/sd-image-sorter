@@ -1000,3 +1000,37 @@ def ensure_group_with_soft_deps(group: str) -> DependencyInstallResult:
         restart_recommended=bool(restart_reason),
         restart_reason=restart_reason,
     )
+
+
+# Groups whose Windows setup swaps a CPU torch for the CUDA build, which only
+# loads after a restart.
+CUDA_TORCH_SWAP_GROUPS: frozenset[str] = frozenset({"toriigate", "sam3"})
+
+
+def plan_group(group: str) -> dict:
+    """What preparing ``group`` would install, without installing anything.
+
+    ``restart_likely`` is true when a package that needs installing is already
+    imported in this process (the new files only load after a restart) or when
+    Windows will swap torch for its CUDA build. A first install of modules this
+    process never imported usually loads without one.
+    """
+    packages = OPTIONAL_DEPENDENCY_GROUPS.get(group)
+    imports = GROUP_IMPORTS.get(group)
+    if not packages or imports is None:
+        return {"group": group, "packages": [], "restart_likely": False}
+
+    missing: list[str] = []
+    restart_likely = False
+    for module_name, package in zip(imports, packages):
+        spec = _resolved_install_spec(module_name, package)
+        if spec and spec not in missing:
+            missing.append(spec)
+            restart_likely = restart_likely or module_name in sys.modules
+    if group in CUDA_TORCH_SWAP_GROUPS and sys.platform == "win32":
+        try:
+            torch_version = importlib.metadata.version("torch")
+        except importlib.metadata.PackageNotFoundError:
+            torch_version = ""
+        restart_likely = restart_likely or "+cu" not in torch_version
+    return {"group": group, "packages": missing, "restart_likely": restart_likely}

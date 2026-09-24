@@ -208,7 +208,7 @@ Object.assign(window.SimilarImages, {
             const ensured = await window.ensureFeatureModel('clip', {
                 label: this._t('similar.clipModelName', 'CLIP similarity'),
                 sizeHint: '~580 MB',
-                confirmBytes: 0,
+                confirmBytes: 580 * 1024 * 1024,
             });
             if (!ensured.ok) return;
         }

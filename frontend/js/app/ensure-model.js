@@ -7,9 +7,51 @@
  */
 'use strict';
 
-const FEATURE_INSTALL_CONFIRM_BYTES = 1024 * 1024 * 1024;
+// Downloads from this size up are confirmed first; setup that likely needs
+// a restart or a particular GPU is confirmed at any size.
+const FEATURE_INSTALL_CONFIRM_BYTES = 100 * 1024 * 1024;
 const FEATURE_INSTALL_POLL_MS = 750;
 const FEATURE_INSTALL_STALL_MS = 3 * 60 * 1000;
+
+// Hardware a feature needs, said in its first-use confirm.
+const FEATURE_GPU_NOTES = {
+    toriigate: ['featureInstall.gpuToriigate',
+        'It needs an NVIDIA GPU with at least 16 GB of VRAM, or 32 GB of RAM to run slowly on the CPU.'],
+    sam3: ['featureInstall.gpuSam3', 'It needs an NVIDIA GPU (CUDA).'],
+};
+
+// The server's read-only preview of setup; a failed read just means the
+// confirm cannot promise anything about packages or restarts.
+async function _readSetupPlan(api, modelId) {
+    try {
+        return await api.get(`/api/models/plan?model_id=${encodeURIComponent(modelId)}`);
+    } catch (_error) {
+        return null;
+    }
+}
+
+function _setupConfirmMessage(modelId, sizeHint, plan) {
+    const lines = [];
+    if (sizeHint) {
+        lines.push(featureInstallT('featureInstall.confirmSize',
+            'It downloads about {size}, only the files this feature needs.', { size: sizeHint }));
+    }
+    const packageCount = Array.isArray(plan?.packages) ? plan.packages.length : 0;
+    if (packageCount > 0) {
+        lines.push(featureInstallT('featureInstall.confirmPackages',
+            'It also installs {count} Python package(s).', { count: packageCount }));
+    }
+    if (plan?.restart_likely === true) {
+        lines.push(featureInstallT('featureInstall.confirmRestart',
+            'After installing, the app needs one restart (about 20 seconds, one click) and then continues here.'));
+    } else if (plan) {
+        lines.push(featureInstallT('featureInstall.confirmNoRestart', 'It is ready to use once downloaded; no restart.'));
+    }
+    const gpuNote = FEATURE_GPU_NOTES[modelId];
+    if (gpuNote) lines.push(featureInstallT(gpuNote[0], gpuNote[1]));
+    lines.push(featureInstallT('featureInstall.confirmQuestion', 'Download now?'));
+    return lines.join(' ');
+}
 
 function featureInstallT(key, fallback, params) {
     const translated = window.I18n?.t?.(key, params);
@@ -46,7 +88,7 @@ function prepareSpecForTagger(modelName) {
             modelId: 'oppai-oracle',
             label: 'OppaiOracle V1.1',
             sizeHint: '~947 MB',
-            confirmBytes: 0,
+            confirmBytes: 947 * 1024 * 1024,
         };
     }
     if (name === 'cl-tagger-v2') {
@@ -63,7 +105,7 @@ function prepareSpecForTagger(modelName) {
         variant: name,
         label: name,
         sizeHint: heavyWd14 ? '~1.2 GB' : '~446 MB',
-        confirmBytes: heavyWd14 ? 1.2 * 1024 * 1024 * 1024 : 0,
+        confirmBytes: heavyWd14 ? 1.2 * 1024 * 1024 * 1024 : 446 * 1024 * 1024,
     };
 }
 
@@ -411,14 +453,13 @@ async function ensureFeatureModel(modelId, options = {}) {
         // Continue; prepare itself will report a conflict if needed.
     }
 
-    if (confirmBytes >= FEATURE_INSTALL_CONFIRM_BYTES) {
+    // Say up front what setup costs: the download, any Python packages,
+    // whether a restart follows, and the hardware it needs.
+    const plan = await _readSetupPlan(api, modelId);
+    if (confirmBytes >= FEATURE_INSTALL_CONFIRM_BYTES || plan?.restart_likely === true || FEATURE_GPU_NOTES[modelId]) {
         const confirmed = await featureInstallConfirm(
             featureInstallT('featureInstall.confirmTitle', 'Download {name}?', { name: label }),
-            featureInstallT(
-                'featureInstall.confirmBody',
-                'This downloads about {size}, only the files this feature needs. Continue?',
-                { size: sizeHint || label },
-            ),
+            _setupConfirmMessage(modelId, sizeHint, plan),
         );
         if (!confirmed) {
             showToast(featureInstallT('featureInstall.cancelled', 'Download cancelled'), 'info');

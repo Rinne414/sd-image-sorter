@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from optional_dependencies import (
     UnsafeDependencyInstallError,
     UnsupportedOptionalDependencyError,
+    plan_group,
 )
 from services.model_service import (
     ExternalAuthRequiredError,
@@ -93,6 +94,41 @@ async def get_download_progress():
     with _prepare_lock:
         progress["prepare_result"] = dict(_prepare_result)
     return progress
+
+
+# Model cards whose setup installs an optional Python dependency group.
+MODEL_DEPENDENCY_GROUPS: Dict[str, str] = {
+    "aesthetic": "aesthetic",
+    "artist": "artist",
+    "censor-legacy": "yolo",
+    "censor-nudenet": "nudenet",
+    "cl-tagger-v2": "cl-tagger-v2",
+    "clip": "clip",
+    "florence2": "florence2",
+    "lucida": "lucida",
+    "sam3": "sam3",
+    "tipo": "tipo",
+    "toriigate": "toriigate",
+}
+
+
+@router.get("/plan")
+async def get_model_plan(model_id: str):
+    """What preparing a model would install and whether a restart is likely.
+
+    Read-only: nothing is installed or downloaded. The first-use confirm uses
+    it to say "ready once downloaded" or "one restart afterwards" up front.
+    """
+    normalized = str(model_id or "").strip().lower()
+    group = MODEL_DEPENDENCY_GROUPS.get(normalized)
+    if group is None:
+        return {"model_id": normalized, "packages": [], "restart_likely": False}
+    try:
+        plan = await asyncio.to_thread(plan_group, group)
+    except Exception as exc:
+        _logger.warning("Could not plan setup for %s: %s", normalized, exc)
+        return {"model_id": normalized, "packages": [], "restart_likely": False}
+    return {"model_id": normalized, "packages": plan["packages"], "restart_likely": plan["restart_likely"]}
 
 
 @router.get("/status")

@@ -272,7 +272,7 @@
                     modelId: 'florence2',
                     label: 'Florence-2 Base',
                     sizeHint: '~465 MB',
-                    confirmBytes: 0,
+                    confirmBytes: 465 * 1024 * 1024,
                 });
             }
             if (form.enable_vlm && form.natural_language_mode === 'toriigate') {

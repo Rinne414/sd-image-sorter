@@ -138,7 +138,8 @@ def test_first_use_downloads_the_clicked_feature_with_progress():
 
     helper = _read("frontend", "js", "app", "ensure-model.js")
     assert "FEATURE_INSTALL_CONFIRM_BYTES" in helper
-    assert "1024 * 1024 * 1024" in helper
+    assert "100 * 1024 * 1024" in helper
+    assert "/api/models/plan" in helper
     assert "function ensureFeatureModel" in helper
     assert "/api/models/download-progress" in helper
     assert "prepareSpecForTagger" in helper
