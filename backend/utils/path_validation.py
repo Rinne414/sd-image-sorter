@@ -4,6 +4,7 @@ Prevents directory traversal attacks and validates file paths.
 """
 import os
 import re
+import stat
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 from typing import Optional, Tuple
@@ -39,7 +40,23 @@ class PathValidationError(ValueError):
 
 def is_directory_symlink_or_junction(path: str | os.PathLike[str]) -> bool:
     """Return whether a directory path is a symbolic link or Windows junction."""
-    return os.path.islink(path) or os.path.isjunction(path)
+    if os.path.islink(path):
+        return True
+    isjunction = getattr(os.path, "isjunction", None)
+    if isjunction is not None:
+        return isjunction(path)
+    return _is_windows_junction(path)
+
+
+def _is_windows_junction(path: str | os.PathLike[str]) -> bool:
+    """os.path.isjunction is Python 3.12+; older portable installs still run 3.11."""
+    if os.name != "nt":
+        return False
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return False
+    return getattr(info, "st_reparse_tag", 0) == stat.IO_REPARSE_TAG_MOUNT_POINT
 
 
 @dataclass(frozen=True)
