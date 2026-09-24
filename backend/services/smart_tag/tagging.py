@@ -406,18 +406,21 @@ def _load_florence2_for_phase2(job: SmartTagJobState, req: "SmartTagRequest"):
     compatibility_error = runtime_health.get("runtime_compatibility_error")
     if compatibility_error:
         raise RuntimeError(compatibility_error)
-    if req.use_gpu and runtime_health.get("torch_cuda_available") is not True:
-        raise RuntimeError(
-            "Florence-2 CUDA runtime is not ready. Open Model Manager, run "
-            "Prepare / Download, then restart the app or explicitly disable GPU. "
-            "No automatic CPU fallback was used."
+    use_gpu = bool(req.use_gpu)
+    if use_gpu and runtime_health.get("torch_cuda_available") is not True:
+        # Florence-2 Base is small enough to caption on the CPU. A GPU the app
+        # cannot use slows the run down; it must not stop it.
+        use_gpu = False
+        job.caption_device_note = (
+            "Florence-2 ran on the CPU because this app has no usable NVIDIA GPU "
+            "(CUDA), so captions are slower."
         )
 
     from florence2_captioner import get_florence2_captioner
 
     job.message = "Loading Florence-2 Base natural-language model..."
     nl_captioner = get_florence2_captioner(
-        use_gpu=req.use_gpu,
+        use_gpu=use_gpu,
         force_reload=False,
     )
     nl_captioner.load()

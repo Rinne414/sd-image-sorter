@@ -63,6 +63,10 @@ class SmartTagJobState:
     # back to 0% when the next phase begins. ``total``/``processed`` keep
     # image-count semantics so "Cancelled at N/M" stays meaningful.
     phase_completion: float = 0.0
+    # Set when the caption model runs somewhere other than asked (a GPU
+    # run that fell back to the CPU); appended to the progress and finish
+    # messages so a slower run is explained.
+    caption_device_note: str = ""
 
     def snapshot(self) -> Dict[str, Any]:
         return {

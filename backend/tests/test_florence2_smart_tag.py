@@ -30,7 +30,7 @@ class _FakeFlorenceCaptioner:
         return self._caption
 
 
-def test_phase2_loader_uses_explicit_gpu_policy_without_cpu_fallback(monkeypatch):
+def test_phase2_loader_uses_the_gpu_when_cuda_is_available(monkeypatch):
     captured: dict[str, object] = {}
     captioner = _FakeFlorenceCaptioner(caption="caption", error=None)
 
@@ -68,6 +68,45 @@ def test_phase2_loader_uses_explicit_gpu_policy_without_cpu_fallback(monkeypatch
     assert captured == {"use_gpu": True, "force_reload": False}
     assert captioner.loaded is True
     assert "Loading Florence-2" in job.message
+
+
+def test_phase2_loader_runs_on_the_cpu_and_says_so_when_cuda_is_missing(monkeypatch):
+    captured: dict[str, object] = {}
+    captioner = _FakeFlorenceCaptioner(caption="caption", error=None)
+
+    def get_captioner(*, use_gpu, force_reload):
+        captured.update(use_gpu=use_gpu, force_reload=force_reload)
+        return captioner
+
+    monkeypatch.setitem(
+        sys.modules,
+        "model_health",
+        SimpleNamespace(
+            get_torch_onnx_runtime_health=lambda: {
+                "torch_cuda_available": False,
+                "runtime_compatible": True,
+                "runtime_compatibility_error": None,
+            }
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "florence2_captioner",
+        SimpleNamespace(get_florence2_captioner=get_captioner),
+    )
+    job = SmartTagJobState(job_id="florence2-cpu")
+    request = SmartTagRequest(
+        image_ids=[1],
+        enable_vlm=True,
+        natural_language_mode="florence2",
+        use_gpu=True,
+    )
+
+    loaded = tagging._load_florence2_for_phase2(job, request)
+
+    assert loaded is captioner
+    assert captured == {"use_gpu": False, "force_reload": False}
+    assert "CPU" in job.caption_device_note
 
 
 def test_caption_phase_persists_required_florence2_prose(monkeypatch):

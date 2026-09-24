@@ -378,9 +378,10 @@ def _run_two_phase_local_captioner_pipeline(
         return
 
     ctx = _build_caption_phase(req, None, nl_tagger)
+    device_note = f" {job.caption_device_note}" if job.caption_device_note else ""
     job.message = (
         f"Phase 2/2: captioning {len(pending_items)} image(s) "
-        f"with {captioner_label}..."
+        f"with {captioner_label}...{device_note}"
     )
     for win_start in range(0, len(pending_items), SMART_TAG_PIPELINE_WINDOW):
         if job.cancel_requested:
@@ -393,6 +394,7 @@ def _run_two_phase_local_captioner_pipeline(
         )
 
     job.status, job.message = _terminal_job_outcome(job, req)
+    job.message += device_note
 
 
 def _run_two_phase_toriigate_pipeline(
