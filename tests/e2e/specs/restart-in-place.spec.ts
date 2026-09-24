@@ -82,3 +82,40 @@ test('using a feature that still needs the restart asks for it instead of prepar
   await expect(overlay).toBeVisible()
   await expect(overlay.locator('[data-action="restart-and-continue"]')).toBeVisible()
 })
+
+test('restarting while work runs asks first: No keeps it running, Yes restarts', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('sd-image-sorter-lang', 'en'))
+  await stubRestartFlow(page)
+  const forced: unknown[] = []
+  let bootId = 'boot-old'
+  await page.route('**/api/updates/boot-id', (route) => route.fulfill({ json: { boot_id: bootId } }))
+  await page.route('**/api/updates/restart', (route) => {
+    const body = route.request().postDataJSON() as { force?: boolean }
+    forced.push(body.force)
+    if (!body.force) {
+      return route.fulfill({ json: { status: 'busy', jobs: ['scan', 'model_setup'], boot_id: bootId } })
+    }
+    setTimeout(() => { bootId = 'boot-new' }, 1500)
+    return route.fulfill({ json: { status: 'scheduled', launcher: 'run.bat', mode: 'in_place', boot_id: bootId } })
+  })
+  await page.goto('/')
+  await page.locator('#btn-open-model-manager').click()
+  await page.locator('[data-settings-tab="models"]').click()
+  const restartBtn = page.locator(`.model-card[data-model-id="${RESTART_CARD.id}"] .btn-restart-model`)
+
+  await restartBtn.click()
+  const message = page.locator('#confirm-message')
+  await expect(message).toContainText('a folder scan')
+  await expect(message).toContainText('a model download')
+  await page.locator('#btn-confirm-cancel').click()
+  await expect(restartBtn).toBeEnabled()
+  expect(forced).toEqual([false])
+
+  await page.evaluate(() => { (window as any).__beforeRestart = true })
+  const reloaded = page.waitForEvent('load')
+  await restartBtn.click()
+  await page.locator('#btn-confirm-ok').click()
+  await reloaded
+  expect(forced).toEqual([false, false, true])
+  expect(await page.evaluate(() => (window as any).__beforeRestart ?? null)).toBeNull()
+})

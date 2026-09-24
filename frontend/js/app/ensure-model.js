@@ -255,6 +255,8 @@ function _showInstallRestartPrompt(spec, result) {
                 }
                 restartBtn.disabled = false;
                 if (dismissBtn) dismissBtn.disabled = false;
+                // The user chose not to stop running work; nothing went wrong.
+                if (restartResult?.status === 'declined') return;
                 if (statusEl) {
                     statusEl.textContent = restartResult?.status === 'error'
                         ? featureInstallT(

@@ -165,6 +165,7 @@ Object.assign(API, {
     async restartApp(options = {}) {
         return this.post('/api/updates/restart', {
             reason: options.reason || '',
+            force: options.force === true,
         });
     },
 

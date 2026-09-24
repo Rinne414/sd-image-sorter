@@ -136,6 +136,7 @@ function _bindPrepareRestartBanner(banner, items) {
                     return;
                 }
                 restartBtn.disabled = false;
+                if (result?.status === 'declined') return;
                 const statusEl = banner.querySelector('[data-role="restart-status"]');
                 if (statusEl) {
                     statusEl.textContent = result?.status === 'error'
@@ -201,6 +202,40 @@ function showPrepareRestartPrompt({ items, host } = {}) {
     return banner;
 }
 
+// Plain words for the job ids the restart endpoint reports as running.
+const RESTART_BUSY_JOB_NAMES = {
+    scan: ['restartBusy.job.scan', 'a folder scan'],
+    tagging: ['restartBusy.job.tagging', 'tagging'],
+    captions: ['restartBusy.job.captions', 'captioning'],
+    aesthetic: ['restartBusy.job.aesthetic', 'aesthetic scoring'],
+    file_moves: ['restartBusy.job.fileMoves', 'moving files'],
+    background_jobs: ['restartBusy.job.background', 'a background task'],
+    model_setup: ['restartBusy.job.modelSetup', 'a model download'],
+    ai: ['restartBusy.job.ai', 'AI work'],
+};
+
+function _confirmRestartWhileBusy(jobs) {
+    const names = (Array.isArray(jobs) ? jobs : []).map((id) => {
+        const entry = RESTART_BUSY_JOB_NAMES[id] || RESTART_BUSY_JOB_NAMES.background_jobs;
+        return _prepareRestartT(entry[0], entry[1]);
+    });
+    const list = [...new Set(names)].join(_prepareRestartT('restartBusy.separator', ', '));
+    const title = _prepareRestartT('restartBusy.title', 'Restart now?');
+    const message = _prepareRestartT(
+        'restartBusy.body',
+        'Still running: {jobs}. Restarting stops it; you can start it again afterwards. Restart anyway?',
+        { jobs: list },
+    );
+    return new Promise((resolve) => {
+        const ask = window.App?.showConfirm || window.showConfirm;
+        if (typeof ask === 'function') {
+            ask(title, message, () => resolve(true), () => resolve(false));
+            return;
+        }
+        resolve(window.confirm(message));
+    });
+}
+
 async function requestAppRestartAndContinue({ reason, items } = {}) {
     const remaining = normalizePrepareResumeItems(items);
     writePrepareResumeQueue({
@@ -222,9 +257,17 @@ async function requestAppRestartAndContinue({ reason, items } = {}) {
     }
     _appRestartInFlight = true;
     try {
-        const result = await api.restartApp({
-            reason: String(reason || 'model_dependency_install').slice(0, 200),
-        });
+        const restartReason = String(reason || 'model_dependency_install').slice(0, 200);
+        let result = await api.restartApp({ reason: restartReason });
+        // A restart stops whatever is running, so ask first; the user decides.
+        if (result?.status === 'busy') {
+            if (!(await _confirmRestartWhileBusy(result.jobs))) {
+                _appRestartInFlight = false;
+                persistQueue(true);
+                return { status: 'declined', jobs: result.jobs };
+            }
+            result = await api.restartApp({ reason: restartReason, force: true });
+        }
         if (result?.status === 'scheduled') {
             persistQueue(true);
             if (typeof showGlobalLoading === 'function') {

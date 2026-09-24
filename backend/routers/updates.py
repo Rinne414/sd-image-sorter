@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 import app_lifecycle
+from services.busy_jobs import collect_busy_jobs
 from services.service_provider import ServiceProvider
 from services.update_service import UpdateService
 
@@ -31,6 +32,8 @@ class ApplyUpdateRequest(BaseModel):
 
 class RestartAppRequest(BaseModel):
     reason: str = Field(default="", max_length=200)
+    # Restart even though jobs are running (the user confirmed it).
+    force: bool = False
 
 
 class UpdateProxyConfigRequest(BaseModel):
@@ -98,7 +101,15 @@ def restart_app(payload: RestartAppRequest) -> dict:
     Feature setup needs this when an install replaced a module that was already
     loaded. Nothing is patched or downloaded here -- the worker just waits for
     this process to exit and starts the launcher again.
+
+    A restart stops whatever is running, so without ``force`` it first answers
+    ``busy`` with the running jobs and the page asks the user.
     """
+    if not payload.force:
+        busy = collect_busy_jobs()
+        if busy:
+            return {"status": "busy", "jobs": busy, "boot_id": app_lifecycle.BOOT_ID}
+
     reason = payload.reason or ""
     try:
         result = get_update_service().restart_app(reason=reason)
