@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-09-25
+
+The stable release of the 3.5 line: everything from 3.5.0-beta.1 to beta.6, plus the changes below. 3.5 is the last release of the V3 line.
+
+3.5 系列正式版：包含 3.5.0-beta.1 到 beta.6 的全部内容，以及下面的改动。3.5 是 V3 系列的最后一版。
+
+### Highlights since 3.5.0-beta.6 / beta.6 之后的重点
+
+- **Gallery batch actions are on screen again**: after selecting images, the Move / Tag / Censor / Collection / More bar sits at the bottom of the window; a layout rule had parked it after the whole grid. Selected tiles show a check mark and pick order.
+  - 选好图后，底部的移动、打标、打码、加入合集、更多操作栏又回到画面上（之前被一条样式规则挤到整片图的后面）；选中的图显示 ✓ 和顺序。
+- **No hard stops**: exports skip problem images instead of refusing, Censor exports un-censored images as they are when you choose, and caps on claims, moves, blacklists, tag counts and watermark regions were raised or removed.
+  - 不再硬挡：导出遇到有问题的图会跳过而不是拒绝；没打码的图可以选择照原图导出；认领、搬移、黑名单、标签数、水印区域的上限都放宽或拿掉。
+- **Libraries stay separate**: "Move N into this library" moves every image, the unsaved Dataset draft stays in its own library, and deleting a library also removes its collections and dataset projects.
+  - 图库互不串：「移进这个图库」会搬全部；未保存的数据集草稿留在自己的图库；删除图库会一并清掉它的合集和数据集项目。
+- **.txt tags and WD14 tags stop overwriting each other**: a re-tag keeps its scored row, a tag the tagger drops comes back from the .txt, and an unchanged sidecar writes nothing on rescan.
+  - .txt 标签和 WD14 标签不再互相覆盖：重新打标保留自己的置信度，打标器不再给的标签会从 .txt 回来，sidecar 没变时重扫不写库。
+- **Model setup says what happens**: first use states the size, the packages and whether a restart follows; a restart happens in place from the launcher and setup continues afterwards.
+  - 模型准备先说清楚：第一次使用会告诉你下载多大、装几个包、要不要重启；重启由启动器原地完成，回来后接着准备。
+- **Missions show their steps**: LoRA / Pixiv / Organize missions list what each step asks, with the current one marked.
+  - 任务会列出步骤：LoRA、Pixiv、整理任务会写出每一步要做什么，并标出现在在哪一步。
+- **Silent failures fixed**: confirm dialogs closed any way count as Cancel, find-near reports a busy AI runtime instead of "CLIP could not read this image", export never saves an empty file, and late censor renames never reuse a name.
+  - 修掉默默失败：确认框用任何方式关掉都算取消；AI 忙时找相似会说清楚；导出不会存成空文件；打码改名不会撞名。
+- **Faster**: gallery page 0.36 s to 0.045 s (migrations 047/048 add indexes), Mass Tag on 1,000 images 170 s to 106 s, dataset audit full check about 25x faster.
+  - 更快：图库翻页 0.36 秒降到 0.045 秒（迁移 047/048 加索引）；批量打标 1000 张 170 秒降到 106 秒；数据集完整查重约快 25 倍。
+- **Python 3.11 portable fix**: folder scans no longer crash on the bundled Python 3.11 (os.path.isjunction fallback).
+  - 修掉可携版内嵌 Python 3.11 扫描文件夹会崩溃的问题。
+- **Clearer pages**: Censor keeps Save All on screen at 1366x768, the tagger says what Start will tag, repeated explanations were removed, Model Center shows the model cards first, and settings toggles read On / Off.
+  - 页面更清楚：1366x768 的打码页看得到「全部保存」；打标会说明这次标哪些图；重复的说明拿掉；模型中心先显示模型卡片；设置开关统一显示开 / 关。
+- **Chinese UI is Chinese**: 73 tooltips and 5 placeholders follow the UI language, the default library shows as 主图库, and each thing has one name (数据集, 合集, 模型中心).
+  - 中文界面全是中文：73 个提示和 5 个占位文字跟着界面语言；默认图库显示为「主图库」；同一个东西只用一个名字。
+- **Quieter launcher**: missing thumbnails no longer flood the launcher window.
+  - 缺缩略图不再刷满启动器窗口。
+
 ### Fixed / 修复
 - **Separate libraries no longer mix All counts / 独立图库不再混用 All 数量**: switching to an empty library zeros generator/tag/folder stats, gallery filters, and selection for that workspace. Mass Tag, including a queued Mass Tag, lists and tags only the images of the library it was started in, and library-health totals follow the current library.
   - 切到空图库时，All / 生成器 / 标签 / 文件夹数字只算当前库；筛选条件和选择不会从上一库带过来；批量打标（包括排队中的批量打标）只处理启动时所在图库的图片。
@@ -149,7 +182,7 @@ Beta 2 closes two high-impact correctness and desktop UX defects found after the
 
 Beta 2 修复首个公开测试版之后发现的两个高影响正确性与桌面体验问题：元数据解析器现可读取 alpha/RGB、压缩/未压缩的签名 Stealth PNG Info 载体，并通过解析器修订号自动重解析旧的 PNG 不完整记录；队列接龙在拖拽、选择、排序、折叠及其他同会话重渲染后保持用户当前滚动位置。发布流水线同时已在 Windows、macOS、Linux 与两种 Linux portable 架构上稳定通过。
 
-## [3.5.0] - 2026-07-19
+## [3.5.0-beta] - 2026-07-19
 
 v3.5.0 stable 落地 v4.0「清爽极光」重设计：新增任务入口页与可定制导航，图库/排序/打码/打标四大工作流同步升级，并重做 LoRA/Dataset 导出、完整搜索语法、查重清理、颜色搜索和大图库后台任务。beta 到 stable 的收口补齐 Krea 2 自然语言优先 Smart Tag、Qwen3-VL Instruct 推荐路径、AI/Mass Tag 生命周期竞态、扫描与元数据边界、打码输出完整性、模型运行时诊断，以及 Model Manager 等高风险模块拆分与桌面回归覆盖。
 

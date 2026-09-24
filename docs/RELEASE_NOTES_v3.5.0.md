@@ -1,70 +1,61 @@
-## v3.5.0 — 清爽极光 + 稳定性收口 / Fresh Aurora + Stability
+## v3.5.0 — 3.5 正式版：更顺手、不再硬挡 / Stable: Smoother, No Hard Stops
 
-清爽极光重塑桌面流程；图库搜索、LoRA/Dataset 导出、Smart Tag、排序、打码与大库任务全面升级。
-
-Fresh Aurora upgrades search, export, Smart Tag, sorting, censoring, and scale.
+操作栏回到画面、图库不串库、模型准备先说清楚。Batch bar back on screen, libraries stay separate, clearer setup.
 
 ---
 
 ## Fixed / 修复
 
-- **Fresh Aurora workspace**: A new mission entry page, customizable task-scoped navigation, function catalog, and four cover modes make every major workflow easier to reach while preserving the familiar desktop top bar.
-  - 全新的「清爽极光」桌面工作台加入任务入口页、按任务收束的可定制导航、所有功能清单与四种门面展示模式，同时保留熟悉的顶部导航。
+This is the stable release of the 3.5 line: everything from 3.5.0-beta.1 to beta.6 (see CHANGELOG) plus the changes below. 3.5 is the last release of the V3 line.
+这是 3.5 系列的正式版：包含 3.5.0-beta.1 到 beta.6 的全部内容（见 CHANGELOG），以及下面的改动。3.5 是 V3 系列的最后一版。
 
-- **Gallery search and selection**: The Gallery now supports a complete bilingual query language, comparisons, ranges, exclusions, Danbooru-aware autocomplete, quick filters, live result counts, color search, smart folders, and a persistent bottom action bar. Server-resolved selection tokens keep filtered actions correct beyond the currently loaded page.
-  - 图库现支持完整双语查询语法、比较/范围/排除、Danbooru 补全、快捷筛选、实时命中数、颜色搜索、智能文件夹与常驻底部操作条；服务端 selection token 确保跨分页筛选批处理不会漏图。
+- **Gallery batch actions are on screen again**: after selecting images, the Move / Tag / Censor / Collection / More bar sits at the bottom of the window. Selected tiles show a check mark and their pick order.
+  - 选好图后，底部操作栏（移动、打标、打码、加入合集、更多）又回到画面上；选中的图显示 ✓ 和顺序。
 
-- **LoRA and Dataset export integrity**: Export was rebuilt around per-image rating and quality, tag provenance, purpose filtering, implication deduplication, character-trait pruning, collision reporting, trainer health checks, and a WYSIWYG preview driven by the same engine that writes sidecars.
-  - LoRA 与 Dataset 导出重做为逐图分级/画质、标签来源追踪、训练目的过滤、蕴含去重、角色特征修剪、撞名报告与训练可用性检查；预览和实际 sidecar 写入共用同一引擎，所见即所得。
+- **No hard stops**: exports skip problem images instead of refusing, Censor can export un-censored images as they are, and caps on claims, moves, blacklists, tag counts and watermark regions were raised or removed.
+  - 不再硬挡：导出会跳过有问题的图而不是拒绝；没打码的图可以选择照原图导出；认领、搬移、黑名单、标签数、水印区域的上限放宽或拿掉。
 
-- **Krea 2 Smart Tag path**: Krea 2 is treated as a natural-language-first target, with Qwen3-VL Instruct clearly recommended for local captions. Booru context is explicit and optional, and real Ollama output now flows through the intended natural-language caption field.
-  - Krea 2 明确按自然语言优先目标处理，本地字幕清楚推荐 Qwen3-VL Instruct；Booru 上下文可显式开关，真实 Ollama 输出会进入正确的自然语言字幕字段。
+- **Libraries stay separate**: "Move N into this library" moves every image, the unsaved Dataset draft stays in its own library, and deleting a library also removes its collections and dataset projects.
+  - 图库互不串：「移进这个图库」会搬全部；未保存的数据集草稿留在自己的图库；删除图库会一并清掉它的合集和数据集项目。
 
-- **Tagger and AI job correctness**: Manual tags survive re-tagging through source/category provenance, VLM tags pass a vocabulary gate, transparent images are prepared correctly, and camie-tagger-v2 reads the correct ONNX output. AI queue and Mass Tag lifecycle races no longer publish stale completion or lose queued work across restarts.
-  - 标签来源/类别追踪确保手动标签不会被重打标覆盖，VLM 标签经过词表闸门，透明图预处理与 camie-tagger-v2 ONNX 输出头已修正；AI 队列和 Mass Tag 生命周期竞态不再发布过期完成状态，排队任务也可跨重启恢复。
+- **.txt tags and WD14 tags stop overwriting each other**: a re-tag keeps its scored row, a tag the tagger drops comes back from the .txt, and an unchanged sidecar writes nothing on rescan.
+  - .txt 标签和 WD14 标签不再互相覆盖：重新打标保留置信度；打标器不再给的标签会从 .txt 回来；sidecar 没变时重扫不写库。
 
-- **Similarity and cleanup tools**: Whole-library Duplicate Cleanup groups near-duplicates without the old size cap and suggests the best keeper; semantic similarity, color discovery, and related navigation now form a coherent review workflow.
-  - 整库「查重清理」不再受旧数量上限限制，可将近似图分组并建议最佳保留项；语义相似、颜色发现与相关入口已连成一致的审核流程。
+- **Model setup says what happens**: first use states the download size, the packages and whether a restart follows. A restart happens in place from the launcher, and setup continues afterwards.
+  - 模型准备先说清楚：第一次使用会告诉你下载多大、装几个包、要不要重启；重启由启动器原地完成，回来后接着准备。
 
-- **Manual Sort workflow**: Three sorting modes, named presets, live scope counts, focus mode, durable session restore, undo-safe copy behavior, and a laptop-visible primary action make long WASD sessions faster and recoverable.
-  - 手动排序加入三种模式、命名预设、实时范围计数、专注模式、持久会话恢复与可安全撤销的复制行为；主操作在笔记本分辨率下也始终可见。
+- **Missions show their steps**: the LoRA, Pixiv and Organize missions list what each step asks, with the current step marked.
+  - 任务会列出步骤：LoRA、Pixiv、整理任务会写出每一步要做什么，并标出现在在哪一步。
 
-- **Censor review and output integrity**: The editor adds a region-by-region review conveyor and per-image batch outcomes. JPEG transparency is flattened deliberately, PNG/WebP alpha and source formats are preserved where supported, and failed outputs are reported instead of being presented as success.
-  - 打码编辑器新增逐区域审核流水线与逐图批处理结果；JPEG 透明度会明确铺底，PNG/WebP 在支持时保留 alpha 与源格式，失败输出会如实报告而不再显示假成功。
+- **Silent failures fixed**: confirm dialogs closed any way count as Cancel, Find near reports a busy AI runtime instead of "CLIP could not read this image", an export never saves an empty file, and late censor renames never reuse a name.
+  - 修掉默默失败：确认框用任何方式关掉都算取消；AI 忙时找相似会说清楚；导出不会存成空文件；打码改名不会撞名。
 
-- **Large-library reliability**: Bulk delete, remove, export, metadata reparse, and duplicate scans run as cancellable background work with bounded progress and errors. Export pagination leaves the event loop responsive, while scan identity handling, junction traversal, WebP EXIF, metadata retention, and duplicate-result publication are hardened.
-  - 批量删除、移出、导出、元数据重解析与查重扫描改为可取消后台任务，进度和错误有界；导出分页不再阻塞事件循环，扫描 identity、junction 遍历、WebP EXIF、原始元数据保留与查重结果发布也完成加固。
+- **Faster**: gallery page 0.36 s to 0.045 s, Mass Tag on 1,000 images 170 s to 106 s, and the dataset audit's full check about 25x faster.
+  - 更快：图库翻页 0.36 秒降到 0.045 秒；批量打标 1000 张 170 秒降到 106 秒；数据集完整查重约快 25 倍。
 
-- **Model setup and runtime repair**: Model Manager now presents clearer prepare/repair state and download-source controls. CUDA, Torch, and ONNX Runtime compatibility checks produce actionable diagnostics, including Linux NVIDIA GPU repair, without hiding the original failure.
-  - Model Manager 更清楚地展示 Prepare/Repair 状态与下载源；CUDA、Torch、ONNX Runtime 兼容检查提供可操作诊断，并覆盖 Linux NVIDIA GPU 修复，不再掩盖根本错误。
+- **Clearer pages**: Censor keeps Save All on screen at 1366x768, the tagger says what Start will tag, repeated explanations were removed, Model Center shows the model cards first, and settings toggles read On / Off.
+  - 页面更清楚：1366x768 的打码页看得到「全部保存」；打标会说明这次标哪些图；重复说明拿掉；模型中心先显示模型卡片；设置开关统一显示开 / 关。
 
-- **Desktop regression and maintainability**: High-risk application, Dataset, Censor, service, and Model Manager modules were split without changing their public behavior. The desktop Playwright gate is sharded with truthful run artifacts and expanded interaction coverage for supported laptop and desktop resolutions.
-  - 高风险的应用、Dataset、Censor、服务与 Model Manager 模块在不改变公开行为的前提下完成拆分；桌面 Playwright 门禁采用可信分片产物，并扩展了受支持笔记本/桌面分辨率的交互覆盖。
+- **Chinese UI is Chinese**: 73 tooltips and 5 placeholders follow the UI language, the default library shows as 主图库, and each thing has one name.
+  - 中文界面全是中文：73 个提示和 5 个占位文字跟着界面语言；默认图库显示为「主图库」；同一个东西只用一个名字。
+
+- **Python 3.11 portable fix and a quieter launcher**: folder scans no longer crash on a bundled Python 3.11, and missing thumbnails no longer flood the launcher window.
+  - 可携版内嵌 Python 3.11 扫描文件夹不再崩溃；缺缩略图不再刷满启动器窗口。
 
 ---
 
 ## Upgrading / 升级注意
 
-- Database migrations run automatically on first start; no manual schema steps are required and existing library data is preserved.
-  - 首次启动会自动执行数据库迁移，无需手动处理 schema，现有图库数据会保留。
-
-- The new mission entry page opens by default. Use Settings → 跳过入口页 to keep the previous direct-to-workspace startup, and click the brand block whenever you want to return to the entry page.
-  - 新任务入口页默认显示；如需沿用直接进入工作区的启动方式，可在「设置 → 跳过入口页」开启，之后仍可点击品牌区返回入口页。
-
-- Auto-Separate and Manual Sort remain non-destructive by default with `copy`; existing shortcuts and destructive-action confirmations are unchanged.
-  - 自动分类与手动排序仍默认使用非破坏性的 `copy`，现有快捷键和危险操作确认保持不变。
-
-- For local natural-language captions, choose a Qwen3-VL Instruct model in Model Setup. Existing WD14 tagger choices remain available; the balanced default is unchanged.
-  - 本地自然语言字幕请在模型设置中选择 Qwen3-VL Instruct；现有 WD14 打标器仍可使用，均衡默认项不变。
-
-- In-app updates from v3.4.x continue through Check Update; the app patch is for that updater only, not for a fresh installation.
-  - v3.4.x 可继续通过「检查更新」升级；app patch 仅供应用内更新器使用，不适合全新安装。
+- The first launch adds two database indexes (migrations 047 and 048). It takes a second or two; nothing needs re-scanning.
+  - 第一次启动会加两个数据库索引（迁移 047、048），只要一两秒，不需要重扫。
+- 3.5.0-beta users and 3.4.3 users are both offered this update in the app.
+  - 3.5.0 beta 用户和 3.4.3 用户都会在应用内收到这次更新。
 
 ---
 
 ## Validation / 验证
 
-Full CI passed: 4,869 backend tests with 90% coverage (7 skipped); 539 desktop Playwright tests with 0 failures or flaky results (3 skipped); click coverage 46.92% (198/422). All six assets passed archive, manifest, checksum, permission, architecture, and internal-file checks. Fresh Windows and Linux x86_64 portable launches served `/`, `/docs`, and diagnostics as v3.5.0; aarch64 was archive- and ELF-validated on the x86_64 host. / 完整 CI 已通过：后端 4,869 项、覆盖率 90%（7 项跳过）；桌面 Playwright 539 项通过、0 失败、0 flaky（3 项跳过）；点击覆盖率 46.92%（198/422）。六项资产通过归档、manifest、校验和、权限、架构与内部文件检查；Windows 与 Linux x86_64 portable 全新首启均以 v3.5.0 提供首页、文档和诊断，aarch64 已在 x86_64 主机完成归档与 ELF 验证。
+Backend 6,734 passed, 9 skipped; desktop E2E 892 tests: 890 passed, 0 failed, 2 skipped. / 后端 6,734 个通过、9 个跳过；桌面 E2E 892 项：890 通过、0 失败、2 跳过。
 
 ---
 
@@ -88,11 +79,11 @@ Full CI passed: 4,869 backend tests with 90% coverage (7 skipped); 539 desktop P
 
 | Asset | SHA-256 |
 |---|---|
-| `sd-image-sorter-v3.5.0-windows-portable.zip` | `9944bd4e59abd677b16c610e1516a6b1ceeaa2854d35ff7e860c15cbfd48ac90` |
-| `sd-image-sorter-v3.5.0-app-patch.zip` | `a0939d8781c380c3cc69b869031ff1bce972ca33e53f682349b860551fb0cd07` |
-| `sd-image-sorter-v3.5.0-linux.tar.gz` | `741af6e7957f35d5100cb844dc7b3aa308ae1ccae288470acdbd590dc888e1c6` |
-| `sd-image-sorter-v3.5.0-linux-portable-x86_64.tar.gz` | `511a1f58857309a8429233faf4a8b224dceec88073ad4d5d02ad9951cb69a8fe` |
-| `sd-image-sorter-v3.5.0-linux-portable-aarch64.tar.gz` | `8d9711a1997a7e7a4cf3dc42d774136afc248152893d6467c2b708d4fe09b83b` |
-| `sd-image-sorter-v3.5.0-release-manifest.json` | `28210ba1a8eef70b3f610ac8c1ab657f354edf828af31560affc1baca5978303` |
+| `sd-image-sorter-v3.5.0-windows-portable.zip` | `58485ee1c11feb69d93c8746a959403625bcd6e9e0a01a9a9f71e7f8de338d0a` |
+| `sd-image-sorter-v3.5.0-app-patch.zip` | `93821ec215a24797b1e40743b0314c5f04ede087a8eca06315a6d7a13b006de8` |
+| `sd-image-sorter-v3.5.0-linux.tar.gz` | `5c101f097019c4e1f810c518f0eb210333c39978a93d041cc2bfe3e4e15b014b` |
+| `sd-image-sorter-v3.5.0-linux-portable-x86_64.tar.gz` | `7a8d14340a5f238fa218add338bef757b22236506bac173c7a6dd887fcb7d251` |
+| `sd-image-sorter-v3.5.0-linux-portable-aarch64.tar.gz` | `a78fcdf67f3f156538d48e4562d18b2427e68da8f55e20d8245200076e454ef4` |
+| `sd-image-sorter-v3.5.0-release-manifest.json` | `b3a57b634e2a344d10a6ffd9c9ba9cceffc77e3bdb295471c89b367ec5fcc175` |
 
 The manifest contains the five archive checksums; its own checksum is recorded above. / manifest 内含五个归档校验和，其自身校验和记录于上表。

@@ -52,6 +52,17 @@
 
 **SD Image Sorter：把“AI 图满盘爆炸、参数到处失踪、好图根本挑不出来、发出去前还得重新打码”的崩溃现场，硬生生压成“扫描、读取、打标、分拣、查重、炼词、识别、打码、加扰、评分”一套打完的本地工作流。**
 
+### v3.5 有什么新东西
+
+- **多个图库**：主图库、NAI style、ComfyUI 这类长期图集各自独立，图片、筛选、合集、数据集项目互不串库；图可以在图库之间搬。
+- **首页三个任务**：LoRA 数据集、批量整理、Pixiv 成套发布。点进去以后顶栏只留这条流程要用的页面，点任务名称还能看到每一步要做什么。
+- **Pixiv 成套发布**：挑图、打码、排顺序、批量改名，导出一组能直接上传的图。还没打码的图也能照原图一起导出，由你决定。
+- **数据集工作台**：项目可以保存、随时接着做；Smart Tag 一次跑完 WD14 + VLM；遮罩编辑、导出前审计、导出 kohya 等训练格式。
+- **模型中心**：第一次用某个 AI 功能时，先告诉你要下载多大、要不要重启；需要重启时一键重启，回来接着做。
+- **不再硬挡**：数量上限、导出条件这类硬卡改成提醒，让你自己选。
+- **更快**：图库翻页从 0.36 秒降到 0.045 秒；批量打标 1000 张从 170 秒降到 106 秒（实测）。
+- **中英文完整**：中文界面里的按钮提示也都是中文。
+
 ### 为什么选 SD Image Sorter？
 
 **SD Image Sorter — 为 Stable Diffusion 工作流设计的本地图库**
@@ -107,6 +118,9 @@ Eagle、Billfish 是通用素材库，不列入这张 SD 工作流细表。详�
 - 按生成器、标签、评级、模型、LoRA、提示词关键字、尺寸、长宽比筛选
 - 按时间、文件名、提示词长度、标签数量等排序
 - **Library Roots 与文件夹树**：定义多个库根目录，侧边栏文件夹树导航，按路径筛选
+- **多个图库**：长期图集各自独立（图片、筛选、合集、数据集项目都分开），图可以在图库之间搬
+- **搜索**：`tag:silver_hair score>=7 -tag:blurry` 这种 key:value 语法，也能用一句话描述做语义搜索
+- **智能文件夹**：把常用筛选固定在侧栏，一点就套用；另有日期范围筛选
 
 ### 2. AI Tagging 打标
 
@@ -126,7 +140,7 @@ Eagle、Billfish 是通用素材库，不列入这张 SD 工作流细表。详�
   - **Cull Mode**（剔除模式）：保留 / 删除二分，快速清理低质量图片
 - 适合把收藏、精选、待删、NSFW、角色分类等工作压缩成几分钟
 
-### 4. Collections 整理
+### 4. Collections 合集
 
 - 将图片组织到持久化的命名集合中
 - 按集合筛选，批量添加 / 移除
@@ -200,6 +214,18 @@ Eagle、Billfish 是通用素材库，不列入这张 SD 工作流细表。详�
 - 编辑 prompt / negative / seed / sampler / steps / CFG / model / LoRA
 - 另存为新图（PNG / WebP / JPG）
 - 同路径覆盖需二次确认
+
+### 15. Pixiv 成套发布
+
+- 从图库挑一组图，送进打码编辑，逐张打码或先用 AI 检测
+- 在队列里排顺序、批量改名（模板支持序号、原文件名、日期）
+- 「送到成套发布」检查整组后导出，可去除生成信息；没打码的图可以照原图一起导出
+
+### 16. 模型中心
+
+- 所有 AI 模型的状态集中在一处：已就绪、缺文件、需要重启
+- 第一次用某个功能时先说明下载大小、要装几个 Python 包、会不会需要重启，确认后才下载
+- 需要重启时一键重启（启动器会原地重开），回来后接着把剩下的准备完
 
 ## 这工具最适合谁
 
@@ -571,6 +597,17 @@ Eagle and Billfish are general asset managers and are not in this SD-workflow ta
 
 **SD Image Sorter turns “my AI image folder is a landfill” into a fast local workflow for finding, filtering, tagging, sorting, comparing, and cleaning your best shots.**
 
+### What's new in 3.5
+
+- **Multiple libraries**: long-lived sets (Main, NAI style, ComfyUI, ...) each keep their own images, filters, collections, and dataset projects; images can move between libraries.
+- **Three missions on the home page**: LoRA dataset, batch organize, Pixiv set publishing. Inside a mission the top bar shows only the pages that flow needs, and the mission name lists what each step asks.
+- **Pixiv set publishing**: pick, censor, order, batch rename, and export a set that is ready to upload. Images you did not censor can be exported as they are; you decide.
+- **Dataset workbench**: saved projects you can come back to, Smart Tag (WD14 + VLM in one pass), masks, a pre-export audit, and kohya-style export.
+- **Model Center**: before a first-time download it tells you the size, the packages, and whether a restart follows; a restart is one click and the setup continues afterwards.
+- **No hard stops**: caps and export gates became warnings with a choice.
+- **Faster**: gallery page 0.36 s to 0.045 s; Mass Tag on 1,000 images 170 s to 106 s (measured).
+- **Complete Chinese and English UI**, tooltips included.
+
 ### Highlights
 
 - **Gallery built for SD workflows**: ComfyUI, NovelAI, WebUI / A1111, Forge metadata support
@@ -579,6 +616,8 @@ Eagle and Billfish are general asset managers and are not in this SD-workflow ta
 - **Background Job Queue**: Unified queue for tagging, similarity, aesthetic, artist ID with live progress tracking
 - **Fast sorting**: Auto-Separate plus addictive `W / A / S / D` manual sorting
 - **Manual Sort Multi-Mode**: Slot Mode (4-way), Bracket Mode (tournament ranking), Cull Mode (keep/delete)
+- **Multiple Libraries**: separate long-lived sets with their own images, filters, collections, and dataset projects
+- **Search**: `tag:silver_hair score>=7 -tag:blurry` key:value syntax, plus plain-language semantic search; smart folders and date filters
 - **Collections System**: Organize images into persistent named collections
 - **Star Ratings**: 1-5 star rating system visible in gallery grid
 - **Censor Edit**: YOLO / NudeNet / SAM3 detection, brush tools, queue workflow, batch save
@@ -592,6 +631,8 @@ Eagle and Billfish are general asset managers and are not in this SD-workflow ta
 - **Reader Metadata Editor**: Edit and save-as-new with format choice (PNG/WebP/JPG)
 - **Auto-Separate 3-pane**: Filter editor + preview grid + action sidebar visible at once
 - **Caption Editor**: Dedicated full-screen workbench for editing LoRA training captions
+- **Pixiv Set Publishing**: censor, order, batch rename, and export a ready-to-upload set (metadata can be stripped)
+- **Model Center**: one place for every AI model; first-use setup states size and restart needs, and restarts in place
 
 ### Screenshots
 
