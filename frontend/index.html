@@ -610,7 +610,7 @@
                             <span><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>
                             <span data-i18n="action.library">Library</span>
                         </button>
-                        <button class="btn btn-ghost full-width" id="mobile-btn-mass-tag-editor" type="button" aria-label="Open mass tag editor" data-i18n-aria="massTag.openTooltip">
+                        <button class="btn btn-ghost full-width" id="mobile-btn-mass-tag-editor" type="button" aria-label="Mass tag editor: find/replace, add, remove, cleanup" data-i18n-aria="massTag.openTooltip">
                             <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-broom"/></svg></span>
                             <span data-i18n="massTag.mobileOpen">Mass Tag</span>
                         </button>
@@ -660,7 +660,7 @@
                 <button id="btn-tags-library" class="btn btn-ghost btn-icon-only" title="Browse all tags and prompts" aria-label="Open tags and prompts library" data-i18n-title="action.libraryTooltip" data-i18n-aria="action.library">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>
                 </button>
-                <button id="btn-mass-tag-editor" class="btn btn-ghost btn-icon-only" type="button" title="Mass tag editor — bulk find/replace, add, remove, cleanup" aria-label="Open mass tag editor" data-i18n-title="massTag.openTooltip">
+                <button id="btn-mass-tag-editor" class="btn btn-ghost btn-icon-only" type="button" title="Mass tag editor: find/replace, add, remove, cleanup" aria-label="Open mass tag editor" data-i18n-title="massTag.openTooltip">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-broom"/></svg></span>
                 </button>
                 <span class="nav-actions-divider" aria-hidden="true"></span>
@@ -1261,7 +1261,7 @@
                                     <span aria-hidden="true" class="onboarding-step-icon"><svg class="icon" aria-hidden="true"><use href="#i-tag"/></svg></span>
                                     <div class="onboarding-step-copy">
                                         <strong data-i18n="onboarding.step2Title">AI-tag images</strong>
-                                        <span data-i18n="onboarding.step2Hint">After Prepare, open <em>AI Tag Images</em>. Five tabs: Smart Tag, local taggers, NL captions, aesthetic score, and color analysis.</span>
+                                        <span data-i18n="onboarding.step2Hint">Open AI Tag Images. It has five tabs: Smart Tag, local taggers, NL captions, aesthetic score and color analysis. The first time you use a model, it downloads with progress shown.</span>
                                     </div>
                                 </li>
                                 <li class="onboarding-step">
@@ -1281,7 +1281,7 @@
                                     </div>
                                 </li>
                             </ol>
-                            <p class="onboarding-tip"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg> <span data-i18n="onboarding.tipHelp">Tip: click Help in the top-right at any time for a guide to the current tab.</span></p>
+                            <p class="onboarding-tip"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg> <span data-i18n="onboarding.tipHelp">Click Help in the top-right at any time for a guide to the current tab.</span></p>
                         </div>
                     </div>
                     <div class="gallery-load-more" id="gallery-load-more" style="display:none">
@@ -2365,7 +2365,7 @@
                         </div>
 
                         <div class="qs-filter-bar" id="qs-filter-bar">
-                            <div class="qs-filter-summary" id="qs-filter-summary" data-i18n="queueSolitaire.filterSummaryIdle">No queue filters active yet.</div>
+                            <div class="qs-filter-summary" id="qs-filter-summary" data-i18n="queueSolitaire.filterSummaryIdle">No queue filters yet. Copy Gallery Filters or apply queue filters to narrow this queue.</div>
                             <div class="qs-filter-field">
                                 <span class="qs-filter-label" data-i18n="queueSolitaire.searchLabel">Tag / Prompt</span>
                                 <input type="text" id="qs-filter-tag" placeholder="Tag / prompt keyword..." data-i18n-placeholder="queueSolitaire.searchPlaceholder" style="flex:1; min-width:150px;">
@@ -2464,7 +2464,7 @@
                                 <div class="qs-profile-header">
                                     <div>
                                         <h3 id="qs-profile-title" data-i18n="queueSolitaire.manageProfiles">Manage Profiles</h3>
-                                        <p class="qs-profile-subtitle" data-i18n="queueSolitaire.profileHelp">Save custom Queue Manager auto-sort rules so you can rebuild the same sections in one click.</p>
+                                        <p class="qs-profile-subtitle" data-i18n="queueSolitaire.profileHelp">Save your custom auto-sort rules so you can rebuild the same sections next time.</p>
                                     </div>
                                     <button class="btn btn-ghost btn-small" id="qs-profile-close" type="button" aria-label="Close profile manager" data-i18n-aria="a11y.closeProfiles"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
                                 </div>
@@ -3572,12 +3572,12 @@
                         <div class="workspace-start-copy">
                             <span class="workspace-start-eyebrow" data-i18n="artist.startEyebrow">Start Here</span>
                             <h3 data-i18n="artist.startTitle">Find repeated artist or style patterns in your library</h3>
-                            <p class="workspace-start-description" data-i18n="artist.startDescription">Check whether your artist is in the model's vocabulary, run identification, then jump back to Gallery with that artist filter applied.</p>
+                            <p class="workspace-start-description" data-i18n="artist.startDescription">Check the model vocabulary, run it, then review matches in Gallery.</p>
                         </div>
                         <ol class="workspace-start-steps">
                             <li>
                                 <strong data-i18n="artist.startStep1Title">1. Check readiness first</strong>
-                                <span data-i18n="artist.startStep1Text">If setup is not ready yet, fix that first instead of starting a batch that cannot run.</span>
+                                <span data-i18n="artist.startStep1Text">Click Identify. If Kaloscope is missing, it downloads with progress shown. You can also prepare it in Model Manager first.</span>
                             </li>
                             <li>
                                 <strong data-i18n="artist.startStep2Title">2. Check the vocabulary</strong>
@@ -5438,7 +5438,7 @@
                     <div class="settings-row">
                         <div class="settings-row-copy">
                             <strong data-i18n="comfort.zenTitle">Zen mode</strong>
-                            <span data-i18n="comfort.zenBody">Quieter chrome so the image stays the focus (Ctrl+.)</span>
+                            <span data-i18n="comfort.zenBody">Quieter interface so the image stands out (Ctrl+.)</span>
                         </div>
                         <button type="button" class="btn btn-ghost" id="btn-settings-comfort-zen" aria-pressed="false">
                             <span aria-hidden="true" id="settings-comfort-zen-icon"><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg></span>
@@ -5759,7 +5759,7 @@
                             -->
                             <div class="modal-ai-provider-note" id="modal-ai-provider-note" style="display:none" role="note" aria-live="polite">
                                 <span class="modal-ai-provider-icon" aria-hidden="true">ℹ️</span>
-                                <span class="modal-ai-provider-text" id="modal-ai-provider-text" data-i18n="modal.aiProviderNote.gemini">Identified via Content Credentials / EXIF metadata. Google's invisible SynthID watermark embedded in the pixels themselves is not yet checked by this app — planned for a future opt-in detector.</span>
+                                <span class="modal-ai-provider-text" id="modal-ai-provider-text" data-i18n="modal.aiProviderNote.gemini">Identified as Gemini from Content Credentials / EXIF metadata. Google's invisible SynthID watermark in the pixels is not checked by this app yet; an opt-in detector is planned.</span>
                             </div>
 
                             <div class="modal-loading-state" id="modal-loading-state">Loading details…</div>
@@ -6083,7 +6083,7 @@
             <div class="modal-content modal-large repair-review-shell">
                 <button class="modal-close" id="btn-close-repair-review" aria-label="Close" data-i18n-aria="common.close" title="Close" data-i18n-title="common.close"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
                 <h3 id="repair-review-title" data-i18n="repairReview.title">Review Ambiguous Matches</h3>
-                <p class="modal-description" data-i18n="repairReview.description">Each found file matches more than one gallery record with the same name and size. Pick the record it belongs to — nothing changes until you confirm, and files on disk are never touched.</p>
+                <p class="modal-description" data-i18n="repairReview.description">Each found file matches several gallery records with the same name and size. Pick the one it belongs to. Nothing changes until you confirm, and files on disk are never touched.</p>
                 <div class="repair-review-list" id="repair-review-list" aria-live="polite"></div>
                 <div class="repair-review-footer">
                     <span class="repair-review-count" id="repair-review-count" aria-live="polite"></span>
@@ -6104,7 +6104,7 @@
                 <p class="modal-description" data-i18n="modal.tagDescription">Use supported tagger models to generate tags for images.</p>
                 <!-- B4: explain why gallery images without a sibling .txt are still in scope. -->
                 <p class="helper-text tag-modal-scope-note" id="tag-modal-scope-note" data-i18n="tagModal.noSidecarNote">
-                    Images without a same-name .txt are still included: AI tags are stored in the app database, not as sidecars. Export writes .txt only when you choose to.
+                    Images without a same-name .txt are included too: AI tags live in the app database, and .txt files are written only when you export.
                 </p>
 
                 <!-- v3.2.2 task #5: Smart Tag wizard discoverability hint.
@@ -6297,9 +6297,7 @@
                         <strong data-i18n="vlm.bannerTitle">Natural Language Captioning Mode</strong>
                     </div>
                     <p class="vlm-banner-text" data-i18n="vlm.bannerText">
-                        VLM (Vision Language Model) generates natural-language captions or danbooru tags
-                        via cloud API (OpenAI / Anthropic / Gemini / OpenRouter) or local Ollama.
-                        Configure provider, model, and prompts in VLM Settings.
+                        A VLM (vision language model) writes natural-language captions or danbooru tags through a cloud API (OpenAI / Anthropic / Gemini / OpenRouter) or local Ollama. Set the provider, model and prompts in VLM Settings.
                     </p>
                     <div class="vlm-banner-actions">
                         <button class="btn btn-primary" id="btn-vlm-banner-settings-legacy">
@@ -6329,7 +6327,7 @@
                                 <option value="camie-tagger-v2" data-i18n="modal.tagCustomProfileCamie">Camie ONNX</option>
                                 <option value="pixai-tagger-v0.9" data-i18n="modal.tagCustomProfilePixai">PixAI ONNX</option>
                             </select>
-                            <small class="helper-text" data-i18n="modal.tagCustomProfileHelper">Choose the profile that matches your local model so preprocessing, metadata, and threshold semantics are correct.</small>
+                            <small class="helper-text" data-i18n="modal.tagCustomProfileHelper">Choose the family your local model was exported from. Preprocessing, tag metadata parsing, confidence normalization and rating fallback all follow it.</small>
                         </div>
 
                         <div class="form-group custom-model-group" id="custom-model-group" style="display: none;">
@@ -6397,7 +6395,7 @@
                             <summary class="tag-power-summary">
                                 <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></span>
                                 <span data-i18n="modal.tagPowerTitle">Pre-tag filters (optional)</span>
-                                <span class="tag-power-summary-hint" data-i18n="modal.tagPowerHint">Drop unwanted tags before they enter the DB.</span>
+                                <span class="tag-power-summary-hint" data-i18n="modal.tagPowerHint">Drop unwanted tags before they enter the database.</span>
                             </summary>
                             <div class="tag-power-body">
                                 <label class="form-label">
@@ -6434,7 +6432,7 @@
                                             data-i18n="common.clear">Clear</button>
                                 </div>
                                 <p class="form-hint"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
-                                    <span data-i18n="modal.tagPreBlacklistAlsoExport">You can also blacklist at export time inside Dataset Maker → Workbench.</span>
+                                    <span data-i18n="modal.tagPreBlacklistAlsoExport">You can also blacklist tags at export time in Dataset Maker's Workbench.</span>
                                 </p>
                             </div>
                         </details>
@@ -6919,7 +6917,7 @@
                 <div class="caption-editor-topbar">
                     <div class="caption-editor-title-block">
                         <h3 id="caption-editor-title"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg> <span data-i18n="captionEditor.title">Caption Editor</span></h3>
-                        <span id="caption-editor-subtitle" class="caption-editor-subtitle" data-i18n="captionEditor.subtitle">Edits here are temporary — only used when you Export, Copy, or Download from this session.</span>
+                        <span id="caption-editor-subtitle" class="caption-editor-subtitle" data-i18n="captionEditor.subtitle">Edits here are temporary and only used when you export, copy or download from this session.</span>
                     </div>
                     <div class="caption-editor-topbar-actions">
                         <button class="btn btn-ghost btn-small" id="btn-caption-editor-refresh" type="button" title="Re-render captions from current settings">
@@ -6979,8 +6977,8 @@
                     <button class="btn btn-primary btn-small" id="btn-dup-apply-all" type="button" data-i18n="dup.applyAll">Keep best everywhere…</button>
                 </div>
                 <div class="dup-empty" id="dup-empty">
-                    <p data-i18n="dup.emptyIntro">Scan your whole library for near-duplicate groups. Each group gets a suggested keeper (your star rating first, then aesthetic score, resolution, file size) — review side by side and move the rest to the trash.</p>
-                    <p class="dup-empty-hint" data-i18n="dup.needEmbeddings">Requires CLIP embeddings — build them in Similarity tools if the scan reports none.</p>
+                    <p data-i18n="dup.emptyIntro">Scan the whole library for groups of near-duplicates. Each group suggests one keeper, judged by your star rating, then aesthetic score, resolution and file size. Compare side by side and move the rest to the trash.</p>
+                    <p class="dup-empty-hint" data-i18n="dup.needEmbeddings">Needs the CLIP index. If the scan reports none, build it in Similar first.</p>
                 </div>
                 <div class="dup-groups" id="dup-groups"></div>
                 <div class="dup-load-more-row">
@@ -7004,8 +7002,8 @@
                     <span class="pub-toolbar-count" id="pub-count"></span>
                 </div>
                 <div class="pub-empty" id="pub-empty">
-                    <p data-i18n="pub.emptyIntro">Turn a gallery selection into a platform-ready set: drag into publish order, pair each image with its censored version, then export as 01.png, 02.png, … plus an optional caption.txt.</p>
-                    <p class="pub-empty-hint" data-i18n="pub.emptyHint">Select images in the Gallery, then use the batch action bar → More → “Publish set…”.</p>
+                    <p data-i18n="pub.emptyIntro">Turn a gallery selection into a ready-to-post set: drag into order, each image is paired with its censored version, then export as 01.png, 02.png, … with an optional caption.txt.</p>
+                    <p class="pub-empty-hint" data-i18n="pub.emptyHint">Select images in the Gallery, then choose Publish set… under More in the batch action bar.</p>
                 </div>
                 <div class="pub-items" id="pub-items"></div>
                 <div class="pub-export-panel">
@@ -7497,7 +7495,7 @@
                                     </div>
                                 </div>
                                 <!-- P16: Mass Tag Editor entry from filter sidebar -->
-                                <button id="btn-filter-mass-tag-editor" class="btn btn-secondary full-width" style="margin-top: 12px;" title="Bulk tag operations: find/replace, add, remove, cleanup" data-i18n-title="massTag.openTooltip">
+                                <button id="btn-filter-mass-tag-editor" class="btn btn-secondary full-width" style="margin-top: 12px;" title="Mass tag editor: find/replace, add, remove, cleanup" data-i18n-title="massTag.openTooltip">
                                     <span><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></span> <span data-i18n="massTag.filterOpen">Batch Edit Tags</span>
                                 </button>
                             </div>
@@ -8724,7 +8722,7 @@
             <button class="modal-close" id="btn-mass-tag-close" aria-label="Close mass tag editor"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
             <h3 id="mass-tag-modal-title"><svg class="icon" aria-hidden="true"><use href="#i-broom"/></svg> <span data-i18n="massTag.title">Mass Tag Editor</span></h3>
             <p class="modal-description" data-i18n="massTag.description">
-                Bulk operations on stored tags. Run "Dry-run preview" before "Apply". Successful edits offer Undo when an undo journal can be saved.
+                Bulk-edit stored tags. Run "Dry-run preview" before "Apply". Successful edits offer Undo when an undo journal can be saved.
             </p>
 
             <section class="mass-tag-scope" aria-labelledby="mass-tag-scope-title">
@@ -8746,7 +8744,7 @@
                     </label>
                 </div>
                 <p class="helper-text" id="mass-tag-scope-helper" data-i18n="massTag.scopeHelper">
-                    Tip: enable selection mode in the gallery to pick specific images. Filter scope uses whatever the current Filter Modal has set.
+                    Turn on selection mode in the Gallery to pick specific images. Filter scope uses whatever the Filter modal is set to.
                 </p>
             </section>
 
@@ -8845,7 +8843,7 @@
             </h3>
             <dl class="mass-tag-confirm-summary" id="mass-tag-confirm-summary"></dl>
             <p class="mass-tag-confirm-note" data-i18n="massTag.confirmNote">
-                This rewrites stored tag rows. Review the dry-run carefully; Undo is offered only when this operation's journal can be saved.
+                This rewrites stored tags. Check the dry-run carefully; Undo is offered only when this operation's journal can be saved.
             </p>
             <div class="modal-actions">
                 <button type="button" class="btn btn-ghost" id="btn-mass-tag-confirm-cancel" data-i18n="common.cancel">Cancel</button>

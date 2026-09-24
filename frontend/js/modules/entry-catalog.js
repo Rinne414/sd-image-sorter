@@ -78,8 +78,8 @@
         {
             titleKey: 'catalog.groupPipelines', titleFallback: 'Pipelines',
             items: [
-                { icon: '🎯', nameKey: 'entry.missionLoraTitle', name: 'LoRA Dataset', descKey: 'catalog.lora', desc: 'Pick → tag → caption → export a kohya-ready training set', run: () => enterMission('lora', 'entry-mission-lora') },
-                { icon: '📤', nameKey: 'entry.missionPixivTitle', name: 'Pixiv Set Publishing', descKey: 'catalog.pixiv', desc: 'Pick → censor → rename → export a publishable image set', run: () => enterMission('pixiv', 'entry-mission-pixiv') },
+                { icon: '🎯', nameKey: 'entry.missionLoraTitle', name: 'LoRA Dataset', descKey: 'catalog.lora', desc: 'Pick, tag and caption, then export a kohya-ready training set', run: () => enterMission('lora', 'entry-mission-lora') },
+                { icon: '📤', nameKey: 'entry.missionPixivTitle', name: 'Pixiv Set Publishing', descKey: 'catalog.pixiv', desc: 'Pick, censor and rename, then export a ready-to-post set', run: () => enterMission('pixiv', 'entry-mission-pixiv') },
                 { icon: '🧺', nameKey: 'entry.missionOrganizeTitle', name: 'Batch Organize', descKey: 'catalog.organize', desc: 'Move a mountain of images into clean folders, with undo', run: () => enterMission('organize', 'entry-mission-organize') },
             ],
         },

@@ -464,7 +464,7 @@
             miss.className = 'cap-ac-info-lead';
             miss.textContent = t(
                 'tagInfo.notInVocab',
-                'Not in the bundled Danbooru vocabulary — the app has no popularity or alias data for it.',
+                'Not in the bundled Danbooru vocabulary, so there is no popularity or alias data for it.',
                 {}
             );
             body.appendChild(miss);

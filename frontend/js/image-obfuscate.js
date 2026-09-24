@@ -205,7 +205,7 @@
                 // users to the cross-site-safe form via the tooltip.
                 passwordInput.title = isSmallTomato
                     ? ''
-                    : this._t('tools.bigTomatoPasswordHint', 'Leave empty for a fixed scramble. For decoding on the site too, use a 4-digit numeric password (e.g. 0512) — other formats break on the site side.');
+                    : this._t('tools.bigTomatoPasswordHint', 'Leave empty for a fixed scramble. To decode on the site too, use a 4-digit numeric password (e.g. 0512); other formats fail on the site.');
             }
 
             // Protect and restore both emit a PNG, and a PNG can always carry

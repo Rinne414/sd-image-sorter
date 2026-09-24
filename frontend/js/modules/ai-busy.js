@@ -85,7 +85,7 @@
         const lines = jobs.map((job) => {
             const each = seconds(job.elapsed_seconds);
             return each
-                ? t('aiBusy.tooltipJob', '{label} — running {elapsed}', { label: job.label, elapsed: each })
+                ? t('aiBusy.tooltipJob', '{label} · running {elapsed}', { label: job.label, elapsed: each })
                 : String(job.label || '');
         });
         lines.unshift(t(
@@ -96,7 +96,7 @@
         if (stuck) {
             lines.push(t(
                 'aiBusy.tooltipStuck',
-                'This has run long enough that the app treats it as stuck. If nothing is progressing, restart the app.',
+                'It has run so long that the app treats it as stuck. If nothing is progressing, restart the app.',
                 {}
             ));
         }

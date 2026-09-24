@@ -118,7 +118,7 @@
         try { const j = await response.json(); detail = (j && (j.detail || j.message)) || ''; } catch (_e) { /* */ }
         if (response.status === 409) {
             return t('clipTools.notIndexed',
-                'These images are not indexed yet. Open the Similar tab and run "Index images" first.');
+                'These images are not indexed yet. Open Similar and click Build Similarity Index first.');
         }
         if (response.status === 404) {
             return t('clipTools.notFound', 'Image not found.');
@@ -183,7 +183,7 @@
         const note = document.createElement('p');
         note.className = 'clip-tools-note';
         note.textContent = t('clipTools.nearNote',
-            'Closest matches by CLIP embedding (highest first). Click an image to preview, or "Compare" for the exact score.');
+            'Closest matches first. Click an image to preview it, or "Compare" for the exact score.');
         body.appendChild(note);
 
         const results = (data && data.results) || [];

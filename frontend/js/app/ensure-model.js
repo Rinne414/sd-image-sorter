@@ -341,7 +341,7 @@ async function ensureFeatureModel(modelId, options = {}) {
         if (live?.prepare_result?.active && activeId && activeId !== modelId) {
             showToast(featureInstallT(
                 'featureInstall.conflict',
-                'Cannot install {requested}: {active} is already installing.',
+                'Can\'t install {requested} while {active} is installing.',
                 { requested: label, active: activeId },
             ), 'warning');
             return { ok: false, conflict: true };
@@ -364,7 +364,7 @@ async function ensureFeatureModel(modelId, options = {}) {
             featureInstallT('featureInstall.confirmTitle', 'Download {name}?', { name: label }),
             featureInstallT(
                 'featureInstall.confirmBody',
-                'This downloads about {size}. First launch stays small; only this feature\'s files are fetched. Continue?',
+                'This downloads about {size}, only the files this feature needs. Continue?',
                 { size: sizeHint || label },
             ),
         );
@@ -403,7 +403,7 @@ async function ensureFeatureModel(modelId, options = {}) {
         _hideInstallOverlay();
         showToast(featureInstallT(
             'featureInstall.conflict',
-            'Cannot install {requested}: {active} is already installing.',
+            'Can\'t install {requested} while {active} is installing.',
             { requested: label, active: activeModelId },
         ), 'warning');
         return { ok: false, conflict: true };

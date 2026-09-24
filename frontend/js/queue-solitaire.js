@@ -527,12 +527,12 @@
         if (!parts.length) {
             if (state.appliedFilterMode === 'gallery') {
                 setSummaryText(
-                    t('queueSolitaire.filterSummaryGalleryAll', 'Gallery filters were copied, but they currently leave the whole queue in scope.'),
+                    t('queueSolitaire.filterSummaryGalleryAll', 'Gallery filters were copied but exclude nothing; the whole queue is still in scope.'),
                     'queueSolitaire.filterSummaryGalleryAll'
                 );
             } else if (state.appliedFilterMode === 'advanced') {
                 setSummaryText(
-                    t('queueSolitaire.filterSummaryAdvancedAll', 'Advanced queue filters are applied, but they currently leave the whole queue in scope.'),
+                    t('queueSolitaire.filterSummaryAdvancedAll', 'Advanced queue filters are applied but exclude nothing; the whole queue is still in scope.'),
                     'queueSolitaire.filterSummaryAdvancedAll'
                 );
             } else {

@@ -732,7 +732,7 @@
             const tokenScoped = !!options.tokenScoped;
             tagBtn.disabled = tokenScoped;
             tagBtn.title = tokenScoped
-                ? t('actionBar.tagSelectedTokenHint', 'Select-all-matching selections tag via the main AI Tag entry (whole library / untagged).')
+                ? t('actionBar.tagSelectedTokenHint', 'For select-all-matching selections, use the main AI Tag entry (whole library / untagged).')
                 : t('actionBar.tagSelectedTooltip', 'AI-tag the selected images');
         }
 

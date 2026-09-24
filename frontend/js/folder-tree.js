@@ -155,7 +155,7 @@
             if (!container) return;
             const top = this._tree ? [...this._tree.children.values()] : [];
             if (top.length === 0) {
-                container.innerHTML = `<p class="folder-tree-empty">${escapeHtml(t('folders.empty', 'No folders yet — scan a folder to populate the gallery.'))}</p>`;
+                container.innerHTML = `<p class="folder-tree-empty">${escapeHtml(t('folders.empty', 'No folders yet. Scan one to filter by it here.'))}</p>`;
                 this._renderBrowsingIndicator();
                 return;
             }

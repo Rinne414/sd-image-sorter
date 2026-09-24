@@ -46,7 +46,7 @@ Object.assign(window.Gallery, {
                 text.textContent = this._t(
                     'modal.aiProviderNote.gemini',
                     null,
-                    'Identified via Content Credentials / EXIF metadata. Google\'s invisible SynthID watermark embedded in the pixels themselves is not yet checked by this app — planned for a future opt-in detector.'
+                    'Identified as Gemini from Content Credentials / EXIF metadata. Google\'s invisible SynthID watermark in the pixels is not checked by this app yet; an opt-in detector is planned.'
                 );
             }
             note.style.display = '';
@@ -64,7 +64,7 @@ Object.assign(window.Gallery, {
                 text.textContent = this._t(
                     'modal.aiProviderNote.gptImage',
                     null,
-                    'Identified via Content Credentials / EXIF metadata. OpenAI\'s invisible in-pixel watermark is not yet checked by this app and currently has no public open-source detector.'
+                    'Identified as gpt-image from Content Credentials / EXIF metadata. OpenAI\'s invisible in-pixel watermark has no public open-source detector yet, and this app does not check it.'
                 );
             }
             note.style.display = '';

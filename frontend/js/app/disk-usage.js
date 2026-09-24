@@ -94,7 +94,7 @@ function renderDiskUsage(data) {
                 <strong>${escapeHtml(appT('disk.libraryIndexTitle', 'Library index'))}</strong>
                 <span class="disk-section-total">${escapeHtml(dbSizeText)} · ${escapeHtml(String(totalLibImages))} ${escapeHtml(appT('disk.imagesUnit', 'images'))}</span>
             </div>
-            <p class="disk-section-hint">${escapeHtml(appT('disk.libraryIndexHint', 'images.db holds the long-lived library index (paths, tags, metadata). Clearing a library removes index rows only — original files on disk stay. Thumbnail cache is separate and can be cleaned below.'))}</p>
+            <p class="disk-section-hint">${escapeHtml(appT('disk.libraryIndexHint', 'images.db holds the library index (paths, tags, metadata). Clearing a library removes records only; original files stay. The thumbnail cache is separate and can be cleaned below.'))}</p>
             <div class="disk-preserved-list">${libraryRows || `<div class="disk-empty">${escapeHtml(appT('disk.noLibraries', 'No libraries yet.'))}</div>`}</div>
             ${libraryIndex.db_path ? `<p class="disk-section-hint disk-path-hint" title="${escapeHtml(libraryIndex.db_path)}">${escapeHtml(libraryIndex.db_path)}</p>` : ''}
         </div>
@@ -103,8 +103,8 @@ function renderDiskUsage(data) {
                 <strong>${escapeHtml(appT('disk.thumbnailLimitTitle', 'Thumbnail cache limit'))}</strong>
                 <span class="disk-section-total">${escapeHtml(thumbnailLimitText)}</span>
             </div>
-            <p class="disk-section-hint">${escapeHtml(appT('disk.thumbnailLimitHint', 'Default is 500 MB. Lower values save disk space but may regenerate thumbnails more often. 0 disables persistent thumbnail caching. Original images are never deleted.'))}</p>
-            <p class="disk-section-hint disk-tradeoff-hint">${escapeHtml(appT('disk.thumbnailTradeoffHint', 'Storage vs speed: lowering this limit saves disk, but scrolling large galleries can use more CPU/IO because thumbnails must be recreated.'))}</p>
+            <p class="disk-section-hint">${escapeHtml(appT('disk.thumbnailLimitHint', 'Default is 500 MB; 0 turns the persistent thumbnail cache off. Original images are never deleted.'))}</p>
+            <p class="disk-section-hint disk-tradeoff-hint">${escapeHtml(appT('disk.thumbnailTradeoffHint', 'A lower limit saves disk space, but scrolling a large gallery rebuilds thumbnails more often and keeps the CPU and disk busier.'))}</p>
             <div class="disk-setting-row">
                 <label for="thumbnail-cache-limit-input">${escapeHtml(appT('disk.thumbnailLimitLabel', 'Max thumbnail cache'))}</label>
                 <input id="thumbnail-cache-limit-input" class="input-field" type="number" min="0" max="102400" step="50" value="${escapeHtml(String(thumbnailLimit))}">

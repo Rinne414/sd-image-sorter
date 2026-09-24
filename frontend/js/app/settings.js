@@ -20,7 +20,7 @@ async function requestCoreRuntimeRebuild() {
     const venvSize = _formatBytes(venvSizeBytes);
     showConfirm(
         appT('disk.rebuildCoreConfirmTitle', 'Rebuild lightweight runtime on next start?'),
-        appT('disk.rebuildCoreConfirmBody', 'This schedules the app-owned Python runtime to be rebuilt the next time you start the app, then core dependencies are reinstalled. User data, images.db, settings, caches, and downloaded models are not deleted. Current runtime size: {size}. Heavy AI Python packages must be prepared again later.', { size: venvSize }),
+        appT('disk.rebuildCoreConfirmBody', 'The next start rebuilds the app\'s own Python runtime and reinstalls core dependencies. User data, images.db, settings, caches and downloaded models are kept. Current runtime size: {size}. Heavy AI packages will need to be prepared again later.', { size: venvSize }),
         async () => {
             const button = $('#btn-rebuild-core-runtime');
             const originalLabel = button?.textContent || '';

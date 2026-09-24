@@ -196,7 +196,7 @@ function _initBgScanProgressButtons() {
                 await API.cancelDelete();
             } catch (error) {
                 Logger.warn('Failed to request delete cancellation:', error);
-                showToast(formatUserError(error, appT('bulk.cancelRequestFailed', 'Could not send the cancel request — the job may still be running')), 'error');
+                showToast(formatUserError(error, appT('bulk.cancelRequestFailed', 'Couldn\'t send the cancel request; the job may still be running')), 'error');
             }
         });
     }
@@ -213,7 +213,7 @@ function _initBgScanProgressButtons() {
                 await API.cancelRemove();
             } catch (error) {
                 Logger.warn('Failed to request remove cancellation:', error);
-                showToast(formatUserError(error, appT('bulk.cancelRequestFailed', 'Could not send the cancel request — the job may still be running')), 'error');
+                showToast(formatUserError(error, appT('bulk.cancelRequestFailed', 'Couldn\'t send the cancel request; the job may still be running')), 'error');
             }
         });
     }

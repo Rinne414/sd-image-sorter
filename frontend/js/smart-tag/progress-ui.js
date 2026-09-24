@@ -65,7 +65,7 @@
                 pipelineQueuedSince = Date.now();
                 setProgressUI({
                     percent: 0,
-                    text: smartTagT('aiQueue.queuedProgress', 'Queued #{position} — waiting for the current AI job to finish')
+                    text: smartTagT('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish')
                         .replace('{position}', String(queuedEntries[0].position || 1)),
                     preview: '',
                 });
@@ -99,7 +99,7 @@
             if (!isLive && queuedEntries.length > 0) {
                 setProgressUI({
                     percent: 0,
-                    text: smartTagT('aiQueue.queuedProgress', 'Queued #{position} — waiting for the current AI job to finish')
+                    text: smartTagT('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish')
                         .replace('{position}', String(queuedEntries[0].position || 1)),
                     preview: '',
                 });

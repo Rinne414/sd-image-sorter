@@ -311,7 +311,7 @@
                 }
                 setProgressUI({
                     percent: 0,
-                    text: smartTagT('aiQueue.queuedProgress', 'Queued #{position} — waiting for the current AI job to finish')
+                    text: smartTagT('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish')
                         .replace('{position}', String(snap.queue_position || 1)),
                     preview: '',
                 });

@@ -482,7 +482,7 @@ function finishSorting() {
     // stats). Reuses window.App.showPipelineNextStep.
     window.App?.showPipelineNextStep?.({
         icon: 'i-folders',
-        title: formatManualSortI18n('flow.sortDoneTitle', 'Sorting done — what next?'),
+        title: formatManualSortI18n('flow.sortDoneTitle', 'Sorting done. What next?'),
         actions: [
             { icon: '🔳', label: formatManualSortI18n('nav.censor', 'Censor Edit'), action: 'view:censor' },
             { icon: '📦', label: formatManualSortI18n('nav.dataset', 'Dataset'), action: 'view:dataset' },

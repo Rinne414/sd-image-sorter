@@ -109,13 +109,13 @@
         if (blocked > 0 && clearable === 0) {
             return appT(
                 'missing.detailAllBlocked',
-                'This app cannot read that location right now — an unplugged drive would look exactly like this. Reconnect it and re-scan; nothing needs clearing.'
+                'The app can\'t read that location right now, which is what an unplugged drive looks like. Reconnect it and re-scan; nothing needs clearing.'
             );
         }
         if (blocked > 0) {
             return appT(
                 'missing.detailMixed',
-                '{blocked} are in a location this app cannot read right now, so those are left alone — reconnect it and re-scan. The other {clearable} point at files that are really gone.',
+                '{blocked} are in a location the app can\'t read right now, so they are left alone; reconnect it and re-scan. The other {clearable} point at files that are really gone.',
                 { blocked: blocked, clearable: clearable }
             );
         }
@@ -350,7 +350,7 @@
                 if (status === 'refused') {
                     window.showToast(appT(
                         'missing.refused',
-                        'Left alone — this app cannot read that location right now. If it is a removable drive, reconnect it and re-scan.'
+                        'Left alone: the app can\'t read that location right now. If it\'s a removable drive, reconnect it and re-scan.'
                     ), 'info');
                 } else if (removed > 0) {
                     window.showToast(appT(

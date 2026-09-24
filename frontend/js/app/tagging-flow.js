@@ -453,7 +453,7 @@ async function startTagging() {
         $('#tag-progress-fill').style.width = '0%';
         _tagLastProgressPercent = 0;
         if (isQueued) {
-            _tagLastProgressText = appT('aiQueue.queuedProgress', 'Queued #{position} — waiting for the current AI job to finish')
+            _tagLastProgressText = appT('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish')
                 .replace('{position}', String(startResp.queue_position || 1));
         } else {
             _tagLastProgressText = gpuLocked
@@ -495,7 +495,7 @@ async function pollTagProgress(retryCount = 0) {
         if (!['running', 'cancelling'].includes(progress.status)) {
             if (_queuedEntries.length > 0) {
                 _tagQueuedWaiting = true;
-                const queuedText = appT('aiQueue.queuedProgress', 'Queued #{position} — waiting for the current AI job to finish')
+                const queuedText = appT('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish')
                     .replace('{position}', String(_queuedEntries[0].position || 1));
                 const queuedFill = $('#tag-progress-fill');
                 if (queuedFill) {
@@ -597,8 +597,8 @@ async function pollTagProgress(retryCount = 0) {
                 showPipelineNextStep({
                     icon: 'i-tag',
                     title: _taggedCount > 0
-                        ? appT('flow.tagDoneTitle', 'Tagged {count} images — what next?').replace('{count}', String(_taggedCount))
-                        : appT('flow.tagDoneTitleZero', 'Tagging complete — what next?'),
+                        ? appT('flow.tagDoneTitle', 'Tagged {count} images. What next?').replace('{count}', String(_taggedCount))
+                        : appT('flow.tagDoneTitleZero', 'Tagging complete. What next?'),
                     actions: [
                         { icon: '🗂️', label: appT('nav.sorting', 'Organize'), action: 'view:sorting' },
                         { icon: '📦', label: appT('nav.dataset', 'Dataset'), action: 'view:dataset' },

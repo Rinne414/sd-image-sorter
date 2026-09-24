@@ -226,7 +226,7 @@
             listEl.replaceChildren();
             if (!items.length) {
                 listEl.appendChild(el('div', 'repair-review-empty',
-                    t('repairReview.empty', 'No pending matches to review — you are done here.')));
+                    t('repairReview.empty', 'No matches left to review.')));
             } else {
                 items.forEach((review) => listEl.appendChild(renderReview(review)));
             }

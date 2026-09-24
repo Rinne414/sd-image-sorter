@@ -173,7 +173,7 @@ Object.assign(window.Gallery, {
                 && (generator === 'comfyui' || generator === 'unknown');
             promptText.textContent = promptView.promptText
                 || (isUnrecoverable
-                    ? this._t('modal.promptUnrecoverable', null, 'No prompt could be recovered from this file — it may be generated at runtime (wildcards / dynamic prompts) or stripped on export.')
+                    ? this._t('modal.promptUnrecoverable', null, 'Couldn\'t recover a prompt from this file. It may be generated at run time (wildcards, dynamic prompts) or stripped on export.')
                     : this._t('modal.noPrompt', null, 'No prompt'));
             promptText.classList.toggle('prompt-unrecoverable-note', isUnrecoverable);
         }

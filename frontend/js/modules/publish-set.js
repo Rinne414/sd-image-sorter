@@ -467,7 +467,7 @@
                     count: result.exported.length,
                 }), 'success');
             } else if (result.errors.length) {
-                showToast(t('pub.exportPartial', 'Export finished with {count} error(s) — see details', {
+                showToast(t('pub.exportPartial', 'Export finished with {count} error(s); see details', {
                     count: result.errors.length,
                 }), 'warning');
             }

@@ -589,13 +589,13 @@ test('Gallery folder empty state re-renders after switching language', async ({ 
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('#view-gallery')).toBeVisible()
   const emptyState = page.locator('#folder-tree .folder-tree-empty')
-  await expect(emptyState).toHaveText('暂无文件夹——扫描一个文件夹后即可在此筛选。')
+  await expect(emptyState).toHaveText('还没有文件夹。扫描一个后就能在这里筛选。')
 
   await page.evaluate(() => (window as any).I18n.setLang('en'))
-  await expect(emptyState).toHaveText('No folders yet — scan a folder to populate the gallery.')
+  await expect(emptyState).toHaveText('No folders yet. Scan one to filter by it here.')
 
   await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
-  await expect(emptyState).toHaveText('暂无文件夹——扫描一个文件夹后即可在此筛选。')
+  await expect(emptyState).toHaveText('还没有文件夹。扫描一个后就能在这里筛选。')
   expect(consoleProblems).toEqual([])
 })
 

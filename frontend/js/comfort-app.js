@@ -43,7 +43,7 @@
         if (!silent && typeof window.showToast === 'function') {
             window.showToast(
                 enabled
-                    ? _t('comfort.zenOn', 'Zen mode on — quieter chrome')
+                    ? _t('comfort.zenOn', 'Zen mode on')
                     : _t('comfort.zenOff', 'Zen mode off'),
                 'info',
             );

@@ -340,7 +340,7 @@
         if (ids.length >= group.members.length) {
             const confirmAll = window.confirm(t(
                 'dup.confirmWholeGroup',
-                'Every image in this group is checked — this trashes the whole group including the keeper. Continue?',
+                'Every image in this group is checked, so the whole group goes to the trash, keeper included. Continue?',
             ));
             if (!confirmAll) return;
         } else if (!window.confirm(t('dup.confirmDelete', 'Move {count} image(s) to the trash?', { count: ids.length }))) {
@@ -462,7 +462,7 @@
     function formatIncompleteScanToast(summary) {
         return t(
             'dup.scanDoneIncomplete',
-            'Duplicate scan finished, but only {embedded}/{total} images have CLIP embeddings. 0 groups is not a whole-library verdict — index embeddings in Similarity first.',
+            'Duplicate scan finished, but only {embedded}/{total} images are indexed, so 0 groups does not mean the whole library is clean. Build the index in Similar first.',
             summaryParams(summary),
         );
     }
@@ -474,7 +474,7 @@
         if (scanCoverageIncomplete(s)) {
             text.textContent = t(
                 'dup.summaryIncomplete',
-                '{groups} groups from {embedded}/{total} indexed images ({coverage}% coverage). {pending} images still need CLIP embeddings — 0 groups is not a whole-library verdict.',
+                '{groups} groups from the {embedded}/{total} indexed images ({coverage}%). {pending} images are not indexed yet, so 0 groups does not mean the whole library is clean.',
                 summaryParams(s),
             );
             return;

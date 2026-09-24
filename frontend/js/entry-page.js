@@ -199,7 +199,7 @@
     }
 
     function heroUnavailableCredit(credit) {
-        if (credit) credit.textContent = t('entry.heroUnavailable', {}, 'Cover images are missing from disk — rescan to refresh the library');
+        if (credit) credit.textContent = t('entry.heroUnavailable', {}, 'Cover images are missing from disk. Rescan to refresh the library');
     }
 
     async function ensureHeroPool() {
@@ -226,7 +226,7 @@
     function poolEmptyCredit(credit) {
         // An empty pool means an empty library — "rate ★5" would be wrong
         // advice here; the actual next step is scanning a folder.
-        if (credit) credit.textContent = t('entry.heroPoolEmpty', {}, 'The library is empty — scan a folder and art shows up here');
+        if (credit) credit.textContent = t('entry.heroPoolEmpty', {}, 'The library is empty. Scan a folder and images show up here');
     }
 
     function renderSlideshow(token) {
@@ -621,7 +621,7 @@
             const sub = el('entry-sub-models');
             if (sub) {
                 sub.textContent = coreMissing
-                    ? t('entry.tileModelsMissing', {}, 'The core tagger is not installed — download it here first')
+                    ? t('entry.tileModelsMissing', {}, 'The core tagger isn\'t installed. Download it here first')
                     : t('entry.tileModelsSub', {}, 'Download & manage the AI models');
             }
         });

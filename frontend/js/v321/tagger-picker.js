@@ -399,7 +399,7 @@ Object.assign(window.V321Integration, {
             if (s.api_key_display || s.endpoint) {
                 setText(`${provider} · ${model} · ${endpoint}`);
             } else {
-                setText(i18n('vlm.notConfigured', 'Not configured — click VLM Settings to set up'));
+                setText(i18n('vlm.notConfigured', 'Not set up. Click VLM Settings'));
             }
         } catch (e) {
             setText(i18n('vlm.notConfigured', 'Not configured'));

@@ -36,7 +36,7 @@ async function requestBulkJobCancel(operation) {
         // Don't leave the cancel button looking dead: tell the user the request
         // didn't land (the job may still be running).
         showToast(
-            formatUserError(error, appT('bulk.cancelRequestFailed', 'Could not send the cancel request — the job may still be running')),
+            formatUserError(error, appT('bulk.cancelRequestFailed', 'Couldn\'t send the cancel request; the job may still be running')),
             'error'
         );
         return false;

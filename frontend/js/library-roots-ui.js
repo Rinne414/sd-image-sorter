@@ -118,7 +118,7 @@
             const list = document.getElementById('library-roots-list');
             if (!list) return;
             if (!roots.length) {
-                list.innerHTML = `<p class="library-roots-empty">${escapeHtml(t('libraryRoots.empty', 'No folders yet — use "Add Folder…" to scan one.'))}</p>`;
+                list.innerHTML = `<p class="library-roots-empty">${escapeHtml(t('libraryRoots.empty', 'No folders yet. Use "Add Folder…" to scan one.'))}</p>`;
                 return;
             }
             list.innerHTML = roots.map((root) => this._rowHtml(root)).join('');
@@ -169,13 +169,13 @@
                     throw new TypeError('The library rescan progress handler is unavailable');
                 }
                 app.beginLibraryRescanScanProgress(result);
-                toast(t('libraryRoots.rescanStarted', 'Rescan started — new files will appear shortly'), 'success');
+                toast(t('libraryRoots.rescanStarted', 'Rescan started; new files will appear shortly'), 'success');
             } catch (error) {
                 const errorCode = error?.apiData?.code;
                 const message = errorCode === 'manual_completion_pending'
                     ? t(
                         'libraryRoots.manualCompletionPending',
-                        'The previous import finished but its completion is still pending. Reload the app to acknowledge it, then run Rescan again.'
+                        'The last import finished but has not been confirmed yet. Reload the page, then run Rescan again.'
                     )
                     : error?.apiStatus === 409
                         ? t('libraryRoots.scanBusy', 'A scan is already running')
@@ -195,7 +195,7 @@
                     toast(t('libraryRoots.removeFailed', 'Could not remove folder'), 'error');
                 }
             };
-            const message = t('libraryRoots.removeConfirm', 'Remove this folder from the library? The image files stay on disk — only the gallery source registration is removed.');
+            const message = t('libraryRoots.removeConfirm', 'Remove this folder from the library? It stops being a source; the image files stay on disk.');
             if (typeof appRef().showConfirm === 'function') {
                 appRef().showConfirm(t('libraryRoots.remove', 'Remove folder'), message, run);
             } else if (window.confirm(message)) {
