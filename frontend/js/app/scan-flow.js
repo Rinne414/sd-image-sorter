@@ -172,7 +172,9 @@ async function startScan() {
     }
 
     const recursive = $('#scan-recursive')?.checked ?? true;
-    const quickImport = $('#scan-quick-import')?.checked ?? true;
+    // Imports skip the full per-image decode check unless asked; damaged
+    // files are still caught when they are opened or tagged.
+    const quickImport = !($('#scan-verify-files')?.checked ?? false);
     const forceReparse = $('#scan-force-reparse')?.checked ?? false;
     const cleanupMissing = $('#scan-cleanup-missing')?.checked ?? false;
 

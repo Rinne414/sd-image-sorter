@@ -2973,7 +2973,17 @@ test.describe('Smoke Tests', () => {
     await page.locator('#btn-dataset-smart-tag').click()
     await expect(page.locator('#smart-tag-modal.visible')).toBeVisible()
     await page.locator('#smart-tag-merge').selectOption('append')
-    await page.locator('#smart-tag-skip-existing').uncheck()
+
+    // A local captioner keeps the GPU option and shows only its own grounding
+    // option (the GPU option used to vanish exactly for local captioners).
+    await page.locator('#smart-tag-nl-mode').selectOption('toriigate')
+    await expect(page.locator('#smart-tag-use-gpu')).toBeVisible()
+    await expect(page.locator('#smart-tag-torii-grounding')).toBeVisible()
+    await expect(page.locator('#smart-tag-vlm-grounding')).toBeHidden()
+    await page.locator('#smart-tag-nl-mode').selectOption('vlm')
+    await expect(page.locator('#smart-tag-vlm-grounding')).toBeVisible()
+
+    await page.locator('#smart-tag-retag-existing').check()
     await page.locator('#smart-tag-vlm-grounding').uncheck()
     await page.locator('#btn-smart-tag-run').click()
 

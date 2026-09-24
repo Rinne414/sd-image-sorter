@@ -45,7 +45,7 @@
             trigger_word: (smartTag$('#smart-tag-trigger')?.value || '').trim(),
             merge_strategy: smartTag$('#smart-tag-merge')?.value || 'replace',
             auto_strip_noise: !!smartTag$('#smart-tag-strip-noise')?.checked,
-            skip_existing: !!smartTag$('#smart-tag-skip-existing')?.checked,
+            skip_existing: !smartTag$('#smart-tag-retag-existing')?.checked,
             enable_wd14: booruEnabled,
             enable_vlm: naturalEnabled,
             natural_language_mode: naturalLanguageMode,

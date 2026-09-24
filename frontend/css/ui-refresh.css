@@ -1271,7 +1271,7 @@ textarea:focus,
     display: flex;
     flex-direction: column;
     gap: 10px;
-    padding: 0 16px 16px;
+    padding: 12px 16px 16px;
     border-top: 1px solid rgba(var(--accent-rgb), 0.08);
 }
 
@@ -1281,7 +1281,7 @@ textarea:focus,
 
 .tag-runtime-advanced-body .checkbox-label,
 .guided-advanced-body .checkbox-label {
-    margin-top: 14px;
+    margin: 0;
     min-height: 56px;
     padding: 12px 14px;
     border-radius: 14px;
@@ -6886,7 +6886,21 @@ html.lang-zh #view-censor .queue-action-btn span {
     z-index: 2;
     margin: 12px -4px 0;
     padding: 12px 4px 0;
-    background: transparent;
+    background: var(--surface-2);
+}
+
+/* The pinned button rows stick at the scroll box's inner edge; without a
+   cover, options scrolled through the padding band below the buttons. */
+#scan-modal .modal-actions::after,
+#tag-modal .modal-actions::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    height: 40px;
+    background: var(--surface-2);
+    pointer-events: none;
 }
 
 #tagger-modal-actions #tag-progress-container {
@@ -7023,7 +7037,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     z-index: 2;
     margin: 12px -4px 0;
     padding: 12px 4px 0;
-    background: transparent;
+    background: var(--surface-2);
 }
 
 #scan-modal .modal-description {

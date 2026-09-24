@@ -99,10 +99,8 @@ async function startScanFromUi(page: Page, folderPath: string) {
     await expect(autoTag).not.toBeChecked()
   }
 
-  const quickImport = page.locator('#scan-quick-import')
-  if (!(await quickImport.isChecked())) {
-    await quickImport.check()
-  }
+  // Imports are fast unless the full damage check is asked for.
+  await expect(page.locator('#scan-verify-files')).not.toBeChecked()
 
   await page.locator('#btn-start-scan').click()
 }

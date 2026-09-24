@@ -389,7 +389,7 @@
             this._setText('#scan-folder-path-label', 'modal.folderPath');
             this._setPlaceholder('#scan-folder-path', 'modal.folderPath');
             this._setText('#scan-recursive-label', 'modal.includeSubfolders');
-            this._setText('#scan-quick-import-label', 'scan.quickImportLabel');
+            this._setText('#scan-verify-files-label', 'scan.verifyFilesLabel');
             this._setText('#scan-force-reparse-label', 'scan.forceReparseLabel');
             this._setText('#scan-cleanup-missing-label', 'scan.cleanupMissingLabel');
             this._setText('#scan-auto-tag-label', 'scan.autoTagLabel');

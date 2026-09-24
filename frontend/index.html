@@ -4313,7 +4313,7 @@
                                     </button>
                                     <label class="dataset-tag-retag-row">
                                         <input type="checkbox" id="dataset-tag-retag-all">
-                                        <span data-i18n="dataset.tagRetagAll">Re-tag images that are already tagged</span>
+                                        <span data-i18n="dataset.tagRetagAll">Re-tag images that already have tags</span>
                                     </label>
                                 </details>
                                 <button class="btn btn-secondary full-width" id="btn-dataset-add-to-collection" style="margin-top: 8px;">
@@ -5968,14 +5968,6 @@
                         <span class="checkbox-text" id="scan-recursive-label" data-i18n="modal.includeSubfolders">Include subfolders</span>
                     </label>
                 </div>
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="scan-quick-import" checked>
-                        <span class="checkbox-custom" aria-hidden="true"></span>
-                        <span class="checkbox-text" id="scan-quick-import-label" data-i18n="scan.quickImportLabel">Fast import (recommended)</span>
-                    </label>
-                </div>
-                <div class="helper-text" id="scan-recommended-hint" data-i18n="scan.recommendedHint">Keeps image info; skips full bad-file check.</div>
                 <div class="helper-text" id="scan-storage-hint" data-i18n="scan.storageHint">Local SSD folders scan best; network and cloud folders read slowly and can look stuck.</div>
                 <details class="guided-advanced-panel" id="scan-advanced-options">
                     <summary class="guided-advanced-summary">
@@ -5983,6 +5975,13 @@
                         <span class="guided-advanced-hint" id="scan-advanced-options-hint" data-i18n="scan.advancedHint">Open only if needed.</span>
                     </summary>
                     <div class="guided-advanced-body">
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="scan-verify-files">
+                                <span class="checkbox-custom" aria-hidden="true"></span>
+                                <span class="checkbox-text" id="scan-verify-files-label" data-i18n="scan.verifyFilesLabel">Check every image for damage while importing (slower)</span>
+                            </label>
+                        </div>
                         <div class="form-group">
                             <label class="checkbox-label">
                                 <input type="checkbox" id="scan-force-reparse">
@@ -6408,7 +6407,7 @@
                             <label class="checkbox-label">
                                 <input type="checkbox" id="tag-retag-all">
                                 <span class="checkbox-custom"></span>
-                                <span class="checkbox-text" data-i18n="modal.tagRetagAll">Re-tag already tagged images?</span>
+                                <span class="checkbox-text" data-i18n="modal.tagRetagAll">Re-tag images that already have tags</span>
                             </label>
                         </div>
 
@@ -8391,8 +8390,8 @@
                 </label>
 
                 <label class="checkbox-label smart-tag-inline-toggle">
-                    <input type="checkbox" id="smart-tag-skip-existing" checked>
-                    <span data-i18n="smartTag.skipExisting">Skip images that already have AI tags (uncheck to re-tag)</span>
+                    <input type="checkbox" id="smart-tag-retag-existing">
+                    <span data-i18n="smartTag.retagExisting">Re-tag images that already have tags</span>
                 </label>
 
                 <section class="smart-tag-section" id="smart-tag-booru-section">
@@ -8464,11 +8463,11 @@
                                 <option value="florence2" data-i18n="smartTag.nlSourceFlorence2">Florence-2 Base local model</option>
                             </select>
                         </label>
-                        <label class="checkbox-label smart-tag-inline-toggle" id="smart-tag-vlm-grounding-option">
+                        <label class="checkbox-label smart-tag-inline-toggle">
                             <input type="checkbox" id="smart-tag-use-gpu" checked>
                             <span data-i18n="smartTag.useGpu">Use GPU for local models if available</span>
                         </label>
-                        <label class="checkbox-label smart-tag-inline-toggle">
+                        <label class="checkbox-label smart-tag-inline-toggle" id="smart-tag-vlm-grounding-option">
                             <input type="checkbox" id="smart-tag-vlm-grounding" checked>
                             <span data-i18n="smartTag.vlmGrounding">Send booru tags to the captioner as context</span>
                         </label>
