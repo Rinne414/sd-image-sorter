@@ -389,7 +389,7 @@ async function ensureFeatureModel(modelId, options = {}) {
 
     let prepareResponse;
     try {
-        prepareResponse = await api.prepareModel(modelId, { variant });
+        prepareResponse = await api.prepareModel(modelId, { variant, source: spec.source || null });
     } catch (error) {
         _hideInstallOverlay();
         const message = (typeof window.formatUserError === 'function')

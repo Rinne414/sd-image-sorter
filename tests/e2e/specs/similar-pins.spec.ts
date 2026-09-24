@@ -518,9 +518,16 @@ test('findDuplicates renders the reason-specific empty message for insufficient_
     { width: 2560, height: 1440 },
   ]
   const expected = {
-    en: 'Quick duplicate check handles up to 5000 indexed images; this library has 99999. Use Duplicate Cleanup to scan the whole library in the background.',
-    'zh-CN': '快速查重最多处理 5000 张建好索引的图，这个图库有 99999 张。请用「查重清理」在后台扫描整个图库。',
+    en: 'This library has 99999 indexed images, more than the quick check handles, so Duplicate Cleanup is scanning it in the background.',
+    'zh-CN': '这个图库有 99999 张建好索引的图，超过快速查重的范围，已转到「查重清理」在后台扫描。',
   }
+  // Too many for the quick check: the page hands over to Duplicate Cleanup and
+  // starts its background scan (recorded here instead of opening the modal).
+  await page.evaluate(() => {
+    const w = window as any
+    w.__dupCleanerOpens = []
+    w.DupCleaner = { open: (options: unknown) => { w.__dupCleanerOpens.push(options) } }
+  })
   const tooManyResults: Array<{
     lang: keyof typeof expected
     viewport: { width: number; height: number }
@@ -570,6 +577,9 @@ test('findDuplicates renders the reason-specific empty message for insufficient_
     expect(result.rect.bottom, JSON.stringify(result)).toBeLessThanOrEqual(result.viewport.height + 1)
     expect(result.overflow).toBe(0)
   }
+  const opens = await page.evaluate(() => (window as any).__dupCleanerOpens)
+  expect(opens.length).toBe(tooManyResults.length)
+  expect(opens[0]).toEqual({ scan: true })
   expect(consoleProblems).toEqual([])
 })
 
@@ -705,6 +715,29 @@ test('updateActionAvailability gates search on >=1 embedding, duplicates on >=2,
   expect(noModel.search).toBe(true)
   expect(noModel.duplicates).toBe(true)
   expect(noModel.embed).toBe(false)
+})
+
+test('while more images are being indexed, the indexed ones stay searchable', async ({ page }) => {
+  const state = await page.evaluate(() => {
+    const S = (window as any).SimilarImages
+    S.isEmbedding = true
+    S.isCheckingEmbeddingStatus = false
+    S.embedProgress = { running: true, total: 100, processed: 40 }
+    S.modelStatus = { available: true }
+    S.stats = { total_images: 100, embedded_count: 40, pending_count: 60, unreadable_count: 0 }
+    S.updateActionAvailability()
+    S.refreshWorkflowStatus()
+    return {
+      search: (document.getElementById('btn-similar-search') as HTMLButtonElement).disabled,
+      duplicates: (document.getElementById('btn-similar-duplicates') as HTMLButtonElement).disabled,
+      embed: (document.getElementById('btn-similar-embed') as HTMLButtonElement).disabled,
+      detail: document.getElementById('similar-workflow-detail')?.textContent ?? '',
+    }
+  })
+  expect(state.search).toBe(false)
+  expect(state.duplicates).toBe(false)
+  expect(state.embed).toBe(true)
+  expect(state.detail).toMatch(/40/)
 })
 
 // ---------------------------------------------------------------------------

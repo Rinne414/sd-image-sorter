@@ -920,6 +920,30 @@ def test_prepare_artist_delegates_to_runtime_artist_asset_preparer(monkeypatch, 
     assert result["paths"]["checkpoint_path"] == str(checkpoint.resolve())
 
 
+def test_prepare_artist_with_a_local_model_sets_up_only_the_runtime(monkeypatch, tmp_path):
+    # A user who points Identify at their own Kaloscope file must not be sent
+    # through the ~2.8 GB checkpoint download.
+    runtime = tmp_path / "runtime"
+    runtime.mkdir()
+    monkeypatch.setattr(
+        model_service,
+        "ensure_group_with_soft_deps",
+        lambda group: model_service.DependencyInstallResult((), False),
+    )
+    import artist_identifier
+
+    def _no_checkpoint_download(source="auto"):
+        raise AssertionError("local source must not download the checkpoint")
+
+    monkeypatch.setattr(artist_identifier, "prepare_artist_assets", _no_checkpoint_download)
+    monkeypatch.setattr(artist_identifier, "_resolve_lsnet_runtime_path", lambda: str(runtime))
+
+    result = model_service.ModelService().prepare_model("artist", source="local")
+
+    assert result["status"] == "ok"
+    assert result["paths"] == {"runtime_path": str(runtime.resolve())}
+
+
 def test_toriigate_download_uses_shared_hf_endpoint_order(monkeypatch, tmp_path):
     import toriigate_tagger
 

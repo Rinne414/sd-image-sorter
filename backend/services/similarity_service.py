@@ -9,6 +9,8 @@ from fastapi import HTTPException, UploadFile, BackgroundTasks
 from starlette.concurrency import run_in_threadpool
 
 import database as db
+from PIL import Image
+from utils.source_paths import resolve_existing_indexed_image_path
 from ai_runtime_guard import AiRuntimeBusyError
 from model_health import get_model_health
 from similarity import (
@@ -20,6 +22,7 @@ from similarity import (
     SimilaritySearchWindowTooLargeError,
     bytes_to_embedding,
     cosine_similarity,
+    embed_image_pil,
     ensure_clip_model_ready,
     get_similarity_index,
 )
@@ -156,16 +159,36 @@ class SimilarityService:
             "limit": result["limit"],
         }
 
+    @staticmethod
+    def _query_embedding(image_id: int, row) -> "object":
+        """The stored vector, or one computed on the spot for an image not indexed yet.
+
+        Nothing is written back: indexing stays the Similar tab's job, but a
+        single "find similar" no longer sends the user there first.
+        """
+        if row["embedding"] is not None:
+            return bytes_to_embedding(row["embedding"])
+        source = resolve_existing_indexed_image_path(row["path"] or "", backend_file=__file__)
+        if not source:
+            raise HTTPException(status_code=404, detail=f"Image {image_id} file is missing")
+        with Image.open(source) as src:
+            src.load()
+            pixels = src.convert("RGB")
+        embedding = embed_image_pil(pixels)
+        if embedding is None:
+            raise HTTPException(status_code=503, detail="CLIP could not read this image")
+        return embedding
+
     def compare_pair(self, id_a: int, id_b: int) -> dict:
         """Compute the CLIP cosine similarity between two stored images.
 
-        Read-only. Raises 404 if either image is missing and 409 if either has
-        no embedding yet (run indexing first). Backs the two-image compare UI.
+        Read-only. Raises 404 if either image is missing; an image that is not
+        indexed yet is embedded on the spot. Backs the two-image compare UI.
         """
         rows: dict = {}
         with db.get_db() as conn:
             cursor = conn.execute(
-                "SELECT id, embedding, filename FROM images WHERE id IN (?, ?)",
+                "SELECT id, embedding, filename, path FROM images WHERE id IN (?, ?)",
                 (id_a, id_b),
             )
             for row in cursor.fetchall():
@@ -173,14 +196,8 @@ class SimilarityService:
         for image_id in (id_a, id_b):
             if image_id not in rows:
                 raise HTTPException(status_code=404, detail=f"Image {image_id} not found")
-        for image_id in (id_a, id_b):
-            if rows[image_id]["embedding"] is None:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Image {image_id} has no embedding yet. Index it first (Similar tab).",
-                )
-        emb_a = bytes_to_embedding(rows[id_a]["embedding"])
-        emb_b = bytes_to_embedding(rows[id_b]["embedding"])
+        emb_a = self._query_embedding(id_a, rows[id_a])
+        emb_b = self._query_embedding(id_b, rows[id_b])
         return {
             "id_a": id_a,
             "id_b": id_b,
@@ -207,17 +224,12 @@ class SimilarityService:
             return {"query_image_id": image_id, "results": [], "count": 0}
         with db.get_db() as conn:
             row = conn.execute(
-                "SELECT embedding FROM images WHERE id = ?", (image_id,)
+                "SELECT embedding, path FROM images WHERE id = ?", (image_id,)
             ).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"Image {image_id} not found")
-        if row["embedding"] is None:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Image {image_id} has no embedding yet. Index it first (Similar tab).",
-            )
         index = get_similarity_index(db)
-        query_emb = bytes_to_embedding(row["embedding"])
+        query_emb = self._query_embedding(image_id, row)
         results = index.top_k_similar(
             query_emb, max(1, int(limit)), exclude_id=image_id, allowed_ids=allowed_ids
         )

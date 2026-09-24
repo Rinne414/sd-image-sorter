@@ -38,16 +38,6 @@ Object.assign(window.SimilarImages, {
             await this.waitForEmbeddingStatusReady();
         }
 
-        if (this.isSimilarityIndexRunning()) {
-            const message = this._t(
-                'similar.duplicatesBlockedRunning',
-                'Embeddings are still running. Wait until indexing finishes before checking duplicates.'
-            );
-            this.renderDuplicateMessage(message);
-            showToast(message, 'info');
-            return;
-        }
-
         const requestToken = this.beginDuplicateRequest();
         this.duplicateEmptyMessage = this._t(
             'similar.duplicateEmptyCurrentThreshold',
@@ -80,11 +70,14 @@ Object.assign(window.SimilarImages, {
                     { count: result.minimum_required || 2 },
                 );
             } else if (result.reason === 'too_many_embeddings') {
+                // Too many for the quick check on this page: hand over to
+                // Duplicate Cleanup, which scans the whole library in the background.
                 this.duplicateEmptyMessage = this._t(
-                    'similar.tooManyEmbeddingsForSyncDuplicates',
-                    `Duplicate search is limited to ${result.max_embeddings || 5000} embedded images for this synchronous tool. Narrow the library or use a staged/background duplicate workflow.`,
-                    { count: result.embedded_count || 0, max: result.max_embeddings || 5000 },
+                    'similar.duplicatesHandedToCleanup',
+                    'This library has {count} indexed images, more than the quick check handles, so Duplicate Cleanup is scanning it in the background.',
+                    { count: result.embedded_count || 0 },
                 );
+                window.DupCleaner?.open?.({ scan: true });
             }
             if (this.duplicateResults.length === 0) {
                 resultsContainer.innerHTML = `<div class="empty-state">${escapeHtml(this.duplicateEmptyMessage)}</div>`;

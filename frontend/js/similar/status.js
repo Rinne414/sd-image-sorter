@@ -176,9 +176,11 @@ Object.assign(window.SimilarImages, {
             cta.hidden = true;
         } else if (running) {
             badge.textContent = this._t('similar.statusIndexing', 'Indexing is running');
+            const indexingDetail = this._t('similar.statusIndexingDetail',
+                'You can search already; results only cover the {embedded} images indexed so far.', { embedded });
             detail.textContent = skipped || failed || unreadable
-                ? `${this._t('similar.statusIndexingDetail', 'Search and duplicate checks stay disabled until indexing finishes.')} ${issueBreakdown}`
-                : this._t('similar.statusIndexingDetail', 'Search and duplicate checks stay disabled until indexing finishes.');
+                ? `${indexingDetail} ${issueBreakdown}`
+                : indexingDetail;
             card.classList.add('is-warning');
             cta.disabled = true;
             cta.textContent = this._t('similar.indexingNow', 'Indexing...');
@@ -213,8 +215,6 @@ Object.assign(window.SimilarImages, {
         if (this.searchResults.length === 0 && !this.currentSearchMode) {
             if (!modelReady) {
                 this.renderSearchMessage(setupNeedsDetail);
-            } else if (running) {
-                this.renderSearchMessage(this._t('similar.searchBlockedRunning', 'Embeddings are still running. Wait until indexing finishes before searching.'));
             } else if (embedded === 0) {
                 this.renderSearchMessage(this._t('similar.searchBlockedNeedsIndex', 'Similarity search is waiting for indexing. Start indexing first.'));
             }
@@ -223,8 +223,6 @@ Object.assign(window.SimilarImages, {
         if (this.duplicateResults.length === 0) {
             if (!modelReady) {
                 this.renderDuplicateMessage(setupNeedsDetail);
-            } else if (running) {
-                this.renderDuplicateMessage(this._t('similar.duplicatesBlockedRunning', 'Embeddings are still running. Wait until indexing finishes before checking duplicates.'));
             } else if (embedded < 2) {
                 this.renderDuplicateMessage(this._t('similar.duplicatesBlockedNeedsIndex', 'Duplicate search is waiting for more indexed images.'));
             }
@@ -244,8 +242,10 @@ Object.assign(window.SimilarImages, {
         const { embedded } = this.getEmbeddingStats();
         const modelReady = this.modelStatus ? this.modelStatus.available !== false : true;
         const indexRunning = this.isSimilarityIndexRunning();
-        const disableSearchActions = indexRunning || embedded === 0 || !modelReady;
-        const disableDuplicateActions = indexRunning || embedded < 2 || !modelReady;
+        // Indexing more images does not stop the ones already indexed from
+        // being searched; the status card says the results are partial.
+        const disableSearchActions = embedded === 0 || !modelReady;
+        const disableDuplicateActions = embedded < 2 || !modelReady;
         const searchInput = document.getElementById('similar-search-id');
         const btnSearch = document.getElementById('btn-similar-search');
         const btnUpload = document.getElementById('btn-similar-upload');

@@ -11,6 +11,19 @@
  * loads FIRST; artist/boot.js runs the DOMContentLoaded tail LAST.
  */
 Object.assign(window.ArtistIdent, {
+    // With a local model file, setup installs only the runtime it runs on,
+    // so there is no 2.8 GB Kaloscope download to confirm or wait for.
+    _artistSetupSpec() {
+        const local = document.getElementById('artist-model-source')?.value === 'local'
+            && Boolean(String(document.getElementById('artist-model-path')?.value || '').trim());
+        return {
+            label: this.tText('Kaloscope 2.0', 'Kaloscope 2.0'),
+            sizeHint: local ? '' : '~2.8 GB',
+            confirmBytes: local ? 0 : 2.8 * 1024 * 1024 * 1024,
+            source: local ? 'local' : null,
+        };
+    },
+
     _getIdentifyModelConfig() {
         const modelSourceEl = document.getElementById('artist-model-source');
         const modelPathEl = document.getElementById('artist-model-path');
@@ -195,11 +208,7 @@ Object.assign(window.ArtistIdent, {
         const progressText = document.getElementById('artist-progress-text');
 
         if (typeof window.ensureFeatureModel === 'function') {
-            const ensured = await window.ensureFeatureModel('artist', {
-                label: this.tText('Kaloscope 2.0', 'Kaloscope 2.0'),
-                sizeHint: '~2.8 GB',
-                confirmBytes: 2.8 * 1024 * 1024 * 1024,
-            });
+            const ensured = await window.ensureFeatureModel('artist', this._artistSetupSpec());
             if (!ensured.ok) return;
         }
 
@@ -362,11 +371,7 @@ Object.assign(window.ArtistIdent, {
         }
 
         if (typeof window.ensureFeatureModel === 'function') {
-            const ensured = await window.ensureFeatureModel('artist', {
-                label: this.tText('Kaloscope 2.0', 'Kaloscope 2.0'),
-                sizeHint: '~2.8 GB',
-                confirmBytes: 2.8 * 1024 * 1024 * 1024,
-            });
+            const ensured = await window.ensureFeatureModel('artist', this._artistSetupSpec());
             if (!ensured.ok) return;
         }
 

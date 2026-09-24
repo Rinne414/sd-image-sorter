@@ -40,16 +40,6 @@ Object.assign(window.SimilarImages, {
             await this.waitForEmbeddingStatusReady();
         }
 
-        if (this.isSimilarityIndexRunning()) {
-            const message = this._t(
-                'similar.searchBlockedRunning',
-                'Embeddings are still running. Wait until indexing finishes before searching.'
-            );
-            this.renderSearchMessage(message);
-            showToast(message, 'info');
-            return;
-        }
-
         const requestToken = this.beginSearchRequest();
         this.searchEmptyMessage = this._t(
             'similar.searchEmptyById',
@@ -116,16 +106,6 @@ Object.assign(window.SimilarImages, {
         if (this.isCheckingEmbeddingStatus) {
             await this.waitForEmbeddingStatusReady();
         }
-        if (this.isSimilarityIndexRunning()) {
-            const message = this._t(
-                'similar.searchBlockedRunning',
-                'Embeddings are still running. Wait until indexing finishes before searching.'
-            );
-            this.renderSearchMessage(message);
-            showToast(message, 'info');
-            return;
-        }
-
         const requestToken = this.beginSearchRequest();
         this.searchEmptyMessage = this._t(
             'similar.searchEmptyByText',
@@ -192,16 +172,6 @@ Object.assign(window.SimilarImages, {
 
         if (this.isCheckingEmbeddingStatus) {
             await this.waitForEmbeddingStatusReady();
-        }
-
-        if (this.isSimilarityIndexRunning()) {
-            const message = this._t(
-                'similar.searchBlockedRunning',
-                'Embeddings are still running. Wait until indexing finishes before searching.'
-            );
-            this.renderSearchMessage(message);
-            showToast(message, 'info');
-            return;
         }
 
         const requestToken = this.beginSearchRequest();

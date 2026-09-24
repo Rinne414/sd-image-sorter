@@ -457,17 +457,10 @@ async function executeAutoSeparateWithProgress() {
     const filters = getAutoSepFilters();
     const currentSignature = getAutoSepFilterSignature(filters);
     if (AutoSepState.previewSignature !== currentSignature) {
-        showToast(
-            _formatAutoSepI18n(
-                operationMode === 'copy' ? 'autosep.previewBeforeCopy' : 'autosep.previewBeforeMove',
-                operationMode === 'copy'
-                    ? 'Please preview the current filter results before copying images'
-                    : 'Please preview the current filter results before moving images'
-            ),
-            'info'
-        );
+        // The preview is out of date: refresh it, then go on to the confirm,
+        // which shows the fresh count, instead of making the user click again.
         await updateAutoSepPreview();
-        return;
+        if (AutoSepState.previewSignature !== getAutoSepFilterSignature(getAutoSepFilters())) return;
     }
 
     if (AutoSepState.matchCount === 0) {

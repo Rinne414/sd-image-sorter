@@ -61,10 +61,13 @@
     // Modal lifecycle
     // ------------------------------------------------------------------
 
-    async function open() {
+    // `scan: true` starts a background scan unless one is already running
+    // (the Similar page hands over here when its quick check is too big).
+    async function open({ scan = false } = {}) {
         window.App?.showModal?.('dup-cleaner-modal');
         await reattachRunningScan();
         await loadGroups(true);
+        if (scan && !STATE.activeJobId) await startScan();
     }
 
     function close() {

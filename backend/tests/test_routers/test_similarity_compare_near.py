@@ -40,6 +40,20 @@ def _seed(test_client, monkeypatch, vectors):
     return ids
 
 
+def _give_file_and_fake_clip(test_client, monkeypatch, tmp_path, image_id, vector):
+    """Back an unindexed image with a real file and stub CLIP for it."""
+    from PIL import Image
+    import services.similarity_service as similarity_service
+
+    source = tmp_path / f"unindexed-{image_id}.png"
+    Image.new("RGB", (8, 8), (40, 80, 120)).save(source)
+    with test_client.test_db.get_db() as conn:
+        conn.execute("UPDATE images SET path = ? WHERE id = ?", (str(source), image_id))
+    monkeypatch.setattr(
+        similarity_service, "embed_image_pil", lambda _image: np.asarray(vector, dtype=np.float32)
+    )
+
+
 class TestSimilarityCompare:
     def test_identical_vectors_score_one(self, test_client, monkeypatch):
         a, b = _seed(test_client, monkeypatch, [[1, 0, 0, 0], [1, 0, 0, 0]])
@@ -61,10 +75,17 @@ class TestSimilarityCompare:
         response = test_client.get(f"/api/similarity/compare?id_a={a}&id_b=999999")
         assert response.status_code == 404
 
-    def test_unembedded_image_is_409(self, test_client, monkeypatch):
+    def test_unindexed_image_is_embedded_on_the_spot(self, test_client, monkeypatch, tmp_path):
+        a, b = _seed(test_client, monkeypatch, [[1, 0, 0, 0], None])
+        _give_file_and_fake_clip(test_client, monkeypatch, tmp_path, b, [1, 0, 0, 0])
+        response = test_client.get(f"/api/similarity/compare?id_a={a}&id_b={b}")
+        assert response.status_code == 200
+        assert response.json()["similarity"] == 1.0
+
+    def test_unindexed_image_whose_file_is_gone_is_404(self, test_client, monkeypatch):
         a, b = _seed(test_client, monkeypatch, [[1, 0, 0, 0], None])
         response = test_client.get(f"/api/similarity/compare?id_a={a}&id_b={b}")
-        assert response.status_code == 409
+        assert response.status_code == 404
 
 
 class TestSimilarityNear:
@@ -86,7 +107,11 @@ class TestSimilarityNear:
         response = test_client.get("/api/similarity/near/999999")
         assert response.status_code == 404
 
-    def test_unembedded_image_is_409(self, test_client, monkeypatch):
-        (a,) = _seed(test_client, monkeypatch, [None])
-        response = test_client.get(f"/api/similarity/near/{a}")
-        assert response.status_code == 409
+    def test_unindexed_query_is_embedded_on_the_spot(self, test_client, monkeypatch, tmp_path):
+        query, near, far = _seed(
+            test_client, monkeypatch, [None, [0.96, 0.02, 0, 0], [0, 1, 0, 0]]
+        )
+        _give_file_and_fake_clip(test_client, monkeypatch, tmp_path, query, [1, 0, 0, 0])
+        response = test_client.get(f"/api/similarity/near/{query}?limit=10")
+        assert response.status_code == 200
+        assert [item["id"] for item in response.json()["results"]][0] == near

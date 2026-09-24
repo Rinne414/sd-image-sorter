@@ -199,9 +199,23 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
         restart_result = _svc()._dependency_restart_result(normalized_model_id, dependency_result)
         if restart_result:
             return restart_result
-        from artist_identifier import prepare_artist_assets
+        from artist_identifier import (
+            _ensure_comfyui_lsnet_runtime,
+            _resolve_lsnet_runtime_path,
+            prepare_artist_assets,
+        )
 
         preferred_source = source or "auto"
+        if preferred_source == "local":
+            # The user brings their own Kaloscope file: set up only the code it
+            # runs on, never the ~2.8 GB checkpoint download.
+            runtime_path = _resolve_lsnet_runtime_path() or _ensure_comfyui_lsnet_runtime()
+            return _svc()._with_dependency_result({
+                "status": "ok",
+                "model_id": normalized_model_id,
+                "message": "Artist runtime is ready; the model file comes from your local path.",
+                "paths": {"runtime_path": str(Path(runtime_path).resolve())},
+            }, dependency_result)
         prepared = prepare_artist_assets(preferred_source)
 
         return _svc()._with_dependency_result({
