@@ -376,6 +376,7 @@ function renderTaggerModelSnapshot(meta, options = {}) {
     if (!subtitleEl || !badgesEl || !noteEl) return;
 
     if (isCustom) {
+        subtitleEl.hidden = false;
         subtitleEl.textContent = appT('tagger.customSubtitle', 'Custom local ONNX model. The app cannot infer its schema or stability in advance.');
         badgesEl.innerHTML = [
             `<span class="tagger-model-badge is-warning">${escapeHtml(appT('tagger.customBadge', 'Custom'))}</span>`,
@@ -398,11 +399,13 @@ function renderTaggerModelSnapshot(meta, options = {}) {
         return;
     }
 
-    const summary = meta?.description || meta?.summary || appT('tagger.defaultSummary', 'WD14 tagger model');
-    subtitleEl.textContent = summary;
+    // The model card and its help line above already say what the model is,
+    // whether it is recommended and what it is best for; this panel only adds
+    // speed, memory, safety and the runtime note.
+    subtitleEl.textContent = '';
+    subtitleEl.hidden = true;
 
     const badges = [];
-    if (meta?.recommended) badges.push({ text: appT('tagger.badgeRecommended', 'Recommended'), tone: 'is-highlight' });
     if (meta?.speed) {
         badges.push({
             text: appT('tagger.badgeSpeed', 'Speed {value}').replace('{value}', getTaggerLocalizedScale(meta.speed)),
@@ -416,7 +419,6 @@ function renderTaggerModelSnapshot(meta, options = {}) {
         });
     }
     if (meta?.runtime_safety_tier) badges.push({ text: getTaggerSafetyTierLabel(meta) });
-    if (meta?.best_for) badges.push({ text: meta.best_for, tone: 'is-highlight' });
     if (modelDisabled) badges.push({ text: appT('tagger.chipCatalogOnly', 'Catalog Only'), tone: 'is-warning' });
 
     badgesEl.innerHTML = badges

@@ -35,10 +35,33 @@
     const LOCKED_TABS = ['gallery'];
     const CUSTOM_VIEWS = ['reader', 'sorting', 'censor', 'similar', 'dataset'];
 
+    // Steps shown by the chip's panel. Several steps can live in one view
+    // (Pixiv: censor, order and export all happen in Censor Edit), so the bar
+    // keeps one tab per view and the panel says what each step asks.
     const MISSIONS = {
-        lora: { labelKey: 'entry.missionLoraTitle', fallback: 'LoRA Dataset', tabs: ['gallery', 'dataset'] },
-        pixiv: { labelKey: 'entry.missionPixivTitle', fallback: 'Pixiv Set Publishing', tabs: ['gallery', 'censor'] },
-        organize: { labelKey: 'entry.missionOrganizeTitle', fallback: 'Batch Organize', tabs: ['gallery', 'sorting'] },
+        lora: {
+            labelKey: 'entry.missionLoraTitle', fallback: 'LoRA Dataset', tabs: ['gallery', 'dataset'],
+            steps: [
+                { view: 'gallery', key: 'navMission.lora.pick', title: 'Pick', hint: 'Select the training images in the Gallery, then use More > Send to dataset in the bar at the bottom. You can also import a folder in the dataset directly.' },
+                { view: 'dataset', key: 'navMission.lora.build', title: 'Tag and export', hint: 'Tag, edit captions, then export a training set kohya can read.' },
+            ],
+        },
+        pixiv: {
+            labelKey: 'entry.missionPixivTitle', fallback: 'Pixiv Set Publishing', tabs: ['gallery', 'censor'],
+            steps: [
+                { view: 'gallery', key: 'navMission.pixiv.pick', title: 'Pick', hint: 'Select the images for this set in the Gallery, then click Censor in the bar at the bottom.' },
+                { view: 'censor', key: 'navMission.pixiv.censor', title: 'Censor', hint: 'Censor each image, or start with Auto detect on the right.' },
+                { view: 'censor', key: 'navMission.pixiv.order', title: 'Order and rename', hint: 'Order the queue with the arrows on the left; name the files with Batch Rename on the right.' },
+                { view: 'censor', key: 'navMission.pixiv.export', title: 'Export', hint: 'Click To Publish Set at the bottom right, check the set, then export it.' },
+            ],
+        },
+        organize: {
+            labelKey: 'entry.missionOrganizeTitle', fallback: 'Batch Organize', tabs: ['gallery', 'sorting'],
+            steps: [
+                { view: 'gallery', key: 'navMission.organize.look', title: 'Look', hint: 'See which images need a home; Organize has its own filters.' },
+                { view: 'sorting', key: 'navMission.organize.sort', title: 'Sort', hint: 'Auto-Separate moves images into folders by rule; sort the rest by hand with WASD in Manual Sort.' },
+            ],
+        },
     };
 
     function t(key, fallback) {
@@ -80,11 +103,125 @@
         if (!MISSIONS[missionKey]) return;
         try { localStorage.setItem(MISSION_KEY, missionKey); } catch (error) { /* ignore */ }
         apply();
+        // Starting a mission shows its steps once; the chip label reopens them.
+        // Deferred: the entry tile's own click is still bubbling and would
+        // otherwise count as a click outside the panel.
+        window.setTimeout(openSteps, 0);
     }
 
     function exit() {
         try { localStorage.removeItem(MISSION_KEY); } catch (error) { /* ignore */ }
+        closeSteps();
         apply();
+    }
+
+    // ------------------------------------------------------------------
+    // Step panel under the mission chip
+    // ------------------------------------------------------------------
+
+    function stepsPanel() {
+        let panel = document.getElementById('nav-mission-steps');
+        if (panel) return panel;
+        panel = document.createElement('div');
+        panel.id = 'nav-mission-steps';
+        panel.className = 'nav-mission-steps';
+        panel.setAttribute('role', 'dialog');
+        panel.hidden = true;
+        document.body.appendChild(panel);
+        return panel;
+    }
+
+    function stepsOpen() {
+        const panel = document.getElementById('nav-mission-steps');
+        return Boolean(panel && !panel.hidden);
+    }
+
+    function renderSteps() {
+        if (!stepsOpen()) return;
+        const missionKey = activeMission();
+        if (!missionKey) {
+            closeSteps();
+            return;
+        }
+        const panel = stepsPanel();
+        const mission = MISSIONS[missionKey];
+        const view = currentView();
+        const title = t(mission.labelKey, mission.fallback);
+        panel.setAttribute('aria-label', title);
+        const heading = document.createElement('div');
+        heading.className = 'nav-mission-steps-title';
+        heading.textContent = title;
+        const list = document.createElement('ol');
+        list.className = 'nav-mission-steps-list';
+        mission.steps.forEach((step, index) => {
+            const item = document.createElement('li');
+            item.className = 'nav-mission-step';
+            item.classList.toggle('is-here', step.view === view);
+            const number = document.createElement('span');
+            number.className = 'nav-mission-step-number';
+            number.textContent = String(index + 1);
+            const body = document.createElement('span');
+            body.className = 'nav-mission-step-body';
+            const name = document.createElement('strong');
+            name.textContent = t(`${step.key}.title`, step.title);
+            const hint = document.createElement('span');
+            hint.textContent = t(`${step.key}.hint`, step.hint);
+            body.append(name, hint);
+            item.append(number, body);
+            list.appendChild(item);
+        });
+        panel.replaceChildren(heading, list);
+        positionSteps(panel);
+    }
+
+    function positionSteps(panel) {
+        const chip = document.getElementById('nav-mission-chip');
+        if (!chip || chip.hidden) return;
+        const rect = chip.getBoundingClientRect();
+        const left = Math.min(rect.left, window.innerWidth - panel.offsetWidth - 12);
+        panel.style.top = `${Math.round(rect.bottom + 8)}px`;
+        panel.style.left = `${Math.round(Math.max(12, left))}px`;
+    }
+
+    function openSteps() {
+        if (!activeMission()) return;
+        stepsPanel().hidden = false;
+        document.getElementById('nav-mission-chip-label')?.setAttribute('aria-expanded', 'true');
+        renderSteps();
+    }
+
+    function closeSteps() {
+        const panel = document.getElementById('nav-mission-steps');
+        if (panel) panel.hidden = true;
+        document.getElementById('nav-mission-chip-label')?.setAttribute('aria-expanded', 'false');
+    }
+
+    function wireSteps() {
+        const label = document.getElementById('nav-mission-chip-label');
+        if (label) {
+            label.addEventListener('click', () => {
+                if (stepsOpen()) closeSteps();
+                else openSteps();
+            });
+        }
+        // Capture-phase pointerdown: canvases (Censor Edit) stop their clicks
+        // from bubbling, and a click there must still close the panel.
+        window.addEventListener('pointerdown', (event) => {
+            if (!stepsOpen()) return;
+            const target = event.target;
+            if (target?.closest?.('#nav-mission-steps, #nav-mission-chip-label')) return;
+            closeSteps();
+        }, true);
+        // Window capture runs before the entry page's Esc-to-home handler; the
+        // prevented event tells it this Esc was spent closing the panel.
+        window.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape' || !stepsOpen()) return;
+            event.preventDefault();
+            closeSteps();
+        }, true);
+        window.addEventListener('resize', () => {
+            if (stepsOpen()) positionSteps(stepsPanel());
+        });
     }
 
     function currentView() {
@@ -153,6 +290,7 @@
 
         renderStepBadges(missionKey ? MISSIONS[missionKey].tabs : null);
         renderChip(missionKey);
+        renderSteps();
 
         // The width-degradation ladder re-measures on resize (app.js binds it
         // there); tab visibility changes shift scrollWidth the same way.
@@ -253,9 +391,13 @@
             }
         });
 
-        window.addEventListener('languageChanged', () => renderChip(activeMission()));
+        window.addEventListener('languageChanged', () => {
+            renderChip(activeMission());
+            renderSteps();
+        });
 
         wireCustomize();
+        wireSteps();
         apply();
     }
 

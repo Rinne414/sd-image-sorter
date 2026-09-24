@@ -104,7 +104,7 @@ function syncSettingsSoundControl() {
     const label = document.getElementById('settings-sound-label');
     const labelText = enabled
         ? appT('settings.soundOn', 'On')
-        : appT('settings.soundOff', 'Muted');
+        : appT('settings.soundOff', 'Off');
     btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
     btn.classList.toggle('is-muted', !enabled);
     btn.setAttribute(

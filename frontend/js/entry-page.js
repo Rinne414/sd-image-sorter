@@ -715,8 +715,8 @@
             const label = el('settings-entry-label');
             if (label) {
                 label.textContent = shown
-                    ? t('settings.entryOn', {}, 'Shown')
-                    : t('settings.entryOff', {}, 'Skipped');
+                    ? t('settings.entryOn', {}, 'On')
+                    : t('settings.entryOff', {}, 'Off');
             }
         }
         const heroBtn = el('btn-settings-entry-hero-toggle');
@@ -726,8 +726,8 @@
             const label = el('settings-entry-hero-label');
             if (label) {
                 label.textContent = shown
-                    ? t('settings.entryHeroOn', {}, 'Shown')
-                    : t('settings.entryHeroOff', {}, 'Hidden');
+                    ? t('settings.entryHeroOn', {}, 'On')
+                    : t('settings.entryHeroOff', {}, 'Off');
             }
         }
     }

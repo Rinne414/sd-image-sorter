@@ -729,11 +729,8 @@
 
         const tagBtn = document.getElementById('btn-tag-selected');
         if (tagBtn) {
-            const tokenScoped = !!options.tokenScoped;
-            tagBtn.disabled = tokenScoped;
-            tagBtn.title = tokenScoped
-                ? t('actionBar.tagSelectedTokenHint', 'For select-all-matching selections, use the main AI Tag entry (whole library / untagged).')
-                : t('actionBar.tagSelectedTooltip', 'AI-tag the selected images');
+            tagBtn.disabled = false;
+            tagBtn.title = t('actionBar.tagSelectedTooltip', 'AI-tag the selected images');
         }
 
         renderBarStats();
@@ -744,32 +741,56 @@
     // Selection-scoped tagging
     // ------------------------------------------------------------------
 
-    function showScopeNote(count) {
+    // The note says what Start will tag: the armed selection, or (local tagger
+    // tab) the whole library, untagged only unless "re-tag" is ticked. Other
+    // tabs show their own scope.
+    function refreshScopeNote() {
         const note = document.getElementById('tag-scope-note');
         const text = document.getElementById('tag-scope-note-text');
+        const clearBtn = document.getElementById('btn-tag-scope-clear');
         if (!note || !text) return;
-        text.textContent = t('tagModal.scopeSelected', 'Tagging only the {count} selected images.')
-            .replace('{count}', String(count));
+        if (Array.isArray(armedTagIds) && armedTagIds.length) {
+            text.textContent = t('tagModal.scopeSelected', 'Tagging only the {count} selected images.')
+                .replace('{count}', String(armedTagIds.length));
+            if (clearBtn) clearBtn.hidden = false;
+            note.hidden = false;
+            return;
+        }
+        const activeTab = document.querySelector('#tag-modal .tagger-tab.active')?.dataset?.taggerTab;
+        if (activeTab !== 'local') {
+            note.hidden = true;
+            return;
+        }
+        const retagAll = Boolean(document.getElementById('tag-retag-all')?.checked);
+        text.textContent = retagAll
+            ? t('tagModal.scopeLibraryAll', 'This run re-tags every image in this library; AI tags are replaced, tags you added by hand stay.')
+            : t('tagModal.scopeLibraryUntagged', 'This run tags the images in this library that have no AI tags yet.');
+        if (clearBtn) clearBtn.hidden = true;
         note.hidden = false;
     }
 
     function disarmTagSelection() {
         armedTagIds = null;
-        const note = document.getElementById('tag-scope-note');
-        if (note) note.hidden = true;
+        // After the modal has picked its tab.
+        window.setTimeout(refreshScopeNote, 0);
     }
 
     function wireTagSelected() {
         const btn = document.getElementById('btn-tag-selected');
         if (btn) {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', async () => {
                 const a = app();
                 const st = a && a.AppState;
-                if (!a || !st || st.selectionToken) return;
-                const ids = Array.from(st.selectedIds || []);
+                if (!a || !st) return;
+                // "Select all matching" pages through its token to the full id
+                // list, so the tagger runs on exactly the filtered images.
+                let ids = Array.from(st.selectedIds || []);
+                if (st.selectionToken && typeof window.expandGallerySelectionIds === 'function') {
+                    ids = await window.expandGallerySelectionIds();
+                }
                 if (!ids.length) return;
                 armedTagIds = ids;
-                showScopeNote(ids.length);
+                refreshScopeNote();
                 if (typeof a.showModal === 'function') a.showModal('tag-modal');
                 // Aurora Phase 3 (#25b): [打标] lands on the 智能一趟 (Smart Tag)
                 // tab with this selection scope, regardless of the last-used tab.
@@ -781,6 +802,10 @@
         if (globalTagBtn) globalTagBtn.addEventListener('click', disarmTagSelection);
         const clearBtn = document.getElementById('btn-tag-scope-clear');
         if (clearBtn) clearBtn.addEventListener('click', disarmTagSelection);
+        document.getElementById('tag-retag-all')?.addEventListener('change', refreshScopeNote);
+        document.addEventListener('click', (event) => {
+            if (event.target?.closest?.('#tag-modal .tagger-tab')) window.setTimeout(refreshScopeNote, 0);
+        });
     }
 
     /** Called by app.js startTagging(): returns armed ids (or null). */

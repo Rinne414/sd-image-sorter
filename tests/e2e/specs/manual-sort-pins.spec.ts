@@ -187,7 +187,6 @@ test('manual sort start stays in the first viewport and gives actionable feedbac
         'sort-mode-switch',
         'sort-preset-bar',
         'manual-sort-filter-summary',
-        'manual-sort-execution-scope',
         'manual-sort-operation-help',
       ]
       const rectanglesOverlap = (first: DOMRect, second: DOMRect): boolean => (

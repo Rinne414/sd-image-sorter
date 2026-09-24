@@ -1342,6 +1342,9 @@
         const logical = this._getLogicalDatasetCount ? this._getLogicalDatasetCount() : this.imageIds.length;
         const num = document.getElementById('dataset-count-num');
         if (num) num.textContent = String(logical);
+        // Nothing to audit until something is imported.
+        const auditCard = document.querySelector('.dataset-import-card-audit');
+        if (auditCard) auditCard.hidden = logical === 0;
         const importCount = document.getElementById('dataset-import-gallery-count');
         if (importCount && logical !== this.imageIds.length) {
             importCount.textContent = this._t('dataset.importGalleryManifestCount',

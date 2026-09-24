@@ -6,7 +6,21 @@
  * the other app/ parts; index.html loads every app/ file BEFORE app.js
  * (tag order = original line order). No behavior change intended.
  */
+// Tabs animate their size (0.25 s). A measure taken mid-animation read the old
+// widths, decided the bar fits and dropped the compact layout; once the
+// animation ended, More sat under the settings button (seen after leaving a
+// mission at 1366 px). Transitions are off while the ladder measures.
 function updateNavigationOverflowState() {
+    const navBar = $('.nav-bar');
+    navBar?.classList.add('nav-measuring');
+    try {
+        return measureNavigationOverflowState();
+    } finally {
+        navBar?.classList.remove('nav-measuring');
+    }
+}
+
+function measureNavigationOverflowState() {
     const navBar = $('.nav-bar');
     const navTabs = $('.nav-tabs');
     if (!navBar || !navTabs) return window.innerWidth <= 768;

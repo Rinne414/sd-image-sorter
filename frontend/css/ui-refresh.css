@@ -2993,8 +2993,16 @@ textarea:focus,
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         gap: 12px 16px;
     }
+    /* Half-width A/D cards left the path field ~116 px at 1366 px. The key
+       badge already says the direction, so the arrow goes and the spacing
+       tightens: ~50 px more for the path. */
     .sort-setup-col-main .folder-row-middle .folder-slot {
         max-width: none;
+        gap: 10px;
+        padding: 10px;
+    }
+    .sort-setup-col-main .folder-row-middle .folder-arrow {
+        display: none;
     }
     .sort-setup-col-main .folder-row-middle .folder-slot[data-key="a"] {
         grid-column: 1;
@@ -8634,24 +8642,6 @@ html.lang-zh #view-censor .queue-action-btn span {
     margin: 0;
 }
 
-.autosep-action-settings-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border-radius: 999px;
-    padding: 5px 10px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-}
-
-.autosep-action-settings-badge {
-    color: #EAD1B4;
-    background: rgba(var(--accent-rgb), 0.12);
-    border: 1px solid rgba(var(--accent-rgb), 0.22);
-}
-
 .autosep-operation-control {
     align-self: flex-start;
 }
@@ -8722,11 +8712,18 @@ html.lang-zh #view-censor .queue-action-btn span {
     line-height: 1;
 }
 
+/* Save All / Send to publish set stay on screen at laptop heights (they sat
+   ~150 px below a 1366x768 window): the card is pinned to the bottom of the
+   panel and the settings scroll behind it. -16px covers the panel's bottom
+   padding so nothing peeks out underneath. */
 #view-censor .sidebar-bottom-actions {
     margin-top: 10px;
-    position: static;
-    bottom: auto;
-    background: rgba(255, 255, 255, 0.035);
+    position: sticky;
+    bottom: -16px;
+    z-index: 2;
+    background: var(--surface-1);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -10px 0 var(--surface-1);
 }
 
 @media (max-height: 860px) {
@@ -12183,6 +12180,94 @@ html.lang-zh #view-censor .queue-action-btn span {
     font-size: 12px;
     font-weight: 700;
     color: var(--text);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.nav-mission-chip .chip-label:hover,
+.nav-mission-chip .chip-label[aria-expanded="true"] {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+/* Mission steps panel: opened by the chip label (and once when a mission
+   starts). Floating chrome, so it may carry the float shadow. */
+.nav-mission-steps {
+    position: fixed;
+    z-index: 1200;
+    width: min(360px, calc(100vw - 24px));
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-float);
+}
+
+.nav-mission-steps[hidden] {
+    display: none;
+}
+
+.nav-mission-steps-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+}
+
+.nav-mission-steps-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.nav-mission-step {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 6px 8px;
+    border-radius: 8px;
+    color: var(--text-2);
+}
+
+.nav-mission-step.is-here {
+    background: rgba(var(--pink-rgb, 255 137 197), 0.12);
+    color: var(--text);
+}
+
+.nav-mission-step-number {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.nav-mission-step.is-here .nav-mission-step-number {
+    border-color: rgba(var(--pink-rgb, 255 137 197), 0.6);
+}
+
+.nav-mission-step-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.nav-mission-step-body strong {
+    font-size: 13px;
+    color: inherit;
 }
 
 .nav-mission-chip .chip-exit {
@@ -12200,6 +12285,13 @@ html.lang-zh #view-censor .queue-action-btn span {
 .nav-mission-chip .chip-exit:hover {
     color: var(--text);
     background: rgba(255, 255, 255, 0.12);
+}
+
+/* The width ladder (nav-toolbar.js) measures final sizes: no animation may
+   run while .nav-measuring is on, whatever else sets a transition. */
+html .nav-bar.nav-measuring,
+html .nav-bar.nav-measuring * {
+    transition: none !important;
 }
 
 /* Pipeline step number on mission-mode tabs (1 → 2), so the bar reads as
@@ -12263,4 +12355,22 @@ html.lang-zh #view-censor .queue-action-btn span {
    [hidden]{display:none} (same trap as the More menu, 2026-07-04). */
 .nav-custom-mirror[hidden] {
     display: none !important;
+}
+
+/* Tag backup row at the end of the tagger's Advanced settings (moved out of
+   the Start footer). */
+.tagger-tag-backup-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-subtle, var(--border));
+}
+
+.tagger-tag-backup-label {
+    font-size: 12px;
+    color: var(--text-2);
+    margin-right: auto;
 }

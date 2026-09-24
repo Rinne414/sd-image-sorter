@@ -85,3 +85,64 @@ test.describe('Nav — customizable tabs and mission mode', () => {
     await expect(page.locator('#nav-tab-dataset')).toBeHidden()
   })
 })
+
+test('the nav width check measures final tab widths, not a running transition', async ({ page }) => {
+  // Seen at 1366 px after leaving a mission: the debounced re-measure ran
+  // while the tabs were still animating, read the old narrow widths, dropped
+  // the compact layout, and "More" ended up under the settings button.
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await page.addInitScript(() => localStorage.setItem('sd-image-sorter-lang', 'zh-CN'))
+  await page.goto('/')
+  await expect(page.locator('#view-gallery')).toBeVisible()
+  await page.click('#nav-tab-censor')
+  await expect(page.locator('#view-censor')).toHaveClass(/active/)
+  await page.waitForTimeout(400)
+  expect(await page.locator('.nav-bar').getAttribute('class')).toContain('nav-tabs-compact-labels')
+
+  // A slow transition makes "re-measure mid-animation" deterministic.
+  await page.addStyleTag({ content: '.nav-bar .nav-tab, .nav-bar .nav-tab * { transition: all 2s linear !important; }' })
+  const layout = await page.evaluate(async () => {
+    const nav = document.querySelector('.nav-bar')!
+    nav.classList.remove('nav-tabs-compact-labels') // tabs start growing
+    ;(window as any).updateNavigationOverflowState() // re-measure right away
+    await new Promise((resolve) => setTimeout(resolve, 2300))
+    const tabs = document.querySelector('.nav-tabs') as HTMLElement
+    const more = document.getElementById('nav-tools-toggle')!.getBoundingClientRect()
+    const gear = document.getElementById('btn-open-model-manager')!.getBoundingClientRect()
+    return { overflow: tabs.scrollWidth - tabs.clientWidth, moreRight: more.right, gearLeft: gear.left }
+  })
+  expect(layout.overflow).toBeLessThanOrEqual(1)
+  expect(layout.moreRight).toBeLessThanOrEqual(layout.gearLeft)
+})
+
+test('a mission shows its steps once, marks where you are, and the chip reopens them', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await page.goto('/')
+  await expect(page.locator('#view-gallery')).toBeVisible()
+
+  await page.evaluate(() => (window as any).NavMissions.enter('pixiv'))
+  const panel = page.locator('#nav-mission-steps')
+  await expect(panel).toBeVisible()
+  await expect(panel.locator('.nav-mission-step')).toHaveCount(4)
+  await expect(panel.locator('.nav-mission-step.is-here')).toHaveCount(1)
+  await expect(panel.locator('.nav-mission-step').first()).toHaveClass(/is-here/)
+  await expect(panel).toBeInViewport()
+
+  // Esc closes the panel and does not jump to the entry page.
+  await page.keyboard.press('Escape')
+  await expect(panel).toBeHidden()
+  await expect(page.locator('#entry-page')).toBeHidden()
+
+  // In Censor Edit, steps 2-4 are the ones here.
+  await page.click('#nav-tab-censor')
+  await page.click('#nav-mission-chip-label')
+  await expect(panel).toBeVisible()
+  await expect(panel.locator('.nav-mission-step.is-here')).toHaveCount(3)
+  await expect(page.locator('#nav-mission-chip-label')).toHaveAttribute('aria-expanded', 'true')
+
+  // A click elsewhere closes it; leaving the mission hides everything.
+  await page.mouse.click(900, 640)
+  await expect(panel).toBeHidden()
+  await page.click('#nav-mission-exit')
+  await expect(page.locator('#nav-mission-chip')).toBeHidden()
+})

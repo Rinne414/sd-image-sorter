@@ -502,12 +502,14 @@ function renderFeatureAvailabilityNotice() {
     const gridEl = $('#model-manager-grid');
     if (!summaryEl || !gridEl) return;
 
+    // Reference text, not a step: collapsed and after the model cards, so the
+    // cards (status + Prepare) are the first thing the Model Center shows.
     let noticeEl = document.getElementById('feature-availability-notice');
     if (!noticeEl) {
-        noticeEl = document.createElement('section');
+        noticeEl = document.createElement('details');
         noticeEl.id = 'feature-availability-notice';
-        noticeEl.className = 'feature-availability-notice';
-        gridEl.parentElement.insertBefore(noticeEl, gridEl);
+        noticeEl.className = 'feature-availability-notice guided-advanced-panel';
+        gridEl.parentElement.insertBefore(noticeEl, gridEl.nextSibling);
     }
 
     const readyItems = [
@@ -521,7 +523,7 @@ function renderFeatureAvailabilityNotice() {
     const prepareItems = [
         appT('features.prepare.wd14', 'WD14 / ONNX tagging: first use downloads the selected model and shows install progress; Windows GPU runtime is repaired when needed'),
         appT('features.prepare.clip', 'CLIP similarity / duplicate search: first use installs fastembed and downloads the vision+text pair (~580 MB) with progress'),
-        appT('features.prepare.aesthetic', 'Aesthetic scoring: first use installs torch + open-clip and downloads CLIP / scoring head files (~1.7 GB; confirm first)'),
+        appT('features.prepare.aesthetic', 'Aesthetic scoring: first use installs torch + open-clip and downloads CLIP / scoring head files (~2 GB; confirm first)'),
         appT('features.prepare.artist', 'Artist ID: first use installs torch / transformers / timm / safetensors / triton and downloads Kaloscope (~2.8 GB; confirm first)'),
         appT('features.prepare.censorAi', 'AI censor detectors: first use of NudeNet installs its runtime and model. Privacy YOLO and SAM3 stay opt-in.'),
         appT('features.prepare.toriigate', 'ToriiGate local captioner: first use installs PyTorch / Transformers and downloads about 9.6 GB BF16 weights after you confirm'),
@@ -530,6 +532,9 @@ function renderFeatureAvailabilityNotice() {
     ];
 
     noticeEl.innerHTML = `
+        <summary class="guided-advanced-summary">
+            <span>${escapeHtml(appT('features.availabilityTitle', 'Which features work right away, and which download on first use'))}</span>
+        </summary>
         <div class="feature-availability-card is-ready">
             <strong>${escapeHtml(appT('features.readyTitle', 'Ready after first run.bat'))}</strong>
             <ul>${readyItems.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>

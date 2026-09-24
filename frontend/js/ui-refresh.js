@@ -258,7 +258,6 @@
             this._setButton('#return-to-gallery-btn', 'manual.returnToGallery');
             this._setText('#view-manual .setup-title', 'manual.title');
             this._setText('#view-manual .setup-description', 'manual.description');
-            this._setText('#manual-sort-scope-note', 'manual.scopeNote');
             this._setText('#view-manual .space-indicator span', 'manual.skip');
             this._setText('#view-manual .filter-header-compact h4', 'filter.imagesToSort');
             this._setButton('#btn-manual-sort-filters', 'gallery.editFilters', 'i-search', 'gallery.editFilters');

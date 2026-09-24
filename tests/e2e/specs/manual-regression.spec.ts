@@ -2802,6 +2802,8 @@ test('tag export and import should roundtrip through the real UI', async ({ page
   await page.locator('#btn-tag').click()
   await expect(page.locator('#tag-modal.visible')).toBeVisible()
 
+  // Tag backup sits in Advanced settings, away from Start.
+  await page.locator('#tag-advanced-options > summary').click()
   const downloadPromise = page.waitForEvent('download')
   await page.locator('#btn-export-tags-json').click()
   const download = await downloadPromise

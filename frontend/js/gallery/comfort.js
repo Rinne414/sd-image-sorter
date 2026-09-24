@@ -188,6 +188,11 @@
     function _releaseRestoreAfterResets(target = null) {
         const holdUntil = Date.now() + 1100;
         const hold = () => {
+            // Left the gallery mid-hold: its offset must not scroll another view.
+            if (!_isGalleryActive()) {
+                _restoring = false;
+                return;
+            }
             if (target != null && Math.abs(_getScrollTop() - target) > 4) {
                 // A reset (or its smooth glide) moved us: cancel the animation
                 // by re-asserting the target instantly.
@@ -295,6 +300,12 @@
         let lastMax = -1;
         let stalledAtBottom = 0;
         const apply = () => {
+            // The user switched to another view while the grid was filling:
+            // stop, or the gallery offset scrolls that view under the nav.
+            if (!_isGalleryActive()) {
+                _restoring = false;
+                return;
+            }
             _setScrollTop(target);
             const now = _getScrollTop();
             if (Math.abs(now - target) <= 4) {

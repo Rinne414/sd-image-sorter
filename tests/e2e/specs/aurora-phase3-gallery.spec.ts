@@ -310,7 +310,15 @@ test.describe('Aurora Phase 3 — selection action bar', () => {
     await page.locator('#tag-modal .tagger-tab[data-tagger-tab="local"]').click()
     await expect(page.locator('#tag-scope-note')).toBeVisible()
     await page.locator('#btn-tag-scope-clear').click()
-    await expect(page.locator('#tag-scope-note')).toBeHidden()
+    // The note now says what Start will tag for the whole library.
+    await expect(page.locator('#tag-scope-note-text')).toContainText('no AI tags yet')
+    await expect(page.locator('#btn-tag-scope-clear')).toBeHidden()
+    await page.locator('#tag-modal').evaluate(() => {
+      const box = document.getElementById('tag-retag-all') as HTMLInputElement
+      box.checked = true
+      box.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await expect(page.locator('#tag-scope-note-text')).toContainText('re-tags every image')
     await page.locator('#btn-close-tag-modal').click()
     await expect(page.locator('#tag-modal')).not.toHaveClass(/visible/)
 
@@ -320,6 +328,17 @@ test.describe('Aurora Phase 3 — selection action bar', () => {
     await expect(tiles.nth(0)).not.toHaveAttribute('data-sel-order')
     await expect(page.locator('#entry-page')).toBeHidden()
     expect(await page.evaluate(() => (window as any).App.AppState.selectionMode)).toBe(true)
+
+    // "Select all matching" can be tagged too: the ids behind the selection
+    // token are expanded, and the note names the exact count.
+    await page.locator('#btn-select-all').click()
+    await expect(page.locator('#btn-tag-selected')).toBeEnabled()
+    await page.locator('#btn-tag-selected').click()
+    await expect(page.locator('#tag-modal')).toHaveClass(/visible/)
+    await expect(page.locator('#tag-scope-note-text')).toContainText('3')
+    await page.locator('#btn-close-tag-modal').click()
+    await expect(page.locator('#tag-modal')).not.toHaveClass(/visible/)
+    await page.keyboard.press('Escape')
 
     // Leave selection mode so later specs start clean.
     await page.locator('#btn-toggle-select').click()

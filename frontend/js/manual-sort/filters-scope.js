@@ -254,22 +254,6 @@ function getManualSortScopeStatus() {
     };
 }
 
-function updateManualSortExecutionScopeSummary() {
-    const summaryEl = document.getElementById('manual-sort-execution-scope');
-    if (!summaryEl) return;
-
-    const status = getManualSortScopeStatus();
-    const tool = getManualSortToolLabel();
-    summaryEl.textContent = status.lastSyncedLabel && status.matchesGallery
-        ? formatManualSortI18n('scope.sessionSynced', 'This session uses {tool} filters copied from Gallery at {time}.', {
-            tool,
-            time: status.lastSyncedLabel,
-        })
-        : formatManualSortI18n('scope.sessionSaved', 'This session uses the saved {tool} filters shown here, not the live Gallery filters.', {
-            tool,
-        });
-}
-
 function updateManualSortScopeStatus() {
     const card = document.getElementById('manual-sort-scope-status');
     const badge = document.getElementById('manual-sort-scope-badge');
@@ -346,7 +330,6 @@ function keepManualSortSavedScope() {
     };
     saveManualSortScopeMeta();
     updateManualSortScopeStatus();
-    updateManualSortExecutionScopeSummary();
     window.App?.showToast?.(
         formatManualSortI18n('scope.keptToast', 'Kept the saved {tool} scope.', {
             tool: getManualSortToolLabel(),
@@ -386,7 +369,6 @@ function updateManualSortFilterSummary() {
     setSummary('#manual-sort-summary-dimensions', summary.dimensions);
 
     updateManualSortScopeStatus();
-    updateManualSortExecutionScopeSummary();
     // Keep the scoped image count in step with the filters (no-op when the
     // setup is off-screen — the fetch guards on visibility).
     refreshManualSortScopeCount();

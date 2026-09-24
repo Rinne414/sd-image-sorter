@@ -147,7 +147,11 @@ Object.assign(window.V321Integration, {
             titleEl.textContent = opt ? this._getModelChoiceTitle(opt) : (select.value || '');
         }
         if (metaEl) {
-            metaEl.textContent = opt ? this._getModelChoiceMeta(opt.value || '', opt, 'local') : '';
+            // The help line under the card already carries the summary (and
+            // scores), so the card only says what the model is best for.
+            const modelMeta = opt ? window.getTaggerModelMetaForV321?.(opt.value || '') : null;
+            metaEl.textContent = modelMeta?.best_for
+                || (opt ? this._getModelChoiceMeta(opt.value || '', opt, 'local') : '');
         }
         if (actionEl) {
             const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };

@@ -2395,8 +2395,7 @@ li > .icon {
 .stat-number,
 .entry-stat-value,
 .similar-stat-value,
-.brush-indicator-v2,
-.autosep-action-settings-badge {
+.brush-indicator-v2 {
     color: var(--text);
 }
 

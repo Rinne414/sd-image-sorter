@@ -181,7 +181,7 @@ function renderAestheticUi(state) {
     }
 
     if (!_aestheticStatus.available && !busy) {
-        const installTitle = t('gallery.aestheticInstallOnUse', 'First use downloads aesthetic scoring (about 1.7 GB) and shows progress.');
+        const installTitle = t('gallery.aestheticInstallOnUse', 'First use downloads aesthetic scoring (about 2 GB) and shows progress.');
         for (const startButton of startButtons) {
             startButton.disabled = false;
             startButton.title = installTitle;
@@ -392,8 +392,8 @@ async function startAestheticScoring(force = false) {
     if (typeof window.ensureFeatureModel === 'function') {
         const ensured = await window.ensureFeatureModel('aesthetic', {
             label: appT('gallery.aestheticModelName', 'Aesthetic scoring'),
-            sizeHint: '~1.7 GB',
-            confirmBytes: 1.7 * 1024 * 1024 * 1024,
+            sizeHint: '~2 GB',
+            confirmBytes: 2 * 1024 * 1024 * 1024,
         });
         if (!ensured.ok) return;
         await refreshAestheticStatus();

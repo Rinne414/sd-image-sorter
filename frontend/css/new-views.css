@@ -695,6 +695,13 @@
     display: block;
 }
 
+/* [hidden] must win over .is-visible: the Similar view hides its banner
+   once CLIP is ready, and "CLIP is ready" used to stay on screen above the
+   index card that says the same thing. */
+.model-health-banner[hidden] {
+    display: none;
+}
+
 .model-health-banner strong {
     color: var(--text-primary);
 }

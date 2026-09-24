@@ -989,19 +989,23 @@ body.entry-active {
     gap: 5px;
 }
 
+/* The stats sit on the ★5 artwork; like the greeting above they carry a soft
+   shadow so the numbers and their labels stay readable on bright images. */
 .entry-identity .stat-num {
     font-family: var(--font-numeral);
     font-size: 34px;
     font-weight: 500;
     line-height: 1;
     color: var(--text);
+    text-shadow: 0 2px 14px rgba(19, 19, 19, 0.7);
 }
 
 .entry-identity .stat-label {
     font-size: 11px;
     letter-spacing: 0.4px;
-    color: rgba(var(--accent-rgb), 0.55);
+    color: rgba(var(--accent-rgb), 0.85);
     white-space: nowrap;
+    text-shadow: 0 1px 3px rgba(19, 19, 19, 0.9), 0 0 12px rgba(19, 19, 19, 0.7);
 }
 
 .entry-identity .streak-today {
@@ -1021,7 +1025,8 @@ body.entry-active {
     width: 100%;
     font-family: var(--font-mono);
     font-size: var(--fs-footnote);
-    color: rgba(var(--accent-rgb), 0.45);
+    color: rgba(var(--accent-rgb), 0.75);
+    text-shadow: 0 1px 3px rgba(19, 19, 19, 0.9), 0 0 12px rgba(19, 19, 19, 0.7);
 }
 
 .entry-identity .hero-credit-slot {

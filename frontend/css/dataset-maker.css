@@ -3238,3 +3238,14 @@
     font-size: 11px;
     line-height: 1.4;
 }
+
+/* Nothing to audit in an empty dataset; the card appears after an import. */
+.dataset-import-card-audit[hidden] {
+    display: none;
+}
+
+/* The draft picker already reads "Unsaved draft"; the idle status would
+   repeat it ("No saved project"). Saved / dirty / saving states still show. */
+.dataset-project-status[data-state="idle"] {
+    display: none;
+}

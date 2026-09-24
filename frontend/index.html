@@ -301,7 +301,7 @@
                     <span class="fn-head">
                         <span class="fn-title" data-i18n="entry.tileSimilar">Find Similar</span>
                     </span>
-                    <span class="fn-sub" data-i18n="entry.tileSimilarSub">Dedupe · search by image</span>
+                    <span class="fn-sub" data-i18n="entry.tileSimilarSub">Search by image · near look-alikes</span>
                 </button>
             </div>
 
@@ -411,7 +411,7 @@
                     <!-- Mission mode chip (owner 2026-07-07): shown while a mission
                          scopes the bar to its pipeline tabs; ✕ restores the full set. -->
                     <span class="nav-mission-chip" id="nav-mission-chip" hidden>
-                        <span class="chip-label" id="nav-mission-chip-label"></span>
+                        <button type="button" class="chip-label" id="nav-mission-chip-label" aria-expanded="false" aria-controls="nav-mission-steps" data-i18n-title="navMission.showSteps" title="Show the steps"></button>
                         <button type="button" class="chip-exit" id="nav-mission-exit"
                                 aria-label="Exit mission mode, show all tabs" data-i18n-aria="navMission.exit"
                                 data-i18n-title="navMission.exit" title="Exit mission mode, show all tabs"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
@@ -1677,27 +1677,6 @@
                                 </button>
                             </div>
                             <div class="autosep-pane-body">
-                                <!-- Saved configs as a small card so it doesn't dominate the pane.
-                                     Note: kept as a regular <div> rather than <details> after the
-                                     <summary> + flex CSS was rendering empty in Chromium. The
-                                     collapse-on-click behaviour was a nice-to-have, not a contract. -->
-                                <div class="autosep-card autosep-card-configs" id="autosep-configs-card">
-                                    <div class="autosep-card-head">
-                                        <span class="autosep-card-summary-text" data-i18n="autosep.savedConfigs">Saved Configs</span>
-                                        <button class="btn btn-ghost btn-small" id="btn-autosep-new-config" type="button">＋ <span data-i18n="autosep.newConfig">New</span></button>
-                                    </div>
-                                    <div class="autosep-config-controls">
-                                        <select id="autosep-config-select" class="input-field"></select>
-                                        <div class="autosep-config-controls-row">
-                                            <button class="btn btn-secondary btn-small" id="btn-autosep-load-config" type="button" data-i18n="autosep.loadConfig">Load</button>
-                                            <button class="btn btn-secondary btn-small" id="btn-autosep-save-config" type="button" data-i18n="autosep.saveCurrentConfig">Save</button>
-                                            <button class="btn btn-ghost btn-small" id="btn-autosep-delete-config" type="button" data-i18n="autosep.deleteConfig">Delete</button>
-                                            <button class="btn btn-ghost btn-small" id="btn-autosep-rename-config" type="button" data-i18n="autosep.renameConfig" hidden>Rename</button>
-                                        </div>
-                                        <div class="autosep-config-summary" id="autosep-config-summary"></div>
-                                    </div>
-                                </div>
-
                                 <!-- Simplified scope: single sync button, no confusing state machine -->
                                 <div class="autosep-card autosep-card-scope" id="autosep-scope-status">
                                     <div class="autosep-scope-detail-block">
@@ -1722,6 +1701,27 @@
                                     <span class="summary-item"><strong>Prompts:</strong> <span id="autosep-summary-prompts" data-i18n="common.none">None</span></span>
                                     <span class="summary-item"><strong>Search:</strong> <span id="autosep-summary-search" data-i18n="common.none">None</span></span>
                                     <span class="summary-item"><strong>Dimensions:</strong> <span id="autosep-summary-dimensions">Any</span></span>
+                                </div>
+
+                                <!-- Saved configs as a small card so it doesn't dominate the pane.
+                                     Note: kept as a regular <div> rather than <details> after the
+                                     <summary> + flex CSS was rendering empty in Chromium. The
+                                     collapse-on-click behaviour was a nice-to-have, not a contract. -->
+                                <div class="autosep-card autosep-card-configs" id="autosep-configs-card">
+                                    <div class="autosep-card-head">
+                                        <span class="autosep-card-summary-text" data-i18n="autosep.savedConfigs">Saved Configs</span>
+                                        <button class="btn btn-ghost btn-small" id="btn-autosep-new-config" type="button">＋ <span data-i18n="autosep.newConfig">New</span></button>
+                                    </div>
+                                    <div class="autosep-config-controls">
+                                        <select id="autosep-config-select" class="input-field"></select>
+                                        <div class="autosep-config-controls-row">
+                                            <button class="btn btn-secondary btn-small" id="btn-autosep-load-config" type="button" data-i18n="autosep.loadConfig">Load</button>
+                                            <button class="btn btn-secondary btn-small" id="btn-autosep-save-config" type="button" data-i18n="autosep.saveCurrentConfig">Save</button>
+                                            <button class="btn btn-ghost btn-small" id="btn-autosep-delete-config" type="button" data-i18n="autosep.deleteConfig">Delete</button>
+                                            <button class="btn btn-ghost btn-small" id="btn-autosep-rename-config" type="button" data-i18n="autosep.renameConfig" hidden>Rename</button>
+                                        </div>
+                                        <div class="autosep-config-summary" id="autosep-config-summary"></div>
+                                    </div>
                                 </div>
                             </div>
                         </section>
@@ -1749,29 +1749,8 @@
                         <section class="autosep-pane autosep-pane-action" aria-labelledby="autosep-pane-action-title">
                             <div class="autosep-pane-head">
                                 <strong id="autosep-pane-action-title" data-i18n="autosep.workbench.actionPaneTitle">Action</strong>
-                                <span class="autosep-action-settings-badge" data-i18n="autosep.actionSettingsBadge">Visible before you run</span>
                             </div>
                             <div class="autosep-pane-body autosep-pane-action-body">
-                                <div class="autosep-action-block">
-                                    <label class="autosep-action-block-label" data-i18n="autosep.destination">Destination Folder</label>
-                                    <div class="folder-input-group">
-                                        <input type="text" id="autosep-destination" class="input-field" placeholder="D:\sorted\my-folder"
-                                               data-folder-browser-container="autosep-destination-browser">
-                                        <button class="btn btn-secondary" id="btn-browse-destination" type="button" data-i18n="scan.browse">Browse</button>
-                                    </div>
-                                    <div id="autosep-destination-browser" class="autosep-destination-browser" aria-live="polite"></div>
-                                    <div id="autosep-destination-mru" class="autosep-destination-mru" hidden></div>
-                                    <label class="autosep-action-block-label" for="autosep-split-by" style="margin-top:10px" data-i18n="autosep.splitBy">Split into subfolders</label>
-                                    <select id="autosep-split-by" class="input-field" aria-describedby="autosep-split-by-help">
-                                        <option value="" data-i18n="autosep.splitByNone">None: everything in one folder</option>
-                                        <option value="generator" data-i18n="autosep.splitByGenerator">By generator</option>
-                                        <option value="checkpoint" data-i18n="autosep.splitByCheckpoint">By base model / checkpoint</option>
-                                        <option value="rating" data-i18n="autosep.splitByRating">By user star rating</option>
-                                    </select>
-                                    <small class="helper-text" id="autosep-split-by-help" data-i18n="autosep.splitByHelp">Creates one subfolder per value under the destination (e.g. …/webui, …/comfyui).</small>
-                                    <div class="autosep-settings-summary" id="autosep-settings-summary"></div>
-                                </div>
-
                                 <div class="autosep-action-block autosep-action-settings" id="autosep-action-mode-panel" aria-labelledby="autosep-action-settings-title">
                                     <label class="autosep-action-block-label" id="autosep-action-settings-title" data-i18n="autosep.actionSettingsTitle">File Action</label>
                                     <div class="segmented-control autosep-operation-control" role="radiogroup" aria-label="Auto-Separate action mode">
@@ -1798,6 +1777,27 @@
                                     </div>
                                     <small class="helper-text" data-i18n="autosep.actionModeHelp">Move changes the library location. Copy keeps originals untouched.</small>
                                 </div>
+
+                                <div class="autosep-action-block">
+                                    <label class="autosep-action-block-label" data-i18n="autosep.destination">Destination Folder</label>
+                                    <div class="folder-input-group">
+                                        <input type="text" id="autosep-destination" class="input-field" placeholder="D:\sorted\my-folder"
+                                               data-folder-browser-container="autosep-destination-browser">
+                                        <button class="btn btn-secondary" id="btn-browse-destination" type="button" data-i18n="scan.browse">Browse</button>
+                                    </div>
+                                    <div id="autosep-destination-browser" class="autosep-destination-browser" aria-live="polite"></div>
+                                    <div id="autosep-destination-mru" class="autosep-destination-mru" hidden></div>
+                                    <label class="autosep-action-block-label" for="autosep-split-by" style="margin-top:10px" data-i18n="autosep.splitBy">Split into subfolders</label>
+                                    <select id="autosep-split-by" class="input-field" aria-describedby="autosep-split-by-help">
+                                        <option value="" data-i18n="autosep.splitByNone">None: everything in one folder</option>
+                                        <option value="generator" data-i18n="autosep.splitByGenerator">By generator</option>
+                                        <option value="checkpoint" data-i18n="autosep.splitByCheckpoint">By base model / checkpoint</option>
+                                        <option value="rating" data-i18n="autosep.splitByRating">By user star rating</option>
+                                    </select>
+                                    <small class="helper-text" id="autosep-split-by-help" data-i18n="autosep.splitByHelp">Creates one subfolder per value under the destination (e.g. …/webui, …/comfyui).</small>
+                                    <div class="autosep-settings-summary" id="autosep-settings-summary"></div>
+                                </div>
+
 
                                 <button class="btn btn-primary btn-large autosep-action-cta" id="btn-execute-autosep">
                                     <span><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></span>
@@ -2036,7 +2036,6 @@
                                 <button class="btn btn-secondary btn-small" id="btn-manual-sort-filters"><span><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></span>
                                     <span data-i18n="gallery.editFilters">Edit Filters</span></button>
                             </div>
-                            <div class="helper-text" id="manual-sort-scope-note" data-i18n="manual.scopeNote">These filters are separate from the Gallery; changing the Gallery does not change them.</div>
                             <div class="scope-status-card" id="manual-sort-scope-status">
                                 <div class="scope-status-header">
                                     <span class="scope-status-badge" id="manual-sort-scope-badge">Manual Sort will use these saved filters</span>
@@ -2069,7 +2068,6 @@
                             </div>
                         </div>
 
-                        <div class="helper-text" id="manual-sort-execution-scope" data-i18n="manual.executionScope">This session uses the Manual Sort filters shown here, not the live Gallery filters.</div>
                         <div class="filter-section sort-slot-only">
                             <div class="filter-header-compact">
                                 <h4 data-i18n="manual.actionModeTitle">File Action Mode</h4>
@@ -5416,7 +5414,7 @@
                         <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></span> <span data-i18n="settings.tabGeneral">Settings</span>
                     </button>
                     <button type="button" class="settings-modal-tab" data-settings-tab="models" role="tab" aria-selected="false">
-                        <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-package"/></svg></span> <span data-i18n="settings.tabModels">AI Models</span>
+                        <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-package"/></svg></span> <span data-i18n="settings.tabModels">Model Center</span>
                     </button>
                     <button type="button" class="settings-modal-tab" data-settings-tab="disk" role="tab" aria-selected="false">
                         <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-save"/></svg></span> <span data-i18n="settings.tabDisk">Disk & Cache</span>
@@ -5447,7 +5445,7 @@
                         </div>
                         <button type="button" class="btn btn-ghost" id="btn-settings-entry-toggle" aria-pressed="true">
                             <span aria-hidden="true" id="settings-entry-icon"><svg class="icon" aria-hidden="true"><use href="#i-logout"/></svg></span>
-                            <span id="settings-entry-label" data-i18n="settings.entryOn">Shown</span>
+                            <span id="settings-entry-label" data-i18n="settings.entryOn">On</span>
                         </button>
                     </div>
                     <div class="settings-row">
@@ -5457,7 +5455,7 @@
                         </div>
                         <button type="button" class="btn btn-ghost" id="btn-settings-entry-hero-toggle" aria-pressed="true">
                             <span aria-hidden="true" id="settings-entry-hero-icon"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></span>
-                            <span id="settings-entry-hero-label" data-i18n="settings.entryHeroOn">Shown</span>
+                            <span id="settings-entry-hero-label" data-i18n="settings.entryHeroOn">On</span>
                         </button>
                     </div>
                     <div class="settings-row">
@@ -5562,12 +5560,13 @@
                     </button>
                     <span class="model-manager-bulk-help" data-i18n="models.bulkDownloadHelp">Pick the recommended models for tagging, censoring, similarity, scoring, artist ID, segmentation, local captions and training masks. CL Tagger v2 stays unchecked until you authorize its official Hugging Face download.</span>
                 </div>
+                <div class="model-manager-grid" id="model-manager-grid"></div>
+
                 <!-- Manual-upgrade safety hint: downloaded models live in data/models.
                      Users who unzip a new release into a fresh folder leave their
                      models (and library DB) behind in the old folder's data\ —
                      every model then shows "missing" even though nothing was lost. -->
                 <p class="model-manager-migrate-hint helper-text" data-i18n="models.manualUpgradeHint">All models show as missing after upgrading to a new folder? They're still in the old folder's data directory. Copy that whole folder into the new install and restart.</p>
-                <div class="model-manager-grid" id="model-manager-grid"></div>
                 </div>
                 <div data-settings-panel="disk" hidden>
                 <section class="disk-usage-section" id="disk-usage-section" aria-labelledby="disk-usage-title">
@@ -6512,6 +6511,13 @@
                             </div>
                         </div>
                     </div>
+                    <!-- Tag backup lives here, not beside Start: it has nothing to do with a tagging run. -->
+                    <div class="tagger-tag-backup-row">
+                        <span class="tagger-tag-backup-label" data-i18n="tagger.tagBackup">Tag backup</span>
+                        <button class="btn btn-ghost tagger-local-action" id="btn-export-tags-json" title="Export all tags to JSON file"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg> <span data-i18n="modal.tagExport">Export Tags</span></button>
+                        <button class="btn btn-ghost tagger-local-action" id="btn-import-tags" title="Import tags from JSON file"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg> <span data-i18n="modal.tagImport">Import Tags</span></button>
+                        <input type="file" id="import-tags-file" accept=".json" style="display: none;">
+                    </div>
                 </details>
 
                 <div class="tagger-utility-strip tagger-compat-hidden" data-tagger-shows="nl" aria-label="AI utility actions" data-i18n-aria="tagger.aiUtilityActions" aria-hidden="true">
@@ -6551,9 +6557,6 @@
                         </div>
                         <span class="progress-text" id="tag-progress-text" data-i18n="modal.tagLoadingModel">Loading model...</span>
                     </div>
-                    <button class="btn btn-ghost tagger-local-action" id="btn-export-tags-json" title="Export all tags to JSON file"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg> <span data-i18n="modal.tagExport">Export Tags</span></button>
-                    <button class="btn btn-ghost tagger-local-action" id="btn-import-tags" title="Import tags from JSON file"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg> <span data-i18n="modal.tagImport">Import Tags</span></button>
-                    <input type="file" id="import-tags-file" accept=".json" style="display: none;">
                     <div style="flex: 1;"></div>
                     <button class="btn btn-ghost" id="btn-cancel-tag" data-i18n="modal.tagCancel">Cancel</button>
                     <button class="btn btn-primary" id="btn-start-tag" data-i18n="modal.tagStart">Start Tagging</button>

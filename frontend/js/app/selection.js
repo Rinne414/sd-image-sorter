@@ -501,8 +501,11 @@ function scheduleViewScrollReset() {
     // this very view switch. This reset fires at 0/rAF/50/160/320/700ms, so it
     // used to stomp the restore six times over and "continue where you left
     // off" could never work. Honour an in-progress restore and skip.
+    // Only a restore on the gallery itself outranks the reset; any other view
+    // starts at the top.
     const restoring = () => Boolean(
-        window.GalleryComfort && typeof window.GalleryComfort.isRestoring === 'function'
+        AppState.currentView === 'gallery'
+        && window.GalleryComfort && typeof window.GalleryComfort.isRestoring === 'function'
         && window.GalleryComfort.isRestoring(),
     );
     const token = ++viewScrollResetToken;

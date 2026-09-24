@@ -125,6 +125,16 @@ Object.assign(window.SimilarImages, {
             workflowCard.classList.toggle('similar-workflow-primary', phase === 'prepare' || running);
             workflowCard.classList.toggle('similar-workflow-compact', phase === 'ready' && !running);
         }
+
+        // Before anything is indexed, building the index is the page's only
+        // action, so its button looks like the main action.
+        const indexCta = document.getElementById('btn-similar-status-embed');
+        if (indexCta) {
+            const isMainAction = phase === 'prepare';
+            indexCta.classList.toggle('btn-primary', isMainAction);
+            indexCta.classList.toggle('btn-secondary', !isMainAction);
+            indexCta.classList.toggle('btn-small', !isMainAction);
+        }
     },
 
     refreshWorkflowStatus() {

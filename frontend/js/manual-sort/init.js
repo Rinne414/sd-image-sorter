@@ -280,7 +280,6 @@ async function initManualSort() {
 
     document.addEventListener('gallery-filters-changed', () => {
         updateManualSortScopeStatus();
-        updateManualSortExecutionScopeSummary();
     });
     document.addEventListener('languageChanged', () => {
         updateManualSortFilterSummary();
