@@ -1825,8 +1825,11 @@ html.gallery-comfort-room #view-gallery .gallery-container::before,
     display: none;
 }
 
-html.gallery-comfort-room #view-gallery .gallery-container > *,
-#view-gallery.is-comfort-room .gallery-container > * {
+/* The action bar is excluded: it is position:fixed (ui-refresh.css), and this
+   ID-weighted rule used to turn it back into a flow element parked after the
+   whole grid, i.e. never on screen. */
+html.gallery-comfort-room #view-gallery .gallery-container > *:not(.gallery-action-bar),
+#view-gallery.is-comfort-room .gallery-container > *:not(.gallery-action-bar) {
     position: relative;
     z-index: 1;
 }
@@ -2466,7 +2469,7 @@ li > .icon {
 .filter-sidebar-footer .gallery-clear-button {
     width: 100%;
     justify-content: center;
-    margin-bottom: 8px;
+    margin-top: 12px;
     border: 1px solid rgba(var(--danger-rgb), 0.34);
     border-radius: var(--r-ctl);
     background: var(--surface-danger);

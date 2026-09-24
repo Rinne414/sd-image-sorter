@@ -921,10 +921,6 @@
                     <div class="filter-sidebar-footer">
                         <div class="divider-h" aria-hidden="true"></div>
 
-                        <button id="btn-clear-db" class="btn btn-ghost btn-small danger gallery-clear-button" type="button" title="Clear all indexed images from the current library (files stay on disk)" data-i18n-title="action.clearGalleryTooltip" aria-label="Clear current library" data-i18n-aria="action.clearGallery">
-                            <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></span> <span data-i18n="action.clearGallery">Clear current library</span>
-                        </button>
-
                         <button id="btn-toggle-select" class="btn btn-primary btn-large full-width" aria-pressed="false" aria-label="Toggle image selection mode">
                             <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span>
                             <span data-i18n="gallery.selectImages">Select Images</span>
@@ -951,6 +947,13 @@
                                  bottom action bar (#gallery-action-bar); this panel keeps
                                  the selection SCOPE tools only, per the 24a checklist. -->
                         </div>
+
+                        <!-- Danger last: the everyday Select button sits on top of the
+                             footer, Clear library at its bottom edge (owner 2026-06-12:
+                             visible at a glance, but far from common ops). -->
+                        <button id="btn-clear-db" class="btn btn-ghost btn-small danger gallery-clear-button" type="button" title="Clear all indexed images from the current library (files stay on disk)" data-i18n-title="action.clearGalleryTooltip" aria-label="Clear current library" data-i18n-aria="action.clearGallery">
+                            <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></span> <span data-i18n="action.clearGallery">Clear current library</span>
+                        </button>
                     </div>
                 </aside>
 

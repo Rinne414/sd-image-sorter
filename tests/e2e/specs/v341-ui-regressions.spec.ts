@@ -209,6 +209,13 @@ test('clear gallery button should be visible on the gallery page, not buried in 
     isInSidebar: true,
   })
 
+  // Danger last: the everyday Select button comes first in the footer and
+  // Clear library sits below it, not right on top of it.
+  const clearBox = await clearButton.boundingBox()
+  const selectBox = await page.locator('#btn-toggle-select').boundingBox()
+  expect(clearBox && selectBox).toBeTruthy()
+  expect(clearBox!.y).toBeGreaterThan(selectBox!.y + selectBox!.height)
+
   // The existing handler + confirmation flow must still fire from the new
   // location (the busy-guard probes progress endpoints first, then confirms).
   await clearButton.click()

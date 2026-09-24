@@ -11358,9 +11358,10 @@ html.lang-zh #view-censor .queue-action-btn span {
    The three accents each own a meaning (tokens.css): pink = the USER's
    decisions, purple = AI output, blue = next action. Tiles previously used
    blue for selection and blue for the aesthetic badge; both re-home here.
-   The selection badge shows ♥ plus the pick order (data-sel-order, stamped
+   The selection badge shows ✓ plus the pick order (data-sel-order, stamped
    by modules/gallery-selection-badges.js) for explicit selections; token
-   "select-all-matching" selections show a plain ♥ (order is meaningless).
+   "select-all-matching" selections show a plain ✓ (order is meaningless).
+   Not ♥: the heart already means favorite on the same tile.
    ========================================================================== */
 .gallery-item.selected {
     outline: 2px solid var(--pink);
@@ -11368,11 +11369,11 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 
 /* The badge moves to the TOP-LEFT checkbox position: the empty ::before
-   circle fills with a pink ♥ pill when picked, and the browse-order pill
+   circle fills with a pink ✓ pill when picked, and the browse-order pill
    yields (pick order matters more than grid position mid-selection).
    Top-right stays owned by the favorite button. */
 .gallery-item.selected::after {
-    content: '\2665\00a0' attr(data-sel-order);
+    content: '\2713\00a0' attr(data-sel-order);
     top: 6px;
     left: 6px;
     right: auto;
@@ -11388,7 +11389,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 
 .gallery-item.selected:not([data-sel-order])::after {
-    content: '\2665';
+    content: '\2713';
     padding: 0;
     width: 24px;
 }

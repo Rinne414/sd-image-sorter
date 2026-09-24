@@ -2,11 +2,11 @@
  * Aurora Phase 3 — pick-order badges for gallery selection.
  *
  * Stamps `data-sel-order` (1-based pick order) onto selected tiles so the
- * CSS ♥ pill (ui-refresh.css "Gallery tile semantics") can show which image
+ * CSS ✓ pill (ui-refresh.css "Gallery tile semantics") can show which image
  * was picked 1st / 2nd / …. Order comes from AppState.selectedIds — a Set,
  * whose iteration order is insertion order, i.e. the order the user clicked.
  *
- * Skipped (plain ♥, no number) when:
+ * Skipped (plain ✓, no number) when:
  *   - the selection is token-scoped ("select all matching"): every filtered
  *     image is selected, so a pick order is meaningless; or
  *   - more than MAX_NUMBERED ids are selected: past that the number carries

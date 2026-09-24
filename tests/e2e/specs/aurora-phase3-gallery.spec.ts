@@ -4,7 +4,7 @@
  * Covers the four new surfaces of this slice:
  *  1. Left nav rail (view switching, collapse persistence, brand → entry page)
  *  2. Gallery toolbar (key:value search parsing, quick chips)
- *  3. Fixed bottom action bar in selection mode (♥ pick-order badges,
+ *  3. Fixed bottom action bar in selection mode (✓ pick-order badges,
  *     More▾ menu Escape isolation, tag-selected scoping note)
  *  4. Roadmap-C repair review (ambiguous reconnect → review modal → pick)
  */
@@ -243,7 +243,7 @@ test.describe('Aurora Phase 3 — selection action bar', () => {
     makePng(path.join(actionBarDir, fixtureNames[2]), 'blue')
   })
 
-  test('selecting tiles shows the fixed bar, ♥ order badges, and an Esc-safe More menu', async ({ page, request }) => {
+  test('selecting tiles shows the fixed bar, ✓ order badges, and an Esc-safe More menu', async ({ page, request }) => {
     test.setTimeout(120000)
     await page.setViewportSize({ width: 1600, height: 900 })
     await scanFolder(request, actionBarDir)
@@ -265,6 +265,16 @@ test.describe('Aurora Phase 3 — selection action bar', () => {
 
     const bar = page.locator('#gallery-action-bar')
     await expect(bar).toBeVisible()
+    // toBeVisible passes for an element parked below the grid; the bar must
+    // actually sit on screen, pinned to the bottom edge of the viewport.
+    await expect(bar).toBeInViewport()
+    const barPlacement = await bar.evaluate((el) => ({
+      position: getComputedStyle(el).position,
+      gapToBottom: window.innerHeight - el.getBoundingClientRect().bottom,
+    }))
+    expect(barPlacement.position).toBe('fixed')
+    expect(barPlacement.gapToBottom).toBeGreaterThanOrEqual(0)
+    expect(barPlacement.gapToBottom).toBeLessThan(40)
     await expect(page.locator('#gallery-action-bar-stats')).not.toHaveText('')
     await expect(tiles.nth(0)).toHaveAttribute('data-sel-order', '1')
     await expect(tiles.nth(1)).toHaveAttribute('data-sel-order', '2')

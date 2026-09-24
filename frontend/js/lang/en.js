@@ -280,7 +280,6 @@ window.I18nLang_en = {
     'gallery.comfort.restoredRibbon': 'Restored your place in the library',
     'gallery.comfort.todayRibbon': 'Today · {stats}',
     'gallery.comfort.statFavorites': 'favorited {n}',
-    'gallery.comfort.statSelects': 'selected up to {n}',
     'gallery.comfort.peekHint': 'Hold Space · release to close · Enter for full details',
     // Comfort-3 — whole-app studio shell
     'comfort.zenTitle': 'Zen mode',

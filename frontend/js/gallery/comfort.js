@@ -102,7 +102,7 @@
             v: 1,
             resume: null,
             dayKey: _todayKey(),
-            day: { favorites: 0, selectsPeak: 0, loads: 0 },
+            day: { favorites: 0, loads: 0 },
             lastResumeToastAt: 0,
         };
     }
@@ -122,7 +122,6 @@
             state.dayKey = raw.dayKey;
             state.day = {
                 favorites: Math.max(0, Number(raw.day.favorites) || 0),
-                selectsPeak: Math.max(0, Number(raw.day.selectsPeak) || 0),
                 loads: Math.max(0, Number(raw.day.loads) || 0),
             };
         }
@@ -377,14 +376,11 @@
         const today = _todayKey();
         if (state.dayKey !== today) {
             state.dayKey = today;
-            state.day = { favorites: 0, selectsPeak: 0, loads: 0 };
+            state.day = { favorites: 0, loads: 0 };
         }
         const n = Math.max(0, Number(amount) || 0);
         if (field === 'favorites') state.day.favorites += n || 1;
         if (field === 'loads') state.day.loads += n || 1;
-        if (field === 'selectsPeak') {
-            state.day.selectsPeak = Math.max(state.day.selectsPeak, n);
-        }
         _write(state);
         _refreshRibbon();
     }
@@ -406,9 +402,6 @@
             const parts = [];
             if (day.favorites > 0) {
                 parts.push(_t('gallery.comfort.statFavorites', 'favorited {n}', { n: day.favorites }));
-            }
-            if (day.selectsPeak > 0) {
-                parts.push(_t('gallery.comfort.statSelects', 'selected up to {n}', { n: day.selectsPeak }));
             }
             if (parts.length === 0) {
                 el.hidden = true;
@@ -441,7 +434,7 @@
             return;
         }
         const day = state.day || {};
-        if ((day.favorites || 0) > 0 || (day.selectsPeak || 0) > 0) {
+        if ((day.favorites || 0) > 0) {
             _showRibbon('today');
         } else if (el.dataset.mode !== 'restored') {
             el.hidden = true;
@@ -639,11 +632,6 @@
         _refreshRibbon();
     }
 
-    function onSelectionChanged() {
-        const size = _appState()?.selectedIds?.size || 0;
-        if (size > 0) bumpDay('selectsPeak', size);
-    }
-
     function onFavoriteToggled() {
         bumpDay('favorites', 1);
     }
@@ -665,10 +653,6 @@
         window.addEventListener('gallery-images-loaded', (e) => {
             onImagesLoaded(e.detail || {});
         });
-
-        // SelectionStore / app may emit this; also poll-free click fallbacks below.
-        window.addEventListener('selection-state-changed', onSelectionChanged);
-        document.addEventListener('selection-changed', onSelectionChanged);
 
         // Favorites: the card's own click handler calls stopPropagation() on the
         // heart (gallery/card-markup.js) so the event never bubbles to

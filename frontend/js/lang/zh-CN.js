@@ -282,7 +282,6 @@ window.I18nLang_zhCN = {
     'gallery.comfort.restoredRibbon': '已恢复你在图库中的位置',
     'gallery.comfort.todayRibbon': '今日 · {stats}',
     'gallery.comfort.statFavorites': '收藏 {n} 张',
-    'gallery.comfort.statSelects': '最多选过 {n} 张',
     'gallery.comfort.peekHint': '按住空格轻预览 · 松开关闭 · Enter 看完整详情',
     // Comfort-3 — 全应用工作室壳
     'comfort.zenTitle': '禅模式',
