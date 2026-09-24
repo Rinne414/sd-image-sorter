@@ -299,10 +299,9 @@ async function refreshAestheticTaskState() {
         return { status: { ..._aestheticStatus }, progress: null };
     }
     const status = publishAestheticStatus(nextStatus);
-    if (!status.available) {
-        return { status, progress: null };
-    }
 
+    // Progress is read even when the runtime is unavailable: the endpoint does
+    // not need the model, and skipping it left a finished job's Stop button up.
     try {
         const rawProgress = await API.getAestheticProgress();
         if (progressGeneration !== _aestheticProgressGeneration) {
@@ -326,7 +325,9 @@ async function refreshAestheticTaskState() {
         }
         _aestheticStatus = {
             available: false,
-            message: formatUserError(error, appT('gallery.aestheticProgressFailed', 'Failed to read aesthetic progress')),
+            message: status.available
+                ? formatUserError(error, appT('gallery.aestheticProgressFailed', 'Failed to read aesthetic progress'))
+                : status.message,
             scored_count: status.scored_count,
         };
         updateAestheticUi({ running: false, starting: false, completed: 0, total: 0 });

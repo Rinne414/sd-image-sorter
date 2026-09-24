@@ -441,15 +441,16 @@ test('visible Aesthetic controls follow the active task across start, cancel, an
   await expect(visibleStop).toBeHidden()
 
   aestheticAvailable = false
-  const unavailableStatusResponse = page.waitForResponse((response) => {
-    const url = new URL(response.url())
-    return response.request().method() === 'GET'
-      && url.pathname === '/api/aesthetic/status'
-      && response.status() === 200
-  })
+  const startsBeforeUnavailableClick = startRequests
   await visibleStart.click()
-  await unavailableStatusResponse
-  await expect(visibleStart).toBeDisabled()
+  // The start flow re-checks the runtime, says it is unavailable, sends no
+  // scoring request, and leaves Start usable instead of stuck busy.
+  await expect(
+    page.locator('#toast-container .toast', { hasText: 'Aesthetic runtime unavailable' }).first()
+  ).toBeVisible()
+  await expect(visibleStart).toBeEnabled()
+  await expect(visibleStop).toBeHidden()
+  expect(startRequests).toBe(startsBeforeUnavailableClick)
   aestheticAvailable = true
   await page.evaluate(async () => {
     await (window as any).App.refreshAestheticStatus()
@@ -534,11 +535,13 @@ test('visible Aesthetic controls follow the active task across start, cancel, an
     })
   }
 
+  // The job ended and the runtime went away: Stop disappears and Start offers
+  // the first-use download instead of staying on the finished job.
   aestheticAvailable = false
   aestheticRunning = false
   await page.locator('#tag-modal .tagger-tab[data-tagger-tab="local"]').click()
   await page.locator('#tag-modal .tagger-tab[data-tagger-tab="aesthetic"]').click()
-  await expect(visibleStart).toBeDisabled()
+  await expect(visibleStart).toBeEnabled()
   await expect(visibleStop).toBeHidden()
   expect(startRequests).toBe(3)
   expect(cancelRequests).toBe(4)

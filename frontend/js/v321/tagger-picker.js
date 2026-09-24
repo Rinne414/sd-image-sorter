@@ -291,7 +291,10 @@ Object.assign(window.V321Integration, {
             titleEl.textContent = (message && !isReady) ? message : i18n(key, fallback);
         }
         if (setupBtn) setupBtn.style.display = isReady ? 'none' : '';
-        if (startBtn && !isReady) startBtn.disabled = true;
+        // Start stays usable when scoring is not installed yet: the first run
+        // downloads it with a confirm and progress, like the gallery button.
+        // The shared task state decides enabled/busy, not readiness alone.
+        refreshAestheticUi();
     },
 
     /** v3.2.1 task #26: Color analysis tab — show counts and wire start/cancel. */
