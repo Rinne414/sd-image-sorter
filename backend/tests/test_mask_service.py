@@ -109,7 +109,7 @@ class TestAutoMask:
         response = test_client.post(f"/api/masks/{image_id}/auto", json={"method": "rembg"})
         assert response.status_code == 400
         error = response.json()["error"]
-        assert "Settings & Models" in error
+        assert "Model Center" in error
         assert "pip install" not in error, "portable users cannot run pip"
 
     def test_unknown_method_400(self, test_client, staged_image, masks_dir):

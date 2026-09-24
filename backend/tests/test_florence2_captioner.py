@@ -270,7 +270,7 @@ def test_gpu_request_fails_without_silent_cpu_fallback(monkeypatch):
 
     with pytest.raises(
         florence2_captioner.Florence2CudaError,
-        match="CUDA.*not available.*Model Manager",
+        match="CUDA.*not available.*Model Center",
     ):
         florence2_captioner._resolve_device(use_gpu=True)
 

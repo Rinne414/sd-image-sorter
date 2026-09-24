@@ -164,8 +164,8 @@ def generate_auto_mask(image_id: int, method: str = "rembg") -> Dict[str, Any]:
             from rembg import remove  # noqa: PLC0415 - heavy opt-in dependency
         except ImportError as exc:
             raise MaskError(
-                "未安装 rembg。请在「设置与模型 › AI 模型」里准备 rembg（约 170 MB）。"
-                " / rembg is not installed. Prepare rembg in Settings & Models › AI Models (~170 MB)."
+                "未安装 rembg。请在模型中心准备 rembg（约 170 MB）。"
+                " / rembg is not installed. Prepare rembg in Model Center (~170 MB)."
             ) from exc
 
         result = remove(rgb)

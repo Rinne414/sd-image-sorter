@@ -94,8 +94,8 @@ Object.assign(window.ArtistIdent, {
                     '现在可以开始识别，然后在中间结果区查看最强匹配。'
                 )
                 : this.tText(
-                    'Open Setup / Download and Prepare Artist Identify (~2.8 GB). Identify will not download automatically.',
-                    '请先在设置里准备 Artist Identify（约 2.8 GB）。识别不会自动下载。'
+                    'Click Identify to download it (~2.8 GB, with progress), or prepare it in Model Center first.',
+                    '点「识别」会下载它（约 2.8 GB，显示进度），也可以先到模型中心准备。'
                 );
             const detailItems = [];
             if (result.message) detailItems.push(this.localizeDiagnosticsMessage(result.message));
@@ -110,7 +110,7 @@ Object.assign(window.ArtistIdent, {
             // reusing the global data-action="open-model-guidance" handler.
             const setupBtnHtml = result.available ? '' : `
                 <button type="button" class="btn btn-secondary btn-small model-health-setup-btn" data-action="open-model-guidance">
-                    <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg> ${this._escapeHtml(this.tText('Open Setup / Download', '打开设置 / 下载模型'))}
+                    <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg> ${this._escapeHtml(this.tText('Open Model Center', '打开模型中心'))}
                 </button>
             `;
             banner.innerHTML = `
@@ -134,7 +134,7 @@ Object.assign(window.ArtistIdent, {
                     <span class="model-health-title">${this._escapeHtml(this.tText('Style Finder is not prepared', '画师识别尚未准备'))}</span>
                     <span>${this._escapeHtml(this.tText('Artist runtime status could not be loaded.', '画师识别运行状态无法加载。'))}</span>
                     <button type="button" class="btn btn-secondary btn-small model-health-setup-btn" data-action="open-model-guidance">
-                        <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg> ${this._escapeHtml(this.tText('Open Setup / Download', '打开设置 / 下载模型'))}
+                        <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg> ${this._escapeHtml(this.tText('Open Model Center', '打开模型中心'))}
                     </button>
                 </div>
             `;

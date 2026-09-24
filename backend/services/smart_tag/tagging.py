@@ -378,7 +378,7 @@ def _load_toriigate_for_phase2(job: SmartTagJobState, req: "SmartTagRequest"):
         raise RuntimeError(compatibility_error)
     if req.use_gpu and runtime_health.get("torch_cuda_available") is not True:
         raise RuntimeError(
-            "ToriiGate CUDA runtime is not ready. Open Model Manager, run Prepare, "
+            "ToriiGate CUDA runtime is not ready. Open Model Center, run Prepare, "
             "then restart the app."
         )
 

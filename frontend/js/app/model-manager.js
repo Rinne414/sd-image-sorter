@@ -428,7 +428,7 @@ async function runBulkDownload(items) {
                 }
                 const message = appT(
                     'models.bulkPollFailed',
-                    'Status checks failed {count} times for {name}. Check the launcher console, then reopen Model Manager to resume.',
+                    'Status checks failed {count} times for {name}. Check the launcher console, then reopen Model Center to resume.',
                     {
                         count: pollErrorStreak,
                         name: item.name || item.id,

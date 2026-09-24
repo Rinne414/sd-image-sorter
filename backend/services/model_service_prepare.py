@@ -91,7 +91,7 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
                     runtime_repair.get("error")
                     or runtime_health.get("runtime_compatibility_error")
                     or (
-                        "ToriiGate CUDA runtime is not ready. Open Model Manager, run Prepare, "
+                        "ToriiGate CUDA runtime is not ready. Open Model Center, run Prepare, "
                         "then restart the app."
                     )
                 )
@@ -287,7 +287,7 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
                     "Open the official CL Tagger v2 Hugging Face page and accept the model terms.",
                     "Sign in with the Hugging Face account that has access to the gated repository.",
                     "Configure a Hugging Face token for this user account if the Hub requests authentication.",
-                    "Return to Model Manager and retry Prepare / Download for CL Tagger v2.",
+                    "Return to Model Center and retry Prepare / Download for CL Tagger v2.",
                 ],
                 "target_dir": str(target_dir.resolve()),
                 "external_url": "https://huggingface.co/cella110n/cl_tagger_v2",

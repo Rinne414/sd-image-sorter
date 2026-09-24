@@ -192,7 +192,7 @@ Object.assign(window.V321Integration, {
             return i18n('tagger.nlVlmApiHint', 'Sends images to a remote VLM. Set the provider and model in VLM Settings first.');
         }
         if (lower.includes('toriigate')) {
-            return i18n('tagger.nlToriiHint', 'Large local captioner. Needs a one-time ~9.6 GB BF16 download from Model Manager.');
+            return i18n('tagger.nlToriiHint', 'Large local captioner. Needs a one-time ~9.6 GB BF16 download from Model Center.');
         }
         if (activeTab === 'local' && value === 'custom') {
             return i18n('tagger.customSubtitle', 'Custom local ONNX tagger with a selectable model profile.');
@@ -248,7 +248,7 @@ Object.assign(window.V321Integration, {
                 <span class="tagger-model-choice-actions">
                     <button type="button" class="btn btn-secondary btn-small" id="btn-tagger-toriigate-setup">
                         <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></span>
-                        <span>${this._escapeHtml(i18n('tagger.aestheticOpenSetup', 'Open Setup to install'))}</span>
+                        <span>${this._escapeHtml(i18n('tagger.aestheticOpenSetup', 'Install in Model Center'))}</span>
                     </button>
                 </span>
             `;

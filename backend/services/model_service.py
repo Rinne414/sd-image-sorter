@@ -446,7 +446,7 @@ def _repair_torch_runtime_if_possible() -> Dict[str, Any]:
                 (
                     "PyTorch repair exited with code 0 but left an incompatible GPU runtime: "
                     f"torch={torch_version or 'missing'}, CUDA {torch_cuda_build or 'missing'}, "
-                    f"available={torch_cuda_available!r}. Use Model Manager Prepare to "
+                    f"available={torch_cuda_available!r}. Use Model Center Prepare to "
                     "install the supported cu126 runtime, then restart the app."
                 ),
                 completed.returncode,

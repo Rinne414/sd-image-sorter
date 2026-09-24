@@ -189,7 +189,7 @@ def _resolve_device(*, use_gpu: bool) -> str:
         import torch
     except ImportError as exc:
         raise Florence2UnavailableError(
-            "Florence-2 requires PyTorch. Open Model Manager, run Prepare / Download, "
+            "Florence-2 requires PyTorch. Open Model Center, run Prepare / Download, "
             "then restart the app. / Florence-2 缺少 PyTorch 运行环境。"
         ) from exc
 
@@ -198,7 +198,7 @@ def _resolve_device(*, use_gpu: bool) -> str:
     if not callable(is_available) or is_available() is not True:
         raise Florence2CudaError(
             "Florence-2 CUDA was requested, but CUDA is not available to this app. "
-            "Open Model Manager, run Prepare / Download, restart the app, or explicitly "
+            "Open Model Center, run Prepare / Download, restart the app, or explicitly "
             "disable GPU for a CPU run. No automatic CPU fallback was used. "
             "/ 已请求 Florence-2 CUDA，但当前应用无法使用 CUDA；未自动回退到 CPU。"
         )
@@ -220,16 +220,16 @@ def _load_runtime(device: str) -> tuple[_Florence2Model, _Florence2Processor]:
             model_dir = Path(get_florence2_model_dir())
             missing = ", ".join(missing_checkpoint_files(model_dir))
             raise Florence2UnavailableError(
-                "Florence-2 model files are missing. Open Model Manager and run "
+                "Florence-2 model files are missing. Open Model Center and run "
                 f"Prepare / Download for Florence-2. Expected {model_dir}; missing: {missing}. "
-                "/ Florence-2 模型文件缺失，请在模型管理器中执行“准备 / 下载”。"
+                "/ Florence-2 模型文件缺失，请在模型中心中执行“准备 / 下载”。"
             )
 
         try:
             from transformers import AutoModelForImageTextToText, AutoProcessor
         except ImportError as exc:
             raise Florence2UnavailableError(
-                "Florence-2 runtime is unavailable. Open Model Manager and run "
+                "Florence-2 runtime is unavailable. Open Model Center and run "
                 "Prepare / Download for Florence-2, then restart the app. "
                 "/ Florence-2 运行环境不可用，请准备后重启应用。"
             ) from exc
@@ -308,7 +308,7 @@ def caption_image(image_path: str, *, use_gpu: bool) -> str:
         import torch
     except ImportError as exc:
         raise Florence2UnavailableError(
-            "Florence-2 requires PyTorch. Run Prepare / Download in Model Manager, "
+            "Florence-2 requires PyTorch. Run Prepare / Download in Model Center, "
             "then restart the app."
         ) from exc
     torch_module = cast(_TorchModule, torch)

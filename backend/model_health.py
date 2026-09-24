@@ -187,7 +187,7 @@ def _windows_torch_onnx_runtime_error(
 
     return (
         f"PyTorch CUDA {torch_cuda_build} is incompatible with ONNX Runtime "
-        "CUDA 12.x used by this app. Open Model Manager, run Prepare for "
+        "CUDA 12.x used by this app. Open Model Center, run Prepare for "
         "ToriiGate or SAM3, then restart the app."
     )
 
@@ -386,7 +386,7 @@ def get_model_health() -> Dict[str, Any]:
             + ". Run Prepare / Download."
         )
     elif not lucida_checkpoint:
-        lucida_message = "Lucida model files are missing. Run Prepare / Download in Model Manager."
+        lucida_message = "Lucida model files are missing. Run Prepare / Download in Model Center."
     elif lucida_missing:
         lucida_message = (
             "Lucida model files are installed, but runtime packages are missing: "
@@ -412,7 +412,7 @@ def get_model_health() -> Dict[str, Any]:
     elif not florence2_checkpoint:
         florence2_message = (
             "Florence-2 Base model files are missing. Run Prepare / Download "
-            "in Model Manager."
+            "in Model Center."
         )
     elif florence2_missing:
         florence2_message = (

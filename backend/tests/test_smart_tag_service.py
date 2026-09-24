@@ -2103,7 +2103,7 @@ def test_phase2_toriigate_blocks_incompatible_runtime_before_import(monkeypatch)
             "runtime_compatible": False,
             "runtime_compatibility_error": (
                 "PyTorch CUDA 13.0 is incompatible with ONNX Runtime CUDA 12.x. "
-                "Open Model Manager, run Prepare, then restart the app."
+                "Open Model Center, run Prepare, then restart the app."
             ),
         },
         raising=False,
@@ -2124,7 +2124,7 @@ def test_phase2_toriigate_blocks_incompatible_runtime_before_import(monkeypatch)
         use_gpu=True,
     )
 
-    with pytest.raises(RuntimeError, match="Model Manager.*Prepare.*restart"):
+    with pytest.raises(RuntimeError, match="Model Center.*Prepare.*restart"):
         smart_tag_service._load_toriigate_for_phase2(job, req)
 
     assert imported == []

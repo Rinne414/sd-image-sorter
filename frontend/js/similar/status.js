@@ -143,7 +143,7 @@ Object.assign(window.SimilarImages, {
         const failed = Number(progress.failed || progress.errors || 0);
         const setupNeedsDetail = this._t(
             'similar.setupNeedsDetail',
-            'CLIP is about 580 MB and shows progress while it downloads. You can also install it first with Setup / Download.'
+            'CLIP is about 580 MB and shows progress while it downloads. You can also install it first in Model Center.'
         );
         const issueBreakdown = this._t(
             'similar.statusIssueBreakdown',
@@ -297,7 +297,7 @@ Object.assign(window.SimilarImages, {
                 : this._t('similar.setupNeedsTitle', 'CLIP will download when you start indexing');
             const description = result.available
                 ? this._t('similar.setupReadyDetail', 'Build the index below to start searching; rebuild any time after adding images.')
-                : this._t('similar.setupNeedsDetail', 'CLIP is about 580 MB and shows progress while it downloads. You can also install it first with Setup / Download.');
+                : this._t('similar.setupNeedsDetail', 'CLIP is about 580 MB and shows progress while it downloads. You can also install it first in Model Center.');
             const detailItems = [];
             if (result.message_key || result.message) {
                 // Prefer the backend's message_key so the tech detail is
@@ -321,7 +321,7 @@ Object.assign(window.SimilarImages, {
             // from Generate Embeddings, so keep this button secondary.
             const setupBtnHtml = result.available ? '' : `
                 <button type="button" class="btn btn-secondary btn-small model-health-setup-btn" data-action="open-model-guidance">
-                    <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg> ${escapeHtml(this._t('models.openSetup', 'Open Setup / Download'))}
+                    <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg> ${escapeHtml(this._t('models.openSetup', 'Open Model Center'))}
                 </button>
             `;
             banner.innerHTML = `
@@ -341,7 +341,7 @@ Object.assign(window.SimilarImages, {
                     <span class="model-health-title">${escapeHtml(this._t('similar.setupNeedsTitle', 'Similarity setup needs one more step'))}</span>
                     <span>${escapeHtml(this._t('similar.statusLoadFailed', 'Similarity setup could not be checked right now.'))}</span>
                     <button type="button" class="btn btn-secondary btn-small model-health-setup-btn" data-action="open-model-guidance">
-                        <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg> ${escapeHtml(this._t('models.openSetup', 'Open Setup / Download'))}
+                        <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg> ${escapeHtml(this._t('models.openSetup', 'Open Model Center'))}
                     </button>
                 </div>
             `;

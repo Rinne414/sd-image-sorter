@@ -103,13 +103,13 @@ test('auto subject surfaces the server error on 400', async ({ page }) => {
   await page.route('**/api/masks/701/auto', async (route) => {
     await route.fulfill({
       status: 400,
-      json: { error: 'rembg is not installed. Prepare rembg in Settings & Models › AI Models (~170 MB).' },
+      json: { error: 'rembg is not installed. Prepare rembg in Model Center (~170 MB).' },
     })
   })
   await page.locator('#btn-dataset-mask-edit').click()
   await expect(page.locator('#mask-editor-modal')).toBeVisible()
   await page.locator('#mask-tool-auto').click()
-  await expect(page.locator('#mask-editor-status')).toContainText('Prepare rembg in Settings & Models')
+  await expect(page.locator('#mask-editor-status')).toContainText('Prepare rembg in Model Center')
 })
 
 test('Lucida engine selection is explicit and discloses research-only training data', async ({ page }) => {

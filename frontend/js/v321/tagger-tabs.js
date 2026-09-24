@@ -345,7 +345,7 @@ Object.assign(window.V321Integration, {
             }
             if (hint) {
                 hint.setAttribute('data-i18n', 'tagger.nlToriiHint');
-                hint.textContent = i18n('tagger.nlToriiHint', 'Large local captioner. Needs a one-time ~9.6 GB BF16 download from Model Manager.');
+                hint.textContent = i18n('tagger.nlToriiHint', 'Large local captioner. Needs a one-time ~9.6 GB BF16 download from Model Center.');
             }
             if (vlmStatus) vlmStatus.style.display = 'none';
             if (startBtn && !startBtn.disabled) {

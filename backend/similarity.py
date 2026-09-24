@@ -251,7 +251,7 @@ def _get_text_embed_model():
                     )
                 except Exception as exc:
                     raise RuntimeError(
-                        "CLIP text model is not ready. Run Prepare / Download in Model Manager. "
+                        "CLIP text model is not ready. Run Prepare / Download in Model Center. "
                         f"Error: {exc}"
                     ) from exc
     return _text_embed_model

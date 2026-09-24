@@ -666,7 +666,7 @@ def test_prepare_router_logs_compact_external_auth_guidance(caplog):
     assert record.starter_console_message == (
         "[MODEL] prepare_failed model_id=cl-tagger-v2 "
         "error_type=ExternalAuthRequired provider=Hugging Face "
-        "action=follow Model Manager recovery steps and retry"
+        "action=follow Model Center recovery steps and retry"
     )
 
 

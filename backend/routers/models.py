@@ -374,7 +374,7 @@ def _run_prepare_blocking(service: ModelService, model_id: str, source: Optional
                     f"[MODEL] prepare_failed model_id={model_id} "
                     f"error_type={exc.payload.get('type') or type(exc).__name__} "
                     f"provider={exc.payload.get('provider') or 'external'} "
-                    "action=follow Model Manager recovery steps and retry"
+                    "action=follow Model Center recovery steps and retry"
                 ),
             },
         )

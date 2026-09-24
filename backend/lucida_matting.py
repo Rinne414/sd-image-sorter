@@ -204,17 +204,17 @@ def _load_model(device: str) -> _LucidaModel:
             model_dir = Path(get_lucida_model_dir())
             missing = ", ".join(missing_checkpoint_files(model_dir))
             raise LucidaUnavailableError(
-                "Lucida model files are missing. Open Model Manager and run "
+                "Lucida model files are missing. Open Model Center and run "
                 f"Prepare / Download for Lucida. Expected {model_dir}; missing: {missing}. "
-                "/ Lucida 模型文件缺失。请在模型管理器中为 Lucida 执行“准备 / 下载”。"
+                "/ Lucida 模型文件缺失。请在模型中心中为 Lucida 执行“准备 / 下载”。"
             )
 
         try:
             from transformers import AutoModelForImageSegmentation
         except ImportError as exc:
             raise LucidaUnavailableError(
-                "Lucida runtime is unavailable. Open Model Manager and run Prepare / Download "
-                "for Lucida, then restart the app. / Lucida 运行环境不可用。请在模型管理器中"
+                "Lucida runtime is unavailable. Open Model Center and run Prepare / Download "
+                "for Lucida, then restart the app. / Lucida 运行环境不可用。请在模型中心中"
                 "执行“准备 / 下载”，然后重启应用。"
             ) from exc
 
@@ -300,8 +300,8 @@ def generate_subject_mask(source: Image.Image, use_gpu: bool) -> Image.Image:
         from torchvision import transforms
     except (ImportError, OSError, RuntimeError) as exc:
         raise LucidaUnavailableError(
-            "Lucida runtime packages are missing. Open Model Manager and run Prepare / Download "
-            "for Lucida, then restart the app. / Lucida 运行依赖缺失。请在模型管理器中"
+            "Lucida runtime packages are missing. Open Model Center and run Prepare / Download "
+            "for Lucida, then restart the app. / Lucida 运行依赖缺失。请在模型中心中"
             f"执行“准备 / 下载”，然后重启应用。原因：{exc}"
         ) from exc
 

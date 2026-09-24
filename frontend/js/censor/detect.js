@@ -219,7 +219,7 @@ async function resolveQuickAutoCensorExecutionPlan(options = {}) {
             let message = censorT(
                 'censor.nudenetInstallFailed',
                 null,
-                'NudeNet could not be installed. Open Settings & Models › AI Models, or try Detect again.'
+                'NudeNet could not be installed. Open Model Center, or try Detect again.'
             );
             if (ensured.needsRestart) {
                 message = censorT('censor.nudenetNeedsRestart', null,

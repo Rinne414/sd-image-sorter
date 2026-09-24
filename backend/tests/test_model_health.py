@@ -166,7 +166,7 @@ def test_model_health_blocks_toriigate_and_sam3_for_windows_cuda13(
     assert sam3["available"] is False
     assert toriigate["runtime_compatible"] is False
     assert sam3["runtime_compatible"] is False
-    assert "Model Manager" in toriigate["message"]
+    assert "Model Center" in toriigate["message"]
     assert "Prepare" in sam3["message"]
     assert "restart" in sam3["message"]
 

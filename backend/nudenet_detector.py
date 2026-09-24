@@ -37,13 +37,13 @@ def _resolve_app_model_path(package_module: object) -> str:
     if not isinstance(package_file, str) or not package_file.strip():
         raise RuntimeError(
             "NudeNet is installed but its package location is unavailable; "
-            "reinstall the nudenet runtime from Model Manager and retry."
+            "reinstall the nudenet runtime from Model Center and retry."
         )
     package_model = Path(package_file).resolve().parent / "320n.onnx"
     if not is_nonempty_model_file(package_model):
         raise RuntimeError(
             "NudeNet is installed but the official 320n.onnx artifact is missing "
-            f"from {package_model}. Reinstall the nudenet runtime from Model Manager "
+            f"from {package_model}. Reinstall the nudenet runtime from Model Center "
             "and retry."
         )
 
