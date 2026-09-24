@@ -7645,13 +7645,22 @@
             <div class="modal-content modal-large save-options-modal-shell">
                 <button class="modal-close" id="btn-close-save-options" aria-label="Close save options" data-i18n-aria="a11y.closeSaveOptions"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
                 <h3><svg class="icon" aria-hidden="true"><use href="#i-save"/></svg> <span data-i18n="save.title">Save Options</span></h3>
-                <p class="modal-description" data-i18n="save.description">Configure output settings before saving all images</p>
+                <p class="modal-description" data-i18n="save.description">Every image in the queue is saved under the name the queue shows.</p>
 
                 <div class="save-options-grid">
                     <div class="form-group save-options-folder-group">
                         <label data-i18n="save.outputFolder">Output Folder</label>
                         <input type="text" id="save-output-folder" class="input-field" placeholder="D:\censored_output">
-                        <small class="helper-text" data-i18n="save.outputFolderHelper">Folder where processed images will be saved</small>
+                        <small class="helper-text" data-i18n="save.outputFolderHelper">Exported images go here</small>
+                    </div>
+
+                    <div class="form-group save-options-unedited-group" id="save-unedited-group" hidden>
+                        <label for="save-unedited-option" id="save-unedited-label">Some images in the queue have no censoring</label>
+                        <select id="save-unedited-option" class="input-field">
+                            <option value="include" data-i18n="save.uneditedInclude">Export them as they are</option>
+                            <option value="skip" data-i18n="save.uneditedSkip">Leave them out</option>
+                        </select>
+                        <small class="helper-text" data-i18n="save.uneditedHelper">Pick "Export them as they are" when you only want the queue order and the new names.</small>
                     </div>
 
                     <div class="form-group">

@@ -285,8 +285,9 @@ function cleanupGlobalListeners() {
 // proxy-mode edit operations — large-image strokes that persist via
 // /save-operations rather than baked pixels, so isProcessed stays false while
 // the edits are real. This is the single source of truth for "did the user
-// actually censor this?"; keep saveAllProcessed and the beforeunload guard on it
-// so the never-fallback-to-uncensored invariant never skips a real proxy stroke.
+// actually censor this?"; the save dialog's unedited count, saveAllProcessed and
+// the beforeunload guard all read it, so a real proxy stroke is never counted
+// as unedited.
 function itemHasCensorContent(item) {
     return Boolean(item && (
         item.isProcessed || item.currentDataUrl ||

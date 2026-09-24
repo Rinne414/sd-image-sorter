@@ -1,6 +1,6 @@
 /**
  * Censor Editor - saving (split VERBATIM from censor-edit.js; god-file decomposition).
- * Save-options popup, save routing (/save-data vs /save-operations off editOperations.length), saveAllProcessed invariant, metadata strip.
+ * Save-options popup, save routing (/save-data vs /save-operations off editOperations.length), the unedited-image choice, metadata strip.
  * Shared top-level bindings (CensorState, ...) are declared in censor/state.js;
  * classic-script global lexical scoping keeps them single instances across parts.
  * Load order is pinned in index.html - see censor/state.js for the full note.
@@ -32,7 +32,35 @@ function openSaveOptionsPopup() {
         allowOverwrite.checked = false;
     }
 
+    refreshUneditedSaveOption();
     document.getElementById('save-options-modal')?.classList.add('visible');
+}
+
+// Items still on the server's page cursor were never opened, so they cannot
+// carry edits: everything past the censored ones is unedited.
+function countUneditedQueueItems() {
+    const censoredCount = CensorState.queue.filter(itemHasCensorContent).length;
+    return Math.max(0, getCensorQueueWorkCount() - censoredCount);
+}
+
+// Reorder + rename is a use of its own, so unedited images are exported as
+// they are unless the user leaves them out. The count is always shown first,
+// so nothing uncensored goes out without the user having seen it.
+function refreshUneditedSaveOption() {
+    const group = document.getElementById('save-unedited-group');
+    if (!group) return;
+
+    const uneditedCount = countUneditedQueueItems();
+    group.hidden = uneditedCount === 0;
+    const label = document.getElementById('save-unedited-label');
+    if (label) {
+        label.textContent = censorT('save.uneditedCount', { count: uneditedCount },
+            '{count} image(s) in the queue have no censoring');
+    }
+    const select = document.getElementById('save-unedited-option');
+    if (select) {
+        select.value = localStorage.getItem('censor_unedited_option') === 'skip' ? 'skip' : 'include';
+    }
 }
 
 async function confirmAndSaveAll() {
@@ -41,6 +69,7 @@ async function confirmAndSaveAll() {
     const metadataOption = document.getElementById('save-metadata-option')?.value || 'strip';
     const formatOption = document.getElementById('save-format-option')?.value || 'png';
     const allowOverwrite = Boolean(document.getElementById('save-allow-overwrite')?.checked);
+    const includeUnedited = document.getElementById('save-unedited-option')?.value !== 'skip';
 
     if (!folder) {
         window.App.showToast(
@@ -55,11 +84,12 @@ async function confirmAndSaveAll() {
     CensorState.metadataOption = metadataOption;
     CensorState.outputFormat = formatOption;
     localStorage.setItem('censor_output_folder', folder);
+    localStorage.setItem('censor_unedited_option', includeUnedited ? 'include' : 'skip');
 
     // Close popup and start saving
     document.getElementById('save-options-modal')?.classList.remove('visible');
 
-    await saveAllProcessed(formatOption, metadataOption, allowOverwrite);
+    await saveAllProcessed(formatOption, metadataOption, allowOverwrite, { includeUnedited });
 }
 
 function markGalleryRefreshAfterCensorSave(result) {
@@ -131,7 +161,7 @@ async function saveCensorQueueItem(item, formatOption = 'png', metadataOption = 
     return result;
 }
 
-async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', allowOverwrite = false) {
+async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', allowOverwrite = false, { includeUnedited = true } = {}) {
     const folder = CensorState.outputFolder;
     if (!folder) {
         window.App.showToast(
@@ -146,19 +176,17 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
     showLoading(true, censorT('censor.loadingSavePreparing', null, 'Save · preparing files...'));
 
     let count = 0;
+    let asIsCount = 0;
     let failedCount = 0;
     let skippedCount = 0;
     const saveWarnings = new Set();
     await processCensorBatchItems(async (item, { index, total }) => {
-        // "Save All Processed" must never write an un-censored original as if it
-        // were done — that would violate the never-fallback-to-uncensored
-        // invariant (an item can reach the original-bytes save path in
-        // saveCensorQueueItem when it has no edits, or via proxy mode with empty
-        // operations). Items with no applied censoring are skipped, not exported.
-        // NOTE: proxy-mode strokes leave isProcessed=false but carry real
-        // editOperations — itemHasCensorContent() covers that so large-image
-        // edits are saved, not silently skipped.
-        if (!itemHasCensorContent(item)) {
+        // Unedited items go out as they are only when the save dialog, which
+        // showed their count, was left on "export them as they are". Proxy-mode
+        // strokes leave isProcessed=false but carry real editOperations;
+        // itemHasCensorContent() counts those as censored.
+        const isUnedited = !itemHasCensorContent(item);
+        if (isUnedited && !includeUnedited) {
             item.batchStatus = 'skipped';
             skippedCount += 1;
             return;
@@ -177,6 +205,7 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
             readCensorSaveWarnings(result).forEach((warning) => saveWarnings.add(warning));
             item.batchStatus = 'saved';
             count++;
+            if (isUnedited) asIsCount += 1;
         } catch (e) {
             Logger.error(e);
             item.batchStatus = 'failed';
@@ -200,7 +229,7 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
         // Nothing was censored — say so plainly instead of a green "Saved 0".
         window.App.showToast(
             censorT('censor.saveNothingProcessed', { skipped: skippedCount },
-                'Nothing saved: none of the {skipped} queued image(s) are censored yet. Run auto-detect or paint a region first.'),
+                'Nothing saved: none of the {skipped} image(s) are censored, and the save options leave uncensored images out.'),
             'warning'
         );
     } else if (skippedCount > 0) {
@@ -208,6 +237,12 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
             censorT('censor.saveSkippedUnprocessed', { count, skipped: skippedCount },
                 'Saved {count} censored image(s); {skipped} uncensored image(s) were not exported.'),
             'warning'
+        );
+    } else if (asIsCount > 0) {
+        window.App.showToast(
+            censorT('censor.saveSuccessAsIs', { count, folder, asIs: asIsCount },
+                'Saved {count} images to {folder}. {asIs} had no censoring and went out as they are.'),
+            'success'
         );
     } else {
         window.App.showToast(

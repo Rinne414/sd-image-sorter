@@ -8,7 +8,8 @@ import { expect, test, type Page, type Route } from '../fixtures/click-ledger'
  * break: queue → canvas load (double-buffer swap), tool switching + keyboard
  * shortcuts, pen strokes → pixels, canvas undo/redo semantics, reset-to-
  * original, the SAVE WIRE FORMATS (/api/censor/save-data vs /save-operations
- * routing + exact payload key sets), the never-fallback-to-uncensored skip,
+ * routing + exact payload key sets), the unedited-image choice (export as
+ * they are, or leave out),
  * and zoom/queue-navigation. They must pass BEFORE and AFTER the refactor.
  *
  * Detect/review-conveyor behavior is pinned in censor-detect-review.spec.ts.
@@ -308,7 +309,7 @@ test('reset-to-original clears edits after confirm and wipes the history', async
   await expect(page.locator('#btn-redo')).toBeDisabled()
 })
 
-test('save-all wire format: /save-data payload, strip default, un-censored items skipped', async ({ page }) => {
+test('save-all wire format: /save-data payload, strip default, unedited items exported or left out by choice', async ({ page }) => {
   await stubCensorBackend(page)
   const saveDataCalls: Array<Record<string, unknown>> = []
   const saveOpsCalls: Array<Record<string, unknown>> = []
@@ -383,13 +384,18 @@ test('save-all wire format: /save-data payload, strip default, un-censored items
     page.locator('#censor-queue-list [data-testid="censor-batch-outcome-badge"]')
   ).toHaveCount(0)
 
-  // Attempt 1 — nothing censored yet. The never-fallback-to-uncensored
-  // invariant: no request may leave the browser, and the toast says so.
+  // Attempt 1 — nothing censored yet. The dialog names how many images have
+  // no censoring before anything is saved; with "Leave them out" chosen no
+  // request may leave the browser, and the toast says so.
   await page.locator('#btn-save-all-processed').click()
   await expect(page.locator('#save-options-modal.visible')).toBeVisible()
   // Privacy default pinned: metadata option starts on 'strip', format on png.
   await expect(page.locator('#save-metadata-option')).toHaveValue('strip')
   await expect(page.locator('#save-format-option')).toHaveValue('png')
+  await expect(page.locator('#save-unedited-group')).toBeVisible()
+  await expect(page.locator('#save-unedited-label')).toHaveText('2 image(s) in the queue have no censoring')
+  await expect(page.locator('#save-unedited-option')).toHaveValue('include')
+  await page.locator('#save-unedited-option').selectOption('skip')
   await page.locator('#save-output-folder').fill(OUTPUT_FOLDER)
   await page.locator('#btn-confirm-save-options').click()
   await expect(page.locator('#toast-container .toast', { hasText: 'Nothing saved' }).first()).toBeVisible()
@@ -403,11 +409,14 @@ test('save-all wire format: /save-data payload, strip default, un-censored items
     item.isProcessed = true
   }, { id: IMAGES[0].id, dataUrl: WHITE_PNG_DATA_URL })
 
-  // Attempt 2 — the output folder round-trips through localStorage into the
-  // reopened modal; exactly ONE save-data POST goes out (item 2 is skipped).
+  // Attempt 2 — the output folder and the "Leave them out" choice round-trip
+  // through localStorage into the reopened modal; exactly ONE save-data POST
+  // goes out (item 2 is skipped).
   await page.locator('#btn-save-all-processed').click()
   await expect(page.locator('#save-options-modal.visible')).toBeVisible()
   await expect(page.locator('#save-output-folder')).toHaveValue(OUTPUT_FOLDER)
+  await expect(page.locator('#save-unedited-label')).toHaveText('1 image(s) in the queue have no censoring')
+  await expect(page.locator('#save-unedited-option')).toHaveValue('skip')
   await page.locator('#btn-confirm-save-options').click()
 
   await expect.poll(() => saveDataCalls.length).toBe(1)
@@ -423,7 +432,7 @@ test('save-all wire format: /save-data payload, strip default, un-censored items
     allow_overwrite: false,
   })
 
-  await expect(page.locator('#toast-container .toast', { hasText: 'skipped 1' }).first()).toBeVisible()
+  await expect(page.locator('#toast-container .toast', { hasText: 'were not exported' }).first()).toBeVisible()
   expect((await itemState(page, IMAGES[0].id)).batchStatus).toBe('saved')
   expect((await itemState(page, IMAGES[1].id)).batchStatus).toBe('skipped')
   const savedBadge = page.locator(
@@ -448,6 +457,31 @@ test('save-all wire format: /save-data payload, strip default, un-censored items
     page.locator(`#censor-queue-list .queue-thumb-shell-v2[data-image-id="${IMAGES[1].id}"]`)
   ).toBeHidden()
   expect(await page.evaluate(() => localStorage.getItem('censor_output_folder'))).toBe(OUTPUT_FOLDER)
+
+  // Attempt 3 — reorder + rename only: "Export them as they are" sends the
+  // unedited item too, under its queue name, and the toast says it went out
+  // uncensored.
+  await page.locator('#btn-save-all-processed').click()
+  await expect(page.locator('#save-options-modal.visible')).toBeVisible()
+  await page.locator('#save-unedited-option').selectOption('include')
+  await page.locator('#btn-confirm-save-options').click()
+
+  await expect.poll(() => saveDataCalls.length).toBe(3)
+  expect(saveOpsCalls).toHaveLength(0)
+  const asIsCall = saveDataCalls.find((call) => call.original_image_id === IMAGES[1].id)
+  expect(asIsCall).toMatchObject({
+    filename: 'censor-core-b.png',
+    output_folder: OUTPUT_FOLDER,
+    metadata_option: 'strip',
+    output_format: 'png',
+    allow_overwrite: false,
+  })
+  expect(String(asIsCall?.image_data)).toMatch(/^data:image\/png;base64,/)
+  await expect(
+    page.locator('#toast-container .toast', { hasText: 'went out as they are' }).first()
+  ).toBeVisible()
+  expect((await itemState(page, IMAGES[1].id)).batchStatus).toBe('saved')
+  expect(await page.evaluate(() => localStorage.getItem('censor_unedited_option'))).toBe('include')
 })
 
 test('items with edit operations save via /save-operations with the operation list intact', async ({ page }) => {
@@ -494,7 +528,14 @@ test('items with edit operations save via /save-operations with the operation li
   await saveAllWithOptions(page, { folder: OUTPUT_FOLDER, format: 'webp' })
 
   await expect.poll(() => saveOpsCalls.length).toBe(1)
-  expect(saveDataCalls).toHaveLength(0)
+  // Item 1 has no edits: with the default "Export them as they are" it goes
+  // out through /save-data under its queue name, never through the op path.
+  await expect.poll(() => saveDataCalls.length).toBe(1)
+  expect(saveDataCalls[0]).toMatchObject({
+    original_image_id: IMAGES[0].id,
+    filename: 'censor-core-a.webp',
+    output_format: 'webp',
+  })
   expect(saveOpsCalls[0]).toEqual({
     original_image_id: IMAGES[1].id,
     operations: OPS,

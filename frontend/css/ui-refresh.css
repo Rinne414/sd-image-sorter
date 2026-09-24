@@ -7586,6 +7586,22 @@ html.lang-zh #view-censor .queue-action-btn span {
     grid-column: 1 / -1;
 }
 
+.save-options-unedited-group {
+    grid-column: 1 / -1;
+    padding: 10px 12px;
+    border: 1px solid rgba(var(--warning-rgb), 0.35);
+    border-radius: var(--r-card);
+    background: rgba(var(--warning-rgb), 0.06);
+}
+
+.save-options-unedited-group > label {
+    color: var(--warning);
+}
+
+.save-options-unedited-group[hidden] {
+    display: none !important;
+}
+
 @media (max-width: 1100px) {
     :root {
         --sidebar-width: 312px;
