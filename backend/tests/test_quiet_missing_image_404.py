@@ -9,15 +9,22 @@ their warning.
 from __future__ import annotations
 
 import logging
-from types import SimpleNamespace
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 import main
 
 
-def _request(path: str) -> SimpleNamespace:
-    return SimpleNamespace(url=SimpleNamespace(path=path), method="GET")
+def _request(path: str) -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": path,
+            "headers": [],
+            "query_string": b"",
+        }
+    )
 
 
 def test_missing_thumbnail_and_image_file_log_at_debug():
