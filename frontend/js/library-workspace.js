@@ -233,7 +233,7 @@
             title: _t('gallery.clearTitle', 'Clear current library'),
             message: _t(
                 'gallery.clearMessageNamedCount',
-                'Clear {countText} from library “{name}”? Other libraries are not affected. Files on disk are not deleted.',
+                'Clear {countText} from library “{name}”? Other libraries and files on disk are not affected.',
                 { name: current.name, countText, count: String(count) },
             ),
             success: _t(

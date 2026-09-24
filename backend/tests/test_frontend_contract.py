@@ -1502,7 +1502,7 @@ def test_gallery_context_menu_has_workflow_actions_and_trash_is_explicit():
     assert "moveOrCopyGalleryImages" in app_source
     assert "deleteGalleryImagesByIds" in app_source
     assert "removeGalleryImagesByIds" in app_source
-    assert "operating system Trash / Recycle Bin" in app_source
+    assert "moves {count} original file(s) to the Recycle Bin / Trash" in app_source
     assert "emitSelectionStateChanged" in app_source
 
 

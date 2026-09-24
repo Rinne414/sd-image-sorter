@@ -221,10 +221,10 @@ async function openFilterModal(options = {}) {
     const footerNote = document.querySelector('#filter-modal .filter-modal-footer-note');
     if (footerNote) {
         const footerByMode = {
-            'manual-sort': ['filter.footerHintManual', 'Applies only to the images Manual Sort will go through — Gallery filters stay unchanged.'],
-            'auto-separate': ['filter.footerHintAutosep', 'Applies only to what Auto-Separate will match — Gallery filters stay unchanged.'],
-            'queue-profile': ['filter.footerHintQueue', 'Applies only to the censor queue selection — Gallery filters stay unchanged.'],
-            'queue-solitaire': ['filter.footerHintQueue', 'Applies only to the censor queue selection — Gallery filters stay unchanged.'],
+            'manual-sort': ['filter.footerHintManual', 'Applies only to the images Manual Sort goes through; Gallery filters stay unchanged.'],
+            'auto-separate': ['filter.footerHintAutosep', 'Applies only to what Auto-Separate matches; Gallery filters stay unchanged.'],
+            'queue-profile': ['filter.footerHintQueue', 'Applies only to the censor queue; Gallery filters stay unchanged.'],
+            'queue-solitaire': ['filter.footerHintQueue', 'Applies only to the censor queue; Gallery filters stay unchanged.'],
         };
         const footerEntry = footerByMode[FilterModalController.mode]
             || ['filter.footerHint', 'Apply filters to refresh the gallery results. Press Enter inside tag or prompt search to add multiple values separated by commas.'];

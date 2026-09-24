@@ -78,7 +78,7 @@ async function deleteGalleryImagesByIds(imageIds) {
     const title = appT('selection.deleteConfirmTitle', 'Move selected image files to Trash?');
     const message = appT(
         'selection.deleteConfirmBody',
-        'This moves {count} original file(s) to the operating system Trash / Recycle Bin and removes them from this gallery. Use Remove from Gallery if you only want to clean the index. Examples: {examples}'
+        'This moves {count} original file(s) to the Recycle Bin / Trash and removes them from the gallery. To clean up records only, use Remove from Gallery. Examples: {examples}'
     )
         .replace('{count}', count)
         .replace('{examples}', examples || (selectionToken
@@ -192,7 +192,7 @@ async function removeGalleryImagesByIds(imageIds) {
     const title = appT('selection.removeConfirmTitle', 'Remove selected images from gallery?');
     const message = appT(
         'selection.removeConfirmBody',
-        'This removes {count} image record(s) from this gallery only. Files stay on disk and can be re-imported by scanning again. Examples: {examples}'
+        'This removes {count} record(s) from this gallery only. Files stay on disk, and scanning again brings them back. Examples: {examples}'
     )
         .replace('{count}', count)
         .replace('{examples}', examples || (selectionToken

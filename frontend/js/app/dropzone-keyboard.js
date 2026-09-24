@@ -189,7 +189,7 @@ async function _handleFolderDrop(folderName, files, folderFiles) {
         input.dispatchEvent(new Event('input', { bubbles: true }));
     }
     showToast(
-        appT('gallery.dropHintBrowse', "Couldn't auto-locate \"{name}\" — your browser can't share a folder's full path. Pick it with Browse to scan it.")
+        appT('gallery.dropHintBrowse', "Couldn't locate \"{name}\": browsers don't share a folder's full path. Pick it with Browse to scan it.")
             .replace('{name}', folderName || (droppedFiles[0]?.name) || ''),
         'warning'
     );

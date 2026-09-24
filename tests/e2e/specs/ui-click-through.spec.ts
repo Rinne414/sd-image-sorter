@@ -167,7 +167,7 @@ for (const viewport of [
         window.App.switchView('gallery')
         await new Promise((resolve) => setTimeout(resolve, 1500))
       }, ageMs)
-      const welcome = page.locator('#toast-container .toast', { hasText: 'Welcome back' })
+      const welcome = page.locator('#toast-container .toast', { hasText: 'Back where you left off' })
 
       await restoreFrom(0)
       // Not toHaveCount(0): that retries until a 3 s toast fades on its own.

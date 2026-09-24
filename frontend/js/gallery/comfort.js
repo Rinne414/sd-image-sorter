@@ -333,7 +333,7 @@
                 && Date.now() - (state.lastResumeToastAt || 0) > RESUME_TOAST_COOLDOWN_MS;
             if (canToast && typeof window.showToast === 'function') {
                 window.showToast(
-                    _t('gallery.comfort.restored', 'Welcome back — restored where you left off'),
+                    _t('gallery.comfort.restored', 'Back where you left off'),
                     'info',
                 );
                 state.lastResumeToastAt = Date.now();

@@ -218,8 +218,8 @@ function updateFilterModalSummary() {
 
     if (summaryHint) {
         summaryHint.textContent = activeGroupCount > 0
-            ? t('filter.summaryHintActive', null, 'Tip: start broad, then add tags or prompts before tightening size, checkpoint, or LoRA filters.')
-            : t('filter.summaryHintIdle', null, 'Tip: use tags, prompts, or dimensions when you want a smaller and more targeted result list.');
+            ? t('filter.summaryHintActive', null, 'Start broad, then add tags or prompts before tightening size, checkpoint or LoRA.')
+            : t('filter.summaryHintIdle', null, 'Add tags, prompts or size conditions to narrow the results.');
     }
 }
 

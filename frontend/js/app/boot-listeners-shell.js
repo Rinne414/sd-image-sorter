@@ -124,7 +124,7 @@ async function verifyClearGalleryJobsIdle() {
         showToast(
             `${appT(
                 'gallery.clearStatusUnknown',
-                'Could not verify background job status, so Gallery was not cleared. Check the local backend connection and try again.'
+                'Couldn\'t check background jobs, so the Gallery was not cleared. Make sure the app is still running and try again.'
             )} ${detail}`,
             'error'
         );
@@ -139,7 +139,7 @@ async function verifyClearGalleryJobsIdle() {
     showToast(
         appT(
             'gallery.clearBlocked',
-            'Cannot clear gallery while scanning, tagging, or scoring is active or queued. Stop or cancel the operation first.'
+            'Can\'t clear the gallery while scanning, tagging or scoring is running or queued. Stop or cancel it first.'
         ),
         'warning'
     );
@@ -509,7 +509,7 @@ function initBootListenersShell() {
                 // Predictor missing but scores exist from a previous run —
                 // sorting still works, just no NEW scoring. Inform the user
                 // so they don't think the data is gone.
-                showToast(appT('gallery.aestheticViewExistingOnly', 'Showing your {count} existing aesthetic scores. New scoring is unavailable until the predictor is reinstalled.', { count: _aestheticStatus.scored_count }), 'info');
+                showToast(appT('gallery.aestheticViewExistingOnly', 'Showing your {count} existing aesthetic scores. New images can\'t be scored until the predictor is reinstalled.', { count: _aestheticStatus.scored_count }), 'info');
             } else if (_aestheticStatus.scored_count === 0) {
                 showToast(appT('gallery.aestheticNeedScoring', 'No images have been scored yet. Open AI Tag Images and run Score Aesthetic first.'), 'info');
             }

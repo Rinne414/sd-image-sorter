@@ -97,7 +97,7 @@ function _applyGalleryEmptyStateVariant(emptyState) {
         if (hintEl) {
             hintEl.setAttribute('data-i18n', 'gallery.noMatchesHint');
             hintEl.textContent = t('gallery.noMatchesHint',
-                'Try removing some filter criteria, clearing your search, or adjusting the prompt/tag conditions.');
+                'Try removing some filters or clearing the search.');
         }
         if (importBtn) importBtn.style.display = 'none';
         if (onboardingSteps) onboardingSteps.style.display = 'none';

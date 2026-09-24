@@ -280,7 +280,7 @@ for (const viewport of CLEAR_GALLERY_VIEWPORTS) {
     await page.locator('#btn-clear-db').click()
 
     const errorToast = page.locator('#toast-container [role="alert"]')
-      .filter({ hasText: 'Could not verify background job status' })
+      .filter({ hasText: "Couldn't check background jobs" })
       .last()
     await expect(errorToast).toBeVisible()
     await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
@@ -290,10 +290,10 @@ for (const viewport of CLEAR_GALLERY_VIEWPORTS) {
     const layout = await page.evaluate(() => {
       const button = document.getElementById('btn-clear-db')?.getBoundingClientRect()
       const toast = Array.from(document.querySelectorAll<HTMLElement>('#toast-container [role="alert"]'))
-        .find((element) => element.textContent?.includes('Could not verify background job status'))
+        .find((element) => element.textContent?.includes("Couldn't check background jobs"))
         ?.getBoundingClientRect()
       const toastMessage = Array.from(document.querySelectorAll<HTMLElement>('#toast-container [role="alert"]'))
-        .find((element) => element.textContent?.includes('Could not verify background job status'))
+        .find((element) => element.textContent?.includes("Couldn't check background jobs"))
         ?.querySelector<HTMLElement>('.toast-message')
         ?.getBoundingClientRect()
       return {
@@ -424,7 +424,7 @@ test('clear gallery validates active, malformed tag, and malformed aesthetic pro
   aestheticProbeCalls = 0
   await page.locator('#btn-clear-db').click()
   await expect(page.locator('#toast-container [role="alert"]')
-    .filter({ hasText: 'Cannot clear gallery while scanning, tagging, or scoring is active or queued' })
+    .filter({ hasText: "Can't clear the gallery while scanning, tagging or scoring is running or queued" })
     .last()).toBeVisible()
   await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
   expect(tagProbeCalls).toBe(1)
@@ -435,7 +435,7 @@ test('clear gallery validates active, malformed tag, and malformed aesthetic pro
   aestheticProbeCalls = 0
   await page.locator('#btn-clear-db').click()
   await expect(page.locator('#toast-container [role="alert"]')
-    .filter({ hasText: 'Cannot clear gallery while scanning, tagging, or scoring is active or queued' })
+    .filter({ hasText: "Can't clear the gallery while scanning, tagging or scoring is running or queued" })
     .last()).toBeVisible()
   await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
   expect(tagProbeCalls).toBe(1)
@@ -475,7 +475,7 @@ test('clear gallery validates active, malformed tag, and malformed aesthetic pro
   await page.locator('#btn-confirm-ok').click()
   await expect.poll(() => tagProbeCalls).toBe(1)
   await expect(page.locator('#toast-container [role="alert"]')
-    .filter({ hasText: 'Cannot clear gallery while scanning, tagging, or scoring is active or queued' })
+    .filter({ hasText: "Can't clear the gallery while scanning, tagging or scoring is running or queued" })
     .last()).toBeVisible()
   await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
   expect(clearRequests).toBe(0)
