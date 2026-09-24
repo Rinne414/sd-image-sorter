@@ -497,7 +497,7 @@
                     }
                     this._syncTriggerQuickfillButton();
                     this._toast(this._t('dataset.quickfillTriggerInvalid',
-                        'The trigger word must be one token of up to 100 characters, with no commas, line breaks, tabs or other control characters. Plain spaces are fine.'),
+                        'The trigger word must be one token of up to 100 characters, with no commas, line breaks, tabs or other control whitespace. Plain spaces are fine.'),
                     'error', 6000);
                     return;
                 }

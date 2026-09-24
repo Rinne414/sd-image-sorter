@@ -341,7 +341,7 @@ function renderModelManager(models = []) {
                                 backgroundPollWarningShown = true;
                                 showToast(appT(
                                     'models.backgroundStatusUnavailable',
-                                    'Model setup is still running, but its status can\'t be read right now. The app keeps checking in the background.',
+                                    'Model setup is still running, but status checks are failing right now. The app keeps checking in the background.',
                                 ), 'warning');
                             }
                         } else {

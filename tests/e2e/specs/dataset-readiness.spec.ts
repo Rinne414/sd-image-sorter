@@ -950,7 +950,7 @@ test('malformed, backend-error, and lost jobs render explicit non-exportable sta
 
   await page.getByTestId('dataset-readiness-check').click()
   await expect(page.getByTestId('dataset-readiness-state')).toHaveAttribute('data-state', 'lost')
-  await expect(page.locator('#dataset-readiness-message')).toContainText('no longer has this readiness job')
+  await expect(page.locator('#dataset-readiness-message')).toContainText('This check can no longer be found')
   await expect(page.locator('#btn-dataset-export')).toBeDisabled()
 })
 

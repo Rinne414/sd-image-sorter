@@ -2237,7 +2237,7 @@ test('historical trigger cleanup leaves all state unchanged when local persisten
   await page.locator('#btn-dataset-cleanup-trigger').click()
   await page.locator('#input-modal-field').fill('Legacy_Trigger')
   await page.locator('#btn-input-ok').click()
-  await expect(page.locator('#toast-container .toast.error').last()).toContainText('persistence failed')
+  await expect(page.locator('#toast-container .toast.error').last()).toContainText("Couldn't save local captions")
   await expect(page.locator('#toast-container .toast.success')).toHaveCount(successToastCountBeforeCleanup)
   await page.evaluate(() => (window as any).__restoreCleanupStorage())
 
@@ -2294,7 +2294,7 @@ test('historical trigger cleanup rejects a blacklist overflow atomically', async
   await page.locator('#input-modal-field').fill('Legacy Trigger')
   await page.locator('#btn-input-ok').click()
 
-  await expect(page.locator('#toast-container .toast.error')).toContainText('1,000 entries')
+  await expect(page.locator('#toast-container .toast.error')).toContainText('1,000-entry limit')
   await expect(page.locator('#toast-container .toast.success')).toHaveCount(0)
   expect(await page.evaluate(() => {
     const dm = (window as any).DatasetMaker
@@ -2337,7 +2337,7 @@ test('historical trigger cleanup is superseded when the Dataset Project changes 
   await page.locator('#input-modal-field').fill('Legacy_Trigger')
   await page.locator('#btn-input-ok').click()
 
-  await expect(page.locator('#toast-container .toast.error')).toContainText('Dataset changed')
+  await expect(page.locator('#toast-container .toast.error')).toContainText('dataset changed while the cleanup dialog was open')
   expect(await page.evaluate(() => {
     const dm = (window as any).DatasetMaker
     return {

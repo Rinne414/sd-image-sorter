@@ -1407,7 +1407,7 @@ test.describe('Idle library auto-refresh completion', () => {
 
     await page.locator('[data-action="rescan"][data-id="41"]').click()
     const toastMessage = page.locator('#toast-container .toast.error .toast-message')
-    await expect(toastMessage).toContainText(/previous import|上一次导入/)
+    await expect(toastMessage).toContainText(/last import|上次导入/)
     await expect(toastMessage).toContainText(/reload|重新加载/i)
     await expect(toastMessage).not.toContainText(/already running|已有扫描正在进行/)
   })

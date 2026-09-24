@@ -86,7 +86,7 @@ function _parseModelPrepareStart(payload, requestedModelId) {
 function _modelPrepareConflictMessage(requestedModelId, activeModelId) {
     return appT(
         'models.prepareConflict',
-        '{active} is being prepared. Wait for it to finish, then prepare {requested}.',
+        '{active} is already being prepared. Wait for it to finish, then prepare {requested}.',
         { requested: requestedModelId, active: activeModelId },
     );
 }
@@ -428,7 +428,7 @@ async function runBulkDownload(items) {
                 }
                 const message = appT(
                     'models.bulkPollFailed',
-                    'Couldn\'t read the status of {name} {count} times in a row. Check the launcher console, then reopen Model Manager to resume.',
+                    'Status checks failed {count} times for {name}. Check the launcher console, then reopen Model Manager to resume.',
                     {
                         count: pollErrorStreak,
                         name: item.name || item.id,

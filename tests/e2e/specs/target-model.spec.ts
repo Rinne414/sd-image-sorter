@@ -82,9 +82,9 @@ test('choosing Krea 2 shows NL-first guidance and applies NL caption type to all
   await expect(applyButton).toContainText('NL captions')
 
   const captionHelp = page.locator('.dataset-editor-help-body')
-  await expect(captionHelp).toContainText('reviewed, factual long natural-language caption')
-  await expect(captionHelp).toContainText('machine tags are cues, not ground truth')
-  await expect(captionHelp).toContainText('does not prescribe a trigger convention')
+  await expect(captionHelp).toContainText('long, factual natural-language caption that you have checked')
+  await expect(captionHelp).toContainText('machine tags are cues, not facts')
+  await expect(captionHelp).toContainText('sets no trigger-word convention')
   await expect(captionHelp).not.toContainText('a few short tags')
   await expect(captionHelp).not.toContainText('DO include your trigger word once')
 

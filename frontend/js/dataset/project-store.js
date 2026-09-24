@@ -452,7 +452,7 @@
                 this._t('dataset.projectDraftWarningTitle', 'Browser draft stays local'),
                 this._t(
                     'dataset.projectDraftWarning',
-                    '{details} only exist in this browser\'s draft and won\'t be saved to the project. Continue?',
+                    '{details} only exist in the browser draft and won\'t be saved to the project. Continue?',
                     { details },
                 ),
             );

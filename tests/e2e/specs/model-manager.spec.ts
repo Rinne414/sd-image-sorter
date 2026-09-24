@@ -711,7 +711,7 @@ test.describe('Model Manager', () => {
       { timeout: 10_000 },
     )
     await expect(page.locator('#bulk-download-progress-banner')).toContainText(
-      /starter console.*reopen Model Manager/i,
+      /launcher console.*reopen Model Manager/i,
     )
     await expect(page.locator('#btn-bulk-download-models')).toBeEnabled()
     expect(progressCalls).toBe(3)

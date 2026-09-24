@@ -1484,7 +1484,7 @@ test('censor settings should open, explain model roles, and allow typing the pro
 
   await page.selectOption('#censor-model-type', 'nudenet')
   await expect(page.locator('#censor-simple-guide')).toContainText('NudeNet')
-  await expect(page.locator('#censor-simple-guide')).toContainText('no text prompt')
+  await expect(page.locator('#censor-simple-guide')).toContainText('no prompt, no custom labels')
 
   await page.locator('#censor-model-file').evaluate((node) => {
     const details = node.closest('details') as HTMLDetailsElement | null

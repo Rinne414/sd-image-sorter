@@ -104,7 +104,7 @@ function renderDiskUsage(data) {
                 <span class="disk-section-total">${escapeHtml(thumbnailLimitText)}</span>
             </div>
             <p class="disk-section-hint">${escapeHtml(appT('disk.thumbnailLimitHint', 'Default is 500 MB; 0 turns the persistent thumbnail cache off. Original images are never deleted.'))}</p>
-            <p class="disk-section-hint disk-tradeoff-hint">${escapeHtml(appT('disk.thumbnailTradeoffHint', 'A lower limit saves disk space, but scrolling a large gallery rebuilds thumbnails more often and keeps the CPU and disk busier.'))}</p>
+            <p class="disk-section-hint disk-tradeoff-hint">${escapeHtml(appT('disk.thumbnailTradeoffHint', 'A lower limit saves disk space, but scrolling a large gallery rebuilds thumbnails more often and uses more CPU/IO.'))}</p>
             <div class="disk-setting-row">
                 <label for="thumbnail-cache-limit-input">${escapeHtml(appT('disk.thumbnailLimitLabel', 'Max thumbnail cache'))}</label>
                 <input id="thumbnail-cache-limit-input" class="input-field" type="number" min="0" max="102400" step="50" value="${escapeHtml(String(thumbnailLimit))}">
