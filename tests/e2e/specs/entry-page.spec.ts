@@ -452,6 +452,13 @@ test.describe('Entry page (opted in)', () => {
 
       await page.locator('#entry-fn-gallery').click()
       await expect(page.locator('#entry-page')).toBeHidden()
+      // The Filters sidebar section starts collapsed (5aa2a55); open it so the
+      // summary it holds can be read and measured.
+      const filtersToggle = page.locator('.sidebar-section-toggle[aria-controls="sidebar-body-filters"]')
+      if ((await filtersToggle.getAttribute('aria-expanded')) === 'false') {
+        await filtersToggle.click()
+      }
+      await expect(filtersToggle).toHaveAttribute('aria-expanded', 'true')
       const generatorSummary = page.locator('#summary-generators')
       await expect(generatorSummary).toHaveText('All')
       expect(await page.evaluate(() => (window as any).FilterStore.DEFAULT_FILTER_GENERATORS.length)).toBe(14)
