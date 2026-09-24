@@ -33,8 +33,10 @@ async function _readSetupPlan(api, modelId) {
 function _setupConfirmMessage(modelId, sizeHint, plan) {
     const lines = [];
     if (sizeHint) {
+        // The sentence already says "about"; "~9.6 GB" would say it twice.
+        const size = String(sizeHint).replace(/^~\s*/, '');
         lines.push(featureInstallT('featureInstall.confirmSize',
-            'It downloads about {size}, only the files this feature needs.', { size: sizeHint }));
+            'It downloads about {size}, only the files this feature needs.', { size }));
     }
     const packageCount = Array.isArray(plan?.packages) ? plan.packages.length : 0;
     if (packageCount > 0) {
@@ -50,7 +52,7 @@ function _setupConfirmMessage(modelId, sizeHint, plan) {
     const gpuNote = FEATURE_GPU_NOTES[modelId];
     if (gpuNote) lines.push(featureInstallT(gpuNote[0], gpuNote[1]));
     lines.push(featureInstallT('featureInstall.confirmQuestion', 'Download now?'));
-    return lines.join(' ');
+    return lines.join('\n');
 }
 
 function featureInstallT(key, fallback, params) {

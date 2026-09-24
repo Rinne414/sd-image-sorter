@@ -2045,6 +2045,19 @@ textarea:focus,
     z-index: 3;
 }
 
+/* The bar sticks at the scroll box's inner edge, so the modal's top padding
+   band above it showed cards scrolling past. Cover that band. */
+.settings-modal-tabs::before {
+    content: "";
+    position: absolute;
+    left: -1px;
+    right: -1px;
+    bottom: 100%;
+    height: 40px;
+    background: var(--surface-2);
+    pointer-events: none;
+}
+
 .settings-modal-tab {
     flex: 1 1 0;
     display: flex;
@@ -4444,6 +4457,11 @@ textarea:focus,
 
 #confirm-modal.visible {
     z-index: 3200;
+}
+
+/* Multi-point confirms (download size, restart, GPU need) put one point per line. */
+#confirm-message {
+    white-space: pre-line;
 }
 
 /* Progress bar smooth transitions */
