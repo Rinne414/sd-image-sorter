@@ -46,8 +46,9 @@ def test_runtime_plan_applies_requested_chunk_size_for_regular_gpu_models():
     assert runtime_plan["effective_use_gpu"] is True
     assert runtime_plan["gpu_locked"] is False
     assert runtime_plan["fetch_batch_size"] == 64
-    assert runtime_plan["commit_interval"] == min(64, 10)
-    assert runtime_plan["gc_interval"] == min(64, 8)
+    # One commit per chunk; gc only every few hundred images.
+    assert runtime_plan["commit_interval"] == 64
+    assert runtime_plan["gc_interval"] == 256
 
 
 def test_runtime_plan_clamps_requested_chunk_size_for_supported_gpu_range():
@@ -71,8 +72,8 @@ def test_runtime_plan_clamps_requested_chunk_size_for_supported_gpu_range():
     assert runtime_plan["effective_use_gpu"] is True
     assert runtime_plan["gpu_locked"] is False
     assert runtime_plan["fetch_batch_size"] == 48
-    assert runtime_plan["commit_interval"] == min(48, 10)
-    assert runtime_plan["gc_interval"] == min(48, 8)
+    assert runtime_plan["commit_interval"] == 48
+    assert runtime_plan["gc_interval"] == 256
 
 
 def test_runtime_adjustment_message_reports_gpu_backoff_and_cpu_fallback():

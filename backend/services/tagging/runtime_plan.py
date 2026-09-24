@@ -56,7 +56,10 @@ class RuntimePlanMixin:
         commit_interval = fetch_batch_size
         gc_interval = max(4, fetch_batch_size)
         cpu_pause_seconds = 0.0
-        session_refresh_interval = 180 if effective_use_gpu else 0
+        # A GPU session is rebuilt only after a runtime error (see the tagger's
+        # OOM backoff). The old every-180-images rebuild cost ~5 s each and
+        # guarded against a leak that turned out to be a power-supply fault.
+        session_refresh_interval = 0
         requested_chunk_size = int(request.batch_size) if request.batch_size else None
 
         system_info = get_system_info()
@@ -98,8 +101,8 @@ class RuntimePlanMixin:
                 CPU_CHUNK_MAX,
                 max(1, int(hardware_rec.get("recommended_cpu_chunk_size") or 12)),
             )
-            # Release the ONNX CPU memory arena (+ gc) every N images on long CPU runs, the
-            # same way the GPU path refreshes every 180. Without this the CPU mem arena grows
+            # Release the ONNX CPU memory arena (+ gc) every N images on long CPU runs.
+            # Without this the CPU mem arena grows
             # unbounded across a big batch; combined with 100%-pinned cores it stresses
             # marginal hardware (observed: a whole-machine freeze / 0x124 CPU machine-check
             # on a ~110-image eva02 CPU run). recommend_tagger_config may already suggest a
@@ -160,8 +163,9 @@ class RuntimePlanMixin:
                 "faster path (it offloads the CPU and self-releases device memory periodically)."
             )
 
-        commit_interval = max(1, min(fetch_batch_size, 10))
-        gc_interval = max(4, min(fetch_batch_size, 8))
+        # One commit per chunk; a full gc pass every few hundred images is plenty.
+        commit_interval = max(1, fetch_batch_size)
+        gc_interval = max(256, fetch_batch_size)
 
         runtime_request = request.model_copy(
             update={

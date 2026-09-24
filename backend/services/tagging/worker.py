@@ -10,7 +10,9 @@ import gc
 import hmac
 import logging
 import os
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -99,6 +101,68 @@ def _require_unchanged_wd14_source(
         raise RuntimeError(
             "source image changed while WD14 inference was running; tags were not published"
         )
+
+
+def _unchanged_source_error(img: Dict[str, Any]) -> Optional[str]:
+    """Re-hash one source after inference; the error text, or None when unchanged.
+
+    The full pixel re-hash stays (a same-size rewrite with a restored mtime must
+    still be caught); it runs on the inspect pool so a batch re-hashes in parallel.
+    """
+    try:
+        _require_unchanged_wd14_source(
+            img.get("_resolved_path") or img["path"],
+            img["_source_identity"],
+            img["_content_fingerprint"],
+        )
+    except Exception as error:
+        return str(error)
+    return None
+
+
+_SOURCE_INSPECT_WORKERS = min(8, os.cpu_count() or 4)
+_source_inspect_pool: Optional[ThreadPoolExecutor] = None
+_source_inspect_pool_lock = threading.Lock()
+
+
+def _get_source_inspect_pool() -> ThreadPoolExecutor:
+    """Decode-heavy per-image checks run in parallel; PIL releases the GIL while decoding."""
+    global _source_inspect_pool
+    if _source_inspect_pool is None:
+        with _source_inspect_pool_lock:
+            if _source_inspect_pool is None:
+                _source_inspect_pool = ThreadPoolExecutor(
+                    max_workers=_SOURCE_INSPECT_WORKERS,
+                    thread_name_prefix="tag-source",
+                )
+    return _source_inspect_pool
+
+
+def _inspect_tag_source(
+    img: Dict[str, Any],
+    with_provenance: bool,
+) -> tuple[Optional[str], str, Any]:
+    """Resolve, read-check and fingerprint one image. Pure: no DB writes, no progress."""
+    resolved_path = resolve_existing_indexed_image_path(
+        img["path"], backend_file=_BACKEND_FILE
+    )
+    if not resolved_path:
+        return None, "missing", None
+    readable, read_error = verify_image_readable(resolved_path)
+    if not readable:
+        return resolved_path, "unreadable", read_error
+    if not with_provenance:
+        return resolved_path, "ok", {}
+    try:
+        content_fingerprint, source_identity = _prepare_wd14_source_evidence(
+            resolved_path
+        )
+    except Exception as error:
+        return resolved_path, "unverifiable", error
+    return resolved_path, "ok", {
+        "_content_fingerprint": content_fingerprint,
+        "_source_identity": source_identity,
+    }
 
 
 class _E2ETaggingStub:
@@ -525,13 +589,16 @@ def _tagging_worker_run(
             existing_images: List[Dict[str, Any]] = []
             batch_paths: List[str] = []
 
-            for img in batch_images:
+            inspections = _get_source_inspect_pool().map(
+                lambda one: _inspect_tag_source(one, writer_provenance is not None),
+                batch_images,
+            )
+            for img, (resolved_path, source_state, source_detail) in zip(
+                batch_images, inspections
+            ):
                 image_path = img["path"]
-                resolved_path = resolve_existing_indexed_image_path(
-                    image_path, backend_file=_BACKEND_FILE
-                )
                 image_name = os.path.basename(resolved_path or image_path)
-                if not resolved_path:
+                if source_state == "missing":
                     total_errors += 1
                     total_processed += 1
                     worker_db.mark_image_unreadable(img["id"], "File not found")
@@ -541,8 +608,8 @@ def _tagging_worker_run(
                     )
                     continue
 
-                readable, read_error = verify_image_readable(resolved_path)
-                if not readable:
+                if source_state == "unreadable":
+                    read_error = source_detail
                     total_errors += 1
                     total_processed += 1
                     cause = describe_readability_failure(read_error)
@@ -557,28 +624,19 @@ def _tagging_worker_run(
                     )
                     continue
 
-                source_evidence: Dict[str, Any] = {}
-                if writer_provenance is not None:
-                    try:
-                        content_fingerprint, source_identity = (
-                            _prepare_wd14_source_evidence(resolved_path)
-                        )
-                    except Exception as error:
-                        total_errors += 1
-                        total_processed += 1
-                        logger.error(
-                            "Skipping image without stable WD14 source evidence: %s (%s)",
-                            image_path,
-                            error,
-                        )
-                        send_with_eta(
-                            f"Skipped changed or unverifiable image: {image_name} ({error})",
-                        )
-                        continue
-                    source_evidence = {
-                        "_content_fingerprint": content_fingerprint,
-                        "_source_identity": source_identity,
-                    }
+                if source_state == "unverifiable":
+                    total_errors += 1
+                    total_processed += 1
+                    logger.error(
+                        "Skipping image without stable WD14 source evidence: %s (%s)",
+                        image_path,
+                        source_detail,
+                    )
+                    send_with_eta(
+                        f"Skipped changed or unverifiable image: {image_name} ({source_detail})",
+                    )
+                    continue
+                source_evidence: Dict[str, Any] = source_detail
 
                 existing_images.append(
                     {
@@ -756,6 +814,21 @@ def _tagging_worker_run(
                             f"GPU inference failed. Continuing on CPU... Reason: {runtime_backend_reason}",
                         )
 
+                    source_change_errors: Dict[int, Optional[str]] = {}
+                    if writer_provenance is not None:
+                        rehash_targets = [
+                            img
+                            for img, result in zip(existing_images, batch_results)
+                            if result.get("error") is None
+                        ]
+                        for img, change_error in zip(
+                            rehash_targets,
+                            _get_source_inspect_pool().map(
+                                _unchanged_source_error, rehash_targets
+                            ),
+                        ):
+                            source_change_errors[id(img)] = change_error
+
                     for img, result in zip(existing_images, batch_results):
                         if cancel_event.is_set():
                             break
@@ -763,14 +836,7 @@ def _tagging_worker_run(
                         result_error = result.get("error")
                         resolved_path = img.get("_resolved_path") or img["path"]
                         if result_error is None and writer_provenance is not None:
-                            try:
-                                _require_unchanged_wd14_source(
-                                    resolved_path,
-                                    img["_source_identity"],
-                                    img["_content_fingerprint"],
-                                )
-                            except Exception as error:
-                                result_error = str(error)
+                            result_error = source_change_errors.get(id(img))
 
                         if result_error:
                             total_errors += 1

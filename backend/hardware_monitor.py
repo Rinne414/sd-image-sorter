@@ -374,7 +374,7 @@ def recommend_tagger_config(
     Returns a dictionary with:
     - recommended_batch_size: int
     - recommended_use_gpu: bool
-    - recommended_session_refresh_interval: int (GPU -> 100, CPU -> 0)
+    - recommended_session_refresh_interval: int (0: no periodic rebuild; errors still rebuild)
     - risk_level: "low" / "medium" / "high"
     - message: human-readable recommendation string
     """
@@ -506,7 +506,7 @@ def recommend_tagger_config(
             batch_size = max(batch_size, 8)
         batch_size = max(1, apply_cpu_model_cap(batch_size))
 
-    session_refresh_interval = 180 if use_gpu else 0
+    session_refresh_interval = 0
 
     # Determine risk level
     if use_gpu:
@@ -533,7 +533,7 @@ def recommend_tagger_config(
         vram_fragment = f" ({int(vram_mb)}MB VRAM)" if vram_mb is not None else ""
         parts.append(f"{runtime_label} GPU detected: {gpu_name}{vram_fragment}.")
         if risk_level == "high":
-            parts.append("VRAM headroom is tight right now. Auto runtime lowered the true batch size and kept session refresh enabled.")
+            parts.append("VRAM headroom is tight right now. Auto runtime lowered the true batch size.")
         elif risk_level == "medium":
             parts.append("Moderate VRAM headroom. Auto runtime is using a balanced true batch size.")
         else:

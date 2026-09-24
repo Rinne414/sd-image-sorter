@@ -589,9 +589,9 @@ def test_runtime_plan_cpu_branch_uses_recommended_chunk_and_long_run_pacing() ->
     plan = _cpu_plan({"recommended_cpu_chunk_size": 24})
     assert plan["effective_use_gpu"] is False
     assert plan["fetch_batch_size"] == 24
-    # commit/gc are derived caps: min(fetch, 10) / min(fetch, 8) with floors.
-    assert plan["commit_interval"] == 10
-    assert plan["gc_interval"] == 8
+    # One commit per chunk; gc every max(256, chunk) images.
+    assert plan["commit_interval"] == 24
+    assert plan["gc_interval"] == 256
     # Chunk >= 12 gets the larger inter-chunk breather.
     assert plan["cpu_pause_seconds"] == 0.02
     # No recommended refresh -> the CPU arena-release fallback of 100.
