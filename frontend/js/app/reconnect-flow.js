@@ -234,7 +234,7 @@ function _renderReconnectResultPanel(progress) {
             ${renderItems(needsReview, (item) => `
                 <div class="reconnect-result-item">
                     <strong>${escapeHtml(item.filename || '')}</strong>
-                    <p>${escapeHtml(appT('reconnect.needsReviewHelp', 'Several old records could match this file. Choose a smaller folder and run Find Moved Images again, or review the paths manually.'))}</p>
+                    <p>${escapeHtml(appT('reconnect.needsReviewHelp', 'Several old records could match this file. Run Find Moved Files again on a smaller folder, or check the paths by hand.'))}</p>
                     ${pathLine(appT('reconnect.foundPathLabel', 'Found'), item.found_path)}
                     ${(Array.isArray(item.old_paths) ? item.old_paths : []).map((path) => pathLine(appT('reconnect.possibleOldPathLabel', 'Possible old'), path)).join('')}
                 </div>
@@ -245,7 +245,7 @@ function _renderReconnectResultPanel(progress) {
             ${renderItems(conflicts, (item) => `
                 <div class="reconnect-result-item">
                     <strong>${escapeHtml(item.filename || '')}</strong>
-                    <p>${escapeHtml(appT('reconnect.conflictHelp', 'The new file path is already another gallery item. If the old missing record is only a duplicate, remove the old record from the gallery.'))}</p>
+                    <p>${escapeHtml(appT('reconnect.conflictHelp', 'The file at the new path is already in the gallery. If the old missing record is just a duplicate, remove it from the gallery.'))}</p>
                     ${pathLine(appT('reconnect.oldPathLabel', 'Old'), item.old_path)}
                     ${pathLine(appT('reconnect.existingPathLabel', 'Already indexed'), item.existing_path)}
                     ${item.old_image_id ? `<button type="button" class="btn btn-ghost btn-small reconnect-remove-old" data-reconnect-remove-id="${escapeHtml(item.old_image_id)}">${escapeHtml(appT('reconnect.removeOldRecord', 'Remove old gallery record'))}</button>` : ''}

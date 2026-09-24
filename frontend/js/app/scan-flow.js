@@ -255,7 +255,7 @@ async function requestStopScan() {
         showToast(
             appT(
                 'scan.cancelUnavailableStatus',
-                'Import cannot be stopped because the server returned status "{status}". Reload the app and try again.'
+                'The import can\'t be stopped right now (status: {status}). Reload the page and try again.'
             ).replace('{status}', status || '<missing>'),
             'error'
         );

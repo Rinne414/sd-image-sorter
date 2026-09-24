@@ -437,7 +437,7 @@
             updateReparseVisibility();
         } catch (error) {
             setText('#health-status-title', t('health.failedTitle', 'Could not load library health'));
-            setText('#health-status-detail', t('health.failedDetail', 'The audit endpoint failed. Try again after the current scan finishes.'));
+            setText('#health-status-detail', t('health.failedDetail', 'The check failed. Try again after the current scan finishes.'));
             if (window.App && typeof window.App.showToast === 'function') {
                 window.App.showToast(t('health.failedToast', 'Failed to load library health'), 'error');
             }
@@ -490,7 +490,7 @@
             button.hidden = !(missing > 0 || state.reparse.running);
             if (!state.reparse.running && missing > 0) {
                 button.title = t('health.reparseTitle',
-                    'Retry {count} images that have neither a prompt nor a caption (uses stored raw metadata, then the files and their .txt/.json sidecars).',
+                    'Re-parse {count} images with neither a prompt nor a caption, using stored raw metadata first, then the files and their .txt/.json sidecars.',
                     { count: formatNumber(missing) });
             }
         }).catch(function () {

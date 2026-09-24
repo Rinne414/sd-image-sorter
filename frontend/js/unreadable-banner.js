@@ -208,7 +208,7 @@
 
         lockedText($('#gallery-unreadable-banner-title'), appT(
             'reconnect.banner.title',
-            '{count} image(s) cannot be opened — their original files are missing.',
+            '{count} image(s) can\'t be opened: their original files are missing.',
             { count: summary.total }
         ));
         lockedText($('#gallery-unreadable-banner-detail'), detailFor(summary));

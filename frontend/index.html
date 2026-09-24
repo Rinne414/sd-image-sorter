@@ -740,7 +740,7 @@
             </div>
             <span class="bg-tag-progress-text" id="bg-reconnect-progress-text">Finding moved files...</span>
             <button class="bg-tag-progress-btn bg-tag-stop-btn" id="bg-reconnect-cancel" title="Stop finding moved files" data-i18n-title="reconnect.bgStopTitle">⏹</button>
-            <button class="bg-tag-progress-btn" id="bg-reconnect-open" title="Open find moved files" data-i18n-title="reconnect.bgDetailsTitle"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg></button>
+            <button class="bg-tag-progress-btn" id="bg-reconnect-open" title="Open Find Moved Files details" data-i18n-title="reconnect.bgDetailsTitle"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg></button>
         </div>
 
         <!-- v3.3.0 USR-1: Move/Copy Progress Bar (gallery selection move runs as a background job) -->
@@ -972,7 +972,7 @@
                         <span class="gallery-banner-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg></span>
                         <div class="gallery-banner-copy">
                             <strong class="gallery-banner-title" id="gallery-unreadable-banner-title"></strong>
-                            <span class="gallery-banner-detail" id="gallery-unreadable-banner-detail" data-i18n="reconnect.banner.detail">This usually means the files were moved, renamed, or are on an unplugged drive. Use Find Moved Files to re-link them — it only updates gallery records.</span>
+                            <span class="gallery-banner-detail" id="gallery-unreadable-banner-detail" data-i18n="reconnect.banner.detail">Usually the files were moved, renamed, or are on an unplugged drive. Find Moved Files re-links them and only updates gallery records.</span>
                         </div>
                         <div class="gallery-banner-actions">
                             <button type="button" class="btn btn-ghost btn-small" id="gallery-missing-clear-all" hidden>
@@ -5587,7 +5587,7 @@
                             <div class="health-status-copy">
                                 <h3 id="health-status-title" data-i18n="health.loadingTitle">Checking your library...</h3>
                                 <p id="health-status-detail" data-i18n="health.loadingDetail">This is read-only. No files will be moved, deleted, or rewritten.</p>
-                                <p class="health-score-help" data-i18n="health.scoreHelp">Score combines metadata coverage, tag coverage, duplicate filenames, and unreadable files. A low score is normal if you only use SD Image Sorter for browsing.</p>
+                                <p class="health-score-help" data-i18n="health.scoreHelp">The score looks at metadata and tag coverage, duplicate file names and unreadable files. If you only browse images here, a low score is normal.</p>
                             </div>
                         </div>
 
@@ -5622,7 +5622,7 @@
                             <section class="health-panel">
                                 <div class="health-panel-header">
                                     <h3 data-i18n="health.recommendations">Next Best Actions</h3>
-                                    <span data-i18n="health.readOnlyHint">Audit only, you stay in control</span>
+                                    <span data-i18n="health.readOnlyHint">Suggestions only; you decide what to do</span>
                                 </div>
                                 <div class="health-recommendations" id="health-recommendations"></div>
                             </section>
@@ -5640,7 +5640,7 @@
                             <section class="health-panel">
                                 <div class="health-panel-header">
                                     <h3 data-i18n="health.topFolders">Largest Import Folders</h3>
-                                    <span data-i18n="health.topFoldersHint">Good archive planning signal</span>
+                                    <span data-i18n="health.topFoldersHint">Shows how your folders are organized</span>
                                 </div>
                                 <div class="health-table" id="health-folder-list"></div>
                             </section>
@@ -5649,7 +5649,7 @@
                         <section class="health-panel">
                             <div class="health-panel-header">
                                 <h3 data-i18n="health.samples">Files Needing Attention</h3>
-                                <span data-i18n="health.samplesHint">Open the Reader or re-import to inspect details</span>
+                                <span data-i18n="health.samplesHint">Open them in Reader, or re-import to parse again</span>
                             </div>
                             <div class="health-table health-sample-table" id="health-sample-list"></div>
                         </section>
@@ -5954,7 +5954,7 @@
                     </label>
                 </div>
                 <div class="helper-text" id="scan-recommended-hint" data-i18n="scan.recommendedHint">Keeps image info; skips full bad-file check.</div>
-                <div class="helper-text" id="scan-storage-hint" data-i18n="scan.storageHint">Local SSD folders scan best; network/cloud folders can look stalled while the OS is still reading files.</div>
+                <div class="helper-text" id="scan-storage-hint" data-i18n="scan.storageHint">Local SSD folders scan best; network and cloud folders read slowly and can look stuck.</div>
                 <details class="guided-advanced-panel" id="scan-advanced-options">
                     <summary class="guided-advanced-summary">
                         <span data-i18n="scan.advancedSummary">Advanced options</span>
@@ -6026,7 +6026,7 @@
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-small">
                 <h3 id="reconnect-modal-title" data-i18n="reconnect.title">Find Moved Images</h3>
-                <p class="modal-description" data-i18n="reconnect.description">Use this if pictures were moved outside the app. It only updates gallery records; it will not move, delete, or edit files.</p>
+                <p class="modal-description" data-i18n="reconnect.description">Use this if images were moved outside the app. It only updates gallery records and never touches the files.</p>
                 <div class="form-group">
                     <label for="reconnect-folder-path" id="reconnect-folder-path-label" data-i18n="reconnect.folderPath">Where should the app look?</label>
                     <div class="folder-path-row">
@@ -6036,7 +6036,7 @@
                     <small id="reconnect-folder-feedback" class="validation-feedback" aria-live="polite"></small>
                     <div id="reconnect-folder-browser-container"></div>
                 </div>
-                <div class="helper-text" data-i18n="reconnect.scopeHelp">Tip: choose the folder or drive where the images may be now. A smaller folder is faster.</div>
+                <div class="helper-text" data-i18n="reconnect.scopeHelp">Choose the folder or drive where the images may be now. A smaller folder is faster.</div>
                 <div class="form-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="reconnect-recursive" checked>

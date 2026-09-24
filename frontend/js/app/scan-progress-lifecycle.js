@@ -418,7 +418,7 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
         showToast(
             appT(
                 'scan.failedResume',
-                'Could not restore the active import progress. Reload the app; if this continues, restart SD Image Sorter.'
+                'Couldn\'t restore the running import\'s progress. Reload the page; if it keeps happening, restart SD Image Sorter.'
             ),
             'error'
         );
@@ -438,7 +438,7 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
         showToast(
             appT(
                 'scan.unknownStatus',
-                'Import progress stopped because the server returned status "{status}". Reload the app; if this continues, restart SD Image Sorter.'
+                'Import progress stopped (status: {status}). Reload the page; if it keeps happening, restart SD Image Sorter.'
             ).replace('{status}', statusLabel),
             'error'
         );
@@ -464,7 +464,7 @@ function handleManualScanPollError(error, retryCount, scheduleNext) {
     const fallback = error?.name === 'ScanAcknowledgementError'
         ? appT(
             'scan.completionAckFailed',
-            'Import finished, but its completion state could not be cleared. Reload the app; if idle auto-refresh remains blocked, restart SD Image Sorter.'
+            'Import finished, but its completion state couldn\'t be cleared. Reload the page; if the gallery still won\'t auto-refresh, restart SD Image Sorter.'
         )
         : appT('scan.failedProgress', 'Could not update import progress');
     showToast(formatUserError(error, fallback), 'error');

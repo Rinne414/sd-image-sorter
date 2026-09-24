@@ -86,7 +86,7 @@ async function openScanLogFile() {
             pathEl.title = result.path_redacted || '<PATH>';
         }
         if (result?.opened === false) {
-            showToast(appT('scan.openLogUnavailable', 'Could not open automatically; the log path is shown. Copy that path if you need to send the log file to support.'), 'warning');
+            showToast(appT('scan.openLogUnavailable', 'Couldn\'t open the folder automatically; the log path is shown. Use it to find the log file if you need to send it to support.'), 'warning');
             return;
         }
         showToast(appT('scan.logOpened', 'Opened support log location'), 'success');
