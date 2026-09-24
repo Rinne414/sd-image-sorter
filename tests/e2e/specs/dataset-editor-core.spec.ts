@@ -302,7 +302,7 @@ test('trigger quickfill can be saved before an image is queued', async ({ page }
   })
 
   await expect.poll(() => page.evaluate(() => {
-    const saved = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session') || 'null')
+    const saved = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session:main') || 'null')
     return {
       trigger: saved?.settings?.caption_render?.trigger,
       commonTags: saved?.settings?.caption_render?.common_tags,
@@ -441,7 +441,7 @@ test('reloaded empty-queue trigger applies to local late import without changing
   await page.locator('#dataset-trigger').fill('Hero_Token')
   await page.locator('#btn-dataset-quickfill-trigger').click()
   await expect.poll(() => page.evaluate(() => {
-    const saved = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session') || 'null')
+    const saved = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session:main') || 'null')
     return saved?.quickfilledTrigger
   })).toBe('Hero_Token')
 
@@ -980,7 +980,7 @@ test('trigger quickfill rejects multi-token input without changing captions', as
   await page.locator('#dataset-trigger').fill('Bad,Trigger')
   await page.locator('#btn-dataset-quickfill-trigger').click()
 
-  await expect(page.locator('#toast-container .toast.error')).toContainText('cannot contain commas')
+  await expect(page.locator('#toast-container .toast.error')).toContainText('no commas')
   expect(previewCalls).toBe(0)
   expect(await page.evaluate(() => {
     const dm = (window as any).DatasetMaker
@@ -1026,7 +1026,7 @@ test('trigger quickfill rejects control whitespace without persisting or preview
   expect(previewBodies.some((body) => invalidTriggers.includes(String(body.trigger || '')))).toBe(false)
   expect(await page.evaluate(() => {
     const dm = (window as any).DatasetMaker
-    const saved = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session') || 'null')
+    const saved = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session:main') || 'null')
     const payload = dm._buildExportPayload()
     return {
       commonTags: (document.getElementById('dataset-common-tags') as HTMLTextAreaElement).value,
@@ -1091,7 +1091,7 @@ test('trigger input waits for IME composition before saving or previewing', asyn
   expect(exportPreviewBodies).toHaveLength(0)
   expect(await page.evaluate(() => {
     const dm = (window as any).DatasetMaker
-    const saved = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session') || 'null')
+    const saved = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session:main') || 'null')
     return {
       savedTrigger: saved?.settings?.caption_render?.trigger,
       caption: dm.captions.get(701),
@@ -1113,7 +1113,7 @@ test('trigger input waits for IME composition before saving or previewing', asyn
   })
 
   await expect.poll(() => page.evaluate(() => {
-    const saved = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session') || 'null')
+    const saved = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session:main') || 'null')
     return saved?.settings?.caption_render?.trigger
   })).toBe('你')
   await expect.poll(() => ({
@@ -1159,7 +1159,7 @@ test('invalid trigger input preserves another pending Dataset draft edit', async
 
   await expect(page.locator('#dataset-trigger')).toHaveValue('___')
   await expect.poll(() => page.evaluate(() => {
-    const saved = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session') || 'null')
+    const saved = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session:main') || 'null')
     return {
       trigger: saved?.settings?.caption_render?.trigger,
       commonTags: saved?.settings?.caption_render?.common_tags,
@@ -1183,7 +1183,7 @@ test('invalid trigger input preserves another pending Dataset draft edit', async
     blacklist.dispatchEvent(new Event('input', { bubbles: true }))
   })
   await expect.poll(() => page.evaluate(() => {
-    const saved = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session') || 'null')
+    const saved = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session:main') || 'null')
     return {
       trigger: saved?.settings?.caption_render?.trigger,
       commonTags: saved?.settings?.caption_render?.common_tags,
@@ -1246,7 +1246,7 @@ test('trigger quickfill rejects a token that normalizes to empty', async ({ page
 
   await page.evaluate(() => (window as any).DatasetMaker._saveSession())
   expect(await page.evaluate(() => {
-    const saved = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session') || 'null')
+    const saved = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session:main') || 'null')
     return saved?.settings?.caption_render?.trigger
   })).toBe('')
 
@@ -1759,7 +1759,7 @@ test('trigger quickfill replaces the previously managed trigger across reloads',
 
   await page.evaluate(() => {
     ;(window as any).DatasetMaker._saveSession()
-    const storageKey = 'sd-image-sorter-dataset-session'
+    const storageKey = 'sd-image-sorter-dataset-session:main'
     const legacyDraft = JSON.parse(localStorage.getItem(storageKey) || 'null')
     delete legacyDraft.quickfilledTrigger
     localStorage.setItem(storageKey, JSON.stringify(legacyDraft))
@@ -3395,7 +3395,7 @@ test('NL-only drafts warn before unload when durable storage is unavailable', as
   const unloadState = await page.evaluate(() => {
     const event = new Event('beforeunload', { cancelable: true })
     const dispatchResult = window.dispatchEvent(event)
-    const draft = JSON.parse(sessionStorage.getItem('sd-image-sorter-dataset-session') || 'null')
+    const draft = JSON.parse(sessionStorage.getItem('sd-image-sorter-dataset-session:main') || 'null')
     return {
       defaultPrevented: event.defaultPrevented,
       dispatchResult,

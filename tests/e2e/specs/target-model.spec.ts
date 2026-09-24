@@ -208,7 +208,7 @@ test('draft choice persists when Dataset Maker reopens after a reload', async ({
   await seedDatasetQueue(page)
   await chooseTargetModel(page, 'flux')
   await expect.poll(() => page.evaluate(() => {
-    const stored = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session') || '{}')
+    const stored = JSON.parse(localStorage.getItem('sd-image-sorter-dataset-session:main') || '{}')
     return stored.settings?.target_model || ''
   })).toBe('flux')
   await page.reload()

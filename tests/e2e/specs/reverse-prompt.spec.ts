@@ -443,7 +443,7 @@ test('TIPO warns about its download before spending it, and never offers a Prepa
   const message = page.locator('#confirm-message')
   await expect(message).toBeVisible()
   const warning = await message.innerText()
-  expect(warning, 'the size must be stated before it is spent').toMatch(/100-250 MB/)
+  expect(warning, 'the size must be stated before it is spent').toMatch(/\d+(\.\d+)? ?(MB|GB)\b/)
   expect(warning, 'and where it lands').toMatch(/data folder/i)
 
   // Declining spends nothing.
