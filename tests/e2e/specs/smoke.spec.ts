@@ -6440,10 +6440,12 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#view-similar.active')).toBeVisible()
     await terminalProgressStarted
 
+    // While indexing runs only "build index" waits; the 4 images already
+    // indexed stay searchable and can be checked for duplicates.
     await expect(page.locator('#btn-similar-embed')).toBeDisabled()
-    await expect(page.locator('#btn-similar-search')).toBeDisabled()
-    await expect(page.locator('#btn-similar-upload')).toBeDisabled()
-    await expect(page.locator('#btn-similar-duplicates')).toBeDisabled()
+    await expect(page.locator('#btn-similar-search')).toBeEnabled()
+    await expect(page.locator('#btn-similar-upload')).toBeEnabled()
+    await expect(page.locator('#btn-similar-duplicates')).toBeEnabled()
     releaseTerminalProgress()
     await expect.poll(() => progressCalls, { timeout: 10000 }).toBeGreaterThanOrEqual(2)
     await expect(page.locator('#btn-similar-embed')).toBeEnabled()

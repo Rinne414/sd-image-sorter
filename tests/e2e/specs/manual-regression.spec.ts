@@ -2847,6 +2847,10 @@ test('censor batch rename should update preview and apply only selected queue it
 
   await page.locator('#btn-batch-rename').click()
   await expect(page.locator('#rename-modal.visible')).toBeVisible()
+  // Viewing one item is not a selection: batch rename covers the whole queue
+  // unless "only selected" is ticked on purpose.
+  await expect(page.locator('#rename-only-selected')).not.toBeChecked()
+  await page.locator('label:has(#rename-only-selected) .checkbox-custom').click()
   await expect(page.locator('#rename-only-selected')).toBeChecked()
   await page.locator('#rename-pattern').fill('{original}_review_{n:02d}')
   await expect(page.locator('#rename-preview-list')).toContainText('_review_01.png')
