@@ -3034,6 +3034,9 @@ test('scan then tag through the real UI should finish and write tags for the new
   test.setTimeout(180000)
   prepareTagLiveFixture()
 
+  // The e2e server tags with SD_IMAGE_SORTER_E2E_FAKE_TAGGER; the WD14 card
+  // still reads "not installed", which would stop Start at the first-use download.
+  await markModelsReady(page)
   await openMainPage(page)
 
   await page.locator('#btn-scan').click()
