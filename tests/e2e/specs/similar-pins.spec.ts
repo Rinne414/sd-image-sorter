@@ -636,10 +636,12 @@ test('refreshWorkflowStatus warns for missing-model + needs-index and marks sync
       }
     }, { available, total, embedded, pending })
 
-  // CLIP model missing -> warning, indexing CTA hidden (the banner owns the next action).
+  // CLIP model missing -> warning, and Start Indexing stays usable: the first
+  // index downloads the model with progress instead of sending the user away.
   const modelMissing = await evalStatus(false, 10, 0, 10)
   expect(modelMissing.warning).toBe(true)
-  expect(modelMissing.ctaHidden).toBe(true)
+  expect(modelMissing.ctaHidden).toBe(false)
+  expect(modelMissing.ctaDisabled).toBe(false)
 
   // Model ready, nothing embedded yet -> warning + an enabled, visible Start Indexing CTA.
   const needsIndex = await evalStatus(true, 10, 0, 10)
@@ -662,7 +664,7 @@ test('refreshWorkflowStatus warns for missing-model + needs-index and marks sync
 // 13. updateActionAvailability — embedded-count + model gates on the action buttons.
 // ---------------------------------------------------------------------------
 
-test('updateActionAvailability gates search on >=1 embedding, duplicates on >=2, and disables all when the model is missing', async ({ page }) => {
+test('updateActionAvailability gates search on >=1 embedding, duplicates on >=2, and keeps indexing open when the model is missing', async ({ page }) => {
   const evalActions = (available: boolean, embedded: number) =>
     page.evaluate((args) => {
       const S = (window as any).SimilarImages
@@ -697,11 +699,12 @@ test('updateActionAvailability gates search on >=1 embedding, duplicates on >=2,
   expect(two.search).toBe(false)
   expect(two.duplicates).toBe(false)
 
-  // Model missing: everything disabled, including Generate Embeddings.
+  // Model missing: search and duplicates wait for CLIP, but building the index
+  // stays available because its first run downloads CLIP with progress.
   const noModel = await evalActions(false, 50)
   expect(noModel.search).toBe(true)
   expect(noModel.duplicates).toBe(true)
-  expect(noModel.embed).toBe(true)
+  expect(noModel.embed).toBe(false)
 })
 
 // ---------------------------------------------------------------------------

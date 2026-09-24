@@ -85,6 +85,14 @@ async function openConsole(page: Page) {
   await expect(page.locator('#sepcon-rows')).toBeVisible()
 }
 
+// The test data has no TIPO weights, so the app first asks before it
+// downloads them; accept that so the request goes out.
+async function runTipoSuggest(page: Page) {
+  await page.locator('#sepcon-tipo-suggest').click()
+  await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+  await page.locator('#confirm-modal #btn-confirm-ok').click()
+}
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('sd-image-sorter-lang', 'en')
@@ -115,7 +123,7 @@ test('proposals render as an unchecked checklist; apply appends checked picks to
   // Pre-seed the landing zone with one of the proposals to prove dedup.
   await page.locator('#dataset-common-tags').fill('blue_sky')
 
-  await page.locator('#sepcon-tipo-suggest').click()
+  await runTipoSuggest(page)
   const panel = page.locator('#sepcon-gaps')
   await expect(panel).toBeVisible()
   await expect(panel).toContainText('TIPO proposes 3 tag(s)')
@@ -166,7 +174,7 @@ test('missing-runtime 400 renders the pip install hint verbatim in the panel', a
   })
 
   await openConsole(page)
-  await page.locator('#sepcon-tipo-suggest').click()
+  await runTipoSuggest(page)
   const panel = page.locator('#sepcon-gaps')
   await expect(panel).toBeVisible()
   await expect(panel).toContainText('pip install llama-cpp-python tipo-kgen')
