@@ -88,6 +88,16 @@ async function showRemoveBackgroundPreview() {
         previewContainer.style.display = 'none';
 
         try {
+            // SAM 3 does the cutout; set it up on first use instead of
+            // failing with "Background removal failed".
+            if (typeof window.ensureFeatureModel === 'function') {
+                const ensured = await window.ensureFeatureModel('sam3', {
+                    label: 'SAM 3',
+                    sizeHint: '~3.3 GB',
+                    confirmBytes: 3.3 * 1024 * 1024 * 1024,
+                });
+                if (!ensured.ok) return;
+            }
             const response = await (window.apiFetch || fetch)('/api/censor/remove-background', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -101,7 +111,8 @@ async function showRemoveBackgroundPreview() {
             const result = await response.json();
 
             if (!response.ok) {
-                throw new Error(result.detail || 'Background removal failed');
+                throw new Error(result.error || result.detail
+                    || censorT('censor.removeBgFailed', null, 'Background removal failed'));
             }
 
             if (result.status === 'no_match') {

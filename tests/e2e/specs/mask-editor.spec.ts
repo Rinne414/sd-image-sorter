@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { markModelsReady } from '../fixtures/model-status'
 
 /**
  * Phase 4 masked-training mask editor: UI wiring pins (backend stubbed).
@@ -6,7 +7,8 @@ import { expect, test, type Page } from '../fixtures/click-ledger'
  *
  *  - the 🎭 entry appears for gallery images only (local ids have no masks);
  *  - open -> paint -> save PUTs a PNG data URL and closes;
- *  - the auto-subject error path surfaces the backend's install hint.
+ *  - the auto-subject error path surfaces the backend's install hint;
+ *  - a Lucida that is not set up yet is offered for download first.
  */
 
 test.describe.configure({ mode: 'serial' })
@@ -110,6 +112,7 @@ test('auto subject surfaces the rembg install hint on 400', async ({ page }) => 
 })
 
 test('Lucida engine selection is explicit and discloses research-only training data', async ({ page }) => {
+  await markModelsReady(page, ['lucida'])
   await seedDatasetQueue(page)
   await page.route('**/api/masks/701', async (route) => {
     await route.fulfill({ status: 404, json: { error: 'no mask' } })
@@ -140,5 +143,38 @@ test('Lucida engine selection is explicit and discloses research-only training d
   await expect(page.locator('#mask-lucida-license')).toContainText('research-only')
   await page.locator('#mask-tool-auto').click()
 
-  expect(autoBody).toEqual({ method: 'lucida' })
+  await expect.poll(() => autoBody).toEqual({ method: 'lucida' })
+})
+
+test('Lucida missing: auto mask offers the download before running', async ({ page }) => {
+  await page.route('**/api/models/status', (route) => route.fulfill({
+    json: {
+      status: 'ok',
+      models: [{ id: 'lucida', name: 'Lucida', status: 'missing', available: false, download_supported: true }],
+      health: {},
+    },
+  }))
+  await page.route('**/api/models/plan**', (route) => route.fulfill({
+    json: { model_id: 'lucida', packages: [], restart_likely: false },
+  }))
+  await seedDatasetQueue(page)
+  await page.route('**/api/masks/701', async (route) => {
+    await route.fulfill({ status: 404, json: { error: 'no mask' } })
+  })
+  let autoCalls = 0
+  await page.route('**/api/masks/701/auto', async (route) => {
+    autoCalls += 1
+    await route.fulfill({ status: 400, json: { error: 'Lucida model files are missing.' } })
+  })
+
+  await page.locator('#btn-dataset-mask-edit').click()
+  await page.locator('#mask-auto-method').selectOption('lucida')
+  await page.locator('#mask-tool-auto').click()
+
+  const message = page.locator('#confirm-message')
+  await expect(message).toBeVisible()
+  await expect(message).toContainText('885 MB')
+  await page.locator('#btn-confirm-cancel').click()
+  await expect(message).toBeHidden()
+  expect(autoCalls).toBe(0)
 })

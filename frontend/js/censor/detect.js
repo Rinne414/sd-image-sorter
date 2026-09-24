@@ -214,14 +214,21 @@ async function resolveQuickAutoCensorExecutionPlan(options = {}) {
             confirmBytes: 0,
         });
         if (!ensured.ok) {
-            return {
-                ok: false,
-                message: censorT(
-                    'censor.nudenetInstallFailed',
-                    null,
-                    'NudeNet could not be installed. Open Setup / Download, or try Detect again.'
-                ),
-            };
+            // Say what actually happened: a pending restart and a declined
+            // download are not install failures.
+            let message = censorT(
+                'censor.nudenetInstallFailed',
+                null,
+                'NudeNet could not be installed. Open Settings & Models › AI Models, or try Detect again.'
+            );
+            if (ensured.needsRestart) {
+                message = censorT('censor.nudenetNeedsRestart', null,
+                    'NudeNet is installed. Restart the app, then detect again.');
+            } else if (ensured.cancelled) {
+                message = censorT('censor.nudenetNotDownloaded', null,
+                    'NudeNet was not downloaded, so detection did not start.');
+            }
+            return { ok: false, message };
         }
         CensorState.backendModelStatus = null;
         await loadCensorModelStatus();

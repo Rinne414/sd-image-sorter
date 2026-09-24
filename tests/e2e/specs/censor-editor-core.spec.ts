@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '../fixtures/click-ledger'
+import { markModelsReady } from '../fixtures/model-status'
 
 /**
  * Censor editor characterization pins — part 1 of 2 (canvas core).
@@ -674,6 +675,7 @@ test('remove-background Apply lands the preview on the canvas with undo support'
   // every click. It now pushes the canvas undo stack and routes through the
   // canonical post-draw sync + queue re-render.
   await stubCensorBackend(page)
+  await markModelsReady(page, ['sam3'])
   await seedCensorQueue(page)
 
   // A solid green preview so the applied result is pixel-verifiable.
@@ -719,4 +721,76 @@ test('remove-background Apply lands the preview on the canvas with undo support'
   // background #d9e2f2 has r=217 while the applied green fill has r=0.
   await page.locator('#btn-undo').click()
   await expect.poll(async () => (await activePixel(page, 4, 4))[0]).toBeGreaterThan(180)
+})
+
+async function openRemoveBackground(page: Page) {
+  await page.locator('.tool-btn-v2[data-tool="remove-bg"]').click()
+  await page.locator('#remove-bg-modal').waitFor({ state: 'attached' })
+  await page.evaluate(() => document.getElementById('remove-bg-preview')!.click())
+}
+
+test('background removal on a machine without SAM 3 offers to download it first', async ({ page }) => {
+  await stubCensorBackend(page)
+  let removeCalls = 0
+  await page.route('**/api/censor/remove-background', async (route) => {
+    removeCalls += 1
+    await route.fulfill({ json: { status: 'ok', preview: WHITE_PNG_DATA_URL } })
+  })
+  await seedCensorQueue(page)
+  await page.route('**/api/models/status', (route) => route.fulfill({
+    json: {
+      status: 'ok',
+      models: [{ id: 'sam3', name: 'SAM 3', status: 'missing', available: false, download_supported: true }],
+      health: {},
+    },
+  }))
+  await page.route('**/api/models/plan**', (route) => route.fulfill({
+    json: { model_id: 'sam3', packages: [], restart_likely: false },
+  }))
+
+  await openRemoveBackground(page)
+  const message = page.locator('#confirm-message')
+  await expect(message).toBeVisible()
+  await expect(message).toContainText('3.3 GB')
+  await expect(message).toContainText('NVIDIA')
+
+  await page.locator('#btn-confirm-cancel').click()
+  await expect(message).toBeHidden()
+  expect(removeCalls).toBe(0)
+})
+
+test('background removal shows the server\'s reason when it cannot run', async ({ page }) => {
+  await stubCensorBackend(page)
+  await markModelsReady(page, ['sam3'])
+  await page.route('**/api/censor/remove-background', async (route) => {
+    await route.fulfill({
+      status: 503,
+      json: { error: 'SAM3 needs an NVIDIA GPU with CUDA.', type: 'HTTPException', status_code: 503 },
+    })
+  })
+  await seedCensorQueue(page)
+
+  await openRemoveBackground(page)
+  await expect.poll(() => page.evaluate(() => document.getElementById('remove-bg-status')?.textContent || ''))
+    .toContain('SAM3 needs an NVIDIA GPU with CUDA.')
+})
+
+test('NudeNet setup that needs a restart or was declined is not reported as a failed install', async ({ page }) => {
+  await stubCensorBackend(page)
+  await seedCensorQueue(page)
+
+  const planMessage = (outcome: Record<string, unknown>) => page.evaluate(async (result) => {
+    const select = document.getElementById('censor-model-type') as HTMLSelectElement
+    select.value = 'nudenet'
+    ;(window as any).ensureFeatureModel = async () => result
+    const plan = await (window as any).resolveQuickAutoCensorExecutionPlan({ silent: true })
+    return String(plan?.message || '')
+  }, outcome)
+
+  const restart = await planMessage({ ok: false, needsRestart: true })
+  expect(restart).toContain('Restart the app')
+  expect(restart).not.toContain('could not be installed')
+
+  const declined = await planMessage({ ok: false, cancelled: true })
+  expect(declined).toContain('not downloaded')
 })

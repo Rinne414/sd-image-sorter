@@ -107,3 +107,39 @@ test('a large download that needs no restart says it is ready once downloaded', 
   await page.locator('#btn-confirm-ok').click()
   expect(await ensured).toMatchObject({ ok: true })
 })
+
+test('a gated model that needs the user to accept its terms opens the setup guide', async ({ page }) => {
+  await page.route('**/api/models/status', (route) => route.fulfill({
+    json: {
+      status: 'ok',
+      models: [{ id: 'cl-tagger-v2', name: 'CL Tagger v2', status: 'missing', available: false, download_supported: true }],
+      health: {},
+    },
+  }))
+  await stubPlan(page, { packages: [], restart_likely: false })
+  await page.route('**/api/models/prepare', (route) => route.fulfill({ json: { status: 'started', model_id: 'cl-tagger-v2' } }))
+  await page.route('**/api/models/download-progress', (route) => route.fulfill({
+    json: {
+      active: false,
+      prepare_result: {
+        active: false,
+        model_id: 'cl-tagger-v2',
+        status: 'error',
+        message: 'This model is gated on Hugging Face.',
+        provider: 'Hugging Face',
+        manual_steps: ['Open the CL Tagger v2 page and accept the model terms.'],
+        external_url: 'https://huggingface.co/cella110n/cl_tagger_v2',
+      },
+    },
+  }))
+  await page.goto('/')
+  await expect.poll(() => page.evaluate(() => typeof (window as any).ensureFeatureModel)).toBe('function')
+
+  const result = await page.evaluate(() => (window as any).ensureFeatureModel('cl-tagger-v2', {
+    label: 'CL Tagger v2', confirmBytes: 0,
+  }))
+  expect(result).toMatchObject({ ok: false, needsAction: true })
+  const guide = page.locator('#model-setup-guide-backdrop')
+  await expect(guide).toBeVisible()
+  await expect(guide).toContainText('accept the model terms')
+})

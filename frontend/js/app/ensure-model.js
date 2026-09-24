@@ -526,6 +526,13 @@ function _finishPrepareResult(result, spec, showToast) {
     const message = result?.message || '';
     if (status === 'error') {
         _hideInstallOverlay();
+        // Steps the user has to take (accept a gated model's terms, sign in)
+        // get the same guide dialog as the model card, not a passing toast.
+        const hasGuidance = Array.isArray(result?.manual_steps) && result.manual_steps.length > 0;
+        if (hasGuidance && typeof showModelSetupGuide === 'function') {
+            showModelSetupGuide(result);
+            return { ok: false, error: message || status, needsAction: true };
+        }
         showToast(message || featureInstallT(
             'featureInstall.failed',
             'Could not install {name}',

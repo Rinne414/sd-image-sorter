@@ -31,6 +31,19 @@
         return method;
     }
 
+    // First use of an engine sets it up (confirm, download, progress) instead
+    // of failing with "model files are missing".
+    const AUTO_MASK_ENGINE_SETUP = {
+        lucida: { modelId: 'lucida', label: 'Lucida', sizeHint: '~885 MB', confirmBytes: 885 * 1024 * 1024 },
+    };
+
+    async function ensureAutoMaskEngine(method) {
+        const spec = AUTO_MASK_ENGINE_SETUP[method];
+        if (!spec || typeof window.ensureFeatureModel !== 'function') return true;
+        const ensured = await window.ensureFeatureModel(spec.modelId, spec);
+        return ensured.ok === true;
+    }
+
     function syncLucidaLicense() {
         const license = document.getElementById('mask-lucida-license');
         if (!license) return;
@@ -292,6 +305,7 @@
                 this._status(String(e.message || e));
                 return;
             }
+            if (!(await ensureAutoMaskEngine(method))) return;
             const button = document.getElementById('mask-tool-auto');
             if (button) button.disabled = true;
             this._status(method === 'lucida'
@@ -336,6 +350,7 @@
                 window.App?.showToast?.(String(e.message || e), 'error');
                 return;
             }
+            if (!(await ensureAutoMaskEngine(method))) return;
             const button = document.getElementById('btn-dataset-mask-auto-all');
             const state = document.getElementById('dataset-mask-state');
             if (button) button.disabled = true;
@@ -357,11 +372,14 @@
                 }
                 const jobId = startBody.job_id || startBody.id;
                 let body = startBody;
-                for (let i = 0; i < 600; i += 1) {
+                // Poll until the job ends: a large set can take far longer
+                // than any fixed number of polls.
+                for (;;) {
                     const polled = await fetch(`/api/bulk-jobs/${jobId}`);
                     body = await polled.json().catch(() => ({}));
                     if (state && body.message) state.textContent = body.message;
                     if (['done', 'error', 'cancelled'].includes(String(body.status || ''))) break;
+                    if (polled.status === 404) break;
                     await new Promise((resolve) => setTimeout(resolve, 400));
                 }
                 if (body.status !== 'done') {
