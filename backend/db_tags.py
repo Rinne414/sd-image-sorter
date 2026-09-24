@@ -160,6 +160,20 @@ def _replace_tag_rows(
             f"DELETE FROM tags WHERE image_id = ? AND (source IN ({placeholders}) OR source IS NULL)",
             (image_id, *PIPELINE_TAG_SOURCES),
         )
+        # A scored pipeline row outranks the flat 1.0 .txt row for the same
+        # tag (one row per tag). If a later run drops the tag, the re-sync at
+        # the end of this function brings the .txt row back.
+        incoming = {str(t.get("tag") or "").lower() for t in tags if t.get("tag")}
+        overlapping_sidecar = [
+            (row[0],)
+            for row in cursor.execute(
+                "SELECT id, tag FROM tags WHERE image_id = ? AND source = 'sidecar'",
+                (image_id,),
+            ).fetchall()
+            if str(row[1]).lower() in incoming
+        ]
+        if overlapping_sidecar:
+            cursor.executemany("DELETE FROM tags WHERE id = ?", overlapping_sidecar)
         surviving = {
             str(row[0]).lower()
             for row in cursor.execute(
@@ -192,6 +206,12 @@ def _replace_tag_rows(
             "INSERT INTO tags (image_id, tag, confidence, source, category) VALUES (?, ?, ?, ?, ?)",
             tag_values,
         )
+    if replace_scope == "pipeline":
+        row = cursor.execute(
+            "SELECT sidecar_caption FROM images WHERE id = ?", (image_id,)
+        ).fetchone()
+        if row is not None and row[0]:
+            sync_sidecar_tags_in_cursor(cursor, image_id, row[0])
 
 
 # The same separators caption_format uses to classify a tag list.
@@ -223,17 +243,30 @@ def sync_sidecar_tags_in_cursor(
     cursor: sqlite3.Cursor,
     image_id: int,
     sidecar_caption: Any,
-    sidecar_caption_format: Optional[str] = None,
 ) -> None:
     """Index a tag-list sidecar into ``tags`` without touching other sources.
 
-    Natural-language / mixed captions are not enumerated. Does not set
+    Natural-language / mixed captions are not enumerated. The format comes
+    from the text itself, the same way ``images.sidecar_caption_format`` is
+    stored, so the index and the stored marker cannot disagree. Does not set
     ``tagged_at`` — a sidecar is not a WD14 run, and untagged-only jobs
-    must still see these images. Runs on every scan upsert, so an unchanged
-    sidecar (or none, with no old sidecar rows) writes nothing.
+    must still see these images.
+
+    A tag another source already holds (manual, tagger, VLM) stays with that
+    source: there is one row per tag, and a tagger row carries a real
+    confidence. Only the rest become sidecar rows, so an unchanged sidecar
+    compares equal on every scan upsert and writes nothing.
     """
-    fmt = sidecar_caption_format or caption_format_for_storage(sidecar_caption)
+    fmt = caption_format_for_storage(sidecar_caption)
     items = split_tag_list_items(sidecar_caption) if fmt == CAPTION_FORMAT_TAGS else []
+    held_elsewhere = {
+        str(row[0]).lower()
+        for row in cursor.execute(
+            "SELECT tag FROM tags WHERE image_id = ? AND (source IS NULL OR source != 'sidecar')",
+            (image_id,),
+        )
+    }
+    wanted = [tag for tag in items if tag.lower() not in held_elsewhere]
     existing = {
         str(row[0])
         for row in cursor.execute(
@@ -241,9 +274,9 @@ def sync_sidecar_tags_in_cursor(
             (image_id,),
         )
     }
-    if set(items) == existing:
+    if set(wanted) == existing:
         return
-    rows = [{"tag": tag, "confidence": 1.0, "source": "sidecar"} for tag in items]
+    rows = [{"tag": tag, "confidence": 1.0, "source": "sidecar"} for tag in wanted]
     _replace_tag_rows(
         cursor,
         image_id,

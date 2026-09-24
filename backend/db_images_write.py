@@ -434,12 +434,7 @@ def _upsert_image_record(
     # Sidecar tag lists live in sidecar_caption, but the gallery index
     # reads the tags table. Index here so scan/reparse stay in one write.
     from db_tags import sync_sidecar_tags_in_cursor
-    sync_sidecar_tags_in_cursor(
-        cursor,
-        image_id,
-        record.get("sidecar_caption"),
-        record.get("sidecar_caption_format"),
-    )
+    sync_sidecar_tags_in_cursor(cursor, image_id, record.get("sidecar_caption"))
     return image_id, write_status
 
 def _mark_image_tagged(
@@ -773,7 +768,7 @@ def update_reparsed_sidecar_caption(image_id: int, sidecar_caption: str) -> None
             (sidecar_caption, stored_format, image_id),
         )
         from db_tags import sync_sidecar_tags_in_cursor
-        sync_sidecar_tags_in_cursor(cursor, image_id, sidecar_caption, stored_format)
+        sync_sidecar_tags_in_cursor(cursor, image_id, sidecar_caption)
     _invalidate_tags_cache()
 
 # --- Split re-exports (2026-07) --------------------------------------------

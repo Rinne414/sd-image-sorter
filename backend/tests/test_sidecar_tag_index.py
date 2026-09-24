@@ -132,3 +132,73 @@ def test_rescan_with_unchanged_sidecar_rewrites_nothing(test_db, tmp_path: Path)
         ).fetchall()
     assert [tuple(row) for row in after] == [tuple(row) for row in before]
     assert {row[1] for row in after} == {"1girl", "smile"}
+
+
+def test_rescan_with_sidecar_overlapping_tagger_rewrites_nothing(test_db, tmp_path: Path):
+    """A .txt tag the tagger already has must not make every rescan rewrite rows."""
+    image_path = _png(tmp_path / "overlap.png")
+    image_id = db.add_image(path=str(image_path), filename=image_path.name)
+    db.add_tags(
+        image_id,
+        [{"tag": "solo", "confidence": 0.9}],
+        default_source="tagger",
+        replace_scope="pipeline",
+    )
+    (tmp_path / "overlap.txt").write_text("1girl, solo, smile", encoding="utf-8")
+    image_manager.scan_folder(str(tmp_path), recursive=False, force_reparse=True)
+    with db.get_db() as conn:
+        before = conn.execute(
+            "SELECT id, tag, source FROM tags WHERE image_id = ? ORDER BY id", (image_id,)
+        ).fetchall()
+
+    image_manager.scan_folder(str(tmp_path), recursive=False, force_reparse=True)
+
+    with db.get_db() as conn:
+        after = conn.execute(
+            "SELECT id, tag, source FROM tags WHERE image_id = ? ORDER BY id", (image_id,)
+        ).fetchall()
+    assert [tuple(row) for row in after] == [tuple(row) for row in before]
+
+
+def test_tagger_retag_keeps_its_own_confidence_for_sidecar_tags(test_db, tmp_path: Path):
+    """The tagger's scored row wins over the flat 1.0 .txt row for the same tag."""
+    image_path = _png(tmp_path / "scored.png")
+    (tmp_path / "scored.txt").write_text("1girl, smile", encoding="utf-8")
+    image_manager.scan_folder(str(tmp_path), recursive=False)
+    image_id = db.get_image_by_path(str(image_path))["id"]
+
+    db.add_tags(
+        image_id,
+        [{"tag": "1girl", "confidence": 0.97}, {"tag": "long_hair", "confidence": 0.6}],
+        default_source="tagger",
+        replace_scope="pipeline",
+    )
+
+    by_tag = {t["tag"]: t for t in db.get_image_tags(image_id)}
+    assert by_tag["1girl"]["source"] == "tagger"
+    assert abs(by_tag["1girl"]["confidence"] - 0.97) < 1e-6
+    assert by_tag["long_hair"]["source"] == "tagger"
+    assert by_tag["smile"]["source"] == "sidecar"
+
+
+def test_sidecar_tag_comes_back_when_the_tagger_drops_it(test_db, tmp_path: Path):
+    image_path = _png(tmp_path / "dropped.png")
+    (tmp_path / "dropped.txt").write_text("1girl, smile", encoding="utf-8")
+    image_manager.scan_folder(str(tmp_path), recursive=False)
+    image_id = db.get_image_by_path(str(image_path))["id"]
+    db.add_tags(
+        image_id,
+        [{"tag": "1girl", "confidence": 0.97}],
+        default_source="tagger",
+        replace_scope="pipeline",
+    )
+
+    db.add_tags(
+        image_id,
+        [{"tag": "long_hair", "confidence": 0.6}],
+        default_source="tagger",
+        replace_scope="pipeline",
+    )
+
+    tags = {t["tag"]: t["source"] for t in db.get_image_tags(image_id)}
+    assert tags == {"1girl": "sidecar", "smile": "sidecar", "long_hair": "tagger"}
