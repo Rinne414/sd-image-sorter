@@ -370,14 +370,17 @@
         menu.appendChild(exportBtn);
 
         // Move gallery selection into a chosen library (when selection exists).
+        // "Select all matching" counts too; its ids are fetched on click.
         const selectedIds = _selectedImageIds();
-        if (selectedIds.length > 0) {
+        const selectedCount = selectedIds.length
+            || Number(typeof window.getSelectedGalleryCount === 'function' ? window.getSelectedGalleryCount() : 0);
+        if (selectedCount > 0) {
             const moveLabel = document.createElement('p');
             moveLabel.className = 'entry-library-menu-note';
             moveLabel.textContent = _t(
                 'library.moveSelectionHint',
                 'Move {count} selected image(s) into…',
-                { count: String(selectedIds.length) },
+                { count: String(selectedCount) },
             );
             menu.appendChild(moveLabel);
             libs.forEach((lib) => {
@@ -392,7 +395,10 @@
                 );
                 moveBtn.addEventListener('click', async () => {
                     closeMenu();
-                    await moveImagesToLibrary(selectedIds, lib.id, lib.name);
+                    const ids = selectedIds.length || typeof window.expandGallerySelectionIds !== 'function'
+                        ? selectedIds
+                        : await window.expandGallerySelectionIds();
+                    await moveImagesToLibrary(ids, lib.id, lib.name);
                 });
                 menu.appendChild(moveBtn);
             });
@@ -424,19 +430,23 @@
         const ids = (imageIds || []).map(Number).filter((n) => n > 0);
         if (!ids.length || !targetLibraryId) return null;
         try {
-            const res = await apiFetch('/api/libraries/move-images', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Accept: 'application/json',
-                },
-                body: JSON.stringify({
-                    image_ids: ids,
-                    target_library_id: targetLibraryId,
-                }),
-            });
-            if (!res.ok) throw new Error('move_failed');
-            const data = await res.json();
+            const data = { moved: 0 };
+            for (let start = 0; start < ids.length; start += LIBRARY_BATCH_SIZE) {
+                const res = await apiFetch('/api/libraries/move-images', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json',
+                    },
+                    body: JSON.stringify({
+                        image_ids: ids.slice(start, start + LIBRARY_BATCH_SIZE),
+                        target_library_id: targetLibraryId,
+                    }),
+                });
+                if (!res.ok) throw new Error('move_failed');
+                const batch = await res.json();
+                data.moved += Number(batch.moved || 0);
+            }
             await refreshFromServer();
             if (typeof window.loadImages === 'function') {
                 try { await window.loadImages(false, { coalesce: true }); } catch (_e) { /* ignore */ }
@@ -463,23 +473,30 @@
         }
     }
 
+    // Requests stay under the endpoint's per-call cap; every path is sent.
+    const LIBRARY_BATCH_SIZE = 2000;
+
     async function claimPaths(paths, targetLibraryId) {
         const list = Array.isArray(paths) ? paths.filter(Boolean) : [];
         if (!list.length) return null;
         try {
-            const res = await apiFetch('/api/libraries/claim-paths', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Accept: 'application/json',
-                },
-                body: JSON.stringify({
-                    paths: list.slice(0, 500),
-                    target_library_id: targetLibraryId || getCurrentLibraryId(),
-                }),
-            });
-            if (!res.ok) throw new Error('claim_failed');
-            const data = await res.json();
+            const data = { moved: 0 };
+            for (let start = 0; start < list.length; start += LIBRARY_BATCH_SIZE) {
+                const res = await apiFetch('/api/libraries/claim-paths', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json',
+                    },
+                    body: JSON.stringify({
+                        paths: list.slice(start, start + LIBRARY_BATCH_SIZE),
+                        target_library_id: targetLibraryId || getCurrentLibraryId(),
+                    }),
+                });
+                if (!res.ok) throw new Error('claim_failed');
+                const batch = await res.json();
+                data.moved += Number(batch.moved || 0);
+            }
             await refreshFromServer();
             if (typeof window.loadImages === 'function') {
                 try { await window.loadImages(false, { coalesce: true }); } catch (_e) { /* ignore */ }

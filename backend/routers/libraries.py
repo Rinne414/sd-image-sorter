@@ -29,7 +29,7 @@ class MoveImagesBody(BaseModel):
 
 
 class ClaimPathsBody(BaseModel):
-    paths: List[str] = Field(default_factory=list, max_length=500)
+    paths: List[str] = Field(default_factory=list, max_length=5000)
     target_library_id: Optional[str] = Field(default=None, max_length=64)
 
 

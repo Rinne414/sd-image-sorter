@@ -285,7 +285,7 @@ function escapeCsvField(value) {
     return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-function buildExportText(exportData, format) {
+function buildExportText(exportData, format, { full = false } = {}) {
     const images = Array.isArray(exportData?.images) ? exportData.images : [];
     let text = '';
 
@@ -348,10 +348,10 @@ function buildExportText(exportData, format) {
     const previewCount = Math.min(totalSelected, previewWindowSize);
     const previewOnly = Boolean(exportData?.has_more) || totalSelected > previewCount;
 
-    if (text.length > EXPORT_PREVIEW_MAX_CHARS) {
+    if (!full && text.length > EXPORT_PREVIEW_MAX_CHARS) {
         text = `${text.slice(0, EXPORT_PREVIEW_MAX_CHARS)}\n\n${appT('export.previewTextTruncated', '[Preview truncated to keep the app responsive]')}`;
     }
-    if (previewOnly) {
+    if (!full && previewOnly) {
         text = `${text}\n\n${appT(
             'export.previewLimited',
             'The preview shows the first {preview} of {total} selected images. For one training .txt per image, use "Same-name .txt".',
@@ -389,7 +389,10 @@ function renderExportModalText(format = null) {
 
 async function showExportModalWithFormat(format = 'prompt') {
     const selectedCount = getSelectedGalleryCount();
-    if (selectedCount === 0) return;
+    if (selectedCount === 0) {
+        offerExportOfFilterResults(() => showExportModalWithFormat(format));
+        return;
+    }
 
     _currentExportModalData = null;
     _currentExportFormat = format;
@@ -433,9 +436,50 @@ function getExportFileExtension(format) {
     return 'txt';
 }
 
-function downloadCurrentExportText() {
-    const text = $('#export-text')?.value || '';
+// The preview stops at EXPORT_PREVIEW_MAX_IMAGES to keep the textarea
+// responsive; the downloaded file pages through the whole selection.
+async function loadFullExportData() {
+    const pageSize = EXPORT_PREVIEW_MAX_IMAGES;
+    const images = [];
+    const token = getActiveSelectionExportToken();
+    if (token) {
+        let offset = 0;
+        for (;;) {
+            const page = await loadSelectionDataByToken(token, { offset, limit: pageSize });
+            images.push(...(Array.isArray(page.images) ? page.images : []));
+            const next = Number(page.next_offset);
+            if (!page.has_more || !Number.isFinite(next) || next <= offset) break;
+            offset = next;
+        }
+    } else {
+        const ids = getSelectedGalleryIds();
+        for (let start = 0; start < ids.length; start += pageSize) {
+            const page = await loadSelectionData(ids.slice(start, start + pageSize));
+            images.push(...(Array.isArray(page.images) ? page.images : []));
+        }
+    }
+    return { images, total: images.length, count: images.length, preview_count: images.length, has_more: false };
+}
+
+function exportPreviewIsPartial() {
+    const data = _currentExportModalData;
+    if (!data) return false;
+    const images = Array.isArray(data.images) ? data.images : [];
+    return Boolean(data.has_more) || Number(data.total || images.length) > images.length;
+}
+
+async function downloadCurrentExportText() {
     const format = $('#export-format')?.value || _currentExportFormat || 'prompt';
+    let text = $('#export-text')?.value || '';
+    if (exportPreviewIsPartial() || text.length > EXPORT_PREVIEW_MAX_CHARS) {
+        showToast(appT('export.preparingFullFile', 'Preparing the full file for every selected image...'), 'info');
+        try {
+            text = buildExportText(await loadFullExportData(), format, { full: true });
+        } catch (e) {
+            showToast(appT('export.errorLoadingData', 'Error loading export data: {message}', { message: e.message }), 'error');
+            return;
+        }
+    }
     const extension = getExportFileExtension(format);
     const filename = `sd-image-sorter-${format}-${new Date().toISOString().slice(0, 10)}.${extension}`;
     const blob = new Blob([text], { type: extension === 'csv' ? 'text/csv;charset=utf-8' : 'text/plain;charset=utf-8' });
@@ -449,10 +493,23 @@ function downloadCurrentExportText() {
 }
 
 
+// With nothing selected, an export offers the current filter results instead
+// of refusing: OK selects all matching images and continues.
+function offerExportOfFilterResults(continueExport) {
+    showConfirm(
+        appT('export.useFilterTitle', 'Export everything the filter shows?'),
+        appT('export.useFilterBody', 'Nothing is selected. Export every image that matches the current Gallery filters instead?'),
+        async () => {
+            await selectAllFilteredResults();
+            if (getSelectedGalleryCount() > 0) continueExport();
+        },
+    );
+}
+
 function showBatchExportModal() {
     const selectedCount = getSelectedGalleryCount();
     if (selectedCount === 0) {
-        showToast(appT('export.selectImagesFirst', 'Please select images first'), 'error');
+        offerExportOfFilterResults(showBatchExportModal);
         return;
     }
 

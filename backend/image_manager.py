@@ -248,6 +248,9 @@ def scan_folder(
         "by_generator": {generator: count}
         }
     """
+    from library_context import get_current_library_id
+
+    scan_library_id = get_current_library_id()
     result: Dict[str, Any] = {
         "total": 0,
         "counted": 0,
@@ -462,9 +465,17 @@ def scan_folder(
             elif status == "updated":
                 run_updated_placeholder_paths.add(normalized)
             elif status == "skipped_other_library":
-                if len(skipped_paths) < 200 and normalized not in skipped_paths:
-                    skipped_paths.append(normalized)
+                _note_skipped_other_library(skipped_paths, normalized)
         pending_records.clear()
+
+    # Every path that belongs to another library is kept, so "move them into
+    # this library" after the scan moves all of them, not the first 200.
+    skipped_seen: set[str] = set()
+
+    def _note_skipped_other_library(skipped_paths: List[str], normalized: str) -> None:
+        if normalized and normalized not in skipped_seen:
+            skipped_seen.add(normalized)
+            skipped_paths.append(normalized)
 
     def _flush_metadata_records(pending_records: List[Dict[str, Any]]) -> None:
         if not pending_records:
@@ -477,9 +488,7 @@ def scan_folder(
         for path, status in (counts.get("statuses") or {}).items():
             if status != "skipped_other_library":
                 continue
-            normalized = normalize_indexed_image_path(path)
-            if len(skipped_paths) < 200 and normalized not in skipped_paths:
-                skipped_paths.append(normalized)
+            _note_skipped_other_library(skipped_paths, normalize_indexed_image_path(path))
         pending_records.clear()
 
     def _flush_deleted_new_paths(paths: List[str]) -> None:
@@ -874,6 +883,15 @@ def scan_folder(
                     try:
                         stat = cached_stat if cached_stat is not None else os.stat(image_path)
                         existing = existing_rows.get(normalize_indexed_image_path(image_path))
+                        if existing and str(existing.get("library_id") or "main") != scan_library_id:
+                            # Indexed under another library: not taken over here,
+                            # but counted and listed so the user can move it in.
+                            result["skipped_other_library"] += 1
+                            _note_skipped_other_library(
+                                result.setdefault("skipped_other_library_paths", []),
+                                normalize_indexed_image_path(image_path),
+                            )
+                            continue
                         # A .txt written or edited after indexing moves neither
                         # the image's mtime nor its size, so without this the
                         # row below is a permanent unchanged hit and its caption
