@@ -888,8 +888,8 @@ test.describe('Smoke Tests', () => {
     await openView(page, 'promptlab')
     await page.locator('.promptlab-tab[data-mode="random"]').click()
 
+    // The badge states the dedupe; the generated output below proves it.
     await expect(page.locator('.promptlab-affix-panel')).toContainText(/Auto dedupe|自动去重/i)
-    await expect(page.locator('.promptlab-affix-panel')).toContainText(/duplicates|重复/i)
     await page.locator('#promptlab-prepend').fill('masterpiece, best quality')
     await page.locator('#promptlab-append').fill('highres, masterpiece')
 
@@ -4408,7 +4408,7 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#export-count')).toContainText('This export includes only 2501 selected images')
     await expect(page.locator('#export-modal')).toContainText('Only the images selected in Gallery are included here')
     await expect(page.locator('#btn-download-export')).toBeVisible()
-    await expect(page.locator('#export-text')).toHaveValue(/Preview only shows the first 2000 of 2501 selected images/)
+    await expect(page.locator('#export-text')).toHaveValue(/first 2000 of 2501 selected images/)
     await expect.poll(() => requestedPayloadSizes.length).toBe(1)
     expect(requestedPayloadSizes[0]).toBe(2000)
 

@@ -233,12 +233,10 @@ Object.assign(window.PromptLab, {
     },
 
     /**
-     * The caption statistic. `sample: 0` with the column present means no
-     * caption has been recorded yet — not that none exists: the sidecars sit
-     * next to the images and a rescan reads them, which is a real remedy that
-     * happens to live outside the database. Printing 0 as the headline average
-     * would state a measurement that was never taken, so the number is withheld
-     * and the note carries the state instead.
+     * The caption statistic. `sample: 0` means no caption has been recorded
+     * yet, not that none exists (a rescan reads the .txt sidecars). Printing 0
+     * as the headline average would state a measurement that was never taken,
+     * so the card stays hidden until there is a real sample.
      */
     _renderCaptionStat(caption) {
         const numberEl = document.getElementById('pl-avg-caption-len');

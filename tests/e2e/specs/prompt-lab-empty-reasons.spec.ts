@@ -219,16 +219,14 @@ test('a reason this build cannot explain says only that, and carries no offer', 
   expect(text).not.toContain('folder of your own generations')
 })
 
-test('an empty caption statistic reads as a rescan away, not as a dead end', async ({ page }) => {
+test('an empty caption statistic stays hidden instead of reading as a measured 0', async ({ page }) => {
   await openPromptLabWith(page, emptyStats())
 
+  // Since 5aa2a55 the quiet Prompt Lab hides a statistic with no sample: a
+  // headline 0 would read as a measurement, not as "none recorded yet".
   const card = page.locator('#pl-avg-caption-len').locator('xpath=ancestor::*[contains(@class,"promptlab-stat-card")][1]')
-  const text = (await card.innerText()).replace(/\s+/g, ' ').trim()
-  expect(text, 'a rescan is a real remedy and must be named').toContain('rescan')
-  expect(text, 'and it must not read as an absence with nothing to do')
-    .not.toMatch(/no sidecar captions exist/i)
-  // 0 as a headline average would read as a measurement, not as "none yet".
-  expect(await page.locator('#pl-avg-caption-len').innerText()).not.toBe('0')
+  await expect(card).toBeHidden()
+  expect(await page.locator('#pl-avg-caption-len').textContent()).not.toBe('0')
 })
 
 test('a recorded caption average reports its own sample size', async ({ page }) => {

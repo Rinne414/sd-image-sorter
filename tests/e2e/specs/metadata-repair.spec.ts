@@ -50,8 +50,12 @@ const backendPythonCandidates = process.platform === 'win32' ? [
 const backendPython = process.env.PW_BACKEND_PYTHON
   || backendPythonCandidates.find((candidate) => commandExists(candidate))
   || backendPythonCandidates[0]
+// These fixtures insert and delete rows directly, so they must only ever touch
+// the isolated e2e database the runner sets up, never data/images.db.
 const runtimeDatabasePath = process.env.SD_IMAGE_SORTER_DB_PATH
-  || path.join(repoRoot, 'data', 'images.db')
+if (!runtimeDatabasePath) {
+  throw new Error('SD_IMAGE_SORTER_DB_PATH is not set; run through tests/e2e/scripts/run-playwright.mjs')
+}
 
 function runBackendScript(script: string): string {
   return execFileSync(backendPython, ['-X', 'utf8', '-c', script], {
@@ -107,6 +111,27 @@ with sqlite3.connect(db_path) as conn:
 print(json.dumps(ids))
 `
   return JSON.parse(runBackendScript(script)) as number[]
+}
+
+/** A real file with no prompt and no caption: text a re-parse can still reach. */
+function insertReachableMissingTextRow(): void {
+  const imagePath = path.join(repoRoot, 'tests', 'e2e', 'fixtures', 'no-metadata-screenshot.png')
+  const script = `
+import sqlite3
+from pathlib import Path
+
+with sqlite3.connect(Path(${JSON.stringify(runtimeDatabasePath)})) as conn:
+    conn.execute(
+        """
+        INSERT INTO images (path, filename, generator, prompt, width, height, file_size,
+                            is_readable, metadata_status, created_at)
+        VALUES (?, 'v350-meta-present.png', 'unknown', NULL, 1440, 900, 1000, 1, 'complete', CURRENT_TIMESTAMP)
+        """,
+        (${JSON.stringify(imagePath)},),
+    )
+    conn.commit()
+`
+  runBackendScript(script)
 }
 
 function readFixtureRows(): Array<{ id: number, prompt: string | null, has_raw: number }> {
@@ -204,8 +229,10 @@ test('reparse job recovers the raw-envelope row and flags the sourceless row', a
 })
 
 test('dataset audit hero shows the re-parse button while prompts are missing', async ({ page }) => {
-  // The previous test recovered one fixture row; the sourceless one still
-  // counts as missing, so the button must be visible.
+  // The sourceless fixture row does not count: the gallery marks a row whose
+  // file is gone as unreadable, and missing_text only counts what a run can
+  // still reach. So add one image that exists on disk but has no text yet.
+  insertReachableMissingTextRow()
   await page.goto('/')
   await page.locator('#btn-open-model-manager').click()
   await expect(page.locator('#model-manager-modal')).toBeVisible()

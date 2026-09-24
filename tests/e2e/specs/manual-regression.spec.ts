@@ -1187,9 +1187,12 @@ test('gallery sidebar selection controls should remain reachable under UI scale'
       const panel = node.querySelector('#selection-actions')
       const scroll = node.querySelector('.filter-sidebar-scroll')
       if (!(panel instanceof HTMLElement) || !(scroll instanceof HTMLElement)) return { visible: false }
+      // The controls must be on screen; the panel's own bottom padding may sit
+      // a pixel or two into the footer, which scrolls at laptop heights (P3-8).
       const rect = panel.getBoundingClientRect()
+      const lastControls = panel.lastElementChild?.getBoundingClientRect() ?? rect
       return {
-        visible: rect.top >= 0 && rect.bottom <= window.innerHeight,
+        visible: rect.top >= 0 && lastControls.bottom <= window.innerHeight,
         canScroll: scroll.scrollHeight > scroll.clientHeight,
       }
     })
