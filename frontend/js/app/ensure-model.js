@@ -92,6 +92,7 @@ function _ensureInstallOverlay() {
         + '<div class="feature-model-install-bar" aria-hidden="true">'
         + '<div class="feature-model-install-fill"></div>'
         + '</div>'
+        + '<button type="button" class="btn btn-ghost btn-small feature-model-install-background" data-action="install-background"></button>'
         + '<div class="feature-model-install-actions" hidden>'
         + '<button type="button" class="btn btn-primary" data-action="restart-and-continue"></button>'
         + '<button type="button" class="btn btn-ghost" data-action="dismiss-install-overlay"></button>'
@@ -102,8 +103,28 @@ function _ensureInstallOverlay() {
     return overlay;
 }
 
+// Set by "Continue in background": progress updates stop reopening the
+// overlay; the result still arrives as a toast (or the restart prompt).
+let _installInBackground = false;
+
 function _setInstallOverlay(label, statusText, percent) {
     const overlay = _ensureInstallOverlay();
+    const backgroundBtn = overlay.querySelector('[data-action="install-background"]');
+    if (backgroundBtn) {
+        backgroundBtn.hidden = false;
+        backgroundBtn.textContent = featureInstallT('featureInstall.runInBackground', 'Continue in background');
+        backgroundBtn.onclick = () => {
+            _installInBackground = true;
+            overlay.hidden = true;
+            const toast = window.App?.showToast || window.showToast;
+            if (typeof toast === 'function') {
+                toast(featureInstallT('featureInstall.backgroundToast',
+                    '{name} keeps installing in the background. You will get a message when it is done.',
+                    { name: label }), 'info');
+            }
+        };
+    }
+    if (_installInBackground) return;
     overlay.hidden = false;
     const titleEl = overlay.querySelector('.feature-model-install-title');
     const statusEl = overlay.querySelector('.feature-model-install-status');
@@ -127,13 +148,19 @@ function _setInstallOverlay(label, statusText, percent) {
 }
 
 function _hideInstallOverlay() {
+    _installInBackground = false;
     const overlay = document.getElementById('feature-model-install-overlay');
     if (overlay) overlay.hidden = true;
 }
 
 function _showInstallRestartPrompt(spec, result) {
     const overlay = _ensureInstallOverlay();
+    // A needed restart is a decision, so it reopens the overlay even after
+    // "Continue in background".
+    _installInBackground = false;
     overlay.hidden = false;
+    const backgroundBtn = overlay.querySelector('[data-action="install-background"]');
+    if (backgroundBtn) backgroundBtn.hidden = true;
     const titleEl = overlay.querySelector('.feature-model-install-title');
     const statusEl = overlay.querySelector('.feature-model-install-status');
     const barEl = overlay.querySelector('.feature-model-install-bar');
@@ -256,8 +283,17 @@ function _formatProgressStatus(label, progress) {
     };
 }
 
+function _formatElapsed(ms) {
+    const seconds = Math.max(0, Math.round(ms / 1000));
+    const minutes = Math.floor(seconds / 60);
+    return minutes > 0
+        ? featureInstallT('featureInstall.elapsedMinutes', '{m} min {s} s', { m: minutes, s: seconds % 60 })
+        : featureInstallT('featureInstall.elapsedSeconds', '{s} s', { s: seconds });
+}
+
 async function _pollPrepareUntilSettled(modelId, label) {
     const api = window.App?.API || window.API;
+    const startedAt = Date.now();
     let lastSignature = null;
     let lastProgressAt = Date.now();
     let stallWarned = false;
@@ -277,6 +313,9 @@ async function _pollPrepareUntilSettled(modelId, label) {
             continue;
         }
 
+        // Only a byte download can stall visibly. Package installs and
+        // downloads that report no bytes show the elapsed time instead of a
+        // false "stalled" warning.
         const signature = payload?.active
             ? `${payload.filename || ''}:${payload.downloaded || 0}`
             : null;
@@ -284,7 +323,7 @@ async function _pollPrepareUntilSettled(modelId, label) {
             lastSignature = signature;
             lastProgressAt = Date.now();
             stallWarned = false;
-        } else if (!stallWarned && Date.now() - lastProgressAt > FEATURE_INSTALL_STALL_MS) {
+        } else if (signature !== null && !stallWarned && Date.now() - lastProgressAt > FEATURE_INSTALL_STALL_MS) {
             stallWarned = true;
             const toast = window.App?.showToast || window.showToast;
             if (typeof toast === 'function') {
@@ -296,7 +335,13 @@ async function _pollPrepareUntilSettled(modelId, label) {
         }
 
         const formatted = _formatProgressStatus(label, payload);
-        _setInstallOverlay(label, formatted.text, formatted.percent);
+        const statusText = payload?.active
+            ? formatted.text
+            : featureInstallT('featureInstall.stillWorking', '{status} ({elapsed} so far)', {
+                status: formatted.text,
+                elapsed: _formatElapsed(Date.now() - startedAt),
+            });
+        _setInstallOverlay(label, statusText, formatted.percent);
 
         const result = payload?.prepare_result;
         if (result && result.active === false && result.model_id === modelId && result.status) {
@@ -381,6 +426,7 @@ async function ensureFeatureModel(modelId, options = {}) {
         }
     }
 
+    _installInBackground = false;
     _setInstallOverlay(
         label,
         featureInstallT('featureInstall.progressUnknown', 'Installing {name}…', { name: label }),
@@ -469,9 +515,14 @@ function _finishPrepareResult(result, spec, showToast) {
         );
         return { ok: false, needsRestart: true };
     }
+    const finishedInBackground = _installInBackground;
     _hideInstallOverlay();
     if (status === 'done' || status === 'ok' || status === 'warning') {
-        if (message) showToast(message, status === 'warning' ? 'warning' : 'success');
+        if (finishedInBackground) {
+            showToast(featureInstallT('featureInstall.readyToast', '{name} is installed.', { name: label }), 'success');
+        } else if (message) {
+            showToast(message, status === 'warning' ? 'warning' : 'success');
+        }
         return { ok: true, status };
     }
     showToast(message || featureInstallT(

@@ -2912,6 +2912,10 @@ body::before {
         display: none;
     }
 
+    .feature-model-install-background {
+        margin-top: 14px;
+    }
+
     .guide-backdrop {
         position: absolute;
         inset: 0;

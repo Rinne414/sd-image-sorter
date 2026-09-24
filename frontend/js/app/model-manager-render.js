@@ -271,9 +271,10 @@ function renderModelManager(models = []) {
                         lastProgressSignature = progressSignature;
                         lastProgressAt = Date.now();
                         stallWarned = false;
-                    } else if (!stallWarned && Date.now() - lastProgressAt > STALL_WARNING_MS) {
-                        // Informational only — keep polling; large downloads can
-                        // pause on slow mirrors and resume on their own.
+                    } else if (progressSignature !== null && !stallWarned && Date.now() - lastProgressAt > STALL_WARNING_MS) {
+                        // Only a byte download can visibly stall; package installs
+                        // report no bytes. Informational only — keep polling; large
+                        // downloads can pause on slow mirrors and resume on their own.
                         stallWarned = true;
                         showToast(appT('models.downloadStalled', 'Download may have stalled. Check your network connection and try again.'), 'warning');
                     }
