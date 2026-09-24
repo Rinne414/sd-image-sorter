@@ -190,8 +190,28 @@ def delete_library(library_id: str) -> Dict[str, Any]:
             )
         except Exception:
             pass
+        # Collections and Dataset Maker projects belong to one library
+        # (migrations 045/046); left behind they would be rows no screen can
+        # reach. Project items, local sources and revisions cascade.
+        conn.execute(
+            "DELETE FROM collection_items WHERE collection_id IN "
+            "(SELECT id FROM collections WHERE library_id = ?)",
+            (lid,),
+        )
+        removed_collections = conn.execute(
+            "DELETE FROM collections WHERE library_id = ?", (lid,)
+        ).rowcount
+        removed_projects = conn.execute(
+            "DELETE FROM dataset_projects WHERE library_id = ?", (lid,)
+        ).rowcount
         conn.execute("DELETE FROM libraries WHERE id = ?", (lid,))
-    return {"id": lid, "removed_images": removed, "name": lib["name"]}
+    return {
+        "id": lid,
+        "removed_images": removed,
+        "removed_collections": int(removed_collections or 0),
+        "removed_dataset_projects": int(removed_projects or 0),
+        "name": lib["name"],
+    }
 
 
 def move_images_to_library(

@@ -30,6 +30,15 @@ function readScanIdentity(payload) {
     return Object.freeze({ runId, source });
 }
 
+// The top-level progress field is a 200-path preview; result.* holds every
+// path, and "Move N into this library" must move all N.
+function scanSkippedOtherLibraryPaths(progress) {
+    const full = progress?.result?.skipped_other_library_paths;
+    if (Array.isArray(full)) return full;
+    const preview = progress?.skipped_other_library_paths;
+    return Array.isArray(preview) ? preview : [];
+}
+
 function scanIdentitiesMatch(left, right) {
     return Boolean(
         left
@@ -269,11 +278,7 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
             ?? progress.result?.skipped_other_library
             ?? 0,
         );
-        const _scanSkippedPaths = Array.isArray(progress.skipped_other_library_paths)
-            ? progress.skipped_other_library_paths
-            : (Array.isArray(progress.result?.skipped_other_library_paths)
-                ? progress.result.skipped_other_library_paths
-                : []);
+        const _scanSkippedPaths = scanSkippedOtherLibraryPaths(progress);
         const _scanAutoTagOn = !!document.getElementById('scan-auto-tag')?.checked;
         if (_scanSkippedOther > 0) {
             showToast(

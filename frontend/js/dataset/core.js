@@ -188,10 +188,20 @@
         },
 
         // ---- Session persistence ----
+        // The unsaved draft belongs to the library it was started in. The owner
+        // is captured, not read at save time: a library switch stores the new
+        // id before its event runs, and a pending save would otherwise write
+        // this library's queue into the next library's draft slot.
+        _draftOwnerLibraryId() {
+            if (!this._draftLibraryId) {
+                this._draftLibraryId = window.LibraryWorkspace?.getCurrentLibraryId?.() || 'main';
+            }
+            return this._draftLibraryId;
+        },
+
         _datasetSessionKey(project) {
             if (project === null) {
-                const lid = window.LibraryWorkspace?.getCurrentLibraryId?.() || 'main';
-                return `${DATASET_DRAFT_SESSION_KEY}:${lid}`;
+                return `${DATASET_DRAFT_SESSION_KEY}:${this._draftOwnerLibraryId()}`;
             }
             const projectId = Number(project?.id);
             const revision = Number(project?.revision);

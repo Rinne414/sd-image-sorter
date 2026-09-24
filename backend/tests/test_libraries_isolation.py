@@ -107,6 +107,70 @@ def test_delete_library_protects_main_and_removes_images(test_db):
         assert conn.execute("SELECT 1 FROM images WHERE id = ?", (img,)).fetchone() is None
 
 
+def test_delete_library_removes_its_collections_and_dataset_projects(test_db):
+    libdb.ensure_default_library()
+    other = libdb.create_library("Doomed pack")
+    other_id = other["id"]
+    main_image = _insert_image("/tmp/lib-del-keep-main.png", MAIN_LIBRARY_ID)
+    other_image = _insert_image("/tmp/lib-del-other-owned.png", other_id)
+
+    token = _with_library(MAIN_LIBRARY_ID)
+    try:
+        kept_collection = db.create_collection("Main keeps this")
+        db.set_collection_membership(kept_collection["id"], main_image, True)
+        kept_project = db.create_dataset_project_record(
+            "Main keeps",
+            "main keeps",
+            [{"item_type": "library", "image_id": int(main_image)}],
+            "{}",
+        )
+    finally:
+        reset_current_library_id(token)
+
+    token = _with_library(other_id)
+    try:
+        doomed_collection = db.create_collection("Only in B")
+        db.set_collection_membership(doomed_collection["id"], other_image, True)
+        db.set_favorite(other_image, True)
+        doomed_project = db.create_dataset_project_record(
+            "Only in B",
+            "only in b",
+            [{"item_type": "library", "image_id": int(other_image)}],
+            "{}",
+        )
+    finally:
+        reset_current_library_id(token)
+
+    libdb.delete_library(other_id)
+
+    with db.get_db() as conn:
+        leftover_collections = conn.execute(
+            "SELECT COUNT(*) FROM collections WHERE library_id = ?", (other_id,)
+        ).fetchone()[0]
+        leftover_projects = conn.execute(
+            "SELECT COUNT(*) FROM dataset_projects WHERE library_id = ?", (other_id,)
+        ).fetchone()[0]
+        leftover_items = conn.execute(
+            "SELECT COUNT(*) FROM collection_items WHERE collection_id = ?",
+            (doomed_collection["id"],),
+        ).fetchone()[0]
+        project_items = conn.execute(
+            "SELECT COUNT(*) FROM dataset_project_items WHERE project_id = ?",
+            (doomed_project["id"],),
+        ).fetchone()[0]
+    assert leftover_collections == 0
+    assert leftover_projects == 0
+    assert leftover_items == 0
+    assert project_items == 0
+
+    token = _with_library(MAIN_LIBRARY_ID)
+    try:
+        assert "Main keeps this" in {row["name"] for row in db.list_collections()}
+        assert db.get_dataset_project_record(kept_project["id"])["name"] == "Main keeps"
+    finally:
+        reset_current_library_id(token)
+
+
 def test_list_query_does_not_cross_libraries(test_db):
     libdb.ensure_default_library()
     other = libdb.create_library("Isolated")

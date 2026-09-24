@@ -639,7 +639,7 @@
         const ok = window.confirm(
             _t(
                 'library.deleteConfirm',
-                'Delete library “{name}”? Indexed images in this library are removed. Files on disk are kept. Other libraries are not affected.',
+                'Delete library “{name}”? Its indexed images, collections and dataset projects are removed. Files on disk are kept. Other libraries are not affected.',
                 { name: name || id },
             ),
         );

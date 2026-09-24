@@ -42,6 +42,21 @@ test('claiming and moving send every image in batches', async ({ page }) => {
   expect(result).toEqual({ claimed: 4500, moved: 4500 })
 })
 
+test('the post-scan move offer takes every other-library path, not the 200 preview', async ({ page }) => {
+  await page.goto('/')
+  const picked = await page.evaluate(() => {
+    const preview = Array.from({ length: 200 }, (_, index) => `C:/set/img-${index}.png`)
+    const full = Array.from({ length: 250 }, (_, index) => `C:/set/img-${index}.png`)
+    const pick = (window as any).scanSkippedOtherLibraryPaths
+    return {
+      withResult: pick({ skipped_other_library_paths: preview, result: { skipped_other_library_paths: full } }).length,
+      previewOnly: pick({ skipped_other_library_paths: preview }).length,
+      neither: pick({}).length,
+    }
+  })
+  expect(picked).toEqual({ withResult: 250, previewOnly: 200, neither: 0 })
+})
+
 test('the prompt export download has every selected image, not only the preview', async ({ page }) => {
   await page.route('**/api/images/export-data', async (route) => {
     const body = route.request().postDataJSON() as { image_ids: number[] }

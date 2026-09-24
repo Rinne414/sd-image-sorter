@@ -1216,20 +1216,34 @@
             void this._refreshProjectLists().catch((error) => {
                 window.Logger?.error?.('dataset_project_list_failed', { error: String(error) });
             });
+            // One switch at a time: a second switch must not flush while the
+            // first is still swapping the queue, or it would save the old
+            // library's queue under the new library's draft key.
+            this._libraryChangeChain = Promise.resolve();
             window.addEventListener('library-workspace-changed', () => {
-                void this._onLibraryWorkspaceChanged();
+                this._libraryChangeChain = this._libraryChangeChain
+                    .then(() => this._onLibraryWorkspaceChanged())
+                    .catch((error) => {
+                        window.Logger?.error?.('dataset_library_switch_failed', { error: String(error) });
+                    });
             });
         },
 
         async _onLibraryWorkspaceChanged() {
             const activeId = this._activeProject ? Number(this._activeProject.id) : null;
-            // Keep unsaved caption edits in the open project's own browser
-            // draft before its queue can be replaced below.
-            if (activeId) this._flushProjectDraftPersistence();
+            // Save pending edits where they were made (the open project's
+            // draft, or the unsaved draft's own library) before the queue can
+            // be replaced below.
+            this._flushProjectDraftPersistence();
+            const nextLibraryId = window.LibraryWorkspace?.getCurrentLibraryId?.() || 'main';
+            const draftMoved = this._draftOwnerLibraryId() !== nextLibraryId;
             await this._refreshProjectLists();
             const stillHere = [...(this._projects || []), ...(this._archivedProjects || [])]
                 .some((project) => Number(project.id) === activeId);
-            if (activeId && !stillHere) {
+            // The owner moves only now, right before the queue is swapped: a
+            // save while the lists load still belongs to the old library.
+            this._draftLibraryId = nextLibraryId;
+            if (activeId ? !stillHere : draftMoved) {
                 await this._replaceQueueWithUnsavedDraft();
             }
         },

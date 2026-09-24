@@ -324,7 +324,7 @@ window.I18nLang_zhCN = {
     'library.createdToast': '已创建图库「{name}」',
     'library.createFailed': '无法创建图库',
     'library.deleteTitle': '删除图库',
-    'library.deleteConfirm': '删除图库「{name}」？该图库中的索引图片会移除，磁盘文件保留，其他图库不受影响。',
+    'library.deleteConfirm': '删除图库「{name}」？它的索引图片、合集和数据集项目会一起移除。磁盘文件保留，其他图库不受影响。',
     'library.deletedToast': '已删除图库「{name}」',
     'library.deleteFailed': '无法删除图库',
     'library.cannotDeleteMain': '主图库不能删除，请改用「清空当前图库」。',

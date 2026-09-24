@@ -112,8 +112,10 @@ def ensure_favorites_collection() -> Dict[str, Any]:
     lib_sql, lib_params = _library_clause()
     with get_db() as conn:
         cursor = conn.cursor()
+        # OR IGNORE: two first requests in a new library can both miss the
+        # check above; the loser reads the winner's row instead of a 500.
         cursor.execute(
-            "INSERT INTO collections (slug, name, folder_path, library_id) VALUES (?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO collections (slug, name, folder_path, library_id) VALUES (?, ?, ?, ?)",
             (
                 FAVORITES_COLLECTION_SLUG,
                 FAVORITES_COLLECTION_NAME,

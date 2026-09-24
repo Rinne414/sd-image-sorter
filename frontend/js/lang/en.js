@@ -322,7 +322,7 @@ window.I18nLang_en = {
     'library.createdToast': 'Library “{name}” created',
     'library.createFailed': 'Could not create library',
     'library.deleteTitle': 'Delete library',
-    'library.deleteConfirm': 'Delete library “{name}”? Indexed images in this library are removed. Files on disk are kept. Other libraries are not affected.',
+    'library.deleteConfirm': 'Delete library “{name}”? Its indexed images, collections and dataset projects are removed. Files on disk are kept. Other libraries are not affected.',
     'library.deletedToast': 'Library “{name}” deleted',
     'library.deleteFailed': 'Could not delete library',
     'library.cannotDeleteMain': 'The main library cannot be deleted. Clear it instead.',
