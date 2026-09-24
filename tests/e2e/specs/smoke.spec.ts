@@ -4110,6 +4110,9 @@ test.describe('Smoke Tests', () => {
     await expect.poll(() => removePayloads.length).toBe(1)
     expect(removePayloads[0]).toMatchObject({ image_ids: [301] })
     expect(deletePayloads).toHaveLength(0)
+    // The finished removal clears the selection asynchronously; clicking before
+    // that lands would toggle 301 off again instead of selecting it.
+    await expect.poll(() => page.evaluate(() => (window as any).App.AppState.selectedIds.size)).toBe(0)
 
     await page.locator('#gallery-grid .gallery-item[data-id="301"]').click()
     await page.keyboard.press('Delete')
@@ -4120,6 +4123,7 @@ test.describe('Smoke Tests', () => {
     await expect.poll(() => removePayloads.length).toBe(2)
     expect(removePayloads[1]).toMatchObject({ image_ids: [301] })
     expect(deletePayloads).toHaveLength(0)
+    await expect.poll(() => page.evaluate(() => (window as any).App.AppState.selectedIds.size)).toBe(0)
 
     await page.locator('#gallery-grid .gallery-item[data-id="301"]').click()
     await openSelectionPanelSection(page, 'Remove')

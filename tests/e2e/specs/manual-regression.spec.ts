@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process'
 
 import { expect, test, type APIRequestContext, type Locator, type Page } from '../fixtures/click-ledger'
 import { observeManualScanTerminal } from '../fixtures/scan-terminal-observer'
+import { markModelsReady } from '../fixtures/model-status'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -1595,6 +1596,9 @@ test('artist identify selected should work on a real image', async ({ page, requ
   }
   const { image, artist } = identifiable!
 
+  // The backend identifies through the e2e fake Kaloscope; the card still
+  // reads "not installed", which would stop the UI at the first-use download.
+  await markModelsReady(page, ['artist'])
   await openMainPage(page)
 
   await setGallerySearch(page, image.filename)
