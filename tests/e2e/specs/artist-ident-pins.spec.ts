@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { markModelsReady } from '../fixtures/model-status'
 
 /**
  * Characterization pins for the artist-ident.js god-file (1,171 lines) — "step 0" of a
@@ -89,6 +90,9 @@ async function initArtistView(page: Page): Promise<void> {
 }
 
 test.beforeEach(async ({ page }) => {
+  // Identify runs first make sure Kaloscope is installed; these pins stub the
+  // identify endpoints, so the test server must not start a 2.8 GB download.
+  await markModelsReady(page, ['artist'])
   await gotoArtist(page)
 })
 
@@ -700,8 +704,10 @@ test('loadDiagnostics renders a plain ready banner when available and a warning 
   expect(needsSetup.warning).toBe(true)
   expect(needsSetup.setupBtn).toBe(true)
   expect(needsSetup.hasDetails).toBe(true)
-  // refreshAvailabilityState (called at the end of loadDiagnostics) gates the run button.
-  expect(needsSetup.identifyAllDisabled).toBe(true)
+  // Identify All stays usable while setup is missing: its first run installs
+  // Kaloscope with a confirm and progress (ensureFeatureModel), so the banner
+  // informs instead of locking the button.
+  expect(needsSetup.identifyAllDisabled).toBe(false)
 })
 
 // ---------------------------------------------------------------------------
@@ -733,7 +739,8 @@ test('run and clear buttons are gated on availability, in-flight state, and gall
       return { disabled: button.disabled, ariaDisabled: button.getAttribute('aria-disabled') }
     }
 
-    // Unavailable runtime -> Identify All disabled regardless of selection.
+    // Unavailable runtime -> Identify All stays usable: its first run installs
+    // Kaloscope (ensureFeatureModel) instead of the button locking the user out.
     A.isIdentifying = false
     A.diagnostics = { available: false }
     A.refreshAvailabilityState()
@@ -780,7 +787,7 @@ test('run and clear buttons are gated on availability, in-flight state, and gall
     }
   })
 
-  expect(probe.unavailableAll).toBe(true)
+  expect(probe.unavailableAll).toBe(false)
   expect(probe.availableAll).toBe(false)
   expect(probe.availableSelWithPick).toBe(false)
   expect(probe.availableSelNoPick).toBe(true)
@@ -853,7 +860,7 @@ test('run and clear buttons are gated on availability, in-flight state, and gall
 //     plus the empty-library and unavailable-runtime early returns.
 // ---------------------------------------------------------------------------
 
-test('identifyAll collects image ids, posts the identify-batch payload, polls to completion + refetches stats, and short-circuits on empty library / unavailable runtime', async ({ page }) => {
+test('identifyAll collects image ids, posts the identify-batch payload, polls to completion + refetches stats, and short-circuits on empty library / declined model setup', async ({ page }) => {
   let imagesResponse: Record<string, unknown> = { images: [{ id: 1, filename: 'x1.png' }, { id: 2, filename: 'x2.png' }], has_more: false }
   let imagesCalls = 0
   let batchBody: Record<string, unknown> | null = null
@@ -936,19 +943,27 @@ test('identifyAll collects image ids, posts the identify-batch payload, polls to
   expect(batchCalls).toBe(1) // no new POST
   expect(emptyToast.level).toBe('warning')
 
-  // --- Unavailable runtime: short-circuits before touching /api/images. ---
+  // --- Model setup declined: short-circuits before touching /api/images. ---
+  // Setup itself (confirm, progress, messages) belongs to ensureFeatureModel;
+  // when the user says no there, Identify All stops without a request.
   const imagesBefore = imagesCalls
-  const unavailableToast = await page.evaluate(async () => {
+  const declinedToast = await page.evaluate(async () => {
     const A = (window as any).ArtistIdent
+    const w = window as any
+    const realEnsure = w.ensureFeatureModel
+    w.ensureFeatureModel = async () => ({ ok: false })
     A.isIdentifying = false
-    A.diagnostics = { available: false }
     ;(window as any).__artistToasts = []
-    await A.identifyAll()
-    return (window as any).__artistToasts.slice(-1)[0]
+    try {
+      await A.identifyAll()
+    } finally {
+      w.ensureFeatureModel = realEnsure
+    }
+    return (window as any).__artistToasts.slice(-1)[0] ?? null
   })
   expect(imagesCalls).toBe(imagesBefore) // never collected images
   expect(batchCalls).toBe(1)             // never posted
-  expect(unavailableToast.level).toBe('warning')
+  expect(declinedToast).toBeNull()
 })
 
 test('existing batch handoff reaches terminal state and restores controls for all and selected starts', async ({ page }) => {

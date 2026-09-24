@@ -14,16 +14,22 @@ export async function markModelsReady(
   { extraVariants = [] }: { extraVariants?: string[] } = {},
 ): Promise<void> {
   await page.route('**/api/models/status', async (route) => {
-    const response = await route.fetch()
-    const body = await response.json()
-    for (const card of body?.models ?? []) {
-      if (!modelIds.includes(card?.id)) continue
-      const variants: string[] = Array.isArray(card.variants) ? card.variants : []
-      const installed: string[] = Array.isArray(card.installed_variants) ? card.installed_variants : []
-      card.status = 'ready'
-      card.available = true
-      card.installed_variants = Array.from(new Set([...installed, ...variants, ...extraVariants]))
+    try {
+      const response = await route.fetch()
+      const body = await response.json()
+      for (const card of body?.models ?? []) {
+        if (!modelIds.includes(card?.id)) continue
+        const variants: string[] = Array.isArray(card.variants) ? card.variants : []
+        const installed: string[] = Array.isArray(card.installed_variants) ? card.installed_variants : []
+        card.status = 'ready'
+        card.available = true
+        card.installed_variants = Array.from(new Set([...installed, ...variants, ...extraVariants]))
+      }
+      await route.fulfill({ response, json: body })
+    } catch (error) {
+      // The test ended while this status request was still in flight.
+      if (page.isClosed() || /disposed|closed/i.test(String(error))) return
+      throw error
     }
-    await route.fulfill({ response, json: body })
   })
 }

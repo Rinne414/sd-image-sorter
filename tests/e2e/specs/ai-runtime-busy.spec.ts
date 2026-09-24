@@ -85,8 +85,13 @@ test('an idle runtime shows no badge at all', async ({ page }) => {
 test('a running job names itself and how long it has been going', async ({ page }) => {
   await openWith(page, busy([WD14_JOB]))
   await expect(page.locator(badge)).toBeVisible()
+  // The chip stays 42px wide (e75e7cc): it shows the elapsed time, and the
+  // tooltip / accessible name carry which job it is.
   const label = await page.locator('#nav-ai-busy-label').innerText()
-  expect(label, 'the label carries the job and its elapsed time').toMatch(/WD14 tagging.*12s/)
+  expect(label, 'the chip shows the elapsed time').toMatch(/12s/)
+  const title = await page.locator(badge).getAttribute('title')
+  expect(title, 'the tooltip names the job and its elapsed time').toMatch(/WD14 tagging.*12s/)
+  await expect(page.locator(badge)).toHaveAttribute('aria-label', /WD14 tagging/)
 
   // And it leaves again once the runtime frees up, rather than sticking.
   await setSnapshot(page, IDLE)
@@ -100,19 +105,21 @@ test('two jobs report the longest-running one and say how many there are', async
   ]))
   await expect(page.locator(badge)).toBeVisible()
   const label = await page.locator('#nav-ai-busy-label').innerText()
-  expect(label).toMatch(/WD14 tagging/)
-  expect(label, 'the second job is counted, not hidden').toMatch(/\+1|2/)
+  expect(label, 'the chip times the longest-running job').toMatch(/12s/)
 
   const title = await page.locator(badge).getAttribute('title')
-  expect(title, 'the tooltip lists every holder').toContain('Aesthetic scoring')
+  expect(title, 'the tooltip leads with the longest-running job').toMatch(/WD14 tagging[\s\S]*Aesthetic scoring/)
+  expect(title, 'the second job is listed, not hidden').toContain('Aesthetic scoring')
 })
 
 test('a lease the app itself calls abnormal is not reported as ordinary work', async ({ page }) => {
   await openWith(page, busy([{ ...WD14_JOB, elapsed_seconds: 1200, stuck: true }]))
   await expect(page.locator(badge)).toBeVisible()
   const label = await page.locator('#nav-ai-busy-label').innerText()
-  expect(label, 'a stuck lease reads differently from a busy one').toMatch(/stuck|not responding/i)
+  expect(label, 'a stuck lease shows a warning mark instead of a timer').toBe('!')
   await expect(page.locator(badge)).toHaveClass(/is-stuck/)
+  const title = await page.locator(badge).getAttribute('title')
+  expect(title, 'a stuck lease reads differently from a busy one').toMatch(/stuck/i)
 })
 
 /** Make one real API call that the backend refuses, and return the sentence the

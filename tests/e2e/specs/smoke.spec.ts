@@ -5682,6 +5682,7 @@ test.describe('Smoke Tests', () => {
   })
 
   test('artist identification should send the selected model source and local path', async ({ page }) => {
+    await markModelsReady(page, ['artist'])
     let identifyPayload: any = null
 
     await page.addInitScript(() => {
