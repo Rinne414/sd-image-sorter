@@ -58,19 +58,11 @@
         }
         list.innerHTML = `<span class="dataset-export-preview-empty">${DM._t?.('dataset.exportPreviewLoading', 'Refreshing preview...') || 'Refreshing preview...'}</span>`;
 
-        const captionVersionsPending = Boolean(
-            DM._activeProject
-            && typeof DM._annotationHeadsReadyForProject === 'function'
-            && !DM._annotationHeadsReadyForProject(DM._activeProject)
-            && (DM._annotationHeadsStatus === 'loading' || DM._annotationHeadsStatus === 'idle')
-        );
-        if (captionVersionsPending) {
-            const pending = DM._annotationHeadsReady;
-            if (pending && typeof pending.then === 'function') {
-                pending.finally(() => {
-                    if (requestSeq === previewRequestSeq) refreshExportPreview();
-                });
-            }
+        // Saved caption versions change what the preview shows. While they
+        // load, wait: the loader refreshes this preview itself when it ends.
+        // Chaining onto its promise instead looped forever once that promise
+        // had already settled.
+        if (DM._activeProject && DM._annotationHeadsStatus === 'loading') {
             return;
         }
 
