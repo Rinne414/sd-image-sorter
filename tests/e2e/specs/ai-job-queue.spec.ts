@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures/click-ledger'
+import { markModelsReady } from '../fixtures/model-status'
 
 /**
  * v3.4.1 AI job queue (Debt-16 / TODO #19): starting an AI tagging job while
@@ -12,6 +13,7 @@ import { test, expect } from '../fixtures/click-ledger'
 
 test.describe('AI job queue', () => {
   test('queued gallery tag start shows queued toast and queued progress text', async ({ page }) => {
+    await markModelsReady(page)
     // Stateful mock: before the user clicks Start, /api/tag/progress must
     // report an empty queue — otherwise the page-load resume path
     // (resumeTaggingProgress) correctly adopts the queued entry as its own

@@ -1,6 +1,7 @@
 import os from 'os'
 import path from 'path'
 import { test, expect, type Page, type Route } from '../fixtures/click-ledger'
+import { markModelsReady } from '../fixtures/model-status'
 
 // Destination path used by auto-separate mocked tests. Overridable via env so
 // runners on any platform can avoid writing to the author's absolute L:\ path.
@@ -1723,6 +1724,7 @@ test.describe('Smoke Tests', () => {
   })
 
   test('should start Max Quality directly under automatic GPU safety limits', async ({ page }) => {
+    await markModelsReady(page)
     let capturedPayload: Record<string, unknown> | null = null
 
     await page.route('**/api/system-info', async (route) => {
@@ -1900,6 +1902,7 @@ test.describe('Smoke Tests', () => {
   })
 
   test('should keep tagger progress available in the background with stop and details', async ({ page }) => {
+    await markModelsReady(page)
     let started = false
     let cancelRequested = 0
     let cancelProgressPolls = 0
@@ -2018,6 +2021,7 @@ test.describe('Smoke Tests', () => {
   })
 
   test('tag progress monitoring survives a temporary backend disconnect without presenting a false idle state', async ({ page }) => {
+    await markModelsReady(page)
     let started = false
     let startRequests = 0
     let progressPollsAfterStart = 0
@@ -2200,6 +2204,7 @@ test.describe('Smoke Tests', () => {
   })
 
   test('queued tag cancellation should stop polling and restore the Start action', async ({ page }) => {
+    await markModelsReady(page)
     const probe = await mockQueuedGalleryTagCancellation(page, {
       status: 'idle',
       message: 'No tagging task is running',
@@ -2252,6 +2257,7 @@ test.describe('Smoke Tests', () => {
   })
 
   test('malformed queued tag cancellation data should fail explicitly', async ({ page }) => {
+    await markModelsReady(page)
     const probe = await mockQueuedGalleryTagCancellation(page, {
       status: 'idle',
       message: 'No tagging task is running',
@@ -2928,6 +2934,7 @@ test.describe('Smoke Tests', () => {
   })
 
   test('dataset Smart Tag should submit existing-caption and VLM grounding options', async ({ page }) => {
+    await markModelsReady(page)
     await mockGalleryImages(page, [{ id: 711, filename: 'smart-tag-payload.png' }])
     await mockTaggerCatalog(page)
     await page.route('**/api/vlm/settings', async (route) => {

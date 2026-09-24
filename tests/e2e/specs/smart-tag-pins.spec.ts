@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { markModelsReady } from '../fixtures/model-status'
 
 /**
  * Characterization pins for the smart-tag.js god-file (1,246 lines) — "step 0" of a
@@ -141,6 +142,8 @@ async function gotoSmartTag(page: Page): Promise<void> {
 
 /** Open the modal scoped to an explicit id set and wait for both taggers to populate. */
 async function openScopedAndReady(page: Page, imageIds: number[]): Promise<void> {
+  // The catalog stub mocks stand-in taggers; mark them installed so Run skips setup.
+  await markModelsReady(page, ['wd14', 'toriigate', 'florence2'], { extraVariants: ['model-a', 'model-b'] })
   await page.evaluate((ids) => (window as any).SmartTag.openScoped({ imageIds: ids }), imageIds)
   await expect(page.locator('#smart-tag-modal')).toHaveClass(/visible/)
   // Two booru models -> two options in tagger-1 (the NL model is filtered out).
@@ -148,6 +151,7 @@ async function openScopedAndReady(page: Page, imageIds: number[]): Promise<void>
 }
 
 async function openDatasetAndReady(page: Page): Promise<void> {
+  await markModelsReady(page, ['wd14', 'toriigate', 'florence2'], { extraVariants: ['model-a', 'model-b'] })
   await page.waitForFunction(() => {
     const dm = (window as any).DatasetMaker
     return dm?._trainerContractState?.status === 'ready'
