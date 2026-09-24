@@ -523,10 +523,23 @@ async def ai_runtime_busy_exception_handler(
     )
 
 
+# A missing image file is expected (the gallery shows a banner for it) and a
+# large library can produce one per thumbnail, so these stay out of the
+# launcher console; every other HTTP error is still logged as a warning.
+_QUIET_404_PREFIXES = ("/api/image-thumbnail/", "/api/image-file/")
+
+
+def _http_exception_log_level(request: Request, exc: HTTPException) -> int:
+    if exc.status_code == 404 and request.url.path.startswith(_QUIET_404_PREFIXES):
+        return logging.DEBUG
+    return logging.WARNING
+
+
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     """Handle HTTPExceptions with consistent JSON format."""
-    logger.warning(
+    logger.log(
+        _http_exception_log_level(request, exc),
         "HTTP %d on %s %s: %s",
         exc.status_code,
         request.method,
