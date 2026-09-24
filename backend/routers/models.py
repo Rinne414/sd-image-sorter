@@ -106,6 +106,7 @@ MODEL_DEPENDENCY_GROUPS: Dict[str, str] = {
     "clip": "clip",
     "florence2": "florence2",
     "lucida": "lucida",
+    "rembg": "rembg",
     "sam3": "sam3",
     "tipo": "tipo",
     "toriigate": "toriigate",
@@ -218,6 +219,15 @@ BULK_MODEL_BUNDLE: list[dict[str, object]] = [
         "variant": "pinned",
         "default_selected": True,
         "restart_after_install": True,
+    },
+    {
+        "id": "rembg",
+        "size_bytes": 170 * 1024 * 1024,
+        "label": "rembg U2Net (default training-set subject masks)",
+        "feature_key": "training_masks",
+        "recommended": False,
+        "default_selected": False,
+        "restart_after_install": False,
     },
     {
         "id": "cl-tagger-v2",

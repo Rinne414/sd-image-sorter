@@ -245,6 +245,22 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
             "paths": {"checkpoint_path": checkpoint_path},
         }, dependency_result)
 
+    if normalized_model_id == "rembg":
+        dependency_result = _svc().ensure_group("rembg")
+        restart_result = _svc()._dependency_restart_result(normalized_model_id, dependency_result)
+        if restart_result:
+            return restart_result
+
+        import rembg_model
+
+        model_path = rembg_model.prepare(_svc()._direct_download_file)
+        return _svc()._with_dependency_result({
+            "status": "ok",
+            "model_id": normalized_model_id,
+            "message": "rembg and the u2net model are ready.",
+            "paths": {"model_path": model_path},
+        }, dependency_result)
+
     if normalized_model_id == "cl-tagger-v2":
         dependency_result = _svc().ensure_group("cl-tagger-v2")
         restart_result = _svc()._dependency_restart_result(

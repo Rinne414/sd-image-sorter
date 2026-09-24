@@ -66,6 +66,7 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
     censor = health["censor"]
     artist = health["artist"]
     lucida = health.get("lucida", {})
+    rembg = health.get("rembg", {})
     florence2 = health.get("florence2", {})
     cl_tagger_v2 = health.get("cl_tagger_v2", {})
     installed_wd14 = [item["name"] for item in health["wd14"]["installed_models"] if item["available"]]
@@ -570,6 +571,27 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
                     "label": "GitHub",
                     "url": "https://github.com/egeorcun/lucida",
                 },
+            ],
+        },
+        {
+            "id": "rembg",
+            "name": "rembg (U2Net)",
+            "group": "Training Masks",
+            "group_key": "models.group.trainingMasks",
+            "available": bool(rembg.get("available")),
+            **with_status(
+                is_ready=bool(rembg.get("available")),
+                is_downloaded=bool(rembg.get("model_path")),
+            ),
+            "message": rembg.get("message") or "rembg is not set up yet.",
+            "message_key": rembg.get("message_key") or "models.rembg.missing",
+            "path": rembg.get("model_path") or rembg.get("expected_path", ""),
+            "download_supported": True,
+            "setup_steps": [
+                "Click Prepare / Download to install the rembg package and the u2net model (~170 MB).",
+            ],
+            "external_links": [
+                {"label": "GitHub", "url": "https://github.com/danielgatis/rembg"},
             ],
         },
         {

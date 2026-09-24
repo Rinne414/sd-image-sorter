@@ -814,6 +814,7 @@ def test_get_status_wraps_inventory_and_health(monkeypatch):
         "aesthetic",
         "artist",
         "lucida",
+        "rembg",
         "censor-legacy",
         "censor-nudenet",
         "sam3",

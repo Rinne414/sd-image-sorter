@@ -7,7 +7,7 @@ import { markModelsReady } from '../fixtures/model-status'
  *
  *  - the 🎭 entry appears for gallery images only (local ids have no masks);
  *  - open -> paint -> save PUTs a PNG data URL and closes;
- *  - the auto-subject error path surfaces the backend's install hint;
+ *  - the auto-subject error path surfaces the backend's message;
  *  - a Lucida that is not set up yet is offered for download first.
  */
 
@@ -94,7 +94,8 @@ test('mask entry hides for local-source items', async ({ page }) => {
   await expect(page.locator('#dataset-mask-controls')).toBeHidden()
 })
 
-test('auto subject surfaces the rembg install hint on 400', async ({ page }) => {
+test('auto subject surfaces the server error on 400', async ({ page }) => {
+  await markModelsReady(page, ['rembg'])
   await seedDatasetQueue(page)
   await page.route('**/api/masks/701', async (route) => {
     await route.fulfill({ status: 404, json: { error: 'no mask' } })
@@ -102,13 +103,13 @@ test('auto subject surfaces the rembg install hint on 400', async ({ page }) => 
   await page.route('**/api/masks/701/auto', async (route) => {
     await route.fulfill({
       status: 400,
-      json: { error: 'rembg is not installed. Install it with: pip install rembg' },
+      json: { error: 'rembg is not installed. Prepare rembg in Settings & Models › AI Models (~170 MB).' },
     })
   })
   await page.locator('#btn-dataset-mask-edit').click()
   await expect(page.locator('#mask-editor-modal')).toBeVisible()
   await page.locator('#mask-tool-auto').click()
-  await expect(page.locator('#mask-editor-status')).toContainText('pip install rembg')
+  await expect(page.locator('#mask-editor-status')).toContainText('Prepare rembg in Settings & Models')
 })
 
 test('Lucida engine selection is explicit and discloses research-only training data', async ({ page }) => {

@@ -34,6 +34,7 @@
     // First use of an engine sets it up (confirm, download, progress) instead
     // of failing with "model files are missing".
     const AUTO_MASK_ENGINE_SETUP = {
+        rembg: { modelId: 'rembg', label: 'rembg (U2Net)', sizeHint: '~170 MB', confirmBytes: 170 * 1024 * 1024 },
         lucida: { modelId: 'lucida', label: 'Lucida', sizeHint: '~885 MB', confirmBytes: 885 * 1024 * 1024 },
     };
 
@@ -311,8 +312,7 @@
             this._status(method === 'lucida'
                 ? t('Generating Lucida subject mask with the prepared model…',
                     '正在使用已准备的 Lucida 模型生成主体遮罩…')
-                : t('Generating subject mask (first run downloads the u2net model)…',
-                    '生成主体遮罩中（首次会下载 u2net 模型）…'));
+                : t('Generating subject mask with rembg…', '正在使用 rembg 生成主体遮罩…'));
             try {
                 const response = await fetch(`/api/masks/${this._imageId}/auto`, {
                     method: 'POST',

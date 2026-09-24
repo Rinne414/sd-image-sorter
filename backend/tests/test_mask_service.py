@@ -108,7 +108,9 @@ class TestAutoMask:
         monkeypatch.setitem(sys.modules, "rembg", None)
         response = test_client.post(f"/api/masks/{image_id}/auto", json={"method": "rembg"})
         assert response.status_code == 400
-        assert "pip install rembg" in response.json()["error"]
+        error = response.json()["error"]
+        assert "Settings & Models" in error
+        assert "pip install" not in error, "portable users cannot run pip"
 
     def test_unknown_method_400(self, test_client, staged_image, masks_dir):
         image_id, _ = staged_image

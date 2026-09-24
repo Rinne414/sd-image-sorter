@@ -132,14 +132,6 @@ def delete_mask(image_id: int) -> bool:
     return False
 
 
-def _rembg_session_home() -> str:
-    """Keep the ~170 MB u2net download inside the app's data dir instead of
-    the user profile, matching how other model assets stay portable."""
-    home = Path(config.DATA_DIR) / "models" / "rembg"
-    home.mkdir(parents=True, exist_ok=True)
-    return str(home)
-
-
 def generate_auto_mask(image_id: int, method: str = "rembg") -> Dict[str, Any]:
     """Generate a subject mask WITHOUT saving it — the frontend previews the
     result on the canvas and the user decides whether to keep/edit/save."""
@@ -164,15 +156,16 @@ def generate_auto_mask(image_id: int, method: str = "rembg") -> Dict[str, Any]:
         except LucidaError as exc:
             raise MaskError(str(exc)) from exc
     else:
-        os.environ.setdefault("U2NET_HOME", _rembg_session_home())
+        import rembg_model
+
+        # Keep the u2net weights in the app's data dir, not the user profile.
+        os.environ.setdefault("U2NET_HOME", str(rembg_model.model_home()))
         try:
             from rembg import remove  # noqa: PLC0415 - heavy opt-in dependency
         except ImportError as exc:
             raise MaskError(
-                "rembg is not installed. Install it into the backend environment "
-                "with: pip install rembg  (ONNX Runtime is already bundled; the "
-                "u2net model (~170 MB) downloads on first use.) / 未安装 rembg。"
-                "请在后端环境执行 pip install rembg（首次使用会自动下载 u2net 模型，约 170 MB）。"
+                "未安装 rembg。请在「设置与模型 › AI 模型」里准备 rembg（约 170 MB）。"
+                " / rembg is not installed. Prepare rembg in Settings & Models › AI Models (~170 MB)."
             ) from exc
 
         result = remove(rgb)

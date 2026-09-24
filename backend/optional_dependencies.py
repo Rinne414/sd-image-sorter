@@ -112,6 +112,11 @@ OPTIONAL_DEPENDENCY_GROUPS: dict[str, tuple[str, ...]] = {
         "huggingface-hub>=0.24.0",
     ),
     "cl-tagger-v2": ("huggingface-hub>=0.24.0",),
+    # rembg 2.0.70+ needs numpy 2, while the app pins numpy 1.26.4 below
+    # Python 3.13; an unpinned rembg would upgrade numpy under every other
+    # feature. 2.0.69 resolves against the pinned numpy and brings no
+    # onnxruntime of its own (verified with pip --dry-run, 2026-09-24).
+    "rembg": ("rembg==2.0.69",),
     "translation": ("translators==6.0.4",),
     # tipo-kgen imports torch/transformers at module load even for GGUF.
     # llama-cpp-python is installed separately from the official CPU wheel
@@ -211,6 +216,7 @@ GROUP_IMPORTS: dict[str, tuple[str, ...]] = {
         "huggingface_hub",
     ),
     "cl-tagger-v2": ("huggingface_hub",),
+    "rembg": ("rembg",),
     "translation": ("translators",),
     "tipo": ("torch", "transformers", "huggingface_hub", "kgen"),
 }
