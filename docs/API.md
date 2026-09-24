@@ -1524,7 +1524,10 @@ Set custom update channel proxy configuration.
 Reset update channel to default.
 
 #### POST /api/updates/restart
-Restart the app through the original launcher without applying an update. Feature Setup uses this after an install replaced an already-loaded module. Body: `{reason: string}` (`reason` max 200 chars, may be empty). Returns `{status, launcher}` where `status` is `scheduled` or `unsupported`. A scheduled restart exits this process after the response; `unsupported` does not exit.
+Restart the app without applying an update. Feature Setup uses this after an install replaced an already-loaded module. Body: `{reason: string}` (`reason` max 200 chars, may be empty). Returns `{status, launcher, mode?, boot_id}` where `status` is `scheduled` or `unsupported` and `boot_id` identifies the process being restarted. A scheduled restart stops this process gracefully after the response. When the launcher runs a restart loop (`SD_IMAGE_SORTER_RESTART_LOOP=1`, set by `run.bat`, `run.sh` and the portable launchers), `mode` is `in_place`: the process exits with code 75 and the launcher starts it again in the same console and on the same port. Otherwise `update_worker.py` relaunches the launcher. `unsupported` does not exit.
+
+#### GET /api/updates/boot-id
+Return `{boot_id}`, a value that changes every time the server starts. After `POST /api/updates/restart`, the page polls this until the id differs from the one it was given, then reloads.
 
 #### POST /api/updates/apply
 Apply a downloaded update package.

@@ -339,11 +339,21 @@ REM -- Ask the backend to open the browser once it is ready (in-process).
 REM -- The launcher no longer spawns a hidden helper that makes HTTP calls in a
 REM -- loop, which some antivirus engines flag as suspicious behavior.
 set "SD_IMAGE_SORTER_OPEN_BROWSER=1"
+REM -- Exit code 75 is the app asking to restart (after a feature install):
+REM -- start it again in this window, on this port, without a new browser tab.
+set "SD_IMAGE_SORTER_RESTART_LOOP=1"
 
 cd backend
 call venv\Scripts\activate.bat 2>nul
+:serve
 python main.py --port !APP_PORT!
 set "SERVER_EXIT_CODE=!ERRORLEVEL!"
+if "!SERVER_EXIT_CODE!"=="75" (
+    echo.
+    echo [INFO] Restarting SD Image Sorter...
+    set "SD_IMAGE_SORTER_OPEN_BROWSER=0"
+    goto serve
+)
 
 echo.
 if "!SERVER_EXIT_CODE!"=="0" (

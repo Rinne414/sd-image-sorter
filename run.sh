@@ -398,5 +398,13 @@ echo
 ) &
 
 # ── Start the server ─────────────────────────────────────────────
+# Exit code 75 is the app asking to restart (after a feature install):
+# start it again in this terminal, on this port.
+export SD_IMAGE_SORTER_RESTART_LOOP=1
 cd backend
-$PYTHON_CMD main.py --port "${APP_PORT}"
+while true; do
+    SERVER_EXIT_CODE=0
+    $PYTHON_CMD main.py --port "${APP_PORT}" || SERVER_EXIT_CODE=$?
+    [ "$SERVER_EXIT_CODE" -eq 75 ] || exit "$SERVER_EXIT_CODE"
+    echo "[INFO] Restarting SD Image Sorter..."
+done

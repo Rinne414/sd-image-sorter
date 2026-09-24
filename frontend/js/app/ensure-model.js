@@ -329,6 +329,13 @@ async function ensureFeatureModel(modelId, options = {}) {
         if (_featureCardIsReady(card, variant)) {
             return { ok: true, alreadyReady: true };
         }
+        // Installed packages only load after a restart. Preparing again would
+        // report "done" and let the feature run in this old process, so the
+        // restart prompt is the only way forward.
+        if (card?.status === 'needs_restart') {
+            _showInstallRestartPrompt({ ...spec, label, modelId }, {});
+            return { ok: false, needsRestart: true };
+        }
     } catch (_statusErr) {
         // Unknown is not ready: fall through and prepare.
     }

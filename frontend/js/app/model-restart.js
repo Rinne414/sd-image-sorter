@@ -7,7 +7,30 @@
 
 const PREPARE_RESUME_STORAGE_KEY = 'sd-image-sorter-prepare-resume-v1';
 const PREPARE_RESUME_BANNER_ID = 'prepare-restart-banner';
+const RESTART_POLL_INTERVAL_MS = 1000;
+const RESTART_WAIT_LIMIT_MS = 180000;
 let _appRestartInFlight = false;
+
+// The launcher starts the server again in its own window; this tab reloads as
+// soon as a server answers with a different boot id, so the user stays here.
+async function reloadWhenServerRestarts(previousBootId) {
+    const deadline = Date.now() + RESTART_WAIT_LIMIT_MS;
+    while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, RESTART_POLL_INTERVAL_MS));
+        try {
+            const response = await fetch('/api/updates/boot-id', { cache: 'no-store' });
+            if (!response.ok) continue;
+            const payload = await response.json();
+            if (payload?.boot_id && payload.boot_id !== previousBootId) {
+                window.location.reload();
+                return true;
+            }
+        } catch (_error) {
+            // The old server has stopped and the new one is not up yet.
+        }
+    }
+    return false;
+}
 
 function prepareResultNeedsRestart(result) {
     if (!result || typeof result !== 'object' || Array.isArray(result)) return false;
@@ -216,6 +239,24 @@ async function requestAppRestartAndContinue({ reason, items } = {}) {
                     'info',
                 );
             }
+            reloadWhenServerRestarts(result.boot_id).then((reloaded) => {
+                if (reloaded) return;
+                if (typeof hideGlobalLoading === 'function') hideGlobalLoading();
+                if (typeof showToast === 'function') {
+                    showToast(
+                        _prepareRestartT(
+                            'models.restartTakingLong',
+                            'The restart is taking longer than usual. Check the launcher window for errors, then reload this page.',
+                        ),
+                        'warning',
+                        {
+                            duration: 15000,
+                            actionLabel: _prepareRestartT('models.restartReloadPage', 'Reload'),
+                            onAction: () => window.location.reload(),
+                        },
+                    );
+                }
+            });
             return result;
         }
         _appRestartInFlight = false;

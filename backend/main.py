@@ -717,10 +717,18 @@ if __name__ == "__main__":
         LOG_FILE_PATH if LOG_FILE_ENABLED else "off",
     )
     _maybe_open_browser_when_ready(args.host, args.port)
-    uvicorn.run(
-        app,
-        host=args.host,
-        port=args.port,
-        access_log=LOG_ACCESS_ENABLED,
-        log_level=LOG_LEVEL.lower(),
+    import app_lifecycle
+
+    server = uvicorn.Server(
+        uvicorn.Config(
+            app,
+            host=args.host,
+            port=args.port,
+            access_log=LOG_ACCESS_ENABLED,
+            log_level=LOG_LEVEL.lower(),
+            timeout_graceful_shutdown=5,
+        )
     )
+    app_lifecycle.attach_server(server)
+    server.run()
+    sys.exit(app_lifecycle.exit_code_after_shutdown())

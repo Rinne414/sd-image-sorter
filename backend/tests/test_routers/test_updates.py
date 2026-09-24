@@ -156,7 +156,13 @@ def test_restart_app_returns_scheduled_payload(test_client, monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.json() == {"status": "scheduled", "launcher": "run.bat"}
+    import app_lifecycle
+
+    assert response.json() == {
+        "status": "scheduled",
+        "launcher": "run.bat",
+        "boot_id": app_lifecycle.BOOT_ID,
+    }
     assert fake.restart_calls == ["model_dependency_install"]
     assert exit_calls == ["exit"]
 

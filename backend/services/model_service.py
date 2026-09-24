@@ -144,9 +144,13 @@ def model_needs_process_restart(model_id: str) -> bool:
 
 
 def _apply_pending_restart_status(card: Dict[str, Any]) -> Dict[str, Any]:
+    """Show "restart required" until the restart happens.
+
+    A first install usually installs packages, asks for a restart and only
+    downloads the weights afterwards, so the card is still "missing" at that
+    point. Showing "missing" + Prepare there hid the one step that matters.
+    """
     if not model_needs_process_restart(str(card.get("id") or "")):
-        return card
-    if str(card.get("status") or "") != "ready":
         return card
     updated = dict(card)
     updated["status"] = "needs_restart"

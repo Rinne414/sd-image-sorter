@@ -490,6 +490,27 @@ def test_inventory_does_not_keep_ready_after_prepare_needs_restart(monkeypatch):
     assert card["status_label"] == "Restart required"
 
 
+def test_inventory_shows_restart_required_before_the_weights_are_downloaded(monkeypatch):
+    # First install: packages went in, the restart is pending, and the weights
+    # download only after it. The card must say "restart required", not
+    # "missing" with a Prepare button that cannot help.
+    monkeypatch.setattr(model_service, "_pending_process_restart", set())
+    monkeypatch.setattr(
+        model_service,
+        "_build_inventory",
+        lambda _health: [
+            {"id": "florence2", "status": "missing", "status_label": "Missing", "available": False}
+        ],
+    )
+    monkeypatch.setattr(model_service, "get_model_health", lambda: {})
+    model_service.note_prepare_needs_restart("florence2")
+
+    card = model_service.ModelService().build_model_inventory()[0]
+
+    assert card["status"] == "needs_restart"
+    assert card["available"] is False
+
+
 def test_prepare_model_notes_restart_so_status_cannot_stay_ready(monkeypatch):
     monkeypatch.setattr(model_service, "_pending_process_restart", set())
     monkeypatch.setattr(

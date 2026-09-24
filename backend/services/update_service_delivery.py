@@ -32,6 +32,7 @@ import urllib.request
 from pathlib import Path, PurePosixPath
 from typing import Any, Optional
 
+import app_lifecycle
 from app_info import (
     APP_VERSION,
     LINUX_FULL_ASSET_TEMPLATE,
@@ -531,6 +532,12 @@ class _UpdateDeliveryMixin:
 
         if getattr(self, "_restart_scheduled", False):
             return {"status": "scheduled", "launcher": launcher_path.name}
+
+        # A launcher with a restart loop starts the server again itself, in the
+        # same console and on the same port; no worker process is needed.
+        if app_lifecycle.launcher_restarts_in_place():
+            self._restart_scheduled = True
+            return {"status": "scheduled", "launcher": launcher_path.name, "mode": "in_place"}
 
         timestamp = int(time.time())
         manifest_path = self._state_dir() / "pending-restart.json"

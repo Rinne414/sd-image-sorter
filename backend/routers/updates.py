@@ -6,13 +6,13 @@ from __future__ import annotations
 
 import logging
 import os
-import signal
 import threading
 import time
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+import app_lifecycle
 from services.service_provider import ServiceProvider
 from services.update_service import UpdateService
 
@@ -42,15 +42,22 @@ get_update_service = _update_service_provider.get
 set_update_service = _update_service_provider.set
 
 
-def _schedule_process_exit(delay_seconds: float = 1.0) -> None:
+def _schedule_process_exit(delay_seconds: float = 1.0, *, restart: bool = False) -> None:
+    """Stop gracefully once the response is out; ``restart`` asks the launcher loop to start again."""
     if os.environ.get("SD_SORTER_TESTING") == "1":
         return
 
     def _exit_worker() -> None:
         time.sleep(max(0.1, delay_seconds))
-        os.kill(os.getpid(), signal.SIGINT)
+        app_lifecycle.request_exit(restart=restart)
 
     threading.Thread(target=_exit_worker, daemon=True).start()
+
+
+@router.get("/boot-id")
+def get_boot_id() -> dict:
+    """Identify this server process; a restarted server answers with a new id."""
+    return {"boot_id": app_lifecycle.BOOT_ID}
 
 
 @router.get("/status")
@@ -100,9 +107,9 @@ def restart_app(payload: RestartAppRequest) -> dict:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     if result.get("status") == "scheduled":
-        _schedule_process_exit()
+        _schedule_process_exit(restart=app_lifecycle.launcher_restarts_in_place())
 
-    return result
+    return {**result, "boot_id": app_lifecycle.BOOT_ID}
 
 
 @router.post("/apply")

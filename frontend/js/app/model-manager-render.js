@@ -134,7 +134,9 @@ function renderModelManager(models = []) {
                     </details>
                 ` : ''}
                 <div class="model-card-actions">
-                    ${model.download_supported ? `<button class="btn btn-primary btn-prepare-model" data-model-id="${safeId}">${escapeHtml(status === 'ready' ? appT('models.repair', 'Recheck / Repair') : appT('models.prepare', 'Prepare / Download'))}</button>` : ''}
+                    ${status === 'needs_restart'
+                        ? `<button class="btn btn-primary btn-restart-model" data-model-id="${safeId}" data-model-name="${escapeHtml(model.name || model.id)}">${escapeHtml(appT('models.restartNowAndContinue', 'Restart now and continue'))}</button>`
+                        : (model.download_supported ? `<button class="btn btn-primary btn-prepare-model" data-model-id="${safeId}">${escapeHtml(status === 'ready' ? appT('models.repair', 'Recheck / Repair') : appT('models.prepare', 'Prepare / Download'))}</button>` : '')}
                     ${!model.download_supported && status !== 'ready' ? `<span class="model-card-hint">${escapeHtml(appT('models.noAutoDownload', 'Can\'t download automatically. Follow the manual steps above'))}</span>` : ''}
                     ${externalLinks}
                 </div>
@@ -169,6 +171,20 @@ function renderModelManager(models = []) {
             : appT('models.restartAfterInstall', 'Restart the app before using this feature.');
         return message ? `${message} ${reminder}` : reminder;
     };
+
+    // A card waiting on a restart has one useful action left; after the
+    // restart the resume queue re-runs this model's setup (weights etc.).
+    gridEl.querySelectorAll('.btn-restart-model').forEach((button) => {
+        button.addEventListener('click', () => {
+            button.disabled = true;
+            requestAppRestartAndContinue({
+                reason: 'model_dependency_install',
+                items: [{ id: button.dataset.modelId, name: button.dataset.modelName }],
+            }).then((result) => {
+                if (result?.status !== 'scheduled') button.disabled = false;
+            });
+        });
+    });
 
     gridEl.querySelectorAll('.btn-prepare-model').forEach((button) => {
         button.addEventListener('click', async () => {

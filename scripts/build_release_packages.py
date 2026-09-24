@@ -862,10 +862,20 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             "REM -- The launcher no longer spawns a hidden helper that makes HTTP calls\n"
             "REM -- in a loop, which some antivirus engines flag as suspicious behavior.\n"
             "set \"SD_IMAGE_SORTER_OPEN_BROWSER=1\"\n"
+            "REM -- Exit code 75 is the app asking to restart (after a feature install):\n"
+            "REM -- start it again in this window, on this port, without a new browser tab.\n"
+            "set \"SD_IMAGE_SORTER_RESTART_LOOP=1\"\n"
             "\n"
             "cd backend\n"
+            ":serve\n"
             "\"!PYTHON_CMD!\" main.py --port !APP_PORT!\n"
             "set \"SERVER_EXIT_CODE=!ERRORLEVEL!\"\n"
+            "if \"!SERVER_EXIT_CODE!\"==\"75\" (\n"
+            "    echo.\n"
+            "    echo [INFO] Restarting SD Image Sorter...\n"
+            "    set \"SD_IMAGE_SORTER_OPEN_BROWSER=0\"\n"
+            "    goto serve\n"
+            ")\n"
             "\n"
             "echo.\n"
             "echo ==========================================\n"
@@ -924,8 +934,9 @@ def write_linux_portable_launcher(stage_dir: Path) -> Path:
     - Same data layout (data/, update/, ...)
     - Same hash-based reinstall flow + lightweight rebuild marker
     - Same lightweight default + optional SD_IMAGE_SORTER_INSTALL_FULL_AI=1
-    - Hands the running terminal off to ``main.py`` (no daemonization;
-      Ctrl+C stays the natural stop signal, matching run.sh).
+    - Runs ``main.py`` in this terminal (no daemonization; Ctrl+C stays
+      the natural stop signal, matching run.sh) and starts it again when
+      it exits with code 75, the app's restart request.
 
     The script is written with LF line endings only because /bin/sh on
     Linux refuses to parse CRLF heredocs — a CRLF here would surface as
@@ -1145,8 +1156,15 @@ EOF
     done
 ) &
 
+# Exit code 75 is the app asking to restart (after a feature install).
+export SD_IMAGE_SORTER_RESTART_LOOP=1
 cd backend
-exec "$PYTHON_CMD" main.py --port "$APP_PORT"
+while true; do
+    SERVER_EXIT_CODE=0
+    "$PYTHON_CMD" main.py --port "$APP_PORT" || SERVER_EXIT_CODE=$?
+    [ "$SERVER_EXIT_CODE" -eq 75 ] || exit "$SERVER_EXIT_CODE"
+    echo "[INFO] Restarting SD Image Sorter..."
+done
 """
     portable_sh.write_bytes(body.encode("utf-8"))
     # rwxr-xr-x — script must be executable inside the tarball or users see
