@@ -3235,6 +3235,12 @@ textarea:focus,
     margin-bottom: 8px;
 }
 
+/* A leftover gradient-text background painted the whole heading box beige
+   behind white text ("Manual Sort Mode" was unreadable). */
+.setup-title {
+    background: none;
+}
+
 .panel-description,
 .setup-description,
 .modal-description {
@@ -3611,7 +3617,9 @@ textarea:focus,
 .promptlab-tab.active {
     background: rgba(var(--accent-primary-rgb), 0.15);
     border-color: rgba(var(--accent-primary-rgb), 0.4);
-    color: var(--accent-contrast);
+    /* --accent-contrast is for text on a solid accent fill; on this light tint
+       it was dark on dark. */
+    color: var(--text-primary);
 }
 
 .promptlab-mode {
@@ -4457,6 +4465,26 @@ textarea:focus,
 
 #confirm-modal.visible {
     z-index: 3200;
+}
+
+/* The close button sits in the dialog's top-right corner; keep the header
+   text and header actions clear of it instead of running underneath. */
+.modal-content > .modal-close ~ .modal-header,
+.modal-content > .modal-close ~ h2:first-of-type,
+.modal-content > .modal-close ~ h3:first-of-type,
+.modal-content > .modal-close ~ .modal-description:first-of-type,
+.modal-content > .modal-close ~ .filter-modal-hero {
+    padding-right: 52px;
+}
+
+/* The filter header carries an inline padding: 0, so move its actions instead. */
+.filter-modal-shell .filter-modal-hero-actions {
+    margin-right: 52px;
+}
+
+/* An unticked box needs a visible outline on the dark surfaces (3:1). */
+.checkbox-label input:not(:checked) + .checkbox-custom {
+    border-color: color-mix(in srgb, var(--muted) 70%, var(--surface-2));
 }
 
 /* Multi-point confirms (download size, restart, GPU need) put one point per line. */
@@ -7341,6 +7369,30 @@ html:not(.lang-zh) .filter-sidebar .btn-ghost.full-width {
     white-space: nowrap;
 }
 
+/* An empty preview box drew an empty bordered bar. */
+.export-format-preview:empty {
+    display: none;
+}
+
+/* Icon options wrap their text in a second span; it is plain text, not a
+   second pill inside the first one. */
+.segmented-option span:has(> .icon) {
+    gap: 6px;
+}
+
+.segmented-option span span,
+.segmented-option:hover span span,
+.segmented-option input:checked + span span {
+    display: inline;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    color: inherit;
+}
+
 .export-format-preview {
     background: rgba(28, 28, 28, 0.58);
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -7801,6 +7853,9 @@ html.lang-zh #view-censor .queue-action-btn span {
         padding-top: 10px;
         background: var(--bg-card);
         border-top: 1px solid var(--border-strong);
+        /* Fill the column's bottom padding too, or text scrolling past shows
+           in the strip below the pinned buttons. */
+        box-shadow: 0 12px 0 0 var(--bg-card);
     }
 
     /* Superseded by the pinned group above: a second sticky element inside it

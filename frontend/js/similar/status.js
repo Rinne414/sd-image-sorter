@@ -295,9 +295,11 @@ Object.assign(window.SimilarImages, {
             const title = result.available
                 ? this._t('similar.setupReadyTitle', 'Similarity setup is ready')
                 : this._t('similar.setupNeedsTitle', 'CLIP will download when you start indexing');
+            // When CLIP is missing, the status card above already says the size
+            // and where to install it; do not repeat the sentence here.
             const description = result.available
                 ? this._t('similar.setupReadyDetail', 'Build the index below to start searching; rebuild any time after adding images.')
-                : this._t('similar.setupNeedsDetail', 'CLIP is about 580 MB and shows progress while it downloads. You can also install it first in Model Center.');
+                : '';
             const detailItems = [];
             if (result.message_key || result.message) {
                 // Prefer the backend's message_key so the tech detail is
@@ -327,7 +329,7 @@ Object.assign(window.SimilarImages, {
             banner.innerHTML = `
                 <div class="model-health-copy">
                     <span class="model-health-title">${escapeHtml(title)}</span>
-                    <span>${escapeHtml(description)}</span>
+                    ${description ? `<span>${escapeHtml(description)}</span>` : ''}
                     ${detailsHtml}
                     ${setupBtnHtml}
                 </div>

@@ -3148,7 +3148,7 @@ window.I18nLang_en = {
     'tagger.aestheticReady': 'Aesthetic scoring is ready on this machine.',
     'tagger.aestheticMissing': 'Aesthetic scoring needs a one-time install of runtimes and models (~2 GB).',
     'tagger.aestheticOpenSetup': 'Install in Model Center',
-    'tagger.routedFromTagger': 'Aesthetic scoring needs a one-time setup (~1.7 GB). Taking you to Model Center.',
+    'tagger.routedFromTagger': 'Aesthetic scoring needs a one-time setup (~2 GB). Taking you to Model Center.',
     'tagger.routedToriigate': 'ToriiGate is about 9.6 GB. Taking you to Model Center.',
     // v3.2.1 task #26 — Color analysis tab in the tagger modal
     'tagger.tabColor': 'Color Analysis',

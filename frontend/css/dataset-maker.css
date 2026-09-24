@@ -1448,6 +1448,16 @@
     background: rgba(28, 28, 28, 0.94);
     box-shadow: 0 8px 18px rgba(0,0,0,0.22);
 }
+/* A narrow side panel (1366-wide windows) cannot fit four step labels in
+   one row without "Generate" running into "3 Review"; use two rows there. */
+#view-dataset .dataset-export-pane {
+    container-type: inline-size;
+}
+@container (max-width: 320px) {
+    #view-dataset .dataset-workflow-rail {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
 #view-dataset .dataset-workflow-step {
     min-width: 0;
     display: flex;

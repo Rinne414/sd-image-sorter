@@ -3315,7 +3315,7 @@ window.I18nLang_zhCN = {
     'tagger.aestheticReady': '美学评分已就绪，可以直接使用。',
     'tagger.aestheticMissing': '美学评分要先装一次运行库和模型（约 2 GB）。',
     'tagger.aestheticOpenSetup': '到模型中心安装',
-    'tagger.routedFromTagger': '美学评分要先装一次（约 1.7 GB），已带你到模型中心。',
+    'tagger.routedFromTagger': '美学评分要先装一次（约 2 GB），已带你到模型中心。',
     'tagger.routedToriigate': 'ToriiGate 约 9.6 GB，已带你到模型中心下载。',
     // v3.2.1 task #26 — 色彩分析 tab（Tagger modal）
     'tagger.tabColor': '色彩分析',

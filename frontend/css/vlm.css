@@ -2124,7 +2124,13 @@
     padding: 12px 16px;
     font-size: 15px;
     font-weight: 700;
-    box-shadow: 0 -10px 18px rgba(0, 0, 0, 0.32);
+}
+
+/* Fill the pane's bottom padding below the pinned button, or options that
+   scroll past show in that strip. (.btn-primary in tokens.css clears
+   box-shadow, hence the extra class.) */
+.btn.autosep-action-cta {
+    box-shadow: 0 14px 0 0 var(--bg-card);
 }
 
 /* === Responsive: laptop fallback (1080-1280) ===
