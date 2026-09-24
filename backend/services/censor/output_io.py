@@ -21,6 +21,7 @@ import base64
 import binascii
 import logging
 import os
+import shutil
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
@@ -39,7 +40,12 @@ from utils.atomic_staging import (
 from utils.source_paths import resolve_existing_indexed_image_path
 
 if TYPE_CHECKING:  # annotation-only; never imported at runtime (no facade cycle)
-    from services.censor_service import CensorApplyRequest, CensorSaveDataRequest, CensorSaveRequest
+    from services.censor_service import (
+        CensorApplyRequest,
+        CensorSaveDataRequest,
+        CensorSaveOriginalRequest,
+        CensorSaveRequest,
+    )
 
 logger = logging.getLogger("services.censor_service")
 
@@ -370,6 +376,87 @@ class _OutputMixin:
         except Exception:
             logger.exception("Censor save failed")
             raise HTTPException(status_code=500, detail="Save failed")
+
+    _SOURCE_FORMATS = {"png", "jpg", "jpeg", "webp"}
+
+    def save_original(self, request: CensorSaveOriginalRequest) -> Dict[str, Any]:
+        """Save an image the user did not edit, straight from its source file.
+
+        Reorder-and-rename exports send every queued image through here. When
+        the source format and its metadata are kept, the file is copied byte
+        for byte; otherwise it is re-encoded on the server, so the browser
+        never round-trips the pixels through a canvas.
+        """
+        from utils.path_validation import validate_folder_path, sanitize_filename
+
+        is_valid, error = validate_folder_path(request.output_folder, allow_create=True)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error or "Invalid output folder")
+
+        image_row = db.get_image_by_id(request.original_image_id)
+        if not image_row:
+            raise HTTPException(status_code=404, detail="Image not found")
+
+        output_folder = self._ensure_safe_output_directory(request.output_folder)
+        source_path = self._resolve_source_image_path(
+            image_row["path"],
+            image_id=request.original_image_id,
+            action_label="Exporting image",
+        )
+        source_format = os.path.splitext(source_path)[1].lower().lstrip(".")
+        if request.output_format == "original":
+            output_format = source_format if source_format in self._SOURCE_FORMATS else "png"
+        else:
+            output_format = self._normalize_output_format(request.output_format)
+
+        try:
+            os.makedirs(output_folder, exist_ok=True)
+            base_name = os.path.splitext(sanitize_filename(request.filename))[0]
+            output_filename = f"{base_name}.{output_format}"
+            output_path = self._ensure_output_path(output_folder, output_filename)
+
+            if output_format == source_format and request.metadata_option == "keep":
+                def _write(final_output_path: str, _overwrite_requested: bool) -> List[str]:
+                    shutil.copyfile(source_path, final_output_path)
+                    return []
+            else:
+                with Image.open(source_path) as src:
+                    src.load()
+                    image = src.copy()
+                    image.info = dict(src.info)
+                if request.metadata_option == "strip":
+                    image = self._strip_all_metadata(image)
+                    save_kwargs: Dict[str, object] = {}
+                else:
+                    save_kwargs = self._prepare_metadata_for_save(
+                        image,
+                        request.original_image_id,
+                        request.metadata_option,
+                        output_format,
+                    )
+
+                def _write(final_output_path: str, _overwrite_requested: bool) -> List[str]:
+                    return self._save_image_with_format(image, final_output_path, output_format, save_kwargs)
+
+            write_result = save_and_reconcile_checked(
+                output_path,
+                _write,
+                allow_overwrite=request.allow_overwrite,
+                backend_file=_svc()._BACKEND_FILE,
+                validation_error_factory=self._output_validation_error,
+                conflict_error_factory=self._output_conflict_error,
+            )
+            return self._save_response(
+                output_path,
+                output_filename,
+                warnings=_combine_save_warnings(write_result.writer_result, write_result.warnings),
+                target_existed=write_result.target_existed,
+            )
+        except HTTPException:
+            raise
+        except Exception:
+            logger.exception("Censor save-original failed")
+            raise HTTPException(status_code=500, detail="Save original failed")
 
     def save_data(self, request: CensorSaveDataRequest) -> Dict[str, Any]:
         """Save base64 image data directly to disk."""

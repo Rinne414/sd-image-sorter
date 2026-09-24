@@ -2530,6 +2530,7 @@ window.I18nLang_zhCN = {
     'save.metadataMinimal': '只保留基础信息',
     'save.metadataHelper': '按用途选择：保留、精简，或清除生成信息。',
     'save.outputFormat': '输出格式',
+    'save.formatOriginal': '与原图相同（没编辑的图直接复制）',
     'save.formatPng': 'PNG（无损，文件较大）',
     'save.formatJpg': 'JPG（文件更小，兼容性更好）',
     'save.formatWebp': 'WebP（文件较小，画质良好）',

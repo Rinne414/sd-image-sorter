@@ -313,9 +313,14 @@ test('save-all wire format: /save-data payload, strip default, unedited items ex
   await stubCensorBackend(page)
   const saveDataCalls: Array<Record<string, unknown>> = []
   const saveOpsCalls: Array<Record<string, unknown>> = []
+  const saveOriginalCalls: Array<Record<string, unknown>> = []
   await page.route('**/api/censor/save-data', async (route) => {
     saveDataCalls.push(route.request().postDataJSON() as Record<string, unknown>)
     await route.fulfill({ json: { status: 'ok', saved_path: `${OUTPUT_FOLDER}/out.png`, warnings: [] } })
+  })
+  await page.route('**/api/censor/save-original', async (route) => {
+    saveOriginalCalls.push(route.request().postDataJSON() as Record<string, unknown>)
+    await route.fulfill({ json: { status: 'ok', warnings: [] } })
   })
   await page.route('**/api/censor/save-operations', async (route) => {
     saveOpsCalls.push(route.request().postDataJSON() as Record<string, unknown>)
@@ -466,17 +471,19 @@ test('save-all wire format: /save-data payload, strip default, unedited items ex
   await page.locator('#save-unedited-option').selectOption('include')
   await page.locator('#btn-confirm-save-options').click()
 
-  await expect.poll(() => saveDataCalls.length).toBe(3)
+  // The edited item goes out through /save-data again; the unedited one is
+  // saved by the server straight from its source file.
+  await expect.poll(() => saveDataCalls.length).toBe(2)
+  await expect.poll(() => saveOriginalCalls.length).toBe(1)
   expect(saveOpsCalls).toHaveLength(0)
-  const asIsCall = saveDataCalls.find((call) => call.original_image_id === IMAGES[1].id)
-  expect(asIsCall).toMatchObject({
+  expect(saveOriginalCalls[0]).toEqual({
+    original_image_id: IMAGES[1].id,
     filename: 'censor-core-b.png',
     output_folder: OUTPUT_FOLDER,
     metadata_option: 'strip',
     output_format: 'png',
     allow_overwrite: false,
   })
-  expect(String(asIsCall?.image_data)).toMatch(/^data:image\/png;base64,/)
   await expect(
     page.locator('#toast-container .toast', { hasText: 'went out as they are' }).first()
   ).toBeVisible()
@@ -488,12 +495,17 @@ test('items with edit operations save via /save-operations with the operation li
   await stubCensorBackend(page)
   const saveDataCalls: Array<Record<string, unknown>> = []
   const saveOpsCalls: Array<Record<string, unknown>> = []
+  const saveOriginalCalls: Array<Record<string, unknown>> = []
   await page.route('**/api/censor/save-data', async (route) => {
     saveDataCalls.push(route.request().postDataJSON() as Record<string, unknown>)
     await route.fulfill({ json: { status: 'ok', warnings: [] } })
   })
   await page.route('**/api/censor/save-operations', async (route) => {
     saveOpsCalls.push(route.request().postDataJSON() as Record<string, unknown>)
+    await route.fulfill({ json: { status: 'ok', warnings: [] } })
+  })
+  await page.route('**/api/censor/save-original', async (route) => {
+    saveOriginalCalls.push(route.request().postDataJSON() as Record<string, unknown>)
     await route.fulfill({ json: { status: 'ok', warnings: [] } })
   })
   await seedCensorQueue(page)
@@ -528,10 +540,11 @@ test('items with edit operations save via /save-operations with the operation li
   await saveAllWithOptions(page, { folder: OUTPUT_FOLDER, format: 'webp' })
 
   await expect.poll(() => saveOpsCalls.length).toBe(1)
-  // Item 1 has no edits: with the default "Export them as they are" it goes
-  // out through /save-data under its queue name, never through the op path.
-  await expect.poll(() => saveDataCalls.length).toBe(1)
-  expect(saveDataCalls[0]).toMatchObject({
+  // Item 1 has no edits: with the default "Export them as they are" the server
+  // saves it from its source under its queue name, never through the op path.
+  await expect.poll(() => saveOriginalCalls.length).toBe(1)
+  expect(saveDataCalls).toHaveLength(0)
+  expect(saveOriginalCalls[0]).toMatchObject({
     original_image_id: IMAGES[0].id,
     filename: 'censor-core-a.webp',
     output_format: 'webp',
@@ -545,6 +558,36 @@ test('items with edit operations save via /save-operations with the operation li
     output_format: 'webp',
     allow_overwrite: false,
   })
+})
+
+test('"same as the original" keeps every image in its own format and remembers the choice', async ({ page }) => {
+  await stubCensorBackend(page)
+  const saveDataCalls: Array<Record<string, unknown>> = []
+  const saveOriginalCalls: Array<Record<string, unknown>> = []
+  await page.route('**/api/censor/save-data', async (route) => {
+    saveDataCalls.push(route.request().postDataJSON() as Record<string, unknown>)
+    await route.fulfill({ json: { status: 'ok', warnings: [] } })
+  })
+  await page.route('**/api/censor/save-original', async (route) => {
+    saveOriginalCalls.push(route.request().postDataJSON() as Record<string, unknown>)
+    await route.fulfill({ json: { status: 'ok', warnings: [] } })
+  })
+  await seedCensorQueue(page)
+  // Item 1 is an edited WebP; item 2 stays unedited.
+  await page.evaluate(({ id, dataUrl }) => {
+    const item = (window as any).__CENSOR_STATE__.queue.find((entry: any) => entry.id === id)
+    item.currentDataUrl = dataUrl
+    item.isProcessed = true
+    item.originalFilename = 'censor-core-a.webp'
+  }, { id: IMAGES[0].id, dataUrl: WHITE_PNG_DATA_URL })
+
+  await saveAllWithOptions(page, { folder: OUTPUT_FOLDER, format: 'original' })
+
+  await expect.poll(() => saveDataCalls.length).toBe(1)
+  await expect.poll(() => saveOriginalCalls.length).toBe(1)
+  expect(saveDataCalls[0]).toMatchObject({ filename: 'censor-core-a.webp', output_format: 'webp' })
+  expect(saveOriginalCalls[0]).toMatchObject({ filename: 'censor-core-b.png', output_format: 'original' })
+  expect(await page.evaluate(() => localStorage.getItem('censor_output_format'))).toBe('original')
 })
 
 test('save warnings are deduplicated and malformed warning contracts fail explicitly', async ({ page }) => {

@@ -25,6 +25,7 @@ from services.censor_service import (
     CensorApplyRequest,
     CensorSaveRequest,
     CensorSaveDataRequest,
+    CensorSaveOriginalRequest,
     CensorSaveOperationsRequest,
     RemoveBackgroundRequest,
 )
@@ -155,6 +156,19 @@ async def censor_save_data(
     result = await run_in_threadpool(service.save_data, request)
     entry_stats_service.record_activity(entry_stats_service.KIND_CENSORED, 1)
     return result
+
+
+@router.post("/save-original")
+async def censor_save_original(
+    request: CensorSaveOriginalRequest,
+    service: CensorService = Depends(get_censor_service),
+):
+    """
+    Save an image the user did not edit, straight from its source file.
+    Reorder-and-rename exports use this; nothing was censored, so it does not
+    count toward the censor activity stat.
+    """
+    return await run_in_threadpool(service.save_original, request)
 
 
 @router.post("/save-operations")

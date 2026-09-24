@@ -134,6 +134,17 @@ class CensorSaveDataRequest(BaseModel):
     allow_overwrite: bool = False
 
 
+class CensorSaveOriginalRequest(BaseModel):
+    """Save an image the user did not edit, read straight from its source file."""
+    original_image_id: int = Field(..., ge=1)
+    filename: str = Field(..., min_length=1)
+    output_folder: str = Field(..., min_length=1)
+    metadata_option: str = Field("keep", pattern="^(keep|minimal|strip)$")
+    # "original" keeps the source's own format (png / jpg / jpeg / webp).
+    output_format: str = Field("original", pattern="^(original|png|jpg|jpeg|webp)$")
+    allow_overwrite: bool = False
+
+
 class CensorSaveOperationsRequest(BaseModel):
     """Request to save non-destructive edit operations on top of the original image."""
     original_image_id: int = Field(..., ge=1)

@@ -1195,6 +1195,9 @@ The decoded source format determines the output bytes and extension: JPEG stays 
 #### POST /api/censor/save-data
 Save edited base64 canvas output.
 
+#### POST /api/censor/save-original
+Save an image the user did not edit, read straight from its source file (reorder-and-rename exports from the censor queue). Body: `{original_image_id, filename, output_folder, metadata_option: keep|minimal|strip, output_format: original|png|jpg|jpeg|webp, allow_overwrite}`. With `output_format: original` and `metadata_option: keep` the source file is copied byte for byte; otherwise it is re-encoded on the server. An existing target is not replaced unless `allow_overwrite` is true (409). Does not count toward the censor activity stat. Returns the same shape as `/api/censor/save-data`.
+
 #### POST /api/censor/save-operations
 Save a non-destructive edit operation list on top of the original image.
 

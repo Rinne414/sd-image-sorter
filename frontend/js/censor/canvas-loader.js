@@ -436,17 +436,6 @@ async function loadImage(src) {
     });
 }
 
-function urlToDataUrl(url) {
-    return fetch(url)
-        .then(response => response.blob())
-        .then(blob => new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        }));
-}
-
 function toggleShowChanges(options = {}) {
     // A large image makes the diff slow, not impossible: ask once per session.
     if (!CensorState.showingChanges && !options.largeConfirmed && !CensorState.largeDiffConfirmed

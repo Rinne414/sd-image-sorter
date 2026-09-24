@@ -24,7 +24,7 @@ function openSaveOptionsPopup() {
 
     const formatOption = document.getElementById('save-format-option');
     if (formatOption) {
-        formatOption.value = CensorState.outputFormat || 'png';
+        formatOption.value = CensorState.outputFormat || localStorage.getItem('censor_output_format') || 'png';
     }
 
     const allowOverwrite = document.getElementById('save-allow-overwrite');
@@ -83,6 +83,7 @@ async function confirmAndSaveAll() {
     CensorState.outputFolder = folder;
     CensorState.metadataOption = metadataOption;
     CensorState.outputFormat = formatOption;
+    localStorage.setItem('censor_output_format', formatOption);
     localStorage.setItem('censor_output_folder', folder);
     localStorage.setItem('censor_unedited_option', includeUnedited ? 'include' : 'skip');
 
@@ -116,15 +117,41 @@ function readCensorSaveWarnings(result) {
     });
 }
 
+const CENSOR_SOURCE_FORMATS = new Set(['png', 'jpg', 'jpeg', 'webp']);
+
+// "Same as the original" resolves per image; anything else is a fixed format.
+function resolveCensorOutputFormat(item, formatOption) {
+    if (formatOption !== 'original') return formatOption;
+    const ext = String(item?.originalFilename || '').split('.').pop().toLowerCase();
+    return CENSOR_SOURCE_FORMATS.has(ext) ? ext : 'png';
+}
+
 async function saveCensorQueueItem(item, formatOption = 'png', metadataOption = 'strip', allowOverwrite = false) {
     const folder = CensorState.outputFolder;
     const baseName = item.outputFilename.replace(/\.[^/.]+$/, '');
-    const finalFilename = `${baseName}.${formatOption}`;
+    const outputFormat = resolveCensorOutputFormat(item, formatOption);
+    const finalFilename = `${baseName}.${outputFormat}`;
 
     if (shouldUseProxyEditMode(item) || (Array.isArray(item.editOperations) && item.editOperations.length > 0)) {
         const result = await window.App.API.post('/api/censor/save-operations', {
             original_image_id: item.id,
             operations: item.editOperations || [],
+            filename: finalFilename,
+            output_folder: folder,
+            metadata_option: metadataOption,
+            output_format: outputFormat,
+            allow_overwrite: allowOverwrite,
+        });
+        markGalleryRefreshAfterCensorSave(result);
+        return result;
+    }
+
+    // Unedited: the server saves straight from the source file (a byte copy
+    // when the format and metadata are kept), so the pixels never go through
+    // a browser canvas and a JPG does not come back as a large PNG.
+    if (!item.currentDataUrl) {
+        const result = await window.App.API.post('/api/censor/save-original', {
+            original_image_id: item.id,
             filename: finalFilename,
             output_folder: folder,
             metadata_option: metadataOption,
@@ -135,25 +162,12 @@ async function saveCensorQueueItem(item, formatOption = 'png', metadataOption = 
         return result;
     }
 
-    let dataUrl;
-
-    if (item.currentDataUrl) {
-        // Already edited - canvas data has no metadata
-        dataUrl = item.currentDataUrl;
-    } else if (metadataOption === 'strip') {
-        // No edits but stripping metadata - draw through canvas to remove all metadata
-        dataUrl = await stripMetadataViaCanvas(item.originalUrl);
-    } else {
-        // Keep metadata - use original blob (metadata preserved in blob)
-        dataUrl = await urlToDataUrl(item.originalUrl);
-    }
-
     const result = await window.App.API.post('/api/censor/save-data', {
-        image_data: dataUrl,
+        image_data: item.currentDataUrl,
         filename: finalFilename,
         output_folder: folder,
         metadata_option: metadataOption,
-        output_format: formatOption,
+        output_format: outputFormat,
         original_image_id: item.id,
         allow_overwrite: allowOverwrite,
     });
@@ -254,20 +268,5 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
     if (saveWarnings.size > 0) {
         window.App.showToast(Array.from(saveWarnings).join(' '), 'warning');
     }
-}
-
-/**
- * Strips all metadata from an image by drawing it through a canvas.
- * Canvas toDataURL() produces a clean image with no embedded metadata.
- */
-async function stripMetadataViaCanvas(url) {
-    const img = await loadImage(url);
-    const canvas = document.createElement('canvas');
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0);
-    // toDataURL creates a clean PNG with no metadata
-    return canvas.toDataURL('image/png');
 }
 

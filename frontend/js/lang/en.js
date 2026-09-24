@@ -2354,6 +2354,7 @@ window.I18nLang_en = {
     'save.metadataMinimal': 'Keep basic info only',
     'save.metadataHelper': 'Choose whether to keep, trim, or remove generation metadata.',
     'save.outputFormat': 'Output Format',
+    'save.formatOriginal': 'Same as the original (unedited images are copied as is)',
     'save.formatPng': 'PNG (Lossless, larger file)',
     'save.formatJpg': 'JPG (Smaller file, widely compatible)',
     'save.formatWebp': 'WebP (Smaller file, good quality)',
