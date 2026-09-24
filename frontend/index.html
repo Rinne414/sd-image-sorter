@@ -792,7 +792,7 @@
                     <div class="filter-sidebar-scroll">
                     <div class="sidebar-section" data-sidebar-section="filters">
                         <div class="sidebar-section-head">
-                            <button id="btn-collapse-desktop-sidebar" class="btn btn-ghost btn-small btn-icon-only" title="Collapse Sidebar" aria-label="Collapse sidebar">
+                            <button id="btn-collapse-desktop-sidebar" class="btn btn-ghost btn-small btn-icon-only" title="Collapse Sidebar" data-i18n-title="tip.collapseSidebar" aria-label="Collapse sidebar">
                                 <span aria-hidden="true">◀</span>
                             </button>
                             <button type="button" class="sidebar-section-toggle" aria-expanded="true" aria-controls="sidebar-body-filters">
@@ -810,45 +810,45 @@
                             <!-- Active Filter Summary -->
                             <div class="filter-summary" id="filter-summary">
                                 <!-- data-filter-field: click opens filter modal focused on that block (B2). -->
-                                <div class="summary-row" data-filter-field="generators" title="Open filter editor: Generators">
+                                <div class="summary-row" data-filter-field="generators" title="Open filter editor: Generators" data-i18n-title="tip.openFilterEditorGenerators">
                                     <!-- Colons live outside the data-i18n node: i18n.js replaces
                                          textContent wholesale and the summary.* values have no colon
                                          (ui-refresh.js _setSummaryStrongs appends its own ':'). -->
                                     <span class="summary-label"><span data-i18n="summary.generators">Generators</span>:</span>
                                     <span class="summary-value" id="summary-generators" data-i18n="common.all">All</span>
                                 </div>
-                                <div class="summary-row" data-filter-field="ratings" title="Open filter editor: Ratings">
+                                <div class="summary-row" data-filter-field="ratings" title="Open filter editor: Ratings" data-i18n-title="tip.openFilterEditorRatings">
                                     <span class="summary-label"><span data-i18n="summary.ratings">Ratings</span>:</span>
                                     <span class="summary-value" id="summary-ratings" data-i18n="common.all">All</span>
                                 </div>
-                                <div class="summary-row" data-filter-field="tags" title="Open filter editor: Tags">
+                                <div class="summary-row" data-filter-field="tags" title="Open filter editor: Tags" data-i18n-title="tip.openFilterEditorTags">
                                     <span class="summary-label"><span data-i18n="summary.tags">Tags</span>:</span>
                                     <span class="summary-value" id="summary-tags" data-i18n="common.none">None</span>
                                 </div>
-                                <div class="summary-row" data-filter-field="checkpoints" title="Open filter editor: Base model / Checkpoints">
+                                <div class="summary-row" data-filter-field="checkpoints" title="Open filter editor: Base model / Checkpoints" data-i18n-title="tip.openFilterEditorBaseModelCheckpoints">
                                     <span class="summary-label"><span data-i18n="summary.checkpoints">Checkpoints</span>:</span>
                                     <span class="summary-value" id="summary-checkpoints" data-i18n="common.none">None</span>
                                 </div>
-                                <div class="summary-row" data-filter-field="loras" title="Open filter editor: LoRAs">
+                                <div class="summary-row" data-filter-field="loras" title="Open filter editor: LoRAs" data-i18n-title="tip.openFilterEditorLoras">
                                     <span class="summary-label"><span data-i18n="summary.loras">LoRAs</span>:</span>
                                     <span class="summary-value" id="summary-loras" data-i18n="common.none">None</span>
                                 </div>
-                                <div class="summary-row" data-filter-field="prompts" title="Open filter editor: Prompt filters">
+                                <div class="summary-row" data-filter-field="prompts" title="Open filter editor: Prompt filters" data-i18n-title="tip.openFilterEditorPromptFilters">
                                     <span class="summary-label"><span data-i18n="summary.prompt">Prompt</span>:</span>
                                     <span class="summary-value" id="summary-prompt">-</span>
                                 </div>
-                                <div class="summary-row" data-filter-field="search" title="Open filter editor: Text search">
+                                <div class="summary-row" data-filter-field="search" title="Open filter editor: Text search" data-i18n-title="tip.openFilterEditorTextSearch">
                                     <span class="summary-label"><span data-i18n="summary.search">Search</span>:</span>
                                     <span class="summary-value" id="summary-search" data-i18n="common.none">None</span>
                                 </div>
-                                <div class="summary-row" data-filter-field="colors" title="Open filter editor: Colors">
+                                <div class="summary-row" data-filter-field="colors" title="Open filter editor: Colors" data-i18n-title="tip.openFilterEditorColors">
                                     <span class="summary-label"><span data-i18n="filter.colors">Colors</span>:</span>
                                     <span class="summary-value" id="summary-colors" data-i18n="filter.any">Any</span>
                                 </div>
                                 <div class="summary-row" id="artist-filter-row" style="display: none;">
                                     <span class="summary-label"><span data-i18n="summary.artist">Artist</span>:</span>
                                     <span class="summary-value" id="summary-artist">-</span>
-                                    <button class="btn-clear-filter" id="btn-clear-artist" title="Clear artist filter" aria-label="Clear artist filter">
+                                    <button class="btn-clear-filter" id="btn-clear-artist" title="Clear artist filter" data-i18n-title="tip.clearArtistFilter" aria-label="Clear artist filter">
                                         <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></span>
                                     </button>
                                 </div>
@@ -938,8 +938,8 @@
                             <div class="selection-panel-section selection-panel-section-scope">
                                 <span class="selection-panel-section-title" data-i18n="selection.scopeSection">Choose images</span>
                                 <div class="selection-panel-actions selection-panel-pick-actions" aria-label="Selection tools">
-                                    <button id="btn-select-all" class="btn btn-primary full-width" title="Select all images matching current filters"><span><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span> <span data-i18n="selection.selectAllFiltered">Select all matching</span></button>
-                                    <button id="btn-invert-selection-filtered" class="btn btn-secondary full-width" title="Invert selection among filtered images"><span>⇄</span> <span data-i18n="selection.invertAllFiltered">Invert matching</span></button>
+                                    <button id="btn-select-all" class="btn btn-primary full-width" title="Select all images matching current filters" data-i18n-title="tip.selectAllImagesMatchingCurrentFilters"><span><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span> <span data-i18n="selection.selectAllFiltered">Select all matching</span></button>
+                                    <button id="btn-invert-selection-filtered" class="btn btn-secondary full-width" title="Invert selection among filtered images" data-i18n-title="tip.invertSelectionAmongFilteredImages"><span>⇄</span> <span data-i18n="selection.invertAllFiltered">Invert matching</span></button>
                                 </div>
                                 <span class="selection-panel-helper" data-i18n="selection.selectAllFilteredHelp">Uses the current Gallery filters, including images not scrolled into view.</span>
                             </div>
@@ -966,7 +966,7 @@
                 <!-- Desktop Sidebar Restore Button -->
                 <!-- Positioning lives in ui-refresh.css (#btn-restore-desktop-sidebar,
                      pinned below the fixed top bar); JS only toggles display. -->
-                <button id="btn-restore-desktop-sidebar" class="btn btn-secondary" title="Expand Sidebar" style="display: none;">
+                <button id="btn-restore-desktop-sidebar" class="btn btn-secondary" title="Expand Sidebar" data-i18n-title="tip.expandSidebar" style="display: none;">
                     <span aria-hidden="true">▶</span>
                 </button>
 
@@ -1142,7 +1142,7 @@
                                 <option value="brightness_skew" data-i18n="sort.brightnessSkew">Brightness Spread</option>
                                 <option value="random" data-i18n="sort.random">Random</option>
                             </select>
-                            <button class="view-btn sort-reverse-btn" id="sort-reverse-btn" title="Reverse sort order" aria-label="Reverse sort order" aria-pressed="false">
+                            <button class="view-btn sort-reverse-btn" id="sort-reverse-btn" title="Reverse sort order" data-i18n-title="tip.reverseSortOrder" aria-label="Reverse sort order" aria-pressed="false">
                                 <span aria-hidden="true">↕</span>
                             </button>
                         </div>
@@ -1238,7 +1238,7 @@
                         </div>
                     </div>
                     <!-- Comfort-1: quiet status ribbon (resume / today stats). Hidden by default. -->
-                    <div id="gallery-comfort-ribbon" class="gallery-comfort-ribbon" hidden role="status" aria-live="polite" title="Click to dismiss"></div>
+                    <div id="gallery-comfort-ribbon" class="gallery-comfort-ribbon" hidden role="status" aria-live="polite" title="Click to dismiss" data-i18n-title="tip.clickToDismiss"></div>
                     <div id="gallery-empty-state" style="display:none" role="status">
                         <div class="empty-state-card empty-state-onboarding">
                             <span class="empty-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></span>
@@ -1302,17 +1302,17 @@
                          handlers) — they MOVED here from the left selection panel. -->
                     <div class="gallery-action-bar" id="gallery-action-bar" hidden role="toolbar" aria-label="Batch actions" data-i18n-aria="actionBar.aria">
                         <div class="gallery-action-bar-buttons">
-                            <button id="btn-move-selected" class="btn btn-primary" title="Move selected images to another folder"><span><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></span> <span data-i18n="selection.moveSelected">Move...</span></button>
+                            <button id="btn-move-selected" class="btn btn-primary" title="Move selected images to another folder" data-i18n-title="tip.moveSelectedImagesToAnotherFolder"><span><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></span> <span data-i18n="selection.moveSelected">Move...</span></button>
                             <button id="btn-tag-selected" class="btn btn-secondary" title="AI-tag the selected images" data-i18n-title="actionBar.tagSelectedTooltip"><span><svg class="icon" aria-hidden="true"><use href="#i-tag"/></svg></span> <span data-i18n="actionBar.tagSelected">Tag</span></button>
                             <button id="btn-send-to-censor" class="btn btn-secondary" title="Send to Censor Edit" data-i18n-title="gallery.contextSendToCensor"><span><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></span> <span data-i18n="selection.censorEdit">Censor Edit</span></button>
-                            <button id="btn-add-selected-to-collection" class="btn btn-secondary" title="Add selected images to a collection (reference, no file copy)"><span><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span> <span data-i18n="selection.addToCollection">Add to collection…</span></button>
+                            <button id="btn-add-selected-to-collection" class="btn btn-secondary" title="Add selected images to a collection (reference, no file copy)" data-i18n-title="tip.addSelectedImagesToACollection"><span><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span> <span data-i18n="selection.addToCollection">Add to collection…</span></button>
                             <div class="gallery-action-more">
                                 <button id="btn-gallery-action-more" class="btn btn-ghost" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="gallery-action-more-menu">
                                     <span data-i18n="actionBar.more">More</span> <span aria-hidden="true">▾</span>
                                 </button>
                                 <div class="gallery-action-more-menu" id="gallery-action-more-menu" hidden>
-                                    <button id="btn-copy-selected" class="btn btn-ghost" title="Copy selected images to another folder"><span><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg></span> <span data-i18n="selection.copySelected">Copy...</span></button>
-                                    <button id="btn-send-selection-to-dataset-maker" class="btn btn-ghost" title="Push the selected images into the Dataset Maker queue (training set workspace)"><span><svg class="icon" aria-hidden="true"><use href="#i-package"/></svg></span> <span data-i18n="selection.sendToDatasetMaker">To Dataset Maker</span></button>
+                                    <button id="btn-copy-selected" class="btn btn-ghost" title="Copy selected images to another folder" data-i18n-title="tip.copySelectedImagesToAnotherFolder"><span><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg></span> <span data-i18n="selection.copySelected">Copy...</span></button>
+                                    <button id="btn-send-selection-to-dataset-maker" class="btn btn-ghost" title="Push the selected images into the Dataset Maker queue (training set workspace)" data-i18n-title="tip.pushTheSelectedImagesIntoThe"><span><svg class="icon" aria-hidden="true"><use href="#i-package"/></svg></span> <span data-i18n="selection.sendToDatasetMaker">To Dataset Maker</span></button>
                                     <button id="btn-send-selection-to-reader" class="btn btn-ghost" title="Open the last selected image in Reader" data-i18n-title="selection.sendToReaderHelp"><span><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span> <span data-i18n="selection.sendToReader">To Reader</span></button>
                                     <button id="btn-send-selection-to-reverse" class="btn btn-ghost" title="Open the last selected image in Reverse Prompt" data-i18n-title="selection.sendToReverseHelp"><span><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg></span> <span data-i18n="selection.sendToReverse">To Reverse Prompt</span></button>
                                     <button id="btn-send-selection-to-privacy" class="btn btn-ghost" title="Send selected images to Privacy Tools" data-i18n-title="selection.sendToPrivacyHelp"><span><svg class="icon" aria-hidden="true"><use href="#i-eye-off"/></svg></span> <span data-i18n="selection.sendToPrivacy">To Privacy Tools</span></button>
@@ -1321,8 +1321,8 @@
                                     <button id="btn-export-selected" class="btn btn-ghost" title="Prompt / Tags / CSV / JSONL" data-i18n-title="selection.exportTextDataHelp"><span><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg></span> <span data-i18n="selection.exportTextData">Combined Export...</span></button>
                                     <button id="btn-batch-export-tags" class="btn btn-ghost" title="Training captions, one file per image" data-i18n-title="selection.exportTagsToFilesHelp"><span><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg></span> <span data-i18n="selection.exportTagsToFiles">Training captions...</span></button>
                                     <div class="gallery-action-more-divider" aria-hidden="true"></div>
-                                    <button id="btn-remove-selected-gallery" class="btn btn-ghost" title="Remove selected images from gallery (files not deleted)"><span><svg class="icon" aria-hidden="true"><use href="#i-broom"/></svg></span> <span data-i18n="selection.removeFromGallery">Remove from Gallery</span></button>
-                                    <button id="btn-delete-selected-files" class="btn btn-ghost danger" title="Move selected image files to trash"><span><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></span> <span data-i18n="selection.deleteSelectedFiles">Move to Trash...</span></button>
+                                    <button id="btn-remove-selected-gallery" class="btn btn-ghost" title="Remove selected images from gallery (files not deleted)" data-i18n-title="tip.removeSelectedImagesFromGalleryFiles"><span><svg class="icon" aria-hidden="true"><use href="#i-broom"/></svg></span> <span data-i18n="selection.removeFromGallery">Remove from Gallery</span></button>
+                                    <button id="btn-delete-selected-files" class="btn btn-ghost danger" title="Move selected image files to trash" data-i18n-title="tip.moveSelectedImageFilesToTrash"><span><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></span> <span data-i18n="selection.deleteSelectedFiles">Move to Trash...</span></button>
                                 </div>
                             </div>
                         </div>
@@ -1578,12 +1578,12 @@
                         <!-- Step 2: Mode + Actions -->
                         <div class="obfuscate-controls-bar">
                             <div class="obfuscate-mode-group">
-                                <select id="obfuscate-compat-mode" class="input-field obfuscate-mode-select" title="Compatibility mode">
+                                <select id="obfuscate-compat-mode" class="input-field obfuscate-mode-select" title="Compatibility mode" data-i18n-title="tip.compatibilityMode">
                                     <option value="big_tomato" data-i18n="tools.compatBigTomato">Standard (password + image info)</option>
                                     <option value="small_tomato" data-i18n="tools.compatSmallTomato">Simple (no password)</option>
                                 </select>
                                 <input type="password" id="obfuscate-password" class="input-field obfuscate-password-input" placeholder="Password (optional)" data-i18n-placeholder="tools.password">
-                                <button class="btn btn-ghost btn-small obfuscate-settings-toggle" id="obfuscate-settings-toggle" title="Advanced settings" type="button"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></button>
+                                <button class="btn btn-ghost btn-small obfuscate-settings-toggle" id="obfuscate-settings-toggle" title="Advanced settings" data-i18n-title="tagger.advancedSummary" type="button"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></button>
                             </div>
                             <div class="obfuscate-action-group">
                                 <button id="obfuscate-btn-encode" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg> <span data-i18n="tools.encode">Protect</span></button>
@@ -1681,9 +1681,9 @@
                                 <div class="autosep-card autosep-card-scope" id="autosep-scope-status">
                                     <div class="autosep-scope-detail-block">
                                         <div class="scope-status-actions">
-                                            <button class="btn btn-secondary btn-small" id="btn-autosep-use-gallery-scope" type="button" title="Use whatever filters Gallery has right now"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg> <span data-i18n="scope.useGallery">Use Gallery's current filters</span></button>
-                                            <button class="btn btn-secondary btn-small" id="btn-autosep-resync-scope" type="button" title="Gallery filters changed — click to update" hidden><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg> <span data-i18n="scope.resyncGallery">Update from Gallery</span></button>
-                                            <button class="btn btn-ghost btn-small" id="btn-autosep-keep-scope" type="button" title="Ignore Gallery changes, keep using the filters shown below" hidden><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg> <span data-i18n="scope.keepSaved">Keep my filters</span></button>
+                                            <button class="btn btn-secondary btn-small" id="btn-autosep-use-gallery-scope" type="button" title="Use whatever filters Gallery has right now" data-i18n-title="tip.useWhateverFiltersGalleryHasRight"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg> <span data-i18n="scope.useGallery">Use Gallery's current filters</span></button>
+                                            <button class="btn btn-secondary btn-small" id="btn-autosep-resync-scope" type="button" title="Gallery filters changed — click to update" data-i18n-title="tip.galleryFiltersChangedClickToUpdate" hidden><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg> <span data-i18n="scope.resyncGallery">Update from Gallery</span></button>
+                                            <button class="btn btn-ghost btn-small" id="btn-autosep-keep-scope" type="button" title="Ignore Gallery changes, keep using the filters shown below" data-i18n-title="tip.ignoreGalleryChangesKeepUsingThe" hidden><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg> <span data-i18n="scope.keepSaved">Keep my filters</span></button>
                                         </div>
                                     </div>
                                 </div>
@@ -2043,9 +2043,9 @@
                                 </div>
                                 <div class="scope-status-detail" id="manual-sort-scope-detail">Gallery filters changed. Manual Sort will still use the filters shown here.</div>
                                 <div class="scope-status-actions">
-                                    <button class="btn btn-secondary btn-small" id="btn-manual-sort-use-gallery-scope" type="button" title="Use whatever filters Gallery has right now"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg> <span data-i18n="scope.useGallery">Use Gallery's current filters</span></button>
-                                    <button class="btn btn-secondary btn-small" id="btn-manual-sort-resync-scope" type="button" title="Gallery filters changed — click to update" hidden><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg> <span data-i18n="scope.resyncGallery">Update from Gallery</span></button>
-                                    <button class="btn btn-ghost btn-small" id="btn-manual-sort-keep-scope" type="button" title="Ignore Gallery changes, keep using the filters shown below" hidden><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg> <span data-i18n="scope.keepSaved">Keep my filters</span></button>
+                                    <button class="btn btn-secondary btn-small" id="btn-manual-sort-use-gallery-scope" type="button" title="Use whatever filters Gallery has right now" data-i18n-title="tip.useWhateverFiltersGalleryHasRight"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg> <span data-i18n="scope.useGallery">Use Gallery's current filters</span></button>
+                                    <button class="btn btn-secondary btn-small" id="btn-manual-sort-resync-scope" type="button" title="Gallery filters changed — click to update" data-i18n-title="tip.galleryFiltersChangedClickToUpdate" hidden><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg> <span data-i18n="scope.resyncGallery">Update from Gallery</span></button>
+                                    <button class="btn btn-ghost btn-small" id="btn-manual-sort-keep-scope" type="button" title="Ignore Gallery changes, keep using the filters shown below" data-i18n-title="tip.ignoreGalleryChangesKeepUsingThe" hidden><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg> <span data-i18n="scope.keepSaved">Keep my filters</span></button>
                                 </div>
                             </div>
                             <div class="filter-summary-compact" id="manual-sort-filter-summary">
@@ -2446,11 +2446,11 @@
                                 </div>
                                 <div class="qs-filter-field">
                                     <span class="qs-filter-label" data-i18n="filter.aestheticMin">Min score</span>
-                                    <input type="number" id="qs-filter-aesthetic" placeholder="Min ★" step="0.5" min="0" max="10" style="width:70px;">
+                                    <input type="number" id="qs-filter-aesthetic" placeholder="Min ★" data-i18n-placeholder="placeholder.min" step="0.5" min="0" max="10" style="width:70px;">
                                 </div>
                                 <div class="qs-filter-field">
                                     <span class="qs-filter-label" data-i18n="filter.aestheticMax">Max score</span>
-                                    <input type="number" id="qs-filter-aesthetic-max" placeholder="Max ★" step="0.5" min="0" max="10" style="width:70px;">
+                                    <input type="number" id="qs-filter-aesthetic-max" placeholder="Max ★" data-i18n-placeholder="placeholder.max" step="0.5" min="0" max="10" style="width:70px;">
                                 </div>
                             </div>
                         </div>
@@ -2528,31 +2528,31 @@
                     <!-- Center Area (Canvas) -->
                     <div class="censor-main-v2">
                         <div class="censor-toolbar-v2">
-                            <button class="tool-btn-v2 active" data-tool="brush" title="Brush (B)">
+                            <button class="tool-btn-v2 active" data-tool="brush" title="Brush (B)" data-i18n-title="tip.brushB">
                                 <span class="tool-icon-v2"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg></span>
                                 <span class="tool-label"><span data-i18n="censor.brush">Brush</span> <kbd>B</kbd></span>
                             </button>
-                            <button class="tool-btn-v2" data-tool="pen" title="Pen (P)">
+                            <button class="tool-btn-v2" data-tool="pen" title="Pen (P)" data-i18n-title="tip.penP">
                                 <span class="tool-icon-v2"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg></span>
                                 <span class="tool-label"><span data-i18n="censor.pen">Pen</span> <kbd>P</kbd></span>
                             </button>
-                            <button class="tool-btn-v2" data-tool="eraser" title="Eraser (E)">
+                            <button class="tool-btn-v2" data-tool="eraser" title="Eraser (E)" data-i18n-title="tip.eraserE">
                                 <span class="tool-icon-v2"><svg class="icon" aria-hidden="true"><use href="#i-broom"/></svg></span>
                                 <span class="tool-label"><span data-i18n="censor.eraser">Eraser</span> <kbd>E</kbd></span>
                             </button>
-                            <button class="tool-btn-v2" data-tool="clone" title="Clone Stamp (G)">
+                            <button class="tool-btn-v2" data-tool="clone" title="Clone Stamp (G)" data-i18n-title="tip.cloneStampG">
                                 <span class="tool-icon-v2"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg></span>
                                 <span class="tool-label"><span data-i18n="censor.clone">Clone</span> <kbd>G</kbd></span>
                             </button>
                             <div class="toolbar-divider"></div>
-                            <button class="tool-btn-v2" data-tool="remove-bg" title="Remove Background (R)">
+                            <button class="tool-btn-v2" data-tool="remove-bg" title="Remove Background (R)" data-i18n-title="tip.removeBackgroundR">
                                 <span class="tool-icon-v2"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></span>
                                 <span class="tool-label"><span data-i18n="censor.removeBg">Remove BG</span> <kbd>R</kbd></span>
                             </button>
                             <div class="toolbar-divider"></div>
                             <!-- Censor Style Dropdown in Toolbar -->
                             <div class="toolbar-dropdown">
-                                <select id="censor-style" class="toolbar-select" title="Censor Style">
+                                <select id="censor-style" class="toolbar-select" title="Censor Style" data-i18n-title="tip.censorStyle">
                                     <option value="mosaic" data-i18n="censor.mosaic">Mosaic</option>
                                     <option value="blur" data-i18n="censor.blur">Blur</option>
                                     <option value="black_bar" data-i18n="censor.black">⬛ Black</option>
@@ -2560,19 +2560,19 @@
                                 </select>
                             </div>
                             <div class="toolbar-divider"></div>
-                            <button class="tool-btn-v2" id="btn-undo" title="Undo (Ctrl+Z)">
+                            <button class="tool-btn-v2" id="btn-undo" title="Undo (Ctrl+Z)" data-i18n-title="tip.undoCtrlZ">
                                 <span class="tool-icon-v2">↩️</span>
                                 <span class="tool-label"><span data-i18n="censor.undo">Undo</span> <kbd>Z</kbd></span>
                             </button>
-                            <button class="tool-btn-v2" id="btn-redo" title="Redo (Ctrl+Shift+Z)">
+                            <button class="tool-btn-v2" id="btn-redo" title="Redo (Ctrl+Shift+Z)" data-i18n-title="tip.redoCtrlShiftZ">
                                 <span class="tool-icon-v2">↪️</span>
                                 <span class="tool-label"><span data-i18n="censor.redo">Redo</span> <kbd>Y</kbd></span>
                             </button>
-                            <button class="tool-btn-v2" id="btn-clear-edits" title="Reset to Original">
+                            <button class="tool-btn-v2" id="btn-clear-edits" title="Reset to Original" data-i18n-title="tip.resetToOriginal">
                                 <span class="tool-icon-v2"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg></span>
                                 <span class="tool-label" data-i18n="censor.reset">Reset</span>
                             </button>
-                            <button class="tool-btn-v2" id="btn-show-changes" title="Show Changes (H)">
+                            <button class="tool-btn-v2" id="btn-show-changes" title="Show Changes (H)" data-i18n-title="tip.showChangesH">
                                 <span class="tool-icon-v2"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></span>
                                 <span class="tool-label"><span data-i18n="censor.showChanges">Diff</span> <kbd>H</kbd></span>
                             </button>
@@ -2624,7 +2624,7 @@
                                      "No image selected" default while an image is being edited. -->
                                 <div class="status-filename" id="censor-filename">No image selected</div>
                                 <button class="btn-icon-small" id="btn-rename-single"
-                                    title="Rename this image (F2)"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg></button>
+                                    title="Rename this image (F2)" data-i18n-title="tip.renameThisImageF2"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg></button>
                                 <div class="status-divider-h"></div>
                                 <details class="censor-shortcuts-disclosure">
                                     <summary><span aria-hidden="true">⌨️</span> <span data-i18n="censor.shortcuts">Shortcuts</span></summary>
@@ -2717,8 +2717,8 @@
                                 <button class="btn btn-primary btn-small" id="btn-run-auto-censor" style="flex:1;" title="For everyday privacy censoring, use Wenaka / NudeNet." data-i18n-title="censor.quickAutoCensorHelp"><svg class="icon" aria-hidden="true"><use href="#i-zap"/></svg> <span data-i18n="censor.quickAutoCensor">Quick Auto Censor</span></button>
                             </div>
                             <div class="censor-side-row sam3-prompt-row" id="sam3-prompt-row" style="display:none">
-                                <input type="text" id="sam3-custom-prompt" class="input-field" placeholder="e.g. exposed breast, face, hands" style="flex:1;font-size:12px;padding:6px 8px;">
-                                <button class="btn btn-ghost btn-small" id="btn-sam3-common-words" title="Common prompts" style="white-space:nowrap;"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg></button>
+                                <input type="text" id="sam3-custom-prompt" class="input-field" placeholder="e.g. exposed breast, face, hands" data-i18n-placeholder="placeholder.eGExposedBreastFaceHands" style="flex:1;font-size:12px;padding:6px 8px;">
+                                <button class="btn btn-ghost btn-small" id="btn-sam3-common-words" title="Common prompts" data-i18n-title="tip.commonPrompts" style="white-space:nowrap;"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg></button>
                             </div>
                             <div class="censor-side-row">
                                 <label class="censor-side-inline-label"><span data-i18n="censor.confidenceThreshold">Conf</span>: <span class="censor-side-value" id="censor-confidence-value-sidebar">0.50</span></label>
@@ -2790,7 +2790,7 @@
                                 </div>
                             </div>
                             <div class="filter-preset-row censor-filter-presets">
-                                <button class="btn btn-ghost btn-small" id="btn-filter-reset" title="Reset" data-i18n="censor.filterReset">Reset</button>
+                                <button class="btn btn-ghost btn-small" id="btn-filter-reset" title="Reset" data-i18n-title="censor.reset" data-i18n="censor.filterReset">Reset</button>
                                 <button class="btn btn-ghost btn-small" id="btn-filter-vivid" data-i18n="censor.filterVivid">Vivid</button>
                                 <button class="btn btn-ghost btn-small" id="btn-filter-warm" data-i18n="censor.filterWarm">Warm</button>
                                 <button class="btn btn-ghost btn-small" id="btn-filter-cool" data-i18n="censor.filterCool">Cool</button>
@@ -2962,7 +2962,7 @@
                                 <label data-i18n="censor.yoloModelPath">Optional Custom YOLO Model Path</label>
                                 <div class="input-row" style="display: flex; gap: 8px;">
                                     <input type="text" id="censor-model-path" class="input-field"
-                                        placeholder="Path to .pt or .onnx model (leave blank to use the built-in local model)" style="flex: 1;">
+                                        placeholder="Path to .pt or .onnx model (leave blank to use the built-in local model)" data-i18n-placeholder="placeholder.pathToPtOrOnnxModel" style="flex: 1;">
                                     <button class="btn btn-secondary" id="btn-browse-model" aria-label="Browse for a YOLO model file" data-i18n-aria="a11y.browseModelFile"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></button>
                                 </div>
                                 <small class="helper-text" data-i18n="censor.yoloModelPathHelp">Leave blank unless you're running custom experiments.</small>
@@ -3965,9 +3965,9 @@
                                         <option value="tagged" data-i18n="dataset.filterTagged">Has caption</option>
                                     </select>
                                     <button type="button" class="dataset-queue-mode-btn active" id="btn-dataset-queue-grid"
-                                            data-dataset-queue-mode="grid" title="Grid thumbnails" aria-pressed="true">▦</button>
+                                            data-dataset-queue-mode="grid" title="Grid thumbnails" data-i18n-title="tip.gridThumbnails" aria-pressed="true">▦</button>
                                     <button type="button" class="dataset-queue-mode-btn" id="btn-dataset-queue-list"
-                                            data-dataset-queue-mode="list" title="List with names" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
+                                            data-dataset-queue-mode="list" title="List with names" data-i18n-title="tip.listWithNames" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
                                 </div>
                             </div>
                             <div class="dataset-queue-toolbar">
@@ -3988,10 +3988,10 @@
                                 <strong data-i18n="dataset.editorTitle">Caption editor</strong>
                                 <span class="dataset-editor-filename" id="dataset-editor-filename"></span>
                                 <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-split-view"
-                                        data-i18n="dataset.splitBtn" title="Compare two captions side by side">Split</button>
+                                        data-i18n="dataset.splitBtn" title="Compare two captions side by side" data-i18n-title="tip.compareTwoCaptionsSideBySide">Split</button>
                                 <details class="dataset-editor-help">
                                     <summary aria-label="What makes a good caption?"
-                                             title="What makes a good caption?"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg></summary>
+                                             title="What makes a good caption?" data-i18n-title="dataset.helpTitle"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg></summary>
                                     <div class="dataset-editor-help-body">
                                         <strong data-i18n="dataset.helpTitle">What makes a good caption?</strong>
                                         <p id="dataset-caption-help-intro" data-i18n="dataset.helpIntro">
@@ -4011,10 +4011,10 @@
                                 </details>
                             </div>
                             <div class="dataset-zoom-toolbar" id="dataset-zoom-toolbar" hidden>
-                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-out" title="Zoom out">−</button>
+                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-out" title="Zoom out" data-i18n-title="tip.zoomOut">−</button>
                                 <span class="dataset-zoom-label" id="dataset-zoom-label">100%</span>
-                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-in" title="Zoom in">+</button>
-                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-reset" title="Reset zoom to 100%" aria-label="Reset zoom to 100%">⟲</button>
+                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-in" title="Zoom in" data-i18n-title="tip.zoomIn">+</button>
+                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-reset" title="Reset zoom to 100%" data-i18n-title="tip.resetZoomTo100" aria-label="Reset zoom to 100%">⟲</button>
                             </div>
                             <div class="dataset-editor-image-wrap" id="dataset-editor-image-wrap">
                                 <img class="dataset-editor-image" id="dataset-editor-image" alt="" hidden>
@@ -4053,12 +4053,12 @@
                                     <div class="dataset-caption-type-bulk">
                                         <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-captype-selected"
                                                 data-i18n="dataset.captionTypeApplySelected"
-                                                title="Apply the active image's type to the selected queue images">▸ Selected</button>
+                                                title="Apply the active image's type to the selected queue images" data-i18n-title="tip.applyTheActiveImageSType">▸ Selected</button>
                                         <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-captype-all"
                                                 data-i18n="dataset.captionTypeApplyAll"
-                                                title="Apply the active image's type to every queue image">▸ All</button>
+                                                title="Apply the active image's type to every queue image" data-i18n-title="tip.applyTheActiveImageSType2">▸ All</button>
                                         <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-captype-auto"
-                                                title="Auto: images that have a natural-language caption → Both, the rest → Booru"><svg class="icon" aria-hidden="true"><use href="#i-zap"/></svg> <span data-i18n="dataset.captionTypeAuto">Auto</span></button>
+                                                title="Auto: images that have a natural-language caption → Both, the rest → Booru" data-i18n-title="tip.autoImagesThatHaveANatural"><svg class="icon" aria-hidden="true"><use href="#i-zap"/></svg> <span data-i18n="dataset.captionTypeAuto">Auto</span></button>
                                     </div>
                                 </div>
 
@@ -4285,7 +4285,7 @@
                                         <span aria-hidden="true">⌫</span>
                                     </button>
                                     <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-anime-defaults"
-                                            title="Fill a simple starter setup: common quality tags, underscore handling, and sequential filenames"
+                                            title="Fill a simple starter setup: common quality tags, underscore handling, and sequential filenames" data-i18n-title="tip.fillASimpleStarterSetupCommon"
                                             data-i18n="dataset.animeDefaultsButton">Apply starter defaults</button>
                                 </div>
                             </section>
@@ -4715,7 +4715,7 @@
                                             <option value="200m-ft" data-i18n="reverse.tipoVariant200m">200M-ft (lighter, ~210 MB)</option>
                                         </select>
                                         <button type="button" class="btn btn-secondary btn-small" id="sepcon-tipo-suggest"
-                                                title="TIPO proposes tags the taggers never scored (vocabulary blind spots) — review checklist, nothing auto-applies"
+                                                title="TIPO proposes tags the taggers never scored (vocabulary blind spots) — review checklist, nothing auto-applies" data-i18n-title="tip.tipoProposesTagsTheTaggersNever"
                                                 ><svg class="icon" aria-hidden="true"><use href="#i-layers"/></svg> <span data-i18n="dataset.sepconTipoSuggest">Suggest missing tags</span></button>
                                     </div>
                                     <div id="sepcon-health-results" class="sepcon-health-results" hidden></div>
@@ -5715,11 +5715,11 @@
                                         </summary>
                                         <div class="modal-copy-menu-list">
                                             <button class="modal-copy-menu-item" id="btn-copy-all" type="button" aria-label="Copy all image info to clipboard" data-i18n="modal.copyAll">Copy All</button>
-                                            <button class="modal-copy-menu-item" id="btn-copy-prompt" type="button" aria-label="Copy prompt" title="Copy prompt only"><span data-i18n="modal.prompt">Prompt</span></button>
-                                            <button class="modal-copy-menu-item" id="btn-copy-negative" type="button" aria-label="Copy negative" title="Copy negative prompt only"><span data-i18n="modal.negative">Negative</span></button>
-                                            <button class="modal-copy-menu-item" id="btn-copy-tags" type="button" aria-label="Copy tags" title="Copy tags only"><span data-i18n="modal.tags">Tags</span></button>
+                                            <button class="modal-copy-menu-item" id="btn-copy-prompt" type="button" aria-label="Copy prompt" title="Copy prompt only" data-i18n-title="tip.copyPromptOnly"><span data-i18n="modal.prompt">Prompt</span></button>
+                                            <button class="modal-copy-menu-item" id="btn-copy-negative" type="button" aria-label="Copy negative" title="Copy negative prompt only" data-i18n-title="tip.copyNegativePromptOnly"><span data-i18n="modal.negative">Negative</span></button>
+                                            <button class="modal-copy-menu-item" id="btn-copy-tags" type="button" aria-label="Copy tags" title="Copy tags only" data-i18n-title="tip.copyTagsOnly"><span data-i18n="modal.tags">Tags</span></button>
                                             <button class="modal-copy-menu-item tag-category-menu-trigger" id="btn-copy-tags-category" type="button" aria-label="Copy Options" title="Copy Options" data-i18n-title="tagCategory.copyOptions" data-i18n-aria="tagCategory.copyOptions"><span data-i18n="tagCategory.copyOptions">Copy Options</span></button>
-                                            <button class="modal-copy-menu-item" id="btn-copy-params" type="button" aria-label="Copy params" title="Copy params only"><span data-i18n="modal.params">Params</span></button>
+                                            <button class="modal-copy-menu-item" id="btn-copy-params" type="button" aria-label="Copy params" title="Copy params only" data-i18n-title="tip.copyParamsOnly"><span data-i18n="modal.params">Params</span></button>
                                         </div>
                                     </details>
                                     <details class="modal-tools-menu" id="modal-tools-menu">
@@ -5898,7 +5898,7 @@
                             <h4 data-i18n="modal.aiCaption">AI Caption</h4>
                             <div class="modal-caption-actions">
                                 <button class="btn btn-ghost btn-small" id="btn-edit-caption" type="button"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg> <span data-i18n="modal.editCaptionBtn">Edit</span></button>
-                                <button class="btn btn-ghost btn-small" id="btn-copy-caption" title="Copy caption">Copy</button>
+                                <button class="btn btn-ghost btn-small" id="btn-copy-caption" title="Copy caption" data-i18n-title="tip.copyCaption">Copy</button>
                             </div>
                         </div>
                         <div id="modal-caption-view">
@@ -5958,7 +5958,7 @@
                     <label for="scan-folder-path" id="scan-folder-path-label" data-i18n="modal.folderPath">Image Folder</label>
                     <div class="folder-path-row">
                         <input type="text" id="scan-folder-path" class="input-field" placeholder="D:\images\outputs" aria-describedby="scan-folder-path-label scan-folder-feedback">
-                        <button type="button" class="btn-browse" id="btn-browse-folder" aria-label="Browse for folder" title="Browse folders" data-i18n="scan.browse">Browse</button>
+                        <button type="button" class="btn-browse" id="btn-browse-folder" aria-label="Browse for folder" title="Browse folders" data-i18n-title="tip.browseFolders" data-i18n="scan.browse">Browse</button>
                     </div>
                     <small id="scan-folder-feedback" class="validation-feedback" aria-live="polite"></small>
                     <div id="folder-browser-container"></div>
@@ -6054,7 +6054,7 @@
                     <label for="reconnect-folder-path" id="reconnect-folder-path-label" data-i18n="reconnect.folderPath">Where should the app look?</label>
                     <div class="folder-path-row">
                         <input type="text" id="reconnect-folder-path" class="input-field" placeholder="D:\images\outputs" data-folder-browser-container="reconnect-folder-browser-container" aria-describedby="reconnect-folder-path-label reconnect-folder-feedback">
-                        <button type="button" class="btn-browse" id="btn-browse-reconnect-folder" aria-label="Browse for folder" title="Browse folders" data-i18n="scan.browse">Browse</button>
+                        <button type="button" class="btn-browse" id="btn-browse-reconnect-folder" aria-label="Browse for folder" title="Browse folders" data-i18n-title="tip.browseFolders" data-i18n="scan.browse">Browse</button>
                     </div>
                     <small id="reconnect-folder-feedback" class="validation-feedback" aria-live="polite"></small>
                     <div id="reconnect-folder-browser-container"></div>
@@ -6435,7 +6435,7 @@
 
                                 <label class="form-label">
                                     <span data-i18n="modal.tagMaxTagsLabel">Max tags per image</span>
-                                    <input type="number" id="tag-max-tags-per-image" class="input-field" min="0" step="1" placeholder="0 = unlimited">
+                                    <input type="number" id="tag-max-tags-per-image" class="input-field" min="0" step="1" placeholder="0 = unlimited" data-i18n-placeholder="placeholder.0Unlimited">
                                     <small class="form-hint" id="tag-max-tags-hint" data-i18n="modal.tagMaxTagsHint">0 = unlimited. The base-model preset above suggests a value when you change it.</small>
                                 </label>
 
@@ -6514,8 +6514,8 @@
                     <!-- Tag backup lives here, not beside Start: it has nothing to do with a tagging run. -->
                     <div class="tagger-tag-backup-row">
                         <span class="tagger-tag-backup-label" data-i18n="tagger.tagBackup">Tag backup</span>
-                        <button class="btn btn-ghost tagger-local-action" id="btn-export-tags-json" title="Export all tags to JSON file"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg> <span data-i18n="modal.tagExport">Export Tags</span></button>
-                        <button class="btn btn-ghost tagger-local-action" id="btn-import-tags" title="Import tags from JSON file"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg> <span data-i18n="modal.tagImport">Import Tags</span></button>
+                        <button class="btn btn-ghost tagger-local-action" id="btn-export-tags-json" title="Export all tags to JSON file" data-i18n-title="tip.exportAllTagsToJsonFile"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg> <span data-i18n="modal.tagExport">Export Tags</span></button>
+                        <button class="btn btn-ghost tagger-local-action" id="btn-import-tags" title="Import tags from JSON file" data-i18n-title="tip.importTagsFromJsonFile"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg> <span data-i18n="modal.tagImport">Import Tags</span></button>
                         <input type="file" id="import-tags-file" accept=".json" style="display: none;">
                     </div>
                 </details>
@@ -6947,11 +6947,11 @@
                         <span id="caption-editor-subtitle" class="caption-editor-subtitle" data-i18n="captionEditor.subtitle">Edits here are temporary and only used when you export, copy or download from this session.</span>
                     </div>
                     <div class="caption-editor-topbar-actions">
-                        <button class="btn btn-ghost btn-small" id="btn-caption-editor-refresh" type="button" title="Re-render captions from current settings">
+                        <button class="btn btn-ghost btn-small" id="btn-caption-editor-refresh" type="button" title="Re-render captions from current settings" data-i18n-title="tip.reRenderCaptionsFromCurrentSettings">
                             <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg></span>
                             <span data-i18n="batchExport.refreshPreview">Refresh</span>
                         </button>
-                        <button class="btn btn-primary btn-small" id="btn-caption-editor-done" type="button" title="Close editor (your edits are kept)" data-i18n="captionEditor.done">Done</button>
+                        <button class="btn btn-primary btn-small" id="btn-caption-editor-done" type="button" title="Close editor (your edits are kept)" data-i18n-title="tip.closeEditorYourEditsAreKept" data-i18n="captionEditor.done">Done</button>
                         <button class="modal-close" id="btn-close-caption-editor" aria-label="Close caption editor"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
                     </div>
                 </div>
@@ -7740,8 +7740,8 @@
                 <div class="queue-manager-toolbar-compact">
                     <input type="text" id="queue-manager-search" class="input-field" placeholder="Search filenames..." data-i18n-placeholder="censor.queueManagerSearch">
                     <div class="queue-manager-toolbar-actions">
-                        <button class="btn btn-ghost btn-small" id="btn-queue-manager-select-all" title="Select All"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> <span data-i18n="censor.selectAll">All</span></button>
-                        <button class="btn btn-ghost btn-small" id="btn-queue-manager-deselect-all" title="Deselect"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg> <span data-i18n="censor.deselectAll">None</span></button>
+                        <button class="btn btn-ghost btn-small" id="btn-queue-manager-select-all" title="Select All" data-i18n-title="selection.selectAll"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> <span data-i18n="censor.selectAll">All</span></button>
+                        <button class="btn btn-ghost btn-small" id="btn-queue-manager-deselect-all" title="Deselect" data-i18n-title="tip.deselect"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg> <span data-i18n="censor.deselectAll">None</span></button>
                         <label class="checkbox-label queue-manager-toggle">
                             <input type="checkbox" id="queue-manager-show-selected">
                             <span class="checkbox-custom"></span>
@@ -7752,13 +7752,13 @@
 
                 <div class="queue-manager-compact-actions">
                     <span class="queue-manager-count" id="queue-manager-selection-count">0 selected</span>
-                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-move-top" title="Move to Top">⤒</button>
-                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-move-up" title="Move Up">↑</button>
-                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-move-down" title="Move Down">↓</button>
-                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-move-bottom" title="Move to Bottom">⤓</button>
+                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-move-top" title="Move to Top" data-i18n-title="tip.moveToTop">⤒</button>
+                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-move-up" title="Move Up" data-i18n-title="tip.moveUp">↑</button>
+                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-move-down" title="Move Down" data-i18n-title="tip.moveDown">↓</button>
+                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-move-bottom" title="Move to Bottom" data-i18n-title="tip.moveToBottom">⤓</button>
                     <div class="queue-manager-separator"></div>
-                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-batch-rename" title="Batch rename selected"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg> <span data-i18n="common.rename">Rename</span></button>
-                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-remove-selected" title="Remove selected from queue" style="color:#ef4444"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg> <span data-i18n="common.remove">Remove</span></button>
+                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-batch-rename" title="Batch rename selected" data-i18n-title="tip.batchRenameSelected"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg> <span data-i18n="common.rename">Rename</span></button>
+                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-remove-selected" title="Remove selected from queue" data-i18n-title="tip.removeSelectedFromQueue" style="color:#ef4444"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg> <span data-i18n="common.remove">Remove</span></button>
                     <div class="queue-manager-position-inline">
                         <input type="number" id="queue-manager-position" class="input-field" min="1" value="1" style="width: 60px; min-height: 36px; padding: 6px 8px;">
                         <button class="btn btn-primary btn-small" id="btn-queue-manager-move-position" data-i18n="common.move">Go</button>

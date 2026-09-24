@@ -11,6 +11,8 @@
     const STORAGE_KEY = LIBRARY_WORKSPACE_STORAGE_KEY;
     const HEADER = 'X-SD-Library-Id';
     const DEFAULT_ID = 'main';
+    // Name the backend seeds for the default library (db_libraries.py, migration 037).
+    const DEFAULT_LIBRARY_SEED_NAME = 'Main library';
 
     let _cache = null; // { libraries, currentId }
 
@@ -110,6 +112,15 @@
         };
     }
 
+    // The backend seeds the default library as "Main library". Until the user
+    // renames it, show it in the UI language (主图库); a chosen name is kept.
+    function libraryDisplayName(lib) {
+        if (lib && lib.is_default && lib.name === DEFAULT_LIBRARY_SEED_NAME) {
+            return _t('library.defaultName', DEFAULT_LIBRARY_SEED_NAME);
+        }
+        return lib ? lib.name : '';
+    }
+
     function getCurrentLibrary() {
         const id = getCurrentLibraryId();
         const list = (_cache && _cache.libraries) || [];
@@ -117,7 +128,7 @@
         if (found) {
             return {
                 id: found.id,
-                name: found.name,
+                name: libraryDisplayName(found),
                 is_default: Boolean(found.is_default),
                 image_count: Number(found.image_count || 0),
             };
@@ -309,7 +320,8 @@
             btn.setAttribute('aria-selected', String(lib.id === current.id));
             btn.dataset.libraryId = lib.id;
             const count = Number(lib.image_count || 0);
-            btn.textContent = count > 0 ? `${lib.name} (${count})` : lib.name;
+            const shownName = libraryDisplayName(lib);
+            btn.textContent = count > 0 ? `${shownName} (${count})` : shownName;
             btn.addEventListener('click', async () => {
                 closeMenu();
                 await setCurrentLibraryId(lib.id);

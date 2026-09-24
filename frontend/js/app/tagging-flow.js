@@ -241,7 +241,10 @@ async function loadTaggerModels() {
 
         const options = models.map((model) => {
             const name = model.name || model.path || 'unknown-model';
-            const bestFor = model.best_for ? ` - ${model.best_for}` : '';
+            // Option text stays as is (the picker reads "(Recommended)" from
+            // it); the tooltip uses the UI language's best-for line.
+            const localizedBestFor = window.getTaggerModelMetaForV321?.(name)?.best_for || model.best_for;
+            const bestFor = localizedBestFor ? ` - ${localizedBestFor}` : '';
             const recommended = model.recommended ? ' (Recommended)' : '';
             const disabled = model.disabled ? ' (Unavailable)' : '';
             const disabledAttr = model.disabled ? ' disabled aria-disabled="true"' : '';

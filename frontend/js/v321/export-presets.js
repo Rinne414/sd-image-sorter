@@ -91,6 +91,15 @@ Object.assign(window.V321Integration, {
         sync();
     },
 
+    // Preset descriptions come from the backend in English; the UI language's
+    // copy lives in loraPreset.<id>.description.
+    _presetDescription(preset) {
+        const fallback = preset?.description || '';
+        const key = `loraPreset.${preset?.id}.description`;
+        const translated = window.I18n?.t?.(key);
+        return (translated && translated !== key) ? translated : fallback;
+    },
+
     renderPresetGrid() {
         const grid = document.getElementById('lora-preset-grid');
         const desc = document.getElementById('lora-preset-description');
@@ -102,13 +111,13 @@ Object.assign(window.V321Integration, {
             chip.className = 'lora-preset-chip';
             if (preset.id === this.selectedPreset) chip.classList.add('active');
             chip.textContent = preset.name;
-            chip.title = preset.description;
+            chip.title = this._presetDescription(preset);
             chip.dataset.presetId = preset.id;
             chip.addEventListener('click', () => {
                 this.selectedPreset = preset.id;
                 grid.querySelectorAll('.lora-preset-chip').forEach(c => c.classList.remove('active'));
                 chip.classList.add('active');
-                if (desc) desc.textContent = preset.description || '';
+                if (desc) desc.textContent = this._presetDescription(preset);
                 // Auto-fill template override hint
                 const tpl = document.getElementById('lora-template-override');
                 if (tpl && !tpl.value) tpl.placeholder = preset.template || tpl.placeholder;
@@ -118,7 +127,7 @@ Object.assign(window.V321Integration, {
         }
         if (desc) {
             const cur = this.presets.find(p => p.id === this.selectedPreset);
-            if (cur) desc.textContent = cur.description || '';
+            if (cur) desc.textContent = this._presetDescription(cur);
         }
     },
 

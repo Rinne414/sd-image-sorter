@@ -33,9 +33,12 @@
         const recommendedSuffix = model?.recommended
             ? ` (${smartTagT('smartTag.taggerRecommended', 'Recommended')})`
             : '';
-        const bestForSuffix = model?.best_for ? ` — ${model.best_for}` : '';
+        // The catalog's best_for is English; the Gallery picker's translated
+        // copy of the same line is used when there is one.
+        const bestFor = window.getTaggerModelMetaForV321?.(name)?.best_for || model?.best_for || '';
+        const bestForSuffix = bestFor ? ` — ${bestFor}` : '';
         option.textContent = name + recommendedSuffix + bestForSuffix;
-        if (model?.best_for) option.title = `${name} - ${model.best_for}`;
+        if (bestFor) option.title = `${name} - ${bestFor}`;
         if (model?.disabled) {
             option.disabled = true;
             option.setAttribute('aria-disabled', 'true');

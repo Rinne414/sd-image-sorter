@@ -106,7 +106,7 @@ function _applyAutoSepChip(el, field, filters) {
         const addBtn = document.createElement('button');
         addBtn.type = 'button';
         addBtn.className = 'autosep-chip-btn autosep-filter-chip-add-icon';
-        addBtn.title = 'Add filter';
+        addBtn.title = (window.I18n?.t?.('autosep.addFilter') !== 'autosep.addFilter' && window.I18n?.t?.('autosep.addFilter')) || 'Add filter';
         addBtn.textContent = '+';
         addBtn.addEventListener('click', (e) => {
             e.stopPropagation();
