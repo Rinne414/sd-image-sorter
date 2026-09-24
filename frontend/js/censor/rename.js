@@ -69,6 +69,14 @@ function readRenameStartNumber() {
     return Number.isFinite(value) && value >= 0 ? value : 1;
 }
 
+// Name an image that joins the queue order after a whole-queue rename (a
+// token-backed image loaded or saved later) by its position in that order.
+function applyRenamePlan(item, position) {
+    const plan = CensorState.renamePlan;
+    if (!plan || !item) return;
+    item.outputFilename = buildRenameFilename(item, position, plan);
+}
+
 function refreshRenameSelectionUi() {
     const checkbox = document.getElementById('rename-only-selected');
     const help = document.getElementById('rename-selection-help');
@@ -217,6 +225,11 @@ async function applyBatchRename() {
     targets.forEach((item, index) => {
         item.outputFilename = plannedNames[index];
     });
+    // Images still on the selection cursor are named when they load or save.
+    const renamesWholeQueue = targets.length === CensorState.queue.length;
+    CensorState.renamePlan = renamesWholeQueue && CensorState.tokenQueueSource?.hasMore
+        ? { useOriginal, base, start, pattern, dateStr, timeStr }
+        : null;
 
     renderQueue();
     closeCensorModal('rename-modal');
@@ -227,8 +240,14 @@ async function applyBatchRename() {
         if (item) document.getElementById('censor-filename').textContent = item.outputFilename;
     }
 
+    const pending = CensorState.renamePlan
+        ? Math.max(0, getCensorQueueWorkCount() - CensorState.queue.length)
+        : 0;
     window.App.showToast(
-        censorT('censor.renamedCount', { count: targets.length }, 'Renamed {count} image(s)'),
+        pending > 0
+            ? censorT('censor.renamedCountWithPending', { count: targets.length, pending },
+                'Renamed {count} image(s). The {pending} not loaded yet continue the numbering in queue order.')
+            : censorT('censor.renamedCount', { count: targets.length }, 'Renamed {count} image(s)'),
         'success'
     );
 }

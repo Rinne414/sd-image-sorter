@@ -100,6 +100,7 @@ function appendCensorQueueImages(images = [], { tokenSource = null } = {}) {
         }
 
         queueIds.add(item.id);
+        applyRenamePlan(item, CensorState.queue.length + nextItems.length);
         nextItems.push(item);
         if (tokenSource?.loadedIds) tokenSource.loadedIds.add(item.id);
     });
@@ -125,28 +126,41 @@ function appendCensorQueueImages(images = [], { tokenSource = null } = {}) {
 // ---------------------------------------------------------------------------
 
 const CENSOR_QUEUE_STORE_KEY = 'censor-queue-v1';
-const CENSOR_QUEUE_STORE_LIMIT = 500;
+// Only used when the browser refuses the whole queue (storage full).
+const CENSOR_QUEUE_STORE_FALLBACK_LIMIT = 5000;
+let censorQueueStoreWarned = false;
 
 function persistCensorQueue() {
+    const items = CensorState.queue
+        .filter((item) => Number.isFinite(Number(item?.id)) && Number(item.id) > 0 && item.originalFilename)
+        .map((item) => ({
+            id: Number(item.id),
+            originalFilename: String(item.originalFilename),
+            outputFilename: String(item.outputFilename || item.originalFilename),
+            width: Number(item.width || 0),
+            height: Number(item.height || 0),
+        }));
     try {
-        const items = CensorState.queue
-            .filter((item) => Number.isFinite(Number(item?.id)) && Number(item.id) > 0 && item.originalFilename)
-            .slice(0, CENSOR_QUEUE_STORE_LIMIT)
-            .map((item) => ({
-                id: Number(item.id),
-                originalFilename: String(item.originalFilename),
-                outputFilename: String(item.outputFilename || item.originalFilename),
-                width: Number(item.width || 0),
-                height: Number(item.height || 0),
-            }));
         if (!items.length) {
             localStorage.removeItem(CENSOR_QUEUE_STORE_KEY);
             return;
         }
         localStorage.setItem(CENSOR_QUEUE_STORE_KEY, JSON.stringify({ version: 1, items }));
     } catch (_) {
-        // Persistence is best-effort; a full/blocked localStorage must never
-        // break the censor workspace itself.
+        // Storage full or blocked: keep what fits and say so once, instead of
+        // silently losing the order and names on the next reload.
+        try {
+            const kept = items.slice(0, CENSOR_QUEUE_STORE_FALLBACK_LIMIT);
+            localStorage.setItem(CENSOR_QUEUE_STORE_KEY, JSON.stringify({ version: 1, items: kept }));
+        } catch (_retry) {
+            // Nothing fits; the workspace itself keeps working.
+        }
+        if (!censorQueueStoreWarned) {
+            censorQueueStoreWarned = true;
+            window.App?.showToast?.(censorT('censor.queueStoreTruncated', { count: items.length },
+                'The browser could not store all {count} queued images. After a reload only part of the queue comes back.'),
+            'warning');
+        }
     }
 }
 
@@ -261,6 +275,7 @@ async function addTokenBackedQueue(sourcePayload) {
 
     switchToCensorView();
     CensorState.tokenQueueSource = source;
+    CensorState.renamePlan = null;
 
     try {
         let loadedItems = [];
@@ -493,6 +508,7 @@ async function processCensorBatchItems(handler, { pageSize = CENSOR_TOKEN_QUEUE_
                 const existingItem = CensorState.queue.find((entry) => entry.id === id);
                 const item = existingItem || buildCensorQueueItemFromImage(image);
                 if (!item) continue;
+                if (!existingItem) applyRenamePlan(item, completed);
 
                 seenIds.add(id);
                 await handler(item, {
@@ -514,6 +530,21 @@ async function processCensorBatchItems(handler, { pageSize = CENSOR_TOKEN_QUEUE_
         completed,
         total: Math.max(total, completed),
     };
+}
+
+// Hand the queue, in its current order and including images still on the
+// selection cursor, to the publish-set workbench.
+async function sendCensorQueueToPublishSet() {
+    if (!hasCensorQueueWork()) {
+        window.App.showToast(censorT('censor.noImagesToSave', null, 'No images in queue to save'), 'info');
+        return;
+    }
+    if (typeof window.PublishSet?.open !== 'function') return;
+    const ids = [];
+    await processCensorBatchItems(async (item) => {
+        ids.push(Number(item.id));
+    });
+    window.PublishSet.open(ids);
 }
 
 function moveQueueSelectionToPosition(targetPosition) {

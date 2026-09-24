@@ -36,6 +36,9 @@ const CensorState = {
     queue: [],
     pendingQueueIds: new Set(),
     tokenQueueSource: null,
+    // The last whole-queue batch rename, kept while token-backed images are
+    // still unloaded so they get the same numbering when they load or save.
+    renamePlan: null,
     activeId: null, // ID of currently edited image
     pendingActiveId: null, // Latest requested image while a newer canvas load is still pending
     selectedItems: new Set(), // IDs of selected items for multi-select

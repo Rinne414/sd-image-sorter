@@ -177,6 +177,38 @@ function addSelectionToCollectionPicker() {
     });
 }
 
+// A selection above this size gets a confirm before a per-image tool opens.
+const LARGE_SELECTION_CONFIRM_COUNT = 300;
+
+// "Select all matching" is a server-side token. Tools that need explicit ids
+// page through it instead of refusing the selection or taking only the
+// images that happen to be loaded on screen.
+async function expandGallerySelectionIds() {
+    const explicit = getSelectedGalleryIds();
+    if (explicit.length) return explicit;
+    const token = getActiveSelectionTokenForActions();
+    if (!token || typeof API?.getSelectionChunk !== 'function') return [];
+    const ids = [];
+    let offset = 0;
+    for (;;) {
+        const chunk = await API.getSelectionChunk(token, { offset });
+        ids.push(...normalizeSelectionImageIds(Array.isArray(chunk?.image_ids) ? chunk.image_ids : []));
+        const next = Number(chunk?.next_offset || 0);
+        if (!chunk?.has_more || !Number.isFinite(next) || next <= offset) break;
+        offset = next;
+    }
+    return ids;
+}
+
+// Run `action` right away, or after a confirm when the selection is large.
+function confirmLargeSelection(count, { title, body }, action) {
+    if (count <= LARGE_SELECTION_CONFIRM_COUNT) {
+        action();
+        return;
+    }
+    showConfirm(title, body, action);
+}
+
 function resolveGallerySendIds() {
     const explicit = getSelectedGalleryIds();
     if (explicit.length) return explicit;
@@ -220,13 +252,19 @@ async function sendSelectionToReversePrompt() {
 }
 
 async function sendSelectionToPrivacy() {
-    const ids = resolveGallerySendIds();
+    const ids = await expandGallerySelectionIds();
     if (!ids.length) {
         showToast(appT('selection.emptyHint', 'Select images, or choose all current filter matches.'), 'info');
         return;
     }
-    const ok = await openPrivacyFromImages(ids);
-    if (ok) clearGallerySelectionAfterBulkAction();
+    confirmLargeSelection(ids.length, {
+        title: appT('selection.largePrivacyTitle', 'Send {count} images to Privacy?', { count: ids.length }),
+        body: appT('selection.largePrivacyBody',
+            'Privacy works through the images one by one in the browser, so this many can take a while.'),
+    }, async () => {
+        const ok = await openPrivacyFromImages(ids);
+        if (ok) clearGallerySelectionAfterBulkAction();
+    });
 }
 
 async function sendSelectionToDatasetMaker() {

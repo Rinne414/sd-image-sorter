@@ -188,6 +188,21 @@
         }
     }
 
+    // The set can grow from the Gallery too: whatever is selected there now
+    // (picked images or all matching) joins the end of the set.
+    async function addGallerySelection() {
+        if (STATE.loading) return;
+        const expand = window.expandGallerySelectionIds;
+        const picked = typeof expand === 'function' ? await expand() : [];
+        if (!picked.length) {
+            showToast(t('pub.nothingSelected', 'Nothing is selected in the Gallery yet'), 'info');
+            return;
+        }
+        const existing = STATE.items.map((item) => item.id);
+        const seen = new Set(existing);
+        await loadItems(existing.concat(picked.filter((id) => !seen.has(id))));
+    }
+
     async function rePair() {
         if (!STATE.items.length || STATE.loading) return;
         STATE.loading = true;
@@ -250,6 +265,7 @@
         $('pub-empty').hidden = STATE.items.length > 0 || STATE.loading;
         $('btn-pub-export').disabled = STATE.exporting || STATE.loading || !STATE.items.length;
         $('btn-pub-repair').disabled = STATE.loading || !STATE.items.length;
+        $('btn-pub-add-selection').disabled = STATE.loading;
     }
 
     function buildVariantToggle(item, index) {
@@ -535,6 +551,7 @@
 
         $('btn-pub-export')?.addEventListener('click', runExport);
         $('btn-pub-repair')?.addEventListener('click', rePair);
+        $('btn-pub-add-selection')?.addEventListener('click', addGallerySelection);
         $('pub-master-censored')?.addEventListener('change', onMasterToggle);
         $('pub-suffix')?.addEventListener('change', () => { saveSettings(); rePair(); });
         ['pub-start', 'pub-pad'].forEach((id) => {

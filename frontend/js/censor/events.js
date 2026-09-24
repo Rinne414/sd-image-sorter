@@ -109,12 +109,15 @@ function bindEvents() {
     $('#btn-batch-rename')?.addEventListener('click', () => {
         const onlySelectedCheckbox = document.getElementById('rename-only-selected');
         if (onlySelectedCheckbox) {
-            onlySelectedCheckbox.checked = getOrderedSelectedQueueIds().length > 0;
+            // Clicking a thumbnail selects it, so one selected item is the
+            // normal state; only a deliberate multi-select narrows the rename.
+            onlySelectedCheckbox.checked = getOrderedSelectedQueueIds().length > 1;
         }
         refreshRenameSelectionUi();
         updateRenamePreview();
         openCensorModal('rename-modal');
     });
+    $('#btn-censor-to-publish-set')?.addEventListener('click', sendCensorQueueToPublishSet);
 
     // Detection Modal handlers
     $('#btn-open-detect-modal')?.addEventListener('click', async () => {
@@ -239,6 +242,7 @@ function bindEvents() {
             () => {
                 CensorState.queue = [];
                 CensorState.tokenQueueSource = null;
+                CensorState.renamePlan = null;
                 CensorState.activeId = null;
                 CensorState.pendingActiveId = null;
                 CensorState.selectedItems.clear();

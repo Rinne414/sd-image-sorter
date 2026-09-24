@@ -2851,6 +2851,7 @@
                                     <svg class="icon" aria-hidden="true"><use href="#i-save"/></svg> <span data-i18n="censor.saveAll">Save All</span>
                                 </button>
                                 <button class="btn btn-ghost btn-small censor-save-secondary" id="btn-batch-rename" title="Batch Rename" data-i18n-title="censor.batchRename"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg> <span data-i18n="censor.batchRename">Batch Rename</span></button>
+                                <button class="btn btn-ghost btn-small censor-save-secondary" id="btn-censor-to-publish-set" title="Send the queue to Publish Set in this order" data-i18n-title="censor.sendToPublishSetTitle"><span data-i18n="censor.sendToPublishSet">To Publish Set</span></button>
                             </div>
                             <button class="btn btn-ghost btn-small censor-clear-queue-btn" id="btn-clear-queue" title="Clear Queue" data-i18n-title="censor.clearQueue"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg> <span data-i18n="censor.clearQueue">Clear</span></button>
                         </div>
@@ -6999,11 +7000,12 @@
                         <span data-i18n="pub.masterCensored">Use censored version where available</span>
                     </label>
                     <button class="btn btn-ghost btn-small" id="btn-pub-repair" type="button" data-i18n="pub.repair">Re-pair</button>
+                    <button class="btn btn-ghost btn-small" id="btn-pub-add-selection" type="button" data-i18n="pub.addSelection">Add gallery selection</button>
                     <span class="pub-toolbar-count" id="pub-count"></span>
                 </div>
                 <div class="pub-empty" id="pub-empty">
                     <p data-i18n="pub.emptyIntro">Turn a gallery selection into a ready-to-post set: drag into order, each image is paired with its censored version, then export as 01.png, 02.png, … with an optional caption.txt.</p>
-                    <p class="pub-empty-hint" data-i18n="pub.emptyHint">Select images in the Gallery, then choose Publish set… under More in the batch action bar.</p>
+                    <p class="pub-empty-hint" data-i18n="pub.emptyHint">Select images in the Gallery and press "Add gallery selection" above, or send the Censor queue here.</p>
                 </div>
                 <div class="pub-items" id="pub-items"></div>
                 <div class="pub-export-panel">

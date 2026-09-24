@@ -66,22 +66,20 @@ function initBootListenersGallery() {
     $('#btn-add-selected-to-collection')?.addEventListener('click', addSelectionToCollectionPicker);
     $('#btn-remove-selected-gallery')?.addEventListener('click', removeSelectedGalleryImages);
     $('#btn-delete-selected-files')?.addEventListener('click', deleteSelectedGalleryImages);
-    // v3.5.0 Tier 1: publish-set workbench. Explicit ids only — a filtered
-    // "select all matching" token can span tens of thousands of images, which
-    // is never a hand-curated publish set.
-    $('#btn-publish-selected')?.addEventListener('click', () => {
-        const ids = getSelectedGalleryIds();
-        if (!ids || ids.length === 0) {
-            showToast(
-                appT('pub.needExplicitSelection',
-                     'Select the images for the set first (explicit picks, not "all matching")'),
-                'info'
-            );
+    // Publish-set workbench. A set is usually hand-picked, but "select all
+    // matching" (a collection or smart folder of finished images) works too:
+    // it expands to ids, with a confirm when it is large.
+    $('#btn-publish-selected')?.addEventListener('click', async () => {
+        const ids = await expandGallerySelectionIds();
+        if (!ids.length) {
+            showToast(appT('pub.needSelection', 'Select the images for the set first.'), 'info');
             return;
         }
-        if (window.PublishSet && typeof window.PublishSet.open === 'function') {
-            window.PublishSet.open(ids);
-        }
+        if (!window.PublishSet || typeof window.PublishSet.open !== 'function') return;
+        confirmLargeSelection(ids.length, {
+            title: appT('pub.largeSetTitle', 'Make a set of {count} images?', { count: ids.length }),
+            body: appT('pub.largeSetBody', 'Every matching image goes into the set, in gallery order.'),
+        }, () => window.PublishSet.open(ids));
     });
 
 
